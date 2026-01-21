@@ -73,6 +73,10 @@
       "types": "./dist/utils/blessed-helpers.d.ts",
       "default": "./dist/utils/blessed-helpers.js"
     },
+    "./utils/door-input-manager": {
+      "types": "./dist/utils/door-input-manager.d.ts",
+      "default": "./dist/utils/door-input-manager.js"
+    },
     "./utils/DoorLoader": {
       "types": "./dist/utils/DoorLoader.d.ts",
       "default": "./dist/utils/DoorLoader.js"

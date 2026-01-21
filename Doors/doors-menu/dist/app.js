@@ -5,12 +5,8 @@
  * Displays available doors organized by category with arrow key navigation.
  * Uses SDK blessed helpers (no duplicate code).
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
-const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 /**
  * Format file size for display
@@ -148,15 +144,13 @@ async function createApp(session) {
     // Type filter state
     const doorTypes = ['ALL', 'XIM', 'TS', 'SIM', 'PY', 'RX'];
     let currentTypeFilter = 'ALL';
-    // Create screen
+    // Create screen using SDK helper
     let screen;
     try {
-        screen = blessed_1.default.screen({
-            smartCSR: true,
-            dockBorders: true,
-            fullUnicode: true,
+        screen = (0, blessed_helpers_1.createScreen)(bbs, {
+            smartCSR: false, // Prevent layout corruption
+            dockBorders: false, // Not needed for fixed panels
             title: 'Door Games & Utilities',
-            output: (data) => bbs.write(data),
         });
     }
     catch (error) {
@@ -178,6 +172,9 @@ async function createApp(session) {
         left: 0,
         width: '100%',
         height: 1,
+        fixed: true,
+        clickable: false, // Don't capture mouse events
+        mouse: false, // Don't listen for mouse events
         content: ' DOOR GAMES & UTILITIES ',
         style: {
             fg: 'white',
@@ -191,6 +188,9 @@ async function createApp(session) {
         left: 0,
         width: '70%',
         height: 1,
+        fixed: true,
+        clickable: false, // Don't capture mouse events
+        mouse: false, // Don't listen for mouse events
         content: '{cyan-fg}Location:{/cyan-fg} All Doors',
         style: {
             fg: 'cyan',
@@ -204,6 +204,9 @@ async function createApp(session) {
         right: 0,
         width: '30%',
         height: 1,
+        fixed: true,
+        clickable: false, // Don't capture mouse events
+        mouse: false, // Don't listen for mouse events
         content: '{yellow-fg}Filter:{/yellow-fg} ALL',
         style: {
             fg: 'yellow',
@@ -259,7 +262,13 @@ async function createApp(session) {
         left: 0,
         width: '100%',
         height: 3,
-        border: { type: 'line' },
+        fixed: true, // Static footer
+        clickable: false, // Don't capture mouse events
+        mouse: false, // Don't listen for mouse events
+        border: {
+            type: 'line',
+            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+        },
         style: {
             fg: 'white',
             border: { fg: 'gray' }

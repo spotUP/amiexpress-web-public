@@ -21,6 +21,10 @@ export declare class BBSEventHandler {
      */
     unlisten(): void;
     /**
+     * Escape blessed tags in user-provided content to prevent formatting injection
+     */
+    private escapeBlessedTags;
+    /**
      * Format event for display in chat log
      */
     formatEvent(event: BBSEventPayload): string;

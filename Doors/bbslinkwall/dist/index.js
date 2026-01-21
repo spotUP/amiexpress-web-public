@@ -51,11 +51,20 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runDoor = runDoor;
+exports.metadata = void 0;
+const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const crypto = __importStar(require("crypto"));
 const http = __importStar(require("http"));
+// Metadata
+exports.metadata = {
+    name: 'BBSLink Graffiti Wall',
+    version: '1.1.0',
+    description: 'Global Graffiti Wall Client',
+    author: 'REBEL/QTX',
+    command: 'LINKWALL',
+};
 /**
  * Generate random string for session key
  */
@@ -83,7 +92,7 @@ function urlEncode(text) {
  * Load BBSLink configuration
  */
 function loadConfig() {
-    const configPath = path.join(process.cwd(), 'doors', 'bbslink', 'bbslink.cfg');
+    const configPath = path.join(process.cwd(), 'Doors', 'bbslink', 'bbslink.cfg');
     const config = {
         serverHost: 'games.bbslink.net',
         httpPort: 80,
@@ -229,7 +238,7 @@ async function getUserInput(socket, bbsSession, prompt, maxLen) {
             }
             // Handle enter
             if (data === '\r' || data === '\n') {
-                socket.off('user-input', handleInput);
+                delete bbsSession.doorInputHandler;
                 socket.emit('ansi-output', '\r\n');
                 resolve(input);
                 return;
@@ -246,7 +255,7 @@ async function getUserInput(socket, bbsSession, prompt, maxLen) {
         bbsSession.doorInputHandler = handleInput;
         // Timeout after 5 minutes
         setTimeout(() => {
-            socket.off('user-input', handleInput);
+            delete bbsSession.doorInputHandler;
             resolve(null);
         }, 300000);
     });
@@ -264,7 +273,7 @@ async function getYesNo(socket, bbsSession) {
                 resolve(true);
             }
             else if (key === 'n') {
-                socket.off('user-input', handleInput);
+                delete bbsSession.doorInputHandler;
                 socket.emit('ansi-output', 'N\r\n');
                 resolve(false);
             }
@@ -275,20 +284,15 @@ async function getYesNo(socket, bbsSession) {
 /**
  * Wait for key press
  */
-async function pause(socket, message = 'press RETURN to continue: ') {
-    return new Promise((resolve) => {
-        socket.emit('ansi-output', message);
-        socket.once('user-input', () => {
-            socket.emit('ansi-output', '\r\n');
-            resolve();
-        });
-    });
+async function pause(bbs, promptText = 'press ANY KEY to continue: ') {
+    await bbs.getKey(promptText);
 }
 /**
- * Run BBSLink Wall door (TypeScript door interface)
+ * Main door class
  */
-async function runDoor(doorSession) {
-    const { socket, user, bbsSession } = doorSession;
+const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
+door.onStart(async (ctx) => {
+    const { socket, user, bbsSession, bbs } = ctx;
     try {
         // Load configuration
         const config = loadConfig();
@@ -297,7 +301,7 @@ async function runDoor(doorSession) {
             socket.emit('ansi-output', '\r\n\x1b[31mError: syscode missing from bbslink.cfg\x1b[0m\r\n');
             socket.emit('ansi-output', '\x1b[33mPlease configure your BBSLink account settings.\x1b[0m\r\n');
             socket.emit('ansi-output', '\x1b[33mSign up at: http://www.bbslink.net/\x1b[0m\r\n\r\n');
-            await pause(socket, '\x1b[32mPress any key to continue...\x1b[0m');
+            await pause(bbs, '\x1b[32mPress any key to continue...\x1b[0m');
             return;
         }
         if (!config.authcode) {
@@ -308,7 +312,7 @@ async function runDoor(doorSession) {
             socket.emit('ansi-output', '\r\n\x1b[31mError: schemecode missing from bbslink.cfg\x1b[0m\r\n');
             return;
         }
-        const userId = user?.id || 0;
+        const userId = parseInt(user?.id || '0');
         // Display header
         socket.emit('ansi-output', '\x1b[2J\x1b[H');
         socket.emit('ansi-output', '\x1b[36m+================================================+\x1b[0m\r\n');
@@ -392,14 +396,15 @@ async function runDoor(doorSession) {
                 }
             }
             socket.emit('ansi-output', '\r\n\r\n');
-            await pause(socket);
+            await pause(bbs);
             // Show updated wall
             await showWall(socket, config);
-            await pause(socket);
+            await pause(bbs);
         }
     }
     catch (err) {
         socket.emit('ansi-output', `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`);
     }
     socket.emit('ansi-output', '\r\n\x1b[32mReturning to menu...\x1b[0m\r\n');
-}
+});
+exports.default = door;

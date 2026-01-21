@@ -248,6 +248,10 @@ console.log(`  Raw16 data=${data16} cmd=${cmd16} node=${node16} line=${line16}`)
     const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
     const offsets = this.getLayoutOffsets(layout);
     this.writeValue(msgAddr, offsets.command, value, layout === 'short' ? 2 : 4);
+
+    // DEBUG: Log command writes for debugging dRE!WAll
+    const char = (value >= 32 && value < 127) ? String.fromCharCode(value) : `0x${value.toString(16)}`;
+console.log(`[XIMMessageParser] writeCommand: msgAddr=0x${msgAddr.toString(16)} offset=${offsets.command} value=${value} (${char}) layout=${layout}`);
   }
 
   /**

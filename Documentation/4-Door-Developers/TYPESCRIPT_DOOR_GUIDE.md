@@ -6,6 +6,28 @@ Complete guide for creating TypeScript doors for AmiExpress-Web BBS.
 
 Always aim for modern, desktop-like doors using neo-blessed windows, panels, and mouse support. Avoid 90's text menus unless explicitly requested.
 
+## Quick Checklist for TypeScript Doors
+
+Before you start coding, remember these critical rules:
+
+- ✅ **ALWAYS use SDK helpers** - `createBox()`, `createList()`, `createTextbox()`
+- ❌ **NEVER use blessed directly** - `blessed.box()`, `blessed.list()` will break mouse support
+- ✅ **Enable mouse** - `screen.program.enableMouse()` at start of every screen
+- ✅ **Enable keyboard nav** - `vi: true` on all list widgets
+- ✅ **Use DoorInputManager** - Proper input cleanup, prevents BBS input breakage
+- ✅ **Clear screen properly** - `clearRegion()` + `alloc()` + `render()` + 200ms wait
+- ✅ **Clean up on exit** - `screen.remove()` all widgets, `inputManager.disable()`
+- ✅ **Add backgrounds** - `bg: 'black'` in all widget styles
+- ✅ **Import correctly** - Use `@amiexpress/bbs-door-sdk/utils/...`, not relative paths
+- ✅ **Check reference doors** - Look at `Doors/grandmaster/ui/` for patterns
+
+**If your door has any of these issues, you did it wrong:**
+- ❌ Mouse clicks don't work
+- ❌ Arrow keys don't navigate lists
+- ❌ BBS input broken after exiting door
+- ❌ Colors don't display (`{cyan-fg}` shows as literal text)
+- ❌ Widgets don't clean up (ghost boxes after exit)
+
 ## Door Types
 
 AmiExpress-Web supports **three types of doors**:
@@ -136,6 +158,68 @@ import { AudioEngine } from '../../engines/audio/audio-engine';
 See the "CRITICAL: SDK Import Rules" section in Troubleshooting for full details.
 
 ---
+
+## CRITICAL: ALWAYS Use SDK UI Helpers
+
+**❌ NEVER DO THIS:**
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// ❌ WRONG - No mouse support, broken cleanup, missing tags
+const box = blessed.box({ parent: screen, ... });
+const list = blessed.list({ parent: screen, ... });
+const textbox = blessed.textbox({ parent: screen, ... });
+```
+
+**✅ ALWAYS DO THIS:**
+```typescript
+import { createBox, createList, createTextbox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// ✅ CORRECT - Full mouse support, proper cleanup, auto tags
+const box = createBox({ parent: screen, ... });
+const list = createList({ parent: screen, mouse: true, vi: true, ... });
+const textbox = createTextbox({ parent: screen, ... });
+```
+
+**Why SDK helpers are required:**
+
+1. **Mouse support** - SDK widgets have proper mouse event handling
+2. **Automatic cleanup** - Widgets clean up properly when removed
+3. **Tags enabled** - `tags: true` is automatic (colors work correctly)
+4. **Keyboard navigation** - `vi: true` for arrow keys, `keys: true` for shortcuts
+5. **Consistent behavior** - All doors work the same way
+
+**Reference implementation:** See `Doors/grandmaster/ui/menu.ts` for a complete example of proper SDK widget usage.
+
+**Required pattern for all screens:**
+```typescript
+import { createScreen, createBox, createList, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// Enable mouse at start of every screen
+screen.program.enableMouse();
+
+// Clear screen before rendering
+screen.clearRegion(0, screen.width, 0, screen.height);
+screen.alloc();
+screen.render();
+await new Promise(r => setTimeout(r, 200));  // Wait for clear
+
+// Use SDK helpers for ALL widgets
+const header = createBox({ parent: screen, ... });
+const menu = createList({ parent: screen, mouse: true, vi: true, ... });
+
+// Proper cleanup on exit
+const cleanup = () => {
+  screen.remove(header);
+  screen.remove(menu);
+};
+```
+
+---
+
+## Basic Door Example (Raw ANSI - No UI)
+
+This example shows basic door structure **without neo-blessed**. For modern UI doors, skip to "Neo-Blessed UI Example" below.
 
 ```typescript
 /**
@@ -464,6 +548,163 @@ function handleMouseInput(event: MouseEvent): void {
 
 ---
 
+## Input Management & Cleanup
+
+### ⚠️ CRITICAL: Always Use DoorInputManager
+
+**THE #1 CAUSE OF "BBS INPUT BROKEN AFTER DOOR EXIT" BUGS IS MISSING INPUT CLEANUP.**
+
+Every blessed UI door MUST use `DoorInputManager` to properly manage input state. Manual input setup WITHOUT proper cleanup WILL break BBS input when the door exits.
+
+### Why DoorInputManager?
+
+Input handling has 7+ layers that must be set up AND torn down correctly:
+1. BBS game mode (`enableGameMode` / `disableGameMode`)
+2. BBS session flag (`inDoorManager = true/false`)
+3. Blessed keyboard capture (`grabKeys = true/false`)
+4. Blessed mouse events (`enableMouse()` / `disableMouse()`)
+5. BBS mouse events flag (`mouseEventsEnabled = true/false`)
+6. Input handler registration (`doorInputHandler`)
+7. Input handler cleanup (`delete doorInputHandler`)
+
+**Missing even ONE cleanup step = broken BBS input.**
+
+DoorInputManager handles ALL of this automatically in the correct order.
+
+### ✅ CORRECT: Using DoorInputManager
+
+```typescript
+import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+class MyDoor {
+  private inputManager!: DoorInputManager;
+
+  async run() {
+    // Create screen
+    this.screen = createScreen(this.session.bbs, { ... });
+
+    // Set up input management
+    this.inputManager = new DoorInputManager(this.session, this.screen, {
+      enableGameMode: false,  // Blessed UI mode (use true for ncurses games)
+      enableGrabKeys: false,  // Blessed focus system (use true for games)
+      enableMouse: true,      // Enable mouse events
+      debug: false,
+      debugName: 'MyDoor'
+    });
+
+    // Enable input (sets all 7 flags correctly)
+    this.inputManager.enable();
+
+    // ... your door logic ...
+  }
+
+  cleanup() {
+    // CRITICAL: Disable input FIRST (before screen.destroy)
+    if (this.inputManager) {
+      this.inputManager.disable();  // Resets all 7 flags in reverse order
+    }
+
+    if (this.screen) {
+      this.screen.destroy();
+    }
+  }
+}
+```
+
+### ❌ WRONG: Manual Input Setup
+
+```typescript
+// ❌ DON'T DO THIS - Missing cleanup steps!
+function setupScreen() {
+  const screen = createScreen(session.bbs, { ... });
+
+  // Manual setup (easy to forget cleanup)
+  session.bbsSession.inDoorManager = true;
+  session.bbsSession.mouseEventsEnabled = true;
+  session.bbsSession.doorInputHandler = (data) => {
+    screen.program.emit('data', data);
+  };
+
+  return screen;
+}
+
+function cleanup() {
+  // ❌ INCOMPLETE CLEANUP - Will break BBS input!
+  screen.destroy();
+  // Missing: inDoorManager = false
+  // Missing: mouseEventsEnabled = false
+  // Missing: delete doorInputHandler
+}
+```
+
+### Input Modes: Game vs Blessed UI
+
+**Blessed UI Mode** (Desktop-like doors):
+```typescript
+this.inputManager = new DoorInputManager(session, screen, {
+  enableGameMode: false,  // Blessed handles input routing
+  enableGrabKeys: false,  // Blessed focus system works
+  enableMouse: true       // Mouse events enabled
+});
+```
+
+**Game Mode** (Arcade games, ncurses):
+```typescript
+this.inputManager = new DoorInputManager(session, screen, {
+  enableGameMode: true,   // Raw keyboard input
+  enableGrabKeys: true,   // Capture ALL keys
+  enableMouse: true       // Mouse events enabled
+});
+```
+
+### Test Checklist: Input Cleanup Working?
+
+After implementing DoorInputManager, test this:
+
+1. ✅ Run door
+2. ✅ Exit door via menu/quit
+3. ✅ **IMMEDIATELY type in BBS prompt** - should work!
+4. ✅ Run door AGAIN - should work!
+5. ✅ Exit again - BBS input should STILL work!
+
+**If typing doesn't work after exit = missing DoorInputManager.disable() call.**
+
+### Common Mistakes
+
+**❌ Calling screen.enableMouse() after inputManager.enable():**
+```typescript
+inputManager.enable();
+screen.program.enableMouse();  // ❌ Redundant - already done!
+```
+
+**✅ Correct - DoorInputManager handles it:**
+```typescript
+inputManager.enable();  // ✓ Calls enableMouse() internally
+```
+
+**❌ Destroying screen before disabling inputManager:**
+```typescript
+screen.destroy();         // ❌ WRONG ORDER
+inputManager.disable();   // Too late!
+```
+
+**✅ Correct - Disable inputManager FIRST:**
+```typescript
+inputManager.disable();   // ✓ Restore BBS state
+screen.destroy();         // ✓ Then destroy UI
+```
+
+### Reference Doors Using DoorInputManager
+
+Good examples to copy:
+- `Doors/livechat/server.ts` - Chat door with blessed UI
+- `Doors/ansi-editor/index.ts` - ANSI editor with blessed UI
+- `Doors/whip/app.ts` - Project management door
+- `Doors/zoo-keeper/index.ts` - Game door with blessed UI
+- `Doors/card-lobby/index.ts` - Card game lobby
+
+---
+
 ## Game Loop Pattern
 
 For games that need continuous updates:
@@ -767,6 +1008,188 @@ export async function runDoor(doorSession: any): Promise<void> {
   });
 }
 ```
+
+---
+
+## Complete Example: Neo-Blessed UI Door
+
+**Modern door pattern using SDK helpers** - This is the RECOMMENDED way to build TypeScript doors.
+
+```typescript
+/**
+ * Modern Menu Door - Complete Example
+ * Shows proper use of SDK UI helpers, mouse support, and cleanup
+ */
+
+import {
+  createScreen,
+  createBox,
+  createList,
+  DoorInputManager
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+export const metadata = {
+  name: 'Modern Menu',
+  version: '1.0.0',
+  description: 'Example neo-blessed door',
+  author: 'Your Name',
+  command: 'MENU',
+};
+
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket, bbsSession, bbs, user } = doorSession;
+
+  // Create screen
+  const screen = createScreen(bbs, {
+    title: 'Modern Menu Door',
+    smartCSR: false,
+    fastCSR: false,
+    focusKeys: false,
+  });
+
+  // Create input manager for proper cleanup
+  const inputManager = new DoorInputManager(bbsSession, screen, {
+    enableGameMode: true,
+    enableGrabKeys: true,
+    enableMouse: true,
+    debug: false,
+    debugName: 'MENU'
+  });
+
+  // Enable input (includes mouse)
+  inputManager.enable();
+
+  // Clear screen
+  screen.clearRegion(0, screen.width, 0, screen.height);
+  screen.alloc();
+  screen.render();
+  await new Promise(r => setTimeout(r, 200));
+
+  // Create header using SDK helper
+  const header = createBox({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: 3,
+    content: '{center}{bold}{cyan-fg}=== MODERN MENU ==={/cyan-fg}{/bold}{/center}',
+    style: { fg: 'cyan', bg: 'black' }
+  });
+
+  // Create menu using SDK helper
+  const menuBox = createBox({
+    parent: screen,
+    top: 4,
+    left: 'center',
+    width: 30,
+    height: 10,
+    border: { type: 'line' },
+    label: ' Select Option ',
+    style: {
+      border: { fg: 'cyan' },
+      bg: 'black'
+    }
+  });
+
+  const menuItems = [
+    { key: 'P', label: 'Play Game', value: 'play' },
+    { key: 'S', label: 'Scores', value: 'scores' },
+    { key: 'H', label: 'Help', value: 'help' },
+    { key: 'Q', label: 'Quit', value: 'quit' }
+  ];
+
+  // CRITICAL: Use createList, not blessed.list
+  const menu = createList({
+    parent: menuBox,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: menuItems.length,
+    items: menuItems.map(item => `[{bold}${item.key}{/bold}] ${item.label}`),
+    keys: true,
+    vi: true,      // Arrow key navigation
+    mouse: true,   // Mouse click support
+    style: {
+      selected: { bg: 'cyan', fg: 'black' },
+      item: { fg: 'white' }
+    }
+  });
+
+  // Footer
+  const footer = createBox({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: 1,
+    content: '{center}Arrow Keys: Navigate  |  Enter: Select  |  Q: Quit{/center}',
+    style: { fg: 'gray', bg: 'black' }
+  });
+
+  menu.focus();
+  screen.render();
+
+  // Handle selection
+  await new Promise<void>((resolve) => {
+    // Keyboard shortcuts
+    const keyHandler = (ch: any, key: any) => {
+      const keyName = key.name.toUpperCase();
+      const menuItem = menuItems.find(item => item.key === keyName);
+
+      if (menuItem) {
+        if (menuItem.value === 'quit') {
+          resolve();
+        } else {
+          // Handle other menu items
+          socket.emit('ansi-output', `Selected: ${menuItem.label}\r\n`);
+        }
+      }
+    };
+
+    // Mouse/Enter selection
+    const selectHandler = (item: any, index: number) => {
+      const selected = menuItems[index];
+      if (selected.value === 'quit') {
+        resolve();
+      } else {
+        socket.emit('ansi-output', `Selected: ${selected.label}\r\n`);
+      }
+    };
+
+    menu.on('select', selectHandler);
+    screen.on('keypress', keyHandler);
+
+    // Cleanup on socket disconnect
+    socket.once('disconnect', () => resolve());
+  });
+
+  // Cleanup - CRITICAL: Remove all widgets and disable input
+  screen.off('keypress', () => {});
+  menu.removeAllListeners('select');
+  screen.remove(header);
+  screen.remove(menuBox);
+  screen.remove(footer);
+
+  inputManager.disable();  // Automatic cleanup
+  screen.destroy();
+}
+```
+
+**Key points in this example:**
+
+1. ✅ **SDK helpers only** - `createBox`, `createList`, not `blessed.box()`
+2. ✅ **DoorInputManager** - Handles all input cleanup automatically
+3. ✅ **Mouse enabled** - `screen.program.enableMouse()` and `mouse: true`
+4. ✅ **Keyboard navigation** - `vi: true` for arrow keys, `keys: true` for shortcuts
+5. ✅ **Proper cleanup** - Remove all widgets, disable input manager
+6. ✅ **Background colors** - `bg: 'black'` on all widgets prevents visual artifacts
+7. ✅ **Screen clear** - `clearRegion()` + `alloc()` + `render()` + 200ms wait
+
+**For more complex examples, see:**
+- `Doors/grandmaster/ui/menu.ts` - Multi-panel menu with descriptions
+- `Doors/whip/ui/main-menu.ts` - Simple menu with stats
+- `Doors/whip/ui/kanban-board.ts` - Complex multi-column board
 
 ---
 
@@ -1657,3 +2080,374 @@ private quit(): void {
 - [SDK v2.0 Validation](SDK_V2_VALIDATION.md) - SDK v2.0 test results and examples
 - [Door Manager](DOOR_MANAGER.md) - BBS door management
 - [Examples](EXAMPLES.md) - More door examples
+
+---
+
+## CRITICAL: Always Use SDK Helpers for UI
+
+**This is the #1 mistake in door development.** You must ALWAYS use SDK helper functions, NEVER use blessed widgets directly.
+
+### Why This Matters
+
+Raw blessed widgets don't have:
+- ✅ Auto-enabled tags (colors won't work)
+- ✅ Proper mouse event handling
+- ✅ Focus management
+- ✅ Cleanup behavior
+- ✅ Consistent API
+
+### The Rules
+
+**❌ NEVER DO THIS:**
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// WRONG - No mouse support, no tags, broken cleanup
+const box = blessed.box({ parent: screen, ... });
+const list = blessed.list({ parent: screen, ... });
+const input = blessed.textbox({ parent: screen, ... });
+```
+
+**✅ ALWAYS DO THIS:**
+```typescript
+import {
+  createBox,
+  createList,
+  createTextbox,
+  createButton
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// CORRECT - Full SDK support
+const box = createBox({ parent: screen, ... });
+const list = createList({ parent: screen, mouse: true, vi: true, ... });
+const input = createTextbox({ parent: screen, ... });
+const button = createButton({ parent: screen, ... });
+```
+
+### Complete Widget List
+
+```typescript
+import {
+  // Core
+  createScreen,          // REQUIRED - Create BBS-aware screen
+  DoorInputManager,      // REQUIRED - Handle input cleanup
+  
+  // Widgets (ALWAYS use these instead of blessed.*)
+  createBox,             // Container, panel, modal
+  createList,            // Menus, dropdowns, selections
+  createTextbox,         // Single-line input
+  createTextarea,        // Multi-line input
+  createButton,          // Clickable button
+  createText,            // Static text
+  createTable,           // Data tables
+  createLog,             // Scrolling log viewer
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+```
+
+### When You CAN Use blessed Directly
+
+Only for built-in dialogs:
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// These are OK - They're special dialog types
+const question = blessed.question({ ... });
+const message = blessed.message({ ... });
+const prompt = blessed.prompt({ ... });
+```
+
+## Form Development Patterns
+
+### Complete Form Example
+
+```typescript
+async function showEditor(screen: any, data: any): Promise<void> {
+  return new Promise((resolve) => {
+    screen.program.enableMouse();
+
+    // 1. Container
+    const modal = createBox({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 20,
+      border: { type: 'line' },
+      label: ' Edit Form ',
+      style: { border: { fg: 'yellow' }, bg: 'black' }
+    });
+
+    // 2. Text input
+    const nameInput = createTextbox({
+      parent: modal,
+      top: 2,
+      left: 2,
+      width: '100%-4',
+      height: 1,
+      keys: true,
+      mouse: true,
+      inputOnFocus: true,
+      value: data.name,
+      style: {
+        fg: 'white',
+        bg: 'blue',
+        focus: { bg: 'lightblue', fg: 'black' }
+      }
+    });
+
+    // 3. Dropdown list
+    const typeList = createList({
+      parent: modal,
+      top: 5,
+      left: 2,
+      width: 30,
+      height: 7,
+      border: { type: 'line' },
+      keys: true,
+      vi: true,
+      mouse: true,
+      items: ['Type A', 'Type B', 'Type C'],
+      selected: 0,
+      style: {
+        border: { fg: 'cyan' },
+        selected: { bg: 'cyan', fg: 'black' },
+        item: { fg: 'white' },
+        bg: 'black'
+      }
+    });
+
+    // 4. Buttons
+    const saveBtn = createButton({
+      parent: modal,
+      bottom: 1,
+      left: 15,
+      width: 12,
+      height: 3,
+      content: ' Save ',
+      align: 'center',
+      keys: true,
+      mouse: true,
+      style: {
+        fg: 'white',
+        bg: 'green',
+        focus: { bg: 'lightgreen', fg: 'black' },
+        hover: { bg: 'lightgreen', fg: 'black' }
+      }
+    });
+
+    const cancelBtn = createButton({
+      parent: modal,
+      bottom: 1,
+      left: 40,
+      width: 12,
+      height: 3,
+      content: ' Cancel ',
+      align: 'center',
+      keys: true,
+      mouse: true,
+      style: {
+        fg: 'white',
+        bg: 'red',
+        focus: { bg: 'lightred', fg: 'black' },
+        hover: { bg: 'lightred', fg: 'black' }
+      }
+    });
+
+    // 5. Event handlers
+    const save = async () => {
+      data.name = nameInput.getValue();
+      data.type = ['Type A', 'Type B', 'Type C'][typeList.selected || 0];
+      
+      if (!data.name.trim()) return; // Validation
+      
+      screen.remove(modal);
+      screen.render();
+      resolve();
+    };
+
+    saveBtn.on('press', () => save());
+    cancelBtn.on('press', () => {
+      screen.remove(modal);
+      screen.render();
+      resolve();
+    });
+
+    screen.on('keypress', (ch: any, key: any) => {
+      if (key.name === 'escape') {
+        screen.remove(modal);
+        screen.render();
+        resolve();
+      }
+    });
+
+    nameInput.focus();
+    screen.render();
+  });
+}
+```
+
+### Common Form Mistakes
+
+**❌ WRONG - Manual field rendering:**
+```typescript
+// Don't do this - no proper widgets
+let currentField = 0;
+const fields = ['name', 'type', 'save'];
+
+const render = () => {
+  let content = '';
+  content += `Name: ${currentField === 0 ? '{inverse}' : ''}${data.name}{/inverse}\n`;
+  content += `Type: ${currentField === 1 ? '{inverse}' : ''}${data.type}{/inverse}\n`;
+  content += `${currentField === 2 ? '{inverse}' : ''}[SAVE]{/inverse}`;
+  box.setContent(content);
+};
+
+screen.on('keypress', (ch, key) => {
+  if (key.name === 'up') currentField--;
+  if (key.name === 'down') currentField++;
+  if (key.name === 'enter') {
+    if (currentField === 0) {
+      // Manual text prompt? Bad!
+    }
+  }
+  render();
+});
+```
+
+**Why this is wrong:**
+- No mouse support
+- No proper focus management
+- No built-in validation
+- Breaks on resize
+- Manual state tracking
+- No accessibility
+
+**✅ CORRECT - Use proper widgets (see Complete Form Example above)**
+
+## Dialog Patterns
+
+### Confirmation Dialog
+
+```typescript
+async function confirmAction(screen: any, message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const question = blessed.question({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 60,
+      height: 7,
+      border: { type: 'line' },
+      style: { border: { fg: 'red' }, bg: 'black' },
+      label: ' Confirm '
+    });
+
+    question.ask(`${message}\n\n(Y/N)`, (answer: boolean) => {
+      screen.remove(question);
+      screen.render();
+      resolve(answer);
+    });
+  });
+}
+
+// Usage
+if (await confirmAction(screen, 'Delete this item?')) {
+  // Delete
+}
+```
+
+### Selection Dialog
+
+```typescript
+async function selectOption(screen: any, options: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    const modal = createBox({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 40,
+      height: 12,
+      border: { type: 'line' },
+      label: ' Select ',
+      style: { border: { fg: 'yellow' }, bg: 'black' }
+    });
+
+    const list = createList({
+      parent: modal,
+      top: 1,
+      left: 1,
+      width: '100%-2',
+      height: '100%-2',
+      keys: true,
+      vi: true,
+      mouse: true,
+      items: options,
+      style: {
+        selected: { bg: 'cyan', fg: 'black' },
+        item: { fg: 'white' },
+        bg: 'black'
+      }
+    });
+
+    list.on('select', (item: any, index: number) => {
+      screen.remove(modal);
+      screen.render();
+      resolve(options[index]);
+    });
+
+    screen.on('keypress', (ch: any, key: any) => {
+      if (key.name === 'escape') {
+        screen.remove(modal);
+        screen.render();
+        resolve(null);
+      }
+    });
+
+    list.focus();
+    screen.render();
+  });
+}
+```
+
+## Async Event Handler Pattern
+
+**❌ WRONG - Async handlers directly:**
+```typescript
+screen.on('keypress', async (ch, key) => {
+  await doSomething();  // TypeScript error!
+});
+
+button.on('press', async () => {
+  await save();  // TypeScript error!
+});
+```
+
+**✅ CORRECT - Wrap in IIFE:**
+```typescript
+screen.on('keypress', (ch, key) => {
+  (async () => {
+    await doSomething();
+  })();
+});
+
+button.on('press', () => {
+  (async () => {
+    await save();
+  })();
+});
+```
+
+## Reference Implementations
+
+Study these working examples:
+
+- **`Doors/whip/ui/task-editor.ts`** - Complete form with inputs, lists, buttons
+- **`Doors/whip/ui/project-list.ts`** - List view with create/edit/delete dialogs
+- **`Doors/whip/ui/kanban-board.ts`** - Multi-column kanban with modals
+- **`Doors/grandmaster/ui/menu.ts`** - Complex menu system with mouse support
+
+## Quick Start Guide
+
+For rapid prototyping, see:
+**[NEO_BLESSED_QUICK_START.md](NEO_BLESSED_QUICK_START.md)** - 5-minute guide with working examples
+

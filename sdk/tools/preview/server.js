@@ -239,6 +239,11 @@ async function compileExamples() {
   // Get all example directories
   const examples = fs.readdirSync(examplesDir)
     .filter(name => {
+      // Skip backup/old directories
+      if (name.endsWith('.OLD') || name.endsWith('.old') || name.endsWith('.backup') ||
+          name.includes('.OLD.') || name.includes('.backup.')) {
+        return false;
+      }
       const stat = fs.statSync(path.join(examplesDir, name));
       return stat.isDirectory();
     });
@@ -342,6 +347,11 @@ app.get('/api/doors', (req, res) => {
   const doors = fs
     .readdirSync(DOORS_DIR)
     .filter((name) => {
+      // Skip backup/old directories
+      if (name.endsWith('.OLD') || name.endsWith('.old') || name.endsWith('.backup') ||
+          name.includes('.OLD.') || name.includes('.backup.')) {
+        return false;
+      }
       const doorPath = path.join(DOORS_DIR, name);
       const stat = fs.statSync(doorPath);
       if (!stat.isDirectory()) return false;

@@ -36,12 +36,23 @@ npm run build
 
 ## TypeScript Doors (Recommended)
 
-**[TYPESCRIPT_DOOR_GUIDE.md](TYPESCRIPT_DOOR_GUIDE.md)** - Complete guide for modern TypeScript doors
+### Quick Start
+
+🚀 **NEW TO NEO-BLESSED UI DOORS? START HERE:**
+
+**[NEO_BLESSED_QUICK_START.md](NEO_BLESSED_QUICK_START.md)** - Build a modern UI door in 5 minutes
+
+**Key takeaway:** ALWAYS use SDK helpers (`createBox`, `createList`), NEVER use `blessed.box()` or `blessed.list()` directly!
+
+### Complete Guide
+
+**[TYPESCRIPT_DOOR_GUIDE.md](TYPESCRIPT_DOOR_GUIDE.md)** - Complete reference for TypeScript doors
 
 TypeScript doors are the recommended approach for new development:
 - Full Node.js API access
 - Native TypeScript/JavaScript execution
 - Mouse and keyboard input support
+- Neo-blessed UI with SDK helpers
 - Easy debugging and hot-reload
 - Access to npm packages
 

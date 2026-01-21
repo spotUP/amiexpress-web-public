@@ -60,8 +60,8 @@ export class AudioService {
   onLeave(): void { this.playSound('leave'); }
   onError(): void { this.playSound('error'); }
   onNotification(): void { this.playSound('notification'); }
-  onReaction(): void { this.playSound('confirm'); }
-  onDM(): void { this.playSound('notification'); }
+  onReaction(): void { this.playSound('reaction'); }
+  onDM(): void { this.playSound('dm'); }
 }
 
 export { SOUNDS, SoundConfig };

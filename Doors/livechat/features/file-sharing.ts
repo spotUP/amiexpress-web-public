@@ -2,7 +2,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export function createFileSharing(s: Screen, sock: any, st: any, un: string, asm: (m: string) => void, acm: (m: string) => void, aa: (a: string) => void, aud: any, sm: (w: any) => void, hm: (w: any) => void) {
-  const o = blessed.box({ parent: s, top: 'center', left: 'center', width: '70%', height: '70%', label: ' Share Files [Drag to Move | Resize: Corner | ESC: Close] ', border: { type: 'line' }, shadow: true, hidden: true, mouse: true, draggable: true, ch: ' ', style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
+  const o = blessed.box({ parent: s, top: 'center', left: 'center', width: '70%', height: '70%', label: ' Share Files [Drag to Move | Resize: Corner | ESC: Close] ', border: { type: 'line' }, shadow: true, hidden: true, mouse: true, draggable: true, ch: ' ', zIndex: 9990, style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
   o.enableResize();
 
   const fm = blessed.filemanager({ parent: o, top: 1, left: 1, width: '100%-4', height: '100%-6', cwd: '/uploads', files: [], directories: [], mouse: true, style: { fg: 'white' } });

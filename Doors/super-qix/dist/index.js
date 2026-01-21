@@ -8,6 +8,7 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
 import { rpcHandlers } from "./server";
 import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, DEFAULT_HIGHSCORES, FIELD_WIDTH, FIELD_HEIGHT, } from "./game/constants";
@@ -80,6 +81,7 @@ let engine = null;
 let isDrawKeyHeld = false;
 let currentDrawSpeed = null;
 let doorContext; // Will be set on start
+let inputManager = null;
 /**
  * Initialize neo-blessed screen
  */
@@ -104,6 +106,7 @@ function initScreen() {
     });
     // Main game area
     gameArea = blessed.box({
+        fixed: true,
         parent: screen,
         top: 1,
         left: 0,
@@ -176,6 +179,7 @@ function showMenu() {
         menuContent.push(`${prefix}${option}${suffix}`);
     });
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -224,6 +228,7 @@ async function showHighscores() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -269,6 +274,7 @@ function showHelp() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -457,6 +463,7 @@ function showPauseScreen() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -512,6 +519,7 @@ function showNameEntry() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -579,6 +587,11 @@ function cleanup() {
         clearInterval(keepAlive);
         keepAlive = null;
     }
+    // CRITICAL: Disable input manager FIRST (restores BBS input state)
+    if (inputManager) {
+        inputManager.disable();
+        inputManager = null;
+    }
     if (screen) {
         screen.removeAllListeners();
         screen.destroy();
@@ -597,6 +610,15 @@ door.onStart(async (ctx) => {
         // Use defaults
     }
     initScreen();
+    // Set up input management (enables mouse, keyboard routing)
+    inputManager = new DoorInputManager(ctx, screen, {
+        enableGameMode: true, // Game needs raw keyboard input
+        enableGrabKeys: true, // Capture all keys for game controls
+        enableMouse: true, // Enable mouse events
+        debug: false,
+        debugName: 'SuperQix'
+    });
+    inputManager.enable();
     showMenu();
 });
 door.onInput((ctx, key) => {

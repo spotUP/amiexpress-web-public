@@ -8,6 +8,7 @@
 import type { Socket, Server as SocketIOServer } from 'socket.io';
 import type { BBSSession } from '../index';
 import { rgbToHsv } from '../utils/image-to-ascii.util';
+import { renderShapeAscii } from '../utils/shape-ascii.util';
 
 // Global cache for temporal smoothing (stabilizes flickering pixels)
 const lumaCache = new Map<string, Float32Array>();
@@ -242,8 +243,8 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
   // Handle raw video data and convert to ASCII art
   // Inspired by Python/Pillow ASCII art techniques with calibrated characters
-  // Modes: 'braille' (8x resolution), 'superres'/'halfblock' (4x rich mode with 10-level shading), 'ascii' (character-based), 'hsv' (16-color HSV-based)
-  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv', data: ArrayBuffer }) => {
+  // Modes: 'braille' (8x resolution), 'superres'/'halfblock' (4x rich mode with 10-level shading), 'ascii' (character-based), 'hsv' (16-color HSV-based), 'shape' (shape-based geometric rendering)
+  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv' | 'shape', data: ArrayBuffer }) => {
     const session = sessions.get(socket.id);
 
     const { width, height, colored, mode = 'halfblock', data: buffer } = data;
@@ -893,6 +894,28 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
         }
         if (y < height - 1) asciiFrame += '\n';
       }
+    } else if (mode === 'shape') {
+      // ========== SHAPE-BASED MODE (Alex Harri Algorithm) ==========
+      // Uses 6-dimensional shape vectors for character selection instead of brightness-only
+      // Provides 5-10x sharper edges and characters that follow geometric shapes
+      //
+      // Key features:
+      // - 6D sampling (TL, TR, ML, MR, BL, BR) captures directional density
+      // - k-d tree for O(log n) nearest neighbor search
+      // - Quantization caching for O(1) performance after warmup
+      // - Directional contrast enhancement (external sampling suppresses internal)
+      // - Global contrast enhancement (power function sharpens edges)
+      //
+      // See: https://alexharri.com/blog/ascii-rendering
+
+      asciiFrame = renderShapeAscii(pixels, width, height, {
+        colored: false, // Grayscale for now (color integration TODO)
+        contrastExponent: 2.5, // Higher = sharper edges
+        directionalContrast: false, // Disabled by default (causes issues with thin features)
+        suppressionFactor: 0.7, // 70% suppression for external regions (if enabled)
+        externalDistance: 0.15, // External sampling distance in cell units
+        useCache: true, // Enable quantization caching
+      });
     } else {
       // ========== ASCII CHARACTER MODE (WORLD-CLASS ENHANCED) ==========
 

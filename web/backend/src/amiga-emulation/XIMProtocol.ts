@@ -906,6 +906,7 @@ debugLog(
   private isDataQueryCommand(command: number): boolean {
     // BB_* commands in 126-146 range should NOT be treated as data queries
     // They are BBS info commands handled by bbsInfoHandler
+    // Also exclude MULTICOM (531) which is in the 527-548 range but handled by bbsInfoHandler
     const isBBSInfo = [
       XIMCommand.BB_CONFNAME,    // 126
       XIMCommand.BB_CONFLOCAL,   // 127
@@ -915,6 +916,7 @@ debugLog(
       XIMCommand.BB_CHATFLAG,    // 142
       XIMCommand.BB_PCONFNAME,   // 146
       XIMCommand.BB_PCONFLOCAL,  // 147
+      XIMCommand.MULTICOM,       // 531
     ].includes(command);
 
     if (isBBSInfo) {

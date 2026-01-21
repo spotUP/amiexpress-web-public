@@ -58,7 +58,7 @@ class AudioService {
     onLeave() { this.playSound('leave'); }
     onError() { this.playSound('error'); }
     onNotification() { this.playSound('notification'); }
-    onReaction() { this.playSound('confirm'); }
-    onDM() { this.playSound('notification'); }
+    onReaction() { this.playSound('reaction'); }
+    onDM() { this.playSound('dm'); }
 }
 exports.AudioService = AudioService;

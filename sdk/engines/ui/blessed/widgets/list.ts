@@ -397,6 +397,7 @@ export class List extends Element {
       this.selected = Math.min(this.selected, items.length - 1);
     }
     this._updateContent();
+    this.emit('set items', items);
   }
 
   select(index: number): void {

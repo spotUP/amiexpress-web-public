@@ -4,7 +4,7 @@
  * All constants, themes, catalogs, and configuration data
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PROFILES_KEY = exports.LOBBY_KEY = exports.LOBBY_BULLETINS = exports.ACHIEVEMENTS = exports.GAME_CATALOG = exports.ACTION_BUTTON_ORDER = exports.ACTION_BUTTON_STYLES = exports.UI_THEME = exports.ANSI_TAGS = exports.PokerAction = exports.BOT_NAMES = exports.MAX_ACTIVITY_EVENTS = exports.REFRESH_INTERVAL_MS = exports.WEEKLY_BULLETIN_NUMBER = exports.WIN_REWARD = exports.ACTIVITY_REWARD = exports.ENTRY_FEE_RATE = exports.WEEK_MS = exports.DAILY_COOLDOWN_MS = exports.DAILY_BONUS = exports.STARTING_CHIPS = exports.CHIP_NAME = void 0;
+exports.PROFILES_KEY = exports.LOBBY_KEY = exports.LOBBY_BULLETINS = exports.ACHIEVEMENTS = exports.GAME_CATALOG = exports.UNO_ACTION_BUTTON_ORDER = exports.UNO_ACTION_BUTTON_STYLES = exports.ACTION_BUTTON_ORDER = exports.ACTION_BUTTON_STYLES = exports.UI_THEME = exports.ANSI_TAGS = exports.PokerAction = exports.BOT_NAMES = exports.MAX_ACTIVITY_EVENTS = exports.REFRESH_INTERVAL_MS = exports.WEEKLY_BULLETIN_NUMBER = exports.WIN_REWARD = exports.ACTIVITY_REWARD = exports.ENTRY_FEE_RATE = exports.WEEK_MS = exports.DAILY_COOLDOWN_MS = exports.DAILY_BONUS = exports.STARTING_CHIPS = exports.CHIP_NAME = void 0;
 exports.CHIP_NAME = 'BBS Chips';
 exports.STARTING_CHIPS = 1000;
 exports.DAILY_BONUS = 200;
@@ -109,6 +109,39 @@ exports.ACTION_BUTTON_STYLES = {
     },
 };
 exports.ACTION_BUTTON_ORDER = ['fold', 'check', 'call', 'raise', 'quit'];
+exports.UNO_ACTION_BUTTON_STYLES = {
+    play: {
+        base: { fg: 'black', bg: 'green' },
+        hover: { fg: 'black', bg: 'light-green' },
+        focus: { fg: 'black', bg: 'lime' },
+        active: { fg: 'black', bg: 'green' },
+    },
+    draw: {
+        base: { fg: 'white', bg: 'blue' },
+        hover: { fg: 'white', bg: 'light-blue' },
+        focus: { fg: 'white', bg: 'cyan' },
+        active: { fg: 'white', bg: 'blue' },
+    },
+    uno: {
+        base: { fg: 'black', bg: 'yellow' },
+        hover: { fg: 'black', bg: 'light-yellow' },
+        focus: { fg: 'black', bg: 'white' },
+        active: { fg: 'black', bg: 'yellow' },
+    },
+    challenge: {
+        base: { fg: 'white', bg: 'red' },
+        hover: { fg: 'white', bg: 'light-red' },
+        focus: { fg: 'white', bg: 'yellow' },
+        active: { fg: 'white', bg: 'red' },
+    },
+    quit: {
+        base: { fg: 'white', bg: exports.UI_THEME.error },
+        hover: { fg: 'white', bg: 'light-red' },
+        focus: { fg: 'white', bg: 'yellow' },
+        active: { fg: 'white', bg: 'red' },
+    },
+};
+exports.UNO_ACTION_BUTTON_ORDER = ['play', 'draw', 'uno', 'challenge', 'quit'];
 exports.GAME_CATALOG = [
     {
         id: 'holdem',
@@ -135,11 +168,27 @@ exports.GAME_CATALOG = [
     {
         id: 'uno',
         name: 'UNO',
-        description: 'Classic UNO with ASCII cards, coming soon.',
+        description: 'Classic UNO with ASCII cards. First to 500 points wins.',
         minPlayers: 2,
         maxPlayers: 4,
-        stakes: [{ label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 }],
-        enabled: false,
+        stakes: [
+            { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+            { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+            { label: '50', smallBlind: 0, bigBlind: 50, buyIn: 1000 },
+        ],
+        enabled: true,
+    },
+    {
+        id: 'uno-house',
+        name: 'UNO: House Rules',
+        description: 'UNO with customizable house rules. Create your own chaos!',
+        minPlayers: 2,
+        maxPlayers: 4,
+        stakes: [
+            { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+            { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+        ],
+        enabled: false, // Enable after House Rules implementation
     },
 ];
 exports.ACHIEVEMENTS = [

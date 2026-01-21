@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.rpcHandlers = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const galaga_game_1 = require("./game/galaga-game");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
@@ -69,6 +70,7 @@ let menuBox = null;
 let gameLoop = null;
 let game = null;
 let doorContext; // Will be set on start
+let inputManager = null;
 function initScreen() {
     screen = blessed_1.default.screen({
         smartCSR: true,
@@ -88,6 +90,7 @@ function initScreen() {
         content: formatHUD(),
     });
     gameArea = blessed_1.default.box({
+        fixed: true,
         parent: screen,
         top: 1,
         left: 0,
@@ -142,6 +145,7 @@ function showMenu() {
         menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
     });
     menuBox = blessed_1.default.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -179,6 +183,7 @@ async function showHighscores() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed_1.default.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -219,6 +224,7 @@ function showHelp() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed_1.default.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -367,6 +373,7 @@ function showPauseScreen() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed_1.default.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -429,6 +436,7 @@ function showNameEntry() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed_1.default.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -485,6 +493,11 @@ function cleanup() {
         clearInterval(keepAlive);
         keepAlive = null;
     }
+    // CRITICAL: Disable input manager FIRST (restores BBS input state)
+    if (inputManager) {
+        inputManager.disable();
+        inputManager = null;
+    }
     if (screen) {
         screen.removeAllListeners();
         screen.destroy();
@@ -502,6 +515,15 @@ door.onStart(async (ctx) => {
         /* use defaults */
     }
     initScreen();
+    // Set up input management (enables mouse, keyboard routing)
+    inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
+        enableGameMode: true, // Game needs raw keyboard input
+        enableGrabKeys: true, // Capture all keys for game controls
+        enableMouse: true, // Enable mouse events
+        debug: false,
+        debugName: 'Galaga'
+    });
+    inputManager.enable();
     showMenu();
 });
 door.onInput((ctx, key) => {

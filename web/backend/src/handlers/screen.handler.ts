@@ -1891,7 +1891,12 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(fileToUse), isPetscii: false, isRip: true, filePath: fileToUse };
           } else {
-            return { content: readScreenWithTransforms(fileToUse).text, isPetscii: false, isRip: false, filePath: fileToUse };
+            const content = readScreenWithTransforms(fileToUse).text;
+            try {
+              const fs = require('fs');
+              fs.appendFileSync('debug-screen-loads.log', `[${new Date().toISOString()}] Loaded ${screenName} from ${fileToUse} (content length: ${content.length})\n`);
+            } catch (e) { /* ignore */ }
+            return { content, isPetscii: false, isRip: false, filePath: fileToUse };
           }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
@@ -1995,6 +2000,10 @@ console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(er
 
 console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
 console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
+try {
+  const fs = require('fs');
+  fs.appendFileSync('debug-screen-loads.log', `[${new Date().toISOString()}] NOT FOUND: ${screenName} (nodeId: ${nodeId}, conferenceId: ${conferenceId})\n`);
+} catch (e) { /* ignore */ }
   SysopDebugUtil.warn(null, session, 'Screen File', `Screen "${screenName}" not found after trying ${attemptNum} locations`);
 
   if (screenName.toUpperCase() === 'AWAITSCREEN') {

@@ -18,6 +18,7 @@ class DisconnectionModal {
             cancelColor: 'red',
             overlay: true,
             overlayOpacity: 0.5,
+            zIndex: 9990,
             onConfirm: () => {
                 options.onRetry();
             },

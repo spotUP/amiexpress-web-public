@@ -694,8 +694,18 @@ console.error('[handleCommand] Error running queued screen commands:', error);
 
       return;
     }
-  } catch (error) {
+  } catch (error: any) {
 console.error('Error in display state handling:', error);
+if (typeof error === 'object' && error !== null) {
+  console.error('Stack:', error.stack);
+}
+// Log to file for retrieval
+try {
+  const fs = require('fs');
+  fs.appendFileSync('debug-display-flow.log', `[${new Date().toISOString()}] Error in display state handling: ${error?.message || error}\nStack: ${error?.stack}\nSession: ${JSON.stringify({ state: session.state, subState: session.subState, currentConf: session.currentConf })}\n`);
+} catch (e) {
+  // ignore
+}
     emitText(socket, '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
     emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -1220,6 +1230,14 @@ console.error('[SystemStats] Error tracking login:', error);
 
           // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
           // LOGON screen contains ~CC_wall, ~CC_gwall etc. that need to execute
+          const cfg = getConfig();
+          const dataDir = cfg.get ? cfg.get('dataDir') : cfg.dataDir;
+          console.log(`[LOGIN] Attempting to display LOGON screen. dataDir=${dataDir}`);
+          try {
+            const fs = require('fs');
+            fs.appendFileSync('debug-display-flow.log', `[${new Date().toISOString()}] Login successful for ${user.username}. dataDir=${dataDir}\n`);
+          } catch (e) {}
+
           const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
 
           if (logonDisplayed) {
@@ -2122,7 +2140,7 @@ console.log(' In file area selection state');
       // Blank line ends description (express.e:17704-17707)
       if (input.trim() === '') {
       // Web upload mode: process uploaded file immediately
-      if (session.tempData.webUploadMode && session.tempData.currentUploadedFile) {
+      if (session.tempData?.webUploadMode && session.tempData?.currentUploadedFile) {
         const uploadedFile = session.tempData.currentUploadedFile;
 
         // Add file to batch with description
@@ -2132,8 +2150,9 @@ console.log(' In file area selection state');
           isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
         });
 
-        // Set currentUploadIndex to 0 so processBatchFile can process it
-        session.tempData.currentUploadIndex = 0;
+        // Use sequential counter instead of array index (consistent with refactored code)
+        session.tempData.currentUploadIndex = session.tempData.filesProcessedCount || 0;
+        session.tempData.filesProcessedCount = (session.tempData.filesProcessedCount || 0) + 1;
 
         // Trigger file processing by calling processBatchFile directly
         emitText(socket, '\r\n\r\n\x1b[36mProcessing upload...\x1b[0m\r\n');

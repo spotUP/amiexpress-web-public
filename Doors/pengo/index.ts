@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import { Screen, Box, List, ScrollableBox, Message, Prompt } from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { PengoGame } from "./game/pengo-game";
 import { rpcHandlers } from "./server";
 import { PengoData, InputKey, Direction } from "./game/types";
@@ -68,6 +69,7 @@ let menuBox: any = null; // Can be List, Box, etc.
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let game: PengoGame | null = null;
 let doorContext: any; // Will be set on start
+let inputManager: DoorInputManager | null = null;
 
 function initScreen(): void {
   screen = new Screen({
@@ -550,6 +552,13 @@ function cleanup(): void {
     clearInterval(keepAlive);
     keepAlive = null;
   }
+
+  // CRITICAL: Disable input manager FIRST (restores BBS input state)
+  if (inputManager) {
+    inputManager.disable();
+    inputManager = null;
+  }
+
   if (screen) {
     screen.removeAllListeners();
     screen.destroy();
@@ -568,7 +577,19 @@ door.onStart(async (ctx: any) => {
   } catch {
     /* cached */
   }
+
   initScreen();
+
+  // Set up input management (enables mouse, keyboard routing)
+  inputManager = new DoorInputManager(ctx, screen, {
+    enableGameMode: true,   // Game needs raw keyboard input
+    enableGrabKeys: true,   // Capture all keys for game controls
+    enableMouse: true,      // Enable mouse events
+    debug: false,
+    debugName: 'Pengo'
+  });
+  inputManager.enable();
+
   showMenu();
 });
 

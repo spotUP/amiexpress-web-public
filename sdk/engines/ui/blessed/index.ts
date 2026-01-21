@@ -68,6 +68,8 @@ export { DockablePanel } from './widgets/dockable-panel';
 export type { DockablePanelOptions, DockPosition, PanelState } from './widgets/dockable-panel';
 export { DropdownMenu, dropdownMenu } from './widgets/dropdown-menu';
 export type { DropdownMenuOptions, DropdownMenuItem } from './widgets/dropdown-menu';
+export { MenuBar } from './widgets/menu-bar';
+export type { MenuBarOptions, MenuBarItem } from './widgets/menu-bar';
 export { MobileCarousel, mobileCarousel } from './widgets/mobile-carousel';
 export type { MobileCarouselOptions } from './widgets/mobile-carousel';
 export { Autocomplete } from './widgets/autocomplete';

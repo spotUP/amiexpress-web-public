@@ -36,6 +36,7 @@ export class XIMIOHandler {
   private state: XIMState;
   private inputQueue: string[] = [];
   private keyState: Record<string, boolean> = {}; // Simultaneous key state tracking
+  private ximPort?: number; // Address of AEDoorPort for bidirectional XIM protocol detection
 
   // Line input state
   private waitingForLineInput: boolean = false;
@@ -677,14 +678,53 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       const keyData = this.processHotkeyToken(token);
       const keyCode = keyData.charCodeAt(0);
 
-      // CRITICAL FIX 2026-01-15: Write character code to msg.command, NOT XIM port!
-      // express.e:3438-3448: msg.command:=readChar(doorTimeout,...)
-      // Doors expect the character code in msg.command. Writing getXimPort() (1 or 2)
-      // caused doors to see Ctrl+A/Ctrl+B instead of the actual key pressed.
-      this.messageParser.writeCommand(msg.msgAddr, keyCode);
+      // CRITICAL FIX 2026-01-20: Character goes to msg.string[0], NOT msg.command!
+      // express.e:3445: msg.string[0]:=ch
+      // express.e:3447: msg.command:=ximPort
+      // Doors read character from msg.string[0], with msg.command = XIM port (1 or 2)
+
+      // Write character to msg.string[0] (and null-terminate at msg.string[1])
+      const stringAddr = msg.msgAddr + 0x14;  // MESSAGE_STRING_OFFSET
+      this.emulator.writeMemory(stringAddr, keyCode);
+      this.emulator.writeMemory(stringAddr + 1, 0);  // Null terminator
+
+      // DEBUG: Check if door has stringPtr (separate buffer from embedded msg.string)
+      const stringPtr = msg.stringPtr || 0;
+console.log(`[DEBUG JH_HK handleHotkey] msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
+
+      // If door has stringPtr, write character there too
+      if (stringPtr && stringPtr !== stringAddr) {
+        this.emulator.writeMemory(stringPtr, keyCode);
+        this.emulator.writeMemory(stringPtr + 1, 0);
+console.log(`[DEBUG JH_HK handleHotkey] ALSO wrote to stringPtr at 0x${stringPtr.toString(16)}`);
+      }
+
+      // Write XIM port to msg.command (express.e line 3447)
+      const ximPort = this.getXimPort();
+      this.messageParser.writeCommand(msg.msgAddr, ximPort);
+
       const keyName = keyCode === 13 ? 'ENTER' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
 debugLog(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
-      this.reply(msg, 1, keyData);
+console.log(`[XIMIOHandler] JH_HK: Wrote keyCode=${keyCode} (${keyName}) to msg.string[0] at 0x${stringAddr.toString(16)}`);
+console.log(`[XIMIOHandler] JH_HK: Wrote ximPort=${ximPort} to msg.command`);
+
+      // CRITICAL FIX 2026-01-20: DON'T pass empty string to reply() - it overwrites msg.string!
+      // Door needs to read the character from msg.string[0], so we must preserve it.
+      // Passing undefined for stringValue skips writeMessageString() call.
+console.log(`[DEBUG JH_HK] BEFORE reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)} keyCode=${keyCode}`);
+      this.reply(msg, 1);
+console.log(`[DEBUG JH_HK] AFTER reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)}`);
+
+      // DEBUG: Also dump entire msg.string buffer (32 bytes) - SHOW HEX!
+      const msgStrBuf = [];
+      for (let i = 0; i < 32; i++) {
+        msgStrBuf.push(this.emulator.readMemory(stringAddr + i));
+      }
+      const msgStrHex = msgStrBuf.map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const msgStrAscii = msgStrBuf.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`[DEBUG JH_HK] msg.string[0-31] HEX: ${msgStrHex}`);
+console.log(`[DEBUG JH_HK] msg.string[0-31] ASCII: "${msgStrAscii}"`);
+
       this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
       this.emulator.resume();  // CRITICAL: Resume when input was queued (pre-paused by callback)
       return;
@@ -723,11 +763,30 @@ debugLog(`  Key name: ${keyName}`);
 debugLog(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
 debugLog('========================================');
 
-    // CRITICAL FIX 2026-01-15: Write character code to msg.command, NOT XIM port!
-    // express.e:3438-3448: msg.command:=readChar(doorTimeout,...)
-    // Doors expect the character code in msg.command.
-    this.messageParser.writeCommand(msg.msgAddr, keyCode);
-    this.reply(msg, this.state.carrierDropped ? -1 : 1, keyData);
+    // CRITICAL FIX 2026-01-20: Character goes to msg.string[0], NOT msg.command!
+    // express.e:3445: msg.string[0]:=ch
+    // express.e:3447: msg.command:=ximPort
+    // This matches the handleHotkey() code path above.
+    const stringAddr = msg.msgAddr + 0x14;  // MESSAGE_STRING_OFFSET
+    this.emulator.writeMemory(stringAddr, keyCode);
+    this.emulator.writeMemory(stringAddr + 1, 0);  // Null terminator
+
+    // DEBUG: Check if door has stringPtr (separate buffer from embedded msg.string)
+    const stringPtr = msg.stringPtr || 0;
+console.log(`[DEBUG JH_HK completeHotkey] msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
+
+    // If door has stringPtr, write character there too
+    if (stringPtr && stringPtr !== stringAddr) {
+      this.emulator.writeMemory(stringPtr, keyCode);
+      this.emulator.writeMemory(stringPtr + 1, 0);
+console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to stringPtr at 0x${stringPtr.toString(16)}`);
+    }
+
+    // Write XIM port to msg.command (express.e line 3447)
+    const ximPort = this.getXimPort();
+    this.messageParser.writeCommand(msg.msgAddr, ximPort);
+
+    this.reply(msg, this.state.carrierDropped ? -1 : 1);
 
     // CRITICAL: Now that input is received, send ReplyMsg to door
     this.execLibrary.replyMsg(msg.msgAddr);
@@ -1621,7 +1680,9 @@ debugLog('[XIMIOHandler] Pause complete, reply sent, resuming');
   /**
    * Send reply to door via bidirectional XIM protocol
    *
-   * CRITICAL FIX 2026-01-13: XIM doors poll AEDoorPort for replies, not mn_ReplyPort
+   * CRITICAL FIX 2026-01-20: Detect if door uses native AEDoor.library or direct XIM
+   * - Native AEDoor.library doors: Set mn_ReplyPort to their own reply port → use replyMsg()
+   * - Direct XIM doors (RTW, Bulls): Set mn_ReplyPort to AEDoorPort → use bidirectional mode
    */
   private reply(msg: XIMMessage, data: number, stringValue?: string): void {
 debugLog('[XIMIOHandler] Sending reply to door:');
@@ -1646,14 +1707,25 @@ debugLog(`  Data: ${data}`);
       message: 'Reply to door I/O request',
     });
 
-    // Send reply via standard Exec ReplyMsg - this puts the message
-    // on mn_ReplyPort where the door is waiting for it.
-    // Note: DoorLifecycleManager also calls replyMsg() but that's OK -
-    // replyMsg is idempotent (tracks via repliedMessages).
-    // DO NOT put reply on XIM port - it confuses the skipReplies tracking.
-    debugLog(`[XIMIOHandler] Reply via ReplyMsg (msg=0x${msg.msgAddr.toString(16)})`);
-    // Note: We don't call replyMsg here because DoorLifecycleManager does it
-    // after handleMessage returns. This prevents double-reply issues.
+    // CRITICAL: Detect if door is using native AEDoor.library or direct XIM protocol
+    // Native aedoor.library sets mn_ReplyPort to door's own reply port (NOT AEDoorPort)
+    // Direct XIM doors (RTW, Bulls) set mn_ReplyPort to AEDoorPort for bidirectional flow
+    const replyPortAddr = this.emulator.readMemory32(msg.msgAddr + 14); // mn_ReplyPort offset
+    const ximPortAddr = this.ximPort || 0;
+    const useBidirectional = (replyPortAddr === ximPortAddr || replyPortAddr === 0);
+
+    if (useBidirectional && ximPortAddr !== 0) {
+      // Direct XIM door - use bidirectional protocol (reply to AEDoorPort)
+      const NT_REPLYMSG = 6;
+      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+      this.execLibrary.putMsg(ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+      debugLog(`[XIMIOHandler] Reply sent via PutMsg to ximPort=0x${ximPortAddr.toString(16)} (bidirectional XIM)`);
+    } else {
+      // Native AEDoor.library door - use standard reply mechanism
+      // The door set mn_ReplyPort to its own reply port, so use replyMsg()
+      this.execLibrary.replyMsg(msg.msgAddr);
+      debugLog(`[XIMIOHandler] Reply sent via ReplyMsg to replyPort=0x${replyPortAddr.toString(16)} (native aedoor.library)`);
+    }
   }
 
   /**

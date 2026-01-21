@@ -12,7 +12,10 @@ function createThreadView(screen, threadData) {
         left: 'center',
         width: '80%',
         height: '80%',
-        border: { type: 'line' },
+        border: {
+            type: 'line',
+            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+        },
         style: { border: { fg: 'cyan' } },
         label: ` Thread: ${threadData.parent.message.substring(0, 40)}... `,
         tags: true,
@@ -24,6 +27,7 @@ function createThreadView(screen, threadData) {
         focusable: true,
         hidden: true,
         trapFocus: true,
+        zIndex: 9990,
     });
     // Parent message
     let content = `{bold}{cyan-fg}Original Message:{/cyan-fg}{/bold}\n`;

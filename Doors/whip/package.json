@@ -1,0 +1,30 @@
+{
+  "name": "whip",
+  "version": "1.0.0",
+  "description": "Demo Scene Project Management Door",
+  "main": "dist/index.js",
+  "bbsCommand": "WHIP",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
+  "author": "AmiExpress Team",
+  "keywords": ["bbs", "door", "demo-scene", "project-management"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx tsx index.ts",
+    "watch": "tsc --watch",
+    "build:watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "xml2js": "^0.6.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/xml2js": "^0.4.14",
+    "@types/uuid": "^9.0.0"
+  }
+}

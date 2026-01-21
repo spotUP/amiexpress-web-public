@@ -17,6 +17,7 @@ import { List } from './list';
 import { Button } from './button';
 import type { ElementOptions } from '../core/types';
 import type { Screen } from '../core/screen';
+import { trapModalInput } from '../utils/modal-helpers';
 
 export interface CategoryItem {
   id: string;
@@ -63,6 +64,7 @@ export class CategoryPicker extends Box {
   private _categoryDebounce: ReturnType<typeof setTimeout> | null = null;
   private _globalClickHandler: ((data: any) => void) | null = null;
   private _categoryWidth: number;
+  private _trapCleanup?: () => void;
 
   constructor(options: CategoryPickerOptions) {
     const categoryWidth = options.categoryWidth || 14;
@@ -291,6 +293,11 @@ export class CategoryPicker extends Box {
    * Show the picker
    */
   display(position?: { x: number; y: number }): void {
+    // Trap modal input to prevent keys from leaking to background elements
+    if (!this._trapCleanup) {
+      this._trapCleanup = trapModalInput(this);
+    }
+
     if (position && this.screen) {
       const screenWidth = this.screen.width as number;
       const overlayWidth = this.width as number || 50;
@@ -346,6 +353,12 @@ export class CategoryPicker extends Box {
     if (this.screen && this._globalClickHandler) {
       this.screen.removeListener('click', this._globalClickHandler);
       this._globalClickHandler = null;
+    }
+
+    // Cleanup trap handlers
+    if (this._trapCleanup) {
+      this._trapCleanup();
+      this._trapCleanup = undefined;
     }
 
     this.screen?.render();

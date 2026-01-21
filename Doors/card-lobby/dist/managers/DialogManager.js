@@ -39,6 +39,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DialogManager = void 0;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const lib_1 = require("../lib");
 class DialogManager {
     constructor(screen, overlayShade) {
@@ -351,6 +352,274 @@ class DialogManager {
                 resolve();
             };
             message.display(text, cleanup);
+            this.screen.render();
+        });
+    }
+    // ============================================================================
+    // UNO DIALOGS
+    // ============================================================================
+    async showColorSelectionDialog() {
+        return new Promise((resolve) => {
+            if (this.modalActive) {
+                resolve(null);
+                return;
+            }
+            this.modalActive = true;
+            this.overlayShade.show();
+            const dialogWidth = 40;
+            const dialogHeight = 12;
+            const dialog = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: dialogWidth,
+                height: dialogHeight,
+                label: ' Choose Color ',
+                border: 'line',
+                shadow: true,
+                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+            });
+            const buttonWidth = 12;
+            const buttonHeight = 3;
+            const startY = 2;
+            const spacing = 1;
+            const colors = [
+                { color: 'R', label: 'RED', fg: 'white', bg: 'red' },
+                { color: 'G', label: 'GREEN', fg: 'black', bg: 'green' },
+                { color: 'B', label: 'BLUE', fg: 'white', bg: 'blue' },
+                { color: 'Y', label: 'YELLOW', fg: 'black', bg: 'yellow' },
+            ];
+            const cleanup = (result) => {
+                dialog.destroy();
+                this.overlayShade.hide();
+                this.modalActive = false;
+                this.screen.render();
+                resolve(result);
+            };
+            colors.forEach((colorDef, index) => {
+                const button = (0, blessed_helpers_1.createButton)({
+                    parent: dialog,
+                    top: startY + (index * (buttonHeight + spacing)),
+                    left: 'center',
+                    width: buttonWidth,
+                    height: buttonHeight,
+                    content: colorDef.label,
+                    align: 'center',
+                    valign: 'middle',
+                    style: {
+                        fg: colorDef.fg,
+                        bg: colorDef.bg,
+                        hover: { fg: 'white', bg: colorDef.bg },
+                        focus: { fg: 'white', bg: colorDef.bg },
+                    },
+                    mouse: true,
+                });
+                button.on('press', () => cleanup(colorDef.color));
+            });
+            dialog.key(['escape', 'q'], () => cleanup(null));
+            dialog.focus();
+            this.screen.render();
+        });
+    }
+    async showHouseRuleCreationDialog() {
+        return new Promise((resolve) => {
+            if (this.modalActive) {
+                resolve(null);
+                return;
+            }
+            this.modalActive = true;
+            this.overlayShade.show();
+            const dialogWidth = 60;
+            const dialogHeight = 20;
+            const dialog = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: dialogWidth,
+                height: dialogHeight,
+                label: ' Create House Rule ',
+                border: 'line',
+                shadow: true,
+                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+            });
+            (0, blessed_helpers_1.createText)({
+                parent: dialog,
+                top: 1,
+                left: 2,
+                content: 'Rule Number (1-5):',
+                style: { fg: 'cyan' },
+            });
+            const numberInput = blessed_1.default.textbox({
+                parent: dialog,
+                top: 2,
+                left: 2,
+                width: 10,
+                height: 1,
+                inputOnFocus: true,
+                style: { fg: 'white', bg: 'blue' },
+            });
+            (0, blessed_helpers_1.createText)({
+                parent: dialog,
+                top: 4,
+                left: 2,
+                content: 'Rule Name:',
+                style: { fg: 'cyan' },
+            });
+            const nameInput = blessed_1.default.textbox({
+                parent: dialog,
+                top: 5,
+                left: 2,
+                width: dialogWidth - 4,
+                height: 1,
+                inputOnFocus: true,
+                style: { fg: 'white', bg: 'blue' },
+            });
+            (0, blessed_helpers_1.createText)({
+                parent: dialog,
+                top: 7,
+                left: 2,
+                content: 'Description:',
+                style: { fg: 'cyan' },
+            });
+            const descInput = blessed_1.default.textbox({
+                parent: dialog,
+                top: 8,
+                left: 2,
+                width: dialogWidth - 4,
+                height: 3,
+                inputOnFocus: true,
+                style: { fg: 'white', bg: 'blue' },
+            });
+            const cleanup = (result) => {
+                dialog.destroy();
+                this.overlayShade.hide();
+                this.modalActive = false;
+                this.screen.render();
+                resolve(result);
+            };
+            const submitBtn = (0, blessed_helpers_1.createButton)({
+                parent: dialog,
+                bottom: 2,
+                left: 'center',
+                width: 12,
+                height: 3,
+                content: 'Create',
+                align: 'center',
+                valign: 'middle',
+                style: {
+                    fg: 'white',
+                    bg: 'green',
+                    hover: { fg: 'white', bg: 'light-green' },
+                    focus: { fg: 'white', bg: 'light-green' },
+                },
+                mouse: true,
+            });
+            submitBtn.on('press', () => {
+                const number = parseInt(numberInput.getValue(), 10);
+                const name = nameInput.getValue().trim();
+                const description = descInput.getValue().trim();
+                if (number < 1 || number > 5 || isNaN(number)) {
+                    cleanup(null);
+                    return;
+                }
+                if (!name || !description) {
+                    cleanup(null);
+                    return;
+                }
+                cleanup({
+                    number: number,
+                    name,
+                    description,
+                    createdBy: 'current-user', // This should be replaced with actual user ID
+                    createdAt: Date.now(),
+                });
+            });
+            dialog.key(['escape', 'q'], () => cleanup(null));
+            numberInput.focus();
+            this.screen.render();
+        });
+    }
+    async showHouseRulesListDialog(activeRules) {
+        return new Promise((resolve) => {
+            if (this.modalActive) {
+                resolve();
+                return;
+            }
+            this.modalActive = true;
+            this.overlayShade.show();
+            const dialogWidth = 70;
+            const dialogHeight = 25;
+            const dialog = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: dialogWidth,
+                height: dialogHeight,
+                label: ' Active House Rules ',
+                border: 'line',
+                shadow: true,
+                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+            });
+            const content = [];
+            content.push('{cyan-fg}House Rules at this table:{/}\n');
+            if (activeRules.length === 0) {
+                content.push('{gray-fg}No house rules active yet.{/}');
+                content.push('');
+                content.push('Play a House Rules card (1-5) to create a rule!');
+            }
+            else {
+                activeRules.forEach((rule) => {
+                    content.push(`{yellow-fg}[${rule.number}]{/} {white-fg}${rule.name}{/}`);
+                    content.push(`    ${rule.description}`);
+                    content.push('');
+                });
+            }
+            const scrollBox = blessed_1.default.scrollablebox({
+                parent: dialog,
+                top: 1,
+                left: 1,
+                right: 1,
+                bottom: 4,
+                content: content.join('\n'),
+                tags: true,
+                scrollable: true,
+                alwaysScroll: true,
+                mouse: true,
+                keys: true,
+                vi: true,
+                scrollbar: {
+                    ch: ' ',
+                    style: { bg: 'blue' },
+                },
+                style: { fg: 'white', bg: 'black' },
+            });
+            const cleanup = () => {
+                dialog.destroy();
+                this.overlayShade.hide();
+                this.modalActive = false;
+                this.screen.render();
+                resolve();
+            };
+            const closeBtn = (0, blessed_helpers_1.createButton)({
+                parent: dialog,
+                bottom: 1,
+                left: 'center',
+                width: 12,
+                height: 3,
+                content: 'Close',
+                align: 'center',
+                valign: 'middle',
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    hover: { fg: 'white', bg: 'light-blue' },
+                    focus: { fg: 'white', bg: 'light-blue' },
+                },
+                mouse: true,
+            });
+            closeBtn.on('press', cleanup);
+            dialog.key(['escape', 'q', 'enter'], cleanup);
+            closeBtn.focus();
             this.screen.render();
         });
     }

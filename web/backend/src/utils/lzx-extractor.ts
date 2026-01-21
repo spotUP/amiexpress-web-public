@@ -723,9 +723,16 @@ console.log(`[LZX] CRC mismatch (expected ${entry.crc}, got ${this.sum})`);
     // Decompress
     this.destPos = 0;
     this.decrunchLength = entry.unpackSize;
-    this.decrunchMethod = 2; // Normal compression
+    this.decrunchMethod = entry.packMode; // Use pack mode from entry (2 or 3)
 
     try {
+      // Read Huffman decode tables before decompression (CRITICAL!)
+      // This must be called before decrunch() to populate literalTable, offsetTable, etc.
+      const tableReadError = this.readLiteralTable();
+      if (tableReadError) {
+        throw new Error('Failed to read Huffman decode tables');
+      }
+
       this.decrunch();
     } catch (error: any) {
 console.error(`[LZX] Decompression failed: ${error.message}`);
@@ -854,8 +861,9 @@ console.log(`[LZX] Extracting stored file...`);
         success = await unlzx.extractStored(file, entry, outputPath);
         break;
 
-      case 2: // Normal (compressed)
-console.log(`[LZX] Decompressing file...`);
+      case 2: // Normal (LZX method 2 - compressed)
+      case 3: // LZX method 3 (faster compression)
+console.log(`[LZX] Decompressing file (method ${entry.packMode})...`);
         success = await unlzx.extractNormal(file, entry, outputPath);
         break;
 

@@ -37,8 +37,10 @@ export function updateStatusBar(
   const myStatus = presence?.status || 'online';
 
   // Use setFullContent for the custom LiveChat format
+  // Keep it short to fit in 80 columns without wrapping
+  const statusIcon = PRESENCE_INDICATORS[myStatus];
   (statusBar as any).setFullContent(
-    ` @${username} | Node ${nodeId} | #${ch} | ${PRESENCE_INDICATORS[myStatus]} ${myStatus.toUpperCase()} | [${status}] | F1:Help F4:Emoji `
+    `@${username} | Node ${nodeId} | #${ch} | [${status.charAt(0)}] ${statusIcon} | F1:Help F4:Emoji`
   );
 
   updateChatHeader();

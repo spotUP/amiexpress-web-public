@@ -11,7 +11,7 @@ function createChannelList(screen) {
         parent: screen,
         top: 1,
         left: 0,
-        width: 16,
+        width: 20,
         height: '100%-3',
         label: ' CHANNELS ',
         border: { type: 'line' },

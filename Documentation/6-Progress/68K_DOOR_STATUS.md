@@ -1,13 +1,13 @@
 # 68K Door Status Tracker
 
-Last updated: 2026-01-16
+Last updated: 2026-01-21
 
 ## Summary
 - **Total XIM (68K) doors:** 67
-- **Tested:** 7
-- **Working:** 3
-- **Partial:** 3
-- **Broken:** 1
+- **Tested:** 8
+- **Working:** 4
+- **Partial:** 2
+- **Broken:** 2
 - **Issues:** 0
 
 ## Door List
@@ -48,18 +48,18 @@ Last updated: 2026-01-16
 | req | BBS:Doors/Request/Request | Untested | File request (path fixed) |
 | TList | Doors:SRH/TList/TLP2 | Untested | T-List |
 | ulist | Doors:5D-User/5D-User | Untested | User list |
-| wall | dOORS:dRE/dRE!WAll/dRE!WAll | Partial | Input works, but new entries not saved to data file |
+| wall | dOORS:dRE/dRE!WAll/dRE!WAll | Broken | Data corruption: ghost characters, stale msg.string data, JH_HK/DT_NAME issues - see dRE_WALL_HANDOFF.md |
 | DD | BBS:doors/TurboLister/TurboLister.XiM | Working | Works after JH_WRITE reply fix - needs Dir files populated |
 
 ### AquaScan Variants
 | Cmd | Location | Status | Notes |
 |-----|----------|--------|-------|
-| cs | Doors:AquaScan/AquaScan.020 | Untested | Conference scan |
-| f | Doors:AquaScan/AquaScan.020 | Untested | File scan |
-| fr | Doors:AquaScan/AquaScan.020 | Untested | File request scan |
-| N | Doors:AquaScan/AquaScan.000 | Untested | New files |
-| nsu | Doors:AquaScan/AquaScan.020 | Untested | New since upload |
-| scan | Doors:AquaScan/AquaScan.020 | Untested | General scan |
+| cs | Doors:AquaScan/AquaScan.020 | Working | Conference scan |
+| f | Doors:AquaScan/AquaScan.020 | Working | File scan |
+| fr | Doors:AquaScan/AquaScan.020 | Working | File request scan |
+| N | Doors:AquaScan/AquaScan.000 | Working | New files |
+| nsu | Doors:AquaScan/AquaScan.020 | Working | New since upload |
+| scan | Doors:AquaScan/AquaScan.020 | Working | General scan |
 
 ### BBSLink Gateway Doors
 These all route through the bbslink door gateway:
@@ -169,4 +169,45 @@ These all route through the bbslink door gateway:
 - TypeScript webhook.service.ts already provides same functionality (USER_LOGIN/USER_LOGOUT)
 - Use WEBHOOK admin command to configure Discord webhooks
 - STATUS: N/A - Use TypeScript webhook.service.ts instead of 68K binary
+
+### 2026-01-20 Session
+
+**dRE!WAll (wall) - DEEP DIVE:**
+- STATUS CHANGE: Partial -> Broken (data loss bug confirmed)
+- Root cause identified: DT_NAME overwrites msg.string after JH_HK character collection
+- JH_HK implementation verified correct (matches express.e:3445-3447 exactly)
+- Character flow: 'p' 'o' 'o' 'p' written to msg.string[0], echoed correctly
+- DT_NAME call writes "sysop" to msg.string, destroying collected characters
+- Door writes OLD data (original "kokkiklhs / Hello from Athens")
+- msg.stringPtr investigation: stringPtr = embedded buffer (no separate buffer)
+- File operations verified: Read gets correct 100 bytes, Write happens but with wrong data
+- Initial display issue: Existing entries not shown until AFTER submit
+- Tested 15+ entries: "test", "yo", "burp", "hoho", "to", "poop" - all lost
+- **CRITICAL BUG:** "Ghost Y" - door echoed "y" when user typed 10 different characters
+  - Indicates msg.string contains stale data from previous prompt "Write Anonymous? (N/y):"
+  - Door is reading corrupt/stale msg.string data instead of fresh input
+- **FAILED ATTEMPT:** LINE INPUT MODE hypothesis (msg.data = max length) - WRONG!
+  - msg.data is TIMEOUT in seconds, not character count
+  - Express.e:1128 confirms `ch:=readChar(doorTimeout)` - single char only
+  - Reverted this incorrect change
+- Complete handoff document: Documentation/6-Progress/dRE_WALL_HANDOFF.md
+- PRIORITY: LOW - Non-essential door, moving to FR (File Request) - critical functionality
+
+### 2026-01-21 Session
+
+**AquaScan (FR, F, N, cs, nsu, scan) - COMPLETE:**
+- All variants working (FR, F, N, cs, nsu, scan)
+- File browsing fully functional
+- **JH_FLAGFILE (Command 13):** File flagging with F command working
+- **Issue #1 Fixed:** Flagged files now persist after door exit
+  - Root cause: bbsSession is separate object from main session
+  - Fix: Copy bbsSession.flaggedFiles to session.flaggedFiles on door exit
+  - Location: door.handler.ts:794-803, 2414-2422
+- **Issue #2 Fixed:** Download handler now finds files in both Upload/ and Files/ directories
+  - Root cause: findFilesInConference() only searched Conf{N}/Files/
+  - Fix: Search BOTH Conf{N}/Upload/ and Conf{N}/Files/ directories
+  - Location: download.handler.ts:540-586
+- **End-to-end workflow:** Flag file in FR (F command) -> Quit (Q) -> Download (D) -> File appears in download list
+- Documentation: FLAGGED_FILES_PERSISTENCE_FIX.md
+- STATUS: Working - Complete file request/flagging/download functionality
 

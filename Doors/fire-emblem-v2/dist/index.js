@@ -238,6 +238,7 @@ class FireEmblemGame {
             showMinimizeButton: true,
             resizable: true,
             draggable: true,
+            fixed: true,
             minWidth: 40,
             minHeight: 15,
             border: { type: 'line', fg: 'cyan' },

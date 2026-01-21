@@ -48,6 +48,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 // Local helper to strip blessed tags from text
 function stripTags(text) {
     return text.replace(/{[^}]+}/g, '');
@@ -147,13 +148,18 @@ async function createApp(session) {
     const initialRoomId = session.bbsSession?.currentRoomId;
     const initialRoomName = session.bbsSession?.currentRoomName;
     // ========== INPUT HANDLING ==========
-    // Wire up terminal input to the blessed screen
-    // Audio is now handled client-side in hybrid mode
+    // Use DoorInputManager for proper input routing and cleanup
+    const inputManager = new door_input_manager_1.DoorInputManager(session, screen, {
+        enableGameMode: false, // Blessed UI mode, not ncurses game mode
+        enableGrabKeys: false, // Blessed focus system handles keys
+        enableMouse: true, // Enable mouse events
+        debug: false,
+        debugName: 'LiveChat'
+    });
     let showHelpFn = null;
+    // Custom input handler for F1 help key
     if (session.bbsSession) {
-        // CRITICAL: Set ALL THREE flags for input routing (see TYPESCRIPT_DOOR_TROUBLESHOOTING.md)
-        session.bbsSession.inDoorManager = true;
-        session.bbsSession.mouseEventsEnabled = true; // Enable mouse hover/move events
+        const originalHandler = session.bbsSession.doorInputHandler;
         session.bbsSession.doorInputHandler = (data) => {
             // Handle F1 directly (escape sequences: \x1bOP or \x1b[11~)
             if (data === '\x1bOP' || data === '\x1b[11~') {
@@ -161,13 +167,15 @@ async function createApp(session) {
                     showHelpFn();
                 return true;
             }
-            screen.program.emit('data', data);
-            return true;
+            // Call the DoorInputManager's handler
+            return originalHandler ? originalHandler(data) : true;
         };
     }
+    // Enable door input (sets all flags correctly)
+    inputManager.enable();
     // ========== LOADING SCREEN ==========
     // Layout constants for 80x24 terminal
-    const SIDEBAR_WIDTH = 18; // Single combined sidebar
+    const SIDEBAR_WIDTH = 12; // Initial sidebar width (will auto-expand via fitContent)
     // Track which tab is active in the sidebar
     let sidebarTab = 'channels';
     // ========== MENU BAR (at top) ==========
@@ -417,7 +425,7 @@ async function createApp(session) {
         fitContent: { width: true, height: false }, // Auto-expand width to fit content
         style: {
             fg: 'white',
-            bg: 'lightblack', // Dark grey for panel backgrounds
+            bg: 'black',
         },
     });
     // ========== CHANNEL LIST (Inside Sidebar) ==========
@@ -1761,11 +1769,9 @@ async function createApp(session) {
             socket.emit('room:leave');
         }
         services_1.events.clear();
-        // Disable mouse and clean up input handler
-        screen.disableMouse();
-        if (session.bbsSession) {
-            delete session.bbsSession.doorInputHandler;
-        }
+        // CRITICAL: Disable door input FIRST (before screen.destroy)
+        // This restores BBS input state properly
+        inputManager.disable();
         screen.destroy();
         // Restore fixed terminal mode only if we enabled wide mode
         if (chatOnly) {

@@ -12,7 +12,10 @@ export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
     left: 'center',
     width: '80%',
     height: '70%',
-    border: { type: 'line' },
+    border: {
+      type: 'line',
+      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+    },
     style: { border: { fg: 'yellow' } },
     label: ' Pinned Messages ',
     tags: true,

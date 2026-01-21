@@ -33,6 +33,7 @@ export class EmojiPicker {
       categoryWidth: 12,
       debounceMs: 80,
       borderColor: 'cyan',
+      zIndex: 9990,
       categoryStyle: {
         fg: 'white',
         bg: 'black',

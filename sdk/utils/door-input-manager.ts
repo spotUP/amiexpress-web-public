@@ -72,8 +72,8 @@ export class DoorInputManager {
     this.session = session;
     this.screen = screen;
     this.options = {
-      enableGameMode: options.enableGameMode ?? true,
-      enableGrabKeys: options.enableGrabKeys ?? true,
+      enableGameMode: options.enableGameMode ?? false,  // Default OFF - only enable for raw game input (ncurses)
+      enableGrabKeys: options.enableGrabKeys ?? false,  // Default OFF - only enable for games needing all keys
       enableMouse: options.enableMouse ?? true,
       debug: options.debug ?? false,
       debugName: options.debugName ?? 'DoorInputManager'
@@ -111,15 +111,22 @@ export class DoorInputManager {
     }
 
     // 4. Enable blessed mouse events
+    console.log('[DoorInputManager] Checking blessed mouse: enableMouse=', this.options.enableMouse, 'hasScreen=', !!this.screen, 'hasProgram=', !!this.screen?.program);
     if (this.options.enableMouse && this.screen?.program) {
+      console.log('[DoorInputManager] Calling screen.program.enableMouse()');
       this.screen.program.enableMouse();
+      console.log('[DoorInputManager] screen.program._mouseEnabled=', (this.screen.program as any)._mouseEnabled);
       this.log('✓ Blessed mouse events enabled');
+    } else {
+      console.log('[DoorInputManager] Skipped blessed mouse enablement');
     }
 
     // 4b. Enable BBS session mouse events (required for socket-handlers to forward mouse to door)
     // Set DIRECTLY on bbsSession - this is what socket-handlers checks
+    console.log('[DoorInputManager] Checking BBS mouse: enableMouse=', this.options.enableMouse, 'hasSession=', !!this.session.bbsSession);
     if (this.options.enableMouse && this.session.bbsSession) {
       this.session.bbsSession.mouseEventsEnabled = true;
+      console.log('[DoorInputManager] Set bbsSession.mouseEventsEnabled = true');
       this.log('✓ BBS mouse events enabled');
     }
 

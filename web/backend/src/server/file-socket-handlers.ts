@@ -59,6 +59,33 @@ console.error("[Upload] Failed to load conferences for accounting", err);
   }
 }
 
+/**
+ * Get upload context from single source of truth
+ * Priority: session.tempData (current working context)
+ */
+function getUploadContext(session: BBSSession, socket: Socket): UploadSessionContext | null {
+  // Priority 1: session.tempData (current working context)
+  if (session.tempData?.uploadMode) {
+    return session.tempData;
+  }
+
+  // Priority 2: uploadContext (backup reference)
+  if (session.uploadContext?.uploadMode) {
+    session.tempData = session.uploadContext;
+    return session.uploadContext;
+  }
+
+  // Priority 3: stored context by socket ID
+  const storedContext = getUploadContextById(socket.id);
+  if (storedContext) {
+    session.tempData = storedContext;
+    session.uploadContext = storedContext;
+    return storedContext;
+  }
+
+  return null;
+}
+
 function clearUploadContext(session: BBSSession, socket?: Socket) {
   const uploadId = session.uploadContext?.uploadSessionId || socket?.id;
   if (uploadId) {
@@ -66,6 +93,166 @@ function clearUploadContext(session: BBSSession, socket?: Socket) {
   }
   session.tempData = undefined;
   session.uploadContext = undefined;
+}
+
+/**
+ * Handle DIZ extraction and description prompting
+ * Shared logic for both file-upload and file-uploaded handlers
+ * Returns true if file was processed, false if waiting for description input
+ */
+async function handleDizExtractionAndDescription(
+  socket: Socket,
+  session: BBSSession,
+  data: { filename: string; originalname: string; size: number; path?: string },
+  config: any
+): Promise<boolean> {
+  const uploadContext = getUploadContext(session, socket);
+  if (!uploadContext) {
+    return false;
+  }
+
+  // Check if we already have a file pending description
+  if (!uploadContext.currentUploadedFile) {
+    uploadContext.currentUploadedFile = {
+      filename: data.originalname,
+      path: data.path,
+      size: data.size,
+    };
+
+    socket.emit(
+      "ansi-output",
+      `\r\n\x1b[32mFile selected: ${data.originalname}\x1b[0m\r\n`
+    );
+    socket.emit(
+      "ansi-output",
+      `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`
+    );
+
+console.log("[DIZ] File selected, checking for DIZ...");
+
+    // Try to extract FILE_ID.DIZ
+    if (data.path) {
+      try {
+        const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir"));
+        socket.emit("ansi-output", "Checking for FILE_ID.DIZ...\r\n");
+
+        const dizPromise = extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 10000)
+        );
+        const dizLines = await Promise.race([dizPromise, timeoutPromise]);
+
+        if (dizLines && dizLines.length > 0) {
+          // Found FILE_ID.DIZ - use it as description
+          socket.emit(
+            "ansi-output",
+            "\x1b[36m[FILE_ID.DIZ found - using as description]\x1b[0m\r\n\r\n"
+          );
+
+          uploadContext.currentDescription = dizLines;
+          uploadContext.hasDiz = true;
+          uploadContext.skipDizExtraction = true;
+
+          // Add to upload batch and process immediately
+          uploadContext.uploadBatch.push({
+            filename: data.originalname,
+            description: dizLines.join("\n"),
+            isPrivate: false,
+          });
+
+          // Use sequential counter instead of array length
+          uploadContext.currentUploadIndex = uploadContext.filesProcessedCount || 0;
+          uploadContext.filesProcessedCount = (uploadContext.filesProcessedCount || 0) + 1;
+
+          // Process file immediately (with error recovery)
+          try {
+            await processBatchFile(socket, session, data, config);
+            return true; // File processed successfully
+          } catch (error: any) {
+console.error("[DIZ] Error processing file after DIZ extraction:", error);
+            // Clear context and show error
+            socket.emit(
+              "ansi-output",
+              `\r\n\x1b[31mUpload failed: ${error.message}\x1b[0m\r\n`
+            );
+            socket.emit(
+              "ansi-output",
+              "\r\n\x1b[32mPress any key to continue...\x1b[0m"
+            );
+            session.menuPause = false;
+            session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+            clearUploadContext(session, socket);
+            return true; // Handled (with error), don't wait for description
+          }
+        } else {
+          // No DIZ found (null from timeout or no file) - prompt for description
+          socket.emit("ansi-output", "No FILE_ID.DIZ found.\r\n");
+          promptForDescription(socket, uploadContext, data);
+          return false; // Waiting for description
+        }
+      } catch (error: any) {
+console.error("[DIZ] Extraction error:", error);
+        // On extraction error, show error message then prompt for description
+        socket.emit(
+          "ansi-output",
+          `\x1b[33mError extracting FILE_ID.DIZ: ${error.message}\x1b[0m\r\n`
+        );
+        promptForDescription(socket, uploadContext, data);
+        return false; // Waiting for description
+      }
+    } else {
+      // No path - prompt for description
+      promptForDescription(socket, uploadContext, data);
+      return false;
+    }
+  }
+
+  // File already pending description from previous attempt
+  // This happens if user tried upload, got error, then tried again
+console.log("[DIZ] File already pending from previous attempt, prompting for description");
+  promptForDescription(socket, uploadContext, data);
+  return false; // Waiting for description (not processed yet)
+}
+
+/**
+ * Prompt user for file description
+ * Shared helper to avoid code duplication
+ * NOTE: Caller must set session.subState = UPLOAD_DESC_INPUT after calling this
+ */
+function promptForDescription(
+  socket: Socket,
+  uploadContext: UploadSessionContext,
+  data: { filename: string; originalname: string; size: number; path?: string }
+): void {
+  const maxDescLines = 10;
+  const sizeStr = formatFileSize(data.size);
+  const dateStr = formatUploadDate(getSystemTime());
+  const filename13 = data.originalname.substring(0, 13).padEnd(13);
+
+  socket.emit("ansi-output", "\r\n");
+  socket.emit(
+    "ansi-output",
+    `Enter a description, you only have ${maxDescLines} lines.\r\n`
+  );
+  socket.emit(
+    "ansi-output",
+    "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n"
+  );
+  socket.emit(
+    "ansi-output",
+    "                                [--------------------------------------------]\r\n"
+  );
+  socket.emit("ansi-output", `${filename13}${sizeStr}  ${dateStr} :`);
+
+  uploadContext.currentDescription = [];
+  uploadContext.maxDescLines = maxDescLines;
+  uploadContext.descLineCount = 0;
+  uploadContext.currentLineBuffer = ""; // Clear any buffered input
+
+  // Switch to line input mode (disable hotkeys)
+  socket.emit("set-input-mode", "line");
+
+  // NOTE: session.subState must be set by CALLER (this function doesn't have access to session)
 }
 
 /**
@@ -78,8 +265,7 @@ export async function processBatchFile(
   data: { filename: string; originalname: string; size: number; path?: string },
   config: any
 ) {
-  const uploadContext: UploadSessionContext | undefined =
-    session.uploadContext || session.tempData;
+  const uploadContext = getUploadContext(session, socket);
   if (!uploadContext) {
     socket.emit(
       "ansi-output",
@@ -94,14 +280,18 @@ export async function processBatchFile(
     clearUploadContext(session, socket);
     return;
   }
-  if (session.tempData !== uploadContext) {
-    session.tempData = uploadContext;
-  }
 
   // Original batch upload mode or processing after description
   const fileArea = uploadContext.fileArea;
+
+  // Use sequential counter instead of array index (fixes off-by-one bugs)
   const currentIndex = uploadContext.currentUploadIndex || 0;
   const currentFile = uploadContext.uploadBatch[currentIndex];
+
+  // Increment files processed counter for tracking
+  if (!uploadContext.filesProcessedCount) {
+    uploadContext.filesProcessedCount = 0;
+  }
 
   if (!currentFile) {
     socket.emit(
@@ -243,36 +433,48 @@ console.error(`[Upload] Error moving file: ${error.message}`);
       }
     }
 
-    // Check for duplicate file in this area (UNIQUE constraint on filename, areaid)
+    // Check for duplicate file in this area (express.e:19356 checkForFile, 19371-19377)
     const existingFile = await db.query(
       "SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2",
       [normalizedFilename, fileArea.id]
     );
 
+    let foundDupe = false;
     if (existingFile.rows.length > 0) {
-      throw new Error(
-        `File "${currentFile.filename}" already exists in this area. Delete the old file first or choose a different filename.`
+      // Express.e:19372-19376 - Move duplicate to HOLD directory, don't abort
+      foundDupe = true;
+      socket.emit(
+        "ansi-output",
+        `\r\n\x1b[33mFile already exists, moving to ${config.get("sysopName")}'s private directory\x1b[0m\r\n`
       );
+      fileStatus = "hold"; // Move to HOLD directory
+      checkedMarker = "D"; // Mark as duplicate (express.e uses 'D' marker)
     }
 
-    // Save file to database
-    const fileEntry = {
-      filename: currentFile.filename,
-      description: finalDescription, // Use DIZ if found, otherwise batch description
-      size: data.size,
-      uploader: session.user!.username,
-      uploadDate: getSystemTime(),
-      downloads: 0,
-      areaId: fileArea.id,
-      fileIdDiz: finalDescription, // Store DIZ text if extracted
-      rating: undefined,
-      votes: undefined,
-      status: fileStatus, // active, private, or hold based on test result
-      checked: checkedMarker, // P/F/N status marker
-      comment: undefined, // Optional sysop comment
-    };
+    // Save file to database (express.e:19356-19377)
+    // Skip database insert for duplicates - file already exists in database
+    if (!foundDupe) {
+      const fileEntry = {
+        filename: currentFile.filename,
+        description: finalDescription, // Use DIZ if found, otherwise batch description
+        size: data.size,
+        uploader: session.user!.username,
+        uploadDate: getSystemTime(),
+        downloads: 0,
+        areaId: fileArea.id,
+        fileIdDiz: finalDescription, // Store DIZ text if extracted
+        rating: undefined,
+        votes: undefined,
+        status: fileStatus, // active, private, or hold based on test result
+        checked: checkedMarker, // P/F/N/D status marker
+        comment: undefined, // Optional sysop comment
+      };
 
-    await db.createFileEntry(fileEntry as any);
+      await db.createFileEntry(fileEntry as any);
+    } else {
+      // Duplicate file - skip database insert but still write to DIR file in HOLD
+console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile.filename}`);
+    }
 
     // Write to DIR file (express.e:19473-19509)
     // Express.e: Uploads go to DIR{maxDirs} - always numbered, never named
@@ -339,10 +541,11 @@ console.error(`[Upload] Error writing DIR file: ${error.message}`);
       // Don't fail upload on DIR write error
     }
 
-    // Update user stats in users table (for backward compatibility)
+    // Update user stats in users table (express.e:19379-19384)
+    // Express.e: Stats ONLY updated when status=RESULT_SUCCESS (not for duplicates/failures)
     // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
     const trackUploads = creditAccountTrackUploads(session.user!);
-    if (trackUploads) {
+    if (trackUploads && !foundDupe) {
       // Update CPS tracking on user object using real transfer speed from frontend
       const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
       await updateUploadStats(session.user!, data.size, realUploadCPS);
@@ -412,12 +615,13 @@ console.error("[Upload] Error writing user disk files:", diskErr);
     }
 
     // Update per-conference upload stats (express.e:19530+)
+    // Express.e: Conference stats ONLY updated for successful uploads (not duplicates)
     try {
       const conferences = await loadConferences(session, db);
       const target = conferences?.find(
         (c: any) => c.id === session.currentConf
       );
-      if (target && trackUploads) {
+      if (target && trackUploads && !foundDupe) {
         target.uploads = (target.uploads || 0) + 1;
         target.bytesUpload = (target.bytesUpload || 0) + data.size;
         // Use db's delegated method instead of creating new repository
@@ -431,45 +635,54 @@ console.error("[Upload] Failed to persist conference upload stats", err);
     }
 
     // Log file upload (express.e:9493 callersLog)
-    await callersLog(
-      session.user!.id,
-      session.user!.username,
-      "Uploaded file",
-      currentFile.filename
-    );
+    // Express.e: Only log successful uploads (not duplicates)
+    if (!foundDupe) {
+      await callersLog(
+        session.user!.id,
+        session.user!.username,
+        "Uploaded file",
+        currentFile.filename
+      );
+    }
 
     // Emit BBS event for LiveChat integration
-    try {
-      const conference = await db.getConferenceById(session.currentConf);
-      emitUpload({
-        username: session.user!.username,
-        nodeId: session.nodeId || 1,
-        fileName: currentFile.filename,
-        fileSize: data.size,
-        conferenceId: session.currentConf,
-        conferenceName: conference?.name,
-        timestamp: Date.now(),
-      });
-    } catch (error) {
+    // Express.e: Only emit events for successful uploads (not duplicates)
+    if (!foundDupe) {
+      try {
+        const conference = await db.getConferenceById(session.currentConf);
+        emitUpload({
+          username: session.user!.username,
+          nodeId: session.nodeId || 1,
+          fileName: currentFile.filename,
+          fileSize: data.size,
+          conferenceId: session.currentConf,
+          conferenceName: conference?.name,
+          timestamp: Date.now(),
+        });
+      } catch (error) {
 console.error("[BBSEvent] Error emitting upload event:", error);
+      }
     }
 
     // Trigger webhook for file upload
-    try {
-      const { webhookService, WebhookTrigger } = await import(
-        "../services/webhook.service"
-      );
-      const conference = await db.getConferenceById(session.currentConf);
+    // Express.e: Only trigger webhooks for successful uploads (not duplicates)
+    if (!foundDupe) {
+      try {
+        const { webhookService, WebhookTrigger } = await import(
+          "../services/webhook.service"
+        );
+        const conference = await db.getConferenceById(session.currentConf);
 
-      await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, {
-        username: session.user!.username,
-        filename: currentFile.filename,
-        filesize: data.size,
-        conference: conference?.name || "Unknown",
-        description: finalDescription.substring(0, 100),
-      });
-    } catch (error) {
+        await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, {
+          username: session.user!.username,
+          filename: currentFile.filename,
+          filesize: data.size,
+          conference: conference?.name || "Unknown",
+          description: finalDescription.substring(0, 100),
+        });
+      } catch (error) {
 console.error("[Webhook] Error sending file upload webhook:", error);
+      }
     }
 
     // Update sysop upload statistics (express.e:19440)
@@ -495,20 +708,31 @@ console.error(`[Upload] Error updating sysop stats: ${error.message}`);
     session.tempData.hasDiz = false;
     session.tempData.skipDizExtraction = false;
 
-    // Check if this was the last file in the batch
-    const currentIndex = uploadContext.currentUploadIndex || 0;
-    const totalFiles = uploadContext.uploadBatch?.length || 0;
-    const isLastFile = currentIndex >= totalFiles - 1;
+    // In web upload mode, frontend tracks ALL pending files and signals when batch is complete
+    // Backend only knows about files one at a time, so we can't check uploadBatch length
+    // Instead, ALWAYS request next file and let frontend emit 'upload-batch-complete' when done
 
-    if (isLastFile) {
-      // This was the last (or only) file - auto-complete the upload
-console.log("[Upload] Last file processed, auto-completing upload batch");
-      await handleUploadBatchComplete(socket, session);
-      return;
+    // Check if this is web upload mode (vs batch upload where backend knows all files upfront)
+    const isWebUploadMode = uploadContext.webUploadMode;
+
+    if (!isWebUploadMode) {
+      // Batch upload mode - backend knows all files upfront, can check if last
+      const currentIndex = uploadContext.currentUploadIndex || 0;
+      const totalFiles = uploadContext.uploadBatch?.length || 0;
+      const isLastFile = currentIndex >= totalFiles - 1;
+
+      if (isLastFile) {
+        // This was the last file in batch - auto-complete
+console.log("[Upload] Last file in batch upload, auto-completing");
+        await handleUploadBatchComplete(socket, session);
+        return;
+      }
     }
 
-    // More files in batch - emit show-file-upload to let frontend send next file
-    // Frontend tracks pending files and will emit 'upload-batch-complete' when done
+    // More files may be pending - emit show-file-upload to request next file
+    // Frontend will either:
+    // 1. Upload next file from its queue (web mode with multiple files selected)
+    // 2. Emit 'upload-batch-complete' if no more files (ends batch)
     socket.emit("show-file-upload", {
       accept: "*/*",
       maxSize: 10 * 1024 * 1024, // 10MB max
@@ -600,6 +824,7 @@ console.error(
 
 /**
  * Process file upload - shared logic for file-upload and file-uploaded events
+ * Now consolidated to avoid code duplication
  */
 async function processFileUpload(
   socket: Socket,
@@ -607,16 +832,9 @@ async function processFileUpload(
   config: any,
   data: { filename: string; originalname: string; size: number; path?: string }
 ) {
-  const socketUploadSession = getUploadContextById(socket.id);
-  const uploadSession =
-    socketUploadSession || session.uploadContext || session.tempData;
-  const hasValidUploadContext = !!(
-    uploadSession &&
-    uploadSession.uploadMode &&
-    uploadSession.fileArea
-  );
+  const uploadContext = getUploadContext(session, socket);
 
-  if (!hasValidUploadContext) {
+  if (!uploadContext) {
     socket.emit(
       "ansi-output",
       "\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n"
@@ -631,19 +849,12 @@ async function processFileUpload(
     return;
   }
 
-  if (session.tempData !== uploadSession) {
-    session.tempData = uploadSession;
-  }
-
 console.log("[processFileUpload] Processing:", data);
-console.log("[processFileUpload] session.tempData:", session.tempData);
 
   // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
-  const isRegularFileUpload =
-    session.tempData?.uploadMode && session.tempData?.fileArea;
+  const isRegularFileUpload = uploadContext.uploadMode && uploadContext.fileArea;
 
   // Check if Door Manager is active - it has its own file-uploaded handler for door archives
-  // But allow regular file uploads to proceed normally even if inDoorManager is true
   if (session.inDoorManager && !isRegularFileUpload) {
 console.log(
       "[processFileUpload] Door Manager is active (door archive upload), skipping"
@@ -666,124 +877,27 @@ console.log(
     return;
   }
 
-  // Web upload mode: check if we need to prompt for description
-  if (session.tempData.webUploadMode) {
-    // First time file is uploaded - try to extract FILE_ID.DIZ first
-    if (!session.tempData.currentUploadedFile) {
-      session.tempData.currentUploadedFile = {
-        filename: data.originalname,
-        path: data.path,
-        size: data.size,
-      };
+  // Web upload mode: use shared DIZ extraction and description prompting logic
+  if (uploadContext.webUploadMode) {
+    const wasProcessed = await handleDizExtractionAndDescription(
+      socket,
+      session,
+      data,
+      config
+    );
 
-      socket.emit(
-        "ansi-output",
-        `\r\n\x1b[32mFile selected: ${data.originalname}\x1b[0m\r\n`
-      );
-      socket.emit(
-        "ansi-output",
-        `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`
-      );
-
-console.log("[processFileUpload] File selected, checking for DIZ...");
-
-      // Try to extract FILE_ID.DIZ
-      if (data.path) {
-        try {
-          const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir"));
-          socket.emit("ansi-output", "Checking for FILE_ID.DIZ...\r\n");
-
-          const dizPromise = extractAndReadDiz(data.path, nodeWorkDir, [], 10);
-          const timeoutPromise = new Promise<null>((resolve) =>
-            setTimeout(() => resolve(null), 10000)
-          );
-          const dizLines = await Promise.race([dizPromise, timeoutPromise]);
-
-          if (dizLines && dizLines.length > 0) {
-            // Found FILE_ID.DIZ - use it as description
-            socket.emit(
-              "ansi-output",
-              "\x1b[36m[FILE_ID.DIZ found - using as description]\x1b[0m\r\n\r\n"
-            );
-
-            session.tempData.currentDescription = dizLines;
-            session.tempData.hasDiz = true;
-            session.tempData.skipDizExtraction = true;
-
-            // Process upload immediately - add file and set index to the newly added file
-            session.tempData.uploadBatch.push({
-              filename: data.originalname,
-              description: dizLines.join("\n"),
-              isPrivate: false,
-            });
-            // Set index to the newly added file, not 0 (avoids re-processing earlier files)
-            session.tempData.currentUploadIndex =
-              session.tempData.uploadBatch.length - 1;
-
-            // Trigger batch processing for this file
-            await processBatchFile(socket, session, data, config);
-          } else {
-            // No DIZ found - prompt for description (express.e:19290-19301)
-            const maxDescLines = 10;
-            const sizeStr = formatFileSize(data.size);
-            const dateStr = formatUploadDate(getSystemTime());
-            const filename13 = data.originalname.substring(0, 13).padEnd(13);
-
-            socket.emit("ansi-output", "No FILE_ID.DIZ found.\r\n\r\n");
-            socket.emit(
-              "ansi-output",
-              `Enter a description, you only have ${maxDescLines} lines.\r\n`
-            );
-            socket.emit(
-              "ansi-output",
-              "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n"
-            );
-            socket.emit(
-              "ansi-output",
-              "                                [--------------------------------------------]\r\n"
-            );
-            socket.emit("ansi-output", `${filename13}${sizeStr}  ${dateStr} :`);
-
-            session.tempData.currentDescription = [];
-            session.tempData.maxDescLines = maxDescLines;
-            session.tempData.descLineCount = 0;
-            session.tempData.currentLineBuffer = ""; // Clear any buffered input
-            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-            return;
-          }
-        } catch (error) {
-console.error("[processFileUpload] Error extracting DIZ:", error);
-          // Continue with manual description entry (express.e:19290-19301)
-          const maxDescLines = 10;
-          const sizeStr = formatFileSize(data.size);
-          const dateStr = formatUploadDate(getSystemTime());
-          const filename13 = data.originalname.substring(0, 13).padEnd(13);
-
-          socket.emit("ansi-output", "Error reading FILE_ID.DIZ.\r\n\r\n");
-          socket.emit(
-            "ansi-output",
-            `Enter a description, you only have ${maxDescLines} lines.\r\n`
-          );
-          socket.emit(
-            "ansi-output",
-            "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n"
-          );
-          socket.emit(
-            "ansi-output",
-            "                                [--------------------------------------------]\r\n"
-          );
-          socket.emit("ansi-output", `${filename13}${sizeStr}  ${dateStr} :`);
-
-          session.tempData.currentDescription = [];
-          session.tempData.maxDescLines = maxDescLines;
-          session.tempData.descLineCount = 0;
-          session.tempData.currentLineBuffer = ""; // Clear any buffered input
-          session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-          return;
-        }
-      }
+    // If file was not processed (waiting for description), return
+    if (!wasProcessed) {
+      session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+      return;
     }
+
+    // File was processed (had DIZ or already has description)
+    return;
   }
+
+  // Non-web upload mode (legacy batch upload) - process directly
+  await processBatchFile(socket, session, data, config);
 }
 
 /**
@@ -962,6 +1076,7 @@ console.error(
   );
 
   // Handle file upload completion (express.e:19059-19110)
+  // Now uses shared processFileUpload() to avoid code duplication
   socket.on(
     "file-uploaded",
     async (data: {
@@ -972,178 +1087,8 @@ console.error(
     }) => {
 console.log("File uploaded event received:", data);
 
-      // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
-      const isRegularFileUpload =
-        session.tempData?.uploadMode && session.tempData?.fileArea;
-
-      // Check if Door Manager is active - it has its own file-uploaded handler for door archives
-      // But allow regular file uploads to proceed normally even if inDoorManager is true
-      if (session.inDoorManager && !isRegularFileUpload) {
-console.log(
-          "[file-uploaded] Door Manager is active (door archive upload), skipping normal file upload handler"
-        );
-        return;
-      }
-
-      if (!isRegularFileUpload) {
-        socket.emit(
-          "ansi-output",
-          "\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n"
-        );
-        socket.emit(
-          "ansi-output",
-          "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-        );
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        clearUploadContext(session, socket);
-        return;
-      }
-
-      // Web upload mode: check if we need to prompt for description
-      if (session.tempData.webUploadMode) {
-        // First time file is uploaded - try to extract FILE_ID.DIZ first
-        if (!session.tempData.currentUploadedFile) {
-          session.tempData.currentUploadedFile = {
-            filename: data.originalname,
-            path: data.path,
-            size: data.size,
-          };
-
-          socket.emit(
-            "ansi-output",
-            `\r\n\x1b[32mFile selected: ${data.originalname}\x1b[0m\r\n`
-          );
-          socket.emit(
-            "ansi-output",
-            `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`
-          );
-
-console.log("[file-uploaded] File selected, checking for DIZ...");
-console.log("[file-uploaded] dataDir:", config.get("dataDir"));
-
-          // Try to extract FILE_ID.DIZ (express.e:19258-19285)
-          if (data.path) {
-            try {
-              const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir"));
-console.log("[file-uploaded] nodeWorkDir:", nodeWorkDir);
-
-              socket.emit("ansi-output", "Checking for FILE_ID.DIZ...\r\n");
-
-              // Add 10 second timeout to prevent hanging
-              const dizPromise = extractAndReadDiz(
-                data.path,
-                nodeWorkDir,
-                [],
-                10
-              );
-              const timeoutPromise = new Promise<null>((resolve) =>
-                setTimeout(() => resolve(null), 10000)
-              );
-              const dizLines = await Promise.race([dizPromise, timeoutPromise]);
-
-              if (dizLines && dizLines.length > 0) {
-                // Found FILE_ID.DIZ - use it as description (express.e:19332+)
-                socket.emit(
-                  "ansi-output",
-                  "\x1b[36m[FILE_ID.DIZ found - using as description]\x1b[0m\r\n\r\n"
-                );
-
-                // Store DIZ as description
-                session.tempData.currentDescription = dizLines;
-                session.tempData.hasDiz = true;
-                session.tempData.skipDizExtraction = true; // Skip second extraction
-
-                // Process upload immediately - no need to prompt
-                session.tempData.uploadBatch.push({
-                  filename: data.originalname,
-                  description: dizLines.join("\n"),
-                  isPrivate: false,
-                });
-                // Set index to the newly added file, not 0 (avoids re-processing earlier files)
-                session.tempData.currentUploadIndex =
-                  session.tempData.uploadBatch.length - 1;
-
-                // Continue processing (fall through to batch processing below)
-              } else {
-                // No DIZ found - prompt for description (express.e:19290-19301)
-                const maxDescLines = 10;
-                const sizeStr = formatFileSize(data.size);
-                const dateStr = formatUploadDate(getSystemTime());
-                const filename13 = data.originalname
-                  .substring(0, 13)
-                  .padEnd(13);
-
-                socket.emit("ansi-output", "No FILE_ID.DIZ found.\r\n\r\n");
-                socket.emit(
-                  "ansi-output",
-                  `Enter a description, you only have ${maxDescLines} lines.\r\n`
-                );
-                socket.emit(
-                  "ansi-output",
-                  "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n"
-                );
-                socket.emit(
-                  "ansi-output",
-                  "                                [--------------------------------------------]\r\n"
-                );
-                socket.emit(
-                  "ansi-output",
-                  `${filename13}${sizeStr}  ${dateStr} :`
-                );
-
-                // Initialize description storage
-                session.tempData.currentDescription = [];
-                session.tempData.maxDescLines = maxDescLines;
-                session.tempData.descLineCount = 0;
-
-                // Switch to line input mode (disable hotkeys)
-                socket.emit("set-input-mode", "line");
-                session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-                return;
-              }
-            } catch (error) {
-console.error("[FILE_ID.DIZ] Extraction error:", error);
-              // On error, fall back to prompting for description (express.e:19290-19301)
-              const maxDescLines = 10;
-              const sizeStr = formatFileSize(data.size);
-              const dateStr = formatUploadDate(getSystemTime());
-              const filename13 = data.originalname.substring(0, 13).padEnd(13);
-
-              socket.emit("ansi-output", "Error reading FILE_ID.DIZ.\r\n\r\n");
-              socket.emit(
-                "ansi-output",
-                `Enter a description, you only have ${maxDescLines} lines.\r\n`
-              );
-              socket.emit(
-                "ansi-output",
-                "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n"
-              );
-              socket.emit(
-                "ansi-output",
-                "                                [--------------------------------------------]\r\n"
-              );
-              socket.emit(
-                "ansi-output",
-                `${filename13}${sizeStr}  ${dateStr} :`
-              );
-
-              session.tempData.currentDescription = [];
-              session.tempData.maxDescLines = maxDescLines;
-              session.tempData.descLineCount = 0;
-
-              // Switch to line input mode (disable hotkeys)
-              socket.emit("set-input-mode", "line");
-              session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-              return;
-            }
-          }
-        }
-        // If currentUploadedFile exists and hasDiz is true, we've collected description - continue to process
-      }
-
-      // Call shared batch processing function
-      await processBatchFile(socket, session, data, config);
+      // Use shared upload processing logic (same as file-upload handler)
+      await processFileUpload(socket, session, config, data);
     }
   );
 

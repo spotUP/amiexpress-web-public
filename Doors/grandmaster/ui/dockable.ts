@@ -5,10 +5,12 @@ export function createDockable(options: DockablePanelOptions): DockablePanel {
   return createDockablePanel({
     useTitleBar: false,
     fitContent: false,
-    allowAutoDock: true,
-    resizable: true,
-    draggable: true,
-    dockPosition: 'float',
-    ...options,
+    fixed: true,  // Static panels for BBS environment
+    // Remove dockable features inappropriate for BBS:
+    // allowAutoDock: true,
+    // resizable: true,
+    // draggable: true,
+    // dockPosition: 'float',
+    ...options,  // User can override fixed if needed
   });
 }

@@ -58,8 +58,12 @@ class LiveChatClient {
   private lastSpeakingState: boolean = false;
   private speakingThreshold: number = 0.01;
 
-  // Audio playback for other users
-  private audioPlayers: Map<string | number, HTMLAudioElement> = new Map();
+  // Audio playback for other users (using Web Audio API for continuous streaming)
+  private audioPlayers: Map<string | number, {
+    source: AudioBufferSourceNode | null;
+    gainNode: GainNode;
+    chunks: ArrayBuffer[];
+  }> = new Map();
 
   constructor() {
     this.door = new ClientDoor({
@@ -179,9 +183,12 @@ class LiveChatClient {
   // UI Sound Playback
   // ============================================================================
 
+  /**
+   * Synthesize and play a note-based sound using Web Audio API
+   */
   private async playSound(soundId: string, params?: any): Promise<void> {
     // Queue sounds if audio isn't initialized yet (waiting for user gesture)
-    if (!this.audioInitialized) {
+    if (!this.audioInitialized || !this.audioContext) {
       // Only queue a few recent sounds to avoid overwhelming on first interaction
       if (this.pendingSounds.length < 3) {
         this.pendingSounds.push({ soundId, params });
@@ -191,10 +198,88 @@ class LiveChatClient {
     }
 
     try {
-      this.audio.playSound(soundId, params);
+      // Synthesize sound from SOUNDS configuration
+      await this.synthesizeSound(soundId);
     } catch (error) {
       console.debug('[LiveChatClient] Audio playback failed:', error);
     }
+  }
+
+  /**
+   * Synthesize a sound from note configuration
+   */
+  private async synthesizeSound(soundId: string): Promise<void> {
+    if (!this.audioContext) return;
+
+    // Sound definitions (matches sounds.ts)
+    const SOUNDS: Record<string, { note?: string; notes?: string[]; duration: number }> = {
+      message: { note: 'C5', duration: 0.05 },
+      mention: { notes: ['E5', 'G5', 'C6'], duration: 0.1 },
+      join: { notes: ['C4', 'E4', 'G4'], duration: 0.15 },
+      leave: { notes: ['G4', 'E4', 'C4'], duration: 0.15 },
+      error: { note: 'C3', duration: 0.2 },
+      notification: { note: 'A4', duration: 0.05 },
+      reaction: { note: 'E5', duration: 0.03 },
+      dm: { notes: ['C5', 'E5'], duration: 0.1 },
+    };
+
+    const soundConfig = SOUNDS[soundId];
+    if (!soundConfig) {
+      console.debug('[LiveChatClient] Unknown sound:', soundId);
+      return;
+    }
+
+    const notes = soundConfig.notes || (soundConfig.note ? [soundConfig.note] : []);
+    const duration = soundConfig.duration;
+
+    // Play each note in sequence
+    let offset = 0;
+    for (const note of notes) {
+      this.playNote(note, duration, offset);
+      offset += duration;
+    }
+  }
+
+  /**
+   * Play a single musical note
+   */
+  private playNote(note: string, duration: number, startOffset: number = 0): void {
+    if (!this.audioContext) return;
+
+    // Note to frequency mapping
+    const noteFrequencies: Record<string, number> = {
+      'C3': 130.81, 'D3': 146.83, 'E3': 164.81, 'F3': 174.61, 'G3': 196.00, 'A3': 220.00, 'B3': 246.94,
+      'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
+      'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99, 'A5': 880.00, 'B5': 987.77,
+      'C6': 1046.50, 'D6': 1174.66, 'E6': 1318.51, 'F6': 1396.91, 'G6': 1567.98, 'A6': 1760.00, 'B6': 1975.53,
+    };
+
+    const frequency = noteFrequencies[note];
+    if (!frequency) {
+      console.debug('[LiveChatClient] Unknown note:', note);
+      return;
+    }
+
+    const now = this.audioContext.currentTime + startOffset;
+
+    // Create oscillator for tone
+    const oscillator = this.audioContext.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(frequency, now);
+
+    // Create gain for volume envelope
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01); // Attack
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration); // Decay
+
+    // Connect nodes
+    oscillator.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+
+    // Play
+    oscillator.start(now);
+    oscillator.stop(now + duration);
   }
 
   // ============================================================================
@@ -379,32 +464,82 @@ class LiveChatClient {
   // Audio Playback from Other Users
   // ============================================================================
 
-  private playAudioChunk(userId: string | number, chunk: ArrayBuffer): void {
+  /**
+   * Play incoming audio chunk from another user
+   * Uses Web Audio API for better streaming performance
+   */
+  private async playAudioChunk(userId: string | number, chunk: ArrayBuffer): Promise<void> {
+    if (!this.audioContext) {
+      console.debug('[LiveChatClient] AudioContext not ready');
+      return;
+    }
+
+    try {
+      // Get or create player state for this user
+      let playerState = this.audioPlayers.get(userId);
+      if (!playerState) {
+        const gainNode = this.audioContext.createGain();
+        gainNode.gain.value = 0.8;
+        gainNode.connect(this.audioContext.destination);
+
+        playerState = {
+          source: null,
+          gainNode,
+          chunks: [],
+        };
+        this.audioPlayers.set(userId, playerState);
+      }
+
+      // Decode the audio chunk
+      const audioBuffer = await this.audioContext.decodeAudioData(chunk.slice(0));
+
+      // Create and play the audio buffer
+      const source = this.audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(playerState.gainNode);
+
+      // Start playback immediately
+      source.start(0);
+
+      // Store reference (so we can stop it if needed)
+      playerState.source = source;
+
+      // Clean up when finished
+      source.onended = () => {
+        if (playerState && playerState.source === source) {
+          playerState.source = null;
+        }
+      };
+
+    } catch (error) {
+      console.debug('[LiveChatClient] Failed to decode/play audio chunk:', error);
+
+      // Fallback to simple Audio element for compatibility
+      this.playAudioChunkFallback(userId, chunk);
+    }
+  }
+
+  /**
+   * Fallback audio playback using HTML Audio element
+   * Used if Web Audio API decoding fails
+   */
+  private playAudioChunkFallback(userId: string | number, chunk: ArrayBuffer): void {
     try {
       const blob = new Blob([chunk], { type: 'audio/webm;codecs=opus' });
       const url = URL.createObjectURL(blob);
 
-      // Get or create audio player for this user
-      let player = this.audioPlayers.get(userId);
-      if (!player) {
-        player = new Audio();
-        player.autoplay = true;
-        this.audioPlayers.set(userId, player);
-      }
-
-      // Play the chunk
-      player.src = url;
-      player.play().catch((error) => {
-        // Autoplay may be blocked - this is expected
-        console.debug('[LiveChatClient] Playback blocked (needs user gesture):', error);
+      const audio = new Audio(url);
+      audio.volume = 0.8;
+      audio.play().catch((error) => {
+        console.debug('[LiveChatClient] Fallback playback failed:', error);
       });
 
       // Clean up blob URL after playback
-      player.onended = () => {
+      audio.onended = () => {
         URL.revokeObjectURL(url);
       };
     } catch (error) {
-      console.error('[LiveChatClient] Failed to play audio chunk:', error);
+      console.error('[LiveChatClient] Fallback playback error:', error);
     }
   }
 

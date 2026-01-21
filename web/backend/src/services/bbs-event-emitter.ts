@@ -7,7 +7,7 @@
 
 import { Server as SocketIOServer } from 'socket.io';
 
-export type BBSEventType = 'user_login' | 'user_logout' | 'upload' | 'download' | 'door_activity';
+export type BBSEventType = 'user_login' | 'user_logout' | 'upload' | 'download' | 'door_activity' | 'custom_door_event';
 
 export interface BBSEventPayload {
   type: BBSEventType;
@@ -56,6 +56,16 @@ export interface DoorActivityEvent {
   nodeId: number;
   doorName: string;
   action: 'entered' | 'exited';
+  timestamp: number;
+}
+
+export interface CustomDoorEvent {
+  username: string;
+  nodeId: number;
+  doorName: string;
+  eventType: string;
+  message: string;
+  data?: Record<string, any>;
   timestamp: number;
 }
 
@@ -154,6 +164,25 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
   }
 
   /**
+   * Emit custom door event
+   * Allows doors to emit custom events that will be displayed in LiveChat and sent to webhooks
+   */
+  emitCustomDoorEvent(data: CustomDoorEvent): void {
+    this.emit('custom_door_event', {
+      type: 'custom_door_event',
+      username: data.username,
+      nodeId: data.nodeId,
+      timestamp: data.timestamp,
+      data: {
+        doorName: data.doorName,
+        eventType: data.eventType,
+        message: data.message,
+        ...data.data
+      }
+    });
+  }
+
+  /**
    * Emit import progress event to admin clients
    */
   emitImportProgress(data: { sessionId: string; progress: number; message: string }): void {
@@ -220,4 +249,11 @@ export function emitDownload(data: DownloadEvent): void {
  */
 export function emitDoorActivity(data: DoorActivityEvent): void {
   bbsEventEmitter.emitDoorActivity(data);
+}
+
+/**
+ * Convenience function for emitting custom door events
+ */
+export function emitCustomDoorEvent(data: CustomDoorEvent): void {
+  bbsEventEmitter.emitCustomDoorEvent(data);
 }

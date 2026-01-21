@@ -380,14 +380,19 @@ debugLog(`[LibraryManager] Creating ${basePortName} for BBS data access...`);
     const amigaNodeId = nodeId === 0 ? 1 : nodeId;
     // CRITICAL: AEServer ports use DOT notation: "AEServer.1", "AEServer.2", etc.
     const portName = basePortName === "AEServer" ? `${basePortName}.${amigaNodeId}` : `${basePortName}${amigaNodeId}`;
-    const mainPortAddr = this.execLibrary.createPublicPort(portName);
+
+    // CRITICAL FIX 2026-01-20: AEServer ports MUST use sigBit=12 to match door Wait() masks
+    // Many 68K doors (e.g., AquaScan, FR) use Wait(0x21000) which expects bit 12 (0x1000) or bit 17 (0x20000)
+    // Without sigBit=12, doors receive bit 16 (0x10000) which doesn't match → Wait() blocks forever
+    const AESERVER_SIGBIT = 12;
+    const mainPortAddr = this.execLibrary.createPublicPort(portName, undefined, AESERVER_SIGBIT);
     this.execLibrary.setDoorPortAddress(mainPortAddr);
 debugLog(
       `[LibraryManager] Created ${portName} at 0x${mainPortAddr.toString(16)}`
     );
 
     const simplePortName = basePortName === "AEServer" ? `${basePortName}.0` : basePortName;
-    const simplePortAddr = this.execLibrary.createPublicPort(simplePortName);
+    const simplePortAddr = this.execLibrary.createPublicPort(simplePortName, undefined, AESERVER_SIGBIT);
 debugLog(
       `[LibraryManager] Created ${simplePortName} (simple) at 0x${simplePortAddr.toString(
         16
@@ -396,7 +401,7 @@ debugLog(
     // Also register the raw nodeId variant if different, to satisfy any 0-based lookups.
     if (nodeId !== amigaNodeId) {
       const zeroBasedName = basePortName === "AEServer" ? `${basePortName}.${nodeId}` : `${basePortName}${nodeId}`;
-      const zeroBasedAddr = this.execLibrary.createPublicPort(zeroBasedName);
+      const zeroBasedAddr = this.execLibrary.createPublicPort(zeroBasedName, undefined, AESERVER_SIGBIT);
 debugLog(
         `[LibraryManager] Created ${zeroBasedName} at 0x${zeroBasedAddr.toString(
           16

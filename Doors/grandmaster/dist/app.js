@@ -170,7 +170,7 @@ class GrandmasterApp {
      */
     createScreen() {
         const screen = (0, blessed_helpers_1.createScreen)(this.session.bbs, {
-            dockBorders: true,
+            dockBorders: false, // Not needed for fixed panels in BBS environment
             title: 'GRANDMASTER v1.1.0', // Version for debugging
             fullUnicode: false,
             smartCSR: false, // Disable smart scroll-region optimization - prevents layout corruption

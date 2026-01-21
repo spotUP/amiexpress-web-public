@@ -7,6 +7,7 @@ import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/ty
 import type { GameDefinition, AchievementDefinition, BulletinEntry } from './types';
 
 export type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
+export type UnoActionButtonKey = 'play' | 'draw' | 'uno' | 'challenge' | 'quit';
 
 export const CHIP_NAME = 'BBS Chips';
 export const STARTING_CHIPS = 1000;
@@ -126,6 +127,41 @@ export const ACTION_BUTTON_STYLES: Record<ActionButtonKey, ButtonStyleSet> = {
 
 export const ACTION_BUTTON_ORDER: ActionButtonKey[] = ['fold', 'check', 'call', 'raise', 'quit'];
 
+export const UNO_ACTION_BUTTON_STYLES: Record<UnoActionButtonKey, ButtonStyleSet> = {
+  play: {
+    base: { fg: 'black', bg: 'green' },
+    hover: { fg: 'black', bg: 'light-green' },
+    focus: { fg: 'black', bg: 'lime' },
+    active: { fg: 'black', bg: 'green' },
+  },
+  draw: {
+    base: { fg: 'white', bg: 'blue' },
+    hover: { fg: 'white', bg: 'light-blue' },
+    focus: { fg: 'white', bg: 'cyan' },
+    active: { fg: 'white', bg: 'blue' },
+  },
+  uno: {
+    base: { fg: 'black', bg: 'yellow' },
+    hover: { fg: 'black', bg: 'light-yellow' },
+    focus: { fg: 'black', bg: 'white' },
+    active: { fg: 'black', bg: 'yellow' },
+  },
+  challenge: {
+    base: { fg: 'white', bg: 'red' },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+  quit: {
+    base: { fg: 'white', bg: UI_THEME.error },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+};
+
+export const UNO_ACTION_BUTTON_ORDER: UnoActionButtonKey[] = ['play', 'draw', 'uno', 'challenge', 'quit'];
+
 export const GAME_CATALOG: GameDefinition[] = [
   {
     id: 'holdem',
@@ -152,11 +188,27 @@ export const GAME_CATALOG: GameDefinition[] = [
   {
     id: 'uno',
     name: 'UNO',
-    description: 'Classic UNO with ASCII cards, coming soon.',
+    description: 'Classic UNO with ASCII cards. First to 500 points wins.',
     minPlayers: 2,
     maxPlayers: 4,
-    stakes: [{ label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 }],
-    enabled: false,
+    stakes: [
+      { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+      { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+      { label: '50', smallBlind: 0, bigBlind: 50, buyIn: 1000 },
+    ],
+    enabled: true,
+  },
+  {
+    id: 'uno-house',
+    name: 'UNO: House Rules',
+    description: 'UNO with customizable house rules. Create your own chaos!',
+    minPlayers: 2,
+    maxPlayers: 4,
+    stakes: [
+      { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+      { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+    ],
+    enabled: false,  // Enable after House Rules implementation
   },
 ];
 

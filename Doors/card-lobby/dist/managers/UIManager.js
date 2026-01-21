@@ -191,7 +191,7 @@ class UIManager {
             width: leftWidth,
             height: mainHeight,
             label: ' Lobby ',
-            border: { type: 'ascii' },
+            border: { type: 'line' },
             style: { border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg },
         });
         this.tableWindow = (0, blessed_helpers_1.createBox)({
@@ -200,7 +200,9 @@ class UIManager {
             left: leftWidth,
             width: rightWidth,
             height: mainHeight,
-            style: { bg: constants_1.UI_THEME.windowBg },
+            border: { type: 'line' },
+            label: ' Table ',
+            style: { border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg },
         });
         let tableListMap = {};
         this.lobbyList = (0, blessed_helpers_1.createList)({
@@ -231,18 +233,27 @@ class UIManager {
         this.lobbyActions = blessed_1.default.listbar({
             parent: this.lobbyWindow,
             bottom: 0,
-            left: 1,
-            right: 1,
+            left: 0,
+            right: 0,
             height: 1,
-            itemPadding: 0,
-            itemGap: 1,
-            style: { fg: 'white', bg: 'black' },
+            itemPadding: 1,
+            itemGap: 2,
+            mouse: true,
+            keys: true,
+            vi: true,
+            autoCommandKeys: true,
+            style: {
+                fg: 'white',
+                bg: 'blue',
+                item: { fg: 'white', bg: 'blue' },
+                selected: { fg: 'black', bg: 'cyan' },
+            },
             items: {
-                Create: { callback: () => runAction(createTableFlow), keys: ['c'] },
-                Join: { callback: () => runAction(joinSelectedTable), keys: ['j'] },
-                Observe: { callback: () => runAction(observeSelectedTable), keys: ['o'] },
-                Filter: { callback: () => runAction(toggleFilters), keys: ['f'] },
-                Refresh: { callback: () => runAction(manualRefresh), keys: ['r'] },
+                '[C]reate': { callback: () => runAction(createTableFlow), keys: ['c'] },
+                '[J]oin': { callback: () => runAction(joinSelectedTable), keys: ['j'] },
+                '[O]bserve': { callback: () => runAction(observeSelectedTable), keys: ['o'] },
+                '[F]ilter': { callback: () => runAction(toggleFilters), keys: ['f'] },
+                '[R]efresh': { callback: () => runAction(manualRefresh), keys: ['r'] },
             },
         });
         this.tableContent = blessed_1.default.scrollabletext({
@@ -329,7 +340,7 @@ class UIManager {
             left: 0,
             width: '100%',
             height: logHeight,
-            border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: 'yellow' } },
             label: ' Activity ',
             tags: true,
             scrollable: true,
@@ -360,7 +371,7 @@ class UIManager {
             label: ' FLOP ',
             tags: true,
             hidden: true,
-            border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
         this.flopContent = (0, blessed_helpers_1.createBox)({
@@ -382,7 +393,7 @@ class UIManager {
             label: ' PLAYERS ',
             tags: true,
             hidden: true,
-            border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
         this.playersContent = blessed_1.default.scrollabletext({
@@ -413,7 +424,7 @@ class UIManager {
             label: ' YOUR HAND ',
             tags: true,
             hidden: true,
-            border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
         this.handContent = (0, blessed_helpers_1.createBox)({
@@ -435,7 +446,7 @@ class UIManager {
             label: ' ACTIVITY ',
             tags: true,
             hidden: true,
-            border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
         this.activityContent = (0, blessed_helpers_1.createLog)({
@@ -682,6 +693,129 @@ class UIManager {
         }
         finally {
             this.dealAnimationInProgress = false;
+        }
+    }
+    // ============================================================================
+    // UNO RENDERING METHODS
+    // ============================================================================
+    renderUnoDiscardPile(topCard, currentColor, direction) {
+        if (!topCard) {
+            this.flopContent.setContent('No card played yet.');
+            return;
+        }
+        // Render the top discard card using CardEngine
+        const lines = [];
+        // Add direction indicator
+        const directionArrow = direction === 1 ? '{cyan-fg}\u21BB{/}' : '{cyan-fg}\u21BA{/}';
+        lines.push(`Direction: ${directionArrow} ${direction === 1 ? 'Clockwise' : 'Counter-clockwise'}`);
+        lines.push('');
+        // Add current color indicator
+        const colorNames = {
+            'R': '{red-fg}RED{/}',
+            'G': '{green-fg}GREEN{/}',
+            'B': '{blue-fg}BLUE{/}',
+            'Y': '{yellow-fg}YELLOW{/}',
+        };
+        lines.push(`Current Color: ${colorNames[currentColor]}`);
+        lines.push('');
+        // Render the card (using simplified ASCII representation)
+        lines.push('Top Card:');
+        lines.push(this.renderUnoCardAscii(topCard));
+        this.flopContent.setContent(lines.join('\n'));
+    }
+    renderUnoCardAscii(card) {
+        const colorTags = {
+            'R': 'red-fg',
+            'G': 'green-fg',
+            'B': 'blue-fg',
+            'Y': 'yellow-fg',
+            'W': 'white-fg',
+        };
+        const colorTag = colorTags[card.color] || 'white-fg';
+        const displayValue = card.value.replace('Wild4', 'W+4').replace('Wild', 'W');
+        // Simple card representation
+        return [
+            ` {${colorTag}}._______. `,
+            ` {${colorTag}}|       | `,
+            ` {${colorTag}}|  ${displayValue.padEnd(4, ' ')} | `,
+            ` {${colorTag}}|       | `,
+            ` {${colorTag}}'-------' {/}`,
+        ].join('\n');
+    }
+    renderUnoPlayerStatus(players, currentPlayerIndex, currentUserId) {
+        const lines = [];
+        lines.push('{cyan-fg}Players:{/}');
+        lines.push('');
+        players.forEach((player, index) => {
+            const isCurrent = index === currentPlayerIndex;
+            const isYou = player.id === currentUserId;
+            const turnMarker = isCurrent ? '{yellow-fg}\u2192{/} ' : '  ';
+            const unoMarker = player.hand.length === 1 ? ' {yellow-fg}\u26A0{/}' : '';
+            const youMarker = isYou ? ' {cyan-fg}(You){/}' : '';
+            const botMarker = player.isBot ? ' {gray-fg}[BOT]{/}' : '';
+            lines.push(`${turnMarker}${player.name}${youMarker}${botMarker}: ${player.hand.length} card${player.hand.length !== 1 ? 's' : ''}${unoMarker}`);
+        });
+        this.playersContent.setContent(lines.join('\n'));
+    }
+    renderUnoHand(hand, playableIndices, selectedIndex) {
+        if (hand.length === 0) {
+            this.handContent.setContent('No cards in hand.');
+            return;
+        }
+        const lines = [];
+        lines.push('{cyan-fg}Your Hand:{/}');
+        lines.push('');
+        // Render cards with indices
+        hand.forEach((card, index) => {
+            const isPlayable = playableIndices.includes(index);
+            const isSelected = index === selectedIndex;
+            const indexLabel = index === 9 ? '0' : String(index + 1);
+            const colorTags = {
+                'R': 'red-fg',
+                'G': 'green-fg',
+                'B': 'blue-fg',
+                'Y': 'yellow-fg',
+                'W': 'white-fg',
+            };
+            const colorTag = colorTags[card.color] || 'white-fg';
+            const displayValue = card.value.replace('Wild4', 'W+4').replace('Wild', 'W');
+            let marker = ' ';
+            if (isSelected) {
+                marker = '{yellow-bg}{black-fg}>{/}{/}';
+            }
+            else if (isPlayable) {
+                marker = '{green-fg}\u2713{/}';
+            }
+            else {
+                marker = '{red-fg}\u2717{/}';
+            }
+            lines.push(`[${indexLabel}] ${marker} {${colorTag}}${displayValue.padEnd(6, ' ')}{/}`);
+        });
+        lines.push('');
+        lines.push('{gray-fg}Press 1-9,0 to select, Enter to play{/}');
+        this.handContent.setContent(lines.join('\n'));
+    }
+    renderUnoActivity(lastAction, challengeWindow) {
+        const lines = [];
+        if (lastAction) {
+            lines.push(`{cyan-fg}Last Action:{/}`);
+            lines.push(lastAction);
+            lines.push('');
+        }
+        if (challengeWindow) {
+            const timeLeft = Math.max(0, Math.floor((challengeWindow.expiresAt - Date.now()) / 1000));
+            const challengeType = challengeWindow.type === 'uno' ? 'UNO Challenge' : 'Wild Draw 4 Challenge';
+            lines.push(`{yellow-bg}{black-fg} ${challengeType} OPEN! {/}{/}`);
+            lines.push(`{yellow-fg}Time remaining: ${timeLeft}s{/}`);
+            lines.push('');
+        }
+        if (this.activityContent) {
+            const existingContent = this.activityContent.getContent();
+            const newContent = lines.join('\n') + (existingContent ? '\n\n' + existingContent : '');
+            // Keep last 20 lines to prevent overflow
+            const allLines = newContent.split('\n');
+            const trimmed = allLines.slice(0, 20).join('\n');
+            this.activityContent.setContent(trimmed);
         }
     }
 }

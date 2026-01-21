@@ -13,6 +13,8 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 class BBSDashboard {
     constructor() {
@@ -51,28 +53,24 @@ class BBSDashboard {
         });
     }
     createUI() {
-        this.screen = new blessed_1.Screen({
-            smartCSR: true,
-            dockBorders: true,
+        this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
+            smartCSR: false, // Prevent layout corruption in BBS environment
+            dockBorders: false, // Not needed for fixed panels
             title: 'BBS SysOp Dashboard',
-            output: (data) => this.ctx.output.write(data),
             responsive: true,
         });
         // System Resources Panel (top-left)
-        this.systemPanel = new blessed_1.DockablePanel({
+        this.systemPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
-            title: ' SYSTEM RESOURCES ',
+            label: ' SYSTEM RESOURCES ',
             left: 0,
             top: 0,
             width: '50%',
             height: '50%',
-            dockPosition: 'float',
-            showMinimizeButton: true,
-            resizable: true,
-            draggable: true,
-            minWidth: 30,
-            minHeight: 10,
-            border: { type: 'line', fg: 'yellow' },
+            fixed: true, // Static panel for BBS environment
+            clickable: false, // Don't capture mouse events
+            mouse: false, // Don't listen for mouse events
+            border: { type: 'line' },
             style: { border: { fg: 'yellow' } },
         });
         this.systemText = new blessed_1.Text({
@@ -85,20 +83,17 @@ class BBSDashboard {
             tags: true,
         });
         // BBS Statistics Panel (top-right)
-        this.statsPanel = new blessed_1.DockablePanel({
+        this.statsPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
-            title: ' BBS STATISTICS ',
+            label: ' BBS STATISTICS ',
             left: '50%',
             top: 0,
             width: '50%',
             height: '50%',
-            dockPosition: 'float',
-            showMinimizeButton: true,
-            resizable: true,
-            draggable: true,
-            minWidth: 30,
-            minHeight: 10,
-            border: { type: 'line', fg: 'cyan' },
+            fixed: true, // Static panel for BBS environment
+            clickable: false, // Don't capture mouse events
+            mouse: false, // Don't listen for mouse events
+            border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
         });
         this.statsText = new blessed_1.Text({
@@ -111,20 +106,17 @@ class BBSDashboard {
             tags: true,
         });
         // Node Status Panel (bottom, full width)
-        this.nodesPanel = new blessed_1.DockablePanel({
+        this.nodesPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
-            title: ' NODE STATUS ',
+            label: ' NODE STATUS ',
             left: 0,
             top: '50%',
             width: '100%',
-            height: '50%',
-            dockPosition: 'float',
-            showMinimizeButton: true,
-            resizable: true,
-            draggable: true,
-            minWidth: 50,
-            minHeight: 8,
-            border: { type: 'line', fg: 'green' },
+            bottom: 1, // Reserve 1 line for status bar
+            fixed: true, // Static panel for BBS environment
+            clickable: false, // Don't capture mouse events
+            mouse: false, // Don't listen for mouse events
+            border: { type: 'line' },
             style: { border: { fg: 'green' } },
         });
         this.nodesText = new blessed_1.Text({
@@ -147,47 +139,40 @@ class BBSDashboard {
             style: { fg: 'white', bg: 'blue' },
             tags: true,
         });
-        // Register responsive constraints
-        this.screen.responsiveLayout.registerElement(this.systemPanel, {
-            minWidth: 30,
-            minHeight: 10,
-        });
-        this.screen.responsiveLayout.registerElement(this.statsPanel, {
-            minWidth: 30,
-            minHeight: 10,
-        });
-        this.screen.responsiveLayout.registerElement(this.nodesPanel, {
-            minWidth: 50,
-            minHeight: 8,
-        });
         // Responsive breakpoint handling
         this.resizeHandler = (width, height) => {
             const breakpoint = this.screen.responsiveLayout.getBreakpoint();
             if (breakpoint === 'small') {
                 // Stack panels vertically on small screens
-                this.systemPanel.options.width = '100%';
-                this.systemPanel.options.height = '33%';
-                this.statsPanel.options.left = 0;
-                this.statsPanel.options.top = '33%';
-                this.statsPanel.options.width = '100%';
-                this.statsPanel.options.height = '33%';
-                this.nodesPanel.options.top = '66%';
-                this.nodesPanel.options.height = '34%';
+                this.systemPanel.width = '100%';
+                this.systemPanel.height = '33%';
+                this.systemPanel.left = 0;
+                this.systemPanel.top = 0;
+                this.statsPanel.left = 0;
+                this.statsPanel.top = '33%';
+                this.statsPanel.width = '100%';
+                this.statsPanel.height = '33%';
+                this.nodesPanel.left = 0;
+                this.nodesPanel.top = '66%';
+                this.nodesPanel.width = '100%';
+                this.nodesPanel.bottom = 1; // Always reserve space for status bar
+                delete this.nodesPanel.height; // Remove height when using bottom constraint
             }
             else {
                 // Side-by-side layout for medium/large screens
-                this.systemPanel.options.width = '50%';
-                this.systemPanel.options.height = '50%';
-                this.systemPanel.options.left = 0;
-                this.systemPanel.options.top = 0;
-                this.statsPanel.options.left = '50%';
-                this.statsPanel.options.top = 0;
-                this.statsPanel.options.width = '50%';
-                this.statsPanel.options.height = '50%';
-                this.nodesPanel.options.left = 0;
-                this.nodesPanel.options.top = '50%';
-                this.nodesPanel.options.width = '100%';
-                this.nodesPanel.options.height = '50%';
+                this.systemPanel.width = '50%';
+                this.systemPanel.height = '50%';
+                this.systemPanel.left = 0;
+                this.systemPanel.top = 0;
+                this.statsPanel.left = '50%';
+                this.statsPanel.top = 0;
+                this.statsPanel.width = '50%';
+                this.statsPanel.height = '50%';
+                this.nodesPanel.left = 0;
+                this.nodesPanel.top = '50%';
+                this.nodesPanel.width = '100%';
+                this.nodesPanel.bottom = 1; // Always reserve space for status bar
+                delete this.nodesPanel.height; // Remove height when using bottom constraint
             }
             if (this.screen && !this.screen.destroyed) {
                 // Don't await here to avoid blocking resize handler
@@ -197,6 +182,15 @@ class BBSDashboard {
             }
         };
         this.screen.responsiveLayout.onResize(this.resizeHandler);
+        // Set up input management (enables mouse, keyboard routing)
+        this.inputManager = new door_input_manager_1.DoorInputManager(this.ctx, this.screen, {
+            enableGameMode: false, // Dashboard UI mode, not ncurses game mode
+            enableGrabKeys: false, // Blessed focus system handles keys
+            enableMouse: true, // Enable mouse events
+            debug: false,
+            debugName: 'BBSDashboard'
+        });
+        this.inputManager.enable();
         // Key handlers
         this.screen.key(['q', 'Q', 'escape'], () => {
             this.cleanup();
@@ -413,6 +407,10 @@ class BBSDashboard {
             }
             if (this.nodesPanel) {
                 this.nodesPanel.destroy?.();
+            }
+            // CRITICAL: Disable input manager FIRST (restores BBS input state)
+            if (this.inputManager) {
+                this.inputManager.disable();
             }
             // Destroy screen
             if (this.screen && !this.screen.destroyed) {

@@ -692,7 +692,9 @@ debugLog(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: $
   /**
    * Send reply to door via bidirectional XIM protocol
    *
-   * CRITICAL FIX 2026-01-13: XIM doors poll AEDoorPort for replies, not mn_ReplyPort
+   * CRITICAL FIX 2026-01-20: Detect if door uses native AEDoor.library or direct XIM
+   * - Native AEDoor.library doors: Set mn_ReplyPort to their own reply port → use replyMsg()
+   * - Direct XIM doors (RTW, Bulls): Set mn_ReplyPort to AEDoorPort → use bidirectional mode
    */
   private reply(
     msg: XIMMessage,
@@ -720,15 +722,23 @@ debugLog(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: $
       message: 'Reply to door request',
     });
 
-    // Use bidirectional XIM protocol - send reply back to AEDoorPort
-    if (this.ximPortAddr !== 0) {
+    // CRITICAL: Detect if door is using native AEDoor.library or direct XIM protocol
+    // Native aedoor.library sets mn_ReplyPort to door's own reply port (NOT AEDoorPort)
+    // Direct XIM doors (RTW, Bulls) set mn_ReplyPort to AEDoorPort for bidirectional flow
+    const replyPortAddr = this.emulator.readMemory32(msg.msgAddr + 14); // mn_ReplyPort offset
+    const useBidirectional = (replyPortAddr === this.ximPortAddr || replyPortAddr === 0);
+
+    if (useBidirectional && this.ximPortAddr !== 0) {
+      // Direct XIM door - use bidirectional protocol (reply to AEDoorPort)
       const NT_REPLYMSG = 6;
       this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
       this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
       debugLog(`[XIMSystem] Reply sent via PutMsg to ximPort=0x${this.ximPortAddr.toString(16)} (bidirectional XIM)`);
     } else {
+      // Native AEDoor.library door - use standard reply mechanism
+      // The door set mn_ReplyPort to its own reply port, so use replyMsg()
       this.execLibrary.replyMsg(msg.msgAddr);
-      debugLog(`[XIMSystem] Reply sent via ReplyMsg (fallback)`);
+      debugLog(`[XIMSystem] Reply sent via ReplyMsg to replyPort=0x${replyPortAddr.toString(16)} (native aedoor.library)`);
     }
 
     // Mark reply as handled so DoorLifecycleManager doesn't send a duplicate

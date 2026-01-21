@@ -301,27 +301,36 @@ else
     printf "%b\n" "   ${GREEN}[OK] SDK up to date (skipped rebuild)${RESET}"
   fi
 
-  # Build all SDK doors IN PARALLEL (CRITICAL - prevents stale code issues)
-  printf "%b\n" "${CYAN}-> SDK Doors: Building all example/installed doors (parallel)...${RESET}"
+  # Build all TypeScript doors IN PARALLEL (CRITICAL - prevents stale code issues)
+  # All production doors live in Doors/ - no more sdk/doors/
+  printf "%b\n" "${CYAN}-> TypeScript Doors: Building all doors in Doors/ (parallel)...${RESET}"
   DOOR_PIDS=""
   DOOR_NAMES=""
 
-  for door_dir in "$REPO_ROOT/sdk/doors"/*/ ; do
+  # Build all TypeScript doors in Doors/ directory
+  for door_dir in "$REPO_ROOT/Doors"/*/ ; do
     if [ -f "$door_dir/package.json" ]; then
-      door_name=$(basename "$door_dir")
-      # Only rebuild if source exists and is newer than dist
-      if [ -d "$door_dir/src" ]; then
-        # Skip if dist/index.js exists and is newer than all src files
-        if [ -f "$door_dir/dist/index.js" ]; then
-          NEWEST_SRC=$(find "$door_dir/src" -name "*.ts" -newer "$door_dir/dist/index.js" 2>/dev/null | head -1)
-          if [ -z "$NEWEST_SRC" ]; then
-            continue  # Skip - dist is up to date
+      # Check if it's a TypeScript door (has tsconfig.json or *.ts files)
+      if [ -f "$door_dir/tsconfig.json" ] || [ -n "$(find "$door_dir" -maxdepth 2 -name "*.ts" 2>/dev/null | head -1)" ]; then
+        door_name=$(basename "$door_dir")
+        # Check if source is newer than dist (if dist exists)
+        NEEDS_BUILD=false
+        if [ ! -d "$door_dir/dist" ] || [ ! -f "$door_dir/dist/index.js" ]; then
+          NEEDS_BUILD=true
+        else
+          # Check for any .ts files newer than dist/index.js
+          NEWEST_SRC=$(find "$door_dir" -name "*.ts" -newer "$door_dir/dist/index.js" 2>/dev/null | head -1)
+          if [ -n "$NEWEST_SRC" ]; then
+            NEEDS_BUILD=true
           fi
         fi
-        # Build in background
-        (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1) &
-        DOOR_PIDS="$DOOR_PIDS $!"
-        DOOR_NAMES="$DOOR_NAMES $door_name"
+
+        if [ "$NEEDS_BUILD" = true ]; then
+          # Build in background
+          (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1) &
+          DOOR_PIDS="$DOOR_PIDS $!"
+          DOOR_NAMES="$DOOR_NAMES $door_name"
+        fi
       fi
     fi
   done
@@ -341,7 +350,7 @@ else
   if [ $DOOR_COUNT -gt 0 ] || [ $DOOR_ERRORS -gt 0 ]; then
     printf "%b\n" "   ${GREEN}[OK] Built $DOOR_COUNT door(s)${RESET}${DOOR_ERRORS:+, ${YELLOW}$DOOR_ERRORS skipped${RESET}}"
   else
-    printf "%b\n" "   ${GREEN}[OK] All doors up to date (skipped rebuild)${RESET}"
+    printf "%b\n" "   ${GREEN}[OK] All TypeScript doors up to date (skipped rebuild)${RESET}"
   fi
 
   # Check and build @amiexpress/terminal package (required by SDK and BBS frontends)

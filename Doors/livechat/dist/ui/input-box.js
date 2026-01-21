@@ -16,7 +16,10 @@ function createInputBox(screen) {
         width: screenWidth - exports.EMOJI_BUTTON_WIDTH, // Leave space for emoji button
         height: exports.INPUT_HEIGHT,
         label: ' Message ',
-        border: { type: 'line' },
+        border: {
+            type: 'line',
+            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+        },
         inputOnFocus: true,
         tags: true,
         mouse: true,

@@ -7,8 +7,16 @@
  * - Socket.IO input handling
  * - Portable and self-contained
  */
+import { ServerDoor } from '@amiexpress/bbs-door-sdk';
+export declare const metadata: {
+    name: string;
+    version: string;
+    description: string;
+    author: string;
+    command: string;
+};
 /**
- * SDK-compatible runDoor export
- * Follows the same pattern as bbslinkwall and other SDK doors
+ * Main door class
  */
-export declare function runDoor(doorSession: any): Promise<void>;
+declare const door: ServerDoor;
+export default door;

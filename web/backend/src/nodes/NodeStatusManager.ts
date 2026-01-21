@@ -138,6 +138,19 @@ console.log(`[NodeStatusManager] Node status structures initialized and register
    * Write singlePort structure to emulator memory
    *
    * Structure (from axcommon.e):
+   *   EXPORT OBJECT singlePort
+   *     semi: ss -> length 46
+   *     list: mlh  -> length 12   <- NOTE: 12 bytes, NOT 14!
+   *     multiCom: LONG
+   *     semiName[20]:ARRAY OF CHAR
+   *     status:LONG -> 82         <- axcommon.e explicitly says offset 82
+   *     handle[31]:ARRAY OF CHAR
+   *     location[31]:ARRAY OF CHAR
+   *     misc1[100]:ARRAY OF CHAR
+   *     misc2[100]:ARRAY OF CHAR
+   *     baud[10]:ARRAY OF CHAR
+   *   ENDOBJECT
+   *
    *   +0:   semi (semaphore header, 46 bytes)
    *          +0: ln_Succ (4 bytes)
    *          +4: ln_Pred (4 bytes)
@@ -145,15 +158,15 @@ console.log(`[NodeStatusManager] Node status structures initialized and register
    *          +12: ln_Type (1 byte)
    *          +13: ln_Pri (1 byte)
    *          +14-45: rest of semaphore structure
-   *   +46:  list (14 bytes)
-   *   +60:  multiCom (4 bytes)
-   *   +64:  semiName (20 bytes)
-   *   +84:  status (4 bytes)
-   *   +88:  handle (31 bytes)
-   *   +119: location (31 bytes)
-   *   +150: misc1 (100 bytes)
-   *   +250: misc2 (100 bytes)
-   *   +350: baud (10 bytes)
+   *   +46:  list/mlh (12 bytes) <- CRITICAL: 12 bytes, not 14!
+   *   +58:  multiCom (4 bytes)
+   *   +62:  semiName (20 bytes)
+   *   +82:  status (4 bytes)     <- axcommon.e says "-> 82"
+   *   +86:  handle (31 bytes)
+   *   +117: location (31 bytes)
+   *   +148: misc1 (100 bytes)
+   *   +248: misc2 (100 bytes)
+   *   +348: baud (10 bytes)
    */
   private writeSinglePortToMemory(emulator: MoiraEmulator, nodeId: number, address: number, nameAddr: number): void {
     const node = this.nodes.get(nodeId);
@@ -171,51 +184,51 @@ console.log(`[NodeStatusManager] Node status structures initialized and register
     // Write ln_Type (offset +12) - NT_SIGNALSEM = 15
     emulator.writeMemory(address + 12, 15);
 
-    // Write MinList header (14 bytes)
-    for (let i = 0; i < 14; i++) {
+    // Write MinList header (12 bytes) <- CRITICAL FIX: 12 bytes, not 14!
+    for (let i = 0; i < 12; i++) {
       emulator.writeMemory(address + 46 + i, 0);
     }
 
-    // Write multiCom flag (4 bytes)
-    emulator.writeMemory32(address + 60, 1);  // Multicom enabled
+    // Write multiCom flag (4 bytes at +58)
+    emulator.writeMemory32(address + 58, 1);  // Multicom enabled
 
-    // Write semiName (20 bytes) - e.g., "AENode0"
+    // Write semiName (20 bytes at +62) - e.g., "AENode0"
     const semiName = `AENode${nodeId}`;
     for (let i = 0; i < semiName.length && i < 19; i++) {
-      emulator.writeMemory(address + 64 + i, semiName.charCodeAt(i));
+      emulator.writeMemory(address + 62 + i, semiName.charCodeAt(i));
     }
-    emulator.writeMemory(address + 64 + semiName.length, 0);  // Null terminator
+    emulator.writeMemory(address + 62 + semiName.length, 0);  // Null terminator
 
-    // Write status (4 bytes)
-    emulator.writeMemory32(address + 84, node.status);
+    // Write status (4 bytes at +82) <- axcommon.e: "status:LONG -> 82"
+    emulator.writeMemory32(address + 82, node.status);
 
-    // Write handle (31 bytes)
+    // Write handle (31 bytes at +86)
     for (let i = 0; i < node.handle.length && i < 30; i++) {
-      emulator.writeMemory(address + 88 + i, node.handle.charCodeAt(i));
+      emulator.writeMemory(address + 86 + i, node.handle.charCodeAt(i));
     }
-    emulator.writeMemory(address + 88 + node.handle.length, 0);
+    emulator.writeMemory(address + 86 + node.handle.length, 0);
 
-    // Write location (31 bytes)
+    // Write location (31 bytes at +117)
     for (let i = 0; i < node.location.length && i < 30; i++) {
-      emulator.writeMemory(address + 119 + i, node.location.charCodeAt(i));
+      emulator.writeMemory(address + 117 + i, node.location.charCodeAt(i));
     }
-    emulator.writeMemory(address + 119 + node.location.length, 0);
+    emulator.writeMemory(address + 117 + node.location.length, 0);
 
-    // Write misc1 (100 bytes)
+    // Write misc1 (100 bytes at +148)
     for (let i = 0; i < node.misc1.length && i < 99; i++) {
-      emulator.writeMemory(address + 150 + i, node.misc1.charCodeAt(i));
+      emulator.writeMemory(address + 148 + i, node.misc1.charCodeAt(i));
     }
-    emulator.writeMemory(address + 150 + node.misc1.length, 0);
+    emulator.writeMemory(address + 148 + node.misc1.length, 0);
 
-    // Write misc2 (first byte is chat availability flag)
-    emulator.writeMemory(address + 250, node.misc2);
+    // Write misc2 (100 bytes at +248, first byte is chat availability flag)
+    emulator.writeMemory(address + 248, node.misc2);
     for (let i = 1; i < 100; i++) {
-      emulator.writeMemory(address + 250 + i, 0);
+      emulator.writeMemory(address + 248 + i, 0);
     }
 
-    // Write baud (10 bytes)
+    // Write baud (10 bytes at +348)
     for (let i = 0; i < node.baud.length && i < 9; i++) {
-      emulator.writeMemory(address + 350 + i, node.baud.charCodeAt(i));
+      emulator.writeMemory(address + 348 + i, node.baud.charCodeAt(i));
     }
     emulator.writeMemory(address + 350 + node.baud.length, 0);
 

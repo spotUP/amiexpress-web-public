@@ -115,6 +115,7 @@ console.log('[DOWNLOAD] User chose goodbye after download');
       }
 
       if (flagged.length > 0) {
+        console.log(`[Download] Processing ${flagged.length} flagged file(s)`);
         const dataDir = config.get('dataDir');
         for (const flag of flagged) {
           const confNum = flag.confNum > 0 ? flag.confNum : (session.currentConf || 1);
@@ -125,6 +126,8 @@ console.log('[DOWNLOAD] User chose goodbye after download');
           );
           if (matches.length > 0) {
             fileList.push(...matches);
+          } else {
+            console.log(`[Download] Warning: Flagged file "${flag.filename}" not found in conf ${confNum}`);
           }
         }
       }
@@ -516,54 +519,59 @@ console.error('[BBSEvent] Error emitting download event:', error);
     confNum: number,
     pattern: string
   ): Promise<any[]> {
-    // AmiExpress stores files on DISK in Conf{N}/Files/ directory
+    // AmiExpress stores files on DISK in Conf{N}/Files/ and Conf{N}/Upload/ directories
     // We must search the filesystem, NOT the database
     // Doors expect files to be on disk where they can access them
     const confPath = getConferenceDir(confNum, dataDir);
     const matchingFiles: any[] = [];
     const hasWildcard = this.hasWildcards(pattern);
 
-    // Search in Files directory (where actual uploaded files are stored)
-    const filesDir = path.join(confPath, 'Files');
+    // Search in both Files/ and Upload/ directories (express.e searches both)
+    const searchDirs = [
+      path.join(confPath, 'Upload'),  // Newly uploaded files
+      path.join(confPath, 'Files')    // Older/organized files
+    ];
 
-    if (!fs.existsSync(filesDir)) {
-      return [];
-    }
+    for (const filesDir of searchDirs) {
+      if (!fs.existsSync(filesDir)) {
+        continue;
+      }
 
-    if (hasWildcard) {
-      // Wildcard search - check all files in Files directory
-      const files = fs.readdirSync(filesDir);
-      for (const file of files) {
-        if (this.matchesWildcard(file, pattern)) {
-          const filePath = path.join(filesDir, file);
+      if (hasWildcard) {
+        // Wildcard search - check all files in directory
+        const files = fs.readdirSync(filesDir);
+        for (const file of files) {
+          if (this.matchesWildcard(file, pattern)) {
+            const filePath = path.join(filesDir, file);
+            const stats = fs.statSync(filePath);
+
+            if (stats.isFile()) {
+              matchingFiles.push({
+                name: file,
+                size: stats.size,
+                confNum: confNum,
+                dirNum: 1,  // All files are in directory 1
+                fullPath: filePath
+              });
+            }
+          }
+        }
+      } else {
+        // Exact match - search in directory
+        const filePath = path.join(filesDir, pattern);
+
+        if (fs.existsSync(filePath)) {
           const stats = fs.statSync(filePath);
 
           if (stats.isFile()) {
             matchingFiles.push({
-              name: file,
+              name: pattern,
               size: stats.size,
               confNum: confNum,
               dirNum: 1,  // All files are in directory 1
               fullPath: filePath
             });
           }
-        }
-      }
-    } else {
-      // Exact match - search in Files directory
-      const filePath = path.join(filesDir, pattern);
-
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-
-        if (stats.isFile()) {
-          matchingFiles.push({
-            name: pattern,
-            size: stats.size,
-            confNum: confNum,
-            dirNum: 1,  // All files are in directory 1
-            fullPath: filePath
-          });
         }
       }
     }

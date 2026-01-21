@@ -6,11 +6,13 @@ function createDockable(options) {
     return (0, blessed_helpers_1.createDockablePanel)({
         useTitleBar: false,
         fitContent: false,
-        allowAutoDock: true,
-        resizable: true,
-        draggable: true,
-        dockPosition: 'float',
-        ...options,
+        fixed: true, // Static panels for BBS environment
+        // Remove dockable features inappropriate for BBS:
+        // allowAutoDock: true,
+        // resizable: true,
+        // draggable: true,
+        // dockPosition: 'float',
+        ...options, // User can override fixed if needed
     });
 }
 //# sourceMappingURL=dockable.js.map

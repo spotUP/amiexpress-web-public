@@ -96,7 +96,6 @@ export class DocModal extends Box {
         fg: 'white',
         bg: 'blue',
         border: { fg: 'cyan' },
-        transparent: true,
         ...options.style,
       },
     });
@@ -171,7 +170,7 @@ export class DocModal extends Box {
       },
       style: {
         fg: options.contentStyle?.fg || 'white',
-        bg: options.contentStyle?.bg || 'blue',
+        ...(options.contentStyle?.bg && { bg: options.contentStyle.bg }),
       },
       content: options.content || '',
     });

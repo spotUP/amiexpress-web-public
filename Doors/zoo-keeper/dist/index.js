@@ -8,6 +8,7 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/door-input-manager";
 import { ZooKeeperGame } from "./game/zoo-stage";
 import { rpcHandlers } from "./server";
 import { SCREEN_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, DEFAULT_HIGHSCORES, } from "./game/constants";
@@ -84,6 +85,7 @@ let menuBox = null;
 let gameLoop = null;
 let game = null;
 let doorContext; // Will be set on start
+let inputManager = null;
 /**
  * Initialize neo-blessed screen
  */
@@ -113,6 +115,7 @@ function initScreen() {
         left: 0,
         width: "100%",
         height: SCREEN_HEIGHT - 4,
+        fixed: true,
         tags: true,
         style: {
             bg: "black",
@@ -178,6 +181,7 @@ function showMenu() {
         menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
     });
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -224,6 +228,7 @@ async function showHighscores() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -268,6 +273,7 @@ function showHelp() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -455,6 +461,7 @@ function showPauseScreen() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -510,6 +517,7 @@ function showNameEntry() {
         menuBox.destroy();
     }
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -577,6 +585,11 @@ function cleanup() {
         clearInterval(keepAlive);
         keepAlive = null;
     }
+    // CRITICAL: Disable input manager FIRST (restores BBS input state)
+    if (inputManager) {
+        inputManager.disable();
+        inputManager = null;
+    }
     if (screen) {
         screen.removeAllListeners();
         screen.destroy();
@@ -596,6 +609,15 @@ door.onStart(async (ctx) => {
         // Use defaults
     }
     initScreen();
+    // Set up input management (enables mouse, keyboard routing)
+    inputManager = new DoorInputManager(ctx, screen, {
+        enableGameMode: true, // Game needs raw keyboard input
+        enableGrabKeys: true, // Capture all keys for game controls
+        enableMouse: true, // Enable mouse events
+        debug: false,
+        debugName: 'ZooKeeper'
+    });
+    inputManager.enable();
     showMenu();
 });
 door.onInput((ctx, key) => {

@@ -36,6 +36,7 @@ export function createSettingsOverlay(
     trapFocus: true,
     ch: ' ',
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+    zIndex: 9990,  // Modal overlays render above panels (1-10) but below dropdowns (9999)
   });
 
   o.enableResize();

@@ -19,13 +19,16 @@ function createChatLog(screen, sidebarWidth) {
     // Create dockable panel for chat
     const screenWidth = screen.width || 80;
     const screenHeight = screen.height || 24;
+    // Account for sidebar width - no additional subtraction needed
+    // Sidebar is 18 chars (including its border), screen is 80, so chat panel gets 62 chars
+    const chatPanelWidth = screenWidth - sidebarWidth;
     const chatPanel = new blessed_1.DockablePanel({
         parent: screen,
         title: ' Chat ',
         label: ' Chat ',
         top: menu_bar_1.MENU_HEIGHT,
         left: sidebarWidth,
-        width: screenWidth - sidebarWidth,
+        width: chatPanelWidth,
         height: screenHeight - menu_bar_1.MENU_HEIGHT - status_bar_1.STATUS_HEIGHT - input_box_1.INPUT_HEIGHT,
         dockPosition: 'float',
         showMinimizeButton: true,
@@ -37,10 +40,14 @@ function createChatLog(screen, sidebarWidth) {
         persistenceKey: 'chat-main',
         topConstraint: menu_bar_1.MENU_HEIGHT,
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
-        border: { type: 'line', fg: 'green' },
+        border: {
+            type: 'line',
+            fg: 'green',
+            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+        },
         style: {
             fg: 'white',
-            bg: 'lightblack', // Dark grey for panel backgrounds
+            bg: 'black',
         },
     });
     // Explicitly set position after creation
@@ -71,7 +78,7 @@ function createChatLog(screen, sidebarWidth) {
         },
         style: {
             fg: 'white',
-            bg: 'lightblack',
+            bg: 'black',
         },
     });
     return { panel: chatPanel, log: chatLog };

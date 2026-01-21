@@ -791,6 +791,17 @@ console.log(
         );
       }
 
+      // Copy flagged files from door bbsSession back to main session
+      // Doors flag files via JH_FLAGFILE which stores in bbsSession.flaggedFiles
+      // Main BBS download handler checks session.flaggedFiles
+      if (Array.isArray((exitState as any).bbsSession?.flaggedFiles) && (exitState as any).bbsSession.flaggedFiles.length > 0) {
+        if (!Array.isArray((session as any).flaggedFiles)) {
+          (session as any).flaggedFiles = [];
+        }
+        (session as any).flaggedFiles.push(...(exitState as any).bbsSession.flaggedFiles);
+        console.log(`[launchAmigaDoor] Copied ${(exitState as any).bbsSession.flaggedFiles.length} flagged file(s) from door to session`);
+      }
+
       // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
       try {
         // CRITICAL: Use processCommand directly, NOT handleCommand!
@@ -2398,6 +2409,17 @@ console.log(
             (exitState as any).bbsSession.acpCommand.command || ''
           } (code=${(exitState as any).bbsSession.acpCommand.code}, target=${(exitState as any).bbsSession.acpCommand.targetNode})`
         );
+      }
+
+      // Copy flagged files from door bbsSession back to main session
+      // Doors flag files via JH_FLAGFILE which stores in bbsSession.flaggedFiles
+      // Main BBS download handler checks session.flaggedFiles
+      if (Array.isArray((exitState as any).bbsSession?.flaggedFiles) && (exitState as any).bbsSession.flaggedFiles.length > 0) {
+        if (!Array.isArray((session as any).flaggedFiles)) {
+          (session as any).flaggedFiles = [];
+        }
+        (session as any).flaggedFiles.push(...(exitState as any).bbsSession.flaggedFiles);
+        console.log(`[executeAmigaDoor] Copied ${(exitState as any).bbsSession.flaggedFiles.length} flagged file(s) from door to session`);
       }
 
       // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP

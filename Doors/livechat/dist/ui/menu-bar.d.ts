@@ -1,8 +1,8 @@
 /**
  * Menu bar component - dropdown menus
+ * Uses SDK MenuBar widget (Moebius-style)
  */
-import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, MenuBar as SDKMenuBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 export declare const MENU_HEIGHT = 1;
 export interface MenuBarHandlers {
     onHelp?: () => void;
@@ -16,7 +16,7 @@ export interface MenuBarHandlers {
     onQuit?: () => void;
 }
 export interface MenuBar {
-    element: Box;
+    element: SDKMenuBar;
     setHandlers: (handlers: MenuBarHandlers) => void;
 }
 export declare function createMenuBar(screen: Screen): MenuBar;

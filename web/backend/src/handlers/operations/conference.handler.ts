@@ -170,8 +170,10 @@ console.warn('[joinConference] Failed to sync node user file:', err);
   if (!silent) {
     // express.e:5066-5088 - auto-rejoin shows user stats and different message
     if (auto) {
+      console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);
       // express.e:5068 - processSysCommand('S') - Display user stats
       const { processCommand } = require('../command.handler');
+      console.log(`[JOIN] Calling processCommand('S')`);
       await processCommand(socket, session, 'S', '');
 
       // express.e:5071-5074 - Display "Auto-ReJoined" message
@@ -196,6 +198,7 @@ console.warn('[joinConference] Failed to sync node user file:', err);
       socket.emit('ansi-output', `\r\n${joinMsg}\r\n`);
     }
 
+    console.log(`[JOIN] Loading flagged files and history`);
     // Like express.e:28576-28577 - load flagged files and command history
     await loadFlagged(socket, session);
     await loadHistory(session);
@@ -204,6 +207,7 @@ console.warn('[joinConference] Failed to sync node user file:', err);
     session.menuPause = true;
 
     // Move to menu display
+    console.log(`[JOIN] Setting subState to DISPLAY_MENU`);
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 

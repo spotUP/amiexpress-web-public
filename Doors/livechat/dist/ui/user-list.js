@@ -12,7 +12,7 @@ function createUserList(screen) {
         parent: screen,
         top: 1,
         right: 0,
-        width: 16,
+        width: 20,
         height: '100%-3',
         label: ' USERS ',
         border: { type: 'line' },

@@ -9,6 +9,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { QixEngine } from "./game/qix-engine";
 import { rpcHandlers } from "./server";
 import { SuperQixData, GameState, InputKey, Direction } from "./game/types";
@@ -105,6 +106,7 @@ let engine: QixEngine | null = null;
 let isDrawKeyHeld: boolean = false;
 let currentDrawSpeed: "fast" | "slow" | null = null;
 let doorContext: any; // Will be set on start
+let inputManager: DoorInputManager | null = null;
 
 /**
  * Initialize neo-blessed screen
@@ -662,6 +664,13 @@ function cleanup(): void {
     clearInterval(keepAlive);
     keepAlive = null;
   }
+
+  // CRITICAL: Disable input manager FIRST (restores BBS input state)
+  if (inputManager) {
+    inputManager.disable();
+    inputManager = null;
+  }
+
   if (screen) {
     screen.removeAllListeners();
     screen.destroy();
@@ -683,6 +692,17 @@ door.onStart(async (ctx: any) => {
   }
 
   initScreen();
+
+  // Set up input management (enables mouse, keyboard routing)
+  inputManager = new DoorInputManager(ctx, screen, {
+    enableGameMode: true,   // Game needs raw keyboard input
+    enableGrabKeys: true,   // Capture all keys for game controls
+    enableMouse: true,      // Enable mouse events
+    debug: false,
+    debugName: 'SuperQix'
+  });
+  inputManager.enable();
+
   showMenu();
 });
 

@@ -169,6 +169,7 @@ class ANSIEditorDoor {
             left: 'center',
             width: '70%',
             height: '60%',
+            fixed: true, // Static modal dialog
             border: { type: 'line', fg: 'yellow' },
             label: ' {bold}BBS Screen Directories{/bold} ',
             tags: true,
@@ -225,6 +226,7 @@ class ANSIEditorDoor {
             left: 'center',
             width: '80%',
             height: '80%',
+            fixed: true, // Static modal dialog
             border: { type: 'line', fg: 'yellow' },
             label: ` {bold}${label}{/bold} `,
             tags: true,
@@ -287,7 +289,7 @@ class ANSIEditorDoor {
     createUI() {
         // Create screen using helper (sets up proper input/output)
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
-            dockBorders: true,
+            dockBorders: false, // Not needed for fixed panels
             title: 'ANSI Art Editor',
             responsive: true,
         });
@@ -321,6 +323,7 @@ class ANSIEditorDoor {
             left: 'center',
             width: '80%',
             height: '80%',
+            fixed: true, // Static modal dialog
             border: { type: 'line', fg: 'cyan' },
             label: ' {bold}Your ANSI Files{/bold} ',
             tags: true,
@@ -499,6 +502,7 @@ class ANSIEditorDoor {
                 left: 'center',
                 width: 50,
                 height: 9,
+                fixed: true, // Static modal dialog
                 border: { type: 'line', fg: 'yellow' },
                 label: ` {bold}${title}{/bold} `,
                 tags: true,
@@ -560,6 +564,7 @@ class ANSIEditorDoor {
                 left: 'center',
                 width: 50,
                 height: 10,
+                fixed: true, // Static modal dialog
                 border: { type: 'line', fg: 'red' },
                 label: ` {bold}${title}{/bold} `,
                 tags: true,
@@ -601,6 +606,7 @@ class ANSIEditorDoor {
             left: 'center',
             width: 60,
             height: 7,
+            fixed: true, // Static modal dialog
             border: { type: 'line', fg: color },
             label: ` {bold}${title}{/bold} `,
             tags: true,

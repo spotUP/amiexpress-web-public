@@ -263,6 +263,22 @@ export interface UploadSessionContext {
   uploadMode: true;
   fileArea: any;
   uploadSessionId: string;
+  uploadBatch: Array<{ filename: string; description: string; isPrivate: boolean }>;
+  uploadCount: number;
+  uploadStartTime: number;
+  webUploadMode?: boolean;
+  batchUpload?: boolean;
+  currentUploadIndex?: number;
+  filesProcessedCount?: number; // Sequential counter for tracking processed files
+  uploadedFiles?: number; // Total files uploaded in this session
+  uploadedBytes?: number; // Total bytes uploaded in this session
+  currentUploadedFile?: { filename: string; path?: string; size: number };
+  currentDescription?: string[];
+  hasDiz?: boolean;
+  skipDizExtraction?: boolean;
+  maxDescLines?: number;
+  descLineCount?: number;
+  currentLineBuffer?: string;
   [key: string]: any;
 }
 

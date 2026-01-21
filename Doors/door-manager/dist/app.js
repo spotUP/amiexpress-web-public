@@ -135,7 +135,11 @@ async function createApp(session) {
         draggable: true,
         minWidth: 60,
         minHeight: 8,
-        border: { type: 'line', fg: 'cyan' },
+        border: {
+            type: 'line',
+            fg: 'cyan',
+            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+        },
         style: { border: { fg: 'cyan' } },
     });
     // Create door list inside panel (top: 2 to account for panel title bar)
@@ -218,7 +222,11 @@ async function createApp(session) {
         draggable: true,
         minWidth: 40,
         minHeight: 5,
-        border: { type: 'line', fg: 'green' },
+        border: {
+            type: 'line',
+            fg: 'green',
+            labelStyle: { fg: 'white', bg: 'blue' } // Blue background for label
+        },
         style: { border: { fg: 'green' } },
     });
     const infoText = (0, blessed_helpers_1.createText)({

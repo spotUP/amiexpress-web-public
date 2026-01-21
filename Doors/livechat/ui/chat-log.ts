@@ -20,13 +20,17 @@ export function createChatLog(
   const screenWidth = (screen as any).width || 80;
   const screenHeight = (screen as any).height || 24;
 
+  // Account for sidebar width - no additional subtraction needed
+  // Sidebar is 18 chars (including its border), screen is 80, so chat panel gets 62 chars
+  const chatPanelWidth = screenWidth - sidebarWidth;
+
   const chatPanel = new DockablePanel({
     parent: screen,
     title: ' Chat ',
     label: ' Chat ',
     top: MENU_HEIGHT,
     left: sidebarWidth,
-    width: screenWidth - sidebarWidth,
+    width: chatPanelWidth,
     height: screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT,
     dockPosition: 'float',
     showMinimizeButton: true,
@@ -38,10 +42,14 @@ export function createChatLog(
     persistenceKey: 'chat-main',
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
-    border: { type: 'line', fg: 'green' },
+    border: {
+      type: 'line',
+      fg: 'green',
+      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+    },
     style: {
       fg: 'white',
-      bg: 'lightblack',  // Dark grey for panel backgrounds
+      bg: 'black',
     },
   });
 
@@ -76,7 +84,7 @@ export function createChatLog(
     },
     style: {
       fg: 'white',
-      bg: 'lightblack',
+      bg: 'black',
     },
   });
 

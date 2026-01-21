@@ -70,12 +70,15 @@ export function buildDirEntryLine(
   isLCFile: boolean = false
 ): string {
   // Express.e:19447-19452 - Build format string
-  const sizeStr = formatFileSize(fileSize);  // "  ###K"
+  const sizeStr = formatFileSize(fileSize);  // Raw bytes: "  89749" (7 chars, right-aligned)
   const dateStr = formatUploadDate(uploadDate);  // "DD-Mon-YY"
 
   let line: string;
 
   // Express.e:19447-19452
+  // Format: filename(13) + status(1) + size(7,right-aligned) + "  " + date(8) + "  " + description
+  // Real: "ALKYS241.LHA N  89749  12-10-25"
+  // Positions: 0-12=filename, 13=status, 14-20=size(7 chars), 21-22=spaces, 23-30=date
   if (isLCFile && filename.length > 12) {
     // Lost carrier with long filename - no padding
     line = `${filename} ${sizeStr}  ${dateStr}  ${description}${LINE_BREAK}`;
@@ -83,7 +86,9 @@ export function buildDirEntryLine(
     // Normal format with lowercase padding (\l)
     // \l\s[13] means left-align string in 13 character field (lowercase fills with spaces)
     const filenamePadded = filename.padEnd(13, ' ');
-    line = `${filenamePadded}${sizeStr}  ${dateStr}  ${description}${LINE_BREAK}`;
+    // Add 1 space before size so when we replace position 13 with status marker,
+    // we don't corrupt the first character of the size field
+    line = `${filenamePadded} ${sizeStr}  ${dateStr}  ${description}${LINE_BREAK}`;
   }
 
   // Express.e:19454-19465 - Insert status marker at position 13

@@ -16,9 +16,10 @@ export function createHelpScreen(
     title: 'LiveChat v3.2 Help',
     header: 'HELP',
     content: HELP_PART_1 + HELP_PART_2 + HELP_PART_3 + HELP_PART_4,
-    headerStyle: { fg: 'cyan', bg: 'black' },
-    contentStyle: { fg: 'white', bg: 'black' },
+    headerStyle: { fg: 'cyan' },
+    contentStyle: { fg: 'white' },
     footerStyle: { fg: 'black', bg: 'cyan' },
+    zIndex: 9990,
     onClose: () => {
       inputBox.focus();
       screen.render();

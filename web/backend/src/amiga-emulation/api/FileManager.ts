@@ -420,6 +420,16 @@ console.error(`[FileManager] Read from invalid BPTR: ${bptr}`);
 
     const data = fh.read(length);
 
+    // DEBUG: Log read operations for dRE!WAll debugging
+    if (fh.amiPath.includes('dRE!WAll') && data.length > 0 && data.length <= 200) {
+      const preview = data.slice(0, Math.min(data.length, 100));
+      const hex = Array.from(preview).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const ascii = Array.from(preview).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`[FileManager] Read BPTR=${bptr} file="${fh.amiPath}" len=${data.length}`);
+console.log(`[FileManager]   Hex: ${hex}`);
+console.log(`[FileManager]   ASCII: ${ascii}`);
+    }
+
     // Targeted debug: inspect Dir1 content for AquaScan FR parsing
     if (/dir1/i.test(fh.name)) {
       const sample = data.subarray(0, Math.min(data.length, 64));
@@ -460,6 +470,16 @@ console.log(
     if (!fh) {
 console.error(`[FileManager] Write to invalid BPTR: ${bptr}`);
       return { bytesWritten: -1 };
+    }
+
+    // DEBUG: Log write operations for debugging dRE!WAll
+    if (fh.amiPath.includes('dRE!WAll') && data.length > 0 && data.length <= 200) {
+      const preview = data.slice(0, Math.min(data.length, 100));
+      const hex = Array.from(preview).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const ascii = Array.from(preview).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`[FileManager] Write BPTR=${bptr} file="${fh.amiPath}" len=${data.length}`);
+console.log(`[FileManager]   Hex: ${hex}`);
+console.log(`[FileManager]   ASCII: ${ascii}`);
     }
 
     const result = fh.write(data);

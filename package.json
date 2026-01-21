@@ -29,7 +29,7 @@
     "yargs": "^18.0.0"
   },
   "devDependencies": {
-    "baseline-browser-mapping": "^2.9.14",
+    "baseline-browser-mapping": "^2.9.16",
     "chokidar": "^3.6.0",
     "puppeteer": "^24.34.0",
     "ts-node": "^10.9.2",

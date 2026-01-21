@@ -1689,12 +1689,15 @@ End of sample markdown.`;
             });
         }
         // Fixed position overlay (stays in place when parent scrolls)
+        // BBS BEST PRACTICE: Use fixed: true for ALL panels in standard BBS doors
+        // This prevents dragging/resizing behavior inappropriate for terminal UIs
+        // See showDockableLayoutDemo() below for detailed guidance on fixed vs dockable
         const fixedOverlay = blessed_1.default.box({
             parent: scrollContainer,
             top: 2, left: 2, width: 20, height: 4,
             label: ' FIXED ',
             border: { type: 'line' },
-            fixed: true, // NEW: Fixed positioning
+            fixed: true, // BBS STANDARD: Prevents drag/resize, keeps layout predictable
             style: { fg: 'black', bg: 'yellow', border: { fg: 'red' } },
             content: ' Stays put\n even when\n parent scrolls!',
         });
@@ -2103,6 +2106,52 @@ End of sample markdown.`;
         screen.render();
     }
     // ========== 30. DOCKABLE LAYOUTS ==========
+    /**
+     * IMPORTANT: DockablePanel Decision Matrix for BBS Doors
+     *
+     * Most BBS doors should use FIXED PANELS (fixed: true) because:
+     * - BBS terminals are typically 80x24 character grids
+     * - Users expect static, predictable layouts
+     * - Dragging/resizing doesn't make sense in terminal environments
+     * - Traditional BBS UX is menu-driven, not window-managed
+     *
+     * USE fixed: true FOR:
+     * - Standard BBS doors (95% of cases)
+     * - Static menu layouts
+     * - Game interfaces
+     * - Data displays (dashboards, stats, file browsers)
+     * - Forms and input screens
+     * - Any door targeting 80x24 terminals
+     *
+     * Example:
+     *   const header = createBox({
+     *     parent: screen,
+     *     top: 0, height: 3, width: '100%',
+     *     fixed: true,  // Static header - doesn't move
+     *   });
+     *
+     * USE DockablePanel (draggable/resizable) ONLY FOR:
+     * - Modern BBS interfaces with advanced UX (e.g., livechat with floating panels)
+     * - Desktop-like experiences on large terminals (>80x24)
+     * - Administrative tools where window management is useful
+     * - Explicitly requested modern features
+     *
+     * Example:
+     *   const chatWindow = new DockablePanel({
+     *     parent: screen,
+     *     dockPosition: 'float',
+     *     draggable: true,
+     *     resizable: true,
+     *     minWidth: 40, minHeight: 10,
+     *   });
+     *
+     * EXCEPTIONS:
+     * - livechat door: Uses dockable features for modern chat UX
+     * - ansi-editor: May use dockable toolbars for desktop-like editing
+     *
+     * The demo below shows dockable features for EDUCATION ONLY.
+     * Most developers should use fixed: true instead.
+     */
     function showDockableLayoutDemo() {
         clearDemo();
         currentDemo = 'dockable';
@@ -2213,7 +2262,8 @@ End of sample markdown.`;
                 { name: 'Rich', key: '2', mode: 'superres', color: 'lightgreen', desc: '4x+10' },
                 { name: 'Rich', key: '3', mode: 'halfblock', color: 'cyan', desc: '4x+10' },
                 { name: 'ASCII', key: '4', mode: 'ascii', color: 'lightblue', desc: '1x' },
-                { name: 'HSV', key: '5', mode: 'hsv', color: 'lightyellow', desc: '16c' }
+                { name: 'HSV', key: '5', mode: 'hsv', color: 'lightyellow', desc: '16c' },
+                { name: 'Shape', key: '6', mode: 'shape', color: 'lightred', desc: 'geo' }
             ];
             let line1 = '{yellow-fg}Mode:{/} ';
             let line2 = '{gray-fg}Keys:{/} ';
@@ -2599,6 +2649,11 @@ End of sample markdown.`;
             updateButtonBar();
             startVideoStream();
         });
+        screen.key(['6'], () => {
+            currentMode = 'shape';
+            updateButtonBar();
+            startVideoStream();
+        });
         screen.key(['f', 'F'], () => {
             // Don't await - fire and forget to prevent blocking the key handler
             toggleFullscreen().then(() => {
@@ -2614,7 +2669,7 @@ End of sample markdown.`;
             if (videoService && activeStreamId) {
                 videoService.stopStream(activeStreamId);
                 activeStreamId = null;
-                webcamBox.setContent('{center}Stream stopped. Press 1-4 to restart.{/center}');
+                webcamBox.setContent('{center}Stream stopped. Press 1-6 to restart.{/center}');
                 screen.render();
             }
         });

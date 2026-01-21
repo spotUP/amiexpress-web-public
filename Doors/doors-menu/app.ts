@@ -5,8 +5,8 @@
  * Uses SDK blessed helpers (no duplicate code).
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
+  createScreen,
   createBox,
   createList,
   DoorInputManager
@@ -191,15 +191,13 @@ export async function createApp(session: DoorSession) {
   const doorTypes = ['ALL', 'XIM', 'TS', 'SIM', 'PY', 'RX'];
   let currentTypeFilter = 'ALL';
 
-  // Create screen
-  let screen: ReturnType<typeof blessed.screen>;
+  // Create screen using SDK helper
+  let screen: ReturnType<typeof createScreen>;
   try {
-    screen = blessed.screen({
-      smartCSR: true,
-      dockBorders: true,
-      fullUnicode: true,
+    screen = createScreen(bbs, {
+      smartCSR: false,    // Prevent layout corruption
+      dockBorders: false, // Not needed for fixed panels
       title: 'Door Games & Utilities',
-      output: (data: string) => bbs.write(data),
     });
   } catch (error) {
     bbs.write('\r\n\x1b[31mError creating door interface\x1b[0m\r\n');
@@ -223,6 +221,9 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: '100%',
     height: 1,
+    fixed: true,
+    clickable: false,  // Don't capture mouse events
+    mouse: false,      // Don't listen for mouse events
     content: ' DOOR GAMES & UTILITIES ',
     style: {
       fg: 'white',
@@ -237,6 +238,9 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: '70%',
     height: 1,
+    fixed: true,
+    clickable: false,  // Don't capture mouse events
+    mouse: false,      // Don't listen for mouse events
     content: '{cyan-fg}Location:{/cyan-fg} All Doors',
     style: {
       fg: 'cyan',
@@ -251,6 +255,9 @@ export async function createApp(session: DoorSession) {
     right: 0,
     width: '30%',
     height: 1,
+    fixed: true,
+    clickable: false,  // Don't capture mouse events
+    mouse: false,      // Don't listen for mouse events
     content: '{yellow-fg}Filter:{/yellow-fg} ALL',
     style: {
       fg: 'yellow',
@@ -311,7 +318,13 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: '100%',
     height: 3,
-    border: { type: 'line' },
+    fixed: true,           // Static footer
+    clickable: false,      // Don't capture mouse events
+    mouse: false,          // Don't listen for mouse events
+    border: {
+      type: 'line',
+      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+    },
     style: {
       fg: 'white',
       border: { fg: 'gray' }

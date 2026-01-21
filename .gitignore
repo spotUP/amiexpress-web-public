@@ -40,12 +40,12 @@ sdk/dist-esm/**/*.map
 .render/
 
 # Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
+# logs
+# *.log
+# npm-debug.log*
+# yarn-debug.log*
+# yarn-error.log*
+# lerna-debug.log*
 
 # Runtime data
 pids
@@ -315,7 +315,7 @@ User.keys
 node*.user
 Bulletins/bull*.txt
 Screens/quicknew*.txt
-handoff.md
+# handoff.md
 Env/
 
 # BBS door password files

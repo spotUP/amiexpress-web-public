@@ -100,6 +100,7 @@ export class DockablePanel extends Panel {
   private allowAutoDock: boolean;
   private currentResizeEdge: string | null = null;
   private currentHoverEdge: string | null = null;  // Track which edge is being hovered for visual feedback
+  private isPanelHovered: boolean = false;  // Explicit hover state tracking
   private ghostBox?: Element;
   private persistenceKey?: string;
   private topConstraint: number = 0;
@@ -231,15 +232,18 @@ export class DockablePanel extends Panel {
     // Panel hover handlers for border color feedback
     // When hovering panel (not on edge) -> white border
     // When leaving panel -> restore original border
-    this.on('mouseover', () => {
-      // _hovered is set by blessed, we just need to trigger style update
+    this.on('mouseenter', () => {
+      // Explicitly track hover state
+      this.isPanelHovered = true;
       // Only apply if not hovering on a resize edge (edge takes priority with yellow)
       if (!this.currentHoverEdge) {
         this.applyBorderHoverStyle();
       }
     });
 
-    this.on('mouseout', () => {
+    this.on('mouseleave', () => {
+      // Clear hover state
+      this.isPanelHovered = false;
       // Reset hover edge and apply original style
       this.currentHoverEdge = null;
       this.applyBorderHoverStyle();
@@ -282,6 +286,11 @@ export class DockablePanel extends Panel {
     if (this.fitContentSettings?.width || this.fitContentSettings?.height) {
       // Listen for content changes on the child to re-fit
       (element as any).on?.('set content', () => {
+        this.scheduleFitToContent();
+      });
+
+      // Listen for List widget item changes (List.setItems triggers 'set items')
+      (element as any).on?.('set items', () => {
         this.scheduleFitToContent();
       });
 
@@ -449,15 +458,21 @@ export class DockablePanel extends Panel {
     // Make title bar draggable and double-click to restore from minimized
     if (this.titleBar) {
       // Hover feedback for title bar (indicates draggable)
-      this.titleBar.on('mouseover', () => {
+      this.titleBar.on('mouseenter', () => {
         if (this.titleBar && this.titleBar.style && !this.isDragging) {
           this.titleBar.style.bg = 'lightblue';
+          // Also trigger panel border highlight
+          this.isPanelHovered = true;
+          this.applyBorderHoverStyle();
           if (this.screen) this.screen.render();
         }
       });
-      this.titleBar.on('mouseout', () => {
+      this.titleBar.on('mouseleave', () => {
         if (this.titleBar && this.titleBar.style && !this.isDragging) {
           this.titleBar.style.bg = 'blue';
+          // Also clear panel border highlight
+          this.isPanelHovered = false;
+          this.applyBorderHoverStyle();
           if (this.screen) this.screen.render();
         }
       });
@@ -921,8 +936,8 @@ export class DockablePanel extends Panel {
       if (activeEdge.includes('e')) {
         styleBorder.fgRight = highlightColor;
       }
-    } else if ((this as any)._hovered) {
-      // Hovering on panel content (not on edge) -> all borders white via _overBorder
+    } else if (this.isPanelHovered) {
+      // Hovering on panel content (not on edge) -> all borders white
       (this as any)._overBorder = true;
       // Clear per-edge colors so renderBorder uses the default hover color (white)
       this.style.border.fg = hoverColor;
@@ -2486,15 +2501,28 @@ export class DockablePanel extends Panel {
         continue;
       }
 
-      const childContent = (child as any).content || '';
-      const lines = childContent.split('\n');
-
-      for (const line of lines) {
-        const cleanLine = stripFormatting(line);
-        maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+      // Check if child is a List widget (has .items property)
+      if ((child as any).items && Array.isArray((child as any).items)) {
+        const items = (child as any).items as string[];
+        for (const item of items) {
+          const cleanItem = stripFormatting(String(item));
+          maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
+        }
+        totalContentHeight = Math.max(totalContentHeight, items.length);
       }
 
-      totalContentHeight += lines.length;
+      // Check regular content
+      const childContent = (child as any).content || '';
+      if (childContent) {
+        const lines = childContent.split('\n');
+
+        for (const line of lines) {
+          const cleanLine = stripFormatting(line);
+          maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+        }
+
+        totalContentHeight += lines.length;
+      }
 
       // Also check child's _lines if available (parsed content)
       if ((child as any)._lines && Array.isArray((child as any)._lines)) {

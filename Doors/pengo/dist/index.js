@@ -7,6 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.rpcHandlers = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const pengo_game_1 = require("./game/pengo-game");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
@@ -53,6 +54,7 @@ let menuBox = null; // Can be List, Box, etc.
 let gameLoop = null;
 let game = null;
 let doorContext; // Will be set on start
+let inputManager = null;
 function initScreen() {
     screen = new blessed_1.Screen({
         smartCSR: true,
@@ -518,6 +520,11 @@ function cleanup() {
         clearInterval(keepAlive);
         keepAlive = null;
     }
+    // CRITICAL: Disable input manager FIRST (restores BBS input state)
+    if (inputManager) {
+        inputManager.disable();
+        inputManager = null;
+    }
     if (screen) {
         screen.removeAllListeners();
         screen.destroy();
@@ -535,6 +542,15 @@ door.onStart(async (ctx) => {
         /* cached */
     }
     initScreen();
+    // Set up input management (enables mouse, keyboard routing)
+    inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
+        enableGameMode: true, // Game needs raw keyboard input
+        enableGrabKeys: true, // Capture all keys for game controls
+        enableMouse: true, // Enable mouse events
+        debug: false,
+        debugName: 'Pengo'
+    });
+    inputManager.enable();
     showMenu();
 });
 door.onInput((ctx, key) => handleInput(key.raw || key.key || key));

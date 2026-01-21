@@ -19,7 +19,10 @@ export function createInputBox(screen: Screen): Textarea {
     width: screenWidth - EMOJI_BUTTON_WIDTH,  // Leave space for emoji button
     height: INPUT_HEIGHT,
     label: ' Message ',
-    border: { type: 'line' },
+    border: {
+      type: 'line',
+      labelStyle: { fg: 'white', bg: 'blue' }  // Blue background for label
+    },
     inputOnFocus: true,
     tags: true,
     mouse: true,

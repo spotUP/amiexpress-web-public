@@ -157,19 +157,60 @@ export function getFileStatusMarker(
   return FileStatus.NOT_TESTED;
 }
 
-// Format file size as string with K suffix (express.e uses fsstr for this)
-export function formatFileSize(bytes: number): string {
-  const kb = Math.ceil(bytes / 1024);
-  return `${kb}K`.padStart(6);
+/**
+ * Format file size for DIR entries - express.e:18918-18942
+ *
+ * AmiExpress has two modes controlled by TOGGLES_CREDITBYKB:
+ * 1. TOGGLES_CREDITBYKB=TRUE: Uses "K" suffix (e.g., "   123K") - 7 chars total
+ * 2. TOGGLES_CREDITBYKB=FALSE (DEFAULT): Raw bytes (e.g., "  89749") - 7 chars
+ *
+ * Most 68K doors (AquaScan/FR, etc.) expect raw bytes to parse size for filtering.
+ * Using "K" suffix causes Val("11K") = 0, which filters out the file.
+ *
+ * @param bytes File size in bytes
+ * @param useKB Whether to use KB suffix (TOGGLES_CREDITBYKB=TRUE)
+ * @returns Formatted size string (7 chars, right-aligned)
+ */
+export function formatFileSize(bytes: number, useKB: boolean = false): string {
+  if (useKB) {
+    // Mode 1: TOGGLES_CREDITBYKB=TRUE - express.e:18920-18930
+    // StringF(fsstr,'\r\d[6]K',tmpSize) - right-align in 6 chars + K = 7 total
+    const tmpSize = bytes >>> 10;  // Shr(fsize,10) - convert to KB
+    if (tmpSize <= 999999) {
+      return `${tmpSize}K`.padStart(7);  // e.g., "   123K"
+    } else {
+      // For very large files (>999999K), just use raw KB
+      return `${tmpSize}K`;
+    }
+  } else {
+    // Mode 2: TOGGLES_CREDITBYKB=FALSE (DEFAULT) - express.e:18931-18940
+    // StringF(fsstr,'\r\d[7]',fsize) - right-align raw bytes in 7 chars
+    // This is what AquaScan and other 68K doors expect for size filtering
+    if (bytes <= 9999999) {
+      return String(bytes).padStart(7);  // e.g., "  89749"
+    } else {
+      // For files >9,999,999 bytes, just use raw bytes (no padding limit)
+      return String(bytes);
+    }
+  }
 }
 
-// Format upload date as DD-Mon-YY (like AmiExpress)
+/**
+ * Format upload date for DIR entries - express.e:19165 uses formatLongDate()
+ *
+ * AmiExpress uses MM-DD-YY numeric format for DIR files (e.g., "12-10-25")
+ * This is critical for 68K doors like AquaScan/FR that parse dates for filtering.
+ *
+ * Evidence from real Amiga DIR files: "12-26-17", "01-25-18", "01-27-18"
+ *
+ * @param date Date to format
+ * @returns Formatted date string in MM-DD-YY format
+ */
 export function formatUploadDate(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = months[date.getMonth()];
-  const year = String(date.getFullYear()).slice(-2);
-  return `${day}-${month}-${year}`;
+  const month = String(date.getMonth() + 1).padStart(2, '0');  // 1-12 -> "01"-"12"
+  const day = String(date.getDate()).padStart(2, '0');         // 1-31 -> "01"-"31"
+  const year = String(date.getFullYear()).slice(-2);           // 2026 -> "26"
+  return `${month}-${day}-${year}`;  // "01-21-26"
 }
 
 // Check if description starts with / (private upload marker) - express.e:19344

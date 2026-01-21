@@ -128,13 +128,29 @@ console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" f
       if (mode === 'r') {
         flags = fs.constants.O_RDONLY;
       } else if (mode === 'w') {
-        flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC;
+        // CRITICAL FIX: MODE_NEWFILE without O_TRUNC
+        // On AmigaOS, MODE_NEWFILE creates/opens for writing but may NOT truncate
+        // if the file is already open for reading. The truncation happens on Close().
+        // This matches dRE!WAll behavior where it:
+        // 1. Opens for read (gets old data)
+        // 2. Opens for write (file NOT truncated yet)
+        // 3. Assembles new record in memory
+        // 4. Writes new record
+        // 5. Closes write handle (NOW file is replaced)
+        flags = fs.constants.O_WRONLY | fs.constants.O_CREAT;
+console.log(`[FileHandle] Opening "${this.amiPath}" for WRITE WITHOUT O_TRUNC - preserving existing content`);
       } else { // 'rw'
         flags = fs.constants.O_RDWR | fs.constants.O_CREAT;
       }
 
       this.fd = fs.openSync(this.sysPath, flags, 0o666);
       this.position = 0;
+
+      // DEBUG: Check file size after opening
+      if (mode === 'w') {
+        const stats = fs.fstatSync(this.fd);
+console.log(`[FileHandle] After open: "${this.amiPath}" size=${stats.size} bytes (write mode)`);
+      }
 
       // For read-only files, snapshot the file size at open time.
       // This prevents infinite loops when reading files that grow during read

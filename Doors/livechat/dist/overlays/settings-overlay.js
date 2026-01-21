@@ -30,6 +30,7 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         trapFocus: true,
         ch: ' ',
         style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+        zIndex: 9990, // Modal overlays render above panels (1-10) but below dropdowns (9999)
     });
     o.enableResize();
     const eCb = (0, settings_checkboxes_events_1.createEventCheckboxes)(o, st, l, 2);

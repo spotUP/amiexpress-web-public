@@ -91,7 +91,8 @@ export class DropdownMenu extends Element {
       focusable: true,
       hidden: true,
       shadow: true,
-    });
+      zIndex: 9999,  // Render on top of everything (panels are typically 1-10)
+    } as any);
 
     this.items = options.items || [];
     this.updateContent();
@@ -139,7 +140,11 @@ export class DropdownMenu extends Element {
   }
 
   openAt(left: number, top: number): void {
-    if (!this.screen) return;
+    console.log('[DropdownMenu] openAt called:', { left, top });
+    if (!this.screen) {
+      console.log('[DropdownMenu] ERROR: No screen in openAt!');
+      return;
+    }
 
     // Close any other open menus first (ensures only one menu open at a time)
     for (const menu of DropdownMenu.openMenus) {
@@ -150,17 +155,22 @@ export class DropdownMenu extends Element {
 
     const cols = this.screen.cols;
     const rows = this.screen.rows;
+    console.log('[DropdownMenu] Screen size:', { cols, rows });
 
     const width = typeof this.width === 'number' ? this.width : 20;
     const height = typeof this.height === 'number' ? this.height : 10;
 
     const clampedLeft = Math.max(0, Math.min(left, cols - width));
     const clampedTop = Math.max(0, Math.min(top, rows - height));
+    console.log('[DropdownMenu] Clamped position:', { clampedLeft, clampedTop, width, height });
 
     this.left = clampedLeft;
     this.top = clampedTop;
+    console.log('[DropdownMenu] Calling show()');
     this.show();
+    console.log('[DropdownMenu] Calling focus()');
     this.focus();
+    console.log('[DropdownMenu] hidden:', this.hidden, 'visible:', this.visible);
 
     // Track this menu as open
     DropdownMenu.openMenus.add(this);
@@ -171,14 +181,23 @@ export class DropdownMenu extends Element {
   }
 
   openFor(anchor: Element, align: 'left' | 'right' = 'left'): void {
-    if (!this.screen) return;
+    console.log('[DropdownMenu] openFor called');
+    if (!this.screen) {
+      console.log('[DropdownMenu] ERROR: No screen!');
+      return;
+    }
     const coords = anchor._getCoords();
-    if (!coords) return;
+    console.log('[DropdownMenu] anchor coords:', coords);
+    if (!coords) {
+      console.log('[DropdownMenu] ERROR: No coords from anchor!');
+      return;
+    }
 
     const left = align === 'right'
       ? coords.xl - (typeof this.width === 'number' ? this.width : 20)
       : coords.xi;
     const top = coords.yl;
+    console.log('[DropdownMenu] Calculated position:', { left, top });
     this.openAt(left, top);
   }
 

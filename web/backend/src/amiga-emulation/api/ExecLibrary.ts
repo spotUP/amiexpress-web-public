@@ -312,11 +312,15 @@ debugLog(
     this.execBase.thisTask = taskAddr;
 
     // Register the task's message port
+    // CRITICAL FIX 2026-01-20: Use sigBit=18 to avoid conflict with door Wait() masks
+    // AquaScan/FR doors use Wait(0x21000) which waits for bits 12 OR 17.
+    // Auto-allocated sigBit was returning 16, which accumulated in sigRecvd and never cleared,
+    // causing doors to loop forever. Bit 18 doesn't conflict with common door Wait masks.
     this.messagePorts.set(taskMsgPortAddr, {
       address: taskMsgPortAddr,
       name: "Door Task Port",
       messages: [],
-      sigBit: 0,
+      sigBit: 18,  // Use bit 18 instead of auto-allocated bit
       sigTask: taskAddr,
       signaled: false,
     });
@@ -5121,6 +5125,29 @@ debugLog(
         )}, sigBit: ${port.sigBit}`
       );
 
+      // CRITICAL FIX 2026-01-20: Port has PA_SIGNAL but sigTask=0!
+      // This happens with AquaScan doors - they set PA_SIGNAL but don't set sigTask.
+      // Auto-fix by setting sigTask to currentTask (the door waiting for the message).
+      if (port.sigTask === 0) {
+console.warn(`[ExecLibrary]   WARNING: Port has PA_SIGNAL but no sigTask - auto-fixing to currentTask`);
+        port.sigTask = this.currentTask.address;
+        this.emulator.writeMemory32(portAddr + 16, port.sigTask);
+
+        // Also ensure sigBit is set
+        const existingSigBit = this.emulator.readMemory(portAddr + 15);
+        if (existingSigBit > 0 && existingSigBit <= 31) {
+          port.sigBit = existingSigBit;
+debugLog(`[ExecLibrary]   Using existing sigBit ${existingSigBit} from port`);
+        } else if (port.sigBit === 0) {
+          port.sigBit = this.AllocSignal(-1);
+          if (port.sigBit < 0 || port.sigBit > 31) {
+            port.sigBit = 1;
+          }
+          this.emulator.writeMemory(portAddr + 15, port.sigBit);
+debugLog(`[ExecLibrary]   Allocated new sigBit ${port.sigBit}`);
+        }
+      }
+
       // Signal the task that owns this port
       if (port.sigTask !== 0) {
         const signalMask = 1 << port.sigBit; // Convert bit number to mask
@@ -5130,7 +5157,7 @@ debugLog(
         );
         this.signal(port.sigTask, signalMask);
       } else {
-console.warn(`[ExecLibrary]   WARNING: Port has no sigTask set!`);
+console.error(`[ExecLibrary]   ERROR: Port has PA_SIGNAL but still no sigTask after auto-fix!`);
       }
     } else {
 debugLog(
@@ -5573,17 +5600,22 @@ debugLog(
     const NT_REPLYMSG = 6;
     this.emulator.writeMemory(msgAddr + 8, NT_REPLYMSG);
 
-    // CRITICAL FIX 2026-01-16: Update mn_ReplyPort to point to AEDoorPort before sending reply.
-    // This prevents infinite loops where:
-    // 1. BBS sends reply to door's port (message still has mn_ReplyPort = door's port)
-    // 2. Door receives message and calls ReplyMsg on it
-    // 3. Without this fix: message goes back to door's own port = infinite loop
-    // 4. With this fix: message goes to AEDoorPort where BBS handles it
-    const aeDoorPort = this.getDoorPortAddress();
-    if (aeDoorPort !== 0) {
-      this.emulator.writeMemory32(msgAddr + 14, aeDoorPort); // mn_ReplyPort = AEDoorPort
-      this.logExecDebug(`ReplyMsg: Updated mn_ReplyPort to AEDoorPort 0x${aeDoorPort.toString(16)}`);
-    }
+    // CRITICAL FIX 2026-01-20: DO NOT overwrite mn_ReplyPort for native XIM doors!
+    // Native AEDoor.library (from 1996 binary in Libs/) uses BIDIRECTIONAL communication
+    // on AEDoorPort - the native code sets mn_ReplyPort correctly for its protocol.
+    // Overwriting it breaks doors like FR (File Request) that use the native library.
+    //
+    // Original fix (2026-01-16) was for trapped/TIM doors that might call ReplyMsg incorrectly.
+    // But native XIM doors know what they're doing - respect their mn_ReplyPort setting!
+    //
+    // TODO: If we encounter doors with the infinite loop issue, add a check to only
+    // overwrite mn_ReplyPort for non-XIM doors or trapped aedoor.library usage.
+    //
+    // const aeDoorPort = this.getDoorPortAddress();
+    // if (aeDoorPort !== 0) {
+    //   this.emulator.writeMemory32(msgAddr + 14, aeDoorPort); // mn_ReplyPort = AEDoorPort
+    //   this.logExecDebug(`ReplyMsg: Updated mn_ReplyPort to AEDoorPort 0x${aeDoorPort.toString(16)}`);
+    // }
 
     // Track replies so host-side polling can skip them on AEDoorPort.
     this.markMessageAsReplied(msgAddr);

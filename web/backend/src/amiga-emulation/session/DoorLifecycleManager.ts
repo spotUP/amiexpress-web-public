@@ -319,6 +319,41 @@ debugLog(
       /* ignore logging errors */
     }
 
+    // Initialize NodeStatusManager for WHO doors (RTW, etc.)
+    // WHO doors use FindSemaphore("AEServer.0", "AEServer.1", etc.) to find node info
+    // NodeStatusManager creates these semaphores with singlePort structures
+    if (this.emulator && this.libraryManager?.execLibrary) {
+      try {
+        const { nodeStatusManager } = await import('../../nodes/NodeStatusManager');
+        if (nodeStatusManager.getMultiPortAddress() === 0) {
+          // Only initialize once (first door that starts)
+          nodeStatusManager.initializeInEmulator(this.emulator, this.libraryManager.execLibrary);
+          console.log('[DoorLifecycleManager] NodeStatusManager initialized for WHO doors');
+        }
+        // Update current node info
+        const bbsSession = this.config.bbsSession;
+        const nodeId = bbsSession?.nodeId || 1;
+        const userName = bbsSession?.user?.username || '';
+        const userLocation = bbsSession?.user?.location || '';
+        const connectionType = bbsSession?.connectionType || 'web';
+        const baudRate = connectionType === 'ssh' ? 'SSH' :
+                        connectionType === 'telnet' ? 'Telnet' : 'Web';
+
+        nodeStatusManager.updateNode(this.emulator, nodeId, {
+          nodeId,
+          status: 3, // ENV_DOORS
+          handle: userName,
+          location: userLocation,
+          misc1: '',  // Filled in by specific contexts (file transfer, etc.)
+          misc2: 0,   // Chat availability flags
+          baud: baudRate
+        });
+        console.log(`[DoorLifecycleManager] Node ${nodeId} updated: ${userName} from ${userLocation}`);
+      } catch (error) {
+        console.error('[DoorLifecycleManager] Failed to initialize NodeStatusManager:', error);
+      }
+    }
+
     // CRITICAL FIX 2026-01-08: Set up synchronous XIM processor for AEDoor.library trap handlers
     // When AEDoor.library's WriteStr/etc calls dispatchCommand -> waitForReply, the
     // trap handler is synchronous and can't yield to the async pollXIMMessages loop.
@@ -418,16 +453,12 @@ debugLog(
           // Handle message synchronously for blocking commands, async for others
           // Note: handleMessage is async but sync parts run immediately
           self.ximProtocol.handleMessage(parsed).then(() => {
-            // CRITICAL FIX 2026-01-16: Reply to door after message handling completes!
-            // Without this, door stays blocked on Wait() forever because replyMsg
-            // was never called. This matches what pollXIMMessages does.
-            // AEDoor.library disassembly confirms ALL commands block on Wait() after PutMsg.
-            if (self.ximProtocol && !self.ximProtocol.isWaitingForLineInput()) {
-              console.log(`[DoorLifecycleManager] doorMessageCallback: Calling replyMsg for cmd=${parsed.command}`);
-              execLib.replyMsg(parsed.msgAddr);
-            } else {
-              console.log(`[DoorLifecycleManager] doorMessageCallback: SKIPPING replyMsg - waiting for input, cmd=${parsed.command}`);
-            }
+            // CRITICAL FIX 2026-01-20: DO NOT call replyMsg here - XIM handlers already reply!
+            // Calling replyMsg here causes DOUBLE REPLIES which confuses door state machines.
+            // The door receives same message twice → wrong branch logic → infinite loops.
+            // AmigaDoorSession.ts:415-420 documents this: "DOUBLED OUTPUT" when both callback and handler reply.
+            // XIM handlers (bbs-info.ts, data-query.ts, etc.) call reply() which calls replyMsg().
+            console.log(`[DoorLifecycleManager] doorMessageCallback: Message handled for cmd=${parsed.command} (XIM handler replied)`);
 
             // CRITICAL FIX 2026-01-17: Check if door requested shutdown (JH_SHUTDOWN)
             // This check was only in pollXIMMessages but doorMessageCallback skips polling!

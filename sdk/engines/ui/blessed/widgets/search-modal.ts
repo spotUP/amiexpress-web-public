@@ -16,6 +16,7 @@ import { Textbox } from './textbox';
 import { Text } from './text';
 import type { ElementOptions } from '../core/types';
 import type { Screen } from '../core/screen';
+import { trapModalInput } from '../utils/modal-helpers';
 
 export interface SearchField {
   /** Field ID */
@@ -66,6 +67,7 @@ export class SearchModal extends Box {
   private _onSelect?: (result: SearchResult) => void;
   private _onClose?: () => void;
   private _focusableFields: Textbox[] = [];
+  private _trapCleanup?: () => void;
 
   constructor(options: SearchModalOptions = {}) {
     const borderColor = options.borderColor || 'green';
@@ -273,6 +275,11 @@ export class SearchModal extends Box {
    * Show the modal
    */
   display(): void {
+    // Trap modal input to prevent keys from leaking to background elements
+    if (!this._trapCleanup) {
+      this._trapCleanup = trapModalInput(this);
+    }
+
     this.show();
     this.setFront();
     this._searchInput.focus();
@@ -284,6 +291,13 @@ export class SearchModal extends Box {
    */
   hide(): void {
     super.hide();
+
+    // Cleanup trap handlers
+    if (this._trapCleanup) {
+      this._trapCleanup();
+      this._trapCleanup = undefined;
+    }
+
     this.screen?.render();
   }
 

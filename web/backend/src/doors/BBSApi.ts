@@ -1311,6 +1311,40 @@ console.error('[BBSApi.deleteDoor] Error:', error);
       };
     }
   }
+
+  /**
+   * Emit a custom door event that will be broadcast to LiveChat and webhooks
+   *
+   * @param eventType - Type of event (e.g., 'project_created', 'task_completed', 'achievement_unlocked')
+   * @param message - Human-readable message for display in LiveChat
+   * @param data - Optional additional data to include with the event
+   *
+   * @example
+   * ```typescript
+   * ctx.bbs.emitCustomEvent('project_created', 'Created new demo project "Revision 2025"', {
+   *   projectName: 'Revision 2025',
+   *   projectType: 'demo'
+   * });
+   * ```
+   */
+  emitCustomEvent(eventType: string, message: string, data?: Record<string, any>): void {
+    try {
+      const { emitCustomDoorEvent } = require('../services/bbs-event-emitter');
+
+      emitCustomDoorEvent({
+        username: this.session.user?.username || 'Unknown',
+        nodeId: this.session.nodeId || 0,
+        doorName: this.session.commandText || 'Door',
+        eventType,
+        message,
+        data,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('[BBSApi.emitCustomEvent] Failed to emit event:', error);
+      // Don't throw - event emission failures should not crash the door
+    }
+  }
 }
 
 /**

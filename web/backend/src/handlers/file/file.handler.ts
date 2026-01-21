@@ -1078,8 +1078,10 @@ console.log('startFileUpload called for area:', fileArea.name);
     uploadCount: 1,
     uploadStartTime: Date.now(),
     webUploadMode: true,
-    batchUpload: previousTempData.batchUpload || false,
-    currentUploadIndex: 0
+    batchUpload: true,  // Always enable batch/multiple upload for web mode
+    currentUploadIndex: 0,
+    uploadedFiles: 0,  // Track number of files actually uploaded
+    uploadedBytes: 0   // Track total bytes uploaded
   };
 
   session.uploadContext = uploadContext;

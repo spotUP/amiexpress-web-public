@@ -1,9 +1,8 @@
 /**
  * Menu bar component - dropdown menus
+ * Uses SDK MenuBar widget (Moebius-style)
  */
-import { Screen, DropdownMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Screen, MenuBar as SDKMenuBar, MenuBarItem } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export const MENU_HEIGHT = 1;
 
@@ -20,18 +19,16 @@ export interface MenuBarHandlers {
 }
 
 export interface MenuBar {
-  element: Box;
+  element: SDKMenuBar;
   setHandlers: (handlers: MenuBarHandlers) => void;
 }
 
 // Handlers storage (set dynamically)
 let globalHandlers: MenuBarHandlers = {};
 
-const MENU_LABELS = ['Chat', 'Tools', 'View', 'Help'];
-
-const buildMenuItems = (): Array<{ label: string; items: Array<{ label: string; action: () => void }> }> => ([
+const buildMenuItems = (): MenuBarItem[] => ([
   {
-    label: 'Chat',
+    label: 'Chat v3.2.0',
     items: [
       { label: 'Help (F1)', action: () => globalHandlers.onHelp?.() },
       { label: 'Channel List (F2)', action: () => globalHandlers.onList?.() },
@@ -62,69 +59,17 @@ const buildMenuItems = (): Array<{ label: string; items: Array<{ label: string; 
 ]);
 
 export function createMenuBar(screen: Screen): MenuBar {
-  const bar = createBox({
-    parent: screen,
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: MENU_HEIGHT,
-    style: { fg: 'white', bg: 'blue' },
-    content: '',
-    fixed: true,
+  const menuBar = new SDKMenuBar({
+    screen,
+    items: buildMenuItems(),
   });
-
-  const menuButtons: Box[] = [];
-  const menus: DropdownMenu[] = [];
-  const menuDefs = buildMenuItems();
-  menuDefs.forEach((menu) => {
-    menus.push(new DropdownMenu({ parent: screen, label: menu.label, items: menu.items }));
-  });
-
-  const openMenu = (index: number) => {
-    menus.forEach((menu, i) => {
-      if (i !== index) menu.close();
-    });
-    menus[index].openFor(menuButtons[index]);
-  };
-
-  const setupMenuButtons = () => {
-    let left = 1;
-    MENU_LABELS.forEach((label, index) => {
-      const button = createBox({
-        parent: bar,
-        top: 0,
-        left,
-        width: label.length + 2,
-        height: 1,
-        content: `{bold}${label}{/bold}`,
-        style: { fg: 'white', bg: 'blue', focus: { fg: 'black', bg: 'cyan' } },
-        mouse: true,
-        keys: true,
-        clickable: true,
-        fixed: true,
-      });
-
-      button.on('click', () => openMenu(index));
-      button.key(['enter', 'space', 'down'], () => openMenu(index));
-
-      menus[index].on('tab-next', () => openMenu((index + 1) % menus.length));
-      menus[index].on('tab-prev', () => openMenu((index - 1 + menus.length) % menus.length));
-
-      menuButtons.push(button);
-      left += label.length + 3;
-    });
-  };
-
-  setupMenuButtons();
 
   return {
-    element: bar as unknown as Box,
+    element: menuBar,
     setHandlers: (handlers: MenuBarHandlers) => {
       globalHandlers = handlers;
-      const updatedDefs = buildMenuItems();
-      updatedDefs.forEach((menu, index) => {
-        menus[index]?.setItems(menu.items);
-      });
+      // Update menu items with new handlers
+      menuBar.setItems(buildMenuItems());
     },
   };
 }

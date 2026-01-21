@@ -952,6 +952,12 @@ export default {
    */
   private isCacheValid(cached: BundleResult, doorPath: string): boolean {
     try {
+      // In development mode, NEVER use cache - always rebuild
+      // This prevents stale bundles when editing door dependencies
+      if (process.env.NODE_ENV !== 'production') {
+        return false;
+      }
+
       // Check if bundle file exists
       if (!fs.existsSync(cached.bundlePath)) {
         return false;
@@ -961,6 +967,8 @@ export default {
       const sourceStats = fs.statSync(doorPath);
       const bundleStats = fs.statSync(cached.bundlePath);
 
+      // For production, check entry file mtime
+      // Note: This doesn't track dependencies, but production builds should be stable
       return bundleStats.mtime >= sourceStats.mtime;
     } catch {
       return false;

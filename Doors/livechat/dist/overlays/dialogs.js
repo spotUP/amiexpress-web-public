@@ -15,7 +15,7 @@ function invalidateCache(element) {
     }
 }
 function createDialogs(s, ib) {
-    const mo = blessed_1.default.overlay({ parent: s, top: 0, left: 0, width: '100%', height: '100%', opacity: 0.5, hidden: true, style: { bg: 'black' } });
+    const mo = blessed_1.default.overlay({ parent: s, top: 0, left: 0, width: '100%', height: '100%', opacity: 0.5, hidden: true, style: { bg: 'black' }, zIndex: 9980 });
     function showModal(w) {
         // Update overlay dimensions to current screen size
         mo.position.width = s.width;

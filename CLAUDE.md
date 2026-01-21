@@ -67,11 +67,11 @@ BBS uses REAL Amiga binaries via MOIRA 68K emulator, NOT TypeScript reimplementa
 
 **Evidence needed:** Memory offset + structure definition + behavior confirmation + express.e reference
 
-### 5. SDK DOORS MUST BE BUILT
+### 5. TYPESCRIPT DOORS MUST BE BUILT
 
-SDK doors (`sdk/doors/`) load `dist/index.js` not source. **MUST BUILD before testing.**
+TypeScript doors in `Doors/` load `dist/index.js` not source. **MUST BUILD before testing.**
 
-`cd sdk/doors/{name} && npm run build` before testing. Watch: `npm run build:watch`. `start-servers.sh` auto-builds.
+`cd Doors/{name} && npm run build` before testing. Watch: `npm run build:watch`. `start-servers.sh` auto-builds ALL TypeScript doors.
 
 ### 6. NEO-BLESSED COLORS
 
@@ -400,7 +400,7 @@ AmiExpress-Web: TypeScript port of Amiga BBS. 68K emulation via MOIRA.
 
 **Arch:** `web/backend` (Node/TS server), `web/frontend` (React/xterm.js), `sdk` (Door Dev Kit)
 
-**Doors:** 68K (legacy via MOIRA in `doors/`), TypeScript (SDK in `sdk/doors/`)
+**Doors:** ALL doors live in `Doors/` - both 68K (legacy via MOIRA) and TypeScript (using SDK)
 
 **Features:** 68K emulation, AREXX (1905 lines, 40+ APIs), Import/Export, Telnet:2323, SSH:2222, WebSocket, QWK/REP, Multi-node chat
 
@@ -444,9 +444,9 @@ npm install; npm run build  # REQUIRED before CLI
 npm test; npm run create-door
 ```
 
-**Before PRs:** Test SDK + 2 example doors build.
+**Before PRs:** Test SDK + 2 TypeScript doors build.
 
-**New doors:** ALWAYS use `npm run create-door`, NEVER create in `web/backend/src/doors/`.
+**New doors:** ALWAYS develop directly in `Doors/` directory. **NEVER** create doors anywhere else (no `web/backend/src/doors/`, no `sdk/doors/`).
 
 **TypeScript door .info files:** Add `PRELOADER=YES` to show animated loading spinner during module import. The preloader handles timing automatically - no hardcoded delays in door code. See `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md` section on PRELOADER tooltype.
 

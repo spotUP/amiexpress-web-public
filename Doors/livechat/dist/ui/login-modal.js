@@ -14,6 +14,7 @@ class LoginModal {
             title: 'LiveChat Login',
             overlay: true,
             overlayOpacity: 0.5,
+            zIndex: 9990,
             onSubmit: options.onSubmit,
         });
     }

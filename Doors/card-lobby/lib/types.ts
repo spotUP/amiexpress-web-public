@@ -4,6 +4,20 @@
  */
 
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
+import type {
+  UnoGameSnapshot,
+  UnoCard,
+  UnoColor,
+  UnoValue,
+  UnoPlayer,
+  UnoGameState,
+  ChallengeWindow,
+  HouseRule,
+  HouseRuleChallenge,
+  PlayCardResult,
+  DrawCardResult,
+  ChallengeResult,
+} from './uno-engine';
 
 export interface DoorSession {
   socket: any;
@@ -154,4 +168,51 @@ export interface BulletinEntry {
   number: number;
   title: string;
   description: string;
+}
+
+// ============================================================================
+// UNO-SPECIFIC TYPES
+// ============================================================================
+
+// Re-export UNO engine types
+export type {
+  UnoGameSnapshot,
+  UnoCard,
+  UnoColor,
+  UnoValue,
+  UnoPlayer,
+  UnoGameState,
+  ChallengeWindow,
+  HouseRule,
+  HouseRuleChallenge,
+  PlayCardResult,
+  DrawCardResult,
+  ChallengeResult,
+};
+
+export type UnoActionType =
+  | 'play-card'
+  | 'draw-card'
+  | 'call-uno'
+  | 'challenge-uno'
+  | 'challenge-wild-four'
+  | 'choose-color'
+  | 'create-house-rule'
+  | 'activate-house-rule';
+
+export interface UnoGameEvent {
+  id: string;
+  type: 'cardPlayed' | 'cardDrawn' | 'unoCalled' | 'challengeOpened' | 'challengeClosed' | 'gameStarted' | 'gameEnded';
+  playerId?: string;
+  data?: any;
+  timestamp: number;
+}
+
+export interface UnoTableHandState {
+  snapshot: UnoGameSnapshot;
+  beforeStacks: Record<string, number>;
+  startedAt: number;
+  updatedAt: number;
+  variant: 'standard' | 'house-rules';
+  events: UnoGameEvent[];
 }

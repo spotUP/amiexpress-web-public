@@ -11,7 +11,7 @@ function invalidateCache(element: any) {
 }
 
 export function createDialogs(s: Screen, ib: any) {
-  const mo = blessed.overlay({ parent: s, top: 0, left: 0, width: '100%', height: '100%', opacity: 0.5, hidden: true, style: { bg: 'black' } });
+  const mo = blessed.overlay({ parent: s, top: 0, left: 0, width: '100%', height: '100%', opacity: 0.5, hidden: true, style: { bg: 'black' }, zIndex: 9980 });
 
   function showModal(w: any) {
     // Update overlay dimensions to current screen size

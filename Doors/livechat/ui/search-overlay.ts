@@ -14,6 +14,7 @@ export function createSearchOverlay(
     title: 'Message Search',
     searchLabel: 'Query',
     borderColor: 'green',
+    zIndex: 9990,
     filters: [
       { id: 'username', label: 'Username (optional)' }
     ],

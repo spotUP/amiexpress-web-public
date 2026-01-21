@@ -258,15 +258,30 @@ export async function initializeData() {
     // Initialize database schema first
     await db.init();
 
+    // Clear door bundle cache in development to prevent stale bundles
+    // In production, cache is kept for performance
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const { getClientDoorBundler } = require('../doors/client-door-bundler');
+        const bundler = getClientDoorBundler();
+        bundler.clearCache();
+        console.log('[Server] Cleared door bundle cache (development mode)');
+      } catch (error) {
+        console.warn('[Server] Failed to clear door bundle cache:', error);
+      }
+    }
+
     // Initialize default webhook if configured
     await initializeDefaultWebhook();
 
     // express.e: cmds.numConf and confNames/confDirs are populated from ConfConfig.info (NCONFS, NAME.n, LOCATION.n)
     // The BBS ALWAYS uses disk files, NOT the database, for conference configuration
     const bbsRoot = process.env.BBS_ROOT || config.get('dataDir');
+    console.log(`[INIT] bbsRoot=${bbsRoot}`);
     const confConfig = loadConfConfig(bbsRoot);
 
     if (confConfig && confConfig.confCount > 0) {
+      console.log(`[INIT] Found ${confConfig.confCount} conferences in ConfConfig.info`);
       // Create conferences array from ConfConfig.info (express.e:8499-8512 uses cmds.numConf from this file)
       conferences = [];
       for (let i = 0; i < confConfig.confCount; i++) {

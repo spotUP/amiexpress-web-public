@@ -857,6 +857,16 @@ debugLog(
       // Bulk copy data to emulator memory (much faster than byte-by-byte)
       if (bytesRead > 0) {
         this.emulator.writeMemoryBuffer(bufferAddr, dataBuffer);
+
+        // DEBUG: For 100-byte reads (likely dRE!WAll data), log what we're returning
+        if (bytesRead === 100) {
+          const preview = dataBuffer.slice(0, 64);
+          const hex = Array.from(preview).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          const ascii = Array.from(preview).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`[DEBUG READ 100-byte file] Returned ${bytesRead} bytes to bufferAddr=0x${bufferAddr.toString(16)}`);
+console.log(`[DEBUG READ] First 64 bytes HEX: ${hex}`);
+console.log(`[DEBUG READ] First 64 bytes ASCII: "${ascii}"`);
+        }
       }
 
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
@@ -949,6 +959,53 @@ debugLog(
     const pc = this.emulator.getRegister(CPURegister.PC);
     const sp = this.emulator.getRegister(CPURegister.A7);
 
+    // DEBUG: Log all registers when writing to dRE!WAll file
+    if (handle === 4 && length === 100) {
+      const regs = {
+        D0: this.emulator.getRegister(CPURegister.D0),
+        D1: handle,
+        D2: bufferAddr,
+        D3: length,
+        A0: this.emulator.getRegister(CPURegister.A0),
+        A1: this.emulator.getRegister(CPURegister.A1),
+        A2: this.emulator.getRegister(CPURegister.A2),
+        A3: this.emulator.getRegister(CPURegister.A3),
+        A4: this.emulator.getRegister(CPURegister.A4),
+        A5: this.emulator.getRegister(CPURegister.A5),
+        A6: this.emulator.getRegister(CPURegister.A6),
+        PC: pc,
+        SP: sp
+      };
+console.log(`[dos.library] Write() to handle 4 (dRE!WAll) - ALL REGISTERS:`);
+console.log(`  D0=0x${regs.D0.toString(16)} D1=${regs.D1} D2=0x${regs.D2.toString(16)} D3=${regs.D3}`);
+console.log(`  A0=0x${regs.A0.toString(16)} A1=0x${regs.A1.toString(16)} A2=0x${regs.A2.toString(16)} A3=0x${regs.A3.toString(16)}`);
+console.log(`  A4=0x${regs.A4.toString(16)} A5=0x${regs.A5.toString(16)} A6=0x${regs.A6.toString(16)}`);
+console.log(`  PC=0x${regs.PC.toString(16)} SP=0x${regs.SP.toString(16)}`);
+
+      // Check what's at various address registers - maybe one contains the new input buffer
+      for (const [name, addr] of [['A0', regs.A0], ['A1', regs.A1], ['A2', regs.A2], ['A3', regs.A3], ['A4', regs.A4], ['A5', regs.A5]] as [string, number][]) {
+        if (addr > 0x1000 && addr < 0x1000000) {
+          const preview = [];
+          for (let i = 0; i < Math.min(32, 0x1000000 - addr); i++) {
+            preview.push(this.emulator.readMemory(addr + i));
+          }
+          const ascii = preview.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`  ${name}[0x${addr.toString(16)}]: ${ascii}`);
+        }
+      }
+
+      // DEBUG: Check msg.string at the known message address
+      // From logs we know msgAddr is around 0x1034e4, so msg.string is at +0x14
+      const msgAddr = 0x1034e4;
+      const stringAddr = msgAddr + 0x14;  // 0x1034f8
+      const msgString = [];
+      for (let i = 0; i < 32; i++) {
+        msgString.push(this.emulator.readMemory(stringAddr + i));
+      }
+      const msgStringAscii = msgString.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`  msg.string[0x${stringAddr.toString(16)}]: "${msgStringAscii}"`);
+    }
+
     if (length <= 0) {
       const preview: number[] = [];
       try {
@@ -966,12 +1023,21 @@ debugLog(
         )} d3=${length} preview=[${preview.map((b) => b.toString(16)).join(" ")}]`
       );
     }
-    this.logDoorFile(`WRITE handle=${handle} len=${length}`);
+    this.logDoorFile(`WRITE handle=${handle} len=${length} bufAddr=0x${bufferAddr.toString(16)}`);
 
     // Read data from emulated memory
     const bytes: number[] = [];
     for (let i = 0; i < length; i++) {
       bytes.push(this.emulator.readMemory(bufferAddr + i));
+    }
+
+    // DEBUG: Log buffer contents for debugging dRE!WAll issue
+    if (length > 0 && length <= 200) {
+      const preview = bytes.slice(0, Math.min(length, 100));
+      const hex = preview.map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const ascii = preview.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+      this.logDoorFile(`  Buffer hex: ${hex}`);
+      this.logDoorFile(`  Buffer ascii: ${ascii}`);
     }
 
     // Convert Amiga/Latin-1 bytes to ASCII (fixes non-breaking space 0xA0 -> 0x20)

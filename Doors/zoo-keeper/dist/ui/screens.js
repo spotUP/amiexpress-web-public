@@ -59,6 +59,7 @@ export class ScreenManager {
             left: "center",
             width: 50,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "yellow" },
             style: {
@@ -95,6 +96,7 @@ export class ScreenManager {
             left: "center",
             width: 40,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "yellow" },
             style: {
@@ -140,6 +142,7 @@ export class ScreenManager {
             left: "center",
             width: 50,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "cyan" },
             style: {
@@ -167,6 +170,7 @@ export class ScreenManager {
             left: "center",
             width: 30,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "yellow" },
             style: {
@@ -196,6 +200,7 @@ export class ScreenManager {
             left: "center",
             width: 35,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "red" },
             style: {
@@ -229,6 +234,7 @@ export class ScreenManager {
             left: "center",
             width: 35,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "yellow" },
             style: {
@@ -257,6 +263,7 @@ export class ScreenManager {
             left: "center",
             width: Math.max(message.length + 10, 30),
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "cyan" },
             style: {
@@ -287,6 +294,7 @@ export class ScreenManager {
             left: "center",
             width: 35,
             height: content.length + 2,
+            fixed: true,
             tags: true,
             border: { type: "line", fg: "green" },
             style: {
