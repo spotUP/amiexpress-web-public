@@ -20,6 +20,8 @@ export interface ExtendedButtonOptions extends ButtonOptions {
   tapFeedbackDuration?: number;
   /** Touch-friendly height on mobile (default: MIN_TOUCH_HEIGHT) */
   mobileHeight?: number;
+  /** Inline mode: no borders, 1 row high (default: false) */
+  inline?: boolean;
 }
 
 export class Button extends Element {
@@ -42,15 +44,18 @@ export class Button extends Element {
       ...(baseStyle.hover ?? {}),
     };
 
+    // Inline mode: no borders, no padding, compact 1-row buttons
+    const isInline = options.inline === true;
+
     super({
       focusable: true,
       clickable: true,
       keys: true,
-      border: 'line',
+      border: isInline ? undefined : 'line',
       align: 'center',
       valign: 'middle',
-      padding: { left: 1, right: 1, top: 0, bottom: 0 },
-      touchFriendly: true,  // Enable touch-friendly sizing by default
+      padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
+      touchFriendly: !isInline,  // Inline buttons are compact, not touch-friendly
       ...options,
       style: {
         fg: baseStyle.fg ?? 'white',
@@ -75,6 +80,10 @@ export class Button extends Element {
     // Mouse handlers
     if (options.mouse !== false) {
       this.on('click', this._onClick.bind(this));
+      // Inline buttons need explicit mouse enabling for hit detection
+      if (isInline) {
+        this.enableMouse();
+      }
     }
 
     // Focus/blur handlers - trigger re-render to show focus style
