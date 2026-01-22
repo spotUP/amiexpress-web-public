@@ -40,6 +40,7 @@ import { List } from './list';
 import { Button } from './button';
 import { Textbox } from './textbox';
 import { DockablePanel } from './dockable-panel';
+import { ListTable } from './listtable';
 import { EventEmitter } from '../core/events';
 import type { Screen } from '../core/screen';
 import type { ElementOptions } from '../core/types';
@@ -121,6 +122,24 @@ export interface LobbyModeConfig {
 }
 
 /**
+ * Table/Lobby entry for browser mode
+ */
+export interface LobbyTableEntry {
+  id: string | number;
+  gameId?: string;
+  gameName: string;
+  mode?: string;
+  stakes?: string;
+  players: number;
+  maxPlayers: number;
+  status: 'waiting' | 'starting' | 'in_progress';
+  hostName?: string;
+  isPrivate?: boolean;
+  age?: string;  // e.g., "5m ago"
+  extra?: Record<string, unknown>;
+}
+
+/**
  * Lobby state
  */
 export interface LobbyState {
@@ -133,6 +152,8 @@ export interface LobbyState {
   settings?: Record<string, unknown>;
   chatMessages?: LobbyChatMessage[];
   leaderboard?: LobbyLeaderboardEntry[];
+  // Browser mode: list of available tables
+  tables?: LobbyTableEntry[];
 }
 
 /**
@@ -151,7 +172,29 @@ export interface LobbyFeatures {
   slotBased?: boolean;
   /** Enable bot management */
   bots?: boolean;
+  /** Enable table browser mode (show list of tables to join) */
+  browserMode?: boolean;
+  /** Enable table filtering (by game, open seats, etc.) */
+  filters?: boolean;
+  /** Enable observe mode (watch without playing) */
+  observe?: boolean;
 }
+
+/**
+ * Filter options for browser mode
+ */
+export interface LobbyBrowserFilters {
+  gameId?: string;
+  openSeatsOnly?: boolean;
+  status?: 'waiting' | 'starting' | 'in_progress';
+  searchText?: string;
+}
+
+/**
+ * Sort options for browser mode
+ */
+export type LobbyBrowserSortBy = 'game' | 'players' | 'status' | 'age' | 'stakes';
+export type LobbyBrowserSortOrder = 'asc' | 'desc';
 
 /**
  * Network adapter interface - implement this for your game
@@ -163,7 +206,7 @@ export interface LobbyNetworkAdapter extends EventEmitter {
   // Actions
   joinQueue(mode: string): Promise<void>;
   createLobby(mode: string, isPrivate?: boolean): Promise<string>;
-  joinLobby(lobbyId: string): Promise<void>;
+  joinLobby(lobbyId: string | number): Promise<void>;
   leaveLobby(): Promise<void>;
   setReady(ready: boolean): Promise<void>;
   startMatch(): Promise<void>;
@@ -180,6 +223,12 @@ export interface LobbyNetworkAdapter extends EventEmitter {
   // Optional: Bot management
   fillWithBots?(count: number, difficulty?: number): void;
   removeBots?(): void;
+
+  // Optional: Browser mode - table list management
+  getTables?(): LobbyTableEntry[];
+  refreshTables?(): Promise<void>;
+  observeTable?(tableId: string | number): Promise<void>;
+  filterTables?(filters: LobbyBrowserFilters): void;
 }
 
 /**
@@ -224,6 +273,28 @@ export interface MultiplayerLobbyOptions extends ElementOptions {
   formatSettings?: (state: LobbyState, modeConfig: LobbyModeConfig) => string;
   /** Custom leaderboard formatter */
   formatLeaderboard?: (entries: LobbyLeaderboardEntry[]) => string;
+  /** Browser mode: Custom table row formatter (returns [id, game, stakes, players, status]) */
+  formatTableRow?: (table: LobbyTableEntry) => string[];
+  /** Browser mode: Table column headers */
+  tableHeaders?: string[];
+  /** Browser mode: Initial filters */
+  initialFilters?: LobbyBrowserFilters;
+  /** Browser mode: Auto-refresh interval in ms (0 = disabled, default: 5000) */
+  autoRefreshInterval?: number;
+  /** Browser mode: Initial sort field */
+  initialSortBy?: LobbyBrowserSortBy;
+  /** Browser mode: Initial sort order */
+  initialSortOrder?: LobbyBrowserSortOrder;
+  /** Browser mode: Enable search box */
+  enableSearch?: boolean;
+  /** Browser mode: Enable quick filter buttons */
+  enableQuickFilters?: boolean;
+  /** Browser mode: Custom empty state message */
+  emptyStateMessage?: string;
+  /** Browser mode: Show table age (created/updated time) */
+  showTableAge?: boolean;
+  /** Browser mode: Validate before join (returns error message or null if valid) */
+  validateJoin?: (table: LobbyTableEntry, localPlayerId: string) => string | null;
 }
 
 // ============================================================================
@@ -252,6 +323,15 @@ export class MultiplayerLobby extends EventEmitter {
   private currentSettings: Record<string, unknown> = {};
   private chatMessages: LobbyChatMessage[] = [];
 
+  // Browser mode state
+  private browserMode: boolean = false;
+  private browserFilters: LobbyBrowserFilters = {};
+  private selectedTableId: string | number | null = null;
+  private browserSortBy: LobbyBrowserSortBy = 'players';
+  private browserSortOrder: LobbyBrowserSortOrder = 'desc';
+  private browserAutoRefreshTimer: NodeJS.Timeout | null = null;
+  private browserSearchText: string = '';
+
   // UI Elements
   private container!: Box;
   private titleBox!: Box;
@@ -273,6 +353,14 @@ export class MultiplayerLobby extends EventEmitter {
   private selectedSettingIndex: number = 0;
   private teamSelector: List | null = null;
 
+  // Browser mode UI elements
+  private tableBrowserBox: Box | null = null;
+  private tableListWidget: any | null = null; // ListTable
+  private browserActionsBox: Box | null = null;
+  private filterBox: Box | null = null;
+  private browserSearchInput: Textbox | null = null;
+  private browserQuickFilterBox: Box | null = null;
+
   constructor(options: MultiplayerLobbyOptions) {
     super();
 
@@ -288,13 +376,21 @@ export class MultiplayerLobby extends EventEmitter {
     this.features = options.features || {};
     this.gameSettings = options.gameSettings || [];
     this.botDifficulty = options.defaultBotDifficulty ?? 5;
+    this.browserMode = this.features.browserMode || false;
+    this.browserFilters = options.initialFilters || {};
+    this.browserSortBy = options.initialSortBy || 'players';
+    this.browserSortOrder = options.initialSortOrder || 'desc';
 
     // Initialize default settings
     this.gameSettings.forEach(setting => {
       this.currentSettings[setting.key] = setting.default;
     });
 
-    this.setupUI();
+    if (this.browserMode) {
+      this.setupBrowserUI();
+    } else {
+      this.setupUI();
+    }
     this.setupEventListeners();
   }
 
@@ -718,6 +814,592 @@ export class MultiplayerLobby extends EventEmitter {
   }
 
   /**
+   * Setup browser mode UI (table list for joining games)
+   */
+  private setupBrowserUI(): void {
+    // Clear screen
+    this.parent.children.forEach((child: { destroy: () => void }) => child.destroy());
+
+    // Main container
+    this.container = new Box({
+      parent: this.parent,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      tags: true,
+    });
+
+    // Title
+    this.titleBox = new Box({
+      parent: this.container,
+      top: 0,
+      left: 'center',
+      width: 60,
+      height: 1,
+      content: `{bold}{yellow-fg}${this.options.title || 'GAME BROWSER'}{/yellow-fg}{/bold}`,
+      tags: true,
+    });
+
+    let currentTop = 1;
+    const screenHeight = typeof this.parent.height === 'number' ? this.parent.height : 24;
+
+    // Search box (if enabled)
+    if (this.options.enableSearch) {
+      const searchBox = new Box({
+        parent: this.container,
+        top: currentTop,
+        left: 2,
+        width: 76,
+        height: 3,
+        border: { type: 'line' },
+        label: ' Search ',
+        style: { border: { fg: 'white' } },
+        tags: true,
+      });
+
+      this.browserSearchInput = new Textbox({
+        parent: searchBox,
+        top: 0,
+        left: 0,
+        width: '100%-2',
+        height: 1,
+        style: {
+          fg: 'white',
+          bg: 'black',
+          focus: { bg: 'blue' },
+        },
+        inputOnFocus: true,
+        tags: true,
+      });
+
+      this.browserSearchInput.on('submit', (text: string) => {
+        this.browserSearchText = text.trim();
+        this.updateBrowserTableList();
+      });
+
+      this.browserSearchInput.key(['escape'], () => {
+        this.browserSearchInput?.clearValue();
+        this.browserSearchText = '';
+        this.updateBrowserTableList();
+        this.tableListWidget?.focus();
+      });
+
+      currentTop += 3;
+    }
+
+    // Quick filters (if enabled)
+    if (this.options.enableQuickFilters) {
+      this.browserQuickFilterBox = new Box({
+        parent: this.container,
+        top: currentTop,
+        left: 2,
+        width: 76,
+        height: 1,
+        content: '{cyan-fg}Filters:{/cyan-fg} [A]ll  [O]pen Seats  [P]laying',
+        style: { fg: 'white', bg: 'black' },
+        tags: true,
+      });
+      currentTop += 1;
+
+      // Filter keyboard shortcuts
+      this.parent.key(['a'], () => {
+        this.browserFilters.openSeatsOnly = false;
+        this.browserFilters.status = undefined;
+        this.updateBrowserTableList();
+      });
+      this.parent.key(['o'], () => {
+        this.browserFilters.openSeatsOnly = true;
+        this.updateBrowserTableList();
+      });
+      this.parent.key(['p'], () => {
+        this.browserFilters.status = 'in_progress';
+        this.updateBrowserTableList();
+      });
+    }
+
+    const tableListHeight = screenHeight - currentTop - 6; // Reserve space for buttons (1) + gap (1) + status (3) + margin (1)
+
+    // Table browser panel
+    this.tableBrowserBox = new DockablePanel({
+      parent: this.container,
+      top: currentTop,
+      left: 2,
+      width: 76,
+      height: tableListHeight,
+      label: 'Available Tables',
+      style: { border: { fg: 'cyan' }, bg: 'black' },
+      fitContent: false,
+      allowAutoDock: true,
+      resizable: true,
+      draggable: true,
+      dockPosition: 'float',
+      persistenceKey: 'multiplayer-lobby.browser',
+    });
+
+    // Table list widget using ListTable
+    // Headers will be set dynamically in updateBrowserTableList() with sort indicators
+    const initialHeaders = this.options.tableHeaders || ['ID', 'Game', 'Stakes', 'Players', 'Status'];
+
+    this.tableListWidget = new ListTable({
+      parent: this.tableBrowserBox,
+      top: 1,
+      left: 0,
+      width: 74,
+      height: tableListHeight - 3,
+      headers: initialHeaders,
+      rows: [],
+      interactive: true,
+      keys: true,
+      mouse: true,
+      vi: true,
+      style: {
+        fg: 'white',
+        selected: { fg: 'black', bg: 'cyan' },
+        header: { fg: 'yellow', bold: true },
+      } as any,
+    });
+
+    // Track selected table
+    this.tableListWidget.on('select', (_item: unknown, index: number) => {
+      const tables = this.adapter.getTables?.() || [];
+      if (tables[index]) {
+        this.selectedTableId = tables[index].id;
+      }
+    });
+
+    // Action buttons row (inline style - 1 row, no borders)
+    const buttonTop = currentTop + tableListHeight;
+    let buttonLeft = 2;
+
+    // Create button
+    const createButton = new Button({
+      parent: this.container,
+      top: buttonTop,
+      left: buttonLeft,
+      width: 10,
+      height: 1,
+      inline: true,
+      content: 'Create',
+      style: {
+        bg: 'green',
+        fg: 'white',
+        focus: { bg: 'cyan', fg: 'black' },
+        hover: { bg: 'cyan', fg: 'black' },
+      },
+      mouse: true,
+      tags: true,
+    });
+    buttonLeft += 11;
+
+    // Join button
+    const joinButton = new Button({
+      parent: this.container,
+      top: buttonTop,
+      left: buttonLeft,
+      width: 8,
+      height: 1,
+      inline: true,
+      content: 'Join',
+      style: {
+        bg: 'yellow',
+        fg: 'black',
+        focus: { bg: 'cyan', fg: 'black' },
+        hover: { bg: 'cyan', fg: 'black' },
+      },
+      mouse: true,
+      tags: true,
+    });
+    buttonLeft += 9;
+
+    // Observe button (if feature enabled)
+    let observeButton: Button | null = null;
+    if (this.features.observe && this.adapter.observeTable) {
+      observeButton = new Button({
+        parent: this.container,
+        top: buttonTop,
+        left: buttonLeft,
+        width: 11,
+        height: 1,
+        inline: true,
+        content: 'Observe',
+        style: {
+          bg: 'cyan',
+          fg: 'black',
+          focus: { bg: 'white', fg: 'black' },
+          hover: { bg: 'white', fg: 'black' },
+        },
+        mouse: true,
+        tags: true,
+      });
+      buttonLeft += 12;
+    }
+
+    // Refresh button
+    const refreshButton = new Button({
+      parent: this.container,
+      top: buttonTop,
+      left: buttonLeft,
+      width: 11,
+      height: 1,
+      inline: true,
+      content: 'Refresh',
+      style: {
+        bg: 'magenta',
+        fg: 'white',
+        focus: { bg: 'cyan', fg: 'black' },
+        hover: { bg: 'cyan', fg: 'black' },
+      },
+      mouse: true,
+      tags: true,
+    });
+    buttonLeft += 12;
+
+    // Leave button
+    this.leaveButton = new Button({
+      parent: this.container,
+      top: buttonTop,
+      left: buttonLeft,
+      width: 8,
+      height: 1,
+      inline: true,
+      content: 'Back',
+      style: {
+        bg: 'red',
+        fg: 'white',
+        focus: { bg: 'yellow', fg: 'black' },
+        hover: { bg: 'yellow', fg: 'black' },
+      },
+      mouse: true,
+      tags: true,
+    });
+
+    // Status box at bottom (2 rows below buttons for clear separation)
+    this.statusBox = new Box({
+      parent: this.container,
+      top: buttonTop + 2,
+      left: 2,
+      width: 76,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Status ',
+      style: { border: { fg: 'gray' } },
+      content: '',
+      tags: true,
+    });
+
+    // Setup button handlers
+    createButton.on('press', () => void this.browserCreateTable());
+    joinButton.on('press', () => void this.browserJoinTable());
+    if (observeButton) {
+      observeButton.on('press', () => void this.browserObserveTable());
+    }
+    refreshButton.on('press', () => void this.browserRefreshTables());
+    this.leaveButton.on('press', () => void this.leaveLobby());
+
+    // Keyboard shortcuts
+    this.parent.key(['c'], () => void this.browserCreateTable());
+    this.parent.key(['j'], () => void this.browserJoinTable());
+    if (this.features.observe && this.adapter.observeTable) {
+      this.parent.key(['o'], () => void this.browserObserveTable());
+    }
+    this.parent.key(['r'], () => void this.browserRefreshTables());
+    this.parent.key(['escape', 'q'], () => void this.leaveLobby());
+    if (this.browserSearchInput) {
+      this.parent.key(['/', 'f'], () => this.browserSearchInput?.focus());
+    }
+    // Sort cycling with S key
+    this.parent.key(['s'], () => this.cycleBrowserSort());
+
+    // Focus on table list initially (or search if enabled)
+    if (this.browserSearchInput) {
+      this.browserSearchInput.focus();
+    } else {
+      this.tableListWidget.focus();
+    }
+
+    // Initial table load
+    this.updateBrowserTableList();
+
+    // Start auto-refresh timer if enabled
+    const refreshInterval = this.options.autoRefreshInterval ?? 5000;
+    if (refreshInterval > 0) {
+      this.browserAutoRefreshTimer = setInterval(() => {
+        void this.browserRefreshTables();
+      }, refreshInterval);
+    }
+  }
+
+  /**
+   * Browser mode: Update table list display
+   */
+  private updateBrowserTableList(): void {
+    if (!this.tableListWidget) return;
+
+    const tables = this.adapter.getTables?.() || [];
+
+    // Apply filters
+    let filtered = tables;
+
+    // Game ID filter
+    if (this.browserFilters.gameId) {
+      filtered = filtered.filter(t => t.gameId === this.browserFilters.gameId);
+    }
+
+    // Open seats only filter
+    if (this.browserFilters.openSeatsOnly) {
+      filtered = filtered.filter(t => t.players < t.maxPlayers);
+    }
+
+    // Status filter
+    if (this.browserFilters.status) {
+      filtered = filtered.filter(t => t.status === this.browserFilters.status);
+    }
+
+    // Search text filter
+    if (this.browserSearchText) {
+      const search = this.browserSearchText.toLowerCase();
+      filtered = filtered.filter(t =>
+        t.gameName.toLowerCase().includes(search) ||
+        (t.hostName && t.hostName.toLowerCase().includes(search)) ||
+        String(t.id).includes(search)
+      );
+    }
+
+    // Sort tables
+    filtered.sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      switch (this.browserSortBy) {
+        case 'game':
+          aVal = a.gameName;
+          bVal = b.gameName;
+          break;
+        case 'players':
+          aVal = a.players;
+          bVal = b.players;
+          break;
+        case 'stakes':
+          aVal = a.stakes || '';
+          bVal = b.stakes || '';
+          break;
+        case 'status':
+          aVal = a.status;
+          bVal = b.status;
+          break;
+        case 'age':
+          aVal = a.age || '';
+          bVal = b.age || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return this.browserSortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return this.browserSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    // Build headers with sort indicator
+    let headers = this.options.tableHeaders || ['ID', 'Game', 'Stakes', 'Players', 'Status'];
+    // Add Age header if enabled
+    if (this.options.showTableAge) {
+      headers = [...headers, 'Age'];
+    }
+    // Add sort indicator to current sort column
+    const headerMap: Record<string, number> = {
+      'game': 1,
+      'stakes': 2,
+      'players': 3,
+      'status': 4,
+      'age': 5,
+    };
+    const sortColumnIndex = headerMap[this.browserSortBy];
+    if (sortColumnIndex !== undefined && sortColumnIndex < headers.length) {
+      const arrow = this.browserSortOrder === 'asc' ? '↑' : '↓';
+      headers = headers.map((h, i) => i === sortColumnIndex ? `${h} ${arrow}` : h);
+    }
+
+    // Format data rows
+    const dataRows: string[][] = [];
+    filtered.forEach(table => {
+      if (this.options.formatTableRow) {
+        // Use custom formatter
+        dataRows.push(this.options.formatTableRow(table));
+      } else {
+        // Default format
+        const playerCount = `${table.players}/${table.maxPlayers}`;
+        const statusColor = table.status === 'waiting' ? 'green' : table.status === 'starting' ? 'yellow' : 'red';
+        const status = `{${statusColor}-fg}${table.status.toUpperCase()}{/${statusColor}-fg}`;
+
+        const row = [
+          String(table.id),
+          table.gameName,
+          table.stakes || '-',
+          playerCount,
+          status,
+        ];
+
+        // Add age column if enabled
+        if (this.options.showTableAge && table.age) {
+          row.push(table.age);
+        }
+
+        dataRows.push(row);
+      }
+    });
+
+    const emptyMessage = this.options.emptyStateMessage || 'No tables available. Press C to create one.';
+    if (dataRows.length === 0) {
+      dataRows.push(['', emptyMessage, '', '', '']);
+    }
+
+    // ListTable.setData() expects first row to be headers
+    this.tableListWidget.setData([headers, ...dataRows]);
+    this.parent.render();
+  }
+
+  /**
+   * Browser mode: Cycle through sort options
+   */
+  private cycleBrowserSort(): void {
+    const sortFields: LobbyBrowserSortBy[] = ['players', 'game', 'status', 'stakes'];
+    if (this.options.showTableAge) {
+      sortFields.push('age');
+    }
+
+    const currentIndex = sortFields.indexOf(this.browserSortBy);
+    const nextIndex = (currentIndex + 1) % sortFields.length;
+
+    // If same field, toggle order; otherwise set to desc
+    if (this.browserSortBy === sortFields[nextIndex]) {
+      this.browserSortOrder = this.browserSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.browserSortBy = sortFields[nextIndex];
+      this.browserSortOrder = 'desc';
+    }
+
+    this.updateBrowserTableList();
+    this.updateStatus(`Sorted by ${this.browserSortBy} (${this.browserSortOrder})`);
+    this.playSound('select');
+  }
+
+  /**
+   * Browser mode: Create new table
+   */
+  private async browserCreateTable(): Promise<void> {
+    // Emit event for door to handle mode selection and table creation
+    this.emit('browser:create-table');
+  }
+
+  /**
+   * Browser mode: Join selected table
+   */
+  private async browserJoinTable(): Promise<void> {
+    if (!this.selectedTableId) {
+      this.updateStatus('No table selected');
+      this.playSound('error');
+      return;
+    }
+
+    // Find the selected table
+    const tables = this.adapter.getTables?.() || [];
+    const selectedTable = tables.find(t => t.id === this.selectedTableId);
+    if (!selectedTable) {
+      this.updateStatus('Table not found');
+      this.playSound('error');
+      return;
+    }
+
+    // Validate join if validator provided
+    if (this.options.validateJoin) {
+      const error = this.options.validateJoin(selectedTable, this.localPlayerId);
+      if (error) {
+        this.updateStatus(error);
+        this.playSound('error');
+        return;
+      }
+    }
+
+    // Built-in validation: check if table is full
+    if (selectedTable.players >= selectedTable.maxPlayers) {
+      this.updateStatus('Table is full');
+      this.playSound('error');
+      return;
+    }
+
+    this.updateStatus(`Joining table ${this.selectedTableId}...`);
+
+    try {
+      await this.adapter.joinLobby(this.selectedTableId);
+
+      // Transition from browser mode to lobby mode
+      this.browserMode = false;
+      this.setupUI();
+
+      const state = this.adapter.getState();
+      if (state) {
+        this.updateSettings(state.mode, String(this.selectedTableId));
+      }
+
+      this.updateStatus('Joined table');
+      this.playSound('join');
+    } catch (err) {
+      this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      this.playSound('error');
+    }
+  }
+
+  /**
+   * Browser mode: Observe selected table
+   */
+  private async browserObserveTable(): Promise<void> {
+    if (!this.adapter.observeTable) {
+      this.updateStatus('Observe mode not supported');
+      this.playSound('error');
+      return;
+    }
+
+    if (!this.selectedTableId) {
+      this.updateStatus('No table selected');
+      this.playSound('error');
+      return;
+    }
+
+    this.updateStatus(`Observing table ${this.selectedTableId}...`);
+
+    try {
+      await this.adapter.observeTable(this.selectedTableId);
+      this.result = { action: 'start', mode: 'observe', lobbyId: String(this.selectedTableId) };
+      this.running = false;
+      this.playSound('select');
+    } catch (err) {
+      this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      this.playSound('error');
+    }
+  }
+
+  /**
+   * Browser mode: Refresh table list
+   */
+  private async browserRefreshTables(): Promise<void> {
+    this.updateStatus('Refreshing tables...');
+
+    try {
+      if (this.adapter.refreshTables) {
+        await this.adapter.refreshTables();
+      }
+      this.updateBrowserTableList();
+      this.updateStatus('Tables refreshed');
+      this.playSound('select');
+    } catch (err) {
+      this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      this.playSound('error');
+    }
+  }
+
+  /**
    * Setup network event listeners
    */
   private setupEventListeners(): void {
@@ -791,6 +1473,13 @@ export class MultiplayerLobby extends EventEmitter {
         if (state.leaderboard) {
           this.updateLeaderboard(state.leaderboard);
         }
+      }
+    });
+
+    // Browser mode: Tables updated
+    this.adapter.on('tables:updated', () => {
+      if (this.browserMode) {
+        this.updateBrowserTableList();
       }
     });
   }
@@ -1376,6 +2065,16 @@ export class MultiplayerLobby extends EventEmitter {
    * Cleanup
    */
   private cleanup(): void {
+    // Clear auto-refresh timer
+    if (this.browserAutoRefreshTimer) {
+      clearInterval(this.browserAutoRefreshTimer);
+      this.browserAutoRefreshTimer = null;
+    }
+
+    // CRITICAL: Remove event listeners to prevent memory leaks
+    // Note: Key handlers are cleaned up when screen is destroyed
+    // If we need manual cleanup, would need to store handler refs
+
     this.container.destroy();
   }
 

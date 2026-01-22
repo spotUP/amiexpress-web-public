@@ -113,6 +113,10 @@ export type {
   LobbyGameSetting,
   LobbyChatMessage,
   LobbyLeaderboardEntry,
+  LobbyTableEntry,
+  LobbyBrowserFilters,
+  LobbyBrowserSortBy,
+  LobbyBrowserSortOrder,
 } from './widgets/multiplayer-lobby';
 
 // Extended Widgets (Consolidated from Contrib)
