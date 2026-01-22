@@ -175,7 +175,7 @@ class CardLobbyApp {
     return this.uiManager.applyActionButtonPalette(action);
   }
 
-  private viewMode: 'lobby' | 'table' = 'lobby';
+  private viewMode: 'lobby' | 'table' | 'browser' = 'lobby';
   private autoDealInProgress = false;
   private lastAnimatedHandStartedAt: number | null = null;
   private actionInProgress = false;
@@ -302,7 +302,7 @@ class CardLobbyApp {
     });
 
     this.screen.key(['c'], () => {
-      if (this.modalActive) return;
+      if (this.modalActive || this.viewMode === 'browser') return;
       if (this.viewMode === 'table') {
         this.triggerCall();
       } else if (this.viewMode === 'lobby') {
@@ -311,7 +311,7 @@ class CardLobbyApp {
     });
 
     this.screen.key(['r'], () => {
-      if (this.modalActive) return;
+      if (this.modalActive || this.viewMode === 'browser') return;
       if (this.viewMode === 'table') {
         this.triggerRaise();
       } else if (this.viewMode === 'lobby') {
@@ -320,12 +320,12 @@ class CardLobbyApp {
     });
 
     this.screen.key(['j'], () => {
-      if (this.modalActive || this.viewMode !== 'lobby') return;
+      if (this.modalActive || (this.viewMode !== 'lobby' && this.viewMode !== 'browser')) return;
       this.runAction(() => this.joinSelectedTable());
     });
 
     this.screen.key(['o'], () => {
-      if (this.modalActive || this.viewMode !== 'lobby') return;
+      if (this.modalActive || (this.viewMode !== 'lobby' && this.viewMode !== 'browser')) return;
       this.runAction(() => this.observeSelectedTable());
     });
 
@@ -503,6 +503,9 @@ class CardLobbyApp {
    * Show SDK MultiplayerLobby browser mode
    */
   private async showBrowser(): Promise<void> {
+    // Set viewMode to browser to prevent key conflicts
+    this.viewMode = 'browser';
+
     // Hide old UI elements
     this.uiManager.hide();
 

@@ -182,7 +182,7 @@ class CardLobbyApp {
             this.triggerCheck();
         });
         this.screen.key(['c'], () => {
-            if (this.modalActive)
+            if (this.modalActive || this.viewMode === 'browser')
                 return;
             if (this.viewMode === 'table') {
                 this.triggerCall();
@@ -192,7 +192,7 @@ class CardLobbyApp {
             }
         });
         this.screen.key(['r'], () => {
-            if (this.modalActive)
+            if (this.modalActive || this.viewMode === 'browser')
                 return;
             if (this.viewMode === 'table') {
                 this.triggerRaise();
@@ -202,12 +202,12 @@ class CardLobbyApp {
             }
         });
         this.screen.key(['j'], () => {
-            if (this.modalActive || this.viewMode !== 'lobby')
+            if (this.modalActive || (this.viewMode !== 'lobby' && this.viewMode !== 'browser'))
                 return;
             this.runAction(() => this.joinSelectedTable());
         });
         this.screen.key(['o'], () => {
-            if (this.modalActive || this.viewMode !== 'lobby')
+            if (this.modalActive || (this.viewMode !== 'lobby' && this.viewMode !== 'browser'))
                 return;
             this.runAction(() => this.observeSelectedTable());
         });
@@ -371,6 +371,8 @@ class CardLobbyApp {
      * Show SDK MultiplayerLobby browser mode
      */
     async showBrowser() {
+        // Set viewMode to browser to prevent key conflicts
+        this.viewMode = 'browser';
         // Hide old UI elements
         this.uiManager.hide();
         // NOTE: Don't suspend/resume here - keep inputManager active
