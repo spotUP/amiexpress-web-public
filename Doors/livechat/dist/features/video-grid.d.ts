@@ -28,6 +28,7 @@ export interface VideoGridOptions {
     height?: number | string;
     currentUserId: number | string;
     currentUsername: string;
+    viewMode?: 'speaker' | 'grid';
 }
 /**
  * VideoGrid - Displays all participants in an adaptive grid layout
@@ -42,6 +43,7 @@ export declare class VideoGrid {
     private activeSpeaker?;
     private lastWidth;
     private lastHeight;
+    private viewMode;
     constructor(options: VideoGridOptions);
     /**
      * Add or update a participant in the grid
@@ -64,7 +66,7 @@ export declare class VideoGrid {
      */
     updateParticipantError(userId: number | string, error: string): void;
     /**
-     * Set active speaker (highlighted border)
+     * Set active speaker (highlighted border in grid mode, switch to speaker in speaker mode)
      */
     setActiveSpeaker(userId?: number | string): void;
     /**
@@ -79,6 +81,14 @@ export declare class VideoGrid {
      * Hide the video grid
      */
     hide(): void;
+    /**
+     * Toggle between speaker mode and grid mode
+     */
+    toggleViewMode(): void;
+    /**
+     * Get current view mode
+     */
+    getViewMode(): 'speaker' | 'grid';
     /**
      * Bring grid to front
      */

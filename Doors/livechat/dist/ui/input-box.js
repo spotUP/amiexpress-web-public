@@ -5,11 +5,12 @@ exports.createInputBox = createInputBox;
 exports.createEmojiButton = createEmojiButton;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const status_bar_1 = require("./status-bar");
+const effect_renderer_1 = require("./effect-renderer");
 exports.INPUT_HEIGHT = 3;
 exports.EMOJI_BUTTON_WIDTH = 6; // Wide enough for :D with border and padding
 function createInputBox(screen) {
     const screenWidth = screen.width || 80;
-    return (0, blessed_helpers_1.createTextarea)({
+    const textarea = (0, blessed_helpers_1.createTextarea)({
         parent: screen,
         bottom: status_bar_1.STATUS_HEIGHT,
         left: 0,
@@ -29,6 +30,9 @@ function createInputBox(screen) {
             border: { fg: 'yellow' },
         },
     });
+    // Enable live effect rendering for WYSIWYG experience
+    (0, effect_renderer_1.enableLiveEffectRendering)(textarea);
+    return textarea;
 }
 function createEmojiButton(screen) {
     const screenWidth = screen.width || 80;

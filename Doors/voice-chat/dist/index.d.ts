@@ -18,7 +18,6 @@
  * - Client emits 'audio:levels' -> Server updates UI
  * - Client emits 'voice:speaking' -> Backend broadcasts to room
  */
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
-declare const door: Door;
+declare const door: any;
 export default door;
 //# sourceMappingURL=index.d.ts.map

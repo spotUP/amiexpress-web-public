@@ -65,6 +65,10 @@ var init_events = __esm({
         }
         return this;
       }
+      // Alias for removeListener (Node.js EventEmitter compatibility)
+      off(event, handler2) {
+        return this.removeListener(event, handler2);
+      }
       removeAllListeners(event) {
         if (event) {
           this.events.delete(event);
@@ -4298,16 +4302,17 @@ var init_button = __esm({
           bg: "cyan",
           ...baseStyle.hover ?? {}
         };
+        const isInline = options.inline === true;
         super({
           focusable: true,
           clickable: true,
           keys: true,
-          border: "line",
+          border: isInline ? void 0 : "line",
           align: "center",
           valign: "middle",
-          padding: { left: 1, right: 1, top: 0, bottom: 0 },
-          touchFriendly: true,
-          // Enable touch-friendly sizing by default
+          padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
+          touchFriendly: !isInline,
+          // Inline buttons are compact, not touch-friendly
           ...options,
           style: {
             fg: baseStyle.fg ?? "white",
@@ -4327,6 +4332,9 @@ var init_button = __esm({
         }
         if (options.mouse !== false) {
           this.on("click", this._onClick.bind(this));
+          if (isInline) {
+            this.enableMouse();
+          }
         }
         this.on("focus", () => {
           if (this.screen) {
@@ -5150,8 +5158,8 @@ var init_dockable_panel = __esm({
         const mergedStyle = {
           ...normalizedOptions.style,
           hover: {
-            border: { fg: "yellow" },
-            // Yellow/orange border on resize edge hover
+            border: { fg: "white" },
+            // White border on hover
             ...normalizedOptions.style?.hover
           }
         };
@@ -5161,6 +5169,8 @@ var init_dockable_panel = __esm({
           draggable: normalizedOptions.draggable !== false,
           mouse: true,
           keys: true,
+          focusable: true,
+          // Enable Tab cycling and focus events
           clickable: true
           // Enable click events for panel activation
         });
@@ -5175,6 +5185,7 @@ var init_dockable_panel = __esm({
         this.resizeNeighbors = [];
         this.currentResizeEdge = null;
         this.currentHoverEdge = null;
+        this.isPanelHovered = false;
         this.topConstraint = 0;
         this.bottomConstraint = 0;
         this.tabs = [];
@@ -5252,12 +5263,14 @@ var init_dockable_panel = __esm({
           this.focus();
           this.emit("activate");
         });
-        this.on("mouseover", () => {
+        this.on("mouseenter", () => {
+          this.isPanelHovered = true;
           if (!this.currentHoverEdge) {
             this.applyBorderHoverStyle();
           }
         });
-        this.on("mouseout", () => {
+        this.on("mouseleave", () => {
+          this.isPanelHovered = false;
           this.currentHoverEdge = null;
           this.applyBorderHoverStyle();
         });
@@ -5288,6 +5301,9 @@ var init_dockable_panel = __esm({
         this.bringUIToFront();
         if (this.fitContentSettings?.width || this.fitContentSettings?.height) {
           element.on?.("set content", () => {
+            this.scheduleFitToContent();
+          });
+          element.on?.("set items", () => {
             this.scheduleFitToContent();
           });
           this.scheduleFitToContent();
@@ -5415,16 +5431,20 @@ var init_dockable_panel = __esm({
           content: options.label || options.title || "Panel"
         });
         if (this.titleBar) {
-          this.titleBar.on("mouseover", () => {
+          this.titleBar.on("mouseenter", () => {
             if (this.titleBar && this.titleBar.style && !this.isDragging) {
               this.titleBar.style.bg = "lightblue";
+              this.isPanelHovered = true;
+              this.applyBorderHoverStyle();
               if (this.screen)
                 this.screen.render();
             }
           });
-          this.titleBar.on("mouseout", () => {
+          this.titleBar.on("mouseleave", () => {
             if (this.titleBar && this.titleBar.style && !this.isDragging) {
               this.titleBar.style.bg = "blue";
+              this.isPanelHovered = false;
+              this.applyBorderHoverStyle();
               if (this.screen)
                 this.screen.render();
             }
@@ -5810,7 +5830,7 @@ var init_dockable_panel = __esm({
           if (activeEdge.includes("e")) {
             styleBorder.fgRight = highlightColor;
           }
-        } else if (this._hovered) {
+        } else if (this.isPanelHovered) {
           this._overBorder = true;
           this.style.border.fg = hoverColor;
           styleBorder.fg = hoverColor;
@@ -7069,13 +7089,30 @@ var init_dockable_panel = __esm({
           if (child === this.titleBar || child === this.minimizeButton || child === this.closeButton) {
             continue;
           }
-          const childContent = child.content || "";
-          const lines = childContent.split("\n");
-          for (const line3 of lines) {
-            const cleanLine = stripFormatting(line3);
-            maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+          if (child.items && Array.isArray(child.items)) {
+            const items = child.items;
+            for (const item of items) {
+              const cleanItem = stripFormatting(String(item));
+              maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
+              if (this.options.label?.includes("Sidebar") && cleanItem.length > 10) {
+                const debugMsg = `[CalcSize] List item: "${cleanItem}" (${cleanItem.length} chars)`;
+                if (this.screen?.log) {
+                  this.screen.log(debugMsg);
+                }
+                console.log(debugMsg);
+              }
+            }
+            totalContentHeight = Math.max(totalContentHeight, items.length);
           }
-          totalContentHeight += lines.length;
+          const childContent = child.content || "";
+          if (childContent) {
+            const lines = childContent.split("\n");
+            for (const line3 of lines) {
+              const cleanLine = stripFormatting(line3);
+              maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+            }
+            totalContentHeight += lines.length;
+          }
           if (child._lines && Array.isArray(child._lines)) {
             for (const line3 of child._lines) {
               const cleanLine = stripFormatting(String(line3));
@@ -7102,6 +7139,13 @@ var init_dockable_panel = __esm({
           return;
         }
         const { width: contentWidth, height: contentHeight } = this.calculateContentSize();
+        if (this.options.label?.includes("Sidebar")) {
+          const debugMsg = `[FitContent] Sidebar: currentWidth=${this.width}, contentWidth=${contentWidth}, fitWidth=${this.fitContentSettings.width}, willGrow=${contentWidth > this.width}`;
+          if (this.screen?.log) {
+            this.screen.log(debugMsg);
+          }
+          console.log(debugMsg);
+        }
         let newWidth = this.width;
         let newHeight = this.height;
         if (this.fitContentSettings.width) {
@@ -7290,10 +7334,293 @@ var init_dockable_panel = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js
+var DropdownMenu;
 var init_dropdown_menu = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js"() {
     "use strict";
     init_element();
+    DropdownMenu = class _DropdownMenu extends Element {
+      /**
+       * Close all currently open dropdown menus
+       */
+      static closeAll() {
+        for (const menu of _DropdownMenu.openMenus) {
+          menu.close();
+        }
+      }
+      /**
+       * Check if any dropdown menu is currently open
+       */
+      static isAnyOpen() {
+        return _DropdownMenu.openMenus.size > 0;
+      }
+      /**
+       * Check if a menu was just closed (blocks canvas clicks for one tick)
+       */
+      static wasJustClosed() {
+        return _DropdownMenu.justClosed;
+      }
+      /**
+       * Check if click should be blocked (menu open OR just closed)
+       */
+      static shouldBlockClick() {
+        return _DropdownMenu.openMenus.size > 0 || _DropdownMenu.justClosed;
+      }
+      constructor(options) {
+        const width = options.width || 20;
+        const height = Math.min((options.items?.length || 1) + 2, options.maxHeight || 12);
+        super({
+          parent: options.parent || options.screen,
+          top: 0,
+          left: 0,
+          width,
+          height,
+          border: { type: "line", fg: "cyan" },
+          label: options.label,
+          style: options.style || {
+            fg: "white",
+            bg: "black",
+            focus: { fg: "white", bg: "black" }
+          },
+          tags: true,
+          keys: true,
+          mouse: true,
+          clickable: true,
+          focusable: true,
+          hidden: true,
+          shadow: true,
+          zIndex: 9999
+          // Render on top of everything (panels are typically 1-10)
+        });
+        this.selectedIndex = 0;
+        this.anchorLeft = 0;
+        this.anchorTop = 0;
+        this.items = options.items || [];
+        this.updateContent();
+        this.on("keypress", (_ch, key) => {
+          if (key.name === "up") {
+            this.move(-1);
+          } else if (key.name === "down") {
+            this.move(1);
+          } else if (key.name === "enter" || key.name === "space") {
+            this.selectItem();
+          } else if (key.name === "escape") {
+            this.close();
+          } else if (key.name === "tab") {
+            this.emit(key.shift ? "tab-prev" : "tab-next");
+            this.close();
+          }
+          return true;
+        });
+        this.on("click", (event) => {
+          const pos = this._getCoords();
+          if (!pos)
+            return;
+          const border = 1;
+          const relY = event.y - pos.yi - border;
+          if (relY >= 0 && relY < this.items.length) {
+            this.selectedIndex = relY;
+            this.selectItem();
+          }
+        });
+        this.on("mousemove", (event) => {
+          const pos = this._getCoords();
+          if (!pos)
+            return;
+          const border = 1;
+          const relY = event.y - pos.yi - border;
+          if (relY >= 0 && relY < this.items.length) {
+            this.selectedIndex = relY;
+            this.updateContent();
+            this.screen?.render();
+          }
+        });
+      }
+      openAt(left, top) {
+        console.log("[DropdownMenu] openAt called:", { left, top });
+        if (!this.screen) {
+          console.log("[DropdownMenu] ERROR: No screen in openAt!");
+          return;
+        }
+        for (const menu of _DropdownMenu.openMenus) {
+          if (menu !== this) {
+            menu.close();
+          }
+        }
+        const cols = this.screen.cols;
+        const rows = this.screen.rows;
+        console.log("[DropdownMenu] Screen size:", { cols, rows });
+        const width = typeof this.width === "number" ? this.width : 20;
+        const height = typeof this.height === "number" ? this.height : 10;
+        const clampedLeft = Math.max(0, Math.min(left, cols - width));
+        const clampedTop = Math.max(0, Math.min(top, rows - height));
+        console.log("[DropdownMenu] Clamped position:", { clampedLeft, clampedTop, width, height });
+        this.left = clampedLeft;
+        this.top = clampedTop;
+        console.log("[DropdownMenu] Calling show()");
+        this.show();
+        console.log("[DropdownMenu] Calling focus()");
+        this.focus();
+        console.log("[DropdownMenu] hidden:", this.hidden, "visible:", this.visible);
+        _DropdownMenu.openMenus.add(this);
+        this.screen.trapFocus(this);
+        this.attachOutsideClick();
+        this.screen.render();
+      }
+      openFor(anchor, align = "left") {
+        console.log("[DropdownMenu] openFor called");
+        if (!this.screen) {
+          console.log("[DropdownMenu] ERROR: No screen!");
+          return;
+        }
+        const coords = anchor._getCoords();
+        console.log("[DropdownMenu] anchor coords:", coords);
+        if (!coords) {
+          console.log("[DropdownMenu] ERROR: No coords from anchor!");
+          return;
+        }
+        const left = align === "right" ? coords.xl - (typeof this.width === "number" ? this.width : 20) : coords.xi;
+        const top = coords.yl;
+        console.log("[DropdownMenu] Calculated position:", { left, top });
+        this.openAt(left, top);
+      }
+      close(fromOutsideClick = false) {
+        if (!this.screen)
+          return;
+        _DropdownMenu.openMenus.delete(this);
+        if (fromOutsideClick) {
+          _DropdownMenu.justClosed = true;
+          setImmediate(() => {
+            _DropdownMenu.justClosed = false;
+          });
+        }
+        this.hide();
+        this.detachOutsideClick();
+        this.screen.releaseFocusTrap();
+        this.screen.render();
+      }
+      setItems(items) {
+        this.items = items;
+        this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.items.length - 1));
+        this.updateContent();
+      }
+      /**
+       * Register an anchor element for hover-to-open behavior
+       * When any menu is open, hovering over this anchor opens this menu
+       * @param anchor The element that triggers this menu
+       * @param leftOffset Additional left offset (optional, default 0)
+       * @param topOffset Additional top offset (optional, default 0 to open directly below anchor)
+       */
+      registerAnchor(anchor, leftOffset = 0, topOffset = 0) {
+        this.anchor = anchor;
+        const getPosition = () => {
+          const coords = anchor._getCoords();
+          if (coords) {
+            return {
+              left: coords.xi + leftOffset,
+              top: coords.yl + topOffset
+              // Open directly below the anchor
+            };
+          }
+          return { left: leftOffset, top: topOffset };
+        };
+        anchor.on("click", () => {
+          const pos = getPosition();
+          this.openAt(pos.left, pos.top);
+        });
+        anchor.on("mouseenter", () => {
+          if (_DropdownMenu.isAnyOpen() && this.hidden) {
+            const pos = getPosition();
+            this.openAt(pos.left, pos.top);
+          }
+        });
+      }
+      /**
+       * Check if this menu is currently open
+       */
+      isOpen() {
+        return !this.hidden && _DropdownMenu.openMenus.has(this);
+      }
+      move(delta) {
+        if (!this.items.length)
+          return;
+        let next = this.selectedIndex;
+        for (let i = 0; i < this.items.length; i++) {
+          next = (next + delta + this.items.length) % this.items.length;
+          if (!this.items[next].disabled && !this.items[next].separator) {
+            this.selectedIndex = next;
+            this.updateContent();
+            this.screen?.render();
+            return;
+          }
+        }
+      }
+      selectItem() {
+        const item = this.items[this.selectedIndex];
+        if (!item || item.disabled || item.separator)
+          return;
+        item.action?.();
+        this.emit("select", item);
+        this.close();
+      }
+      updateContent() {
+        const lines = [];
+        let maxWidth = 10;
+        this.items.forEach((item, index) => {
+          if (item.separator) {
+            lines.push("\u2500".repeat(18));
+            maxWidth = Math.max(maxWidth, 18);
+            return;
+          }
+          const selected = index === this.selectedIndex;
+          const prefix = selected ? "> " : "  ";
+          const label = item.disabled ? `{gray-fg}${item.label}{/gray-fg}` : item.label;
+          const line3 = `${prefix}${label}`;
+          lines.push(line3);
+          maxWidth = Math.max(maxWidth, line3.replace(/\{[^}]+\}/g, "").length);
+        });
+        this.setContent(lines.join("\n"));
+        if (typeof this.width === "number" && this.width < maxWidth + 2) {
+          this.width = Math.min(maxWidth + 2, this.screen?.cols || maxWidth + 2);
+        }
+      }
+      attachOutsideClick() {
+        if (!this.screen || this.outsideClickHandler)
+          return;
+        this.outsideClickHandler = (event) => {
+          if (this.hidden)
+            return;
+          const pos = this._getCoords();
+          if (!pos)
+            return;
+          const outside = event.x < pos.xi || event.x > pos.xl || event.y < pos.yi || event.y > pos.yl;
+          if (outside) {
+            this.close(true);
+          }
+        };
+        this.screen.on("mousedown", this.outsideClickHandler);
+        this.screen.on("click", this.outsideClickHandler);
+      }
+      detachOutsideClick() {
+        if (!this.screen || !this.outsideClickHandler)
+          return;
+        this.screen.off("mousedown", this.outsideClickHandler);
+        this.screen.off("click", this.outsideClickHandler);
+        this.outsideClickHandler = void 0;
+      }
+    };
+    DropdownMenu.openMenus = /* @__PURE__ */ new Set();
+    DropdownMenu.justClosed = false;
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js
+var init_menu_bar = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js"() {
+    "use strict";
+    init_element();
+    init_box();
+    init_dropdown_menu();
   }
 });
 
@@ -7494,6 +7821,321 @@ var init_doc_modal = __esm({
     init_bigtext();
     init_scrollabletext();
     init_responsive_constants();
+    init_modal_helpers();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
+var init_confirm_modal = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
+    "use strict";
+    init_box();
+    init_button();
+    init_overlay();
+    init_modal_helpers();
+    init_responsive_constants();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js
+var init_canvas2 = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js"() {
+    "use strict";
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js
+var ANSI_REGEX, ANSIUtils;
+var init_ansi_utils = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js"() {
+    "use strict";
+    ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
+    ANSIUtils = class {
+      /**
+       * Strip all ANSI codes from text
+       */
+      static stripANSI(text) {
+        return text.replace(ANSI_REGEX, "");
+      }
+      /**
+       * Calculate visual length (excluding ANSI codes)
+       */
+      static visualLength(text) {
+        return this.stripANSI(text).length;
+      }
+      /**
+       * Get actual string position from visual column position
+       * Accounts for ANSI codes that don't contribute to visual length
+       */
+      static getActualPosition(text, visualCol) {
+        let actualPos = 0;
+        let visualPos = 0;
+        while (actualPos < text.length && visualPos < visualCol) {
+          if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
+            let end = actualPos + 2;
+            while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
+              end++;
+            }
+            end++;
+            actualPos = end;
+          } else {
+            actualPos++;
+            visualPos++;
+          }
+        }
+        return actualPos;
+      }
+      /**
+       * Get visual column from actual string position
+       */
+      static getVisualPosition(text, actualCol) {
+        let actualPos = 0;
+        let visualPos = 0;
+        while (actualPos < actualCol && actualPos < text.length) {
+          if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
+            let end = actualPos + 2;
+            while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
+              end++;
+            }
+            end++;
+            actualPos = end;
+          } else {
+            actualPos++;
+            visualPos++;
+          }
+        }
+        return visualPos;
+      }
+      /**
+       * Parse ANSI codes into structured tokens
+       */
+      static parseANSI(text) {
+        const tokens = [];
+        let lastIndex = 0;
+        const matches = text.matchAll(ANSI_REGEX);
+        for (const match2 of matches) {
+          const start2 = match2.index;
+          if (start2 > lastIndex) {
+            tokens.push({
+              type: "text",
+              content: text.substring(lastIndex, start2),
+              start: lastIndex,
+              end: start2
+            });
+          }
+          const ansiCode = match2[0];
+          tokens.push({
+            type: this.classifyANSI(ansiCode),
+            content: ansiCode,
+            start: start2,
+            end: start2 + ansiCode.length
+          });
+          lastIndex = start2 + ansiCode.length;
+        }
+        if (lastIndex < text.length) {
+          tokens.push({
+            type: "text",
+            content: text.substring(lastIndex),
+            start: lastIndex,
+            end: text.length
+          });
+        }
+        return tokens;
+      }
+      /**
+       * Classify ANSI code type
+       */
+      static classifyANSI(code) {
+        if (code === "\x1B[0m" || code === "\x1B[m") {
+          return "reset";
+        }
+        const match2 = code.match(/\x1b\[([0-9;]+)m/);
+        if (match2) {
+          const params = match2[1].split(";").map(Number);
+          for (const param of params) {
+            if (param >= 30 && param <= 37 || param >= 40 && param <= 47 || param >= 90 && param <= 97 || param >= 100 && param <= 107) {
+              return "color";
+            }
+          }
+        }
+        if (code.match(/\x1b\[[1245 7]m/)) {
+          return "style";
+        }
+        return "ansi";
+      }
+      /**
+       * Insert ANSI code at visual position
+       */
+      static insertANSI(text, visualPosition, ansiCode) {
+        const actualPos = this.getActualPosition(text, visualPosition);
+        return text.substring(0, actualPos) + ansiCode + text.substring(actualPos);
+      }
+      /**
+       * Remove ANSI codes at visual position
+       */
+      static removeANSIAt(text, visualPosition) {
+        const actualPos = this.getActualPosition(text, visualPosition);
+        if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
+          let end = actualPos + 2;
+          while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
+            end++;
+          }
+          end++;
+          return text.substring(0, actualPos) + text.substring(end);
+        }
+        return text;
+      }
+      /**
+       * Get color name from ANSI code
+       */
+      static getColorName(ansiCode) {
+        for (const [name, color] of Object.entries(this.colors)) {
+          if (color.fg === ansiCode || color.bg === ansiCode) {
+            return name;
+          }
+        }
+        return null;
+      }
+      /**
+       * Convert blessed color tags to ANSI codes
+       * Example: "{red-fg}text{/}" -> "\x1b[31mtext\x1b[0m"
+       */
+      static blessedToANSI(text) {
+        let result = text;
+        for (const [name, color] of Object.entries(this.colors)) {
+          const tag = `{${name}-fg}`;
+          result = result.replace(new RegExp(tag, "g"), color.fg);
+        }
+        for (const [name, color] of Object.entries(this.colors)) {
+          const tag = `{${name}-bg}`;
+          result = result.replace(new RegExp(tag, "g"), color.bg);
+        }
+        result = result.replace(/{\/}/g, this.styles.reset);
+        return result;
+      }
+      /**
+       * Convert ANSI codes to blessed color tags
+       */
+      static ansiToBlessed(text) {
+        let result = text;
+        for (const [name, color] of Object.entries(this.colors)) {
+          result = result.replace(new RegExp(color.fg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `{${name}-fg}`);
+        }
+        for (const [name, color] of Object.entries(this.colors)) {
+          result = result.replace(new RegExp(color.bg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `{${name}-bg}`);
+        }
+        result = result.replace(/\x1b\[0m/g, "{/}");
+        return result;
+      }
+      /**
+       * Validate ANSI code
+       */
+      static isValidANSI(code) {
+        return ANSI_REGEX.test(code);
+      }
+      /**
+       * Extract all ANSI codes from text
+       */
+      static extractANSI(text) {
+        return Array.from(text.matchAll(ANSI_REGEX), (match2) => match2[0]);
+      }
+      /**
+       * Count ANSI codes in text
+       */
+      static countANSI(text) {
+        return (text.match(ANSI_REGEX) || []).length;
+      }
+      /**
+       * Get line without ANSI codes for editing
+       */
+      static getEditableLine(text) {
+        return this.stripANSI(text);
+      }
+      /**
+       * Preserve ANSI codes when editing text
+       * Returns new text with ANSI codes preserved from original
+       */
+      static preserveANSI(originalText, newText) {
+        const tokens = this.parseANSI(originalText);
+        const ansiCodes = tokens.filter((t) => t.type !== "text");
+        if (ansiCodes.length === 0) {
+          return newText;
+        }
+        let result = "";
+        let newTextPos = 0;
+        const originalVisualLength = this.visualLength(originalText);
+        const newTextLength = newText.length;
+        for (const ansiCode of ansiCodes) {
+          const visualPos = this.getVisualPosition(originalText, ansiCode.start);
+          const newPos = Math.floor(visualPos / originalVisualLength * newTextLength);
+          if (newPos > newTextPos) {
+            result += newText.substring(newTextPos, newPos);
+            newTextPos = newPos;
+          }
+          result += ansiCode.content;
+        }
+        if (newTextPos < newText.length) {
+          result += newText.substring(newTextPos);
+        }
+        return result;
+      }
+    };
+    ANSIUtils.colors = {
+      // Foreground colors
+      black: { name: "Black", fg: "\x1B[30m", bg: "\x1B[40m", sample: "\x1B[30m\u2588\u2588\u2588\x1B[0m" },
+      red: { name: "Red", fg: "\x1B[31m", bg: "\x1B[41m", sample: "\x1B[31m\u2588\u2588\u2588\x1B[0m" },
+      green: { name: "Green", fg: "\x1B[32m", bg: "\x1B[42m", sample: "\x1B[32m\u2588\u2588\u2588\x1B[0m" },
+      yellow: { name: "Yellow", fg: "\x1B[33m", bg: "\x1B[43m", sample: "\x1B[33m\u2588\u2588\u2588\x1B[0m" },
+      blue: { name: "Blue", fg: "\x1B[34m", bg: "\x1B[44m", sample: "\x1B[34m\u2588\u2588\u2588\x1B[0m" },
+      magenta: { name: "Magenta", fg: "\x1B[35m", bg: "\x1B[45m", sample: "\x1B[35m\u2588\u2588\u2588\x1B[0m" },
+      cyan: { name: "Cyan", fg: "\x1B[36m", bg: "\x1B[46m", sample: "\x1B[36m\u2588\u2588\u2588\x1B[0m" },
+      white: { name: "White", fg: "\x1B[37m", bg: "\x1B[47m", sample: "\x1B[37m\u2588\u2588\u2588\x1B[0m" },
+      // Bright colors
+      gray: { name: "Gray", fg: "\x1B[90m", bg: "\x1B[100m", sample: "\x1B[90m\u2588\u2588\u2588\x1B[0m" },
+      brightRed: { name: "Bright Red", fg: "\x1B[91m", bg: "\x1B[101m", sample: "\x1B[91m\u2588\u2588\u2588\x1B[0m" },
+      brightGreen: { name: "Bright Green", fg: "\x1B[92m", bg: "\x1B[102m", sample: "\x1B[92m\u2588\u2588\u2588\x1B[0m" },
+      brightYellow: { name: "Bright Yellow", fg: "\x1B[93m", bg: "\x1B[103m", sample: "\x1B[93m\u2588\u2588\u2588\x1B[0m" },
+      brightBlue: { name: "Bright Blue", fg: "\x1B[94m", bg: "\x1B[104m", sample: "\x1B[94m\u2588\u2588\u2588\x1B[0m" },
+      brightMagenta: { name: "Bright Magenta", fg: "\x1B[95m", bg: "\x1B[105m", sample: "\x1B[95m\u2588\u2588\u2588\x1B[0m" },
+      brightCyan: { name: "Bright Cyan", fg: "\x1B[96m", bg: "\x1B[106m", sample: "\x1B[96m\u2588\u2588\u2588\x1B[0m" },
+      brightWhite: { name: "Bright White", fg: "\x1B[97m", bg: "\x1B[107m", sample: "\x1B[97m\u2588\u2588\u2588\x1B[0m" }
+    };
+    ANSIUtils.styles = {
+      reset: "\x1B[0m",
+      bold: "\x1B[1m",
+      dim: "\x1B[2m",
+      underline: "\x1B[4m",
+      blink: "\x1B[5m",
+      reverse: "\x1B[7m",
+      hidden: "\x1B[8m"
+    };
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js
+var init_editor_state = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js"() {
+    "use strict";
+    init_ansi_utils();
+    init_canvas2();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js
+var init_ansi_editor = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js"() {
+    "use strict";
+    init_box();
+    init_canvas();
+    init_text();
+    init_list();
+    init_overlay();
+    init_doc_modal();
+    init_confirm_modal();
+    init_dropdown_menu();
+    init_modal_helpers();
+    init_canvas2();
+    init_editor_state();
   }
 });
 
@@ -7517,18 +8159,7 @@ var init_category_picker = __esm({
     init_box();
     init_list();
     init_button();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
-var init_confirm_modal = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_overlay();
     init_modal_helpers();
-    init_responsive_constants();
   }
 });
 
@@ -7556,6 +8187,7 @@ var init_search_modal = __esm({
     init_list();
     init_textbox();
     init_text();
+    init_modal_helpers();
   }
 });
 
@@ -7576,6 +8208,7 @@ var init_multiplayer_lobby = __esm({
     init_button();
     init_textbox();
     init_dockable_panel();
+    init_listtable();
     init_events();
   }
 });
@@ -7812,6 +8445,7 @@ var init_blessed = __esm({
     init_panel();
     init_dockable_panel();
     init_dropdown_menu();
+    init_menu_bar();
     init_mobile_carousel();
     init_autocomplete();
     init_autocomplete_textbox();
@@ -7822,6 +8456,7 @@ var init_blessed = __esm({
     init_stacked_gauge();
     init_colorpicker();
     init_fileexplorer();
+    init_ansi_editor();
     init_doc_modal();
     init_login_modal();
     init_category_picker();

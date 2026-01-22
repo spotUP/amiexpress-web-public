@@ -50,6 +50,7 @@ class VideoGrid {
         this.screen = options.screen;
         this.currentUserId = options.currentUserId;
         this.currentUsername = options.currentUsername;
+        this.viewMode = options.viewMode ?? 'speaker'; // Default to speaker mode for low-res terminals
         // Main container for video grid
         this.container = blessed_1.default.box({
             parent: options.parent,
@@ -61,6 +62,7 @@ class VideoGrid {
                 bg: 'transparent',
             },
             tags: true,
+            mouse: false, // Don't capture mouse events - pass through to chat panel
             // Low z-index so it doesn't block modals/dialogs
             // @ts-ignore - zIndex exists but not in types
             zIndex: 10,
@@ -130,18 +132,25 @@ class VideoGrid {
         }
     }
     /**
-     * Set active speaker (highlighted border)
+     * Set active speaker (highlighted border in grid mode, switch to speaker in speaker mode)
      */
     setActiveSpeaker(userId) {
+        const prevSpeaker = this.activeSpeaker;
+        this.activeSpeaker = userId;
+        // In speaker mode, switch to showing the new speaker
+        if (this.viewMode === 'speaker' && prevSpeaker !== userId) {
+            this.updateGrid();
+            return;
+        }
+        // In grid mode, just highlight the border
         // Remove previous active speaker highlight
-        if (this.activeSpeaker !== undefined) {
-            const prevTile = this.tiles.get(String(this.activeSpeaker));
+        if (prevSpeaker !== undefined) {
+            const prevTile = this.tiles.get(String(prevSpeaker));
             if (prevTile) {
                 prevTile.setActive(false);
             }
         }
-        // Set new active speaker
-        this.activeSpeaker = userId;
+        // Set new active speaker highlight
         if (userId !== undefined) {
             const tile = this.tiles.get(String(userId));
             if (tile) {
@@ -168,8 +177,49 @@ class VideoGrid {
             this.screen.render();
             return;
         }
+        // Clear existing tiles
+        for (const tile of this.tiles.values()) {
+            tile.destroy();
+        }
+        this.tiles.clear();
+        // SPEAKER MODE: Show only the active speaker (or self if nobody speaking)
+        if (this.viewMode === 'speaker') {
+            // Determine who to show: active speaker, or self if nobody is speaking
+            let participantToShow = participantArray.find(p => String(p.userId) === String(this.activeSpeaker));
+            // If no active speaker, show yourself
+            if (!participantToShow) {
+                participantToShow = participantArray.find(p => String(p.userId) === String(this.currentUserId));
+            }
+            // If still nothing, show first participant
+            if (!participantToShow && participantArray.length > 0) {
+                participantToShow = participantArray[0];
+            }
+            if (participantToShow) {
+                // Show single participant filling entire container
+                const tileOptions = {
+                    parent: this.container,
+                    screen: this.screen,
+                    left: 0,
+                    top: 0,
+                    width: containerWidth,
+                    height: containerHeight,
+                    userId: participantToShow.userId,
+                    username: participantToShow.username,
+                    isMuted: participantToShow.isMuted,
+                    hasVideo: participantToShow.hasVideo,
+                    isSpeaking: participantToShow.isSpeaking,
+                    audioLevel: participantToShow.audioLevel,
+                    isCurrentUser: participantToShow.userId === this.currentUserId,
+                    avatar: participantToShow.avatar,
+                };
+                const tile = new video_tile_1.VideoTile(tileOptions);
+                this.tiles.set(participantToShow.userId, tile);
+            }
+            this.screen.render();
+            return;
+        }
+        // GRID MODE: Show all participants in a grid (original behavior)
         // Calculate optimal grid (cols x rows) to fill the space
-        // We want to maximize the area of each tile (tileWidth * tileHeight)
         let bestCols = 1;
         let bestRows = 1;
         let maxArea = 0;
@@ -186,11 +236,6 @@ class VideoGrid {
         }
         const tileWidth = Math.floor(containerWidth / bestCols);
         const tileHeight = Math.floor(containerHeight / bestRows);
-        // Clear existing tiles
-        for (const tile of this.tiles.values()) {
-            tile.destroy();
-        }
-        this.tiles.clear();
         // Create tiles for each participant
         participantArray.forEach((participant, index) => {
             const row = Math.floor(index / bestCols);
@@ -239,6 +284,19 @@ class VideoGrid {
     hide() {
         this.container.hide();
         this.screen.render();
+    }
+    /**
+     * Toggle between speaker mode and grid mode
+     */
+    toggleViewMode() {
+        this.viewMode = this.viewMode === 'speaker' ? 'grid' : 'speaker';
+        this.updateGrid();
+    }
+    /**
+     * Get current view mode
+     */
+    getViewMode() {
+        return this.viewMode;
     }
     /**
      * Bring grid to front

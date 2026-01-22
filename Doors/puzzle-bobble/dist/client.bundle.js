@@ -65,6 +65,10 @@ var init_events = __esm({
         }
         return this;
       }
+      // Alias for removeListener (Node.js EventEmitter compatibility)
+      off(event, handler2) {
+        return this.removeListener(event, handler2);
+      }
       removeAllListeners(event) {
         if (event) {
           this.events.delete(event);
@@ -783,6 +787,502 @@ var init_colors = __esm({
   }
 });
 
+// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js
+function getBreakpointName(width) {
+  if (width < BREAKPOINT_XS)
+    return "xs";
+  if (width < BREAKPOINT_SM)
+    return "small";
+  if (width < BREAKPOINT_MD)
+    return "medium";
+  return "large";
+}
+function isMobileWidth(width) {
+  return width < BREAKPOINT_XS;
+}
+function enforceMinTouchHeight(height, touchFriendly) {
+  if (!touchFriendly)
+    return height;
+  if (typeof height === "number" && height < MIN_TOUCH_HEIGHT) {
+    return MIN_TOUCH_HEIGHT;
+  }
+  return height;
+}
+var MIN_TOUCH_HEIGHT, BREAKPOINT_XS, BREAKPOINT_SM, BREAKPOINT_MD, SWIPE_THRESHOLD, SWIPE_THRESHOLD_VERTICAL, SWIPE_MAX_TIME, LONG_PRESS_TIME, DOUBLE_TAP_INTERVAL, DEFAULT_PADDING, MOBILE_PADDING;
+var init_responsive_constants = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js"() {
+    "use strict";
+    MIN_TOUCH_HEIGHT = 3;
+    BREAKPOINT_XS = 50;
+    BREAKPOINT_SM = 80;
+    BREAKPOINT_MD = 120;
+    SWIPE_THRESHOLD = 5;
+    SWIPE_THRESHOLD_VERTICAL = 3;
+    SWIPE_MAX_TIME = 500;
+    LONG_PRESS_TIME = 500;
+    DOUBLE_TAP_INTERVAL = 300;
+    DEFAULT_PADDING = 1;
+    MOBILE_PADDING = 0;
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js
+var TouchGestureHandler;
+var init_touch_gestures = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js"() {
+    "use strict";
+    init_responsive_constants();
+    TouchGestureHandler = class {
+      constructor(element) {
+        this.state = {
+          startX: 0,
+          startY: 0,
+          startTime: 0,
+          isActive: false
+        };
+        this.lastTapTime = 0;
+        this.lastTapX = 0;
+        this.lastTapY = 0;
+        this.boundHandlers = {};
+        this.element = element;
+        this.screen = element.screen;
+      }
+      /**
+       * Enable swipe gesture detection
+       */
+      enableSwipe(options) {
+        this.swipeOptions = {
+          threshold: SWIPE_THRESHOLD,
+          verticalThreshold: SWIPE_THRESHOLD_VERTICAL,
+          maxTime: SWIPE_MAX_TIME,
+          direction: "both",
+          ...options
+        };
+        this.attachMouseListeners();
+        return () => {
+          this.swipeOptions = void 0;
+          this.detachMouseListenersIfUnused();
+        };
+      }
+      /**
+       * Enable long press detection
+       */
+      enableLongPress(options) {
+        this.longPressOptions = {
+          duration: LONG_PRESS_TIME,
+          ...options
+        };
+        this.attachMouseListeners();
+        return () => {
+          this.longPressOptions = void 0;
+          this.clearLongPressTimer();
+          this.detachMouseListenersIfUnused();
+        };
+      }
+      /**
+       * Enable double tap detection
+       */
+      enableDoubleTap(options) {
+        this.doubleTapOptions = {
+          interval: DOUBLE_TAP_INTERVAL,
+          ...options
+        };
+        this.attachMouseListeners();
+        return () => {
+          this.doubleTapOptions = void 0;
+          this.detachMouseListenersIfUnused();
+        };
+      }
+      /**
+       * Disable all gestures and cleanup
+       */
+      destroy() {
+        this.swipeOptions = void 0;
+        this.longPressOptions = void 0;
+        this.doubleTapOptions = void 0;
+        this.clearLongPressTimer();
+        this.detachAllListeners();
+      }
+      // ============================================================================
+      // Private Methods
+      // ============================================================================
+      attachMouseListeners() {
+        if (this.boundHandlers.mousedown)
+          return;
+        this.boundHandlers.mousedown = this.handleMouseDown.bind(this);
+        this.boundHandlers.mouseup = this.handleMouseUp.bind(this);
+        this.boundHandlers.mousemove = this.handleMouseMove.bind(this);
+        this.element.on("mousedown", this.boundHandlers.mousedown);
+        if (this.element.screen) {
+          this.screen = this.element.screen;
+          this.screen.on("mouseup", this.boundHandlers.mouseup);
+          this.screen.on("mousemove", this.boundHandlers.mousemove);
+        } else {
+          this.element.once("attach", () => {
+            this.screen = this.element.screen;
+            if (this.screen) {
+              this.screen.on("mouseup", this.boundHandlers.mouseup);
+              this.screen.on("mousemove", this.boundHandlers.mousemove);
+            }
+          });
+        }
+      }
+      detachMouseListenersIfUnused() {
+        if (!this.swipeOptions && !this.longPressOptions && !this.doubleTapOptions) {
+          this.detachAllListeners();
+        }
+      }
+      detachAllListeners() {
+        if (this.boundHandlers.mousedown) {
+          this.element.removeListener("mousedown", this.boundHandlers.mousedown);
+        }
+        if (this.screen) {
+          if (this.boundHandlers.mouseup) {
+            this.screen.removeListener("mouseup", this.boundHandlers.mouseup);
+          }
+          if (this.boundHandlers.mousemove) {
+            this.screen.removeListener("mousemove", this.boundHandlers.mousemove);
+          }
+        }
+        this.boundHandlers = {};
+      }
+      handleMouseDown(data) {
+        this.state = {
+          startX: data.x,
+          startY: data.y,
+          startTime: Date.now(),
+          isActive: true
+        };
+        if (this.longPressOptions) {
+          this.startLongPressTimer(data.x, data.y);
+        }
+        if (this.doubleTapOptions) {
+          const now2 = Date.now();
+          const interval = this.doubleTapOptions.interval || DOUBLE_TAP_INTERVAL;
+          const dx = Math.abs(data.x - this.lastTapX);
+          const dy = Math.abs(data.y - this.lastTapY);
+          if (now2 - this.lastTapTime < interval && dx < 2 && dy < 2) {
+            this.doubleTapOptions.onDoubleTap(data.x, data.y);
+            this.lastTapTime = 0;
+            return;
+          }
+          this.lastTapTime = now2;
+          this.lastTapX = data.x;
+          this.lastTapY = data.y;
+        }
+      }
+      handleMouseUp(data) {
+        if (!this.state.isActive)
+          return;
+        this.clearLongPressTimer();
+        const deltaX = data.x - this.state.startX;
+        const deltaY = data.y - this.state.startY;
+        const duration = Date.now() - this.state.startTime;
+        if (this.swipeOptions) {
+          this.detectSwipe(deltaX, deltaY, duration);
+        }
+        this.state.isActive = false;
+      }
+      handleMouseMove(data) {
+        if (!this.state.isActive)
+          return;
+        const deltaX = Math.abs(data.x - this.state.startX);
+        const deltaY = Math.abs(data.y - this.state.startY);
+        if (this.longPressOptions && (deltaX > 2 || deltaY > 2)) {
+          this.clearLongPressTimer();
+          if (this.longPressOptions.onCancel) {
+            this.longPressOptions.onCancel();
+          }
+        }
+      }
+      detectSwipe(deltaX, deltaY, duration) {
+        if (!this.swipeOptions)
+          return;
+        const { threshold = SWIPE_THRESHOLD, verticalThreshold = SWIPE_THRESHOLD_VERTICAL, maxTime = SWIPE_MAX_TIME, direction = "both" } = this.swipeOptions;
+        if (duration > maxTime)
+          return;
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+        const velocity = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / duration;
+        let swipeDirection = null;
+        if (direction === "horizontal" || direction === "both") {
+          if (absDeltaX >= threshold && absDeltaX > absDeltaY) {
+            swipeDirection = deltaX < 0 ? "left" : "right";
+          }
+        }
+        if (direction === "vertical" || direction === "both") {
+          if (absDeltaY >= verticalThreshold && absDeltaY > absDeltaX) {
+            swipeDirection = deltaY < 0 ? "up" : "down";
+          }
+        }
+        if (swipeDirection) {
+          const distance = swipeDirection === "left" || swipeDirection === "right" ? absDeltaX : absDeltaY;
+          const event = {
+            direction: swipeDirection,
+            deltaX,
+            deltaY,
+            distance,
+            duration,
+            velocity
+          };
+          switch (swipeDirection) {
+            case "left":
+              this.swipeOptions.onSwipeLeft?.(event);
+              break;
+            case "right":
+              this.swipeOptions.onSwipeRight?.(event);
+              break;
+            case "up":
+              this.swipeOptions.onSwipeUp?.(event);
+              break;
+            case "down":
+              this.swipeOptions.onSwipeDown?.(event);
+              break;
+          }
+          this.swipeOptions.onSwipe?.(event);
+        }
+      }
+      startLongPressTimer(x, y) {
+        this.clearLongPressTimer();
+        const duration = this.longPressOptions?.duration || LONG_PRESS_TIME;
+        this.longPressTimer = setTimeout(() => {
+          if (this.state.isActive && this.longPressOptions) {
+            this.longPressOptions.onLongPress(x, y);
+          }
+        }, duration);
+      }
+      clearLongPressTimer() {
+        if (this.longPressTimer) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = void 0;
+        }
+      }
+    };
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js
+function applyResponsiveMixin(element, options = {}) {
+  const behavior = new ResponsiveBehavior(element, options);
+  element._responsiveBehavior = behavior;
+  element.getResponsiveState = () => behavior.getState();
+  element.getBreakpoint = () => behavior.getBreakpoint();
+  element.isMobile = () => behavior.isMobile();
+  element.onBreakpointChange = (handler2) => behavior.onBreakpointChange(handler2);
+  element.enableSwipe = (swipeOptions) => behavior.enableSwipe(swipeOptions);
+  element.enableLongPress = (lpOptions) => behavior.enableLongPress(lpOptions);
+  if (element.screen) {
+    behavior.initialize();
+  } else {
+    element.once("attach", () => {
+      behavior.initialize();
+    });
+  }
+  const originalDestroy = element.destroy?.bind(element);
+  element.destroy = () => {
+    behavior.destroy();
+    if (originalDestroy) {
+      originalDestroy();
+    }
+  };
+  return behavior;
+}
+var ResponsiveBehavior;
+var init_responsive_mixin = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js"() {
+    "use strict";
+    init_responsive_constants();
+    init_touch_gestures();
+    ResponsiveBehavior = class {
+      constructor(element, options = {}) {
+        this.breakpointHandlers = /* @__PURE__ */ new Set();
+        this.resizeHandlers = /* @__PURE__ */ new Set();
+        this.initialized = false;
+        this.element = element;
+        this.options = {
+          responsive: true,
+          touchFriendly: false,
+          swipeEnabled: false,
+          ...options
+        };
+        this.state = {
+          breakpoint: "large",
+          previousBreakpoint: "large",
+          isMobile: false,
+          screenWidth: 80,
+          screenHeight: 24
+        };
+      }
+      /**
+       * Initialize responsive behavior (call after element is attached to screen)
+       */
+      initialize() {
+        if (this.initialized)
+          return;
+        if (!this.element.screen)
+          return;
+        const screen2 = this.element.screen;
+        this.state.screenWidth = screen2.width || 80;
+        this.state.screenHeight = screen2.height || 24;
+        this.state.breakpoint = getBreakpointName(this.state.screenWidth);
+        this.state.previousBreakpoint = this.state.breakpoint;
+        this.state.isMobile = isMobileWidth(this.state.screenWidth);
+        if (screen2.responsiveLayout && this.options.responsive) {
+          this.unsubscribeResize = screen2.responsiveLayout.onResize(this.handleScreenResize.bind(this));
+        }
+        if (this.options.touchFriendly) {
+          this.applyTouchFriendlySizing();
+        }
+        if (this.options.swipeEnabled) {
+          this.gestureHandler = new TouchGestureHandler(this.element);
+        }
+        this.initialized = true;
+      }
+      /**
+       * Clean up responsive behavior
+       */
+      destroy() {
+        if (this.unsubscribeResize) {
+          this.unsubscribeResize();
+          this.unsubscribeResize = void 0;
+        }
+        if (this.gestureHandler) {
+          this.gestureHandler.destroy();
+          this.gestureHandler = void 0;
+        }
+        this.breakpointHandlers.clear();
+        this.resizeHandlers.clear();
+        this.initialized = false;
+      }
+      // ============================================================================
+      // Public API
+      // ============================================================================
+      /**
+       * Get current responsive state
+       */
+      getState() {
+        return { ...this.state };
+      }
+      /**
+       * Get current breakpoint
+       */
+      getBreakpoint() {
+        return this.state.breakpoint;
+      }
+      /**
+       * Check if currently mobile
+       */
+      isMobile() {
+        return this.state.isMobile;
+      }
+      /**
+       * Register a breakpoint change handler
+       * Returns unsubscribe function
+       */
+      onBreakpointChange(handler2) {
+        this.breakpointHandlers.add(handler2);
+        return () => this.breakpointHandlers.delete(handler2);
+      }
+      /**
+       * Register a resize handler
+       * Returns unsubscribe function
+       */
+      onResize(handler2) {
+        this.resizeHandlers.add(handler2);
+        return () => this.resizeHandlers.delete(handler2);
+      }
+      /**
+       * Enable swipe gestures
+       */
+      enableSwipe(options) {
+        if (!this.gestureHandler) {
+          this.gestureHandler = new TouchGestureHandler(this.element);
+        }
+        return this.gestureHandler.enableSwipe(options);
+      }
+      /**
+       * Enable long press gesture
+       */
+      enableLongPress(options) {
+        if (!this.gestureHandler) {
+          this.gestureHandler = new TouchGestureHandler(this.element);
+        }
+        return this.gestureHandler.enableLongPress(options);
+      }
+      /**
+       * Force recalculation of responsive state
+       */
+      recalculate() {
+        if (!this.element.screen)
+          return;
+        const screen2 = this.element.screen;
+        this.handleScreenResize(screen2.width || 80, screen2.height || 24);
+      }
+      // ============================================================================
+      // Protected Methods (for widget overrides)
+      // ============================================================================
+      /**
+       * Called when screen resizes
+       * Override in widgets for custom resize behavior
+       */
+      handleResize(width, height) {
+        for (const handler2 of this.resizeHandlers) {
+          handler2(width, height, this.state);
+        }
+        if (typeof this.element._handleResize === "function") {
+          this.element._handleResize(width, height, this.state);
+        }
+      }
+      /**
+       * Called when breakpoint changes
+       * Override in widgets for custom breakpoint behavior
+       */
+      handleBreakpointChange(breakpoint, previousBreakpoint) {
+        for (const handler2 of this.breakpointHandlers) {
+          handler2(breakpoint, previousBreakpoint, this.state);
+        }
+        if (typeof this.element._handleBreakpointChange === "function") {
+          this.element._handleBreakpointChange(breakpoint, previousBreakpoint, this.state);
+        }
+        if (this.state.isMobile && !isMobileWidth(this.state.screenWidth)) {
+          if (typeof this.element._exitMobileMode === "function") {
+            this.element._exitMobileMode();
+          }
+        } else if (!this.state.isMobile && isMobileWidth(this.state.screenWidth)) {
+          if (typeof this.element._enterMobileMode === "function") {
+            this.element._enterMobileMode();
+          }
+        }
+      }
+      // ============================================================================
+      // Private Methods
+      // ============================================================================
+      handleScreenResize(width, height) {
+        const newBreakpoint = getBreakpointName(width);
+        const breakpointChanged = newBreakpoint !== this.state.breakpoint;
+        this.state.previousBreakpoint = this.state.breakpoint;
+        this.state.breakpoint = newBreakpoint;
+        this.state.screenWidth = width;
+        this.state.screenHeight = height;
+        this.state.isMobile = isMobileWidth(width);
+        this.handleResize(width, height);
+        if (breakpointChanged) {
+          this.handleBreakpointChange(newBreakpoint, this.state.previousBreakpoint);
+        }
+      }
+      applyTouchFriendlySizing() {
+        const currentHeight = this.element.height;
+        if (typeof currentHeight === "number" && currentHeight < MIN_TOUCH_HEIGHT) {
+          this.element.position.height = MIN_TOUCH_HEIGHT;
+        }
+        if (this.element.options) {
+          this.element.options.height = enforceMinTouchHeight(this.element.options.height, true);
+        }
+      }
+    };
+  }
+});
+
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/box.js
 var box_exports = {};
 __export(box_exports, {
@@ -793,9 +1293,100 @@ var init_box = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/box.js"() {
     "use strict";
     init_element();
+    init_responsive_constants();
     Box = class extends Element {
       constructor(options = {}) {
         super(options);
+        if (options.responsivePadding) {
+          this._responsivePadding = options.responsivePadding;
+          this._originalPadding = options.padding;
+        }
+      }
+      /**
+       * Handle resize - update padding based on breakpoint
+       */
+      _handleResize(width, height, state) {
+        if (this._responsivePadding) {
+          this._applyResponsivePadding(state.breakpoint);
+        }
+        this._notifyChildrenResize(width, height);
+      }
+      /**
+       * Handle breakpoint change
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        if (this._responsivePadding) {
+          this._applyResponsivePadding(breakpoint);
+        }
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Apply padding based on breakpoint
+       */
+      _applyResponsivePadding(breakpoint) {
+        if (!this._responsivePadding)
+          return;
+        let newPadding;
+        switch (breakpoint) {
+          case "large":
+            newPadding = this._responsivePadding.large ?? this._responsivePadding.medium ?? this._responsivePadding.small ?? this._responsivePadding.xs ?? this._originalPadding;
+            break;
+          case "medium":
+            newPadding = this._responsivePadding.medium ?? this._responsivePadding.small ?? this._responsivePadding.xs ?? this._originalPadding;
+            break;
+          case "small":
+            newPadding = this._responsivePadding.small ?? this._responsivePadding.xs ?? this._originalPadding;
+            break;
+          case "xs":
+            newPadding = this._responsivePadding.xs ?? this._originalPadding;
+            break;
+        }
+        if (newPadding !== void 0) {
+          this.options.padding = newPadding;
+          if (this.screen) {
+            this.screen.render();
+          }
+        }
+      }
+      /**
+       * Notify all children of resize event
+       */
+      _notifyChildrenResize(width, height) {
+        for (const child of this.children) {
+          if (typeof child._handleResize === "function") {
+            const state = this.getResponsiveState();
+            if (state) {
+              child._handleResize(width, height, state);
+            }
+          }
+        }
+      }
+      /**
+       * Set responsive padding configuration
+       */
+      setResponsivePadding(config) {
+        this._responsivePadding = config;
+        const state = this.getResponsiveState();
+        if (state) {
+          this._applyResponsivePadding(state.breakpoint);
+        }
+      }
+      /**
+       * Get current effective padding
+       */
+      getEffectivePadding() {
+        return this.options.padding ?? 0;
+      }
+      /**
+       * Helper to get default responsive padding (mobile-aware)
+       */
+      static getDefaultResponsivePadding() {
+        return {
+          xs: MOBILE_PADDING,
+          small: MOBILE_PADDING,
+          medium: DEFAULT_PADDING,
+          large: DEFAULT_PADDING
+        };
       }
     };
   }
@@ -808,6 +1399,7 @@ var init_element = __esm({
     "use strict";
     init_events();
     init_colors();
+    init_responsive_mixin();
     ESC2 = String.fromCharCode(27);
     Element = class extends EventEmitter2 {
       /**
@@ -845,8 +1437,6 @@ var init_element = __esm({
         this.children = [];
         this.border = null;
         this.position = { xi: 0, xl: 0, yi: 0, yl: 0 };
-        this._coordsCache = null;
-        this._coordsCacheValid = false;
         this.content = "";
         this._lines = [];
         this._contentDirty = false;
@@ -937,6 +1527,15 @@ var init_element = __esm({
         }
         if (this.options.closable) {
           this.setupClosable();
+        }
+        const enableResponsive = this.options.responsive === void 0 || this.options.responsive === true;
+        if (enableResponsive) {
+          this._responsiveBehavior = applyResponsiveMixin(this, {
+            responsive: true,
+            touchFriendly: this.options.touchFriendly,
+            swipeEnabled: this.options.swipeEnabled,
+            mobileBreakpoint: this.options.mobileBreakpoint
+          });
         }
       }
       setupClosable() {
@@ -1047,24 +1646,14 @@ var init_element = __esm({
         return true;
       }
       /**
-       * Invalidate coordinate cache for this element and all its children
-       * MUST be called whenever position or visibility changes
+       * Invalidate coordinates - NO-OP since caching was removed
+       * Kept for API compatibility with existing code that calls it
        */
       _invalidateCoords() {
-        this._coordsCacheValid = false;
-        this._coordsCache = null;
-        if (this.children) {
-          for (const child of this.children) {
-            child._invalidateCoords();
-          }
-        }
       }
       _getCoords(get, noscroll) {
         if (this.destroyed)
           return void 0;
-        if (this._coordsCacheValid && this._coordsCache && !get) {
-          return this._coordsCache;
-        }
         const parent = this.parent;
         const parentPos = parent?._getCoords(get, noscroll) || {
           xi: 0,
@@ -1154,8 +1743,6 @@ var init_element = __esm({
         this.position.xl = xl;
         this.position.yi = yi;
         this.position.yl = yl;
-        this._coordsCache = this.position;
-        this._coordsCacheValid = true;
         return this.position;
       }
       // ============================================================================
@@ -1528,6 +2115,9 @@ var init_element = __esm({
         content = this.processCenterTags(content);
         this.content = content;
         this._contentDirty = true;
+        if (this.screen && this.screen.markDirtyElement) {
+          this.screen.markDirtyElement(this);
+        }
         const width = this.iwidth;
         if (width > 0) {
           this._lines = this.parseContent(content);
@@ -1752,10 +2342,10 @@ var init_element = __esm({
        */
       sattr(style) {
         if (!style)
-          return 0;
+          return 511 << 9 | 511;
         let flags = 0;
         let fgCode = 511;
-        let bgCode = 0;
+        let bgCode = 511;
         if (style.bold)
           flags |= 1;
         if (style.underline)
@@ -2030,6 +2620,9 @@ var init_element = __esm({
           this.hidden = false;
           this.visible = true;
           this._invalidateCoords();
+          if (this.screen && this.screen.markDirtyElement) {
+            this.screen.markDirtyElement(this);
+          }
           this.emit("show");
           this._emitOverlayEvent(true);
           if (this.options.trapFocus && this.screen) {
@@ -2041,6 +2634,9 @@ var init_element = __esm({
         if (this.destroyed)
           return;
         if (!this.hidden) {
+          if (this.screen && this.screen.markDirtyElement) {
+            this.screen.markDirtyElement(this);
+          }
           const pos = this._getCoords();
           if (this.screen && pos) {
             this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
@@ -2074,6 +2670,12 @@ var init_element = __esm({
           this.options.style = {};
         }
         this.options.style.transparent = enabled;
+        if (this.style) {
+          this.style.transparent = enabled;
+        }
+        if (this._emitOverlayEvent) {
+          this._emitOverlayEvent(enabled);
+        }
         if (this.screen) {
           this.screen.render();
         }
@@ -2629,6 +3231,7 @@ var init_element = __esm({
       }
       /**
        * Render border around element
+       * Supports per-edge colors via fgTop, fgBottom, fgLeft, fgRight properties
        */
       renderBorder() {
         if (!this.hasBorder() || !this.screen)
@@ -2671,18 +3274,28 @@ var init_element = __esm({
             borderStyle = { ...borderStyle, fg: "cyan", bold: true };
           }
         }
-        const attr = this.sattr(borderStyle);
-        this.screen.fillRegion(attr, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attr, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attr, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attr, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yl - 1, pos.yl);
-        this.screen.fillRegion(attr, chars.bottomLeft, pos.xi, pos.xi + 1, pos.yl - 1, pos.yl);
-        this.screen.fillRegion(attr, chars.bottomRight, pos.xl - 1, pos.xl, pos.yl - 1, pos.yl);
+        const defaultAttr = this.sattr(borderStyle);
+        const styleBorder = this.options.style?.border || {};
+        const optionsBorder = typeof this.options.border === "object" ? this.options.border : {};
+        const fgTop = styleBorder.fgTop || optionsBorder.fgTop;
+        const fgBottom = styleBorder.fgBottom || optionsBorder.fgBottom;
+        const fgLeft = styleBorder.fgLeft || optionsBorder.fgLeft;
+        const fgRight = styleBorder.fgRight || optionsBorder.fgRight;
+        const attrTop = fgTop ? this.sattr({ ...borderStyle, fg: fgTop }) : defaultAttr;
+        const attrBottom = fgBottom ? this.sattr({ ...borderStyle, fg: fgBottom }) : defaultAttr;
+        const attrLeft = fgLeft ? this.sattr({ ...borderStyle, fg: fgLeft }) : defaultAttr;
+        const attrRight = fgRight ? this.sattr({ ...borderStyle, fg: fgRight }) : defaultAttr;
+        this.screen.fillRegion(attrTop, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yi, pos.yi + 1);
+        this.screen.fillRegion(attrTop, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
+        this.screen.fillRegion(attrTop, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
+        this.screen.fillRegion(attrBottom, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yl - 1, pos.yl);
+        this.screen.fillRegion(attrBottom, chars.bottomLeft, pos.xi, pos.xi + 1, pos.yl - 1, pos.yl);
+        this.screen.fillRegion(attrBottom, chars.bottomRight, pos.xl - 1, pos.xl, pos.yl - 1, pos.yl);
         for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-          this.screen.fillRegion(attr, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
+          this.screen.fillRegion(attrLeft, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
         }
         for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-          this.screen.fillRegion(attr, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
+          this.screen.fillRegion(attrRight, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
         }
       }
       /**
@@ -3500,11 +4113,74 @@ var init_element = __esm({
         return { line: relY, col };
       }
       // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      /**
+       * Called when screen resizes. Override in widgets for custom resize behavior.
+       */
+      _handleResize(width, height, state) {
+      }
+      /**
+       * Called when breakpoint changes. Override in widgets for breakpoint-specific behavior.
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+      }
+      /**
+       * Called when entering mobile mode (xs breakpoint). Override in widgets.
+       */
+      _enterMobileMode() {
+      }
+      /**
+       * Called when exiting mobile mode (leaving xs breakpoint). Override in widgets.
+       */
+      _exitMobileMode() {
+      }
+      /**
+       * Get the current responsive state
+       */
+      getResponsiveState() {
+        return this._responsiveBehavior?.getState();
+      }
+      /**
+       * Get the current breakpoint name
+       */
+      getBreakpoint() {
+        return this._responsiveBehavior?.getBreakpoint();
+      }
+      /**
+       * Check if currently in mobile mode (xs breakpoint)
+       */
+      isMobile() {
+        return this._responsiveBehavior?.isMobile() ?? false;
+      }
+      /**
+       * Enable swipe gestures on this element
+       */
+      enableSwipe(options) {
+        if (!this._responsiveBehavior) {
+          this._responsiveBehavior = applyResponsiveMixin(this, { swipeEnabled: true });
+        }
+        return this._responsiveBehavior.enableSwipe(options);
+      }
+      /**
+       * Enable long press gesture on this element
+       */
+      enableLongPress(options) {
+        if (!this._responsiveBehavior) {
+          this._responsiveBehavior = applyResponsiveMixin(this, {});
+        }
+        return this._responsiveBehavior.enableLongPress(options);
+      }
+      // ============================================================================
       // Destruction
       // ============================================================================
       destroy() {
         if (this.destroyed)
           return;
+        if (this._responsiveBehavior) {
+          this._responsiveBehavior.destroy();
+          this._responsiveBehavior = void 0;
+        }
         const pos = this._getCoords();
         if (this.screen && pos) {
           this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
@@ -3612,6 +4288,7 @@ var init_button = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/button.js"() {
     "use strict";
     init_element();
+    init_responsive_constants();
     Button = class extends Element {
       constructor(options = {}) {
         const baseStyle = options.style ?? {};
@@ -3625,14 +4302,17 @@ var init_button = __esm({
           bg: "cyan",
           ...baseStyle.hover ?? {}
         };
+        const isInline = options.inline === true;
         super({
           focusable: true,
           clickable: true,
           keys: true,
-          border: "line",
+          border: isInline ? void 0 : "line",
           align: "center",
           valign: "middle",
-          padding: { left: 1, right: 1, top: 0, bottom: 0 },
+          padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
+          touchFriendly: !isInline,
+          // Inline buttons are compact, not touch-friendly
           ...options,
           style: {
             fg: baseStyle.fg ?? "white",
@@ -3642,11 +4322,19 @@ var init_button = __esm({
             hover: hoverStyle
           }
         });
+        this._tapFeedback = options.tapFeedback !== false;
+        this._tapFeedbackDuration = options.tapFeedbackDuration ?? 100;
+        this._desktopHeight = options.height;
+        this._mobileHeight = options.mobileHeight ?? MIN_TOUCH_HEIGHT;
+        this._originalStyle = { ...this.style };
         if (options.keys !== false) {
           this.on("keypress", this._onKeypress.bind(this));
         }
         if (options.mouse !== false) {
           this.on("click", this._onClick.bind(this));
+          if (isInline) {
+            this.enableMouse();
+          }
         }
         this.on("focus", () => {
           if (this.screen) {
@@ -3673,8 +4361,93 @@ var init_button = __esm({
         this.press();
       }
       press() {
+        if (this._tapFeedback) {
+          this._showTapFeedback();
+        }
         this.emit("press");
         this.emit("action");
+      }
+      /**
+       * Show visual tap feedback (flash effect)
+       */
+      _showTapFeedback() {
+        const currentBg = this.style.bg;
+        const currentFg = this.style.fg;
+        this.style.bg = "white";
+        this.style.fg = "black";
+        if (this.screen) {
+          this.screen.render();
+        }
+        setTimeout(() => {
+          this.style.bg = currentBg;
+          this.style.fg = currentFg;
+          if (this.screen) {
+            this.screen.render();
+          }
+        }, this._tapFeedbackDuration);
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      /**
+       * Handle breakpoint change - adjust height
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        if (state.isMobile) {
+          this._setMobileHeight();
+        } else {
+          this._setDesktopHeight();
+        }
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Called when entering mobile mode - increase height for touch targets
+       */
+      _enterMobileMode() {
+        this._setMobileHeight();
+        this.emit("enter-mobile");
+      }
+      /**
+       * Called when exiting mobile mode - restore desktop height
+       */
+      _exitMobileMode() {
+        this._setDesktopHeight();
+        this.emit("exit-mobile");
+      }
+      /**
+       * Set mobile-friendly height
+       */
+      _setMobileHeight() {
+        const currentHeight = typeof this.height === "number" ? this.height : 1;
+        if (currentHeight < this._mobileHeight) {
+          this.height = this._mobileHeight;
+          if (this.screen) {
+            this.screen.render();
+          }
+        }
+      }
+      /**
+       * Restore desktop height
+       */
+      _setDesktopHeight() {
+        if (this._desktopHeight !== void 0) {
+          this.height = this._desktopHeight;
+          if (this.screen) {
+            this.screen.render();
+          }
+        }
+      }
+      /**
+       * Enable/disable tap feedback
+       */
+      setTapFeedback(enabled) {
+        this._tapFeedback = enabled;
+      }
+      /**
+       * Set tap feedback duration
+       */
+      setTapFeedbackDuration(duration) {
+        this._tapFeedbackDuration = duration;
       }
     };
   }
@@ -3685,6 +4458,7 @@ var init_progressbar = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js"() {
     "use strict";
     init_element();
+    init_responsive_constants();
   }
 });
 
@@ -3725,6 +4499,7 @@ var init_checkbox = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js"() {
     "use strict";
     init_box();
+    init_responsive_constants();
   }
 });
 
@@ -3733,6 +4508,7 @@ var init_radiobutton = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js"() {
     "use strict";
     init_box();
+    init_responsive_constants();
   }
 });
 
@@ -3770,6 +4546,7 @@ var init_message = __esm({
     init_button();
     init_overlay();
     init_modal_helpers();
+    init_responsive_constants();
   }
 });
 
@@ -3781,6 +4558,7 @@ var init_question = __esm({
     init_button();
     init_overlay();
     init_modal_helpers();
+    init_responsive_constants();
   }
 });
 
@@ -3793,6 +4571,7 @@ var init_prompt = __esm({
     init_button();
     init_overlay();
     init_modal_helpers();
+    init_responsive_constants();
   }
 });
 
@@ -3886,6 +4665,7 @@ var init_listbar = __esm({
     "use strict";
     init_box();
     init_button();
+    init_responsive_constants();
   }
 });
 
@@ -3934,6 +4714,7 @@ var init_layout = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/layout.js"() {
     "use strict";
     init_box();
+    init_responsive_constants();
   }
 });
 
@@ -3951,6 +4732,7 @@ var init_filebox = __esm({
     "use strict";
     init_list();
     init_box();
+    init_responsive_constants();
   }
 });
 
@@ -3967,6 +4749,7 @@ var init_viewport = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/viewport.js"() {
     "use strict";
     init_box();
+    init_responsive_constants();
   }
 });
 
@@ -4003,20 +4786,2850 @@ var init_contextmenu = __esm({
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/panel.js
+var Panel;
 var init_panel = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/panel.js"() {
     "use strict";
     init_box();
+    init_responsive_constants();
+    Panel = class extends Box {
+      constructor(options = {}) {
+        super({
+          ...options,
+          border: options.border || { type: "line", fg: "blue" },
+          focusable: true,
+          keys: true,
+          mouse: true,
+          clickable: true,
+          // Enable click events for panel activation
+          style: {
+            fg: "white",
+            bg: "black",
+            focus: {
+              fg: "white",
+              bg: "black"
+            },
+            ...options.style
+          }
+        });
+        this._isActive = false;
+        this.lastFocusedChild = null;
+        this._focusing = false;
+        this._isCollapsed = false;
+        this._expandedHeight = null;
+        this.panelIndex = options.panelIndex;
+        this._title = options.title || "";
+        this._collapsibleOnMobile = options.collapsibleOnMobile ?? false;
+        this._collapsedHeight = options.collapsedHeight ?? MIN_TOUCH_HEIGHT;
+        this._swipeNavigation = options.swipeNavigation ?? true;
+        if (options.title) {
+          this.options.label = ` ${options.title} `;
+        }
+        this.on("click", () => {
+          this.focus();
+        });
+        this.on("click", (data) => {
+          if (this._collapsibleOnMobile && this.isMobile()) {
+            const relativeY = data?.y !== void 0 ? data.y - (this.position?.yi || 0) : 0;
+            if (relativeY < MIN_TOUCH_HEIGHT) {
+              this.toggleCollapse();
+            }
+          }
+        });
+        this.on("focus", () => {
+          if (this._focusing)
+            return;
+          if (this._isCollapsed)
+            return;
+          if (this.lastFocusedChild && !this.lastFocusedChild.destroyed && this.lastFocusedChild.visible) {
+            this._focusing = true;
+            setTimeout(() => {
+              if (this.lastFocusedChild && !this.lastFocusedChild.destroyed) {
+                this.lastFocusedChild.focus();
+              }
+              this._focusing = false;
+            }, 0);
+          }
+        });
+        if (this.screen) {
+          this.screen.on("element focus", (el) => {
+            const isDescendant = this._isDescendantOf(el, this);
+            if (isDescendant) {
+              if (el !== this) {
+                this.lastFocusedChild = el;
+              }
+              if (!this._isActive) {
+                this._activate();
+              }
+            } else if (this._isActive) {
+              this._deactivate();
+            }
+          });
+        }
+        if (this.panelIndex && this.panelIndex >= 1 && this.panelIndex <= 9) {
+          const altKey = `M-${this.panelIndex}`;
+          if (this.screen) {
+            this.screen.key([altKey], () => {
+              this.activate();
+            });
+          }
+        }
+        if (options.startCollapsed && this._collapsibleOnMobile) {
+          this.once("attach", () => {
+            if (this.isMobile()) {
+              this._collapse();
+            }
+          });
+        }
+      }
+      /**
+       * Check if element is a descendant of parent
+       */
+      _isDescendantOf(element, parent) {
+        let current = element;
+        while (current) {
+          if (current === parent)
+            return true;
+          current = current.parent;
+        }
+        return false;
+      }
+      /**
+       * Activate panel (focus first focusable child)
+       */
+      activate() {
+        const focusable = this._getFirstFocusable(this);
+        if (focusable) {
+          focusable.focus();
+        } else {
+          this.focus();
+        }
+      }
+      /**
+       * Get first focusable descendant
+       */
+      _getFirstFocusable(element) {
+        if (element.options.focusable && element !== this) {
+          return element;
+        }
+        for (const child of element.children || []) {
+          const focusable = this._getFirstFocusable(child);
+          if (focusable)
+            return focusable;
+        }
+        return null;
+      }
+      /**
+       * Mark panel as active (internal)
+       */
+      _activate() {
+        if (this._isActive)
+          return;
+        this._isActive = true;
+        if (this.style) {
+          this.style.fg = "white";
+          if (this.style.border)
+            this.style.border.fg = "cyan";
+        }
+        this.emit("activate");
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Mark panel as inactive (internal)
+       */
+      _deactivate() {
+        if (!this._isActive)
+          return;
+        this._isActive = false;
+        if (this.style) {
+          this.style.fg = "gray";
+          if (this.style.border)
+            this.style.border.fg = "blue";
+        }
+        this.emit("deactivate");
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Check if panel is currently active
+       */
+      isActive() {
+        return this._isActive;
+      }
+      // ============================================================================
+      // Responsive Methods
+      // ============================================================================
+      /**
+       * Handle resize - update layout based on screen size
+       */
+      _handleResize(width, height, state) {
+        super._handleResize(width, height, state);
+        if (state.isMobile && this._collapsibleOnMobile) {
+          this._updateCollapseIndicator();
+        }
+      }
+      /**
+       * Handle breakpoint change
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Called when entering mobile mode
+       */
+      _enterMobileMode() {
+        if (this._swipeNavigation && !this._unsubscribeSwipe) {
+          this._unsubscribeSwipe = this.enableSwipe({
+            direction: "horizontal",
+            onSwipe: (event) => {
+              this.emit("swipe", event.direction);
+              if (event.direction === "left") {
+                this.emit("swipe-next");
+              } else if (event.direction === "right") {
+                this.emit("swipe-prev");
+              }
+            }
+          });
+        }
+        if (this._collapsibleOnMobile) {
+          this._updateCollapseIndicator();
+        }
+        this.emit("enter-mobile");
+      }
+      /**
+       * Called when exiting mobile mode
+       */
+      _exitMobileMode() {
+        if (this._unsubscribeSwipe) {
+          this._unsubscribeSwipe();
+          this._unsubscribeSwipe = void 0;
+        }
+        if (this._isCollapsed) {
+          this._expand();
+        }
+        if (this._title) {
+          this.options.label = ` ${this._title} `;
+        }
+        this.emit("exit-mobile");
+      }
+      // ============================================================================
+      // Collapse/Expand Methods
+      // ============================================================================
+      /**
+       * Toggle collapsed state
+       */
+      toggleCollapse() {
+        if (this._isCollapsed) {
+          this._expand();
+        } else {
+          this._collapse();
+        }
+      }
+      /**
+       * Collapse the panel to title bar only
+       */
+      _collapse() {
+        if (this._isCollapsed)
+          return;
+        this._expandedHeight = this.options.height ?? null;
+        this.options.height = this._collapsedHeight;
+        this.position.height = this._collapsedHeight;
+        for (const child of this.children) {
+          if (child !== this) {
+            child._wasVisible = child.visible;
+            child.hide();
+          }
+        }
+        this._isCollapsed = true;
+        this._updateCollapseIndicator();
+        this.emit("collapse");
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Expand the panel to full size
+       */
+      _expand() {
+        if (!this._isCollapsed)
+          return;
+        if (this._expandedHeight !== null) {
+          this.options.height = this._expandedHeight;
+          if (typeof this._expandedHeight === "number") {
+            this.position.height = this._expandedHeight;
+          }
+        }
+        for (const child of this.children) {
+          if (child !== this && child._wasVisible !== false) {
+            child.show();
+          }
+        }
+        this._isCollapsed = false;
+        this._updateCollapseIndicator();
+        this.emit("expand");
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Update the collapse/expand indicator in the title
+       */
+      _updateCollapseIndicator() {
+        if (!this._collapsibleOnMobile)
+          return;
+        const indicator = this._isCollapsed ? "[+]" : "[-]";
+        const title = this._title || "";
+        this.options.label = ` ${indicator} ${title} `;
+      }
+      /**
+       * Check if panel is collapsed
+       */
+      isCollapsed() {
+        return this._isCollapsed;
+      }
+      /**
+       * Set collapsible on mobile
+       */
+      setCollapsibleOnMobile(enabled) {
+        this._collapsibleOnMobile = enabled;
+        if (this.isMobile()) {
+          this._updateCollapseIndicator();
+        }
+      }
+      /**
+       * Get panel title
+       */
+      getTitle() {
+        return this._title;
+      }
+      /**
+       * Set panel title
+       */
+      setTitle(title) {
+        this._title = title;
+        if (this._collapsibleOnMobile && this.isMobile()) {
+          this._updateCollapseIndicator();
+        } else {
+          this.options.label = ` ${title} `;
+        }
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Override destroy to clean up swipe handler
+       */
+      destroy() {
+        if (this._unsubscribeSwipe) {
+          this._unsubscribeSwipe();
+          this._unsubscribeSwipe = void 0;
+        }
+        super.destroy();
+      }
+    };
   }
 });
 
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js
+var DockablePanel;
 var init_dockable_panel = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js"() {
     "use strict";
     init_panel();
     init_box();
     init_button();
+    init_responsive_constants();
+    DockablePanel = class _DockablePanel extends Panel {
+      constructor(options = {}) {
+        const fixed = options.fixed === true;
+        const normalizedOptions = {
+          ...options,
+          draggable: fixed ? false : options.draggable,
+          resizable: fixed ? false : options.resizable,
+          allowAutoDock: fixed ? false : options.allowAutoDock,
+          allowFloat: fixed ? false : options.allowFloat,
+          allowResize: fixed ? false : options.allowResize,
+          allowMinimize: fixed ? false : options.allowMinimize
+        };
+        const mergedStyle = {
+          ...normalizedOptions.style,
+          hover: {
+            border: { fg: "white" },
+            // White border on hover
+            ...normalizedOptions.style?.hover
+          }
+        };
+        super({
+          ...normalizedOptions,
+          style: mergedStyle,
+          draggable: normalizedOptions.draggable !== false,
+          mouse: true,
+          keys: true,
+          focusable: true,
+          // Enable Tab cycling and focus events
+          clickable: true
+          // Enable click events for panel activation
+        });
+        this.isDragging = false;
+        this.isResizing = false;
+        this.dragStartX = 0;
+        this.dragStartY = 0;
+        this.dragStartLeft = 0;
+        this.dragStartTop = 0;
+        this.dragStartWidth = 0;
+        this.dragStartHeight = 0;
+        this.resizeNeighbors = [];
+        this.currentResizeEdge = null;
+        this.currentHoverEdge = null;
+        this.isPanelHovered = false;
+        this.topConstraint = 0;
+        this.bottomConstraint = 0;
+        this.tabs = [];
+        this.activeTab = 0;
+        this.tabButtons = [];
+        this.preMaximizeState = null;
+        this.mobileMode = false;
+        this.screenListenersBound = false;
+        this.dockPosition = normalizedOptions.dockPosition || "float";
+        this.useTitleBar = normalizedOptions.useTitleBar !== false;
+        this.fixed = fixed;
+        this.panelState = {
+          position: this.dockPosition,
+          minimized: normalizedOptions.minimized || false,
+          x: typeof this.left === "number" ? this.left : 0,
+          y: typeof this.top === "number" ? this.top : 0,
+          width: typeof this.width === "number" ? this.width : 40,
+          height: typeof this.height === "number" ? this.height : 20,
+          zIndex: normalizedOptions.zIndex || 100
+        };
+        this.minWidth = normalizedOptions.minWidth;
+        this.maxWidth = normalizedOptions.maxWidth;
+        this.minHeight = normalizedOptions.minHeight;
+        this.maxHeight = normalizedOptions.maxHeight;
+        this.resizable = normalizedOptions.resizable !== false;
+        this.allowAutoDock = normalizedOptions.allowAutoDock !== false;
+        this.persistenceKey = normalizedOptions.persistenceKey;
+        this.topConstraint = normalizedOptions.topConstraint || 0;
+        this.bottomConstraint = normalizedOptions.bottomConstraint || 0;
+        this._swipeUndock = normalizedOptions.swipeUndock !== false;
+        if (normalizedOptions.fitContent === false) {
+          this.fitContentSettings = { width: false, height: false };
+        } else if (typeof normalizedOptions.fitContent === "object") {
+          this.fitContentSettings = {
+            width: normalizedOptions.fitContent.width !== false,
+            // default true
+            height: normalizedOptions.fitContent.height !== false
+            // default true
+          };
+        } else {
+          this.fitContentSettings = { width: true, height: true };
+        }
+        if (this.useTitleBar) {
+          this.options.label = void 0;
+        }
+        if (this._originalBorderColor === void 0) {
+          const borderFg = this.options.border?.fg || this.options.style?.border?.fg || this.style?.border?.fg || "blue";
+          this._originalBorderColor = borderFg;
+        }
+        if (this.useTitleBar) {
+          this.setupTitleBar(normalizedOptions);
+        }
+        this.setupDocking();
+        this.setupDragging();
+        this.setupResizing();
+        this.setupKeyboardShortcuts();
+        if (this.persistenceKey) {
+          this.on("drag-end", () => {
+            void this.saveState();
+          });
+          this.on("resize-end", () => {
+            void this.saveState();
+          });
+          this.on("dock", () => {
+            void this.saveState();
+          });
+          this.on("minimize", () => {
+            void this.saveState();
+          });
+          this.on("maximize", () => {
+            void this.saveState();
+          });
+        }
+        this.on("click", () => {
+          this.focus();
+          this.emit("activate");
+        });
+        this.on("mouseenter", () => {
+          this.isPanelHovered = true;
+          if (!this.currentHoverEdge) {
+            this.applyBorderHoverStyle();
+          }
+        });
+        this.on("mouseleave", () => {
+          this.isPanelHovered = false;
+          this.currentHoverEdge = null;
+          this.applyBorderHoverStyle();
+        });
+        if (this.panelState.minimized) {
+          this.minimize();
+        }
+        this.on("attach", () => {
+          this.bindScreenEvents();
+          if (this.persistenceKey) {
+            this.loadState().then(() => {
+              if (this.screen)
+                this.screen.render();
+            });
+          }
+        });
+        if (this.screen) {
+          this.bindScreenEvents();
+        }
+        this.bringUIToFront();
+      }
+      /**
+       * Override append to ensure UI elements (title bar, resize handles) stay on top
+       * When user content is added as children, we need to reorder so our UI is rendered last
+       * Also triggers fitToContent if enabled
+       */
+      append(element) {
+        super.append(element);
+        this.bringUIToFront();
+        if (this.fitContentSettings?.width || this.fitContentSettings?.height) {
+          element.on?.("set content", () => {
+            this.scheduleFitToContent();
+          });
+          element.on?.("set items", () => {
+            this.scheduleFitToContent();
+          });
+          this.scheduleFitToContent();
+        }
+      }
+      scheduleFitToContent() {
+        if (this._fitContentTimer) {
+          clearTimeout(this._fitContentTimer);
+        }
+        this._fitContentTimer = setTimeout(() => {
+          this.fitToContent();
+          this._fitContentTimer = void 0;
+        }, 10);
+      }
+      /**
+       * Bring title bar to front (rendered last = on top)
+       */
+      bringUIToFront() {
+        if (this.titleBar) {
+          const idx = this.children.indexOf(this.titleBar);
+          if (idx !== -1 && idx !== this.children.length - 1) {
+            this.children.splice(idx, 1);
+            this.children.push(this.titleBar);
+          }
+        }
+      }
+      /**
+       * Bind mouse event handlers to the screen for dragging and resizing
+       * This is called when the element is attached to a screen
+       */
+      bindScreenEvents() {
+        if (this.screenListenersBound || !this.screen)
+          return;
+        this.screenListenersBound = true;
+        this.screen.on("mousemove", (data) => {
+          if (this.isResizing && this.currentResizeEdge) {
+            this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
+          } else if (this.isDragging) {
+            this.handleDrag(data.x, data.y);
+          }
+        });
+        this.screen.on("mouseup", () => {
+          if (this.isDragging) {
+            this.stopDrag();
+          }
+          if (this.isResizing) {
+            this.stopResize();
+          }
+        });
+        this.screen.on("resize", () => {
+          const breakpoint = this.screen.responsiveLayout.getBreakpoint();
+          const isMobile = breakpoint === "xs";
+          if (isMobile) {
+            this.mobileMode = true;
+            this.setState({
+              x: 0,
+              y: this.topConstraint,
+              width: this.screen.width,
+              height: this.screen.height - this.topConstraint - 1,
+              // Leave space for status bar
+              position: "float"
+            });
+          } else if (this.mobileMode) {
+            this.mobileMode = false;
+            this.applyDockPosition(this.dockPosition);
+          }
+          if (!isMobile) {
+            if (this.dockPosition !== "float") {
+              this.applyDockPosition(this.dockPosition);
+            } else {
+              this.constrainToScreen();
+            }
+          }
+        });
+      }
+      /**
+       * Constrain floating panel to stay within screen bounds
+       */
+      constrainToScreen() {
+        if (!this.screen)
+          return;
+        const currentLeft = typeof this.position.left === "number" ? this.position.left : 0;
+        const currentTop = typeof this.position.top === "number" ? this.position.top : 0;
+        const currentWidth = typeof this.position.width === "number" ? this.position.width : this.width;
+        const currentHeight = typeof this.position.height === "number" ? this.position.height : this.height;
+        const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
+        let newLeft = Math.max(0, Math.min(currentLeft, this.screen.width - currentWidth));
+        let newTop = Math.max(this.topConstraint, Math.min(currentTop, this.screen.height - currentHeight - this.bottomConstraint));
+        let newWidth = Math.min(currentWidth, this.screen.width);
+        let newHeight = Math.min(currentHeight, maxScreenHeight);
+        if (this.minWidth)
+          newWidth = Math.max(newWidth, this.minWidth);
+        if (this.minHeight)
+          newHeight = Math.max(newHeight, this.minHeight);
+        this.position.left = newLeft;
+        this.position.top = newTop;
+        this.position.width = newWidth;
+        this.position.height = newHeight;
+        this._invalidateCoords();
+      }
+      setupTitleBar(options) {
+        if (!options.label && !options.title && !options.showMinimizeButton && !options.showCloseButton) {
+          return;
+        }
+        this.options.label = void 0;
+        this.titleBar = new Box({
+          parent: this,
+          top: 0,
+          left: 0,
+          width: "100%",
+          // Fill the entire content area width
+          height: 1,
+          tags: true,
+          mouse: true,
+          // Required for drag events
+          style: {
+            fg: "white",
+            bg: "blue",
+            hover: {
+              fg: "white",
+              bg: "lightblue"
+              // Light blue on hover to indicate draggable
+            }
+          },
+          content: options.label || options.title || "Panel"
+        });
+        if (this.titleBar) {
+          this.titleBar.on("mouseenter", () => {
+            if (this.titleBar && this.titleBar.style && !this.isDragging) {
+              this.titleBar.style.bg = "lightblue";
+              this.isPanelHovered = true;
+              this.applyBorderHoverStyle();
+              if (this.screen)
+                this.screen.render();
+            }
+          });
+          this.titleBar.on("mouseleave", () => {
+            if (this.titleBar && this.titleBar.style && !this.isDragging) {
+              this.titleBar.style.bg = "blue";
+              this.isPanelHovered = false;
+              this.applyBorderHoverStyle();
+              if (this.screen)
+                this.screen.render();
+            }
+          });
+          let lastClickTime = 0;
+          this.titleBar.on("click", () => {
+            const now2 = Date.now();
+            const isDoubleClick = now2 - lastClickTime < 300;
+            lastClickTime = now2;
+            if (isDoubleClick) {
+              if (this.panelState.minimized) {
+                this.maximize();
+              } else if (this.isMaximized) {
+                this.restoreFromMaximized();
+              } else {
+                this.maximizeToScreen();
+              }
+            } else if (this.panelState.minimized) {
+              this.maximize();
+            }
+          });
+          if (options.draggable !== false) {
+            this.titleBar.on("mousedown", (data) => {
+              if (!this.panelState.minimized && !this.isMaximized) {
+                this.startDrag(data.x, data.y);
+              }
+            });
+          }
+        }
+        if (options.showMinimizeButton !== false) {
+          this.minimizeButton = new Button({
+            parent: this.titleBar,
+            right: options.showCloseButton === true ? 3 : 0,
+            // Position at far right, or offset by close button width (3)
+            top: 0,
+            width: 3,
+            height: 1,
+            content: "[_]",
+            // Minimize icon
+            border: { type: "none" },
+            // No border for inline title bar button
+            padding: 0,
+            // No padding - content fills the space
+            style: {
+              fg: "yellow",
+              bg: "blue",
+              focus: {
+                fg: "white",
+                bg: "lightblue"
+              },
+              hover: {
+                fg: "white",
+                bg: "lightblue"
+              }
+            }
+          });
+          this.minimizeButton.on("press", () => {
+            this.toggleMinimize();
+          });
+        }
+        if (options.showCloseButton) {
+          this.closeButton = new Button({
+            parent: this.titleBar,
+            right: 0,
+            // Far right position
+            top: 0,
+            width: 3,
+            height: 1,
+            content: "[X]",
+            border: { type: "none" },
+            // No border for inline title bar button
+            padding: 0,
+            // No padding - content fills the space
+            style: {
+              fg: "white",
+              bg: "red",
+              focus: {
+                fg: "white",
+                bg: "darkred"
+              },
+              hover: {
+                fg: "white",
+                bg: "darkred"
+              }
+            }
+          });
+          this.closeButton.on("press", () => {
+            this.emit("close");
+            this.destroy();
+          });
+        }
+      }
+      /**
+       * Setup docking behavior
+       */
+      setupDocking() {
+        this.applyDockPosition(this.dockPosition);
+      }
+      /**
+       * Setup dragging behavior
+       * Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
+       */
+      setupDragging() {
+        if (this.fixed)
+          return;
+        this.on("mousedown", (data) => {
+          if (this.resizable) {
+            const edge = this.detectResizeEdge(data.x, data.y);
+            if (edge) {
+              return;
+            }
+          }
+          if (!this.titleBar) {
+            if (!this.isOnTopBorder(data.x, data.y)) {
+              return;
+            }
+          }
+          if (!this.titleBar || data.y === 0) {
+            this.startDrag(data.x, data.y);
+          }
+        });
+      }
+      /**
+       * Setup resizing behavior on panel borders
+       * No separate gadgets - uses the panel's own border for resize detection
+       * Top row is reserved for title bar (drag to move)
+       */
+      setupResizing() {
+        if (this.fixed || !this.resizable)
+          return;
+        this.on("mousedown", (data) => {
+          const edge = this.detectResizeEdge(data.x, data.y);
+          if (edge) {
+            this.startResizeFromEdge(edge, data.x, data.y);
+          }
+        });
+        this.on("mousemove", (data) => {
+          const edge = this.detectResizeEdge(data.x, data.y);
+          this.updateBorderHover(edge);
+        });
+      }
+      /**
+       * Setup keyboard shortcuts for panel management
+       * - Ctrl+Arrow: Dock to edge (left/right/top/bottom)
+       * - Ctrl+M: Minimize/restore
+       * - Ctrl+Shift+M: Maximize to screen/restore
+       * - Escape: Cancel drag or restore from maximized
+       */
+      setupKeyboardShortcuts() {
+        this.on("keypress", (_ch, key) => {
+          if (!key)
+            return;
+          if (this.fixed)
+            return;
+          const ctrl = key.ctrl;
+          const shift = key.shift;
+          const name = key.name;
+          if (ctrl && !shift) {
+            switch (name) {
+              case "left":
+                this.setDockPosition("left");
+                return;
+              case "right":
+                this.setDockPosition("right");
+                return;
+              case "up":
+                this.setDockPosition("top");
+                return;
+              case "down":
+                this.setDockPosition("bottom");
+                return;
+            }
+          }
+          if (ctrl && !shift && name === "m") {
+            this.toggleMinimize();
+            return;
+          }
+          if (ctrl && shift && name === "m") {
+            this.toggleMaximize();
+            return;
+          }
+          if (name === "escape") {
+            if (this.isDragging) {
+              this.isDragging = false;
+              this.position.left = this.dragStartLeft;
+              this.position.top = this.dragStartTop;
+              this.hideDropZoneIndicators();
+              this.removeSnapPreview();
+              if (this.screen)
+                this.screen.render();
+            } else if (this.isMaximized) {
+              this.restoreFromMaximized();
+            }
+            return;
+          }
+          if (ctrl && !shift && name === "f") {
+            this.setDockPosition("float");
+            return;
+          }
+        });
+      }
+      /**
+       * Detect which resize edge/corner the mouse is over
+       * Returns edge name or null if not on a resize area
+       */
+      detectResizeEdge(mouseX, mouseY) {
+        const coords = this._getCoords();
+        if (!coords)
+          return null;
+        const panelLeft = coords.xi;
+        const panelTop = coords.yi;
+        const panelRight = coords.xl - 1;
+        const panelBottom = coords.yl - 1;
+        const panelWidth = coords.xl - coords.xi;
+        const panelHeight = coords.yl - coords.yi;
+        console.log(`[EDGE-DEBUG] mouse=(${mouseX},${mouseY}) panel=(${panelLeft},${panelTop})-(${panelRight},${panelBottom}) size=${panelWidth}x${panelHeight} rel=(${mouseX - panelLeft},${mouseY - panelTop}) pos.width=${this.position.width} pos.left=${this.position.left}`);
+        if (mouseX < panelLeft || mouseX > panelRight || mouseY < panelTop || mouseY > panelBottom) {
+          return null;
+        }
+        const relX = mouseX - panelLeft;
+        const relY = mouseY - panelTop;
+        const onLeft = relX === 0;
+        const onRight = relX === panelWidth - 1;
+        const onTop = relY === 0;
+        const onBottom = relY === panelHeight - 1;
+        if (!this.useTitleBar && onTop) {
+          return null;
+        }
+        if (onTop && onLeft)
+          return "nw";
+        if (onTop && onRight)
+          return "ne";
+        if (onBottom && onLeft)
+          return "sw";
+        if (onBottom && onRight)
+          return "se";
+        if (onTop)
+          return "n";
+        if (onBottom)
+          return "s";
+        if (onLeft)
+          return "w";
+        if (onRight)
+          return "e";
+        return null;
+      }
+      isOnTopBorder(mouseX, mouseY) {
+        const coords = this._getCoords();
+        if (!coords)
+          return false;
+        const panelLeft = coords.xi;
+        const panelTop = coords.yi;
+        const panelRight = coords.xl - 1;
+        const panelBottom = coords.yl - 1;
+        if (mouseX < panelLeft || mouseX > panelRight || mouseY < panelTop || mouseY > panelBottom) {
+          return false;
+        }
+        const relY = mouseY - panelTop;
+        return relY === 0;
+      }
+      /**
+       * Find sibling panels that share an edge with the edge we are dragging
+       */
+      findResizeNeighbors(edge) {
+        if (!this.parent)
+          return [];
+        const neighbors = [];
+        const myPos = this._getCoords();
+        if (!myPos)
+          return [];
+        const TOLERANCE = 2;
+        const myDockPos = this.getDockPosition();
+        for (const sibling of this.parent.children) {
+          if (!(sibling instanceof _DockablePanel) || sibling === this)
+            continue;
+          if (sibling.isMinimized())
+            continue;
+          const sPos = sibling._getCoords();
+          if (!sPos)
+            continue;
+          const siblingDockPos = sibling.getDockPosition();
+          let touches = false;
+          let touchingEdge = "";
+          if (myDockPos === "left" && siblingDockPos === "right" && (edge === "e" || edge === "ne" || edge === "se")) {
+            touches = true;
+            touchingEdge = "w";
+          } else if (myDockPos === "right" && siblingDockPos === "left" && (edge === "w" || edge === "nw" || edge === "sw")) {
+            touches = true;
+            touchingEdge = "e";
+          } else if (myDockPos === "top" && siblingDockPos === "bottom" && (edge === "s" || edge === "se" || edge === "sw")) {
+            touches = true;
+            touchingEdge = "n";
+          } else if (myDockPos === "bottom" && siblingDockPos === "top" && (edge === "n" || edge === "ne" || edge === "nw")) {
+            touches = true;
+            touchingEdge = "s";
+          }
+          if (!touches) {
+            if (edge === "e" || edge === "ne" || edge === "se") {
+              if (Math.abs(sPos.xi - (myPos.xl - 1)) <= TOLERANCE || Math.abs(sPos.xi - myPos.xl) <= TOLERANCE) {
+                touches = true;
+                touchingEdge = "w";
+              }
+            }
+            if ((edge === "w" || edge === "nw" || edge === "sw") && !touches) {
+              if (Math.abs(sPos.xl - 1 - myPos.xi) <= TOLERANCE || Math.abs(sPos.xl - myPos.xi) <= TOLERANCE) {
+                touches = true;
+                touchingEdge = "e";
+              }
+            }
+            if ((edge === "s" || edge === "se" || edge === "sw") && !touches) {
+              if (Math.abs(sPos.yi - (myPos.yl - 1)) <= TOLERANCE || Math.abs(sPos.yi - myPos.yl) <= TOLERANCE) {
+                touches = true;
+                touchingEdge = "n";
+              }
+            }
+            if ((edge === "n" || edge === "ne" || edge === "nw") && !touches) {
+              if (Math.abs(sPos.yl - 1 - myPos.yi) <= TOLERANCE || Math.abs(sPos.yl - myPos.yi) <= TOLERANCE) {
+                touches = true;
+                touchingEdge = "s";
+              }
+            }
+          }
+          if (touches) {
+            neighbors.push({
+              panel: sibling,
+              edge: touchingEdge,
+              startLeft: sibling.aleft,
+              startTop: sibling.atop,
+              startWidth: sibling.width,
+              startHeight: sibling.height
+            });
+          }
+        }
+        return neighbors;
+      }
+      /**
+       * Update border color based on hover state
+       * Uses per-edge colors to highlight only the hovered resize edge
+       */
+      updateBorderHover(edge) {
+        const prevEdge = this.currentHoverEdge;
+        this.currentHoverEdge = edge;
+        if (prevEdge !== edge) {
+          this.applyBorderHoverStyle();
+        }
+      }
+      /**
+       * Apply border hover style based on current hover state
+       * Uses per-edge colors (fgTop, fgBottom, fgLeft, fgRight) for edge-specific highlighting:
+       * - Hovering specific edge: that edge turns yellow/orange
+       * - Hovering panel content: all borders turn white
+       * - Not hovering: restore original border color
+       */
+      applyBorderHoverStyle() {
+        if (!this.style?.border)
+          return;
+        const originalColor = this._originalBorderColor || "blue";
+        const highlightColor = "yellow";
+        const hoverColor = "white";
+        if (!this.options.style?.border) {
+          this.options.style = this.options.style || {};
+          this.options.style.border = {};
+        }
+        const styleBorder = this.options.style.border;
+        delete styleBorder.fgTop;
+        delete styleBorder.fgBottom;
+        delete styleBorder.fgLeft;
+        delete styleBorder.fgRight;
+        const activeEdge = this.isResizing ? this.currentResizeEdge : this.currentHoverEdge;
+        if (activeEdge) {
+          this._overBorder = false;
+          this.style.border.fg = originalColor;
+          styleBorder.fg = originalColor;
+          if (activeEdge.includes("n")) {
+            styleBorder.fgTop = highlightColor;
+          }
+          if (activeEdge.includes("s")) {
+            styleBorder.fgBottom = highlightColor;
+          }
+          if (activeEdge.includes("w")) {
+            styleBorder.fgLeft = highlightColor;
+          }
+          if (activeEdge.includes("e")) {
+            styleBorder.fgRight = highlightColor;
+          }
+        } else if (this.isPanelHovered) {
+          this._overBorder = true;
+          this.style.border.fg = hoverColor;
+          styleBorder.fg = hoverColor;
+        } else {
+          this._overBorder = false;
+          this.style.border.fg = originalColor;
+          styleBorder.fg = originalColor;
+        }
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Show visual resize cursor (no-op - handles are invisible)
+       */
+      showResizeCursor(_edge) {
+      }
+      /**
+       * Hide visual resize cursor (no-op - handles are invisible)
+       */
+      hideResizeCursor() {
+      }
+      /**
+       * Start dragging
+       */
+      startDrag(x, y) {
+        if (this.panelState.minimized)
+          return;
+        this.isDragging = true;
+        this.dragStartX = x;
+        this.dragStartY = y;
+        this.dragStartLeft = typeof this.left === "number" ? this.left : 0;
+        this.dragStartTop = typeof this.top === "number" ? this.top : 0;
+        if (this.style) {
+          if (this.style.border) {
+            this.style.border.fg = "yellow";
+          }
+        }
+        if (this.options.style?.border) {
+          this.options.style.border.fg = "yellow";
+        }
+        if (!this.options.style) {
+          this.options.style = {};
+        }
+        this.options.style.transparent = true;
+        if (this.style) {
+          this.style.transparent = true;
+        }
+        this.setChildrenTransparent(true);
+        if (this.titleBar && this.titleBar.style) {
+          this.titleBar.style.bg = "cyan";
+        }
+        this.bringToFront();
+        this.showDropZoneIndicators();
+        if (this.dockPosition !== "float") {
+          this.panelState.originalDockPosition = this.dockPosition;
+          this.setDockPosition("float");
+        } else {
+          this.panelState.originalDockPosition = void 0;
+        }
+        this.emit("drag-start");
+      }
+      /**
+       * Handle dragging
+       */
+      handleDrag(x, y) {
+        const deltaX = x - this.dragStartX;
+        const deltaY = y - this.dragStartY;
+        let newLeft = this.dragStartLeft + deltaX;
+        let newTop = this.dragStartTop + deltaY;
+        if (isNaN(newLeft))
+          newLeft = this.dragStartLeft;
+        if (isNaN(newTop))
+          newTop = this.dragStartTop;
+        if (this.screen) {
+          const VISIBLE_HANDLE = 3;
+          const sw = this.screen.width;
+          const sh = this.screen.height;
+          const pw = this.width || 40;
+          const ph = this.height || 20;
+          newLeft = Math.max(VISIBLE_HANDLE - pw, Math.min(newLeft, sw - VISIBLE_HANDLE));
+          newTop = Math.max(this.topConstraint, Math.min(newTop, sh - VISIBLE_HANDLE));
+        }
+        this.position.left = newLeft;
+        this.position.top = newTop;
+        this.panelState.x = newLeft;
+        this.panelState.y = newTop;
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.lock();
+          this.updateSnapPreview(x, y);
+          this.updateDropZoneHighlight(x, y);
+          this.screen.forceFullRedraw();
+          this.screen.unlock();
+        }
+        this.emit("drag", { x: this.left, y: this.top });
+      }
+      /**
+       * Stop dragging
+       */
+      stopDrag() {
+        this.isDragging = false;
+        if (this.style) {
+          if (this.style.border) {
+            const borderOptions = this.options.border;
+            this.style.border.fg = borderOptions?.fg || "green";
+          }
+        }
+        if (this.options.style?.border) {
+          const borderOptions = this.options.border;
+          this.options.style.border.fg = borderOptions?.fg || "green";
+        }
+        if (this.options.style) {
+          this.options.style.transparent = false;
+        }
+        if (this.style) {
+          this.style.transparent = false;
+        }
+        this.setChildrenTransparent(false);
+        if (this.titleBar && this.titleBar.style) {
+          this.titleBar.style.bg = "blue";
+        }
+        if (this.allowAutoDock) {
+          this.checkEdgeDocking();
+        }
+        this.hideDropZoneIndicators();
+        this.removeSnapPreview();
+        this.screen?.invalidateMouseIndex?.();
+        if (this.screen) {
+          this.screen.forceFullRedraw();
+          this.screen.render();
+        }
+        this.emit("drag-end");
+      }
+      /**
+       * Set transparent mode on all children recursively
+       * Used during drag so child widgets don't obscure the transparency effect
+       */
+      setChildrenTransparent(transparent) {
+        const setTransparent = (element) => {
+          if (element === this.titleBar)
+            return;
+          if (element.style) {
+            element.style.transparent = transparent;
+          }
+          if (element.options?.style) {
+            element.options.style.transparent = transparent;
+          }
+          if (element.children) {
+            for (const child of element.children) {
+              setTransparent(child);
+            }
+          }
+        };
+        if (this.children) {
+          for (const child of this.children) {
+            setTransparent(child);
+          }
+        }
+      }
+      /**
+       * Start resizing from a specific edge
+       */
+      startResizeFromEdge(edge, x, y) {
+        this.isDragging = false;
+        this.isResizing = true;
+        this.currentResizeEdge = edge;
+        this.dragStartX = x;
+        this.dragStartY = y;
+        this.dragStartLeft = typeof this.position.left === "number" ? this.position.left : 0;
+        this.dragStartTop = typeof this.position.top === "number" ? this.position.top : 0;
+        this.dragStartWidth = typeof this.position.width === "number" ? this.position.width : 40;
+        this.dragStartHeight = typeof this.position.height === "number" ? this.position.height : 20;
+        this.resizeNeighbors = this.findResizeNeighbors(edge);
+        this.applyBorderHoverStyle();
+        if (this.titleBar && this.titleBar.style) {
+          this.titleBar.style.bg = "cyan";
+        }
+        this.emit("resize-start");
+      }
+      /**
+       * Handle resizing from a specific edge
+       */
+      handleResizeFromEdge(edge, x, y) {
+        const isHorizontalOnly = edge === "e" || edge === "w";
+        const isVerticalOnly = edge === "n" || edge === "s";
+        const deltaX = isVerticalOnly ? 0 : x - this.dragStartX;
+        const deltaY = isHorizontalOnly ? 0 : y - this.dragStartY;
+        let newWidth = this.dragStartWidth;
+        let newHeight = this.dragStartHeight;
+        let newLeft = this.dragStartLeft;
+        let newTop = this.dragStartTop;
+        switch (edge) {
+          case "nw":
+            newWidth = this.dragStartWidth - deltaX;
+            newHeight = this.dragStartHeight - deltaY;
+            newLeft = this.dragStartLeft + deltaX;
+            newTop = this.dragStartTop + deltaY;
+            break;
+          case "ne":
+            newWidth = this.dragStartWidth + deltaX;
+            newHeight = this.dragStartHeight - deltaY;
+            newTop = this.dragStartTop + deltaY;
+            break;
+          case "sw":
+            newWidth = this.dragStartWidth - deltaX;
+            newHeight = this.dragStartHeight + deltaY;
+            newLeft = this.dragStartLeft + deltaX;
+            break;
+          case "se":
+            newWidth = this.dragStartWidth + deltaX;
+            newHeight = this.dragStartHeight + deltaY;
+            break;
+          case "n":
+            newHeight = this.dragStartHeight - deltaY;
+            newTop = this.dragStartTop + deltaY;
+            break;
+          case "s":
+            newHeight = this.dragStartHeight + deltaY;
+            break;
+          case "w":
+            newWidth = this.dragStartWidth - deltaX;
+            newLeft = this.dragStartLeft + deltaX;
+            break;
+          case "e":
+            newWidth = this.dragStartWidth + deltaX;
+            break;
+        }
+        const ABS_MIN_WIDTH = 5;
+        const ABS_MIN_HEIGHT = 3;
+        const effectiveMinWidth = Math.max(ABS_MIN_WIDTH, this.minWidth || 0);
+        const effectiveMinHeight = Math.max(ABS_MIN_HEIGHT, this.minHeight || 0);
+        if (isNaN(newWidth))
+          newWidth = this.dragStartWidth;
+        if (isNaN(newHeight))
+          newHeight = this.dragStartHeight;
+        if (isNaN(newLeft))
+          newLeft = this.dragStartLeft;
+        if (isNaN(newTop))
+          newTop = this.dragStartTop;
+        if (newWidth < effectiveMinWidth) {
+          if (edge.includes("w")) {
+            newLeft = this.dragStartLeft + (this.dragStartWidth - effectiveMinWidth);
+          }
+          newWidth = effectiveMinWidth;
+        }
+        if (this.maxWidth && newWidth > this.maxWidth) {
+          if (edge.includes("w")) {
+            newLeft = this.dragStartLeft + (this.dragStartWidth - this.maxWidth);
+          }
+          newWidth = this.maxWidth;
+        }
+        if (newHeight < effectiveMinHeight) {
+          if (edge.includes("n")) {
+            newTop = this.dragStartTop + (this.dragStartHeight - effectiveMinHeight);
+          }
+          newHeight = effectiveMinHeight;
+        }
+        if (this.maxHeight && newHeight > this.maxHeight) {
+          if (edge.includes("n")) {
+            newTop = this.dragStartTop + (this.dragStartHeight - this.maxHeight);
+          }
+          newHeight = this.maxHeight;
+        }
+        if (this.screen) {
+          newLeft = Math.max(0, Math.min(newLeft, this.screen.width - 1));
+          newTop = Math.max(this.topConstraint, Math.min(newTop, this.screen.height - 1));
+        }
+        newWidth = Math.max(1, newWidth);
+        newHeight = Math.max(1, newHeight);
+        this.position.width = newWidth;
+        this.position.height = newHeight;
+        this.position.left = newLeft;
+        this.position.top = newTop;
+        if (this.screen) {
+          this.screen.lock();
+        }
+        for (const neighbor of this.resizeNeighbors) {
+          let nWidth = neighbor.startWidth;
+          let nHeight = neighbor.startHeight;
+          let nLeft = neighbor.startLeft;
+          let nTop = neighbor.startTop;
+          const nMinWidth = neighbor.panel.minWidth || 5;
+          const nMinHeight = neighbor.panel.minHeight || 3;
+          if (edge === "e") {
+            const pWidth = neighbor.startWidth - deltaX;
+            if (pWidth >= nMinWidth) {
+              nWidth = pWidth;
+              nLeft = neighbor.startLeft + deltaX;
+            } else {
+              const maxDelta = neighbor.startWidth - nMinWidth;
+              this.position.width = this.dragStartWidth + maxDelta;
+              newWidth = this.position.width;
+              nWidth = nMinWidth;
+              nLeft = neighbor.startLeft + maxDelta;
+            }
+          } else if (edge === "w") {
+            const pWidth = neighbor.startWidth + deltaX;
+            if (pWidth >= nMinWidth) {
+              nWidth = pWidth;
+            } else {
+              const maxDelta = nMinWidth - neighbor.startWidth;
+              this.aleft = this.dragStartLeft + maxDelta;
+              this.position.width = this.dragStartWidth - maxDelta;
+              newWidth = this.position.width;
+              newLeft = this.aleft;
+              nWidth = nMinWidth;
+            }
+          } else if (edge === "s") {
+            const pHeight = neighbor.startHeight - deltaY;
+            if (pHeight >= nMinHeight) {
+              nHeight = pHeight;
+              nTop = neighbor.startTop + deltaY;
+            } else {
+              const maxDelta = neighbor.startHeight - nMinHeight;
+              this.position.height = this.dragStartHeight + maxDelta;
+              newHeight = this.position.height;
+              nHeight = nMinHeight;
+              nTop = neighbor.startTop + maxDelta;
+            }
+          } else if (edge === "n") {
+            const pHeight = neighbor.startHeight + deltaY;
+            if (pHeight >= nMinHeight) {
+              nHeight = pHeight;
+            } else {
+              const maxDelta = nMinHeight - neighbor.startHeight;
+              this.atop = this.dragStartTop + maxDelta;
+              this.position.height = this.dragStartHeight - maxDelta;
+              newHeight = this.position.height;
+              newTop = this.atop;
+              nHeight = nMinHeight;
+            }
+          }
+          neighbor.panel.width = nWidth;
+          neighbor.panel.height = nHeight;
+          neighbor.panel.aleft = nLeft;
+          neighbor.panel.atop = nTop;
+          neighbor.panel._invalidateCoords();
+        }
+        this.panelState.width = this.position.width;
+        this.panelState.height = this.position.height;
+        this.panelState.x = this.position.left;
+        this.panelState.y = this.position.top;
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.forceFullRedraw();
+          this.screen.unlock();
+        }
+        this.emit("resize", { width: newWidth, height: newHeight, x: newLeft, y: newTop });
+      }
+      /**
+       * Stop resizing
+       */
+      stopResize() {
+        this.isResizing = false;
+        this.currentResizeEdge = null;
+        this.resizeNeighbors = [];
+        this.applyBorderHoverStyle();
+        if (this.titleBar && this.titleBar.style) {
+          this.titleBar.style.bg = "blue";
+        }
+        this.hideResizeCursor();
+        this.fitContentSettings = { width: false, height: false };
+        this._invalidateCoords();
+        this.screen?.invalidateMouseIndex?.();
+        if (this.screen) {
+          this.screen.forceFullRedraw();
+          this.screen.render();
+        }
+        this.emit("resize-end");
+        this.relayoutDockedPanels();
+      }
+      /**
+       * Relayout all docked panels to fill available screen space
+       * Called after resize to ensure panels tile properly without gaps
+       */
+      relayoutDockedPanels() {
+        if (!this.screen)
+          return;
+        const dockedPanels = [];
+        for (const child of this.screen.children) {
+          if (child instanceof _DockablePanel && child !== this) {
+            const pos = child.getDockPosition();
+            if (pos !== "float" && pos !== "center") {
+              dockedPanels.push({ panel: child, position: pos });
+            }
+          }
+        }
+        const myPos = this.getDockPosition();
+        if (myPos !== "float" && myPos !== "center") {
+          dockedPanels.push({ panel: this, position: myPos });
+        }
+        let topSpace = this.topConstraint;
+        let bottomSpace = this.bottomConstraint;
+        for (const { panel, position } of dockedPanels) {
+          if (position === "top") {
+            const h = typeof panel.position.height === "number" ? panel.position.height : 0;
+            topSpace = Math.max(topSpace, h);
+          } else if (position === "bottom") {
+            const h = typeof panel.position.height === "number" ? panel.position.height : 0;
+            bottomSpace = Math.max(bottomSpace, h);
+          }
+        }
+        let leftSpace = 0;
+        let rightSpace = 0;
+        for (const { panel, position } of dockedPanels) {
+          if (position === "left") {
+            const w = typeof panel.position.width === "number" ? panel.position.width : 0;
+            leftSpace = Math.max(leftSpace, w);
+          } else if (position === "right") {
+            const w = typeof panel.position.width === "number" ? panel.position.width : 0;
+            rightSpace = Math.max(rightSpace, w);
+          }
+        }
+        const availableHeight = this.screen.height - topSpace - bottomSpace;
+        for (const { panel, position } of dockedPanels) {
+          switch (position) {
+            case "left":
+              panel.position.left = 0;
+              panel.position.top = topSpace;
+              panel.position.height = availableHeight;
+              break;
+            case "right":
+              const rightWidth = typeof panel.position.width === "number" ? panel.position.width : 0;
+              panel.position.left = this.screen.width - rightWidth;
+              panel.position.top = topSpace;
+              panel.position.height = availableHeight;
+              break;
+            case "top":
+              panel.position.left = 0;
+              panel.position.top = 0;
+              panel.position.width = this.screen.width;
+              break;
+            case "bottom":
+              panel.position.left = 0;
+              const bottomHeight = typeof panel.position.height === "number" ? panel.position.height : 0;
+              panel.position.top = this.screen.height - bottomHeight;
+              panel.position.width = this.screen.width;
+              break;
+          }
+          panel._invalidateCoords();
+        }
+        this.screen.invalidateMouseIndex?.();
+      }
+      /**
+       * Check if panel should dock to an edge or swap with another panel
+       */
+      checkEdgeDocking() {
+        if (!this.screen)
+          return;
+        const threshold = 5;
+        const x = this.aleft;
+        const y = this.atop;
+        const w = this.width;
+        const h = this.height;
+        const sw = this.screen.width;
+        const sh = this.screen.height;
+        const swapped = this.checkPanelSwap();
+        if (swapped) {
+          this.panelState.originalDockPosition = void 0;
+          return;
+        }
+        for (const child of this.screen.children) {
+          if (!(child instanceof _DockablePanel) || child === this)
+            continue;
+          const other = child;
+          if (other.isMinimized())
+            continue;
+          const oPos = other._getCoords();
+          if (!oPos)
+            continue;
+          const myCenterX = x + w / 2;
+          const myCenterY = y + h / 2;
+          if (myCenterX > oPos.xi + 5 && myCenterX < oPos.xl - 5 && myCenterY > oPos.yi + 2 && myCenterY < oPos.yl - 2) {
+            other.mergeWith(this);
+            this.panelState.originalDockPosition = void 0;
+            return;
+          }
+        }
+        const nearLeft = x <= threshold;
+        const nearRight = x + w >= sw - threshold;
+        const nearTop = y <= threshold;
+        const nearBottom = y + h >= sh - threshold;
+        const dists = [
+          { pos: "left", dist: x },
+          { pos: "right", dist: sw - (x + w) },
+          { pos: "top", dist: y },
+          { pos: "bottom", dist: sh - (y + h) }
+        ].filter((d) => d.dist <= threshold).sort((a, b) => a.dist - b.dist);
+        if (dists.length > 0) {
+          const bestEdge = dists[0].pos;
+          if (bestEdge === this.panelState.originalDockPosition) {
+            this.panelState.originalDockPosition = void 0;
+            return;
+          }
+          const existingPanel = this.findPanelDockedAt(bestEdge);
+          if (existingPanel && existingPanel !== this) {
+            const oppositeEdge = this.getOppositeEdge(bestEdge);
+            existingPanel.setDockPosition(oppositeEdge);
+          }
+          this.setDockPosition(bestEdge);
+        }
+        this.panelState.originalDockPosition = void 0;
+      }
+      /**
+       * Get the opposite edge for a dock position (for intuitive swapping)
+       */
+      getOppositeEdge(position) {
+        switch (position) {
+          case "left":
+            return "right";
+          case "right":
+            return "left";
+          case "top":
+            return "bottom";
+          case "bottom":
+            return "top";
+          default:
+            return "float";
+        }
+      }
+      /**
+       * Find a panel that is currently docked at the specified position
+       */
+      findPanelDockedAt(position) {
+        if (!this.screen)
+          return null;
+        for (const child of this.screen.children) {
+          if (!(child instanceof _DockablePanel) || child === this)
+            continue;
+          const otherPanel = child;
+          if (otherPanel.getDockPosition() === position && !otherPanel.isMinimized()) {
+            return otherPanel;
+          }
+        }
+        return null;
+      }
+      /**
+       * Show drop zone indicators at screen edges
+       */
+      showDropZoneIndicators() {
+        if (!this.screen)
+          return;
+        let zones = _DockablePanel.dropZones.get(this.screen);
+        if (!zones) {
+          zones = {};
+          _DockablePanel.dropZones.set(this.screen, zones);
+        }
+        const sw = this.screen.width;
+        const sh = this.screen.height;
+        const stripWidth = 3;
+        const stripHeight = 1;
+        if (!zones.left) {
+          zones.left = new Box({
+            parent: this.screen,
+            left: 0,
+            top: this.topConstraint,
+            width: stripWidth,
+            height: sh - this.topConstraint - this.bottomConstraint,
+            style: { bg: "blue", transparent: true },
+            tags: true,
+            content: ""
+          });
+          zones.left._isDropZone = true;
+        }
+        if (!zones.right) {
+          zones.right = new Box({
+            parent: this.screen,
+            right: 0,
+            top: this.topConstraint,
+            width: stripWidth,
+            height: sh - this.topConstraint - this.bottomConstraint,
+            style: { bg: "blue", transparent: true },
+            tags: true,
+            content: ""
+          });
+          zones.right._isDropZone = true;
+        }
+        if (!zones.top) {
+          zones.top = new Box({
+            parent: this.screen,
+            left: 0,
+            top: this.topConstraint,
+            width: sw,
+            height: stripHeight,
+            style: { bg: "blue", transparent: true },
+            tags: true,
+            content: ""
+          });
+          zones.top._isDropZone = true;
+        }
+        if (!zones.bottom) {
+          zones.bottom = new Box({
+            parent: this.screen,
+            left: 0,
+            bottom: this.bottomConstraint,
+            width: sw,
+            height: stripHeight,
+            style: { bg: "blue", transparent: true },
+            tags: true,
+            content: ""
+          });
+          zones.bottom._isDropZone = true;
+        }
+        for (const zone of Object.values(zones)) {
+          if (zone) {
+            zone.show();
+            zone.style.bg = "blue";
+          }
+        }
+        _DockablePanel.activeDropZone = null;
+      }
+      /**
+       * Hide drop zone indicators
+       */
+      hideDropZoneIndicators() {
+        if (!this.screen)
+          return;
+        const zones = _DockablePanel.dropZones.get(this.screen);
+        if (zones) {
+          for (const zone of Object.values(zones)) {
+            if (zone)
+              zone.hide();
+          }
+        }
+        _DockablePanel.activeDropZone = null;
+      }
+      /**
+       * Update drop zone highlighting based on mouse position
+       */
+      updateDropZoneHighlight(mouseX, mouseY) {
+        if (!this.screen)
+          return;
+        const zones = _DockablePanel.dropZones.get(this.screen);
+        if (!zones)
+          return;
+        const sw = this.screen.width;
+        const sh = this.screen.height;
+        const edgeThreshold = 5;
+        const vertThreshold = 3;
+        let activeZone = null;
+        if (mouseX < edgeThreshold) {
+          activeZone = "left";
+        } else if (mouseX >= sw - edgeThreshold) {
+          activeZone = "right";
+        } else if (mouseY < this.topConstraint + vertThreshold) {
+          activeZone = "top";
+        } else if (mouseY >= sh - this.bottomConstraint - vertThreshold) {
+          activeZone = "bottom";
+        }
+        if (activeZone !== _DockablePanel.activeDropZone) {
+          for (const [pos, zone] of Object.entries(zones)) {
+            if (zone) {
+              zone.style.bg = "blue";
+            }
+          }
+          if (activeZone && zones[activeZone]) {
+            zones[activeZone].style.bg = "cyan";
+          }
+          _DockablePanel.activeDropZone = activeZone;
+          this.screen.render();
+        }
+      }
+      /**
+       * Update the visual snap preview ghost area
+       */
+      updateSnapPreview(mouseX, mouseY) {
+        if (!this.screen || !this.allowAutoDock)
+          return;
+        const threshold = 5;
+        const sw = this.screen.width;
+        const sh = this.screen.height;
+        const dists = [
+          { pos: "left", dist: mouseX },
+          { pos: "right", dist: sw - mouseX },
+          { pos: "top", dist: mouseY },
+          { pos: "bottom", dist: sh - mouseY }
+        ].filter((d) => d.dist <= threshold).sort((a, b) => a.dist - b.dist);
+        if (dists.length === 0 || dists[0].pos === this.panelState.originalDockPosition) {
+          this.removeSnapPreview();
+          return;
+        }
+        const edge = dists[0].pos;
+        if (!this.ghostBox) {
+          this.ghostBox = new Box({
+            parent: this.screen,
+            border: { type: "line", fg: "cyan" },
+            style: {
+              fg: "cyan",
+              bg: "cyan",
+              transparent: true
+              // Transparent background like blessed shadow demo
+            },
+            zIndex: 9999,
+            ch: " ",
+            // Use simple space for fill
+            tags: true
+          });
+        }
+        let targetX = 0, targetY = 0, targetW = 0, targetH = 0;
+        const dockSize = 0.15;
+        switch (edge) {
+          case "left":
+            targetW = Math.floor(sw * dockSize);
+            targetH = sh;
+            break;
+          case "right":
+            targetX = sw - Math.floor(sw * dockSize);
+            targetW = Math.floor(sw * dockSize);
+            targetH = sh;
+            break;
+          case "top":
+            targetW = sw;
+            targetH = Math.floor(sh * dockSize);
+            break;
+          case "bottom":
+            targetY = sh - Math.floor(sh * dockSize);
+            targetW = sw;
+            targetH = Math.floor(sh * dockSize);
+            break;
+        }
+        this.ghostBox.aleft = targetX;
+        this.ghostBox.atop = targetY;
+        this.ghostBox.width = targetW;
+        this.ghostBox.height = targetH;
+        if (this.ghostBox._emitOverlayEvent) {
+          this.ghostBox._emitOverlayEvent(true);
+        }
+        this.ghostBox.show();
+        this.ghostBox.setFront();
+      }
+      /**
+       * Remove snap preview ghost
+       */
+      removeSnapPreview() {
+        if (this.ghostBox) {
+          if (this.ghostBox._emitOverlayEvent) {
+            this.ghostBox._emitOverlayEvent(false);
+          }
+          this.ghostBox.hide();
+          if (this.screen)
+            this.screen.render();
+        }
+      }
+      /**
+       * Check if this panel should swap positions with another docked panel
+       * Returns true if a swap occurred
+       */
+      checkPanelSwap() {
+        if (!this.screen)
+          return false;
+        const myX = this.aleft;
+        const myY = this.atop;
+        const myW = this.width;
+        const myH = this.height;
+        const myCenterX = myX + myW / 2;
+        const myCenterY = myY + myH / 2;
+        for (const child of this.screen.children) {
+          if (!(child instanceof _DockablePanel) || child === this)
+            continue;
+          const otherPanel = child;
+          const otherPos = otherPanel.getDockPosition();
+          if (otherPos === "float")
+            continue;
+          const otherX = otherPanel.aleft;
+          const otherY = otherPanel.atop;
+          const otherW = otherPanel.width;
+          const otherH = otherPanel.height;
+          if (myCenterX >= otherX && myCenterX <= otherX + otherW && myCenterY >= otherY && myCenterY <= otherY + otherH) {
+            const myOriginalPosition = this.panelState.originalDockPosition || "float";
+            if (myOriginalPosition !== "float") {
+              otherPanel.setDockPosition(myOriginalPosition);
+            } else {
+              otherPanel.setDockPosition("float");
+            }
+            this.setDockPosition(otherPos);
+            return true;
+          }
+        }
+        return false;
+      }
+      /**
+       * Merge another panel into this one as a tab
+       */
+      mergeWith(other) {
+        if (other === this || this.tabs.includes(other))
+          return;
+        if (this.tabs.length === 0) {
+          this.tabs.push(this);
+        }
+        this.tabs.push(other);
+        other.detach();
+        other.parent = this;
+        other.border = null;
+        if (other.options)
+          other.options.border = void 0;
+        other.position = { left: 0, top: 1, width: "100%", height: "100%-1" };
+        other.hide();
+        other._invalidateCoords();
+        this.updateTabs();
+        this.emit("merge", other);
+      }
+      /**
+       * Update the tab bar display
+       */
+      updateTabs() {
+        if (this.tabs.length <= 1)
+          return;
+        for (const btn of this.tabButtons) {
+          btn.destroy();
+        }
+        this.tabButtons = [];
+        let currentX = 1;
+        this.tabs.forEach((panel, index) => {
+          const label = panel.options.label || panel.options.title || `Tab ${index + 1}`;
+          const isActive = index === this.activeTab;
+          const btn = new Button({
+            parent: this,
+            top: 0,
+            left: currentX,
+            width: String(label).length + 2,
+            height: 1,
+            content: isActive ? `{white-bg}{black-fg}${label}{/}` : label,
+            tags: true,
+            style: {
+              bg: isActive ? "white" : "blue",
+              fg: isActive ? "black" : "white"
+            }
+          });
+          btn.on("press", () => {
+            this.switchTab(index);
+          });
+          this.tabButtons.push(btn);
+          currentX += String(label).length + 3;
+        });
+        this.tabs.forEach((panel, index) => {
+          if (index === this.activeTab) {
+            if (panel !== this)
+              panel.show();
+          } else {
+            if (panel !== this)
+              panel.hide();
+          }
+        });
+        if (this.screen)
+          this.screen.render();
+      }
+      /**
+       * Switch to a specific tab
+       */
+      switchTab(index) {
+        if (index < 0 || index >= this.tabs.length)
+          return;
+        this.activeTab = index;
+        this.updateTabs();
+        this.emit("tab-switch", index);
+      }
+      /**
+       * Set dock position with visual feedback
+       */
+      setDockPosition(position) {
+        const previousPosition = this.dockPosition;
+        this.dockPosition = position;
+        this.panelState.position = position;
+        this.applyDockPosition(position);
+        if (position !== "float" && previousPosition !== position) {
+          this.flashBorder("cyan", 150);
+        }
+        this.emit("dock", position);
+      }
+      /**
+       * Flash the border color briefly for visual feedback
+       */
+      flashBorder(color, duration) {
+        if (!this.style?.border)
+          return;
+        const originalColor = this._originalBorderColor || this.style.border.fg || "green";
+        this.style.border.fg = color;
+        if (this.options.style?.border) {
+          this.options.style.border.fg = color;
+        }
+        if (this.screen)
+          this.screen.render();
+        setTimeout(() => {
+          if (this.style?.border) {
+            this.style.border.fg = originalColor;
+          }
+          if (this.options.style?.border) {
+            this.options.style.border.fg = originalColor;
+          }
+          if (this.screen)
+            this.screen.render();
+        }, duration);
+      }
+      /**
+       * Set dock position while preserving the panel's current width/height
+       * Used by auto-docking to avoid dramatic layout changes
+       */
+      setDockPositionPreservingSize(position, preserveWidth, preserveHeight) {
+        this.dockPosition = position;
+        this.panelState.position = position;
+        this.applyDockPositionPreservingSize(position, preserveWidth, preserveHeight);
+        this.emit("dock", position);
+      }
+      /**
+       * Apply dock position
+       * Uses position.* for runtime updates (not options.* which is only read at construction)
+       */
+      applyDockPosition(position) {
+        if (!this.screen)
+          return;
+        const top = this.topConstraint;
+        const height = Math.max(5, this.screen.height - this.topConstraint - this.bottomConstraint);
+        switch (position) {
+          case "top":
+            this.position.left = 0;
+            this.position.top = 0;
+            this.position.width = this.screen.width;
+            this.position.height = Math.floor(this.screen.height * 0.3);
+            break;
+          case "bottom":
+            this.position.left = 0;
+            this.position.top = Math.floor(this.screen.height * 0.7);
+            this.position.width = this.screen.width;
+            this.position.height = Math.floor(this.screen.height * 0.3);
+            break;
+          case "left":
+            this.position.left = 0;
+            this.position.top = top;
+            this.position.width = this.panelState.width || Math.floor(this.screen.width * 0.3);
+            this.position.height = height;
+            break;
+          case "right":
+            const w = this.panelState.width || Math.floor(this.screen.width * 0.3);
+            this.position.left = this.screen.width - w;
+            this.position.width = w;
+            this.position.top = top;
+            this.position.height = height;
+            break;
+          case "center":
+            this.position.left = Math.floor(this.screen.width * 0.25);
+            this.position.top = Math.floor(this.screen.height * 0.25);
+            this.position.width = Math.floor(this.screen.width * 0.5);
+            this.position.height = Math.floor(this.screen.height * 0.5);
+            break;
+          case "float":
+            this.position.left = this.panelState.savedX || this.panelState.x;
+            this.position.top = this.panelState.savedY || this.panelState.y;
+            this.position.width = this.panelState.savedWidth || this.panelState.width;
+            this.position.height = this.panelState.savedHeight || this.panelState.height;
+            break;
+        }
+        if (typeof this.position.width === "number")
+          this.position.width = Math.max(1, this.position.width);
+        if (typeof this.position.height === "number")
+          this.position.height = Math.max(1, this.position.height);
+        if (typeof this.position.left === "number" && isNaN(this.position.left))
+          this.position.left = 0;
+        if (typeof this.position.top === "number" && isNaN(this.position.top))
+          this.position.top = 0;
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Apply dock position while preserving panel dimensions
+       * Used by auto-docking to snap to edge without changing size dramatically
+       */
+      applyDockPositionPreservingSize(position, preserveWidth, preserveHeight) {
+        if (!this.screen)
+          return;
+        const width = Math.min(preserveWidth, this.screen.width);
+        const height = Math.min(preserveHeight, this.screen.height);
+        switch (position) {
+          case "top":
+            this.position.left = 0;
+            this.position.top = 0;
+            this.position.width = width;
+            this.position.height = height;
+            break;
+          case "bottom":
+            this.position.left = 0;
+            this.position.top = this.screen.height - height;
+            this.position.width = width;
+            this.position.height = height;
+            break;
+          case "left":
+            this.position.left = 0;
+            this.position.top = 0;
+            this.position.width = width;
+            this.position.height = height;
+            break;
+          case "right":
+            this.position.left = this.screen.width - width;
+            this.position.top = 0;
+            this.position.width = width;
+            this.position.height = height;
+            break;
+          case "center":
+            this.position.left = Math.floor((this.screen.width - width) / 2);
+            this.position.top = Math.floor((this.screen.height - height) / 2);
+            this.position.width = width;
+            this.position.height = height;
+            break;
+          case "float":
+            this.position.left = this.panelState.savedX || this.panelState.x;
+            this.position.top = this.panelState.savedY || this.panelState.y;
+            this.position.width = this.panelState.savedWidth || this.panelState.width;
+            this.position.height = this.panelState.savedHeight || this.panelState.height;
+            break;
+        }
+        this.panelState.width = this.position.width;
+        this.panelState.height = this.position.height;
+        this.panelState.x = this.position.left;
+        this.panelState.y = this.position.top;
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Minimize panel
+       * Uses position.* for runtime updates (not options.* which is only read at construction)
+       */
+      minimize() {
+        if (this.panelState.minimized)
+          return;
+        this.panelState.savedWidth = this.width;
+        this.panelState.savedHeight = this.height;
+        this.panelState.savedX = this.left;
+        this.panelState.savedY = this.top;
+        for (const child of this.children) {
+          if (child !== this.titleBar && child !== this.minimizeButton && child !== this.closeButton) {
+            child.hide();
+          }
+        }
+        this.position.height = 1;
+        this.panelState.minimized = true;
+        if (this.dockPosition === "float" && this.screen) {
+          this.position.top = this.screen.height - 1;
+          this.position.width = Math.min(this.panelState.savedWidth, 30);
+        }
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.render();
+        }
+        this.emit("minimize");
+      }
+      /**
+       * Maximize/restore panel
+       * Uses position.* for runtime updates (not options.* which is only read at construction)
+       */
+      maximize() {
+        if (!this.panelState.minimized)
+          return;
+        for (const child of this.children) {
+          child.show();
+        }
+        this.position.width = this.panelState.savedWidth || this.panelState.width;
+        this.position.height = this.panelState.savedHeight || this.panelState.height;
+        this.position.left = this.panelState.savedX || this.panelState.x;
+        this.position.top = this.panelState.savedY || this.panelState.y;
+        this.panelState.minimized = false;
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.render();
+        }
+        this.emit("maximize");
+      }
+      /**
+       * Toggle minimize/maximize
+       */
+      toggleMinimize() {
+        if (this.panelState.minimized) {
+          this.maximize();
+        } else {
+          this.minimize();
+        }
+      }
+      /**
+       * Toggle fullscreen maximization
+       */
+      toggleMaximize() {
+        if (this.isMaximized) {
+          this.restoreFromMaximized();
+        } else {
+          this.maximizeToScreen();
+        }
+      }
+      /**
+       * Check if panel is currently maximized to fullscreen
+       */
+      get isMaximized() {
+        return this.preMaximizeState !== null;
+      }
+      /**
+       * Maximize panel to fill screen
+       */
+      maximizeToScreen() {
+        if (this.preMaximizeState)
+          return;
+        this.preMaximizeState = this.getState();
+        if (this.screen) {
+          this.setState({
+            x: 0,
+            y: this.topConstraint,
+            width: this.screen.width,
+            height: this.screen.height - this.topConstraint - this.bottomConstraint,
+            position: "float"
+          });
+          this.bringToFront();
+          this.flashBorder("yellow", 100);
+        }
+      }
+      /**
+       * Restore panel from maximized state
+       */
+      restoreFromMaximized() {
+        if (!this.preMaximizeState)
+          return;
+        this.setState(this.preMaximizeState);
+        this.preMaximizeState = null;
+        this.flashBorder("green", 100);
+      }
+      /**
+       * Bring panel to front
+       */
+      bringToFront() {
+        if (!this.screen)
+          return;
+        let maxZ = 100;
+        for (const child of this.screen.children) {
+          if (child instanceof _DockablePanel && child !== this) {
+            maxZ = Math.max(maxZ, child.panelState.zIndex);
+          }
+        }
+        this.panelState.zIndex = maxZ + 1;
+        this.detach();
+        this.screen.append(this);
+      }
+      /**
+       * Get panel state
+       */
+      getState() {
+        return { ...this.panelState };
+      }
+      /**
+       * Restore panel state
+       * Uses position.* for runtime updates (not options.* which is only read at construction)
+       */
+      async setState(state) {
+        if (state.position) {
+          this.setDockPosition(state.position);
+        }
+        if (this.screen) {
+          const sw = this.screen.width;
+          const sh = this.screen.height;
+          if (state.width !== void 0) {
+            const newWidth = Math.max(5, Math.min(state.width, sw));
+            this.position.width = newWidth;
+            this.panelState.width = newWidth;
+          }
+          if (state.height !== void 0) {
+            const newHeight = Math.max(3, Math.min(state.height, sh));
+            this.position.height = newHeight;
+            this.panelState.height = newHeight;
+          }
+          if (state.x !== void 0) {
+            const pw = this.position.width || 40;
+            const newLeft = Math.max(0, Math.min(state.x, sw - pw));
+            this.position.left = newLeft;
+            this.panelState.x = newLeft;
+          }
+          if (state.y !== void 0) {
+            const ph = this.position.height || 20;
+            const newTop = Math.max(this.topConstraint, Math.min(state.y, sh - ph));
+            this.position.top = newTop;
+            this.panelState.y = newTop;
+          }
+        } else {
+          if (state.x !== void 0) {
+            this.position.left = state.x;
+            this.panelState.x = state.x;
+          }
+          if (state.y !== void 0) {
+            this.position.top = state.y;
+            this.panelState.y = state.y;
+          }
+          if (state.width !== void 0) {
+            this.position.width = state.width;
+            this.panelState.width = state.width;
+          }
+          if (state.height !== void 0) {
+            this.position.height = state.height;
+            this.panelState.height = state.height;
+          }
+        }
+        if (state.minimized !== void 0) {
+          if (state.minimized) {
+            this.minimize();
+          } else {
+            this.maximize();
+          }
+        }
+        this._invalidateCoords();
+        if (this.screen) {
+          this.screen.render();
+        }
+      }
+      /**
+       * Check if panel is minimized
+       */
+      isMinimized() {
+        return this.panelState.minimized;
+      }
+      /**
+       * Get dock position
+       */
+      getDockPosition() {
+        return this.dockPosition;
+      }
+      /**
+       * Save panel state to persistent storage
+       */
+      async saveState() {
+        if (!this.persistenceKey || !this.screen?.storage)
+          return;
+        const state = this.getState();
+        await this.screen.storage.set(`layout:${this.persistenceKey}`, state);
+      }
+      /**
+       * Load panel state from persistent storage
+       */
+      async loadState() {
+        if (!this.persistenceKey || !this.screen?.storage)
+          return;
+        const saved = await this.screen.storage.get(`layout:${this.persistenceKey}`);
+        if (saved) {
+          await this.setState(saved);
+        }
+      }
+      /**
+       * Calculate the content width/height needed to fit all children
+       * Returns { width, height } representing the minimum dimensions needed
+       */
+      calculateContentSize() {
+        let maxContentWidth = 0;
+        let totalContentHeight = 0;
+        const stripFormatting = (str) => {
+          let clean = str.replace(/\x1b\[[0-9;]*m/g, "");
+          clean = clean.replace(/\{[^}]+\}/g, "");
+          return clean;
+        };
+        for (const child of this.children) {
+          if (child === this.titleBar || child === this.minimizeButton || child === this.closeButton) {
+            continue;
+          }
+          if (child.items && Array.isArray(child.items)) {
+            const items = child.items;
+            for (const item of items) {
+              const cleanItem = stripFormatting(String(item));
+              maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
+              if (this.options.label?.includes("Sidebar") && cleanItem.length > 10) {
+                const debugMsg = `[CalcSize] List item: "${cleanItem}" (${cleanItem.length} chars)`;
+                if (this.screen?.log) {
+                  this.screen.log(debugMsg);
+                }
+                console.log(debugMsg);
+              }
+            }
+            totalContentHeight = Math.max(totalContentHeight, items.length);
+          }
+          const childContent = child.content || "";
+          if (childContent) {
+            const lines = childContent.split("\n");
+            for (const line3 of lines) {
+              const cleanLine = stripFormatting(line3);
+              maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+            }
+            totalContentHeight += lines.length;
+          }
+          if (child._lines && Array.isArray(child._lines)) {
+            for (const line3 of child._lines) {
+              const cleanLine = stripFormatting(String(line3));
+              maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+            }
+            totalContentHeight = Math.max(totalContentHeight, child._lines.length);
+          }
+        }
+        const borderWidth = this.border ? 2 : 0;
+        const borderHeight = this.border ? 2 : 0;
+        const titleBarHeight = this.titleBar ? 1 : 0;
+        return {
+          width: maxContentWidth + borderWidth,
+          height: totalContentHeight + borderHeight + titleBarHeight
+        };
+      }
+      /**
+       * Resize panel to fit its content (grow only, never shrink)
+       * Only expands when content doesn't fit, never shrinks below current size
+       * Respects minWidth/minHeight/maxWidth/maxHeight constraints
+       */
+      fitToContent() {
+        if (!this.fitContentSettings.width && !this.fitContentSettings.height) {
+          return;
+        }
+        const { width: contentWidth, height: contentHeight } = this.calculateContentSize();
+        if (this.options.label?.includes("Sidebar")) {
+          const debugMsg = `[FitContent] Sidebar: currentWidth=${this.width}, contentWidth=${contentWidth}, fitWidth=${this.fitContentSettings.width}, willGrow=${contentWidth > this.width}`;
+          if (this.screen?.log) {
+            this.screen.log(debugMsg);
+          }
+          console.log(debugMsg);
+        }
+        let newWidth = this.width;
+        let newHeight = this.height;
+        if (this.fitContentSettings.width) {
+          if (contentWidth > newWidth) {
+            newWidth = contentWidth;
+          }
+          if (this.maxWidth)
+            newWidth = Math.min(newWidth, this.maxWidth);
+          if (this.screen) {
+            newWidth = Math.min(newWidth, this.screen.width);
+          }
+        }
+        if (this.fitContentSettings.height) {
+          if (contentHeight > newHeight) {
+            newHeight = contentHeight;
+          }
+          if (this.maxHeight)
+            newHeight = Math.min(newHeight, this.maxHeight);
+          if (this.screen) {
+            const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
+            newHeight = Math.min(newHeight, maxScreenHeight);
+          }
+        }
+        if (newWidth !== this.width || newHeight !== this.height) {
+          this.position.width = newWidth;
+          this.position.height = newHeight;
+          this.panelState.width = newWidth;
+          this.panelState.height = newHeight;
+          if (this.dockPosition === "right" && this.screen) {
+            this.position.left = this.screen.width - newWidth;
+            this.panelState.x = this.position.left;
+          }
+          this._invalidateCoords();
+          if (this.screen) {
+            this.screen.render();
+          }
+          this.emit("fit-content", { width: newWidth, height: newHeight });
+        }
+      }
+      /**
+       * Enable or disable fitContent mode
+       */
+      setFitContent(enabled) {
+        if (enabled === false) {
+          this.fitContentSettings = { width: false, height: false };
+        } else if (typeof enabled === "object") {
+          this.fitContentSettings = {
+            width: enabled.width !== false,
+            height: enabled.height !== false
+          };
+        } else {
+          this.fitContentSettings = { width: true, height: true };
+        }
+      }
+      /**
+       * Get current fitContent settings
+       */
+      getFitContent() {
+        return { ...this.fitContentSettings };
+      }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      /**
+       * Handle resize - update layout based on screen size
+       */
+      _handleResize(width, height, state) {
+        super._handleResize(width, height, state);
+        if (this.dockPosition === "float" && !this.mobileMode) {
+          this.constrainToScreen();
+        }
+      }
+      /**
+       * Handle breakpoint change
+       */
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
+      /**
+       * Called when entering mobile mode - enable swipe undocking
+       */
+      _enterMobileMode() {
+        super._enterMobileMode();
+        if (this._swipeUndock && !this._unsubscribeSwipeUndock && this.dockPosition !== "float") {
+          this._unsubscribeSwipeUndock = this.enableSwipe({
+            direction: "both",
+            threshold: SWIPE_THRESHOLD,
+            onSwipe: (event) => {
+              if (this._shouldUndockFromSwipe(event.direction)) {
+                this._undockWithSwipe(event.direction);
+              }
+            }
+          });
+        }
+        this.emit("enter-mobile");
+      }
+      /**
+       * Called when exiting mobile mode - disable swipe undocking
+       */
+      _exitMobileMode() {
+        if (this._unsubscribeSwipeUndock) {
+          this._unsubscribeSwipeUndock();
+          this._unsubscribeSwipeUndock = void 0;
+        }
+        super._exitMobileMode();
+        this.emit("exit-mobile");
+      }
+      /**
+       * Check if a swipe direction should undock this panel
+       */
+      _shouldUndockFromSwipe(direction) {
+        switch (this.dockPosition) {
+          case "left":
+            return direction === "right";
+          case "right":
+            return direction === "left";
+          case "top":
+            return direction === "down";
+          case "bottom":
+            return direction === "up";
+          default:
+            return false;
+        }
+      }
+      /**
+       * Undock the panel with a swipe animation
+       */
+      _undockWithSwipe(direction) {
+        const previousPosition = this.dockPosition;
+        const currentWidth = this.width;
+        const currentHeight = this.height;
+        this.setDockPosition("float");
+        const offset = 10;
+        switch (direction) {
+          case "right":
+            this.position.left = (this.position.left || 0) + offset;
+            break;
+          case "left":
+            this.position.left = Math.max(0, (this.position.left || 0) - offset);
+            break;
+          case "down":
+            this.position.top = (this.position.top || 0) + offset;
+            break;
+          case "up":
+            this.position.top = Math.max(this.topConstraint, (this.position.top || 0) - offset);
+            break;
+        }
+        this.position.width = Math.min(currentWidth, this.screen?.width || 80);
+        this.position.height = Math.min(currentHeight, (this.screen?.height || 24) - this.topConstraint - this.bottomConstraint);
+        this._invalidateCoords();
+        this.flashBorder("yellow", 200);
+        if (this.screen) {
+          this.screen.render();
+        }
+        this.emit("swipe-undock", { direction, previousPosition });
+      }
+      /**
+       * Enable swipe undocking
+       */
+      setSwipeUndock(enabled) {
+        this._swipeUndock = enabled;
+        if (this.isMobile()) {
+          if (enabled && !this._unsubscribeSwipeUndock) {
+            this._enterMobileMode();
+          } else if (!enabled && this._unsubscribeSwipeUndock) {
+            this._unsubscribeSwipeUndock();
+            this._unsubscribeSwipeUndock = void 0;
+          }
+        }
+      }
+      /**
+       * Override destroy to clean up swipe handler
+       */
+      destroy() {
+        if (this._unsubscribeSwipeUndock) {
+          this._unsubscribeSwipeUndock();
+          this._unsubscribeSwipeUndock = void 0;
+        }
+        super.destroy();
+      }
+    };
+    DockablePanel.dropZones = /* @__PURE__ */ new Map();
+    DockablePanel.activeDropZone = null;
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js
+var DropdownMenu;
+var init_dropdown_menu = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js"() {
+    "use strict";
+    init_element();
+    DropdownMenu = class _DropdownMenu extends Element {
+      /**
+       * Close all currently open dropdown menus
+       */
+      static closeAll() {
+        for (const menu of _DropdownMenu.openMenus) {
+          menu.close();
+        }
+      }
+      /**
+       * Check if any dropdown menu is currently open
+       */
+      static isAnyOpen() {
+        return _DropdownMenu.openMenus.size > 0;
+      }
+      /**
+       * Check if a menu was just closed (blocks canvas clicks for one tick)
+       */
+      static wasJustClosed() {
+        return _DropdownMenu.justClosed;
+      }
+      /**
+       * Check if click should be blocked (menu open OR just closed)
+       */
+      static shouldBlockClick() {
+        return _DropdownMenu.openMenus.size > 0 || _DropdownMenu.justClosed;
+      }
+      constructor(options) {
+        const width = options.width || 20;
+        const height = Math.min((options.items?.length || 1) + 2, options.maxHeight || 12);
+        super({
+          parent: options.parent || options.screen,
+          top: 0,
+          left: 0,
+          width,
+          height,
+          border: { type: "line", fg: "cyan" },
+          label: options.label,
+          style: options.style || {
+            fg: "white",
+            bg: "black",
+            focus: { fg: "white", bg: "black" }
+          },
+          tags: true,
+          keys: true,
+          mouse: true,
+          clickable: true,
+          focusable: true,
+          hidden: true,
+          shadow: true,
+          zIndex: 9999
+          // Render on top of everything (panels are typically 1-10)
+        });
+        this.selectedIndex = 0;
+        this.anchorLeft = 0;
+        this.anchorTop = 0;
+        this.items = options.items || [];
+        this.updateContent();
+        this.on("keypress", (_ch, key) => {
+          if (key.name === "up") {
+            this.move(-1);
+          } else if (key.name === "down") {
+            this.move(1);
+          } else if (key.name === "enter" || key.name === "space") {
+            this.selectItem();
+          } else if (key.name === "escape") {
+            this.close();
+          } else if (key.name === "tab") {
+            this.emit(key.shift ? "tab-prev" : "tab-next");
+            this.close();
+          }
+          return true;
+        });
+        this.on("click", (event) => {
+          const pos = this._getCoords();
+          if (!pos)
+            return;
+          const border = 1;
+          const relY = event.y - pos.yi - border;
+          if (relY >= 0 && relY < this.items.length) {
+            this.selectedIndex = relY;
+            this.selectItem();
+          }
+        });
+        this.on("mousemove", (event) => {
+          const pos = this._getCoords();
+          if (!pos)
+            return;
+          const border = 1;
+          const relY = event.y - pos.yi - border;
+          if (relY >= 0 && relY < this.items.length) {
+            this.selectedIndex = relY;
+            this.updateContent();
+            this.screen?.render();
+          }
+        });
+      }
+      openAt(left, top) {
+        console.log("[DropdownMenu] openAt called:", { left, top });
+        if (!this.screen) {
+          console.log("[DropdownMenu] ERROR: No screen in openAt!");
+          return;
+        }
+        for (const menu of _DropdownMenu.openMenus) {
+          if (menu !== this) {
+            menu.close();
+          }
+        }
+        const cols = this.screen.cols;
+        const rows = this.screen.rows;
+        console.log("[DropdownMenu] Screen size:", { cols, rows });
+        const width = typeof this.width === "number" ? this.width : 20;
+        const height = typeof this.height === "number" ? this.height : 10;
+        const clampedLeft = Math.max(0, Math.min(left, cols - width));
+        const clampedTop = Math.max(0, Math.min(top, rows - height));
+        console.log("[DropdownMenu] Clamped position:", { clampedLeft, clampedTop, width, height });
+        this.left = clampedLeft;
+        this.top = clampedTop;
+        console.log("[DropdownMenu] Calling show()");
+        this.show();
+        console.log("[DropdownMenu] Calling focus()");
+        this.focus();
+        console.log("[DropdownMenu] hidden:", this.hidden, "visible:", this.visible);
+        _DropdownMenu.openMenus.add(this);
+        this.screen.trapFocus(this);
+        this.attachOutsideClick();
+        this.screen.render();
+      }
+      openFor(anchor, align = "left") {
+        console.log("[DropdownMenu] openFor called");
+        if (!this.screen) {
+          console.log("[DropdownMenu] ERROR: No screen!");
+          return;
+        }
+        const coords = anchor._getCoords();
+        console.log("[DropdownMenu] anchor coords:", coords);
+        if (!coords) {
+          console.log("[DropdownMenu] ERROR: No coords from anchor!");
+          return;
+        }
+        const left = align === "right" ? coords.xl - (typeof this.width === "number" ? this.width : 20) : coords.xi;
+        const top = coords.yl;
+        console.log("[DropdownMenu] Calculated position:", { left, top });
+        this.openAt(left, top);
+      }
+      close(fromOutsideClick = false) {
+        if (!this.screen)
+          return;
+        _DropdownMenu.openMenus.delete(this);
+        if (fromOutsideClick) {
+          _DropdownMenu.justClosed = true;
+          setImmediate(() => {
+            _DropdownMenu.justClosed = false;
+          });
+        }
+        this.hide();
+        this.detachOutsideClick();
+        this.screen.releaseFocusTrap();
+        this.screen.render();
+      }
+      setItems(items) {
+        this.items = items;
+        this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.items.length - 1));
+        this.updateContent();
+      }
+      /**
+       * Register an anchor element for hover-to-open behavior
+       * When any menu is open, hovering over this anchor opens this menu
+       * @param anchor The element that triggers this menu
+       * @param leftOffset Additional left offset (optional, default 0)
+       * @param topOffset Additional top offset (optional, default 0 to open directly below anchor)
+       */
+      registerAnchor(anchor, leftOffset = 0, topOffset = 0) {
+        this.anchor = anchor;
+        const getPosition = () => {
+          const coords = anchor._getCoords();
+          if (coords) {
+            return {
+              left: coords.xi + leftOffset,
+              top: coords.yl + topOffset
+              // Open directly below the anchor
+            };
+          }
+          return { left: leftOffset, top: topOffset };
+        };
+        anchor.on("click", () => {
+          const pos = getPosition();
+          this.openAt(pos.left, pos.top);
+        });
+        anchor.on("mouseenter", () => {
+          if (_DropdownMenu.isAnyOpen() && this.hidden) {
+            const pos = getPosition();
+            this.openAt(pos.left, pos.top);
+          }
+        });
+      }
+      /**
+       * Check if this menu is currently open
+       */
+      isOpen() {
+        return !this.hidden && _DropdownMenu.openMenus.has(this);
+      }
+      move(delta) {
+        if (!this.items.length)
+          return;
+        let next = this.selectedIndex;
+        for (let i = 0; i < this.items.length; i++) {
+          next = (next + delta + this.items.length) % this.items.length;
+          if (!this.items[next].disabled && !this.items[next].separator) {
+            this.selectedIndex = next;
+            this.updateContent();
+            this.screen?.render();
+            return;
+          }
+        }
+      }
+      selectItem() {
+        const item = this.items[this.selectedIndex];
+        if (!item || item.disabled || item.separator)
+          return;
+        item.action?.();
+        this.emit("select", item);
+        this.close();
+      }
+      updateContent() {
+        const lines = [];
+        let maxWidth = 10;
+        this.items.forEach((item, index) => {
+          if (item.separator) {
+            lines.push("\u2500".repeat(18));
+            maxWidth = Math.max(maxWidth, 18);
+            return;
+          }
+          const selected = index === this.selectedIndex;
+          const prefix = selected ? "> " : "  ";
+          const label = item.disabled ? `{gray-fg}${item.label}{/gray-fg}` : item.label;
+          const line3 = `${prefix}${label}`;
+          lines.push(line3);
+          maxWidth = Math.max(maxWidth, line3.replace(/\{[^}]+\}/g, "").length);
+        });
+        this.setContent(lines.join("\n"));
+        if (typeof this.width === "number" && this.width < maxWidth + 2) {
+          this.width = Math.min(maxWidth + 2, this.screen?.cols || maxWidth + 2);
+        }
+      }
+      attachOutsideClick() {
+        if (!this.screen || this.outsideClickHandler)
+          return;
+        this.outsideClickHandler = (event) => {
+          if (this.hidden)
+            return;
+          const pos = this._getCoords();
+          if (!pos)
+            return;
+          const outside = event.x < pos.xi || event.x > pos.xl || event.y < pos.yi || event.y > pos.yl;
+          if (outside) {
+            this.close(true);
+          }
+        };
+        this.screen.on("mousedown", this.outsideClickHandler);
+        this.screen.on("click", this.outsideClickHandler);
+      }
+      detachOutsideClick() {
+        if (!this.screen || !this.outsideClickHandler)
+          return;
+        this.screen.off("mousedown", this.outsideClickHandler);
+        this.screen.off("click", this.outsideClickHandler);
+        this.outsideClickHandler = void 0;
+      }
+    };
+    DropdownMenu.openMenus = /* @__PURE__ */ new Set();
+    DropdownMenu.justClosed = false;
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js
+var init_menu_bar = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js"() {
+    "use strict";
+    init_element();
+    init_box();
+    init_dropdown_menu();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js
+var init_mobile_carousel = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js"() {
+    "use strict";
+    init_box();
+    init_listbar();
   }
 });
 
@@ -4037,12 +7650,23 @@ var init_autocomplete = __esm({
   }
 });
 
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js
+var init_autocomplete_textbox = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js"() {
+    "use strict";
+    init_element();
+    init_list();
+    init_box();
+  }
+});
+
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js
 var init_tabpanel = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js"() {
     "use strict";
     init_box();
     init_button();
+    init_responsive_constants();
   }
 });
 
@@ -4052,6 +7676,7 @@ var init_accordion = __esm({
     "use strict";
     init_box();
     init_button();
+    init_responsive_constants();
   }
 });
 
@@ -4061,6 +7686,7 @@ var init_collapsible = __esm({
     "use strict";
     init_box();
     init_button();
+    init_responsive_constants();
   }
 });
 
@@ -4139,6 +7765,13 @@ var init_colorpicker = __esm({
       get type() {
         return "colorpicker";
       }
+      // ============================================================================
+      // Responsive Lifecycle Hooks
+      // ============================================================================
+      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
+      }
     };
     ColorPicker.ANSI_COLORS = [
       "black",
@@ -4177,6 +7810,406 @@ var init_fileexplorer = __esm({
     init_box();
     init_tree();
     init_listtable();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js
+var init_doc_modal = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js"() {
+    "use strict";
+    init_box();
+    init_bigtext();
+    init_scrollabletext();
+    init_responsive_constants();
+    init_modal_helpers();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
+var init_confirm_modal = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
+    "use strict";
+    init_box();
+    init_button();
+    init_overlay();
+    init_modal_helpers();
+    init_responsive_constants();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js
+var init_canvas2 = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js"() {
+    "use strict";
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js
+var ANSI_REGEX, ANSIUtils;
+var init_ansi_utils = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js"() {
+    "use strict";
+    ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
+    ANSIUtils = class {
+      /**
+       * Strip all ANSI codes from text
+       */
+      static stripANSI(text) {
+        return text.replace(ANSI_REGEX, "");
+      }
+      /**
+       * Calculate visual length (excluding ANSI codes)
+       */
+      static visualLength(text) {
+        return this.stripANSI(text).length;
+      }
+      /**
+       * Get actual string position from visual column position
+       * Accounts for ANSI codes that don't contribute to visual length
+       */
+      static getActualPosition(text, visualCol) {
+        let actualPos = 0;
+        let visualPos = 0;
+        while (actualPos < text.length && visualPos < visualCol) {
+          if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
+            let end = actualPos + 2;
+            while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
+              end++;
+            }
+            end++;
+            actualPos = end;
+          } else {
+            actualPos++;
+            visualPos++;
+          }
+        }
+        return actualPos;
+      }
+      /**
+       * Get visual column from actual string position
+       */
+      static getVisualPosition(text, actualCol) {
+        let actualPos = 0;
+        let visualPos = 0;
+        while (actualPos < actualCol && actualPos < text.length) {
+          if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
+            let end = actualPos + 2;
+            while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
+              end++;
+            }
+            end++;
+            actualPos = end;
+          } else {
+            actualPos++;
+            visualPos++;
+          }
+        }
+        return visualPos;
+      }
+      /**
+       * Parse ANSI codes into structured tokens
+       */
+      static parseANSI(text) {
+        const tokens = [];
+        let lastIndex = 0;
+        const matches = text.matchAll(ANSI_REGEX);
+        for (const match2 of matches) {
+          const start2 = match2.index;
+          if (start2 > lastIndex) {
+            tokens.push({
+              type: "text",
+              content: text.substring(lastIndex, start2),
+              start: lastIndex,
+              end: start2
+            });
+          }
+          const ansiCode = match2[0];
+          tokens.push({
+            type: this.classifyANSI(ansiCode),
+            content: ansiCode,
+            start: start2,
+            end: start2 + ansiCode.length
+          });
+          lastIndex = start2 + ansiCode.length;
+        }
+        if (lastIndex < text.length) {
+          tokens.push({
+            type: "text",
+            content: text.substring(lastIndex),
+            start: lastIndex,
+            end: text.length
+          });
+        }
+        return tokens;
+      }
+      /**
+       * Classify ANSI code type
+       */
+      static classifyANSI(code) {
+        if (code === "\x1B[0m" || code === "\x1B[m") {
+          return "reset";
+        }
+        const match2 = code.match(/\x1b\[([0-9;]+)m/);
+        if (match2) {
+          const params = match2[1].split(";").map(Number);
+          for (const param of params) {
+            if (param >= 30 && param <= 37 || param >= 40 && param <= 47 || param >= 90 && param <= 97 || param >= 100 && param <= 107) {
+              return "color";
+            }
+          }
+        }
+        if (code.match(/\x1b\[[1245 7]m/)) {
+          return "style";
+        }
+        return "ansi";
+      }
+      /**
+       * Insert ANSI code at visual position
+       */
+      static insertANSI(text, visualPosition, ansiCode) {
+        const actualPos = this.getActualPosition(text, visualPosition);
+        return text.substring(0, actualPos) + ansiCode + text.substring(actualPos);
+      }
+      /**
+       * Remove ANSI codes at visual position
+       */
+      static removeANSIAt(text, visualPosition) {
+        const actualPos = this.getActualPosition(text, visualPosition);
+        if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
+          let end = actualPos + 2;
+          while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
+            end++;
+          }
+          end++;
+          return text.substring(0, actualPos) + text.substring(end);
+        }
+        return text;
+      }
+      /**
+       * Get color name from ANSI code
+       */
+      static getColorName(ansiCode) {
+        for (const [name, color] of Object.entries(this.colors)) {
+          if (color.fg === ansiCode || color.bg === ansiCode) {
+            return name;
+          }
+        }
+        return null;
+      }
+      /**
+       * Convert blessed color tags to ANSI codes
+       * Example: "{red-fg}text{/}" -> "\x1b[31mtext\x1b[0m"
+       */
+      static blessedToANSI(text) {
+        let result = text;
+        for (const [name, color] of Object.entries(this.colors)) {
+          const tag = `{${name}-fg}`;
+          result = result.replace(new RegExp(tag, "g"), color.fg);
+        }
+        for (const [name, color] of Object.entries(this.colors)) {
+          const tag = `{${name}-bg}`;
+          result = result.replace(new RegExp(tag, "g"), color.bg);
+        }
+        result = result.replace(/{\/}/g, this.styles.reset);
+        return result;
+      }
+      /**
+       * Convert ANSI codes to blessed color tags
+       */
+      static ansiToBlessed(text) {
+        let result = text;
+        for (const [name, color] of Object.entries(this.colors)) {
+          result = result.replace(new RegExp(color.fg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `{${name}-fg}`);
+        }
+        for (const [name, color] of Object.entries(this.colors)) {
+          result = result.replace(new RegExp(color.bg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `{${name}-bg}`);
+        }
+        result = result.replace(/\x1b\[0m/g, "{/}");
+        return result;
+      }
+      /**
+       * Validate ANSI code
+       */
+      static isValidANSI(code) {
+        return ANSI_REGEX.test(code);
+      }
+      /**
+       * Extract all ANSI codes from text
+       */
+      static extractANSI(text) {
+        return Array.from(text.matchAll(ANSI_REGEX), (match2) => match2[0]);
+      }
+      /**
+       * Count ANSI codes in text
+       */
+      static countANSI(text) {
+        return (text.match(ANSI_REGEX) || []).length;
+      }
+      /**
+       * Get line without ANSI codes for editing
+       */
+      static getEditableLine(text) {
+        return this.stripANSI(text);
+      }
+      /**
+       * Preserve ANSI codes when editing text
+       * Returns new text with ANSI codes preserved from original
+       */
+      static preserveANSI(originalText, newText) {
+        const tokens = this.parseANSI(originalText);
+        const ansiCodes = tokens.filter((t) => t.type !== "text");
+        if (ansiCodes.length === 0) {
+          return newText;
+        }
+        let result = "";
+        let newTextPos = 0;
+        const originalVisualLength = this.visualLength(originalText);
+        const newTextLength = newText.length;
+        for (const ansiCode of ansiCodes) {
+          const visualPos = this.getVisualPosition(originalText, ansiCode.start);
+          const newPos = Math.floor(visualPos / originalVisualLength * newTextLength);
+          if (newPos > newTextPos) {
+            result += newText.substring(newTextPos, newPos);
+            newTextPos = newPos;
+          }
+          result += ansiCode.content;
+        }
+        if (newTextPos < newText.length) {
+          result += newText.substring(newTextPos);
+        }
+        return result;
+      }
+    };
+    ANSIUtils.colors = {
+      // Foreground colors
+      black: { name: "Black", fg: "\x1B[30m", bg: "\x1B[40m", sample: "\x1B[30m\u2588\u2588\u2588\x1B[0m" },
+      red: { name: "Red", fg: "\x1B[31m", bg: "\x1B[41m", sample: "\x1B[31m\u2588\u2588\u2588\x1B[0m" },
+      green: { name: "Green", fg: "\x1B[32m", bg: "\x1B[42m", sample: "\x1B[32m\u2588\u2588\u2588\x1B[0m" },
+      yellow: { name: "Yellow", fg: "\x1B[33m", bg: "\x1B[43m", sample: "\x1B[33m\u2588\u2588\u2588\x1B[0m" },
+      blue: { name: "Blue", fg: "\x1B[34m", bg: "\x1B[44m", sample: "\x1B[34m\u2588\u2588\u2588\x1B[0m" },
+      magenta: { name: "Magenta", fg: "\x1B[35m", bg: "\x1B[45m", sample: "\x1B[35m\u2588\u2588\u2588\x1B[0m" },
+      cyan: { name: "Cyan", fg: "\x1B[36m", bg: "\x1B[46m", sample: "\x1B[36m\u2588\u2588\u2588\x1B[0m" },
+      white: { name: "White", fg: "\x1B[37m", bg: "\x1B[47m", sample: "\x1B[37m\u2588\u2588\u2588\x1B[0m" },
+      // Bright colors
+      gray: { name: "Gray", fg: "\x1B[90m", bg: "\x1B[100m", sample: "\x1B[90m\u2588\u2588\u2588\x1B[0m" },
+      brightRed: { name: "Bright Red", fg: "\x1B[91m", bg: "\x1B[101m", sample: "\x1B[91m\u2588\u2588\u2588\x1B[0m" },
+      brightGreen: { name: "Bright Green", fg: "\x1B[92m", bg: "\x1B[102m", sample: "\x1B[92m\u2588\u2588\u2588\x1B[0m" },
+      brightYellow: { name: "Bright Yellow", fg: "\x1B[93m", bg: "\x1B[103m", sample: "\x1B[93m\u2588\u2588\u2588\x1B[0m" },
+      brightBlue: { name: "Bright Blue", fg: "\x1B[94m", bg: "\x1B[104m", sample: "\x1B[94m\u2588\u2588\u2588\x1B[0m" },
+      brightMagenta: { name: "Bright Magenta", fg: "\x1B[95m", bg: "\x1B[105m", sample: "\x1B[95m\u2588\u2588\u2588\x1B[0m" },
+      brightCyan: { name: "Bright Cyan", fg: "\x1B[96m", bg: "\x1B[106m", sample: "\x1B[96m\u2588\u2588\u2588\x1B[0m" },
+      brightWhite: { name: "Bright White", fg: "\x1B[97m", bg: "\x1B[107m", sample: "\x1B[97m\u2588\u2588\u2588\x1B[0m" }
+    };
+    ANSIUtils.styles = {
+      reset: "\x1B[0m",
+      bold: "\x1B[1m",
+      dim: "\x1B[2m",
+      underline: "\x1B[4m",
+      blink: "\x1B[5m",
+      reverse: "\x1B[7m",
+      hidden: "\x1B[8m"
+    };
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js
+var init_editor_state = __esm({
+  "../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js"() {
+    "use strict";
+    init_ansi_utils();
+    init_canvas2();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js
+var init_ansi_editor = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js"() {
+    "use strict";
+    init_box();
+    init_canvas();
+    init_text();
+    init_list();
+    init_overlay();
+    init_doc_modal();
+    init_confirm_modal();
+    init_dropdown_menu();
+    init_modal_helpers();
+    init_canvas2();
+    init_editor_state();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js
+var init_login_modal = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js"() {
+    "use strict";
+    init_box();
+    init_textbox();
+    init_button();
+    init_overlay();
+    init_modal_helpers();
+    init_responsive_constants();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js
+var init_category_picker = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js"() {
+    "use strict";
+    init_box();
+    init_list();
+    init_button();
+    init_modal_helpers();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js
+var init_fkey_bar = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js"() {
+    "use strict";
+    init_box();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js
+var init_status_bar = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js"() {
+    "use strict";
+    init_box();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js
+var init_search_modal = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js"() {
+    "use strict";
+    init_box();
+    init_list();
+    init_textbox();
+    init_text();
+    init_modal_helpers();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js
+var init_audio_level_bar = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js"() {
+    "use strict";
+    init_box();
+  }
+});
+
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js
+var init_multiplayer_lobby = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js"() {
+    "use strict";
+    init_box();
+    init_list();
+    init_button();
+    init_textbox();
+    init_dockable_panel();
+    init_listtable();
+    init_events();
   }
 });
 
@@ -4370,6 +8403,9 @@ var init_blessed = __esm({
     init_keybindings();
     init_responsive_layout();
     init_colors();
+    init_responsive_constants();
+    init_touch_gestures();
+    init_responsive_mixin();
     init_box();
     init_text();
     init_list();
@@ -4408,7 +8444,11 @@ var init_blessed = __esm({
     init_contextmenu();
     init_panel();
     init_dockable_panel();
+    init_dropdown_menu();
+    init_menu_bar();
+    init_mobile_carousel();
     init_autocomplete();
+    init_autocomplete_textbox();
     init_AutocompleteManager();
     init_tabpanel();
     init_accordion();
@@ -4416,6 +8456,16 @@ var init_blessed = __esm({
     init_stacked_gauge();
     init_colorpicker();
     init_fileexplorer();
+    init_ansi_editor();
+    init_doc_modal();
+    init_login_modal();
+    init_category_picker();
+    init_confirm_modal();
+    init_fkey_bar();
+    init_status_bar();
+    init_search_modal();
+    init_audio_level_bar();
+    init_multiplayer_lobby();
     init_bar();
     init_donut();
     init_gauge();
@@ -4434,7 +8484,7 @@ var init_blessed = __esm({
     init_carousel();
     init_utils();
     init_screen();
-    init_box();
+    init_dockable_panel();
     init_text();
     init_list();
     init_form();
@@ -4470,6 +8520,7 @@ var init_blessed = __esm({
     init_iframe();
     init_video();
     init_autocomplete();
+    init_autocomplete_textbox();
     init_AutocompleteManager();
     init_tabpanel();
     init_accordion();
@@ -4477,6 +8528,7 @@ var init_blessed = __esm({
     init_stacked_gauge();
     init_colorpicker();
     init_fileexplorer();
+    init_doc_modal();
     init_screen();
     init_element();
     init_program();
@@ -4523,9 +8575,20 @@ var init_blessed = __esm({
     init_stacked_gauge();
     init_colorpicker();
     init_fileexplorer();
+    init_doc_modal();
+    init_login_modal();
+    init_category_picker();
+    init_confirm_modal();
+    init_fkey_bar();
+    init_status_bar();
+    init_search_modal();
+    init_audio_level_bar();
+    init_multiplayer_lobby();
     init_contextmenu();
     init_panel();
     init_dockable_panel();
+    init_dropdown_menu();
+    init_mobile_carousel();
     init_responsive_layout();
     init_bar();
     init_donut();
@@ -5515,6 +9578,7 @@ var ProtocolHelper = class {
 
 // ../../sdk/dist-esm/engines/ui/ui-engine.js
 init_blessed();
+init_dockable_panel();
 
 // ../../sdk/dist-esm/core/types.js
 var AnsiColor;
@@ -24739,10 +28803,9 @@ var AudioEngine = class {
       this.sfxGain = {};
       return;
     }
-    this.masterGain = new Gain(this.config.masterVolume).toDestination();
-    this.musicGain = new Gain(this.config.musicVolume).connect(this.masterGain);
-    this.sfxGain = new Gain(this.config.sfxVolume).connect(this.masterGain);
-    this.buildSoundLibrary();
+    this.masterGain = null;
+    this.musicGain = null;
+    this.sfxGain = null;
   }
   /**
    * Initialize audio context (must be called after user interaction)
@@ -24759,14 +28822,72 @@ var AudioEngine = class {
     if (this.initialized)
       return;
     const isBrowser = typeof globalThis !== "undefined" && globalThis.window !== void 0 && typeof globalThis.window.AudioContext !== "undefined";
-    if (isBrowser && context && context.state !== "running") {
+    if (isBrowser) {
       try {
         await start();
+        console.log("[AudioEngine] Tone.js started successfully");
       } catch (e) {
-        console.error("Tone.js start failed:", e);
+        console.error("[AudioEngine] Tone.js start failed:", e);
+        return;
+      }
+      if (!this.masterGain || !this.masterGain.gain) {
+        this.masterGain = new Gain(this.config.masterVolume).toDestination();
+        this.musicGain = new Gain(this.config.musicVolume).connect(this.masterGain);
+        this.sfxGain = new Gain(this.config.sfxVolume).connect(this.masterGain);
+        this.buildSoundLibrary();
+        console.log("[AudioEngine] Audio system initialized");
       }
     }
     this.initialized = true;
+  }
+  /**
+   * Enable or disable UI sounds
+   * When in Node.js with socket, sends command to web client
+   *
+   * @param enabled - Whether UI sounds should be enabled
+   *
+   * @example
+   * ```typescript
+   * // Disable UI sounds for quiet mode
+   * audio.setUISoundsEnabled(false);
+   *
+   * // Re-enable
+   * audio.setUISoundsEnabled(true);
+   * ```
+   */
+  setUISoundsEnabled(enabled) {
+    this.config.enabled = enabled;
+    const isBrowser = typeof globalThis !== "undefined" && globalThis.window !== void 0;
+    if (!isBrowser && this.socket) {
+      this.socket.emit("audio:set-ui-sounds", { enabled });
+    }
+  }
+  /**
+   * Check if UI sounds are enabled
+   */
+  isUISoundsEnabled() {
+    return this.config.enabled;
+  }
+  /**
+   * Set the SFX volume (0.0 to 1.0)
+   * When in Node.js with socket, sends command to web client
+   *
+   * @param volume - Volume level (0.0 to 1.0)
+   */
+  setSfxVolume(volume) {
+    this.config.sfxVolume = Math.max(0, Math.min(1, volume));
+    const isBrowser = typeof globalThis !== "undefined" && globalThis.window !== void 0;
+    if (!isBrowser && this.socket) {
+      this.socket.emit("audio:set-volume", { volume: this.config.sfxVolume });
+    } else if (this.sfxGain && this.sfxGain.gain) {
+      this.sfxGain.gain.value = this.config.sfxVolume;
+    }
+  }
+  /**
+   * Get current SFX volume
+   */
+  getSfxVolume() {
+    return this.config.sfxVolume;
   }
   /**
    * Build comprehensive sound effects library
@@ -25573,7 +29694,7 @@ var AudioEngine = class {
       this.socket.emit("audio:play-sfx", { type: "note", note, duration });
       return;
     }
-    if (!this.config.enabled || !this.initialized)
+    if (!this.config.enabled || !this.initialized || !this.sfxGain?.gain)
       return;
     const synth = new Synth().connect(this.sfxGain);
     synth.triggerAttackRelease(note, duration);
@@ -25778,46 +29899,46 @@ var AudioEngine = class {
 };
 
 // ../../sdk/dist-esm/engines/network/network-engine.js
-var import_events16 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/connection.js
-var import_events5 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/lobby.js
-var import_events6 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
-var import_events7 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/sync.js
-var import_events8 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/prediction.js
-var import_events9 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/interpolation.js
-var import_events10 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/presence.js
-var import_events11 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/social.js
-var import_events12 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
-var import_events13 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/replay.js
-var import_events14 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/security.js
-var import_events15 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events17 = __toESM(require_events());
 
-// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+// ../../sdk/dist-esm/engines/network/modules/connection.js
+var import_events6 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/lobby.js
+var import_events7 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
+var import_events8 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/sync.js
+var import_events9 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/prediction.js
+var import_events10 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/interpolation.js
+var import_events11 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/presence.js
+var import_events12 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/social.js
+var import_events13 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
+var import_events14 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/replay.js
+var import_events15 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/security.js
+var import_events16 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events18 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+var import_events19 = __toESM(require_events());
 var TerrainType;
 (function(TerrainType2) {
   TerrainType2["Plains"] = "plains";
@@ -25867,19 +29988,19 @@ var UnitClass;
 })(UnitClass || (UnitClass = {}));
 
 // ../../sdk/dist-esm/components/level/level-manager.js
-var import_events19 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events20 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
+// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events21 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/quest/quest-system.js
+// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
 var import_events22 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/tactical/class-system.js
+// ../../sdk/dist-esm/components/quest/quest-system.js
 var import_events23 = __toESM(require_events());
+
+// ../../sdk/dist-esm/components/tactical/class-system.js
+var import_events24 = __toESM(require_events());
 var MovementType;
 (function(MovementType2) {
   MovementType2["Infantry"] = "Infantry";
@@ -25900,7 +30021,7 @@ var SkillTrigger;
 })(SkillTrigger || (SkillTrigger = {}));
 
 // ../../sdk/dist-esm/client/index.js
-var ClientDoor = class extends EventEmitter {
+var ClientDoor = class _ClientDoor extends EventEmitter {
   /**
    * Create a new Client-side BBS Door (runs in browser)
    *
@@ -25934,6 +30055,20 @@ var ClientDoor = class extends EventEmitter {
       ...config
     };
     this.initialize();
+  }
+  /**
+   * Override emit to auto-forward certain events to the server via Socket.IO.
+   * This allows client code to use `door.emit('audio:levels', data)` and have
+   * it automatically sent to the server without requiring a separate method.
+   */
+  emit(event, ...args) {
+    if (_ClientDoor.SERVER_FORWARD_EVENTS.has(event)) {
+      const socketIO = this.socketIO;
+      if (socketIO && typeof socketIO.emit === "function") {
+        socketIO.emit(event, args[0]);
+      }
+    }
+    return super.emit(event, ...args);
   }
   /**
    * Initialize door systems
@@ -25989,6 +30124,32 @@ var ClientDoor = class extends EventEmitter {
           if (event.detail.sessionId === sessionId) {
             this.handleMessage(event.detail.message);
           }
+        });
+      }
+      if (socket && typeof socket.on === "function") {
+        socket.on("audio:play", (data) => {
+          console.log("[ClientDoor] Received audio:play event:", data);
+          this.emit("audio:play", data);
+        });
+        socket.on("audio:set-enabled", (data) => {
+          this.emit("audio:set-enabled", data);
+        });
+        socket.on("audio:set-volume", (data) => {
+          this.emit("audio:set-volume", data);
+        });
+        socket.on("audio:start-streaming", (data) => {
+          console.log("[ClientDoor] Received audio:start-streaming event:", data);
+          this.emit("audio:start-streaming", data);
+        });
+        socket.on("audio:stop-streaming", (data) => {
+          console.log("[ClientDoor] Received audio:stop-streaming event:", data);
+          this.emit("audio:stop-streaming", data);
+        });
+        socket.on("audio:mute", (data) => {
+          this.emit("audio:mute", data);
+        });
+        socket.on("audio:data", (data) => {
+          this.emit("audio:data", data);
         });
       }
       this.mainLoop();
@@ -26274,6 +30435,30 @@ var ClientDoor = class extends EventEmitter {
     }
   }
   /**
+   * Emit an event to the server via Socket.IO (for hybrid doors)
+   * Use this to send custom events back to the server-side door code.
+   *
+   * @param event - Event name (e.g., 'audio:levels', 'audio:started')
+   * @param data - Event data to send
+   *
+   * @example
+   * ```typescript
+   * // Send audio levels from browser to server
+   * door.emitToServer('audio:levels', { input: 0.5, output: 0.3 });
+   *
+   * // Notify server that streaming started
+   * door.emitToServer('audio:started');
+   * ```
+   */
+  emitToServer(event, data) {
+    const socketIO = this.socketIO;
+    if (socketIO && typeof socketIO.emit === "function") {
+      socketIO.emit(event, data);
+    } else {
+      console.warn("[ClientDoor] Cannot emit to server - no Socket.IO connection");
+    }
+  }
+  /**
    * Shutdown the door gracefully
    */
   shutdown() {
@@ -26383,6 +30568,18 @@ var ClientDoor = class extends EventEmitter {
     });
   }
 };
+ClientDoor.SERVER_FORWARD_EVENTS = /* @__PURE__ */ new Set([
+  // Audio level and status events
+  "audio:levels",
+  "audio:started",
+  "audio:stopped",
+  "audio:error",
+  // Audio data streaming
+  "audio:chunk",
+  "audio:data",
+  // Voice activity detection
+  "voice:speaking"
+]);
 
 // client.ts
 var door = new ClientDoor({

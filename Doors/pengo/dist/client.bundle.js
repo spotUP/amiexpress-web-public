@@ -4302,16 +4302,17 @@ var init_button = __esm({
           bg: "cyan",
           ...baseStyle.hover ?? {}
         };
+        const isInline = options.inline === true;
         super({
           focusable: true,
           clickable: true,
           keys: true,
-          border: "line",
+          border: isInline ? void 0 : "line",
           align: "center",
           valign: "middle",
-          padding: { left: 1, right: 1, top: 0, bottom: 0 },
-          touchFriendly: true,
-          // Enable touch-friendly sizing by default
+          padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
+          touchFriendly: !isInline,
+          // Inline buttons are compact, not touch-friendly
           ...options,
           style: {
             fg: baseStyle.fg ?? "white",
@@ -4331,6 +4332,9 @@ var init_button = __esm({
         }
         if (options.mouse !== false) {
           this.on("click", this._onClick.bind(this));
+          if (isInline) {
+            this.enableMouse();
+          }
         }
         this.on("focus", () => {
           if (this.screen) {
@@ -5154,8 +5158,8 @@ var init_dockable_panel = __esm({
         const mergedStyle = {
           ...normalizedOptions.style,
           hover: {
-            border: { fg: "yellow" },
-            // Yellow/orange border on resize edge hover
+            border: { fg: "white" },
+            // White border on hover
             ...normalizedOptions.style?.hover
           }
         };
@@ -5165,6 +5169,8 @@ var init_dockable_panel = __esm({
           draggable: normalizedOptions.draggable !== false,
           mouse: true,
           keys: true,
+          focusable: true,
+          // Enable Tab cycling and focus events
           clickable: true
           // Enable click events for panel activation
         });
@@ -5179,6 +5185,7 @@ var init_dockable_panel = __esm({
         this.resizeNeighbors = [];
         this.currentResizeEdge = null;
         this.currentHoverEdge = null;
+        this.isPanelHovered = false;
         this.topConstraint = 0;
         this.bottomConstraint = 0;
         this.tabs = [];
@@ -5256,12 +5263,14 @@ var init_dockable_panel = __esm({
           this.focus();
           this.emit("activate");
         });
-        this.on("mouseover", () => {
+        this.on("mouseenter", () => {
+          this.isPanelHovered = true;
           if (!this.currentHoverEdge) {
             this.applyBorderHoverStyle();
           }
         });
-        this.on("mouseout", () => {
+        this.on("mouseleave", () => {
+          this.isPanelHovered = false;
           this.currentHoverEdge = null;
           this.applyBorderHoverStyle();
         });
@@ -5292,6 +5301,9 @@ var init_dockable_panel = __esm({
         this.bringUIToFront();
         if (this.fitContentSettings?.width || this.fitContentSettings?.height) {
           element.on?.("set content", () => {
+            this.scheduleFitToContent();
+          });
+          element.on?.("set items", () => {
             this.scheduleFitToContent();
           });
           this.scheduleFitToContent();
@@ -5419,16 +5431,20 @@ var init_dockable_panel = __esm({
           content: options.label || options.title || "Panel"
         });
         if (this.titleBar) {
-          this.titleBar.on("mouseover", () => {
+          this.titleBar.on("mouseenter", () => {
             if (this.titleBar && this.titleBar.style && !this.isDragging) {
               this.titleBar.style.bg = "lightblue";
+              this.isPanelHovered = true;
+              this.applyBorderHoverStyle();
               if (this.screen)
                 this.screen.render();
             }
           });
-          this.titleBar.on("mouseout", () => {
+          this.titleBar.on("mouseleave", () => {
             if (this.titleBar && this.titleBar.style && !this.isDragging) {
               this.titleBar.style.bg = "blue";
+              this.isPanelHovered = false;
+              this.applyBorderHoverStyle();
               if (this.screen)
                 this.screen.render();
             }
@@ -5814,7 +5830,7 @@ var init_dockable_panel = __esm({
           if (activeEdge.includes("e")) {
             styleBorder.fgRight = highlightColor;
           }
-        } else if (this._hovered) {
+        } else if (this.isPanelHovered) {
           this._overBorder = true;
           this.style.border.fg = hoverColor;
           styleBorder.fg = hoverColor;
@@ -7073,13 +7089,30 @@ var init_dockable_panel = __esm({
           if (child === this.titleBar || child === this.minimizeButton || child === this.closeButton) {
             continue;
           }
-          const childContent = child.content || "";
-          const lines = childContent.split("\n");
-          for (const line3 of lines) {
-            const cleanLine = stripFormatting(line3);
-            maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+          if (child.items && Array.isArray(child.items)) {
+            const items = child.items;
+            for (const item of items) {
+              const cleanItem = stripFormatting(String(item));
+              maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
+              if (this.options.label?.includes("Sidebar") && cleanItem.length > 10) {
+                const debugMsg = `[CalcSize] List item: "${cleanItem}" (${cleanItem.length} chars)`;
+                if (this.screen?.log) {
+                  this.screen.log(debugMsg);
+                }
+                console.log(debugMsg);
+              }
+            }
+            totalContentHeight = Math.max(totalContentHeight, items.length);
           }
-          totalContentHeight += lines.length;
+          const childContent = child.content || "";
+          if (childContent) {
+            const lines = childContent.split("\n");
+            for (const line3 of lines) {
+              const cleanLine = stripFormatting(line3);
+              maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+            }
+            totalContentHeight += lines.length;
+          }
           if (child._lines && Array.isArray(child._lines)) {
             for (const line3 of child._lines) {
               const cleanLine = stripFormatting(String(line3));
@@ -7106,6 +7139,13 @@ var init_dockable_panel = __esm({
           return;
         }
         const { width: contentWidth, height: contentHeight } = this.calculateContentSize();
+        if (this.options.label?.includes("Sidebar")) {
+          const debugMsg = `[FitContent] Sidebar: currentWidth=${this.width}, contentWidth=${contentWidth}, fitWidth=${this.fitContentSettings.width}, willGrow=${contentWidth > this.width}`;
+          if (this.screen?.log) {
+            this.screen.log(debugMsg);
+          }
+          console.log(debugMsg);
+        }
         let newWidth = this.width;
         let newHeight = this.height;
         if (this.fitContentSettings.width) {
@@ -8119,6 +8159,7 @@ var init_category_picker = __esm({
     init_box();
     init_list();
     init_button();
+    init_modal_helpers();
   }
 });
 
@@ -8146,6 +8187,7 @@ var init_search_modal = __esm({
     init_list();
     init_textbox();
     init_text();
+    init_modal_helpers();
   }
 });
 
@@ -8166,6 +8208,7 @@ var init_multiplayer_lobby = __esm({
     init_button();
     init_textbox();
     init_dockable_panel();
+    init_listtable();
     init_events();
   }
 });

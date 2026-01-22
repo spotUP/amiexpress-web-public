@@ -35,6 +35,7 @@ class VoiceControlBar {
         this.username = options.username;
         this.onDisconnectCallback = options.onDisconnect;
         this.onVideoToggleCallback = options.onVideoToggle;
+        this.onGridToggleCallback = options.onGridToggle;
         this.createUI(options.parent);
         this.setupSocketHandlers();
     }
@@ -62,8 +63,8 @@ class VoiceControlBar {
             label: ' Voice ',
             hidden: true,
         });
-        // Set high z-index to appear above other elements
-        this.container.zIndex = 10000;
+        // Set moderate z-index - above chat content (10) but below command suggestions (10000)
+        this.container.zIndex = 100;
         // User status with speaking indicator
         this.statusBox = blessed_1.default.box({
             parent: this.container,
@@ -123,6 +124,29 @@ class VoiceControlBar {
         });
         this.videoButton.on('click', () => {
             this.toggleVideo();
+        });
+        // Grid toggle button [G] - toggle between speaker/grid view
+        this.gridToggleButton = blessed_1.default.box({
+            parent: this.container,
+            top: 0,
+            left: isInsidePanel ? '65%' : 27,
+            width: 5,
+            height: 1,
+            tags: true,
+            content: '{yellow-fg}[S]{/yellow-fg}', // S = Speaker mode (default)
+            mouse: true,
+            clickable: true,
+            style: {
+                fg: 'yellow',
+                bg: 'black',
+                hover: {
+                    fg: 'white',
+                    bg: 'yellow',
+                },
+            },
+        });
+        this.gridToggleButton.on('click', () => {
+            this.toggleGrid();
         });
         // Disconnect button [X] Leave
         this.disconnectButton = blessed_1.default.box({
@@ -196,6 +220,22 @@ class VoiceControlBar {
         }
         this.screen.render();
     }
+    toggleGrid() {
+        // Call callback to toggle video grid view mode
+        if (this.onGridToggleCallback) {
+            this.onGridToggleCallback();
+        }
+    }
+    updateGridButtonLabel(viewMode) {
+        // Update button to show current mode
+        if (viewMode === 'speaker') {
+            this.gridToggleButton.setContent('{yellow-fg}[S]{/yellow-fg}'); // S = Speaker mode
+        }
+        else {
+            this.gridToggleButton.setContent('{cyan-fg}[G]{/cyan-fg}'); // G = Grid mode
+        }
+        this.screen.render();
+    }
     disconnect() {
         if (this.onDisconnectCallback) {
             this.onDisconnectCallback();
@@ -243,6 +283,7 @@ class EnhancedVoiceChannel {
         this.chatPanel = options.chatPanel;
         this.onJoinVoiceCallback = options.onJoinVoice;
         this.onLeaveVoiceCallback = options.onLeaveVoice;
+        this.showConfirmDialog = options.showConfirmDialog;
         this.setupSocketHandlers();
         this.setupAdaptiveQuality();
     }
@@ -357,56 +398,63 @@ class EnhancedVoiceChannel {
     updateVideoGridVisibility() {
         if (!this.videoGrid)
             return;
-        // Show video grid if we are in a voice channel
+        // Show video grid ONLY if someone has video enabled (not just for being in voice)
         const inVoice = this.isInVoiceChannel();
-        if (inVoice && !this.videoGrid.isVisible()) {
+        const hasAnyVideo = this.videoGrid.getParticipants().some(p => p.hasVideo);
+        if (inVoice && hasAnyVideo && !this.videoGrid.isVisible()) {
             this.videoGrid.show();
-            this.videoGrid.setFront(); // Ensure it's above the chat log
+            // Don't call setFront() - rely on zIndex so command suggestions stay on top
         }
-        else if (!inVoice && this.videoGrid.isVisible()) {
+        else if ((!inVoice || !hasAnyVideo) && this.videoGrid.isVisible()) {
             this.videoGrid.hide();
         }
     }
     async toggleVideo() {
         this.videoEnabled = !this.videoEnabled;
+        // Check if video API is available (only for web clients, not terminal)
+        if (!this.ctx?.video) {
+            console.log('[Voice] Video API not available - web client required for video');
+            this.videoEnabled = false; // Disable it since it won't work
+            return;
+        }
         // Notify server
         this.socket.emit('voice:video-toggle', { hasVideo: this.videoEnabled });
         // Handle video streaming
-        if (this.ctx?.video) {
-            if (this.videoEnabled) {
-                try {
-                    const videoOptions = this.qualityManager?.getVideoProfile();
-                    await this.ctx.video.startStream({ type: 'webcam' }, {
-                        width: videoOptions?.asciiWidth || 80,
-                        height: videoOptions?.asciiHeight || 24,
-                        fps: videoOptions?.fps || 10,
-                        colored: videoOptions?.colored ?? true,
-                    });
-                    // Route local frames to the video grid for preview
-                    this.ctx.video.onFrame((frame) => {
-                        if (this.videoEnabled && this.videoGrid) {
-                            this.videoGrid.updateParticipantVideo(this.userId, frame);
-                        }
-                    });
-                }
-                catch (error) {
-                    this.videoEnabled = true; // Keep it enabled so we can show the error in the tile
-                    if (this.videoGrid) {
-                        const errorMsg = error.message?.includes('denied') ? 'CAMERA BLOCKED' : 'STREAM ERROR';
-                        this.videoGrid.updateParticipantError(this.userId, errorMsg);
+        if (this.videoEnabled) {
+            try {
+                const videoOptions = this.qualityManager?.getVideoProfile();
+                await this.ctx.video.startStream({ type: 'webcam' }, {
+                    width: videoOptions?.asciiWidth || 80,
+                    height: videoOptions?.asciiHeight || 24,
+                    fps: videoOptions?.fps || 10,
+                    colored: videoOptions?.colored ?? true,
+                });
+                // Route local frames to the video grid for preview
+                this.ctx.video.onFrame((frame) => {
+                    if (this.videoEnabled && this.videoGrid) {
+                        this.videoGrid.updateParticipantVideo(this.userId, frame);
                     }
-                    this.socket.emit('voice:video-toggle', { hasVideo: true });
-                }
+                });
             }
-            else {
-                try {
-                    const myStreamId = `video-${this.socket.id}`;
-                    await this.ctx.video.stopStream(myStreamId);
-                    // Remove listener
-                    this.ctx.video.onFrame(() => { });
+            catch (error) {
+                console.log('[Voice] Video stream failed:', error.message);
+                this.videoEnabled = true; // Keep it enabled so we can show the error in the tile
+                if (this.videoGrid) {
+                    const errorMsg = error.message?.includes('denied') ? 'CAMERA BLOCKED' : 'STREAM ERROR';
+                    this.videoGrid.updateParticipantError(this.userId, errorMsg);
                 }
-                catch (error) {
-                }
+                this.socket.emit('voice:video-toggle', { hasVideo: true });
+            }
+        }
+        else {
+            try {
+                const myStreamId = `video-${this.socket.id}`;
+                await this.ctx.video.stopStream(myStreamId);
+                // Remove listener
+                this.ctx.video.onFrame(() => { });
+            }
+            catch (error) {
+                console.log('[Voice] Stop video failed:', error.message);
             }
         }
         // Update own participant in video grid
@@ -417,6 +465,153 @@ class EnhancedVoiceChannel {
             this.updateVideoGridVisibility();
         }
     }
+    /**
+     * Show voice permissions dialog and return user's choices
+     */
+    async showVoicePermissionsDialog() {
+        return new Promise((resolve) => {
+            // Create modal overlay
+            const overlay = blessed_1.default.box({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 52,
+                height: 12,
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'black',
+                    border: { fg: 'cyan' },
+                },
+                tags: true,
+                label: ' {cyan-fg}Join Voice Channel{/cyan-fg} ',
+                ch: ' ', // Fill background
+                // @ts-ignore - zIndex exists but not in types
+                zIndex: 99999,
+            });
+            overlay.setFront();
+            this.screen.realloc();
+            // Header text
+            blessed_1.default.text({
+                parent: overlay,
+                top: 1,
+                left: 2,
+                width: 48,
+                content: 'Enable audio and video for this call?',
+                tags: true,
+                style: { fg: 'white' },
+            });
+            // Instructions
+            blessed_1.default.text({
+                parent: overlay,
+                top: 2,
+                left: 2,
+                width: 48,
+                content: '{gray-fg}(M/V=toggle, J=join, C=cancel){/gray-fg}',
+                tags: true,
+            });
+            let micEnabled = true;
+            let cameraEnabled = true;
+            // Microphone checkbox
+            const micCheckbox = blessed_1.default.text({
+                parent: overlay,
+                top: 4,
+                left: 3,
+                width: 46,
+                content: '{green-fg}[X]{/green-fg} Enable Microphone (M)',
+                tags: true,
+                mouse: true,
+                clickable: true,
+                style: { fg: 'white', hover: { bg: 'blue' } },
+            });
+            micCheckbox.on('click', () => {
+                micEnabled = !micEnabled;
+                micCheckbox.setContent(micEnabled
+                    ? '{green-fg}[X]{/green-fg} Enable Microphone (M)'
+                    : '{gray-fg}[ ]{/gray-fg} Enable Microphone (M)');
+                this.screen.render();
+            });
+            // Camera checkbox
+            const cameraCheckbox = blessed_1.default.text({
+                parent: overlay,
+                top: 5,
+                left: 3,
+                width: 46,
+                content: '{green-fg}[X]{/green-fg} Enable Camera (V)',
+                tags: true,
+                mouse: true,
+                clickable: true,
+                style: { fg: 'white', hover: { bg: 'blue' } },
+            });
+            cameraCheckbox.on('click', () => {
+                cameraEnabled = !cameraEnabled;
+                cameraCheckbox.setContent(cameraEnabled
+                    ? '{green-fg}[X]{/green-fg} Enable Camera (V)'
+                    : '{gray-fg}[ ]{/gray-fg} Enable Camera (V)');
+                this.screen.render();
+            });
+            // Buttons
+            const joinButton = blessed_1.default.text({
+                parent: overlay,
+                bottom: 2,
+                left: 3,
+                width: 20,
+                content: '{center}{green-fg}[J] Join{/green-fg}{/center}',
+                tags: true,
+                mouse: true,
+                clickable: true,
+                style: { fg: 'white', hover: { bg: 'green' } },
+            });
+            joinButton.on('click', () => {
+                overlay.destroy();
+                this.screen.render();
+                resolve({ enableMic: micEnabled, enableCamera: cameraEnabled });
+            });
+            const cancelButton = blessed_1.default.text({
+                parent: overlay,
+                bottom: 2,
+                right: 3,
+                width: 20,
+                content: '{center}{red-fg}[C] Cancel{/red-fg}{/center}',
+                tags: true,
+                mouse: true,
+                clickable: true,
+                style: { fg: 'white', hover: { bg: 'red' } },
+            });
+            cancelButton.on('click', () => {
+                overlay.destroy();
+                this.screen.render();
+                resolve(null);
+            });
+            // Keyboard shortcuts
+            overlay.key(['j', 'enter'], () => {
+                overlay.destroy();
+                this.screen.render();
+                resolve({ enableMic: micEnabled, enableCamera: cameraEnabled });
+            });
+            overlay.key(['c', 'escape'], () => {
+                overlay.destroy();
+                this.screen.render();
+                resolve(null);
+            });
+            overlay.key(['m'], () => {
+                micEnabled = !micEnabled;
+                micCheckbox.setContent(micEnabled
+                    ? '{green-fg}[X]{/green-fg} Enable Microphone (M)'
+                    : '{gray-fg}[ ]{/gray-fg} Enable Microphone (M)');
+                this.screen.render();
+            });
+            overlay.key(['v'], () => {
+                cameraEnabled = !cameraEnabled;
+                cameraCheckbox.setContent(cameraEnabled
+                    ? '{green-fg}[X]{/green-fg} Enable Camera (V)'
+                    : '{gray-fg}[ ]{/gray-fg} Enable Camera (V)');
+                this.screen.render();
+            });
+            overlay.focus();
+            this.screen.render();
+        });
+    }
     async joinVoiceChannel(channelId) {
         if (this.currentVoiceChannel === channelId) {
             // Already in this channel, leave instead
@@ -426,6 +621,12 @@ class EnhancedVoiceChannel {
         // Leave current channel if in one
         if (this.currentVoiceChannel) {
             await this.leaveVoiceChannel();
+        }
+        // Show permissions dialog
+        const permissions = await this.showVoicePermissionsDialog();
+        if (!permissions) {
+            // User cancelled
+            return;
         }
         try {
             // Helper to complete the join (called on success or timeout)
@@ -444,6 +645,13 @@ class EnhancedVoiceChannel {
                         },
                         onVideoToggle: () => {
                             this.toggleVideo();
+                        },
+                        onGridToggle: () => {
+                            if (this.videoGrid) {
+                                this.videoGrid.toggleViewMode();
+                                const newMode = this.videoGrid.getViewMode();
+                                this.controlBar?.updateGridButtonLabel(newMode);
+                            }
                         },
                     });
                 }
@@ -492,10 +700,19 @@ class EnhancedVoiceChannel {
                         }
                     }
                 }
-                // Start audio streaming
-                await this.startAudioStreaming();
+                // Start audio streaming if mic enabled
+                if (permissions.enableMic) {
+                    await this.startAudioStreaming();
+                }
                 // Show control bar
                 this.controlBar.show();
+                // Enable camera if requested
+                if (permissions.enableCamera) {
+                    // Wait a bit for control bar to render
+                    setTimeout(() => {
+                        this.toggleVideo();
+                    }, 100);
+                }
                 // Update grid visibility (will show avatars by default)
                 this.updateVideoGridVisibility();
                 if (this.onJoinVoiceCallback) {
@@ -550,19 +767,24 @@ class EnhancedVoiceChannel {
         }
     }
     async startAudioStreaming() {
-        if (!this.ctx?.audio || !this.qualityManager)
+        if (!this.ctx?.audio || !this.qualityManager) {
+            // Audio API not available - this is normal for terminal/telnet clients
+            // Only web clients have audio support
             return;
+        }
         try {
             const audioOptions = this.qualityManager.getAudioStreamOptions();
             await this.ctx.audio.startStreaming(audioOptions);
         }
         catch (error) {
+            // Permission denied or getUserMedia failed
+            console.log('[Voice] Audio streaming failed:', error.message);
         }
     }
     showGrid() {
         if (this.videoGrid) {
             this.videoGrid.show();
-            this.videoGrid.setFront();
+            // Don't call setFront() - rely on zIndex so command suggestions stay on top
         }
     }
     hideGrid() {

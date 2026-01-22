@@ -27,6 +27,7 @@ export interface VoiceControlBarOptions {
     username: string;
     onDisconnect?: () => void;
     onVideoToggle?: () => void;
+    onGridToggle?: () => void;
 }
 /**
  * Bottom Control Bar (Discord-style)
@@ -40,7 +41,7 @@ export declare class VoiceControlBar {
     private statusBox;
     private muteButton;
     private videoButton;
-    private settingsButton;
+    private gridToggleButton;
     private disconnectButton;
     private username;
     private isMuted;
@@ -48,11 +49,14 @@ export declare class VoiceControlBar {
     private isSpeaking;
     private onDisconnectCallback?;
     private onVideoToggleCallback?;
+    private onGridToggleCallback?;
     constructor(options: VoiceControlBarOptions);
     private createUI;
     private setupSocketHandlers;
     private toggleMute;
     private toggleVideo;
+    private toggleGrid;
+    updateGridButtonLabel(viewMode: 'speaker' | 'grid'): void;
     private disconnect;
     private updateSpeakingIndicator;
     show(): void;
@@ -74,6 +78,7 @@ export interface EnhancedVoiceChannelOptions {
     chatPanel?: any;
     onJoinVoice?: (channelId: string) => void;
     onLeaveVoice?: () => void;
+    showConfirmDialog?: (title: string, message: string) => Promise<boolean>;
 }
 export declare class EnhancedVoiceChannel {
     private parent?;
@@ -92,6 +97,7 @@ export declare class EnhancedVoiceChannel {
     private qualityManager?;
     private onJoinVoiceCallback?;
     private onLeaveVoiceCallback?;
+    private showConfirmDialog?;
     private videoEnabled;
     constructor(options: EnhancedVoiceChannelOptions);
     private setupSocketHandlers;
@@ -99,6 +105,10 @@ export declare class EnhancedVoiceChannel {
     private updateChannelList;
     private updateVideoGridVisibility;
     toggleVideo(): Promise<void>;
+    /**
+     * Show voice permissions dialog and return user's choices
+     */
+    private showVoicePermissionsDialog;
     joinVoiceChannel(channelId: string): Promise<void>;
     leaveVoiceChannel(): Promise<void>;
     private startAudioStreaming;

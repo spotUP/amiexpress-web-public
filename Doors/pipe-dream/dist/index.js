@@ -70,6 +70,7 @@ function initScreen() {
         content: formatHUD(),
     });
     gameArea = blessed.box({
+        fixed: true,
         parent: screen,
         top: 1,
         left: 0,
@@ -118,6 +119,7 @@ function showMenu() {
         menuContent.push(`{${selected ? "yellow" : "white"}-fg}${selected ? "> " : "  "}${option}{/}`);
     });
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -155,6 +157,7 @@ async function showHighscores() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -192,6 +195,7 @@ function showHelp() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -236,6 +240,7 @@ function showLevelComplete() {
         "{gray-fg}Press SPACE for next level{/}",
     ];
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -261,6 +266,7 @@ function showGameOver() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -391,6 +397,7 @@ function showPauseScreen() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",
@@ -451,6 +458,7 @@ function showNameEntry() {
     if (menuBox)
         menuBox.destroy();
     menuBox = blessed.box({
+        fixed: true,
         parent: gameArea,
         top: "center",
         left: "center",

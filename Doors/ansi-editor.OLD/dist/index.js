@@ -14,7 +14,7 @@
  * - Color picker with full palette
  * - Real-time canvas rendering
  */
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor as Door } from '@amiexpress/bbs-door-sdk';
 import { UIEngine } from '@amiexpress/bbs-door-sdk';
 import { ANSI } from './types.js';
 import { createCanvas, flushUndoChunk, undo, redo, updateSelection, clearSelection, copySelection, cutSelection, pasteSelection, selectAll, renderCanvas, renderStatusBar, clearCanvas, } from './canvas.js';
@@ -604,7 +604,3 @@ door.onClose(async (ctx) => {
 // EXPORT
 // =============================================================================
 export default door;
-// Provide runDoor entrypoint expected by the TS door harness
-export async function runDoor(session) {
-    await door.execute(session);
-}
