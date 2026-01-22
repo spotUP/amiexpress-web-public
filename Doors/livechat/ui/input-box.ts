@@ -5,6 +5,7 @@
 import { Screen, Textarea, Button } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createTextarea, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { STATUS_HEIGHT } from './status-bar';
+import { enableLiveEffectRendering } from './effect-renderer';
 
 export const INPUT_HEIGHT = 3;
 export const EMOJI_BUTTON_WIDTH = 6;  // Wide enough for :D with border and padding
@@ -12,7 +13,7 @@ export const EMOJI_BUTTON_WIDTH = 6;  // Wide enough for :D with border and padd
 export function createInputBox(screen: Screen): Textarea {
   const screenWidth = (screen as any).width || 80;
 
-  return createTextarea({
+  const textarea = createTextarea({
     parent: screen,
     bottom: STATUS_HEIGHT,
     left: 0,
@@ -32,6 +33,11 @@ export function createInputBox(screen: Screen): Textarea {
       border: { fg: 'yellow' },
     },
   });
+
+  // Enable live effect rendering for WYSIWYG experience
+  enableLiveEffectRendering(textarea);
+
+  return textarea;
 }
 
 export function createEmojiButton(screen: Screen): Button {

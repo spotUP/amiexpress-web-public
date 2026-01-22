@@ -308,6 +308,7 @@ export async function createApp(session: DoorSession) {
     label: ' Commands ',
     border: { type: 'line' },
     hidden: true,
+    ch: ' ',           // CRITICAL: Fill background to make widget opaque
     mouse: true,
     clickable: true,
     keys: true,
@@ -321,6 +322,8 @@ export async function createApp(session: DoorSession) {
     scrollbar: {
       ch: ' ',
     },
+    // @ts-ignore - zIndex exists but not in types
+    zIndex: 10000,  // CRITICAL: Must be above all panels to avoid clipping
   });
 
   // Ghost text overlay for inline completion preview
@@ -490,7 +493,6 @@ export async function createApp(session: DoorSession) {
     dockPosition: 'left',
     resizable: true,
     draggable: true,
-    persistenceKey: 'sidebar',
     zIndex: 1,
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
@@ -626,7 +628,37 @@ export async function createApp(session: DoorSession) {
       });
     }
 
+    // Debug: show what items we're setting
+    console.log('[LIVECHAT DEBUG] Channel list items:', items.map((item, i) => {
+      const stripped = item.replace(/{[^}]+}/g, ''); // Strip blessed tags
+      return `[${i}] "${stripped}" (${stripped.length} chars)`;
+    }));
+
     channelList.setItems(items);
+
+    // Manually trigger fitContent to resize panel based on actual content
+    // This ensures panel expands even if persisted state had a narrow width
+    console.log('[LIVECHAT DEBUG] Calling fitToContent, sidebar width before:', sidebarPanel.width, 'list width:', channelList.width);
+    sidebarPanel.fitToContent();
+    console.log('[LIVECHAT DEBUG] Sidebar width after fitToContent:', sidebarPanel.width, 'list width:', channelList.width);
+
+    // CRITICAL: Force list to update its width based on parent panel
+    // When panel expands, child list doesn't auto-recalculate '100%-2' width
+    const newListWidth = (sidebarPanel.width as number) - 2; // Panel width minus borders
+    channelList.width = newListWidth;
+    (channelList as any).position.width = newListWidth;
+    console.log('[LIVECHAT DEBUG] Forced list width to:', newListWidth);
+
+    // Invalidate blessed's internal cache to force re-layout
+    if ((channelList as any)._clines) {
+      delete (channelList as any)._clines;
+    }
+    if ((channelList as any)._pclines) {
+      delete (channelList as any)._pclines;
+    }
+
+    // Re-render to apply new width
+    screen.render();
 
     // Select current channel if in the list
     const currentIdx = channelItems.findIndex(ch => ch.id === state.currentChannel);
@@ -1101,7 +1133,18 @@ export async function createApp(session: DoorSession) {
   // ========== POPUP DIALOGS ==========
   // Note: Dialog widgets (Message, Prompt, Question) have built-in fixed heights.
   // Don't pass height: 'shrink' as it breaks nested element rendering.
-  const { modalOverlay, showModal, hideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox);
+  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox);
+
+  // Wrap hideModal to restore commandSuggestions z-order after hiding modals
+  const hideModal = (widget: any) => {
+    originalHideModal(widget);
+    // If commandSuggestions is visible, restore it to front
+    // This ensures it stays above modals that called setFront()
+    if (!commandSuggestions.hidden && commandSuggestionsVisible) {
+      commandSuggestions.setFront();
+      ghostText.setFront();
+    }
+  };
 
   // Password dialog for private rooms
   const passwordOverlay = createBox({
@@ -1271,7 +1314,7 @@ export async function createApp(session: DoorSession) {
 
   // ========== VOICE CHANNEL (Discord-style UX) ==========
   const voiceChannel = createEnhancedVoiceChannel({
-    parent: sidebarPanel,
+    parent: screen,  // Parent to screen so control bar floats at bottom, not in sidebar
     channelList,
     screen,
     socket,
@@ -1788,10 +1831,14 @@ export async function createApp(session: DoorSession) {
   }
 
   socket.on('disconnect', (reason: string) => {
+    console.log('[LIVECHAT DEBUG] Socket disconnected, reason:', reason);
     if (reason !== 'io client disconnect') {
       // Server initiated disconnect or connection lost
       showConnectionErrorDialog(`Disconnected: ${reason}`);
     }
+    // CRITICAL: Always call cleanup on disconnect to restore BBS input
+    console.log('[LIVECHAT DEBUG] Calling cleanup() from disconnect handler');
+    cleanup();
   });
 
   socket.on('connect_error', (error: any) => {
@@ -1876,6 +1923,12 @@ export async function createApp(session: DoorSession) {
 
   // Live typing indicator and command autocomplete
   inputBox.on('keypress', (ch: string, key: any) => {
+    // CRITICAL: Allow Shift+Arrow/Home/End to pass through to textbox for text selection
+    // Don't intercept these - the textbox widget handles them internally
+    if (key.shift && (key.name === 'left' || key.name === 'right' || key.name === 'up' || key.name === 'down' || key.name === 'home' || key.name === 'end')) {
+      return false;  // Return false to allow event to continue to textbox's internal handler
+    }
+
     // Handle Enter key - submit message instead of inserting newline
     if (key.name === 'enter' || key.name === 'return') {
       if (commandSuggestionsVisible) {
@@ -1898,18 +1951,19 @@ export async function createApp(session: DoorSession) {
     // Handle command autocomplete navigation when dropdown is visible
     if (commandSuggestionsVisible) {
       // Tab or Right arrow: accept ghost text completion (if available)
-      if ((key.name === 'tab' || key.name === 'right') && currentGhostCompletion) {
+      // But ONLY if shift is not pressed (Shift+Right is for selection)
+      if ((key.name === 'tab' || (key.name === 'right' && !key.shift)) && currentGhostCompletion) {
         // Accept the ghost completion
         inputBox.setValue(`/${currentGhostCompletion} `);
         inputBox.focus();
         hideCommandSuggestions();
         screen.render();
         return;
-      } else if (key.name === 'down') {
+      } else if (key.name === 'down' && !key.shift) {
         commandSuggestions.down(1);
         screen.render();
         return;
-      } else if (key.name === 'up') {
+      } else if (key.name === 'up' && !key.shift) {
         commandSuggestions.up(1);
         screen.render();
         return;
@@ -2134,6 +2188,7 @@ export async function createApp(session: DoorSession) {
   // ========== CLEANUP ==========
 
   function cleanup() {
+    console.log('[LIVECHAT CLEANUP] Starting cleanup...');
     state.running = false;
 
     // Stop cursor blink interval
@@ -2146,11 +2201,15 @@ export async function createApp(session: DoorSession) {
 
     events.clear();
 
+    console.log('[LIVECHAT CLEANUP] Calling inputManager.disable()...');
     // CRITICAL: Disable door input FIRST (before screen.destroy)
     // This restores BBS input state properly
     inputManager.disable();
+    console.log('[LIVECHAT CLEANUP] inputManager.disable() completed');
 
+    console.log('[LIVECHAT CLEANUP] Calling screen.destroy()...');
     screen.destroy();
+    console.log('[LIVECHAT CLEANUP] screen.destroy() completed');
 
     // Restore fixed terminal mode only if we enabled wide mode
     if (chatOnly) {
@@ -2162,9 +2221,11 @@ export async function createApp(session: DoorSession) {
       bbs.setModemSpeed?.(originalModemSpeed);
     }
 
+    console.log('[LIVECHAT CLEANUP] Writing goodbye message...');
     bbs.write('\x1b[2J\x1b[H');
     bbs.writeLine('\x1b[33mThanks for using LiveChat v3.2! Goodbye.\x1b[0m');
     state.running = false;
+    console.log('[LIVECHAT CLEANUP] Cleanup completed successfully');
   }
 
   // ========== MAIN ==========
@@ -2172,50 +2233,61 @@ export async function createApp(session: DoorSession) {
   return {
     state,
     async run() {
-      // Clear screen before drawing UI (prevent BBS log bleed-through)
-      bbs.write('\x1b[2J\x1b[H');  // Clear screen and home cursor
+      try {
+        // Clear screen before drawing UI (prevent BBS log bleed-through)
+        bbs.write('\x1b[2J\x1b[H');  // Clear screen and home cursor
 
-      // Initial UI setup
-      updateChannelList();
-      updateUserTable();
-      updateStatusBar();
+        // Initial UI setup
+        updateChannelList();
+        updateUserTable();
+        updateStatusBar();
 
-      // Ensure command suggestions appear above everything else
-      // (must be called after all other elements are created)
-      commandSuggestions.setIndex(9999);
-      commandSuggestions.setFront();
-      ghostText.setFront();
+        // Ensure command suggestions appear above everything else
+        // (must be called after all other elements are created)
+        // Use 10000 to be above modals (which call setFront() dynamically)
+        commandSuggestions.setIndex(10000);
+        commandSuggestions.setFront();
+        ghostText.setIndex(10001);
+        ghostText.setFront();
 
-      // Start animation manager for animated text effects
-      animationManager.start();
+        // Start animation manager for animated text effects
+        animationManager.start();
 
-      // Force initial layout calculation to ensure full-width elements are properly sized
-      // Emit a resize event to trigger the responsive layout manager
-      screen.emit('resize');
+        // Force initial layout calculation to ensure full-width elements are properly sized
+        // Emit a resize event to trigger the responsive layout manager
+        screen.emit('resize');
 
-      screen.render();
+        screen.render();
 
-      // Focus input and start reading
-      inputBox.focus();
-      inputBox.readInput();
+        // Focus input and start reading
+        inputBox.focus();
+        inputBox.readInput();
 
-      // Welcome messages
-      addSystemMessage('Welcome to LiveChat v3.2!');
-      addChatMessage('{cyan-fg}Hotkeys:{/cyan-fg}', false);
-      addChatMessage('  {white-fg}F1{/white-fg}=Help  {white-fg}F2{/white-fg}=Sidebar  {white-fg}F3{/white-fg}=Switch Tab  {white-fg}F4{/white-fg}=Emoji Picker', false);
-      addChatMessage('  {white-fg}F5{/white-fg}=Art Channel  {white-fg}F6{/white-fg}=Files  {white-fg}Tab{/white-fg}=Focus Cycle', false);
-      addChatMessage('  {white-fg}^S{/white-fg}=Settings  {white-fg}^E{/white-fg}=Emoji  {white-fg}^C/^Q{/white-fg}=Quit  {white-fg}Esc{/white-fg}=Close/Return', false);
-      addChatMessage('{yellow-fg}Commands:{/yellow-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events', false);
-      addChatMessage('{gray-fg}Type a message and press Enter to send{/gray-fg}', false);
+        // Welcome messages
+        addSystemMessage('Welcome to LiveChat v3.2!');
+        addChatMessage('{cyan-fg}Hotkeys:{/cyan-fg}', false);
+        addChatMessage('  {white-fg}F1{/white-fg}=Help  {white-fg}F2{/white-fg}=Sidebar  {white-fg}F3{/white-fg}=Switch Tab  {white-fg}F4{/white-fg}=Emoji Picker', false);
+        addChatMessage('  {white-fg}F5{/white-fg}=Art Channel  {white-fg}F6{/white-fg}=Files  {white-fg}Tab{/white-fg}=Focus Cycle', false);
+        addChatMessage('  {white-fg}^S{/white-fg}=Settings  {white-fg}^E{/white-fg}=Emoji  {white-fg}^C/^Q{/white-fg}=Quit  {white-fg}Esc{/white-fg}=Close/Return', false);
+        addChatMessage('{yellow-fg}Commands:{/yellow-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events', false);
+        addChatMessage('{gray-fg}Type a message and press Enter to send{/gray-fg}', false);
 
-      // Request room list
-      addSystemMessage('Loading rooms...');
-      socket.emit('room:list', {});
+        // Request room list
+        addSystemMessage('Loading rooms...');
+        socket.emit('room:list', {});
 
-      // Wait for exit
-      await new Promise<void>((resolve) => {
-        screen.on('destroy', resolve);
-      });
+        // Wait for exit
+        await new Promise<void>((resolve) => {
+          screen.on('destroy', resolve);
+        });
+      } finally {
+        // CRITICAL: Ensure cleanup() is ALWAYS called on door exit
+        // This prevents BBS input from breaking when door exits abnormally
+        console.log('[LIVECHAT DEBUG] run() exiting, calling cleanup() from finally block');
+        if (state.running) {
+          cleanup();
+        }
+      }
     }
   };
 }

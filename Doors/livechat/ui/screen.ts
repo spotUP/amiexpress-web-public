@@ -11,6 +11,7 @@ export function createScreen(bbs: any): Screen {
     responsive: true,
     smartCSR: false,  // Disable smart scroll-region optimization - prevents layout corruption during drag/resize
     fastCSR: false,   // Disable fast CSR - forces full redraws for stable dockable panel rendering
+    focusKeys: true,  // Enable Tab/Shift+Tab for focus cycling between widgets
   });
 
   screen.enableMouse();
