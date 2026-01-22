@@ -392,3 +392,10 @@ Node*/DoorLog
 # XIM debugging files
 logs/xim-debug.json
 logs/reports/xim-debug-*.md
+
+# Backend runtime logs
+logs/access.log
+logs/backend.log
+logs/filehandle-debug.log
+logs/preview.log
+logs/xim-amiga.log
