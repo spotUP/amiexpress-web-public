@@ -49,10 +49,11 @@ Then manually restart when needed:
 
 - `Doors/**/*.ts` - TypeScript doors in main Doors directory
 - `Doors/**/*.js` - Compiled JavaScript doors
+- `Doors/**/dist/**/*.js` - **Compiled dist/ output (hybrid doors)**
 - `sdk/doors/**/*.ts` - SDK example doors
 - `sdk/doors/**/*.js` - SDK compiled doors
 
-**Note:** Changes to `dist/` folders trigger restarts. If you rebuild a door with `npm run build`, the watcher will see the `dist/index.js` change and restart automatically.
+**Important for Hybrid Doors:** The watcher monitors `dist/` directories because hybrid TypeScript doors (like card-lobby) load from compiled `dist/index.js`. When you run `npm run build` in a door directory, the watcher sees the `dist/*.js` changes and auto-restarts the backend.
 
 ## Excluded from Watching
 

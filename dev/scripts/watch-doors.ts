@@ -250,6 +250,7 @@ writePidFile();
 startBackend();
 
 // Watch door directories
+// Includes both source files AND compiled dist files for hybrid doors
 watcher = watch(
   [
     'Doors/**/*.{ts,js}',
@@ -259,7 +260,7 @@ watcher = watch(
     cwd: PROJECT_ROOT,
     ignored: [
       '**/node_modules/**',
-      '**/dist/**',
+      // Don't ignore dist/ - hybrid doors need dist/ changes to trigger restart
       '**/.git/**',
     ],
     persistent: true,
@@ -272,9 +273,10 @@ log('|           Door File Watcher - Auto Restart Mode              |', colors.c
 log('+---------------------------------------------------------------+', colors.cyan);
 log(`\n-> Watcher PID: ${process.pid}`, colors.cyan);
 log('-> Watching for door changes...', colors.cyan);
-log('   Doors/**/*.{ts,js}', colors.gray);
+log('   Doors/**/*.{ts,js} (includes dist/)', colors.gray);
 log('   sdk/doors/**/*.{ts,js}', colors.gray);
 log('\n-> Backend will auto-restart when door files change', colors.cyan);
+log('-> Includes compiled dist/ files for hybrid doors', colors.cyan);
 log('-> Press Ctrl+C to stop\n', colors.cyan);
 
 watcher

@@ -726,10 +726,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     // Game mode keyboard handlers - bypass OS key repeat delay with custom key repeat
-    // Movement keys (arrows, WASD, space) don't repeat - games should use key state tracking
     // Typing keys have initial delay before repeat for single character typing
-    const KEY_REPEAT_DELAY = 83;   // Initial delay before repeat starts (ms) - fast for games like Tetris
-    const KEY_REPEAT_RATE = 16;    // Interval between repeats (ms) - ~60fps for smooth game input
+    // Delay is long enough for comfortable typing while still responsive for games
+    const KEY_REPEAT_DELAY = 400;  // Initial delay before repeat starts (ms) - safe for typing, responsive for games
+    const KEY_REPEAT_RATE = 30;    // Interval between repeats (ms) - ~33fps, fast enough for games
 
     // Keys that should NOT auto-repeat
     // NOTE: Arrow keys REMOVED to enable list navigation in neo-blessed UIs

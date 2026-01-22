@@ -283,7 +283,7 @@ else
   SDK_NEEDS_BUILD=false
   if [ ! -d "$REPO_ROOT/sdk/dist" ]; then
     SDK_NEEDS_BUILD=true
-  elif [ -n "$(find "$REPO_ROOT/sdk/core" "$REPO_ROOT/sdk/engines" -name "*.ts" -newer "$REPO_ROOT/sdk/dist/index.js" 2>/dev/null | head -1)" ]; then
+  elif [ -n "$(find "$REPO_ROOT/sdk/core" "$REPO_ROOT/sdk/engines" "$REPO_ROOT/sdk/utils" -name "*.ts" -newer "$REPO_ROOT/sdk/dist/index.js" 2>/dev/null | head -1)" ]; then
     SDK_NEEDS_BUILD=true
   fi
 

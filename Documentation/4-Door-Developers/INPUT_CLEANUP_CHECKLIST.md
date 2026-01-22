@@ -103,6 +103,70 @@ Run your door → Exit cleanly → Type in BBS prompt (should work!)
 
 ---
 
+## ⚠️ CRITICAL: Cleanup Must Run on ALL Exit Paths
+
+**The most common mistake:** cleanup() only called on user quit (Ctrl+C), but not on:
+- Browser tab close
+- Connection disconnect
+- Network error
+- Door crash/exception
+- Abnormal exit
+
+**Result:** BBS input breaks because `inputManager.disable()` never runs.
+
+### ✅ SOLUTION: Use try/finally + disconnect handler
+
+```typescript
+async run() {
+  try {
+    // Door setup and main loop
+    this.screen = createScreen(...);
+    this.inputManager = new DoorInputManager(...);
+    this.inputManager.enable();
+
+    // Setup disconnect handler
+    socket.on('disconnect', (reason: string) => {
+      console.log('[DEBUG] Socket disconnected:', reason);
+      this.cleanup();  // CRITICAL: Cleanup on disconnect!
+    });
+
+    // ... door logic ...
+
+    // Wait for exit
+    await new Promise<void>((resolve) => {
+      this.screen.on('destroy', resolve);
+    });
+  } finally {
+    // CRITICAL: Cleanup runs even if door crashes or exits abnormally
+    console.log('[DEBUG] run() exiting, calling cleanup()');
+    if (this.state.running) {
+      this.cleanup();
+    }
+  }
+}
+
+cleanup() {
+  this.state.running = false;
+
+  // CRITICAL: Disable input FIRST
+  if (this.inputManager) {
+    this.inputManager.disable();
+  }
+
+  if (this.screen) {
+    this.screen.destroy();
+  }
+}
+```
+
+**Why this works:**
+- `try/finally` ensures cleanup() runs even on exceptions
+- `socket.on('disconnect')` ensures cleanup() runs on connection loss
+- `if (this.state.running)` prevents double-cleanup
+- Order: `inputManager.disable()` BEFORE `screen.destroy()`
+
+---
+
 ## Common Mistakes
 
 ### ❌ WRONG: Manual Input Setup
@@ -175,16 +239,16 @@ new DoorInputManager(session, screen, {
 
 ## Reference Doors
 
-**Good examples with correct cleanup:**
+**Good examples with correct cleanup (try/finally + disconnect handler):**
 
-- `Doors/livechat/server.ts` - Chat door with blessed UI
+- ⭐ `Doors/livechat/server.ts` - Chat door with blessed UI (BEST EXAMPLE - has try/finally + disconnect)
 - `Doors/ansi-editor/index.ts` - ANSI editor
 - `Doors/whip/app.ts` - Project management
 - `Doors/zoo-keeper/index.ts` - Game with blessed UI
 - `Doors/card-lobby/index.ts` - Card game lobby
 - `Doors/bbs-dashboard/index.ts` - Dashboard
 
-**Before January 2026:** Many doors had manual input setup - DO NOT copy those patterns!
+**⚠️ Before January 22, 2026:** Many doors only called cleanup() on user quit, not on disconnect/exceptions - DO NOT copy those patterns!
 
 ---
 
