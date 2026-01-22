@@ -3342,6 +3342,16 @@ debugLog(
     const name = this.emulator.readString(nameAddr);
 debugLog(`[ExecLibrary] FindSemaphore("${name}")`);
 
+    // CRITICAL DEBUG: Log ALL calls to see what RTW is looking for
+    const fs = require('fs');
+    const allSemas = Array.from(this.publicSemaphores.keys()).join(', ');
+    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `FindSemaphore("${name}") - total: ${this.publicSemaphores.size}\n`);
+    if (name.startsWith('AE')) {
+      const aeSemas = Array.from(this.publicSemaphores.keys()).filter(k => k.startsWith('AE')).join(', ');
+      console.log(`[ExecLibrary] FindSemaphore("${name}") - AE*: ${aeSemas || 'NONE'}`);
+      fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `  AE semaphores: ${aeSemas || 'NONE'}\n`);
+    }
+
     // Search for semaphore in public registry
     const semaAddr = this.publicSemaphores.get(name);
 

@@ -125,13 +125,27 @@ console.log('[NodeStatusManager] Initializing multiPort semaphore structure...')
 
     // Register all AEServer semaphores with ExecLibrary
 console.log('[NodeStatusManager] Registering AEServer semaphores...');
+    const fs = require('fs');
     for (let i = 0; i < this.MAX_NODES; i++) {
       const semaphoreAddr = this.singlePortAddresses.get(i)!;
+      const nameAddr = this.nameAddresses.get(i)!;
+      const semName = emulator.readString(nameAddr, 20);
+
       execLibrary.addSemaphore(semaphoreAddr);
+
+      if (i < 3) {
+        // Debug: verify first 3 semaphores
+        const handle = emulator.readString(semaphoreAddr + 86, 20);
+        const location = emulator.readString(semaphoreAddr + 117, 20);
+        const msg = `[NodeStatusManager]   "${semName}" registered at 0x${semaphoreAddr.toString(16)}: "${handle}" from "${location}"\n`;
+        console.log(msg.trim());
+        fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', msg);
+      }
     }
 
 console.log(`[NodeStatusManager] MultiPort at 0x${this.multiPortAddress.toString(16)}`);
-console.log(`[NodeStatusManager] Node status structures initialized and registered`);
+console.log(`[NodeStatusManager] ${this.MAX_NODES} AEServer.N semaphores registered`);
+    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `Registered ${this.MAX_NODES} semaphores\n`);
   }
 
   /**

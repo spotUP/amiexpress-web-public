@@ -309,6 +309,10 @@ debugLog(`[XIMBBSInfo] ENVSTAT [WRITE]: ${newStatus}`);
       case XIMCommand.CONF_ACCESS:
         this.handleConfAccess(msg);
         return;
+
+      case XIMCommand.MULTICOM:
+        this.handleMulticom(msg);
+        return;
     }
 
     if (isRead && value) {
@@ -760,6 +764,8 @@ debugLog('[XIMBBSInfo] NODE_UNIT: 0');
    */
   handleMulticom(msg: XIMMessage): void {
 debugLog('[XIMBBSInfo] MULTICOM - Creating multi-node structure');
+    const fs = require('fs');
+    fs.writeFileSync('/tmp/multicom-called.txt', `MULTICOM called at ${new Date().toISOString()}\n`);
 
     // From axcommon.e:
     // OBJECT nodeInfo = 124 bytes total:
@@ -783,6 +789,9 @@ debugLog('[XIMBBSInfo] MULTICOM - Creating multi-node structure');
     const nodeId = this.bbsSession?.nodeId || 1; // Current node
     const userName = this.bbsSession?.user?.username || '';
     const userLocation = this.bbsSession?.user?.location || '';
+
+    // DEBUG: Log what node we're setting as current
+    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: Setting node ${nodeId} as current user: "${userName}" from "${userLocation}"\n`);
 
     // Initialize masterNode (multiPort) semaphore header (46 bytes)
     for (let i = 0; i < 46; i++) {
@@ -844,7 +853,13 @@ debugLog('[XIMBBSInfo] MULTICOM - Creating multi-node structure');
       this.emulator.writeMemory32(nodeInfoAddr + 115, singlePortAddr);
 
       // Write taskSignal at +119 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 119, 0)
+      this.emulator.writeMemory32(nodeInfoAddr + 119, 0);
+
+      // DEBUG: Verify what we wrote for current node
+      if (isCurrentNode) {
+        const verifyHandle = this.emulator.readString(nodeInfoAddr + 0, 30);
+        fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: myNode[${i}] handle at +0: "${verifyHandle}"\n`);
+      }
 
       // Optional: Initialize singlePort structure (pointed to by nodeInfo.s at +115)
       // Structure per axcommon.e: status at +82, handle at +86, location at +117
@@ -946,10 +961,28 @@ debugLog(`[XIMBBSInfo] MULTICOM - Current node ${nodeId}: "${userName}" from "${
       }
     }
 
+    // DEBUG: Verify what RTW will actually read
+    console.log('[MULTICOM] ===== FINAL VERIFICATION =====');
+    for (let i = 0; i < 5; i++) {
+      const nodeInfoAddr = MY_NODE_ARRAY_BASE + (i * NODE_INFO_SIZE);
+      const handleFromNodeInfo = this.emulator.readString(nodeInfoAddr + 0, 30);
+      const singlePortPtr = this.emulator.readMemory32(nodeInfoAddr + 115);
+      const handleFromSinglePort = this.emulator.readString(singlePortPtr + 86, 30);
+      const locationFromSinglePort = this.emulator.readString(singlePortPtr + 117, 30);
+      console.log(`[MULTICOM] myNode[${i}]: nodeInfo.handle="${handleFromNodeInfo}" singlePort@0x${singlePortPtr.toString(16)}.handle="${handleFromSinglePort}" loc="${locationFromSinglePort}"`);
+      fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `myNode[${i}]: nodeInfo="${handleFromNodeInfo}" singlePort="${handleFromSinglePort}" loc="${locationFromSinglePort}"\n`);
+    }
+
     // Return pointer to masterNode semaphore
     // RTW will access masterNode.myNode[i].s to get singlePort pointers
     this.messageParser.writeSemaphore(msg.msgAddr, MASTER_NODE_BASE);
-    this.reply(msg, 1); // Success
+    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: Returning masterNode ptr = 0x${MASTER_NODE_BASE.toString(16)}\n`);
+
+    // CRITICAL: Also write the current node number in the message
+    // RTW needs to know which node is current so it can display "yOUR lINE"
+    // Check if RTW expects node number in msg.data or msg.param
+    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: msg.param before reply = ${msg.param}\n`);
+    this.reply(msg, nodeId); // Return current node ID
   }
 
   /**
