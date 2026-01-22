@@ -53,20 +53,27 @@ Create button in browser mode was not working - neither mouse clicks nor 'c' key
    }
    ```
 
-3. **Updated key handler guards** to exclude browser mode:
-   - 'c' handler (line 305): `if (this.modalActive || this.viewMode === 'browser') return;`
-   - 'r' handler (line 314): `if (this.modalActive || this.viewMode === 'browser') return;`
-   - 'j' handler (line 323): Allow in both 'lobby' and 'browser' modes
-   - 'o' handler (line 328): Allow in both 'lobby' and 'browser' modes
+3. **Updated key handler guards**:
+   - 'c' handler (line 305): `if (this.modalActive || this.viewMode === 'browser') return;` - Exclude browser mode
+   - 'r' handler (line 314): `if (this.modalActive || this.viewMode === 'browser') return;` - Exclude browser mode
+   - 'j' handler (line 323): Keep original `if (this.modalActive || this.viewMode !== 'lobby') return;` - Lobby only
+   - 'o' handler (line 328): Keep original `if (this.modalActive || this.viewMode !== 'lobby') return;` - Lobby only
 
 ### How It Works Now
 
+**For 'c' and 'r' keys (excluded from browser mode):**
 1. Browser starts with `viewMode = 'browser'`
-2. Door's 'c' handler exits early due to `viewMode === 'browser'` guard
-3. Only browser widget's 'c' handler fires
-4. Browser widget emits `'browser:create-table'` event
-5. Door's event handler shows game/stakes dialogs
-6. Create flow completes successfully
+2. Door's 'c'/'r' handler exits early due to `viewMode === 'browser'` guard
+3. Only browser widget's handler fires
+4. Browser widget handles the action (create table, refresh)
+5. Works correctly without conflicts
+
+**For 'j' and 'o' keys (lobby-only):**
+1. Browser widget registers its own 'j'/'o' handlers
+2. Door's 'j'/'o' handlers only run when `viewMode === 'lobby'`
+3. In browser mode, only browser widget's handlers fire
+4. In lobby mode, only door's handlers fire
+5. No conflicts in any mode
 
 ## Testing Checklist
 
@@ -81,10 +88,10 @@ Create button in browser mode was not working - neither mouse clicks nor 'c' key
 ## Files Modified
 
 - `Doors/card-lobby/index.ts`:
-  - Extended `viewMode` type to include `'browser'`
-  - Set `viewMode = 'browser'` at start of `showBrowser()`
-  - Added `viewMode === 'browser'` guards to 'c' and 'r' key handlers
-  - Updated 'j' and 'o' handlers to allow browser mode
+  - Extended `viewMode` type to include `'browser'` (line 178)
+  - Set `viewMode = 'browser'` at start of `showBrowser()` (line 507)
+  - Added `viewMode === 'browser'` guards to 'c' and 'r' key handlers (lines 305, 314)
+  - 'j' and 'o' handlers unchanged (already correct - lobby-only)
 
 ## Related Issues
 

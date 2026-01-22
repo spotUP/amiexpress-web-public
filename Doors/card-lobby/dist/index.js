@@ -202,12 +202,12 @@ class CardLobbyApp {
             }
         });
         this.screen.key(['j'], () => {
-            if (this.modalActive || (this.viewMode !== 'lobby' && this.viewMode !== 'browser'))
+            if (this.modalActive || this.viewMode !== 'lobby')
                 return;
             this.runAction(() => this.joinSelectedTable());
         });
         this.screen.key(['o'], () => {
-            if (this.modalActive || (this.viewMode !== 'lobby' && this.viewMode !== 'browser'))
+            if (this.modalActive || this.viewMode !== 'lobby')
                 return;
             this.runAction(() => this.observeSelectedTable());
         });
