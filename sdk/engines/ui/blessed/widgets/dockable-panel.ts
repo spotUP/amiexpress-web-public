@@ -133,11 +133,11 @@ export class DockablePanel extends Panel {
       allowResize: fixed ? false : options.allowResize,
       allowMinimize: fixed ? false : options.allowMinimize,
     };
-    // Merge hover style for resize edge indication (orange border on hover)
+    // Merge hover style for resize edge indication (white border on hover)
     const mergedStyle = {
       ...normalizedOptions.style,
       hover: {
-        border: { fg: 'yellow' },  // Yellow/orange border on resize edge hover
+        border: { fg: 'white' },  // White border on hover
         ...(normalizedOptions.style as any)?.hover,
       },
     };
@@ -148,6 +148,7 @@ export class DockablePanel extends Panel {
       draggable: normalizedOptions.draggable !== false,
       mouse: true,
       keys: true,
+      focusable: true,  // Enable Tab cycling and focus events
       clickable: true,  // Enable click events for panel activation
     });
 
@@ -2507,6 +2508,14 @@ export class DockablePanel extends Panel {
         for (const item of items) {
           const cleanItem = stripFormatting(String(item));
           maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
+          // Debug: log longest items
+          if (this.options.label?.includes('Sidebar') && cleanItem.length > 10) {
+            const debugMsg = `[CalcSize] List item: "${cleanItem}" (${cleanItem.length} chars)`;
+            if ((this as any).screen?.log) {
+              ((this as any).screen as any).log(debugMsg);
+            }
+            console.log(debugMsg);
+          }
         }
         totalContentHeight = Math.max(totalContentHeight, items.length);
       }
@@ -2556,6 +2565,15 @@ export class DockablePanel extends Panel {
     }
 
     const { width: contentWidth, height: contentHeight } = this.calculateContentSize();
+
+    // Debug logging - use screen.log if available
+    if (this.options.label?.includes('Sidebar')) {
+      const debugMsg = `[FitContent] Sidebar: currentWidth=${this.width}, contentWidth=${contentWidth}, fitWidth=${this.fitContentSettings.width}, willGrow=${contentWidth > (this.width as number)}`;
+      if ((this.screen as any)?.log) {
+        (this.screen as any).log(debugMsg);
+      }
+      console.log(debugMsg);
+    }
 
     let newWidth = this.width as number;
     let newHeight = this.height as number;

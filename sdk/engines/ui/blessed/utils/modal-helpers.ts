@@ -110,6 +110,8 @@ export function createModalBackdrop(screen: Screen, opacity: number = 0.5): {
       transparent: true,
     },
     hidden: true,
+    // CRITICAL: Backdrop must be above panels but below modal
+    zIndex: 99998,
   });
 
   // Set opacity if supported
@@ -169,6 +171,10 @@ export function showModal(modal: Element, options: {
   if (trapInput && screen.focusPush) {
     screen.focusPush(modal);
   }
+
+  // CRITICAL: Set extremely high z-index to ensure modals always appear above panels
+  // Panels can call setFront() which brings them forward, so we need to be even higher
+  (modal as any).zIndex = 99999;
 
   // Show modal
   modal.show();

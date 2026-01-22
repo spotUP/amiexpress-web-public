@@ -2274,13 +2274,13 @@ export class Screen extends Element {
           borderEl._originalBorderColor = currentStyle.fg || 'cyan';
           borderEl._originalBorderBold = currentStyle.bold || false;
         }
-        // Set prominent white border for focused element
+        // Set yellow border for focused element (white is reserved for hover)
         if (borderEl.options?.style?.border) {
-          borderEl.options.style.border.fg = 'white';
+          borderEl.options.style.border.fg = 'yellow';
           borderEl.options.style.border.bold = true;
         }
         if (borderEl.style?.border) {
-          borderEl.style.border.fg = 'white';
+          borderEl.style.border.fg = 'yellow';
           borderEl.style.border.bold = true;
         }
       }

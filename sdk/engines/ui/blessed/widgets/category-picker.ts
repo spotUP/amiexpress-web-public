@@ -194,26 +194,25 @@ export class CategoryPicker extends Box {
   }
 
   private _setupEventHandlers(): void {
-    // Debounced category update on navigation
-    const updateCategoryDebounced = () => {
-      if (this._categoryDebounce) {
-        clearTimeout(this._categoryDebounce);
+    // Immediate category update on navigation (no debounce for responsive UX)
+    const updateCategoryImmediate = () => {
+      const selectedIndex = (this._categoryList as any).selected;
+      const newCat = this._categories[selectedIndex];
+
+      if (newCat && newCat !== this._currentCategory) {
+        this._currentCategory = newCat;
+        this._loadCategory(this._currentCategory);
       }
-
-      this._categoryDebounce = setTimeout(() => {
-        const selectedIndex = (this._categoryList as any).selected;
-        const newCat = this._categories[selectedIndex];
-
-        if (newCat && newCat !== this._currentCategory) {
-          this._currentCategory = newCat;
-          this._loadCategory(this._currentCategory);
-        }
-      }, this._debounceMs);
     };
 
-    // Auto-update on navigation
-    this._categoryList.on('move', updateCategoryDebounced);
-    this._categoryList.on('select item', updateCategoryDebounced);
+    // Auto-update immediately on navigation (arrow keys)
+    this._categoryList.key(['up', 'down', 'k', 'j'], () => {
+      // Use setImmediate to update after the list selection changes
+      setImmediate(updateCategoryImmediate);
+    });
+
+    // Also update on select item event
+    this._categoryList.on('select item', updateCategoryImmediate);
 
     // Enter on category moves focus to items
     this._categoryList.on('select', () => {
