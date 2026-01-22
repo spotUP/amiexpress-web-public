@@ -399,3 +399,4 @@ logs/backend.log
 logs/filehandle-debug.log
 logs/preview.log
 logs/xim-amiga.log
+web/backend/debug-screen-loads.log
