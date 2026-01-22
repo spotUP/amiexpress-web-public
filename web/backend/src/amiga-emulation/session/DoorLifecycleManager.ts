@@ -319,40 +319,12 @@ debugLog(
       /* ignore logging errors */
     }
 
-    // Initialize NodeStatusManager for WHO doors (RTW, etc.)
-    // WHO doors use FindSemaphore("AEServer.0", "AEServer.1", etc.) to find node info
-    // NodeStatusManager creates these semaphores with singlePort structures
-    if (this.emulator && this.libraryManager?.execLibrary) {
-      try {
-        const { nodeStatusManager } = await import('../../nodes/NodeStatusManager');
-        if (nodeStatusManager.getMultiPortAddress() === 0) {
-          // Only initialize once (first door that starts)
-          nodeStatusManager.initializeInEmulator(this.emulator, this.libraryManager.execLibrary);
-          console.log('[DoorLifecycleManager] NodeStatusManager initialized for WHO doors');
-        }
-        // Update current node info
-        const bbsSession = this.config.bbsSession;
-        const nodeId = bbsSession?.nodeId || 1;
-        const userName = bbsSession?.user?.username || '';
-        const userLocation = bbsSession?.user?.location || '';
-        const connectionType = bbsSession?.connectionType || 'web';
-        const baudRate = connectionType === 'ssh' ? 'SSH' :
-                        connectionType === 'telnet' ? 'Telnet' : 'Web';
-
-        nodeStatusManager.updateNode(this.emulator, nodeId, {
-          nodeId,
-          status: 3, // ENV_DOORS
-          handle: userName,
-          location: userLocation,
-          misc1: '',  // Filled in by specific contexts (file transfer, etc.)
-          misc2: 0,   // Chat availability flags
-          baud: baudRate
-        });
-        console.log(`[DoorLifecycleManager] Node ${nodeId} updated: ${userName} from ${userLocation}`);
-      } catch (error) {
-        console.error('[DoorLifecycleManager] Failed to initialize NodeStatusManager:', error);
-      }
-    }
+    // DISABLED: NodeStatusManager conflicts with MULTICOM
+    // WHO doors like RTW use MULTICOM (cmd 531) to get node data, not FindSemaphore
+    // MULTICOM creates the singlePort structures at 0xb1000+
+    // NodeStatusManager was writing to the SAME addresses, causing conflicts
+    // RTW gets masterNode from MULTICOM, follows myNode[i].s pointers to read singlePort data
+    // So we only need MULTICOM, not NodeStatusManager
 
     // CRITICAL FIX 2026-01-08: Set up synchronous XIM processor for AEDoor.library trap handlers
     // When AEDoor.library's WriteStr/etc calls dispatchCommand -> waitForReply, the
