@@ -380,3 +380,8 @@ Doors/**/*.d.ts
 Doors/**/*.js.map
 Doors/**/*.d.ts.map
 !Doors/**/dist/**
+
+# Large runtime log files
+logs/*.log
+logs/**/*.log
+web/backend/logs/*.log
