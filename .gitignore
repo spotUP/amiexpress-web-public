@@ -385,3 +385,10 @@ Doors/**/*.d.ts.map
 logs/*.log
 logs/**/*.log
 web/backend/logs/*.log
+
+# Node runtime logs
+Node*/DoorLog
+
+# XIM debugging files
+logs/xim-debug.json
+logs/reports/xim-debug-*.md
