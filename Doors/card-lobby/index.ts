@@ -97,6 +97,11 @@ import {
   visibleWidth,
 } from './lib';
 import { UIManager, DialogManager, GameStateManager } from './managers';
+import {
+  MultiplayerLobby,
+  type LobbyResult,
+} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { CardLobbyBrowserAdapter } from './adapters/CardLobbyBrowserAdapter';
 
 export const metadata = {
   name: 'Card Lobby',
@@ -174,6 +179,8 @@ class CardLobbyApp {
   private autoDealInProgress = false;
   private lastAnimatedHandStartedAt: number | null = null;
   private actionInProgress = false;
+  private browserAdapter: CardLobbyBrowserAdapter | null = null;
+  private browserWidget: MultiplayerLobby | null = null;
 
   private lobby: LobbyState | null = null;
   private profiles: Record<string, PlayerProfile> = {};
@@ -217,20 +224,16 @@ class CardLobbyApp {
     await this.persistState();
 
     loader.update(95, 'Finalizing lobby...');
-    this.updateAllPanels();
+    // NOTE: Don't call updateAllPanels() here - browser mode handles its own initialization
+    // this.updateAllPanels();
 
     loader.update(100, 'Ready!');
     await loader.delay(500);
     loader.hide();
     loader.destroy();
 
-    this.lobbyList.focus();
-    this.screen.render();
-    this.startRefreshTimer();
-
-    await new Promise<void>((resolve) => {
-      this.screen.on('destroy', () => resolve());
-    });
+    // Show browser mode instead of old lobby list
+    await this.showBrowser();
 
     this.cleanup();
   }
@@ -253,9 +256,9 @@ class CardLobbyApp {
     // DoorInputManager handles all the input routing automatically
     this.inputManager = new DoorInputManager(this.session, this.screen, {
       enableGameMode: false,  // Blessed UI mode, not ncurses game mode
-      enableGrabKeys: false,  // Blessed focus system handles keys
+      enableGrabKeys: true,   // Enable grabKeys for browser mode screen handlers
       enableMouse: true,      // Enable mouse events
-      debug: false,
+      debug: true,            // Enable debug logging to diagnose input issues
       debugName: 'CardLobby'
     });
     this.inputManager.enable();
@@ -299,13 +302,31 @@ class CardLobbyApp {
     });
 
     this.screen.key(['c'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      this.triggerCall();
+      if (this.modalActive) return;
+      if (this.viewMode === 'table') {
+        this.triggerCall();
+      } else if (this.viewMode === 'lobby') {
+        this.runAction(() => this.createTableFlow());
+      }
     });
 
     this.screen.key(['r'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      this.triggerRaise();
+      if (this.modalActive) return;
+      if (this.viewMode === 'table') {
+        this.triggerRaise();
+      } else if (this.viewMode === 'lobby') {
+        this.runAction(() => this.refreshLobby());
+      }
+    });
+
+    this.screen.key(['j'], () => {
+      if (this.modalActive || this.viewMode !== 'lobby') return;
+      this.runAction(() => this.joinSelectedTable());
+    });
+
+    this.screen.key(['o'], () => {
+      if (this.modalActive || this.viewMode !== 'lobby') return;
+      this.runAction(() => this.observeSelectedTable());
     });
 
     this.screen.key(['l'], () => {
@@ -438,7 +459,7 @@ class CardLobbyApp {
     this.cleanup();
 
     // CRITICAL: Disable input manager FIRST (restores BBS input state)
-    // This also calls screen.disableMouse() internally
+    // This also handles grabKeys cleanup internally
     if (this.inputManager) {
       this.inputManager.disable();
     }
@@ -468,6 +489,171 @@ class CardLobbyApp {
     // DoorInputManager handles doorInputHandler cleanup
     if (this.session.bbsSession) {
       delete this.session.bbsSession.doorReconnectHandler;
+    }
+
+    // Cleanup browser mode
+    if (this.browserWidget) {
+      this.browserWidget.destroy();
+      this.browserWidget = null;
+    }
+    this.browserAdapter = null;
+  }
+
+  /**
+   * Show SDK MultiplayerLobby browser mode
+   */
+  private async showBrowser(): Promise<void> {
+    // Hide old UI elements
+    this.uiManager.hide();
+
+    // NOTE: Don't suspend/resume here - keep inputManager active
+    // grabKeys is already enabled in config, screen handlers will work
+
+    // Create adapter
+    this.browserAdapter = new CardLobbyBrowserAdapter(this.lobby!, this.profiles);
+
+    // Update adapter when state changes
+    const updateAdapter = () => {
+      if (this.browserAdapter && this.lobby) {
+        this.browserAdapter.updateLobby(this.lobby);
+        this.browserAdapter.updateProfiles(this.profiles);
+      }
+    };
+
+    // Create browser widget with all SDK features
+    this.browserWidget = new MultiplayerLobby({
+      parent: this.screen,
+      adapter: this.browserAdapter,
+      localPlayerId: this.session.bbsSession?.userId || 'local',
+      modes: {}, // Not used in browser mode
+      title: 'CARD LOBBY - TABLE BROWSER',
+
+      // Enable all browser features
+      features: {
+        browserMode: true,
+        observe: false, // Not implemented yet
+        filters: true,
+      },
+
+      // Enable search
+      enableSearch: true,
+
+      // Enable quick filters
+      enableQuickFilters: true,
+
+      // Sorting
+      initialSortBy: 'players',
+      initialSortOrder: 'desc',
+
+      // Auto-refresh every 5 seconds
+      autoRefreshInterval: REFRESH_INTERVAL_MS,
+
+      // Show table age
+      showTableAge: true,
+
+      // Custom headers
+      tableHeaders: ['ID', 'Game', 'Stakes', 'Players', 'Status', 'Age'],
+
+      // Empty state
+      emptyStateMessage: 'No tables available. Press C to create one.',
+
+      // Custom row formatting
+      formatTableRow: (table) => {
+        const playerCount = `${table.players}/${table.maxPlayers}`;
+        const statusColor = table.status === 'waiting' ? 'green' : table.status === 'starting' ? 'yellow' : 'red';
+        const status = `{${statusColor}-fg}${table.status.toUpperCase()}{/${statusColor}-fg}`;
+
+        return [
+          String(table.id),
+          table.gameName,
+          table.stakes || '-',
+          playerCount,
+          status,
+          table.age || '-',
+        ];
+      },
+
+      // Join validation
+      validateJoin: (table, localPlayerId) => {
+        const profile = this.profiles[localPlayerId];
+        if (!profile) {
+          return 'Profile not found';
+        }
+
+        // Check if player has enough chips
+        const buyIn = (table.extra as any)?.buyIn || 0;
+        if (profile.chips < buyIn) {
+          return `Need ${formatChips(buyIn)} (you have ${formatChips(profile.chips)})`;
+        }
+
+        // Check if already in game
+        const existingTable = this.lobby!.tables.find(t =>
+          t.seats.some(s => s?.playerId === localPlayerId)
+        );
+        if (existingTable && existingTable.id !== table.id) {
+          return 'Already playing at another table';
+        }
+
+        return null; // OK to join
+      },
+    });
+
+    // Handle create table event
+    this.browserWidget.on('browser:create-table', async () => {
+      try {
+        // Show game/stakes selection dialogs
+        await this.createTableFlow();
+
+        // Refresh browser after creation
+        updateAdapter();
+      } catch (error) {
+        this.pushNotice(`Failed to create table: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    });
+
+    // Show browser and wait for result
+    const result: LobbyResult = await this.browserWidget.show('custom');
+
+    if (result.action === 'start' && result.lobbyId) {
+      // User joined a table - transition to table view
+      const tableId = Number(result.lobbyId);
+      this.selectedTableId = tableId;
+
+      // Hide browser
+      if (this.browserWidget) {
+        this.browserWidget.destroy();
+        this.browserWidget = null;
+      }
+
+      // NOTE: grabKeys remains enabled, inputManager handles everything
+
+      // Show table UI
+      this.uiManager.show();
+      this.viewMode = 'table';
+
+      // Join the table
+      await this.joinTable(tableId);
+
+      // Wait for user to leave table or exit
+      await new Promise<void>((resolve) => {
+        this.screen.on('destroy', () => resolve());
+
+        // Add handler to return to browser when leaving table
+        const checkInterval = setInterval(() => {
+          if (this.viewMode === 'lobby') {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 500);
+      });
+
+      // Return to browser if didn't exit
+      if (this.viewMode === 'lobby' && !this.screen.destroyed) {
+        await this.showBrowser();
+      }
+    } else {
+      // User exited browser - exit door
+      await this.shutdown();
     }
   }
 
@@ -896,9 +1082,9 @@ class CardLobbyApp {
       ? getGameById(this.lobbyFilters.gameId)?.name ?? 'Unknown'
       : 'All Games';
     const openOnly = this.lobbyFilters.openSeatsOnly ? 'Open Seats' : 'All Seats';
-    this.lobbyWindow.setLabel(` Lobby - ${filterName} / ${openOnly} `);
+    this.lobbyWindow.setLabel(` Lobby v2.1.0-LISTTABLE - ${filterName} / ${openOnly} `);
 
-    const rows: string[] = [];
+    const rows: string[][] = [];
     const map: number[] = [];
 
     const filtered = this.lobby.tables.filter((table) => {
@@ -910,25 +1096,23 @@ class CardLobbyApp {
     filtered.forEach((table) => {
       const humanCount = this.getHumanPlayers(table).length;
       const seats = `${humanCount}/${table.maxPlayers}`;
-      const line =
-        pad(String(table.id), 3) +
-        ' ' +
-        pad(table.gameName, 12) +
-        pad(table.stakesLabel, 6) +
-        pad(seats, 6) +
-        pad(table.status.toUpperCase(), 10) +
-        formatAge(table.createdAt);
-      rows.push(line);
+      // ListTable uses array of arrays - each cell is a separate string
+      rows.push([
+        String(table.id),
+        table.gameName,
+        table.stakesLabel,
+        seats,
+        table.status.toUpperCase(),
+      ]);
       map.push(table.id);
     });
 
     if (rows.length === 0) {
-      rows.push('No tables. Create one with the Create button.');
+      rows.push(['', 'No tables. Press C to create.', '', '', '']);
     }
 
     this.tableListMap = map;
-    this.lobbyList.setWrapItems(rows.length === 1 && map.length === 0);
-    this.lobbyList.setItems(rows);
+    (this.lobbyList as any).setRows(rows);
 
     if (map.length === 0) {
       this.selectedTableId = null;
@@ -1710,6 +1894,14 @@ class CardLobbyApp {
     await this.persistState();
     this.applyViewMode('table');
     this.updateAllPanels();
+  }
+
+  /**
+   * Join a table by ID (used by browser mode)
+   */
+  private async joinTable(tableId: number): Promise<void> {
+    this.selectedTableId = tableId;
+    await this.joinSelectedTable();
   }
 
   private async observeSelectedTable(): Promise<void> {

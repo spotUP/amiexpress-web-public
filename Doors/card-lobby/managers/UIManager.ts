@@ -3,7 +3,7 @@
  * Handles all UI building, layout, and rendering operations
  */
 
-import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu, ListTable } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
@@ -32,7 +32,7 @@ export class UIManager {
   public statusBar!: Box;
   public lobbyWindow!: Box;
   public tableWindow!: Box;
-  public lobbyList!: List;
+  public lobbyList!: ListTable;
   public lobbyActions!: Listbar;
   public tableContent!: ScrollableText;
   public tableActions!: Box;
@@ -94,7 +94,7 @@ export class UIManager {
       tags: true,
       hidden: true,
       style: { fg: 'white', bg: 'blue' },
-      content: ' Card Lobby ',
+      content: ' Card Lobby v2.0.2-SDK ',
     });
 
     const menuDefs = [
@@ -200,15 +200,9 @@ export class UIManager {
     const tableHeight = height - topOffset - statusHeight;
     const mainHeight = tableHeight - logHeight;
 
-    const minLobbyWidth = 22;
-    const minTableWidth = 40;
-    let leftWidth = Math.floor(width * 0.35);
-    leftWidth = Math.max(minLobbyWidth, leftWidth);
-    leftWidth = Math.min(leftWidth, width - minTableWidth);
-    if (leftWidth < 10) {
-      leftWidth = Math.max(10, width - minTableWidth);
-    }
-    const rightWidth = Math.max(minTableWidth, width - leftWidth);
+    // Better layout: 30% lobby (min 25 chars), 70% table
+    const leftWidth = Math.max(25, Math.floor(width * 0.30));
+    const rightWidth = width - leftWidth;
     this.layout = {
       width,
       height,
@@ -245,76 +239,57 @@ export class UIManager {
 
     let tableListMap: Record<number, number | null> = {};
 
-    this.lobbyList = createList({
+    // Use SDK ListTable for clean table display
+    this.lobbyList = new ListTable({
       parent: this.lobbyWindow,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 2,
-      wrapItems: false,
-      keys: true,
-      mouse: true,
-      vi: true,
-      tags: true,
+      top: 0,
+      left: 0,
+      width: '100%-2',
+      height: '100%-2',
+      headers: ['ID', 'Game', 'Stakes', 'Players', 'Status'],
+      rows: [],
+      interactive: true,
       style: {
         fg: 'white',
         selected: { fg: 'black', bg: UI_THEME.highlightBg },
+        header: { fg: 'yellow', bold: true },
       } as any,
       scrollbar: {
         ch: '|',
         track: { ch: '|', bg: 'black' },
-        style: { fg: UI_THEME.accent, bg: UI_THEME.accent },
+        style: { fg: UI_THEME.accent },
       } as any,
-      items: [],
-    });
+    }) as any;
 
     this.lobbyList.on('select', (_: any, index: number) => {
       onLobbySelect(index, tableListMap);
     });
 
-    this.lobbyActions = blessed.listbar({
+    // Action bar at bottom
+    this.lobbyActions = createBox({
       parent: this.lobbyWindow,
       bottom: 0,
       left: 0,
-      right: 0,
+      width: '100%',
       height: 1,
-      itemPadding: 1,
-      itemGap: 2,
-      mouse: true,
-      keys: true,
-      vi: true,
-      autoCommandKeys: true,
-      style: {
-        fg: 'white',
-        bg: 'blue',
-        item: { fg: 'white', bg: 'blue' },
-        selected: { fg: 'black', bg: 'cyan' },
-      },
-      items: {
-        '[C]reate': { callback: () => runAction(createTableFlow), keys: ['c'] },
-        '[J]oin': { callback: () => runAction(joinSelectedTable), keys: ['j'] },
-        '[O]bserve': { callback: () => runAction(observeSelectedTable), keys: ['o'] },
-        '[F]ilter': { callback: () => runAction(toggleFilters), keys: ['f'] },
-        '[R]efresh': { callback: () => runAction(manualRefresh), keys: ['r'] },
-      },
-    });
+      style: { fg: 'black', bg: 'cyan' },
+      content: ' C:Create J:Join O:Observe F:Filter R:Refresh ',
+    }) as any;
 
-    this.tableContent = blessed.scrollabletext({
+    // Use SDK box instead of blessed.scrollabletext
+    this.tableContent = createBox({
       parent: this.tableWindow,
       top: 1,
       left: 1,
       right: 1,
       bottom: 1,
-      tags: true,
       scrollable: true,
       alwaysScroll: true,
       keys: true,
       mouse: true,
-      style: {
-        fg: 'white',
-      },
+      style: { fg: 'white' },
       content: 'Select a table to view details.',
-    });
+    }) as any;
 
     this.tableActions = createBox({
       parent: this.tableWindow,
@@ -972,5 +947,39 @@ export class UIManager {
 
       this.activityContent.setContent(trimmed);
     }
+  }
+
+  /**
+   * Hide all UI elements (for browser mode)
+   */
+  hide(): void {
+    if (this.topBar) this.topBar.hidden = true;
+    if (this.topInfoBar) this.topInfoBar.hidden = true;
+    if (this.statusBar) this.statusBar.hidden = true;
+    if (this.lobbyWindow) this.lobbyWindow.hidden = true;
+    if (this.tableWindow) this.tableWindow.hidden = true;
+    if (this.logWindow) this.logWindow.hidden = true;
+    if (this.flopPanel) this.flopPanel.hidden = true;
+    if (this.playersPanel) this.playersPanel.hidden = true;
+    if (this.handPanel) this.handPanel.hidden = true;
+    if (this.activityPanel) this.activityPanel.hidden = true;
+    this.screen.render();
+  }
+
+  /**
+   * Show all UI elements (return from browser mode)
+   */
+  show(): void {
+    if (this.topBar) this.topBar.hidden = false;
+    if (this.topInfoBar) this.topInfoBar.hidden = false;
+    if (this.statusBar) this.statusBar.hidden = false;
+    if (this.lobbyWindow) this.lobbyWindow.hidden = false;
+    if (this.tableWindow) this.tableWindow.hidden = false;
+    if (this.logWindow) this.logWindow.hidden = false;
+    if (this.flopPanel) this.flopPanel.hidden = false;
+    if (this.playersPanel) this.playersPanel.hidden = false;
+    if (this.handPanel) this.handPanel.hidden = false;
+    if (this.activityPanel) this.activityPanel.hidden = false;
+    this.screen.render();
   }
 }
