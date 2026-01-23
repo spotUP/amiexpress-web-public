@@ -642,7 +642,19 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
       let prevA5 = this.emulator.getRegister(13);
       let earlyTraceCount = 0;
 
+      // MULTI-USER FIX: Track time since last yield to prevent blocking other users
+      let lastYieldTime = Date.now();
+      const YIELD_INTERVAL_MS = 10; // Yield every 10ms to allow other users to run
+
       while (this.executionState.isRunning) {
+        // === STEP 0: Yield to event loop if too much time has elapsed ===
+        // CRITICAL: This prevents blocking other users when running CPU-intensive doors
+        const now = Date.now();
+        if (now - lastYieldTime >= YIELD_INTERVAL_MS) {
+          await new Promise((resolve) => setImmediate(resolve));
+          lastYieldTime = Date.now();
+        }
+
         // === STEP 1: Check if paused (async input) ===
         if (this.emulator.isPaused()) {
           await this.handlePausedState();
@@ -936,8 +948,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // === STEP 5: BATCH EXECUTION using executeUntilTrap() ===
         // Execute instructions in tight C++ loop until a trap address is hit.
         // This is MUCH faster than single-instruction execution for CPU-intensive doors.
-        // PERFORMANCE: Increased batch size from 10000 to 50000 for faster throughput
-        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 50000;
+        // MULTI-USER: Reduced from 50000 to 5000 to prevent blocking other users
+        // Combined with time-based yielding (10ms), this ensures responsive multi-user experience
+        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 5000;
         const pcBeforeBatch = this.emulator.getRegister(16);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
 

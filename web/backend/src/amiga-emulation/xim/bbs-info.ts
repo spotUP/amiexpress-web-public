@@ -762,227 +762,90 @@ debugLog('[XIMBBSInfo] NODE_UNIT: 0');
    *   +250: misc2 (100 bytes) - misc flags (first byte = OLM blocked)
    *   +350: baud (10 bytes) - baud rate text
    */
+  /**
+   * Handle MULTICOM - Get pointer to multi-node status structures.
+   *
+   * CRITICAL ARCHITECTURE (matches express.e):
+   * - Structures are created ONCE when session starts (in AmigaDoorSession.initializeLibraries())
+   * - This handler just returns the pointer (does NOT recreate structures)
+   * - MulticomManager handles all structure creation and updates
+   *
+   * This matches express.e where ACP creates structures at startup, then express.e
+   * just returns the pointer when doors call MULTICOM.
+   */
   handleMulticom(msg: XIMMessage): void {
-debugLog('[XIMBBSInfo] MULTICOM - Creating multi-node structure');
-    const fs = require('fs');
-    fs.writeFileSync('/tmp/multicom-called.txt', `MULTICOM called at ${new Date().toISOString()}\n`);
+    const { multicomManager } = require('../../nodes/MulticomManager.js');
 
-    // From axcommon.e:
-    // OBJECT nodeInfo = 124 bytes total:
-    //   handle[31]: 31 bytes (+0)
-    //   netSocket: 4 bytes (+31)
-    //   chatColor: 4 bytes (+35)
-    //   offHook: 4 bytes (+39)
-    //   private: 4 bytes (+43)
-    //   stats[MAX_NODES]: 64 bytes (+47)
-    //   t: 4 bytes (+111)
-    //   s: PTR TO singlePort (+115)
-    //   taskSignal: 4 bytes (+119)
-    const MAX_NODES = 32; // axcommon.e: MAX_NODES=32
-    const NODE_INFO_SIZE = 124; // nodeInfo structure size from axcommon.e
-    const MASTER_NODE_BASE = 0xB0000; // masterNode (multiPort) semaphore
-    const MY_NODE_ARRAY_BASE = MASTER_NODE_BASE + 58; // +46 (semi) + 12 (list)
-    const SINGLE_PORTS_BASE = 0xB1000; // singlePort structures (if needed)
-    const SINGLE_PORT_SIZE = 512; // singlePort structure size
+    // Get current node ID
+    const nodeId = this.bbsSession?.nodeId || 1;
 
-    // Get current node information
-    const nodeId = this.bbsSession?.nodeId || 1; // Current node
-    const userName = this.bbsSession?.user?.username || '';
-    const userLocation = this.bbsSession?.user?.location || '';
+    console.error(`[XIMBBSInfo] MULTICOM called - nodeId=${nodeId}, msgAddr=0x${msg.msgAddr.toString(16)}`);
 
-    // DEBUG: Log what node we're setting as current
-    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: Setting node ${nodeId} as current user: "${userName}" from "${userLocation}"\n`);
+    // Get masterNode pointer from MulticomManager
+    // Structures were already created in AmigaDoorSession.initializeLibraries()
+    const masterNodePtr = multicomManager.getMasterNodePointer();
 
-    // Initialize masterNode (multiPort) semaphore header (46 bytes)
-    for (let i = 0; i < 46; i++) {
-      this.emulator.writeMemory(MASTER_NODE_BASE + i, 0);
-    }
+    console.error(`[XIMBBSInfo] MULTICOM - Returning masterNode ptr 0x${masterNodePtr.toString(16)} for node ${nodeId}`);
 
-    // Initialize list/mlh header (12 bytes at +46)
-    for (let i = 0; i < 12; i++) {
-      this.emulator.writeMemory(MASTER_NODE_BASE + 46 + i, 0);
-    }
+    // DEBUG: Log the message layout being used
+    const msgLen = this.emulator.readMemory16(msg.msgAddr + 18); // mn_Length offset
+    console.error(`[XIMBBSInfo] MULTICOM - msgLen=${msgLen} (0 means uninitialized)`);
 
-    // Create myNode[] array of nodeInfo structures (inline, 124 bytes each)
-    // Structure per axcommon.e:
-    //   +0: handle[31] - username (THIS IS WHAT RTW READS!)
-    //   +31: netSocket (LONG)
-    //   +35: chatColor (LONG)
-    //   +39: offHook (LONG)
-    //   +43: private (LONG)
-    //   +47: stats[32] (64 bytes)
-    //   +111: t (LONG)
-    //   +115: s (PTR TO singlePort)
-    //   +119: taskSignal (LONG)
-    for (let i = 0; i < MAX_NODES; i++) {
-      const nodeInfoAddr = MY_NODE_ARRAY_BASE + (i * NODE_INFO_SIZE);
+    // CRITICAL FIX: RTW and other WHO doors use LONG layout and read from offset 0xf4
+    // regardless of mn_Length. From RTW disassembly at 0x1e88: "move.l 0xf4(a0), d0"
+    // The writeSemaphore function may skip writing if mn_Length is 0 (uninitialized),
+    // so we must write directly to offset 0xf4 to ensure the pointer is available.
+    const SEMAPHORE_OFFSET_LONG = 0xf4;
+    this.emulator.writeMemory32(msg.msgAddr + SEMAPHORE_OFFSET_LONG, masterNodePtr);
+
+    // Verify the write
+    const writtenValue = this.emulator.readMemory32(msg.msgAddr + SEMAPHORE_OFFSET_LONG);
+    console.error(`[XIMBBSInfo] MULTICOM - Wrote 0x${masterNodePtr.toString(16)} to msgAddr+0xf4, readback=0x${writtenValue.toString(16)}`);
+
+    // DEBUG: Dump what's at masterNode memory for first 4 nodes
+    const MY_NODE_ARRAY_BASE = 0x1E003A;
+    const MY_NODE_SIZE = 124;
+    const SINGLE_PORTS_BASE = 0x1E1000;
+    const SINGLE_PORT_SIZE = 512;
+
+    console.error(`[XIMBBSInfo] MULTICOM - Memory dump of node structures:`);
+    for (let i = 0; i < 8; i++) {
+      // Check myNode structure (where RTW might read from)
+      const myNodeAddr = MY_NODE_ARRAY_BASE + (i * MY_NODE_SIZE);
+      const myNodeHandleBytes: number[] = [];
+      for (let j = 0; j < 20; j++) {
+        const byte = this.emulator.readMemory(myNodeAddr + j);
+        if (byte === 0) break;
+        myNodeHandleBytes.push(byte);
+      }
+      const myNodeHandle = Buffer.from(myNodeHandleBytes).toString('ascii') || '(empty)';
+      const sPtr = this.emulator.readMemory32(myNodeAddr + 0x74); // .s pointer (aligned offset)
+
+      // Check singlePort structure
       const singlePortAddr = SINGLE_PORTS_BASE + (i * SINGLE_PORT_SIZE);
-      const isCurrentNode = (i === nodeId);
-
-      // Write handle[31] at +0 - THIS IS WHAT RTW DISPLAYS FOR USERNAME
-      const handle = isCurrentNode ? userName : '';
-      for (let j = 0; j < handle.length && j < 30; j++) {
-        this.emulator.writeMemory(nodeInfoAddr + j, handle.charCodeAt(j));
+      const status = this.emulator.readMemory32(singlePortAddr + 0x52);
+      const handleBytes: number[] = [];
+      for (let j = 0; j < 20; j++) {
+        const byte = this.emulator.readMemory(singlePortAddr + 0x56 + j);
+        if (byte === 0) break;
+        handleBytes.push(byte);
       }
-      this.emulator.writeMemory(nodeInfoAddr + handle.length, 0); // Null terminator
-      for (let j = handle.length + 1; j < 31; j++) {
-        this.emulator.writeMemory(nodeInfoAddr + j, 0);
-      }
+      const handle = Buffer.from(handleBytes).toString('ascii') || '(empty)';
 
-      // Write netSocket at +31 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 31, isCurrentNode ? 1 : -1);
-
-      // Write chatColor at +35 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 35, 0);
-
-      // Write offHook at +39 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 39, 0);
-
-      // Write private at +43 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 43, 0);
-
-      // Write stats[32] at +47 (64 bytes) - zero for now
-      for (let j = 0; j < 64; j++) {
-        this.emulator.writeMemory(nodeInfoAddr + 47 + j, 0);
-      }
-
-      // Write t at +111 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 111, 0);
-
-      // Write s (pointer to singlePort) at +115 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 115, singlePortAddr);
-
-      // Write taskSignal at +119 (LONG)
-      this.emulator.writeMemory32(nodeInfoAddr + 119, 0);
-
-      // DEBUG: Verify what we wrote for current node
-      if (isCurrentNode) {
-        const verifyHandle = this.emulator.readString(nodeInfoAddr + 0, 30);
-        fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: myNode[${i}] handle at +0: "${verifyHandle}"\n`);
-      }
-
-      // Optional: Initialize singlePort structure (pointed to by nodeInfo.s at +115)
-      // Structure per axcommon.e: status at +82, handle at +86, location at +117
-      // Clear semaphore + list header (58 bytes)
-      for (let j = 0; j < 58; j++) {
-        this.emulator.writeMemory(singlePortAddr + j, 0);
-      }
-
-      // Write multiCom flag at +58 (LONG)
-      this.emulator.writeMemory32(singlePortAddr + 58, 1);
-
-      // Write semiName at +62 (20 bytes)
-      const semiName = `AENode${i}`;
-      for (let j = 0; j < semiName.length && j < 19; j++) {
-        this.emulator.writeMemory(singlePortAddr + 62 + j, semiName.charCodeAt(j));
-      }
-      this.emulator.writeMemory(singlePortAddr + 62 + semiName.length, 0);
-      for (let j = semiName.length + 1; j < 20; j++) {
-        this.emulator.writeMemory(singlePortAddr + 62 + j, 0);
-      }
-
-      // Write status at +82 (LONG) - per axcommon.e comment "status:LONG -> 82"
-      const status = isCurrentNode ? 3 : -1; // 3 = ENV_DOORS
-      this.emulator.writeMemory32(singlePortAddr + 82, status);
-
-      // Write handle at +86 (31 bytes)
-      for (let j = 0; j < handle.length && j < 30; j++) {
-        this.emulator.writeMemory(singlePortAddr + 86 + j, handle.charCodeAt(j));
-      }
-      this.emulator.writeMemory(singlePortAddr + 86 + handle.length, 0);
-      for (let j = handle.length + 1; j < 31; j++) {
-        this.emulator.writeMemory(singlePortAddr + 86 + j, 0);
-      }
-
-      // Write location at +117 (31 bytes)
-      const location = isCurrentNode ? userLocation : '';
-      for (let j = 0; j < location.length && j < 30; j++) {
-        this.emulator.writeMemory(singlePortAddr + 117 + j, location.charCodeAt(j));
-      }
-      this.emulator.writeMemory(singlePortAddr + 117 + location.length, 0);
-      for (let j = location.length + 1; j < 31; j++) {
-        this.emulator.writeMemory(singlePortAddr + 117 + j, 0);
-      }
-
-      // Zero remaining fields (misc1, misc2, baud - 210 bytes total from +148 to +357)
-      for (let j = 0; j < 210; j++) {
-        this.emulator.writeMemory(singlePortAddr + 148 + j, 0);
-      }
+      console.error(`[XIMBBSInfo]   Node ${i}: myNode=0x${myNodeAddr.toString(16)} handle="${myNodeHandle}" .s=0x${sPtr.toString(16)} | singlePort=0x${singlePortAddr.toString(16)} status=${status} handle="${handle}"`);
     }
 
-    // Write multiPort.semiName at end of myNode array (+58 + 32*124 = +4024)
-    const SEMI_NAME_OFFSET = MY_NODE_ARRAY_BASE + (MAX_NODES * NODE_INFO_SIZE);
-    const multiPortSemiName = 'multiPort';
-    for (let i = 0; i < multiPortSemiName.length && i < 19; i++) {
-      this.emulator.writeMemory(SEMI_NAME_OFFSET + i, multiPortSemiName.charCodeAt(i));
+    // Also dump raw bytes at masterNode to see structure
+    console.error(`[XIMBBSInfo] Raw masterNode header (first 64 bytes at 0x${masterNodePtr.toString(16)}):`);
+    let hexDump = '';
+    for (let i = 0; i < 64; i++) {
+      if (i % 16 === 0) hexDump += `\n  0x${(masterNodePtr + i).toString(16).padStart(6, '0')}: `;
+      hexDump += this.emulator.readMemory(masterNodePtr + i).toString(16).padStart(2, '0') + ' ';
     }
-    this.emulator.writeMemory(SEMI_NAME_OFFSET + multiPortSemiName.length, 0);
-    for (let i = multiPortSemiName.length + 1; i < 20; i++) {
-      this.emulator.writeMemory(SEMI_NAME_OFFSET + i, 0);
-    }
+    console.error(hexDump)
 
-debugLog(`[XIMBBSInfo] MULTICOM - Initialized ${MAX_NODES} node structures (124 bytes each)`);
-debugLog(`[XIMBBSInfo] MULTICOM - masterNode (multiPort) at 0x${MASTER_NODE_BASE.toString(16)}`);
-debugLog(`[XIMBBSInfo] MULTICOM - myNode array at 0x${MY_NODE_ARRAY_BASE.toString(16)}`);
-debugLog(`[XIMBBSInfo] MULTICOM - Current node ${nodeId}: "${userName}" from "${userLocation}"`);
-
-    // DEBUG: Verify nodeInfo structures (what RTW actually reads)
-    console.log(`[XIMBBSInfo] MULTICOM - Memory verification (axcommon.e structure):`);
-    for (let i = 0; i < 3; i++) {
-      const nodeInfoAddr = MY_NODE_ARRAY_BASE + (i * NODE_INFO_SIZE);
-
-      // Read handle at +0 (31 bytes) - what RTW displays for username
-      const handle = this.emulator.readString(nodeInfoAddr + 0, 30);
-
-      // Read netSocket at +31
-      const netSocket = this.emulator.readMemory32(nodeInfoAddr + 31);
-
-      // Read offHook at +39
-      const offHook = this.emulator.readMemory32(nodeInfoAddr + 39);
-
-      // Read singlePort pointer at +115
-      const singlePortPtr = this.emulator.readMemory32(nodeInfoAddr + 115);
-
-      console.log(`[XIMBBSInfo]   myNode[${i}] at 0x${nodeInfoAddr.toString(16)}:`);
-      console.log(`[XIMBBSInfo]     .handle (+0): "${handle}"`);
-      console.log(`[XIMBBSInfo]     .netSocket (+31): ${netSocket}`);
-      console.log(`[XIMBBSInfo]     .offHook (+39): ${offHook}`);
-      console.log(`[XIMBBSInfo]     .s ptr (+115): 0x${singlePortPtr.toString(16)}`);
-
-      // Also read from singlePort (if door uses it)
-      if (singlePortPtr !== 0) {
-        const status = this.emulator.readMemory32(singlePortPtr + 82);
-        const spHandle = this.emulator.readString(singlePortPtr + 86, 30);
-        const location = this.emulator.readString(singlePortPtr + 117, 30);
-
-        console.log(`[XIMBBSInfo]     singlePort.status (+82): ${status}`);
-        console.log(`[XIMBBSInfo]     singlePort.handle (+86): "${spHandle}"`);
-        console.log(`[XIMBBSInfo]     singlePort.location (+117): "${location}"`);
-      }
-    }
-
-    // DEBUG: Verify what RTW will actually read
-    console.log('[MULTICOM] ===== FINAL VERIFICATION =====');
-    for (let i = 0; i < 5; i++) {
-      const nodeInfoAddr = MY_NODE_ARRAY_BASE + (i * NODE_INFO_SIZE);
-      const handleFromNodeInfo = this.emulator.readString(nodeInfoAddr + 0, 30);
-      const singlePortPtr = this.emulator.readMemory32(nodeInfoAddr + 115);
-      const handleFromSinglePort = this.emulator.readString(singlePortPtr + 86, 30);
-      const locationFromSinglePort = this.emulator.readString(singlePortPtr + 117, 30);
-      console.log(`[MULTICOM] myNode[${i}]: nodeInfo.handle="${handleFromNodeInfo}" singlePort@0x${singlePortPtr.toString(16)}.handle="${handleFromSinglePort}" loc="${locationFromSinglePort}"`);
-      fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `myNode[${i}]: nodeInfo="${handleFromNodeInfo}" singlePort="${handleFromSinglePort}" loc="${locationFromSinglePort}"\n`);
-    }
-
-    // Return pointer to masterNode semaphore
-    // RTW will access masterNode.myNode[i].s to get singlePort pointers
-    this.messageParser.writeSemaphore(msg.msgAddr, MASTER_NODE_BASE);
-    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: Returning masterNode ptr = 0x${MASTER_NODE_BASE.toString(16)}\n`);
-
-    // CRITICAL: Also write the current node number in the message
-    // RTW needs to know which node is current so it can display "yOUR lINE"
-    // Check if RTW expects node number in msg.data or msg.param
-    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `MULTICOM: msg.param before reply = ${msg.param}\n`);
-    this.reply(msg, nodeId); // Return current node ID
+    // Reply with current node ID
+    this.reply(msg, nodeId);
   }
 
   /**

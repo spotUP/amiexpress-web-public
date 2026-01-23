@@ -582,6 +582,33 @@ debugLog(
     this.sharedState.doorReplyPortAddr =
       this.libraryManager.getReplyPortAddress();
 
+    // Initialize MULTICOM structures in this session's emulator
+    // This matches express.e where ACP creates structures at startup
+    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
+    const sessionId = this.config.bbsSession?.id || `session-${nodeId}`;
+    const username = this.config.bbsSession?.user?.username || 'Guest';
+    const location = this.config.bbsSession?.user?.location || 'Unknown';
+
+    this.logger.log('MULTICOM', `INIT: nodeId=${nodeId}, username="${username}", location="${location}"`);
+
+    try {
+      const { multicomManager, ENV_DOORS } = await import("../nodes/MulticomManager.js");
+      this.logger.log('MULTICOM', `multicomManager imported successfully`);
+
+      // Initialize structures in this emulator
+      multicomManager.initializeInEmulator(this.emulator, sessionId, nodeId);
+      this.logger.log('MULTICOM', `initializeInEmulator called`);
+
+      // Update with current user info (status = ENV_DOORS since we're launching a door)
+      multicomManager.updateNode(nodeId, username, location, ENV_DOORS);
+      this.logger.log('MULTICOM', `updateNode called`);
+
+      this.logger.log('MULTICOM', `initialized for node ${nodeId}: ${username} @ ${location}`);
+    } catch (error) {
+      this.logger.log('MULTICOM', `INIT ERROR: ${error}`);
+      console.error('[AmigaDoorSession] MULTICOM init failed:', error);
+    }
+
     // CRITICAL FIX (Jan 8): Create AEDoorPort IMMEDIATELY after libraries init, BEFORE door loads!
     // Native AEDoor.library or door's first instruction may call FindPort("AEDoorPort")
     // during initialization. We must create it BEFORE any door code can execute.
@@ -938,6 +965,19 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
       this.lifecycleManager.terminate();
     }
 
+    // Clear node status and unregister from MULTICOM manager
+    const { multicomManager } = require("../nodes/MulticomManager.js");
+    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
+    const sessionId = this.config.bbsSession?.id || `session-${nodeId}`;
+
+    // Clear this node's status (user logged out or door exited)
+    multicomManager.clearNode(nodeId);
+
+    // Unregister this session's emulator
+    multicomManager.unregisterEmulator(sessionId);
+
+debugLog(`[AmigaDoorSession] Cleared node ${nodeId} and unregistered MULTICOM for session ${sessionId}`);
+
     // Cleanup emulator
     if (this.emulator) {
       this.emulator.cleanup();
@@ -947,7 +987,6 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     // End door logger
     this.logger.end(undefined, "Session terminated");
     const doorName = path.basename(this.config.executablePath);
-    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber;
     removeDoorLogger(doorName, nodeId);
 
     // Clear all references
