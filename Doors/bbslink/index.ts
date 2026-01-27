@@ -30,7 +30,7 @@ export const metadata = {
   author: 'AmiExpress Team (port from Darren Coles)',
   description: 'InterBBS games client - play LORD, Trade Wars, and more!',
   minSecurityLevel: 10,
-  command: 'LINKMENU',
+  command: 'BBSLINK',
   category: 'Games'
 };
 
@@ -50,6 +50,93 @@ interface TelnetConnection {
   socket: net.Socket;
   buffer: string;
   connected: boolean;
+}
+
+/**
+ * CP437 to Unicode translation table
+ * Maps IBM PC CP437 bytes (0x00-0xFF) to Unicode codepoints
+ * This allows proper display in xterm.js/web terminals
+ */
+const CP437_TO_UNICODE: string[] = [
+  // 0x00-0x1F: Control characters and special symbols
+  '\u0000', '\u263A', '\u263B', '\u2665', '\u2666', '\u2663', '\u2660', '\u2022',
+  '\u25D8', '\u25CB', '\u25D9', '\u2642', '\u2640', '\u266A', '\u266B', '\u263C',
+  '\u25BA', '\u25C4', '\u2195', '\u203C', '\u00B6', '\u00A7', '\u25AC', '\u21A8',
+  '\u2191', '\u2193', '\u2192', '\u2190', '\u221F', '\u2194', '\u25B2', '\u25BC',
+  // 0x20-0x7F: Standard ASCII (pass through)
+  ' ', '!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/',
+  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?',
+  '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O',
+  'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_',
+  '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
+  'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~', '\u2302',
+  // 0x80-0x9F: Extended Latin characters
+  '\u00C7', '\u00FC', '\u00E9', '\u00E2', '\u00E4', '\u00E0', '\u00E5', '\u00E7',
+  '\u00EA', '\u00EB', '\u00E8', '\u00EF', '\u00EE', '\u00EC', '\u00C4', '\u00C5',
+  '\u00C9', '\u00E6', '\u00C6', '\u00F4', '\u00F6', '\u00F2', '\u00FB', '\u00F9',
+  '\u00FF', '\u00D6', '\u00DC', '\u00A2', '\u00A3', '\u00A5', '\u20A7', '\u0192',
+  // 0xA0-0xAF: More Latin + special
+  '\u00E1', '\u00ED', '\u00F3', '\u00FA', '\u00F1', '\u00D1', '\u00AA', '\u00BA',
+  '\u00BF', '\u2310', '\u00AC', '\u00BD', '\u00BC', '\u00A1', '\u00AB', '\u00BB',
+  // 0xB0-0xBF: Shading and box drawing
+  '\u2591', '\u2592', '\u2593', '\u2502', '\u2524', '\u2561', '\u2562', '\u2556',
+  '\u2555', '\u2563', '\u2551', '\u2557', '\u255D', '\u255C', '\u255B', '\u2510',
+  // 0xC0-0xCF: Box drawing continued
+  '\u2514', '\u2534', '\u252C', '\u251C', '\u2500', '\u253C', '\u255E', '\u255F',
+  '\u255A', '\u2554', '\u2569', '\u2566', '\u2560', '\u2550', '\u256C', '\u2567',
+  // 0xD0-0xDF: Box drawing + blocks
+  '\u2568', '\u2564', '\u2565', '\u2559', '\u2558', '\u2552', '\u2553', '\u256B',
+  '\u256A', '\u2518', '\u250C', '\u2588', '\u2584', '\u258C', '\u2590', '\u2580',
+  // 0xE0-0xEF: Greek and math symbols
+  '\u03B1', '\u00DF', '\u0393', '\u03C0', '\u03A3', '\u03C3', '\u00B5', '\u03C4',
+  '\u03A6', '\u0398', '\u03A9', '\u03B4', '\u221E', '\u03C6', '\u03B5', '\u2229',
+  // 0xF0-0xFF: Math and misc symbols
+  '\u2261', '\u00B1', '\u2265', '\u2264', '\u2320', '\u2321', '\u00F7', '\u2248',
+  '\u00B0', '\u2219', '\u00B7', '\u221A', '\u207F', '\u00B2', '\u25A0', '\u00A0',
+];
+
+/**
+ * Translate CP437 (IBM PC) encoded buffer to UTF-8 string for web terminal display
+ */
+function translateCP437ToUnicode(data: Buffer): string {
+  let result = '';
+  let i = 0;
+
+  while (i < data.length) {
+    const byte = data[i];
+
+    // Check for ANSI escape sequence - pass through unchanged
+    if (byte === 0x1B && i + 1 < data.length && data[i + 1] === 0x5B) {
+      // ESC [ sequence - find the end
+      result += '\x1B[';
+      i += 2;
+      // Copy until we hit a letter (the command terminator)
+      while (i < data.length) {
+        const c = data[i];
+        result += String.fromCharCode(c);
+        i++;
+        // ANSI sequences end with a letter (A-Z, a-z)
+        if ((c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)) {
+          break;
+        }
+      }
+    } else if (byte < 0x20) {
+      // Control characters (0x00-0x1F) - pass through as-is for terminal handling
+      // This includes: BEL (0x07), BS (0x08), TAB (0x09), LF (0x0A), CR (0x0D), ESC (0x1B)
+      result += String.fromCharCode(byte);
+      i++;
+    } else if (byte === 0x7F) {
+      // DEL character - pass through
+      result += String.fromCharCode(byte);
+      i++;
+    } else {
+      // Translate using CP437 table (0x20-0x7E standard ASCII, 0x80-0xFF extended)
+      result += CP437_TO_UNICODE[byte] || String.fromCharCode(byte);
+      i++;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -149,7 +236,11 @@ async function connectToGame(socket: any, config: BBSLinkConfig, userSlot: numbe
       connected = true;
       socket.emit('ansi-output', `\x1b[32mConnected! Loading game...\x1b[0m\r\n\r\n`);
     });
-    telnetSocket.on('data', (data: Buffer) => socket.emit('ansi-output', data.toString('binary')));
+    telnetSocket.on('data', (data: Buffer) => {
+      // Translate CP437 (PC) characters to Unicode for proper web terminal display
+      const translated = translateCP437ToUnicode(data);
+      socket.emit('ansi-output', translated);
+    });
     telnetSocket.on('error', (err) => {
       socket.emit('ansi-output', `\r\n\x1b[31mConnection error: ${err.message}\x1b[0m\r\n`);
       resolve();
@@ -172,10 +263,14 @@ door.onStart(async (ctx: DoorContext) => {
   try {
     let doorCodeParam = params?.[0]?.trim().toUpperCase();
     const config: BBSLinkConfig = { serverHost: 'games.bbslink.net', httpPort: 80, telnetPort: 23, timeout: 10, syscode: '', authcode: '', schemecode: '' };
-    const progdirConfig = path.join(process.cwd(), 'Doors', 'bbslink', 'bbslink.cfg');
-    parseConfigFile(progdirConfig, config, doorCodeParam);
+    // Find config file - same location as 68K door for compatibility
+    // Config is in same directory as door (Doors/bbslink/bbslink.cfg)
+    const configPath = path.resolve(__dirname, 'bbslink.cfg');
+    parseConfigFile(configPath, config, doorCodeParam);
     const doorCode = (doorCodeParam || config.doorcode || 'MENU').toLowerCase();
-    if (!config.syscode || !config.authcode || !config.schemecode) throw new Error('syscode/authcode/schemecode missing from bbslink.cfg');
+    if (!config.syscode || !config.authcode || !config.schemecode) {
+      throw new Error('syscode/authcode/schemecode missing from bbslink.cfg');
+    }
     const xkey = randomString(6);
     socket.emit('ansi-output', '\x1b[36mAuthenticating with BBSLink...\x1b[0m\r\n');
     let token = (await httpGet(config.serverHost, config.httpPort, `/token.php?key=${xkey}`, config.timeout)).trim();

@@ -26,6 +26,7 @@ import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
 import { debugLog } from '../utils/debug-log';
+import * as net from 'net';
 
 export { XIMCommand } from './xim/types';
 
@@ -49,6 +50,27 @@ export class XIMProtocol {
   private systemCommandsHandler: XIMSystemCommandsHandler;
   private messageLogger: ((msg: XIMMessage, commandName?: string) => void) | null = null;
   private doorLogger: DoorLogger | null = null;
+
+  // Telnet passthrough session state (express.e:3051-3302)
+  private telnetState: {
+    usernamePrompt: string;
+    username: string;
+    passwordPrompt: string;
+    password: string;
+    connection: net.Socket | null;
+    connected: boolean;
+    pendingMsgAddr: number;
+    originalInputHandler: ((data: string) => void) | null;
+  } = {
+    usernamePrompt: '',
+    username: '',
+    passwordPrompt: '',
+    password: '',
+    connection: null,
+    connected: false,
+    pendingMsgAddr: 0,
+    originalInputHandler: null
+  };
 
   constructor(
     emulator: MoiraEmulator,
@@ -1210,6 +1232,12 @@ debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorPara
       XIMCommand.EXT_CHOOSE_NAME,
       XIMCommand.CHECK_REALNAME,
       XIMCommand.CON_CURSOR,
+      // Telnet passthrough commands (express.e:3051-3302)
+      XIMCommand.TELNET_CONNECT,
+      XIMCommand.TELNET_USERNAME_PROMPT,
+      XIMCommand.TELNET_USERNAME,
+      XIMCommand.TELNET_PASSWORD_PROMPT,
+      XIMCommand.TELNET_PASSWORD,
     ];
 
     // Debug: log once to confirm runtime list
@@ -1368,7 +1396,243 @@ debugLog(
       case XIMCommand.CON_CURSOR:
         this.systemCommandsHandler.handleConCursor(msg);
         break;
+
+      // Telnet passthrough commands (express.e:3051-3302)
+      case XIMCommand.TELNET_USERNAME_PROMPT:
+        debugLog(`[XIMProtocol] TELNET_USERNAME_PROMPT: "${msg.string}"`);
+        this.telnetState.usernamePrompt = msg.string || '';
+        this.sendReply(msg, 0);
+        break;
+
+      case XIMCommand.TELNET_USERNAME:
+        debugLog(`[XIMProtocol] TELNET_USERNAME: "${msg.string}"`);
+        this.telnetState.username = msg.string || '';
+        this.sendReply(msg, 0);
+        break;
+
+      case XIMCommand.TELNET_PASSWORD_PROMPT:
+        debugLog(`[XIMProtocol] TELNET_PASSWORD_PROMPT: "${msg.string}"`);
+        this.telnetState.passwordPrompt = msg.string || '';
+        this.sendReply(msg, 0);
+        break;
+
+      case XIMCommand.TELNET_PASSWORD:
+        debugLog(`[XIMProtocol] TELNET_PASSWORD: (hidden)`);
+        this.telnetState.password = msg.string || '';
+        this.sendReply(msg, 0);
+        break;
+
+      case XIMCommand.TELNET_CONNECT:
+        // BLOCKING call - don't reply until telnet session ends
+        debugLog(`[XIMProtocol] TELNET_CONNECT: "${msg.string}" port=${msg.data}`);
+        this.handleTelnetConnect(msg);
+        // NO sendReply here - will be sent when session ends
+        break;
     }
+  }
+
+  /**
+   * Handle TELNET_CONNECT command (express.e:3051-3302)
+   * Opens TCP connection to remote host and establishes bidirectional passthrough
+   * This is a BLOCKING call - emulator pauses until user disconnects (ESC)
+   */
+  private handleTelnetConnect(msg: XIMMessage): void {
+    const host = msg.string || '';
+    let port = msg.data || 23;
+    if (port === 0) port = 23;
+
+    this.telnetState.pendingMsgAddr = msg.msgAddr;
+
+    debugLog(`[XIMProtocol] TELNET_CONNECT: Connecting to ${host}:${port}`);
+    this.socket.emit('ansi-output', `\r\nConnecting to ${host}:${port}...\r\n`);
+
+    // Close any existing connection first
+    if (this.telnetState.connection) {
+      debugLog(`[XIMProtocol] TELNET_CONNECT: Closing existing connection`);
+      this.telnetState.connection.destroy();
+      this.telnetState.connection = null;
+    }
+
+    // Create TCP connection with 30 second timeout
+    const telnetSocket = net.createConnection({ host, port, timeout: 30000 });
+    this.telnetState.connection = telnetSocket;
+    this.telnetState.connected = false;
+
+    telnetSocket.on('connect', () => {
+      this.telnetState.connected = true;
+      debugLog(`[XIMProtocol] TELNET_CONNECT: Connected to ${host}:${port}`);
+      this.socket.emit('ansi-output', `Connected to ${host}.\r\n`);
+      this.socket.emit('ansi-output', "Escape character is '^]'.\r\n\r\n");
+    });
+
+    telnetSocket.on('data', (data: Buffer) => {
+      // Filter telnet IAC commands, pass through clean data
+      const filtered = this.filterTelnetIAC(data, telnetSocket);
+      if (filtered.length > 0) {
+        this.socket.emit('ansi-output', filtered.toString('binary'));
+      }
+      // Check for auto-login prompts
+      this.checkTelnetAutoLogin(data, telnetSocket);
+    });
+
+    telnetSocket.on('close', () => {
+      debugLog(`[XIMProtocol] TELNET_CONNECT: Connection closed`);
+      this.socket.emit('ansi-output', '\r\nConnection closed.\r\n');
+      this.cleanupTelnetSession();
+    });
+
+    telnetSocket.on('error', (err: Error) => {
+      debugLog(`[XIMProtocol] TELNET_CONNECT: Error - ${err.message}`);
+      this.socket.emit('ansi-output', `\r\nConnection error: ${err.message}\r\n`);
+      this.cleanupTelnetSession();
+    });
+
+    telnetSocket.on('timeout', () => {
+      debugLog(`[XIMProtocol] TELNET_CONNECT: Connection timeout`);
+      this.socket.emit('ansi-output', '\r\nConnection timed out.\r\n');
+      telnetSocket.destroy();
+      this.cleanupTelnetSession();
+    });
+
+    // Set up input handler and pause emulator
+    this.setupTelnetInputHandler(telnetSocket);
+    this.emulator.pause();
+    debugLog(`[XIMProtocol] TELNET_CONNECT: Emulator paused, waiting for telnet session to end`);
+  }
+
+  /**
+   * Filter telnet IAC (Interpret As Command) sequences (express.e:3218-3269)
+   */
+  private filterTelnetIAC(data: Buffer, telnetSocket: net.Socket): Buffer {
+    const IAC = 255, WILL = 251, WONT = 252, DO = 253, DONT = 254, SB = 250, SE = 240;
+    const ECHO = 1, SGA = 3;
+    const filtered: number[] = [];
+    let i = 0;
+
+    while (i < data.length) {
+      if (data[i] === IAC && i + 1 < data.length) {
+        const cmd = data[i + 1];
+        if (cmd === IAC) {
+          filtered.push(IAC);
+          i += 2;
+        } else if (cmd === WILL && i + 2 < data.length) {
+          const option = data[i + 2];
+          if (option === ECHO || option === SGA) {
+            telnetSocket.write(Buffer.from([IAC, DO, option]));
+          } else {
+            telnetSocket.write(Buffer.from([IAC, DONT, option]));
+          }
+          i += 3;
+        } else if (cmd === WONT && i + 2 < data.length) {
+          telnetSocket.write(Buffer.from([IAC, DONT, data[i + 2]]));
+          i += 3;
+        } else if (cmd === DO && i + 2 < data.length) {
+          telnetSocket.write(Buffer.from([IAC, WONT, data[i + 2]]));
+          i += 3;
+        } else if (cmd === DONT && i + 2 < data.length) {
+          telnetSocket.write(Buffer.from([IAC, WONT, data[i + 2]]));
+          i += 3;
+        } else if (cmd === SB) {
+          let j = i + 2;
+          while (j < data.length - 1) {
+            if (data[j] === IAC && data[j + 1] === SE) { j += 2; break; }
+            j++;
+          }
+          i = j;
+        } else {
+          i += 2;
+        }
+      } else {
+        filtered.push(data[i]);
+        i++;
+      }
+    }
+    return Buffer.from(filtered);
+  }
+
+  /**
+   * Check for auto-login prompts (express.e:3271-3284)
+   */
+  private checkTelnetAutoLogin(data: Buffer, telnetSocket: net.Socket): void {
+    const text = data.toString().toLowerCase();
+    if (this.telnetState.username && this.telnetState.usernamePrompt) {
+      if (text.includes(this.telnetState.usernamePrompt.toLowerCase())) {
+        debugLog(`[XIMProtocol] Auto-login: sending username`);
+        telnetSocket.write(this.telnetState.username + '\r\n');
+        this.telnetState.username = '';
+      }
+    }
+    if (this.telnetState.password && this.telnetState.passwordPrompt) {
+      if (text.includes(this.telnetState.passwordPrompt.toLowerCase())) {
+        debugLog(`[XIMProtocol] Auto-login: sending password`);
+        telnetSocket.write(this.telnetState.password + '\r\n');
+        this.telnetState.password = '';
+      }
+    }
+  }
+
+  /**
+   * Set up input handler for telnet session
+   */
+  private setupTelnetInputHandler(telnetSocket: net.Socket): void {
+    const telnetInputHandler = (data: string) => {
+      // ESC (0x1B) or Ctrl+] (0x1D) disconnects
+      if (data === '\x1b' || data === '\x1d') {
+        debugLog(`[XIMProtocol] Telnet: User requested disconnect`);
+        this.socket.emit('ansi-output', '\r\n[Disconnecting...]\r\n');
+        telnetSocket.destroy();
+        return;
+      }
+      if (this.telnetState.connected && telnetSocket && !telnetSocket.destroyed) {
+        telnetSocket.write(data);
+      }
+    };
+
+    // Store original handler and replace with telnet handler
+    const listeners = this.socket.listeners('door:input');
+    this.telnetState.originalInputHandler = listeners[0] as ((data: string) => void) || null;
+    this.socket.removeAllListeners('door:input');
+    this.socket.on('door:input', telnetInputHandler);
+    debugLog(`[XIMProtocol] Telnet input handler set up`);
+  }
+
+  /**
+   * Clean up telnet session and resume door execution
+   */
+  private cleanupTelnetSession(): void {
+    debugLog(`[XIMProtocol] Cleaning up telnet session`);
+
+    if (this.telnetState.connection && !this.telnetState.connection.destroyed) {
+      this.telnetState.connection.destroy();
+    }
+
+    // Restore original input handler
+    this.socket.removeAllListeners('door:input');
+    if (this.telnetState.originalInputHandler) {
+      this.socket.on('door:input', this.telnetState.originalInputHandler);
+    }
+
+    // Reply to pending TELNET_CONNECT message
+    const pendingMsgAddr = this.telnetState.pendingMsgAddr;
+    if (pendingMsgAddr) {
+      debugLog(`[XIMProtocol] Telnet session ended - replying to TELNET_CONNECT`);
+      this.messageParser.writeData(pendingMsgAddr, 0);
+      this.execLibrary.replyMsg(pendingMsgAddr);
+      this.emulator.resume();
+      debugLog(`[XIMProtocol] Emulator resumed after telnet session`);
+    }
+
+    // Reset state
+    this.telnetState = {
+      usernamePrompt: '',
+      username: '',
+      passwordPrompt: '',
+      password: '',
+      connection: null,
+      connected: false,
+      pendingMsgAddr: 0,
+      originalInputHandler: null
+    };
   }
 
   /**

@@ -202,6 +202,7 @@ export class BsdSocketLibrary {
 
     state.socket.on('data', (data) => {
       console.log(`[BsdSocketLibrary] Received ${data.length} bytes`);
+      console.log(`[BsdSocketLibrary] recv data (full): ${data.toString('utf8')}`);
       state.readBuffer.push(data);
       if (state.readResolve) {
         const resolve = state.readResolve;
@@ -274,6 +275,7 @@ export class BsdSocketLibrary {
     }
 
     console.log(`[BsdSocketLibrary] send(fd=${fd}, len=${len})`);
+    console.log(`[BsdSocketLibrary] send data: ${buffer.toString('utf8').substring(0, 200)}`);
 
     // Use TLS socket if available, otherwise regular socket
     const socket = state.tlsSocket || state.socket;
@@ -497,6 +499,93 @@ export class BsdSocketLibrary {
     // In a real implementation, this would use exec.AllocMem
     const addr = 0x300000 + Math.floor(Math.random() * 0x10000);
     return addr;
+  }
+
+  /**
+   * WaitSelect() - Wait for socket activity (Amiga-specific select with signals)
+   * LVO: -126
+   */
+  waitSelect(): number {
+    const nfds = this.emulator.getRegister(0);       // D0
+    const readfdsPtr = this.emulator.getRegister(8);  // A0
+    const writefdsPtr = this.emulator.getRegister(9); // A1
+    const exceptfdsPtr = this.emulator.getRegister(10); // A2
+    const timeoutPtr = this.emulator.getRegister(11);  // A3
+
+    let timeoutMs = 30000;
+    if (timeoutPtr !== 0) {
+      const tvSec = this.emulator.readMemory32(timeoutPtr);
+      const tvUsec = this.emulator.readMemory32(timeoutPtr + 4);
+      timeoutMs = tvSec * 1000 + Math.floor(tvUsec / 1000);
+      if (timeoutMs === 0) timeoutMs = 1;
+    }
+
+    console.log(`[BsdSocketLibrary] WaitSelect(nfds=${nfds}, timeout=${timeoutMs}ms)`);
+
+    const readFds = this.parseFdSet(readfdsPtr, nfds);
+    const writeFds = this.parseFdSet(writefdsPtr, nfds);
+    const readyReadFds: number[] = [];
+    const readyWriteFds: number[] = [];
+    const startTime = Date.now();
+
+    deasync.loopWhile(() => {
+      for (const fd of readFds) {
+        const state = this.sockets.get(fd);
+        if (state && (state.readBuffer.length > 0 || !state.connected)) {
+          if (!readyReadFds.includes(fd)) readyReadFds.push(fd);
+        }
+      }
+      for (const fd of writeFds) {
+        const state = this.sockets.get(fd);
+        if (state && state.connected && state.socket) {
+          if (!readyWriteFds.includes(fd)) readyWriteFds.push(fd);
+        }
+      }
+      const elapsed = Date.now() - startTime;
+      return readyReadFds.length === 0 && readyWriteFds.length === 0 && elapsed < timeoutMs;
+    });
+
+    if (readfdsPtr !== 0) {
+      this.clearFdSet(readfdsPtr, nfds);
+      for (const fd of readyReadFds) this.setFdBit(readfdsPtr, fd);
+    }
+    if (writefdsPtr !== 0) {
+      this.clearFdSet(writefdsPtr, nfds);
+      for (const fd of readyWriteFds) this.setFdBit(writefdsPtr, fd);
+    }
+    if (exceptfdsPtr !== 0) this.clearFdSet(exceptfdsPtr, nfds);
+
+    const totalReady = readyReadFds.length + readyWriteFds.length;
+    console.log(`[BsdSocketLibrary] WaitSelect returning ${totalReady}`);
+    return totalReady;
+  }
+
+  private parseFdSet(ptr: number, nfds: number): number[] {
+    if (ptr === 0) return [];
+    const fds: number[] = [];
+    for (let fd = 0; fd < Math.min(nfds, 256); fd++) {
+      const wordIndex = Math.floor(fd / 32);
+      const bitIndex = fd % 32;
+      const word = this.emulator.readMemory32(ptr + wordIndex * 4);
+      if (word & (1 << bitIndex)) fds.push(fd);
+    }
+    return fds;
+  }
+
+  private clearFdSet(ptr: number, nfds: number): void {
+    if (ptr === 0) return;
+    for (let i = 0; i < Math.ceil(Math.min(nfds, 256) / 32); i++) {
+      this.emulator.writeMemory32(ptr + i * 4, 0);
+    }
+  }
+
+  private setFdBit(ptr: number, fd: number): void {
+    if (ptr === 0 || fd < 0 || fd >= 256) return;
+    const wordIndex = Math.floor(fd / 32);
+    const bitIndex = fd % 32;
+    const wordAddr = ptr + wordIndex * 4;
+    const word = this.emulator.readMemory32(wordAddr);
+    this.emulator.writeMemory32(wordAddr, word | (1 << bitIndex));
   }
 
   /**
