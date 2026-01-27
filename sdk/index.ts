@@ -62,6 +62,25 @@ export * from './core/ansi-string-utils';
 // Screen utilities
 export { getTerminalDimensions, BBS_CONSTANTS } from './src/utils/screen-utils';
 
+// Gamepad support
+export { GamepadInputManager } from './utils/gamepad-input-manager';
+export type {
+  GamepadButton,
+  GamepadAxis,
+  GamepadEventType,
+  DPadDirection,
+  GamepadEvent,
+  GamepadConnectedEvent,
+  GamepadDisconnectedEvent,
+  GamepadButtonEvent,
+  GamepadAxisEvent,
+  GamepadDPadEvent,
+  AnyGamepadEvent,
+  GamepadState,
+  GamepadConfig,
+} from './types/gamepad';
+export { DEFAULT_GAMEPAD_CONFIG } from './types/gamepad';
+
 // Server runtime (Node.js)
 export { ServerDoor } from './server';
 
@@ -155,6 +174,35 @@ export {
   pokerCardsToCards,
   restoreFromSnapshot,
 } from './engines/poker/poker-engine';
+
+// Card Game AI System
+export { CardGameAI } from './engines/cards/ai/card-game-ai';
+export { PokerAIStrategy } from './engines/cards/ai/poker-ai-strategy';
+export { UnoAIStrategy } from './engines/cards/ai/uno-ai-strategy';
+export {
+  getDifficultyConfig,
+  applyThinkingDelay,
+  shouldMakeMistake,
+} from './engines/cards/ai/difficulty-config';
+export type {
+  CardGameAIStrategy,
+  DecisionContext,
+  AIDecision,
+  PokerDecisionContext,
+  UnoDecisionContext,
+  PokerAIDecision,
+  UnoAIDecision,
+  DifficultyConfig,
+  HandStrength,
+  PotOdds,
+  CardCountingState,
+} from './engines/cards/ai/types';
+export {
+  Difficulty,
+  GameType,
+  PokerActionType,
+  UnoActionType,
+} from './engines/cards/ai/types';
 
 // UI Library - Blessed (full neo-blessed port without Node.js dependencies)
 export * as blessed from './engines/ui/blessed/index';

@@ -77,9 +77,17 @@
       "types": "./dist/utils/door-input-manager.d.ts",
       "default": "./dist/utils/door-input-manager.js"
     },
+    "./utils/gamepad-input-manager": {
+      "types": "./dist/utils/gamepad-input-manager.d.ts",
+      "default": "./dist/utils/gamepad-input-manager.js"
+    },
     "./utils/DoorLoader": {
       "types": "./dist/utils/DoorLoader.d.ts",
       "default": "./dist/utils/DoorLoader.js"
+    },
+    "./types/gamepad": {
+      "types": "./dist/types/gamepad.d.ts",
+      "default": "./dist/types/gamepad.js"
     },
     "./tools/runDoorSession": {
       "types": "./dist/tools/runDoorSession.d.ts",

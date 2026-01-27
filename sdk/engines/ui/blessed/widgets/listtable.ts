@@ -239,10 +239,17 @@ export class ListTable extends Box {
     if (index < 0 || index >= this.rows.length) return;
     this.selectedRow = index;
     this.updateContent();
-    this.emit('select row', index, this.rows[index]);
+    this.emit('select', this.rows[index], index);
     if (this.screen) {
       this.screen.render();
     }
+  }
+
+  /**
+   * Select a row (alias for selectRow)
+   */
+  select(index: number): void {
+    this.selectRow(index);
   }
 
   /**
@@ -288,6 +295,18 @@ export class ListTable extends Box {
    */
   setHeaders(headers: string[]): void {
     this.headers = headers;
+    this.calculateColumnWidths();
+    this.updateContent();
+    if (this.screen) {
+      this.screen.render();
+    }
+  }
+
+  /**
+   * Set rows without changing headers
+   */
+  setRows(rows: string[][]): void {
+    this.rows = rows;
     this.calculateColumnWidths();
     this.updateContent();
     if (this.screen) {

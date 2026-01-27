@@ -878,14 +878,12 @@ export class Screen extends Element {
       this._fullRedrawNeeded = true;
     }
 
-    // Optimized rendering: only clear buffer and mark dirty when full redraw is needed
+    // Track if this is a full redraw request (for cache invalidation below)
     const needsFullRedraw = !this._optimizedRendering || this._fullRedrawNeeded;
 
-    if (needsFullRedraw) {
-      // Mark entire screen as dirty since we're clearing the entire buffer
-      this._markDirty(0, 0, this.width - 1, this.height - 1);
-    }
-    // Note: For optimized rendering, dirty regions are already marked by markDirtyElement()
+    // ALWAYS mark entire screen as dirty to ensure _diff() processes all cells
+    // This works with the full buffer clear below to prevent rendering corruption
+    this._markDirty(0, 0, this.width - 1, this.height - 1);
 
     // Clear buffer with default attribute
     // CRITICAL FIX: Use bg=0 (black) instead of bg=0x1ff (transparent) for BBS consistency
@@ -897,23 +895,20 @@ export class Screen extends Element {
     const bufHeight = this.buffer.length;
     const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
 
-    // Only clear buffer on full redraw (optimized rendering preserves unchanged regions)
-    if (needsFullRedraw) {
-      for (let y = 0; y < bufHeight; y++) {
-        for (let x = 0; x < bufWidth; x++) {
-          this.buffer[y][x] = [dattr, ' '];
-        }
-      }
-    } else {
-      // Optimized: only clear dirty regions
-      const minY = Math.max(0, this._dirtyMinY);
-      const maxY = Math.min(bufHeight - 1, this._dirtyMaxY);
-      const minX = Math.max(0, this._dirtyMinX);
-      const maxX = Math.min(bufWidth - 1, this._dirtyMaxX);
-
-      for (let y = minY; y <= maxY; y++) {
-        for (let x = minX; x <= maxX; x++) {
-          this.buffer[y][x] = [dattr, ' '];
+    // ALWAYS clear the full buffer to prevent rendering corruption
+    // The previous optimization (only clearing dirty regions) caused issues because:
+    // 1. Dirty region was captured before elements rendered
+    // 2. Elements expanded the dirty region during render via _markDirty()
+    // 3. Cells in the expanded region weren't cleared, causing buffer == lastBuffer
+    // 4. _diff() skipped those cells, leaving stale content on terminal
+    // The cost of clearing 80x24 = 1920 cells is negligible vs. the rendering/output cost
+    for (let y = 0; y < bufHeight; y++) {
+      for (let x = 0; x < bufWidth; x++) {
+        this.buffer[y][x] = [dattr, ' '];
+        // AGGRESSIVE FIX: Also invalidate lastBuffer to force ALL cells to be output
+        // This disables differential rendering optimization but ensures correct display
+        if (this.lastBuffer[y] && this.lastBuffer[y][x]) {
+          this.lastBuffer[y][x] = [-1, '\x00'];
         }
       }
     }
@@ -1596,6 +1591,7 @@ export class Screen extends Element {
     for (let y = minY; y <= maxY; y++) {
       // Guard: check buffer row exists
       if (!this.buffer[y] || !this.lastBuffer[y]) continue;
+
       for (let x = minX; x <= maxX; x++) {
         // Guard: check buffer cells exist
         if (!this.buffer[y][x] || !this.lastBuffer[y][x]) continue;

@@ -10,6 +10,7 @@ Always aim for modern, desktop-like doors using neo-blessed windows, panels, and
 
 - **[TypeScript Door Guide](../Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md)** - Full TypeScript door patterns and pitfalls
 - **[DoorInputManager Guide](../Documentation/4-Door-Developers/DOOR_INPUT_MANAGER_GUIDE.md)** - **REQUIRED** for neo-blessed doors - Centralized input management
+- **[Gamepad API Guide](../Documentation/4-Door-Developers/GAMEPAD_API_GUIDE.md)** - USB gamepad/controller support for arcade games
 - **[TypeScript Examples](./examples/)** - Working TypeScript door examples
 - **[Templates](./templates/)** - Starter templates
 - **[68K SDK](./68k/README.md)** - Create authentic 68K Amiga binaries (C/Assembly)
@@ -117,6 +118,45 @@ export default door;
 ```
 
 **Important:** TypeScript doors are registered by scanning `.info` files in `Commands/BBSCmd/` at BBS startup. Doors without a `.info` file will not be available.
+
+### Gamepad Support
+
+Add USB gamepad/controller support to your door:
+
+```typescript
+import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
+import { GamepadButton } from '@amiexpress/bbs-door-sdk/types/gamepad';
+
+const gamepad = new GamepadInputManager(ctx.session);
+
+// Listen for button presses
+gamepad.on('button:a', (pressed: boolean) => {
+  if (pressed) {
+    console.log('A button pressed!');
+  }
+});
+
+// Listen for D-pad movement
+gamepad.on('dpad:up', () => {
+  console.log('D-pad up');
+});
+
+// Listen for analog stick
+gamepad.on('axis:left-x', (value: number) => {
+  if (value < -0.3) {
+    moveLeft();
+  } else if (value > 0.3) {
+    moveRight();
+  }
+});
+
+// Cleanup
+gamepad.destroy();
+```
+
+**Supported Controllers:** Xbox, PlayStation, Nintendo Switch Pro, generic USB gamepads
+
+**See:** [Gamepad API Guide](../Documentation/4-Door-Developers/GAMEPAD_API_GUIDE.md) for complete documentation
 
 ## Release Packaging (Required)
 
@@ -255,6 +295,7 @@ sdk/
 - **CardEngine** - ASCII/ANSI playing cards, hands, and UNO (defaults to ASCII + ANSI)
 - **GraphicsEngine** - Sprites, particles, parallax scrolling
 - **InputEngine** - Key binding and input mapping
+- **GamepadInputManager** - USB gamepad/controller support (Xbox, PlayStation, generic) - See [Gamepad API Guide](../Documentation/4-Door-Developers/GAMEPAD_API_GUIDE.md)
 - **PhysicsEngine** - Collision detection, movement
 - **AIEngine** - Pathfinding, behaviors
 - **NetworkEngine** - Multiplayer support

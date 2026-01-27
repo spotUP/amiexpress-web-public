@@ -409,7 +409,11 @@ export class MultiplayerLobby extends EventEmitter {
       width: '100%',
       height: '100%',
       tags: true,
-    });
+      z: 1,  // Low z-index so dialogs/overlays appear on top
+    } as any);
+
+    console.log('[MultiplayerLobby] Container created with z-index:', (this.container as any).z);
+    console.log('[MultiplayerLobby] Parent (screen) z-index:', (this.parent as any).z);
 
     // Title
     this.titleBox = new Box({
@@ -968,6 +972,14 @@ export class MultiplayerLobby extends EventEmitter {
       }
     });
 
+    // Allow action keys to bubble up to screen handlers
+    // The table list should only handle navigation (arrows, enter, vi keys)
+    // but pass through shortcut keys (c, j, r, etc.) to screen-level handlers
+    this.tableListWidget.key(['c', 'j', 'r', 'o', 's', '/', 'f'], () => {
+      // Return false to not consume the key - let it bubble to screen handlers
+      return false;
+    });
+
     // Action buttons row (inline style - 1 row, no borders)
     const buttonTop = currentTop + tableListHeight;
     let buttonLeft = 2;
@@ -1089,7 +1101,10 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     // Setup button handlers
-    createButton.on('press', () => void this.browserCreateTable());
+    createButton.on('press', () => {
+      console.log('[MultiplayerLobby] Create button pressed!');
+      void this.browserCreateTable();
+    });
     joinButton.on('press', () => void this.browserJoinTable());
     if (observeButton) {
       observeButton.on('press', () => void this.browserObserveTable());
@@ -1110,6 +1125,9 @@ export class MultiplayerLobby extends EventEmitter {
     }
     // Sort cycling with S key
     this.parent.key(['s'], () => this.cycleBrowserSort());
+
+    console.log('[MultiplayerLobby] Browser mode key handlers registered');
+    console.log('[MultiplayerLobby] parent.grabKeys:', (this.parent.screen?.program as any)?.grabKeys);
 
     // Focus on table list initially (or search if enabled)
     if (this.browserSearchInput) {
@@ -1289,8 +1307,11 @@ export class MultiplayerLobby extends EventEmitter {
    * Browser mode: Create new table
    */
   private async browserCreateTable(): Promise<void> {
+    console.log('[MultiplayerLobby] browserCreateTable() called');
     // Emit event for door to handle mode selection and table creation
+    console.log('[MultiplayerLobby] Emitting browser:create-table event');
     this.emit('browser:create-table');
+    console.log('[MultiplayerLobby] Event emitted');
   }
 
   /**

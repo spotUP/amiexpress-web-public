@@ -930,6 +930,10 @@ export class Textarea extends Element {
   private isDragging: boolean = false;
   private selectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // When true, up/down/tab arrow keys are not handled internally
+  // allowing external handlers (like command palette) to use them
+  suppressNavigationKeys: boolean = false;
+
   constructor(options: TextboxOptions = {}) {
     super({
       focusable: true,
@@ -1038,8 +1042,12 @@ export class Textarea extends Element {
   private _onKeypress(ch: any, key: KeyEvent): boolean {
     if (!this.focused) return false;
 
-    // Ignore Tab (except Shift+Tab) - handled by screen for focus navigation
-    if (key.name === 'tab' && !key.shift) return false;
+    // Tab handling: when navigation keys are suppressed, consume tab to trap focus
+    // Otherwise, allow tab to pass through for screen focus navigation
+    if (key.name === 'tab') {
+      if (this.suppressNavigationKeys) return true;  // Trap tab
+      if (!key.shift) return false;  // Allow normal tab navigation
+    }
 
     // Ctrl+A to select all
     if (key.ctrl && key.name === 'a') {
@@ -1086,6 +1094,8 @@ export class Textarea extends Element {
         return true;
 
       case 'up':
+        // If navigation keys are suppressed, let external handler deal with it
+        if (this.suppressNavigationKeys) return false;
         if (key.shift) {
           this._extendSelectionVertical(-1);
         } else {
@@ -1095,6 +1105,8 @@ export class Textarea extends Element {
         return true;
 
       case 'down':
+        // If navigation keys are suppressed, let external handler deal with it
+        if (this.suppressNavigationKeys) return false;
         if (key.shift) {
           this._extendSelectionVertical(1);
         } else {
@@ -1301,10 +1313,55 @@ export class Textarea extends Element {
     return text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
   }
 
+  /**
+   * Convert custom ~effect~ tags to blessed tags for display preview
+   * (Copied from Textbox class for consistency)
+   */
+  private _convertEffectTags(text: string): string {
+    // Rainbow: cycle through colors for each character
+    text = text.replace(/~rainbow~(.*?)~\/rainbow~/g, (_, content) => {
+      const colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
+      let result = '';
+      let colorIdx = 0;
+      for (const char of content) {
+        if (char === ' ') {
+          result += char;
+        } else {
+          result += `{${colors[colorIdx % colors.length]}-fg}${char}{/}`;
+          colorIdx++;
+        }
+      }
+      return result;
+    });
+
+    // Pulse: show in cyan (pulsing effect can't be static)
+    text = text.replace(/~pulse~(.*?)~\/pulse~/g, '{cyan-fg}$1{/}');
+
+    // Sparkle: show in yellow
+    text = text.replace(/~sparkle~(.*?)~\/sparkle~/g, '{yellow-fg}$1{/}');
+
+    // Shake: show in red (shaking can't be shown statically)
+    text = text.replace(/~shake~(.*?)~\/shake~/g, '{red-fg}$1{/}');
+
+    // Wave: show in blue
+    text = text.replace(/~wave~(.*?)~\/wave~/g, '{blue-fg}$1{/}');
+
+    // Gradient: extract colors and show first color
+    text = text.replace(/~gradient\s+from=(\w+)\s+to=(\w+)~(.*?)~\/gradient~/g,
+      (_, fromColor, _toColor, content) => `{${fromColor}-fg}${content}{/}`);
+
+    return text;
+  }
+
   private _updateContent(): void {
     this._ensureCursorVisible();
 
-    const lines = this._getLines();
+    const useTags = (this.options as any).tags;
+
+    // Convert effect tags to blessed tags for display if tags enabled
+    const displayValue = useTags ? this._convertEffectTags(this.value) : this.value;
+    const lines = displayValue.split('\n');
+
     const visibleHeight = this._getVisibleHeight();
     const visibleLines = lines.slice(this.viewOffsetY, this.viewOffsetY + visibleHeight);
     const { line: cursorLine, col: cursorCol } = this._getCursorLineCol();
@@ -1321,8 +1378,6 @@ export class Textarea extends Element {
     for (let i = 0; i < this.viewOffsetY && i < lines.length; i++) {
       charPos += lines[i].length + 1; // +1 for newline
     }
-
-    const useTags = (this.options as any).tags;
 
     for (let i = 0; i < visibleLines.length; i++) {
       const lineIndex = this.viewOffsetY + i;

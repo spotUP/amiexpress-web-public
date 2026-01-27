@@ -2502,22 +2502,28 @@ export class DockablePanel extends Panel {
         continue;
       }
 
-      // Check if child is a List widget (has .items property)
-      if ((child as any).items && Array.isArray((child as any).items)) {
-        const items = (child as any).items as string[];
-        for (const item of items) {
+      // Check if child is a List widget (has .items or .ritems property)
+      // CRITICAL: Use .items (raw array) not .ritems (populated after render)
+      // blessed.list: .items = raw array, .ritems = rendered (populated during render cycle)
+      // SDK List: .items = raw array
+      const listItems = (child as any).items;
+      if (listItems && Array.isArray(listItems) && listItems.length > 0) {
+        for (const item of listItems) {
           const cleanItem = stripFormatting(String(item));
-          maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
-          // Debug: log longest items
-          if (this.options.label?.includes('Sidebar') && cleanItem.length > 10) {
-            const debugMsg = `[CalcSize] List item: "${cleanItem}" (${cleanItem.length} chars)`;
-            if ((this as any).screen?.log) {
-              ((this as any).screen as any).log(debugMsg);
+          const itemWidth = cleanItem.length;
+          if (itemWidth > maxContentWidth) {
+            maxContentWidth = itemWidth;
+            // Debug: log longest items for Sidebar
+            if (this.options.label?.includes('Sidebar')) {
+              const debugMsg = `[CalcSize] Longest item so far: "${cleanItem}" (${itemWidth} chars), maxWidth now: ${maxContentWidth}`;
+              if ((this as any).screen?.log) {
+                ((this as any).screen as any).log(debugMsg);
+              }
+              console.log(debugMsg);
             }
-            console.log(debugMsg);
           }
         }
-        totalContentHeight = Math.max(totalContentHeight, items.length);
+        totalContentHeight = Math.max(totalContentHeight, listItems.length);
       }
 
       // Check regular content
@@ -2548,8 +2554,17 @@ export class DockablePanel extends Panel {
     const borderHeight = this.border ? 2 : 0;
     const titleBarHeight = this.titleBar ? 1 : 0;
 
+    // CRITICAL: Add extra space for child widget padding/margins
+    // Lists have internal padding (ileft, iright) that blessed adds
+    // Typical blessed list: ileft=2, iright=1 → 3 chars overhead
+    // Add 3 chars to account for this internal spacing
+    const childPaddingBuffer = 3;
+
+    // Add 1 char buffer for better usability (breathing room, scrollbar hint, etc.)
+    const widthBuffer = 1;
+
     return {
-      width: maxContentWidth + borderWidth,
+      width: maxContentWidth + borderWidth + childPaddingBuffer + widthBuffer,
       height: totalContentHeight + borderHeight + titleBarHeight,
     };
   }

@@ -32,11 +32,12 @@ export class ContextMenu extends Element {
       left: 0,
       width: 20,
       height: (options.items?.length || 1) + 2,
-      border: { type: 'line', fg: 'cyan' },
+      border: { type: 'line', fg: 'white', bg: 'blue' },
       style: {
         fg: 'white',
-        bg: 'black',
-        focus: { fg: 'white', bg: 'black' }
+        bg: 'blue',
+        border: { fg: 'white', bg: 'blue' },
+        focus: { fg: 'white', bg: 'blue' }
       },
       tags: true,
       keys: true,
@@ -45,7 +46,8 @@ export class ContextMenu extends Element {
       focusable: true,
       hidden: true,
       shadow: true,
-    });
+      alwaysOnTop: true,
+    } as any);
 
     this.items = options.items || [];
     this._updateContent();
@@ -182,9 +184,15 @@ export class ContextMenu extends Element {
     this.left = adjustedX;
     this.top = adjustedY;
 
+    // Detach and re-append to force to top of render order
+    this.detach();
+    if (this.parent) {
+      this.parent.append(this);
+    }
+
     this.show();
-    this.focus();
     this.setFront();
+    this.focus();
     this._updateContent();
     this.screen?.render();
   }
