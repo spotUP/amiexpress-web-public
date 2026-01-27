@@ -85,6 +85,7 @@ Choose your role to find relevant documentation:
 ### Door Development
 🚪 **[Door Development Guide](4-Door-Developers/DOOR_DEVELOPMENT.md)** - Complete door guide
 ⚙️ **[Amiga Emulation](4-Door-Developers/AMIGA_EMULATION.md)** - Emulation details
+🎮 **[Gamepad API Guide](4-Door-Developers/GAMEPAD_API_GUIDE.md)** - USB gamepad/controller support
 📚 **[AEDoor API](4-Door-Developers/AEDOOR_API.md)** - AEDoor.library reference
 📚 **[DOS Library API](4-Door-Developers/DOS_LIBRARY_API.md)** - dos.library reference
 💡 **[Examples](4-Door-Developers/EXAMPLES.md)** - Example doors

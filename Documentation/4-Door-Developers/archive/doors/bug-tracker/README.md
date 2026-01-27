@@ -51,63 +51,7 @@ A comprehensive, feature-rich bug tracking system designed for Bulletin Board Sy
 - **Export Functionality**: JSON export for backups
 - **Data Management**: Comprehensive CRUD operations
 
-## 📦 Installation
 
-```bash
-# Navigate to the bug-tracker directory
-cd sdk/doors/bug-tracker
-
-# Install dependencies
-npm install
-
-# Start the door
-npm start
-```
-
-## ⚙️ Configuration
-
-### Webhook Configuration
-
-Create a `webhook.config.json` file:
-
-```json
-{
-  "webhooks": [
-    {
-      "platform": "discord",
-      "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN",
-      "enabled": true,
-      "username": "Bug Tracker Bot",
-      "avatarUrl": "https://example.com/avatar.png",
-      "categories": ["System Commands", "Doors"],
-      "retryAttempts": 3,
-      "retryDelay": 1000
-    },
-    {
-      "platform": "slack",
-      "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
-      "enabled": true,
-      "username": "Bug Tracker",
-      "categories": ["General System"]
-    }
-  ]
-}
-```
-
-### BBS Integration
-
-Add to your BBS menu (Commands/BBSCmd/BUGS.info):
-
-```
-COMMAND=BUGS
-LOCATION=Doors:bug-tracker/index.ts
-ACCESS=0
-TYPE=XIM
-STACK=4096
-MULTINODE=YES
-NAME=Bug Tracker
-DESCRIPTION=Report and track system bugs
-```
 
 ## 🎮 Usage
 
@@ -239,18 +183,6 @@ bug-tracker/
 └── data/
     ├── bugs.json     # Bug reports storage
     └── webhooks.json # Webhook configuration
-```
-
-### Building
-
-```bash
-npm run build
-```
-
-### Testing
-
-```bash
-npm test
 ```
 
 ## 📝 API Integration
