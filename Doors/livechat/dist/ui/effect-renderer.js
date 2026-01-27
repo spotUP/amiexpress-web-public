@@ -37,25 +37,44 @@ function renderEffectsForInput(text) {
 }
 /**
  * Enable live effect rendering for a textarea
- * Overrides the _updateContent method to render effects in real-time
+ * Hooks into the change event to update display with rendered effects
  */
 function enableLiveEffectRendering(textarea) {
-    // Store original _updateContent method
-    const originalUpdateContent = textarea._updateContent;
-    if (!originalUpdateContent)
-        return;
-    // Override _updateContent to render effects
-    textarea._updateContent = function () {
-        // Get the raw value with effect codes
-        const rawValue = this.value;
-        // Temporarily set value to rendered version for display
-        const renderedValue = renderEffectsForInput(rawValue);
-        // Store raw value
-        const savedValue = this.value;
-        this.value = renderedValue;
-        // Call original update (this renders the display)
-        originalUpdateContent.call(this);
-        // Restore raw value (so getValue() returns codes intact)
-        this.value = savedValue;
+    // Store raw value separately
+    let rawValue = textarea.value || '';
+    // Override setValue to intercept and store raw value
+    const originalSetValue = textarea.setValue.bind(textarea);
+    textarea.setValue = function (value) {
+        rawValue = value;
+        const rendered = renderEffectsForInput(value);
+        originalSetValue(rendered);
     };
+    // Override getValue to return raw value with codes
+    const originalGetValue = textarea.getValue.bind(textarea);
+    textarea.getValue = function () {
+        return rawValue;
+    };
+    // Hook into change events to update display
+    textarea.on('change', function (value) {
+        // Store the raw value
+        rawValue = value;
+        // Update internal value to rendered version for display
+        const rendered = renderEffectsForInput(value);
+        if (textarea.value !== rendered) {
+            textarea.value = rendered;
+            // Force display update
+            if (typeof textarea.setContent === 'function') {
+                textarea.setContent(rendered);
+            }
+            // Trigger render
+            if (textarea.screen) {
+                textarea.screen.render();
+            }
+        }
+    });
+    // Apply initial rendering
+    if (rawValue) {
+        const rendered = renderEffectsForInput(rawValue);
+        originalSetValue(rendered);
+    }
 }

@@ -12,7 +12,11 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: (
   let sv = true;
 
   function ucl() {
-    const lo = sv ? SW : 0;
+    // CRITICAL: Use actual sidebar panel width, not static constant
+    // fitToContent can expand sidebar beyond initial SIDEBAR_WIDTH
+    const sidebarPanel = chl.parent;
+    const actualSidebarWidth = sv ? (sidebarPanel?.width || SW) : 0;
+    const lo = actualSidebarWidth;
     const sw = (s as any).width || 80;
     const wd = sw - lo;  // Width is full screen minus left offset
 

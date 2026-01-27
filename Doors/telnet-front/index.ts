@@ -86,16 +86,8 @@ async function getNodes(socket: any, currentNodeNumber: number, currentUserIp: s
   return new Promise((resolve) => {
     const maxNodes = parseInt(process.env.MAX_NODES || '8');
 
-    // Request active users from backend
-    socket.emit('get-active-users');
-
-    // Wait for response
-    const timeout = setTimeout(() => {
-      console.log('[telnet-front] Timeout waiting for active-users, using defaults');
-      resolve(getDefaultNodes(currentNodeNumber, maxNodes));
-    }, 1000);
-
-    socket.once('active-users', (data: { users: NodeInfo[] }) => {
+    // Set up listener BEFORE emitting to avoid race condition
+    const responseHandler = (data: { users: NodeInfo[] }) => {
       clearTimeout(timeout);
       console.log(`[telnet-front] Received ${data.users.length} active users from backend`);
 
@@ -132,7 +124,21 @@ async function getNodes(socket: any, currentNodeNumber: number, currentUserIp: s
       }
 
       resolve(nodes);
-    });
+    };
+
+    // Listen for response first
+    socket.once('active-users', responseHandler);
+
+    // Short timeout - if backend doesn't respond quickly, use defaults
+    // Original 1000ms was too long, causing visible pause
+    const timeout = setTimeout(() => {
+      socket.off('active-users', responseHandler);
+      console.log('[telnet-front] Timeout waiting for active-users, using defaults');
+      resolve(getDefaultNodes(currentNodeNumber, maxNodes));
+    }, 150); // Reduced from 1000ms to 150ms
+
+    // Request active users from backend
+    socket.emit('get-active-users');
   });
 }
 
@@ -281,7 +287,7 @@ const door = new ServerDoor(metadata);
 
 door.onStart(async (ctx: DoorContext) => {
   const { socket, user, bbsSession } = ctx;
-  
+
   console.log('[TELNET-FRONT] Starting display');
 
   // Display the frontend
@@ -289,20 +295,19 @@ door.onStart(async (ctx: DoorContext) => {
 
   console.log('[TELNET-FRONT] Display complete');
 
-  // During pre-login (AWAIT state), display and wait briefly so it can be seen
-  // before the ANSI prompt appears below it
+  // During pre-login (AWAIT state), no pause needed - ANSI prompt follows immediately
+  // The display is informational and the user will see it while logging in
   if (!bbsSession || bbsSession.state === 'AWAIT') {
-    console.log('[TELNET-FRONT] Pre-login mode, pausing for 2 seconds');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('[TELNET-FRONT] Pre-login mode, continuing immediately');
     return;
   }
 
-  // For logged-in users, wait briefly for any key to continue
+  // For logged-in users, wait briefly for any key to continue (or auto-continue after 500ms)
   await new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
       delete bbsSession.doorInputHandler;
       resolve();
-    }, 2000);
+    }, 500); // Reduced from 2000ms to 500ms
 
     const handleInput = (data: string) => {
       clearTimeout(timeout);

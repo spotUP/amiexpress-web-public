@@ -580,16 +580,38 @@ export class EnhancedVoiceChannel {
 
   /**
    * Show voice permissions dialog and return user's choices
+   * Uses proper blessed components: Checkbox, Button with focus cycling
    */
   private async showVoicePermissionsDialog(): Promise<{ enableMic: boolean; enableCamera: boolean } | null> {
     return new Promise((resolve) => {
-      // Create modal overlay
-      const overlay = blessed.box({
+      // Track if dialog was already resolved to prevent double-resolution
+      let resolved = false;
+      const resolveOnce = (result: { enableMic: boolean; enableCamera: boolean } | null) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve(result);
+      };
+
+      // Modal overlay (darkens background)
+      const modalOverlay = blessed.box({
+        parent: this.screen,
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        style: { bg: 'black', transparent: true },
+        // @ts-ignore
+        zIndex: 99998,
+      });
+
+      // Dialog container
+      const dialog = blessed.box({
         parent: this.screen,
         top: 'center',
         left: 'center',
         width: 52,
-        height: 12,
+        height: 11,
         border: { type: 'line' },
         style: {
           fg: 'white',
@@ -598,155 +620,170 @@ export class EnhancedVoiceChannel {
         },
         tags: true,
         label: ' {cyan-fg}Join Voice Channel{/cyan-fg} ',
-        ch: ' ',  // Fill background
-        // @ts-ignore - zIndex exists but not in types
+        ch: ' ',
+        // @ts-ignore
         zIndex: 99999,
       });
 
-      overlay.setFront();
-      this.screen.realloc();
-
       // Header text
       blessed.text({
-        parent: overlay,
+        parent: dialog,
         top: 1,
         left: 2,
         width: 48,
         content: 'Enable audio and video for this call?',
         tags: true,
-        style: { fg: 'white' },
+        style: { fg: 'white', bg: 'black' },
       });
 
       // Instructions
       blessed.text({
-        parent: overlay,
+        parent: dialog,
         top: 2,
         left: 2,
         width: 48,
-        content: '{gray-fg}(M/V=toggle, J=join, C=cancel){/gray-fg}',
+        content: '{gray-fg}Tab to navigate, Space/Enter to toggle/select{/gray-fg}',
         tags: true,
+        style: { bg: 'black' },
       });
 
-      let micEnabled = true;
-      let cameraEnabled = true;
-
-      // Microphone checkbox
-      const micCheckbox = blessed.text({
-        parent: overlay,
+      // Microphone checkbox - using proper Checkbox widget
+      const micCheckbox = blessed.checkbox({
+        parent: dialog,
         top: 4,
         left: 3,
-        width: 46,
-        content: '{green-fg}[X]{/green-fg} Enable Microphone (M)',
-        tags: true,
-        mouse: true,
-        clickable: true,
-        style: { fg: 'white', hover: { bg: 'blue' } },
-      }) as any;
-
-      micCheckbox.on('click', () => {
-        micEnabled = !micEnabled;
-        micCheckbox.setContent(
-          micEnabled
-            ? '{green-fg}[X]{/green-fg} Enable Microphone (M)'
-            : '{gray-fg}[ ]{/gray-fg} Enable Microphone (M)'
-        );
-        this.screen.render();
+        width: 30,
+        height: 1,
+        text: 'Enable Microphone',
+        checked: true,
+        style: {
+          fg: 'white',
+          bg: 'black',
+          focus: { fg: 'black', bg: 'cyan' },
+          hover: { fg: 'black', bg: 'blue' },
+        },
       });
 
-      // Camera checkbox
-      const cameraCheckbox = blessed.text({
-        parent: overlay,
+      // Camera checkbox - using proper Checkbox widget
+      const cameraCheckbox = blessed.checkbox({
+        parent: dialog,
         top: 5,
         left: 3,
-        width: 46,
-        content: '{green-fg}[X]{/green-fg} Enable Camera (V)',
+        width: 30,
+        height: 1,
+        text: 'Enable Camera',
+        checked: true,
+        style: {
+          fg: 'white',
+          bg: 'black',
+          focus: { fg: 'black', bg: 'cyan' },
+          hover: { fg: 'black', bg: 'blue' },
+        },
+      });
+
+      // Join button - using proper Button widget
+      const joinButton = blessed.button({
+        parent: dialog,
+        bottom: 1,
+        left: 5,
+        width: 18,
+        height: 1,
+        content: '{center}[ Join ]{/center}',
         tags: true,
         mouse: true,
-        clickable: true,
-        style: { fg: 'white', hover: { bg: 'blue' } },
-      }) as any;
-
-      cameraCheckbox.on('click', () => {
-        cameraEnabled = !cameraEnabled;
-        cameraCheckbox.setContent(
-          cameraEnabled
-            ? '{green-fg}[X]{/green-fg} Enable Camera (V)'
-            : '{gray-fg}[ ]{/gray-fg} Enable Camera (V)'
-        );
-        this.screen.render();
+        style: {
+          fg: 'green',
+          bg: 'black',
+          focus: { fg: 'white', bg: 'green' },
+          hover: { fg: 'white', bg: 'green' },
+        },
       });
 
-      // Buttons
-      const joinButton = blessed.text({
-        parent: overlay,
-        bottom: 2,
-        left: 3,
-        width: 20,
-        content: '{center}{green-fg}[J] Join{/green-fg}{/center}',
+      // Cancel button - using proper Button widget
+      const cancelButton = blessed.button({
+        parent: dialog,
+        bottom: 1,
+        right: 5,
+        width: 18,
+        height: 1,
+        content: '{center}[ Cancel ]{/center}',
         tags: true,
         mouse: true,
-        clickable: true,
-        style: { fg: 'white', hover: { bg: 'green' } },
-      }) as any;
-
-      joinButton.on('click', () => {
-        overlay.destroy();
-        this.screen.render();
-        resolve({ enableMic: micEnabled, enableCamera: cameraEnabled });
+        style: {
+          fg: 'red',
+          bg: 'black',
+          focus: { fg: 'white', bg: 'red' },
+          hover: { fg: 'white', bg: 'red' },
+        },
       });
 
-      const cancelButton = blessed.text({
-        parent: overlay,
-        bottom: 2,
-        right: 3,
-        width: 20,
-        content: '{center}{red-fg}[C] Cancel{/red-fg}{/center}',
-        tags: true,
-        mouse: true,
-        clickable: true,
-        style: { fg: 'white', hover: { bg: 'red' } },
-      }) as any;
+      // Focusable elements in tab order
+      const focusables = [micCheckbox, cameraCheckbox, joinButton, cancelButton];
+      let focusIndex = 0;
 
-      cancelButton.on('click', () => {
-        overlay.destroy();
+      // Focus cycling with Tab
+      const cycleFocus = (direction: number) => {
+        focusIndex = (focusIndex + direction + focusables.length) % focusables.length;
+        focusables[focusIndex].focus();
         this.screen.render();
-        resolve(null);
+      };
+
+      // Setup keyboard handlers on dialog for global shortcuts
+      dialog.key(['tab'], () => {
+        cycleFocus(1);
+        return false; // Prevent propagation
       });
 
-      // Keyboard shortcuts
-      overlay.key(['j', 'enter'], () => {
-        overlay.destroy();
-        this.screen.render();
-        resolve({ enableMic: micEnabled, enableCamera: cameraEnabled });
+      dialog.key(['S-tab'], () => {
+        cycleFocus(-1);
+        return false;
       });
 
-      overlay.key(['c', 'escape'], () => {
-        overlay.destroy();
-        this.screen.render();
-        resolve(null);
+      dialog.key(['escape'], () => {
+        resolveOnce(null);
       });
 
-      overlay.key(['m'], () => {
-        micEnabled = !micEnabled;
-        micCheckbox.setContent(
-          micEnabled
-            ? '{green-fg}[X]{/green-fg} Enable Microphone (M)'
-            : '{gray-fg}[ ]{/gray-fg} Enable Microphone (M)'
-        );
-        this.screen.render();
+      // Button press handlers
+      joinButton.on('press', () => {
+        resolveOnce({
+          enableMic: micCheckbox.isChecked(),
+          enableCamera: cameraCheckbox.isChecked(),
+        });
       });
 
-      overlay.key(['v'], () => {
-        cameraEnabled = !cameraEnabled;
-        cameraCheckbox.setContent(
-          cameraEnabled
-            ? '{green-fg}[X]{/green-fg} Enable Camera (V)'
-            : '{gray-fg}[ ]{/gray-fg} Enable Camera (V)'
-        );
-        this.screen.render();
+      cancelButton.on('press', () => {
+        resolveOnce(null);
       });
 
-      overlay.focus();
+      // Also handle Enter on buttons
+      joinButton.key(['enter'], () => {
+        resolveOnce({
+          enableMic: micCheckbox.isChecked(),
+          enableCamera: cameraCheckbox.isChecked(),
+        });
+      });
+
+      cancelButton.key(['enter'], () => {
+        resolveOnce(null);
+      });
+
+      // Cleanup function to destroy all elements
+      const cleanup = () => {
+        dialog.destroy();
+        modalOverlay.destroy();
+        this.screen.render();
+      };
+
+      // Click outside to cancel (on modal overlay)
+      modalOverlay.on('click', () => {
+        resolveOnce(null);
+      });
+
+      // Initial focus on first checkbox
+      dialog.setFront();
+      modalOverlay.setFront();
+      dialog.setFront();
+      micCheckbox.focus();
       this.screen.render();
     });
   }

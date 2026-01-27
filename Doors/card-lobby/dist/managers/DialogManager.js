@@ -49,6 +49,7 @@ class DialogManager {
         this.overlayShade = overlayShade;
     }
     setModalActive(value) {
+        console.log('[DialogManager] setModalActive:', value, '(was:', this.modalActive + ')');
         this.modalActive = value;
     }
     isModalActive() {
@@ -238,11 +239,23 @@ class DialogManager {
         this.screen.render();
     }
     async showListDialog(title, items) {
-        if (this.modalActive)
+        console.log('[DialogManager] showListDialog called:', { title, itemCount: items.length });
+        if (this.modalActive) {
+            console.log('[DialogManager] BLOCKED - modalActive is true');
             return null;
+        }
+        console.log('[DialogManager] Setting modalActive = true');
         this.modalActive = true;
+        console.log('[DialogManager] Showing overlayShade...');
+        console.log('[DialogManager] overlayShade.hidden BEFORE:', this.overlayShade.hidden);
+        console.log('[DialogManager] overlayShade.visible BEFORE:', this.overlayShade.visible);
+        console.log('[DialogManager] overlayShade.z BEFORE:', this.overlayShade.z);
         this.overlayShade.show();
+        console.log('[DialogManager] overlayShade.hidden AFTER:', this.overlayShade.hidden);
+        console.log('[DialogManager] overlayShade.visible AFTER:', this.overlayShade.visible);
+        console.log('[DialogManager] overlayShade.z AFTER:', this.overlayShade.z);
         return new Promise((resolve) => {
+            console.log('[DialogManager] Creating List element...');
             const list = new blessed_1.List({
                 parent: this.overlayShade,
                 top: 'center',
@@ -262,7 +275,37 @@ class DialogManager {
                 mouse: true,
                 vi: true,
             });
+            console.log('[DialogManager] List created');
+            console.log('[DialogManager] List.hidden:', list.hidden);
+            console.log('[DialogManager] List.visible:', list.visible);
+            console.log('[DialogManager] List.z:', list.z);
+            console.log('[DialogManager] List.parent === overlayShade:', list.parent === this.overlayShade);
+            // Dump element tree for debugging
+            console.log('[DialogManager] === Element Tree ===');
+            console.log('[DialogManager] Screen children:', this.screen.children.map((c) => ({
+                type: c.type,
+                z: c.z,
+                hidden: c.hidden,
+                visible: c.visible
+            })));
+            // Find overlayShade's parent
+            const desktop = this.screen.children.find((c) => c.children && c.children.some((child) => child === this.overlayShade));
+            if (desktop) {
+                console.log('[DialogManager] Desktop children:', desktop.children.map((c) => ({
+                    type: c.type,
+                    z: c.z,
+                    hidden: c.hidden,
+                    visible: c.visible
+                })));
+            }
+            console.log('[DialogManager] OverlayShade children:', this.overlayShade.children.map((c) => ({
+                type: c.type,
+                z: c.z,
+                hidden: c.hidden,
+                visible: c.visible
+            })));
             const cleanup = (value) => {
+                console.log('[DialogManager] Cleanup called with value:', value);
                 list.destroy();
                 this.overlayShade.hide();
                 this.modalActive = false;
@@ -271,8 +314,17 @@ class DialogManager {
             };
             list.on('select', (_, index) => cleanup(index));
             list.key(['escape', 'q'], () => cleanup(null));
+            console.log('[DialogManager] Focusing list...');
+            // Ensure dialog stays on top and focused
+            this.overlayShade.setFront();
+            list.setFront();
             list.focus();
+            console.log('[DialogManager] List focused');
+            console.log('[DialogManager] List.focused:', list.focused);
+            console.log('[DialogManager] Rendering screen...');
             this.screen.render();
+            console.log('[DialogManager] Screen rendered');
+            console.log('[DialogManager] showListDialog setup complete - waiting for user interaction');
         });
     }
     async showPromptDialog(title, text, value) {
@@ -296,6 +348,9 @@ class DialogManager {
                 this.screen.render();
                 resolve(result);
             };
+            // Ensure prompt stays on top and focused
+            this.overlayShade.setFront();
+            prompt.setFront();
             prompt.showInput(text, value, (err, result) => {
                 if (err) {
                     cleanup(null);
@@ -326,6 +381,9 @@ class DialogManager {
                 this.screen.render();
                 resolve(value);
             };
+            // Ensure question dialog stays on top and focused
+            this.overlayShade.setFront();
+            question.setFront();
             question.once('answer', (answer) => cleanup(answer));
             question.ask(text);
             this.screen.render();
@@ -351,6 +409,9 @@ class DialogManager {
                 this.screen.render();
                 resolve();
             };
+            // Ensure message stays on top
+            this.overlayShade.setFront();
+            message.setFront();
             message.display(text, cleanup);
             this.screen.render();
         });
@@ -449,7 +510,7 @@ class DialogManager {
                 content: 'Rule Number (1-5):',
                 style: { fg: 'cyan' },
             });
-            const numberInput = blessed_1.default.textbox({
+            const numberInput = (0, blessed_helpers_1.createTextbox)({
                 parent: dialog,
                 top: 2,
                 left: 2,
@@ -465,7 +526,7 @@ class DialogManager {
                 content: 'Rule Name:',
                 style: { fg: 'cyan' },
             });
-            const nameInput = blessed_1.default.textbox({
+            const nameInput = (0, blessed_helpers_1.createTextbox)({
                 parent: dialog,
                 top: 5,
                 left: 2,
@@ -481,7 +542,7 @@ class DialogManager {
                 content: 'Description:',
                 style: { fg: 'cyan' },
             });
-            const descInput = blessed_1.default.textbox({
+            const descInput = (0, blessed_helpers_1.createTextbox)({
                 parent: dialog,
                 top: 8,
                 left: 2,

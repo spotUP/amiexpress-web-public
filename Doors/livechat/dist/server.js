@@ -175,7 +175,7 @@ async function createApp(session) {
     inputManager.enable();
     // ========== LOADING SCREEN ==========
     // Layout constants for 80x24 terminal
-    const SIDEBAR_WIDTH = 12; // Initial sidebar width (will auto-expand via fitContent)
+    const SIDEBAR_WIDTH = 15; // Minimum sidebar width (will auto-expand via fitContent to fit content)
     // Track which tab is active in the sidebar
     let sidebarTab = 'channels';
     // ========== MENU BAR (at top) ==========
@@ -248,30 +248,30 @@ async function createApp(session) {
     // ========== CHANNEL LIST (Left Sidebar) ==========
     // ========== COMMAND AUTOCOMPLETE ==========
     const commandSuggestions = (0, blessed_helpers_1.createList)({
-        parent: screen, // Parent to screen for full width alignment
+        parent: screen,
         bottom: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT, // Position above input box
         left: 0,
-        width: '100%', // Full width of screen
+        width: '100%',
         height: 10,
         label: ' Commands ',
-        border: { type: 'line' },
+        border: 'line',
         hidden: true,
-        ch: ' ', // CRITICAL: Fill background to make widget opaque
+        ch: ' ',
         mouse: true,
         clickable: true,
         keys: true,
         vi: true,
         style: {
-            fg: 'white',
+            fg: 'cyan',
             bg: 'black',
-            border: { fg: 'cyan' },
             selected: { fg: 'black', bg: 'cyan' },
+            border: { fg: 'yellow' },
         },
         scrollbar: {
             ch: ' ',
         },
         // @ts-ignore - zIndex exists but not in types
-        zIndex: 10000, // CRITICAL: Must be above all panels to avoid clipping
+        zIndex: 10000,
     });
     // Ghost text overlay for inline completion preview
     const ghostText = (0, blessed_helpers_1.createBox)({
@@ -286,10 +286,13 @@ async function createApp(session) {
             fg: 'gray',
             bg: 'black',
         },
+        // @ts-ignore - zIndex exists but not in types
+        zIndex: 6000, // Above input box (5000) but below command suggestions (10000)
     });
     ghostText.hide();
     // Set high z-index to appear above other elements
     commandSuggestions.setIndex(1000);
+    ghostText.setIndex(600);
     let commandSuggestionsVisible = false;
     let filteredCommands = [];
     let currentGhostCompletion = ''; // Track the current ghost text completion
@@ -314,15 +317,15 @@ async function createApp(session) {
             ghostText.hide();
             commandSuggestionsVisible = false;
             currentGhostCompletion = '';
+            // Release navigation key suppression
+            inputBox.suppressNavigationKeys = false;
             screen.render();
             return;
         }
         // Format command items with name, usage, and description
-        // Dynamically calculate width based on screen width
         const chatWidth = screen.width || 80;
         const nameWidth = 12;
         const usageWidth = 20;
-        // Description gets the remaining space (minus borders and spacing)
         const descWidth = Math.max(10, chatWidth - nameWidth - usageWidth - 6);
         const items = filteredCommands.map(cmd => {
             const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
@@ -331,15 +334,19 @@ async function createApp(session) {
             return `{cyan-fg}/${name}{/cyan-fg} {gray-fg}${usage}{/gray-fg} ${desc}`;
         });
         // Ensure list width is updated to match screen
-        commandSuggestions.width = chatWidth;
         commandSuggestions.position.width = chatWidth;
         commandSuggestions.position.left = 0;
-        invalidateCache(commandSuggestions);
+        // Update items using List's setItems method
         commandSuggestions.setItems(items);
         commandSuggestions.select(0);
+        // Invalidate caches to ensure clean render
+        invalidateCache(inputBox);
+        invalidateCache(commandSuggestions);
         commandSuggestions.show();
         commandSuggestions.setFront();
         commandSuggestionsVisible = true;
+        // Suppress navigation keys in input so arrow keys navigate the list
+        inputBox.suppressNavigationKeys = true;
         // Show ghost text for top match (Claude-style inline completion)
         if (filteredCommands.length > 0 && searchTerm.length > 0) {
             const topMatch = filteredCommands[0];
@@ -356,9 +363,10 @@ async function createApp(session) {
                 const cursorOffset = 1 + typedPortion.length;
                 ghostText.position.left = cursorOffset;
                 // Build content: typed portion in white, remaining in gray
-                ghostText.setContent(`{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`);
-                ghostText.show();
-                ghostText.setFront();
+                // TEMPORARILY DISABLED: Ghost text causes blessed coordinate corruption
+                // ghostText.setContent(`{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`);
+                // ghostText.show();
+                // ghostText.setFront();
             }
             else {
                 // No exact prefix match - hide ghost text
@@ -378,6 +386,12 @@ async function createApp(session) {
             ghostText.hide();
             commandSuggestionsVisible = false;
             currentGhostCompletion = '';
+            // Release navigation key suppression
+            inputBox.suppressNavigationKeys = false;
+            // Invalidate caches to force clean redraw and prevent border artifacts
+            invalidateCache(commandSuggestions);
+            invalidateCache(inputBox);
+            invalidateCache(ghostText);
             screen.render();
         }
     }
@@ -416,6 +430,8 @@ async function createApp(session) {
         top: menu_bar_1.MENU_HEIGHT,
         left: 0,
         width: SIDEBAR_WIDTH,
+        minWidth: 12, // Minimum usable width for "# general"
+        maxWidth: 35, // Max 35 chars to leave room for chat (80 - 35 = 45 chars for chat)
         bottom: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
         dockPosition: 'left',
         resizable: true,
@@ -424,7 +440,7 @@ async function createApp(session) {
         topConstraint: menu_bar_1.MENU_HEIGHT,
         bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
         border: { type: 'line', fg: 'cyan' },
-        fitContent: { width: true, height: false }, // Auto-expand width to fit content
+        fitContent: { width: true, height: false }, // Auto-expand width to fit content dynamically
         style: {
             fg: 'white',
             bg: 'black',
@@ -547,23 +563,36 @@ async function createApp(session) {
                 channelItems.push({ id: 'voice-' + vc.id, name: vc.name, type: 'voice' });
             });
         }
-        // Debug: show what items we're setting
-        console.log('[LIVECHAT DEBUG] Channel list items:', items.map((item, i) => {
+        // Debug: show what items we're setting and calculate expected width
+        const itemLengths = items.map((item, i) => {
             const stripped = item.replace(/{[^}]+}/g, ''); // Strip blessed tags
-            return `[${i}] "${stripped}" (${stripped.length} chars)`;
-        }));
+            return { index: i, text: stripped, length: stripped.length };
+        });
+        const longestItem = itemLengths.reduce((max, curr) => curr.length > max.length ? curr : max, { index: 0, text: '', length: 0 });
+        // Write to file since console.log doesn't show up
+        const fs = require('fs');
+        const debugLog = `\n=== updateChannelList ${new Date().toISOString()} ===\nItems:\n${itemLengths.map(item => `  [${item.index}] "${item.text}" (${item.length} chars)${item.index === longestItem.index ? ' <- LONGEST' : ''}`).join('\n')}\nExpected width: ${longestItem.length} + 3 (borders+buffer) = ${longestItem.length + 3}\n`;
+        fs.appendFileSync('logs/sidebar-debug.log', debugLog);
         channelList.setItems(items);
-        // Manually trigger fitContent to resize panel based on actual content
-        // This ensures panel expands even if persisted state had a narrow width
-        console.log('[LIVECHAT DEBUG] Calling fitToContent, sidebar width before:', sidebarPanel.width, 'list width:', channelList.width);
+        // CRITICAL: Force screen render before fitToContent so blessed populates internal state
+        if (screen) {
+            screen.render();
+        }
+        // Debug: log width before/after
+        const widthBefore = sidebarPanel.width;
         sidebarPanel.fitToContent();
-        console.log('[LIVECHAT DEBUG] Sidebar width after fitToContent:', sidebarPanel.width, 'list width:', channelList.width);
+        const widthAfter = sidebarPanel.width;
+        fs.appendFileSync('logs/sidebar-debug.log', `Width before fitToContent: ${widthBefore}\nWidth after fitToContent: ${widthAfter}\n`);
+        fs.appendFileSync('logs/sidebar-debug.log', `fitContent settings: ${JSON.stringify(sidebarPanel.fitContentSettings)}\n`);
+        fs.appendFileSync('logs/sidebar-debug.log', `channelList.items.length: ${channelList.items?.length}\n\n`);
         // CRITICAL: Force list to update its width based on parent panel
         // When panel expands, child list doesn't auto-recalculate '100%-2' width
         const newListWidth = sidebarPanel.width - 2; // Panel width minus borders
+        fs.appendFileSync('logs/sidebar-debug.log', `Setting list width to: ${newListWidth}\n`);
+        fs.appendFileSync('logs/sidebar-debug.log', `List width before: ${channelList.width}\n`);
         channelList.width = newListWidth;
         channelList.position.width = newListWidth;
-        console.log('[LIVECHAT DEBUG] Forced list width to:', newListWidth);
+        fs.appendFileSync('logs/sidebar-debug.log', `List width after: ${channelList.width}\n`);
         // Invalidate blessed's internal cache to force re-layout
         if (channelList._clines) {
             delete channelList._clines;
@@ -571,6 +600,11 @@ async function createApp(session) {
         if (channelList._pclines) {
             delete channelList._pclines;
         }
+        // CRITICAL: Force coordinate recalculation
+        if (typeof channelList._invalidateCoords === 'function') {
+            channelList._invalidateCoords();
+        }
+        fs.appendFileSync('logs/sidebar-debug.log', `List iwidth: ${channelList.iwidth}, ileft: ${channelList.ileft}\n`);
         // Re-render to apply new width
         screen.render();
         // Select current channel if in the list
@@ -1300,10 +1334,6 @@ async function createApp(session) {
         }
         // CRITICAL: Use CRLF for separation to force margin return
         const fullContent = [...chatMessages, ...previewLines].join('\r\n');
-        // FORCE REDRAW: Tell the screen to ignore its previous state
-        if (screen && screen.forceFullRedraw) {
-            screen.forceFullRedraw();
-        }
         chatLog.setContent(fullContent);
         chatLog.setScrollPerc(100);
     }
@@ -1564,11 +1594,6 @@ async function createApp(session) {
     inputBox.on('submit', (value) => { asyncSubmitHandler(value); });
     // Live typing indicator and command autocomplete
     inputBox.on('keypress', (ch, key) => {
-        // CRITICAL: Allow Shift+Arrow/Home/End to pass through to textbox for text selection
-        // Don't intercept these - the textbox widget handles them internally
-        if (key.shift && (key.name === 'left' || key.name === 'right' || key.name === 'up' || key.name === 'down' || key.name === 'home' || key.name === 'end')) {
-            return false; // Return false to allow event to continue to textbox's internal handler
-        }
         // Handle Enter key - submit message instead of inserting newline
         if (key.name === 'enter' || key.name === 'return') {
             if (commandSuggestionsVisible) {
@@ -1632,10 +1657,9 @@ async function createApp(session) {
         // Use setTimeout to get the updated value after the keypress
         setTimeout(() => {
             const currentValue = inputBox.getValue();
-            // Update content to render tags if enabled
-            if (inputBox.options.tags) {
-                inputBox.setContent(currentValue);
-            }
+            // NOTE: Do NOT call setContent() here - it overrides the textbox's internal
+            // _updateContent() which handles effect conversion and selection markers.
+            // The textbox automatically updates its own content when needed.
             if (currentValue.startsWith('/') && currentValue.length > 0) {
                 // Show command suggestions
                 showCommandSuggestions(currentValue);
@@ -1644,7 +1668,9 @@ async function createApp(session) {
                 // Hide suggestions if not a command
                 hideCommandSuggestions();
             }
-            screen.render();
+            // CRITICAL: Don't call screen.render() here - showCommandSuggestions/hideCommandSuggestions
+            // already render, and calling screen.render() again causes blessed buffer corruption
+            // where the Commands box border bleeds into the input box
         }, 0);
     });
     // ========== GLOBAL KEYBOARD SHORTCUTS ==========
@@ -1848,8 +1874,12 @@ async function createApp(session) {
                 bbs.write('\x1b[2J\x1b[H'); // Clear screen and home cursor
                 // Initial UI setup
                 updateChannelList();
+                // CRITICAL: Update chat layout after sidebar width changes from fitToContent
+                updateChatLayout();
                 updateUserTable();
                 updateStatusBar();
+                // CRITICAL: Reset input label to ensure it's correct after all initialization
+                inputBox.setLabel(' Message ');
                 // Ensure command suggestions appear above everything else
                 // (must be called after all other elements are created)
                 // Use 10000 to be above modals (which call setFront() dynamically)

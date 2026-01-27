@@ -4,6 +4,7 @@
  */
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { BubbleBobbleGame } from "./game/bubble-bobble-game";
 import { rpcHandlers } from "./server";
 import { GAME_WIDTH, GAME_HEIGHT, GAME_TICK_MS, STARTING_LIVES, MENU_OPTIONS, DEFAULT_HIGHSCORES, BUBBLE_RANGE, } from "./game/constants";
@@ -68,6 +69,7 @@ let menuBox = null;
 let gameLoop = null;
 let game = null;
 let doorContext; // Will be set on start
+let gamepadManager = null;
 function initScreen() {
     screen = blessed.screen({
         smartCSR: true,
@@ -526,6 +528,10 @@ function cleanup() {
         clearInterval(keepAlive);
         keepAlive = null;
     }
+    if (gamepadManager) {
+        gamepadManager.destroy();
+        gamepadManager = null;
+    }
     if (screen) {
         screen.removeAllListeners();
         screen.destroy();
@@ -544,6 +550,104 @@ door.onStart(async (ctx) => {
         /* cached */
     }
     initScreen();
+    // Set up gamepad support
+    gamepadManager = new GamepadInputManager(ctx.session);
+    // D-pad/analog for movement
+    gamepadManager.on('dpad:left', () => {
+        if (gameData.state === 'playing') {
+            game?.handleMove('left');
+        }
+    });
+    gamepadManager.on('dpad:right', () => {
+        if (gameData.state === 'playing') {
+            game?.handleMove('right');
+        }
+    });
+    gamepadManager.on('axis:left-x', (value) => {
+        if (gameData.state === 'playing') {
+            if (value < -0.3) {
+                game?.handleMove('left');
+            }
+            else if (value > 0.3) {
+                game?.handleMove('right');
+            }
+        }
+    });
+    // Menu navigation
+    gamepadManager.on('dpad:up', () => {
+        if (gameData.state === 'menu') {
+            gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+            showMenu();
+        }
+    });
+    gamepadManager.on('dpad:down', () => {
+        if (gameData.state === 'menu') {
+            gameData.menuSelection = Math.min(3, gameData.menuSelection + 1);
+            showMenu();
+        }
+    });
+    // A button for jump
+    gamepadManager.on('button:a', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing') {
+            game?.handleJump();
+        }
+        else if (gameData.state === 'menu') {
+            switch (gameData.menuSelection) {
+                case 0:
+                    startGame();
+                    break;
+                case 1:
+                    showHighscores();
+                    break;
+                case 2:
+                    showHelp();
+                    break;
+                case 3:
+                    cleanup();
+                    doorContext?.close();
+                    break;
+            }
+        }
+    });
+    // B button for bubble
+    gamepadManager.on('button:b', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing') {
+            game?.handleBubble();
+        }
+    });
+    // START for pause
+    gamepadManager.on('button:start', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing') {
+            showPauseScreen();
+        }
+        else if (gameData.state === 'paused') {
+            if (menuBox) {
+                menuBox.destroy();
+                menuBox = null;
+            }
+            gameData.state = 'playing';
+            game?.render();
+        }
+    });
+    // SELECT for quit
+    gamepadManager.on('button:select', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing' || gameData.state === 'paused') {
+            gameData.state = 'menu';
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+            }
+            showMenu();
+        }
+    });
     showMenu();
 });
 door.onInput((ctx, key) => handleInput(key.raw || key.key || key));

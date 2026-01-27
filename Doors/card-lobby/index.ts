@@ -7,6 +7,8 @@
 
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
+import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
+import { GamepadButton } from '@amiexpress/bbs-door-sdk/types/gamepad';
 import type {
   Screen,
   Box,
@@ -34,6 +36,9 @@ import {
   ActionType,
   pokerCardsToCards,
   Storage,
+  CardGameAI,
+  PokerAIStrategy,
+  UnoAIStrategy,
 } from '@amiexpress/bbs-door-sdk';
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
@@ -128,6 +133,7 @@ class CardLobbyApp {
   private screen!: Screen;
   private desktop!: Box;
   private inputManager!: DoorInputManager;
+  private gamepadManager: GamepadInputManager | null = null;
 
   // Managers
   private uiManager!: UIManager;
@@ -224,22 +230,24 @@ class CardLobbyApp {
     await this.persistState();
 
     loader.update(95, 'Finalizing lobby...');
-    // NOTE: Don't call updateAllPanels() here - browser mode handles its own initialization
-    // this.updateAllPanels();
+
+    // Show simple lobby list (no browser mode)
+    this.updateAllPanels();
+    this.focusLobby();
 
     loader.update(100, 'Ready!');
     await loader.delay(500);
     loader.hide();
     loader.destroy();
 
-    // Show browser mode instead of old lobby list
-    await this.showBrowser();
-
     this.cleanup();
   }
 
   private setupScreen(): void {
     const height = this.session.bbsSession?.screenHeight || 24;
+
+    // Clear BBS output before creating blessed screen
+    this.session.bbs.write('\x1b[2J\x1b[H');  // Clear screen and move cursor to home
 
     this.screen = createScreen(this.session.bbs, {
       height,
@@ -250,7 +258,12 @@ class CardLobbyApp {
       fastCSR: false,      // Disable for stable rendering
       focusKeys: false,    // Prevent arrows from being swallowed
       ignoreLocked: ['mouse', 'keypress'],
+      // NOTE: grabKeys is NOT a valid blessed constructor option
+      // DoorInputManager.enable() sets screen.program.grabKeys = true (line 265)
     });
+
+    // Clear the blessed screen
+    this.screen.clearRegion(0, this.screen.width as number, 0, this.screen.height as number);
 
     // Set up input management (enables mouse, keyboard routing)
     // DoorInputManager handles all the input routing automatically
@@ -262,6 +275,118 @@ class CardLobbyApp {
       debugName: 'CardLobby'
     });
     this.inputManager.enable();
+
+    // Set up gamepad support
+    this.gamepadManager = new GamepadInputManager(this.session.socket, {
+      deadzone: 0.15,
+      pollRate: 16,
+    });
+
+    // D-pad navigation
+    this.gamepadManager.on('dpad:up', () => {
+      if (this.modalActive) return;
+      // Simulate up arrow key press
+      this.screen.program.emit('keypress', null, { name: 'up' });
+    });
+
+    this.gamepadManager.on('dpad:down', () => {
+      if (this.modalActive) return;
+      // Simulate down arrow key press
+      this.screen.program.emit('keypress', null, { name: 'down' });
+    });
+
+    this.gamepadManager.on('dpad:left', () => {
+      if (this.modalActive) return;
+      if (this.viewMode === 'table') {
+        this.focusLobby();
+      }
+    });
+
+    this.gamepadManager.on('dpad:right', () => {
+      if (this.modalActive) return;
+      if (this.viewMode === 'lobby' && this.currentProfile?.currentTableId) {
+        this.focusTable();
+      }
+    });
+
+    // Button A: Join/Select/Confirm
+    this.gamepadManager.on('button:a', (pressed: boolean) => {
+      if (!pressed || this.modalActive) return;
+
+      if (this.viewMode === 'lobby') {
+        // Join selected table
+        this.runAction(() => this.joinSelectedTable());
+      } else if (this.viewMode === 'table') {
+        // Trigger action (call/check/fold based on game state)
+        const table = this.currentProfile?.currentTableId
+          ? this.findTableById(this.currentProfile.currentTableId)
+          : null;
+
+        if (table) {
+          if (table.gameId === 'poker' || table.gameId === 'poker-house') {
+            this.triggerCall();
+          } else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+            // Play first card in hand
+            const engine = this.gameStateManager.getUnoEngine();
+            if (engine) {
+              this.selectUnoCard(0);
+            }
+          }
+        }
+      }
+    });
+
+    // Button B: Back/Cancel
+    this.gamepadManager.on('button:b', (pressed: boolean) => {
+      if (!pressed || this.modalActive) return;
+
+      if (this.viewMode === 'table') {
+        this.runAction(() => this.leaveCurrentTable());
+      }
+    });
+
+    // Button X: Fold (poker) or Draw card (UNO)
+    this.gamepadManager.on('button:x', (pressed: boolean) => {
+      if (!pressed || this.modalActive || this.viewMode !== 'table') return;
+
+      const table = this.currentProfile?.currentTableId
+        ? this.findTableById(this.currentProfile.currentTableId)
+        : null;
+
+      if (table) {
+        if (table.gameId === 'poker' || table.gameId === 'poker-house') {
+          this.triggerFold();
+        } else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+          this.drawUnoCard();
+        }
+      }
+    });
+
+    // Button Y: Raise (poker) or Call UNO
+    this.gamepadManager.on('button:y', (pressed: boolean) => {
+      if (!pressed || this.modalActive || this.viewMode !== 'table') return;
+
+      const table = this.currentProfile?.currentTableId
+        ? this.findTableById(this.currentProfile.currentTableId)
+        : null;
+
+      if (table) {
+        if (table.gameId === 'poker' || table.gameId === 'poker-house') {
+          this.triggerRaise();
+        } else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
+          this.callUno();
+        }
+      }
+    });
+
+    // Start button: Refresh lobby
+    this.gamepadManager.on('button:start', (pressed: boolean) => {
+      if (!pressed || this.modalActive) return;
+
+      if (this.viewMode === 'lobby') {
+        this.runAction(() => this.refreshLobby());
+      }
+    });
 
     // Reconnect handler for screen refresh
     if (this.session.bbsSession) {
@@ -277,6 +402,8 @@ class CardLobbyApp {
     });
 
     this.screen.key(['q'], () => {
+      // In browser mode, don't consume the event - let browser widget handle it
+      if (this.viewMode === 'browser') return false;
       if (this.modalActive) return;
       this.exitDoor();
     });
@@ -292,6 +419,8 @@ class CardLobbyApp {
     });
 
     this.screen.key(['f'], () => {
+      // In browser mode, don't consume the event - let browser widget handle it (search)
+      if (this.viewMode === 'browser') return false;
       if (this.modalActive || this.viewMode !== 'table') return;
       this.triggerFold();
     });
@@ -302,7 +431,9 @@ class CardLobbyApp {
     });
 
     this.screen.key(['c'], () => {
-      if (this.modalActive || this.viewMode === 'browser') return;
+      if (this.modalActive) return;
+      // In browser mode, don't consume the event - let browser widget handle it
+      if (this.viewMode === 'browser') return false;
       if (this.viewMode === 'table') {
         this.triggerCall();
       } else if (this.viewMode === 'lobby') {
@@ -311,7 +442,9 @@ class CardLobbyApp {
     });
 
     this.screen.key(['r'], () => {
-      if (this.modalActive || this.viewMode === 'browser') return;
+      if (this.modalActive) return;
+      // In browser mode, don't consume the event - let browser widget handle it
+      if (this.viewMode === 'browser') return false;
       if (this.viewMode === 'table') {
         this.triggerRaise();
       } else if (this.viewMode === 'lobby') {
@@ -320,11 +453,22 @@ class CardLobbyApp {
     });
 
     this.screen.key(['j'], () => {
-      if (this.modalActive || this.viewMode !== 'lobby') return;
+      console.log('[KEY J] Pressed', { modalActive: this.modalActive, viewMode: this.viewMode, selectedTableId: this.selectedTableId });
+      // In browser mode, don't consume the event - let browser widget handle it
+      if (this.viewMode === 'browser') {
+        console.log('[KEY J] Browser mode - passing to widget');
+        return false;
+      }
+      if (this.modalActive || this.viewMode !== 'lobby') {
+        console.log('[KEY J] Blocked:', { modalActive: this.modalActive, viewMode: this.viewMode });
+        return;
+      }
       this.runAction(() => this.joinSelectedTable());
     });
 
     this.screen.key(['o'], () => {
+      // In browser mode, don't consume the event - let browser widget handle it
+      if (this.viewMode === 'browser') return false;
       if (this.modalActive || this.viewMode !== 'lobby') return;
       this.runAction(() => this.observeSelectedTable());
     });
@@ -335,8 +479,14 @@ class CardLobbyApp {
     });
 
     this.screen.key(['d'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      this.runAction(() => this.dealHand());
+      // In browser mode, don't consume the event (no browser handler, but consistent pattern)
+      if (this.viewMode === 'browser') return false;
+      if (this.modalActive) return;
+      if (this.viewMode === 'table') {
+        this.runAction(() => this.dealHand());
+      } else if (this.viewMode === 'lobby') {
+        this.runAction(() => this.deleteTableFlow());
+      }
     });
 
     // UNO card selection keys (1-9, 0 for 10th card)
@@ -375,8 +525,19 @@ class CardLobbyApp {
 
     // Initialize managers
     this.uiManager = new UIManager(this.screen, this.desktop);
-    this.dialogManager = new DialogManager(this.screen, this.uiManager.overlayShade);
     this.gameStateManager = new GameStateManager();
+
+    // Initialize AI system
+    const ai = new CardGameAI();
+    ai.registerStrategy(new PokerAIStrategy());
+    ai.registerStrategy(new UnoAIStrategy());
+    this.gameStateManager.setAI(ai);
+
+    // Build overlay FIRST so overlayShade exists
+    this.uiManager.buildOverlay();
+
+    // Now create DialogManager with valid overlayShade
+    this.dialogManager = new DialogManager(this.screen, this.uiManager.overlayShade);
 
     // Build UI via manager
     this.uiManager.buildTopBar({
@@ -403,7 +564,24 @@ class CardLobbyApp {
       manualRefresh: this.manualRefresh.bind(this),
       runAction: this.runAction.bind(this),
     });
-    this.uiManager.buildOverlay();
+
+    // Enter key to join table
+    this.uiManager.lobbyList.key('enter', () => {
+      if (!this.modalActive && this.selectedTableId) {
+        this.runAction(() => this.joinSelectedTable());
+      }
+    });
+
+    // Double-click to join table
+    let lastClickTime = 0;
+    const doubleClickThreshold = 500;
+    this.uiManager.lobbyList.on('element click', () => {
+      const now = Date.now();
+      if (now - lastClickTime < doubleClickThreshold && this.selectedTableId) {
+        this.runAction(() => this.joinSelectedTable());
+      }
+      lastClickTime = now;
+    });
 
     // Wire up button press handlers
     this.actionButtons.fold.on('press', () => this.triggerFold());
@@ -486,6 +664,12 @@ class CardLobbyApp {
       this.actionButtons.quit?.removeAllListeners('press');
     }
 
+    // Cleanup gamepad manager
+    if (this.gamepadManager) {
+      this.gamepadManager.destroy();
+      this.gamepadManager = null;
+    }
+
     // DoorInputManager handles doorInputHandler cleanup
     if (this.session.bbsSession) {
       delete this.session.bbsSession.doorReconnectHandler;
@@ -503,8 +687,13 @@ class CardLobbyApp {
    * Show SDK MultiplayerLobby browser mode
    */
   private async showBrowser(): Promise<void> {
+    console.log('[CardLobby] showBrowser() called');
+    console.log('[CardLobby] screen.grabKeys:', (this.screen.program as any).grabKeys);
+    console.log('[CardLobby] viewMode before:', this.viewMode);
+
     // Set viewMode to browser to prevent key conflicts
     this.viewMode = 'browser';
+    console.log('[CardLobby] viewMode after:', this.viewMode);
 
     // Hide old UI elements
     this.uiManager.hide();
@@ -514,6 +703,7 @@ class CardLobbyApp {
 
     // Create adapter
     this.browserAdapter = new CardLobbyBrowserAdapter(this.lobby!, this.profiles);
+    console.log('[CardLobby] Browser adapter created');
 
     // Update adapter when state changes
     const updateAdapter = () => {
@@ -524,6 +714,7 @@ class CardLobbyApp {
     };
 
     // Create browser widget with all SDK features
+    // NOTE: MultiplayerLobby destroys all screen children in setupUI(), including overlayShade
     this.browserWidget = new MultiplayerLobby({
       parent: this.screen,
       adapter: this.browserAdapter,
@@ -601,18 +792,43 @@ class CardLobbyApp {
       },
     });
 
+    // CRITICAL: Browser widget destroyed all screen children including desktop and overlayShade
+    // Recreate both and update references
+    console.log('[CardLobby] Recreating desktop and overlayShade after browser widget creation...');
+    this.desktop = createBox({
+      parent: this.screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      ch: ' ',
+      style: {
+        bg: 'black',
+      },
+    });
+    this.desktop.hide(); // Hide desktop in browser mode
+    (this.uiManager as any).desktop = this.desktop; // Update UIManager's desktop reference
+    this.uiManager.buildOverlay();
+    (this.dialogManager as any).overlayShade = this.uiManager.overlayShade;
+    console.log('[CardLobby] desktop and overlayShade recreated, references updated');
+
     // Handle create table event
     this.browserWidget.on('browser:create-table', async () => {
+      console.log('[CardLobby] browser:create-table event received!');
       try {
         // Show game/stakes selection dialogs
+        console.log('[CardLobby] Calling createTableFlow()...');
         await this.createTableFlow();
+        console.log('[CardLobby] createTableFlow() completed');
 
         // Refresh browser after creation
         updateAdapter();
       } catch (error) {
+        console.error('[CardLobby] Error in create table:', error);
         this.pushNotice(`Failed to create table: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     });
+    console.log('[CardLobby] browser:create-table event handler registered');
 
     // Show browser and wait for result
     const result: LobbyResult = await this.browserWidget.show('custom');
@@ -859,15 +1075,12 @@ class CardLobbyApp {
 
   private updateTableStatus(table: LobbyTable): void {
     if (table.hand) {
+      // Game is actually in progress
       table.status = 'in-progress';
       return;
     }
-    const seated = table.players.filter((player) => player.role === 'player').length;
-    if (table.autoStart && seated >= table.minPlayers) {
-      table.status = 'in-progress';
-    } else {
-      table.status = 'open';
-    }
+    // No hand in progress - table is open
+    table.status = 'open';
   }
 
   private maybeGrantDailyBonus(): void {
@@ -1084,8 +1297,9 @@ class CardLobbyApp {
     const filterName = this.lobbyFilters.gameId
       ? getGameById(this.lobbyFilters.gameId)?.name ?? 'Unknown'
       : 'All Games';
-    const openOnly = this.lobbyFilters.openSeatsOnly ? 'Open Seats' : 'All Seats';
-    this.lobbyWindow.setLabel(` Lobby v2.1.0-LISTTABLE - ${filterName} / ${openOnly} `);
+
+    // Short label that fits in 30% window width
+    this.lobbyWindow.setLabel(` Lobby - ${filterName} `);
 
     const rows: string[][] = [];
     const map: number[] = [];
@@ -1111,11 +1325,11 @@ class CardLobbyApp {
     });
 
     if (rows.length === 0) {
-      rows.push(['', 'No tables. Press C to create.', '', '', '']);
+      rows.push(['', '', '>>> No tables available. Press [C] to create one. <<<', '', '']);
     }
 
     this.tableListMap = map;
-    (this.lobbyList as any).setRows(rows);
+    this.uiManager.lobbyList.setRows(rows);
 
     if (map.length === 0) {
       this.selectedTableId = null;
@@ -1700,7 +1914,11 @@ class CardLobbyApp {
   }
 
   private async createTableFlow(): Promise<void> {
-    if (this.modalActive) return;
+    console.log('[CardLobby] createTableFlow() - modalActive:', this.modalActive);
+    if (this.modalActive) {
+      console.log('[CardLobby] createTableFlow() BLOCKED by modalActive=true');
+      return;
+    }
 
     const enabledGames = GAME_CATALOG.filter((game) => game.enabled);
     const gameIndex = await this.showListDialog(
@@ -1816,9 +2034,21 @@ class CardLobbyApp {
   }
 
   private async joinSelectedTable(): Promise<void> {
-    if (this.modalActive || !this.lobby || !this.currentProfile) return;
+    console.log('[joinSelectedTable] Called', {
+      modalActive: this.modalActive,
+      lobby: !!this.lobby,
+      currentProfile: !!this.currentProfile,
+      selectedTableId: this.selectedTableId,
+      viewMode: this.viewMode
+    });
+
+    if (this.modalActive || !this.lobby || !this.currentProfile) {
+      console.log('[joinSelectedTable] Early return:', { modalActive: this.modalActive, lobby: !!this.lobby, currentProfile: !!this.currentProfile });
+      return;
+    }
     if (!this.selectedTableId) {
       this.pushNotice('Select a table first.');
+      console.log('[joinSelectedTable] No table selected');
       return;
     }
 
@@ -2143,8 +2373,8 @@ class CardLobbyApp {
     });
   }
 
-  private async performBotAction(engine: PokerEngine, seat: number, playerId: string): Promise<void> {
-    await this.gameStateManager.performBotAction(engine, seat, playerId, this.pushEvent.bind(this));
+  private async performBotAction(engine: PokerEngine, seat: number, playerId: string, table: LobbyTable): Promise<void> {
+    await this.gameStateManager.performBotAction(engine, seat, playerId, this.pushEvent.bind(this), table);
   }
 
   private async handlePlayerAction(action: 'call' | 'bet' | 'fold'): Promise<void> {
@@ -2500,6 +2730,65 @@ class CardLobbyApp {
         this.pushEvent(event.data.message || 'Game ended!');
         break;
     }
+  }
+
+  private deleteTableFlow(): void {
+    if (!this.selectedTableId || !this.lobby) return;
+
+    const table = this.lobby.tables.find((t) => t.id === this.selectedTableId);
+    if (!table) return;
+
+    if (table.hostUserId !== this.currentProfile?.userId) {
+      this.pushNotice('Only the table host can delete the table.');
+      return;
+    }
+
+    this.dialogManager.showConfirmDialog(
+      'Delete Table',
+      `Delete table #${table.id} (${table.gameName})?`,
+      async (confirmed) => {
+        if (confirmed && this.selectedTableId) {
+          await this.deleteTable(this.selectedTableId);
+        }
+      }
+    );
+  }
+
+  private async deleteTable(tableId: number): Promise<void> {
+    if (!this.lobby) return;
+
+    const table = this.lobby.tables.find((t) => t.id === tableId);
+    if (!table) {
+      this.pushNotice('Table not found.');
+      return;
+    }
+
+    // Remove all players from table
+    table.players.forEach((player) => {
+      if (!isBotPlayer(player)) {
+        const profile = this.profiles[player.userId];
+        if (profile) {
+          profile.currentTableId = undefined;
+          profile.status = 'lobby';
+        }
+      }
+    });
+
+    // Remove table from lobby
+    this.lobby.tables = this.lobby.tables.filter((t) => t.id !== tableId);
+
+    // If current user was at this table, return to lobby view
+    if (this.currentProfile?.currentTableId === tableId) {
+      this.currentProfile.currentTableId = undefined;
+      this.currentProfile.status = 'lobby';
+      this.focusLobby();
+    }
+
+    this.selectedTableId = null;
+    await this.persistState();
+    this.updateLobbyPanel();
+    this.pushEvent(`Table #${tableId} deleted.`);
+    this.pushNotice(`Table #${tableId} deleted.`);
   }
 
   private stopRefreshTimer(): void {

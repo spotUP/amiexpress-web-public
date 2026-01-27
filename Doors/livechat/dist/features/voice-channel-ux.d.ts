@@ -107,6 +107,7 @@ export declare class EnhancedVoiceChannel {
     toggleVideo(): Promise<void>;
     /**
      * Show voice permissions dialog and return user's choices
+     * Uses proper blessed components: Checkbox, Button with focus cycling
      */
     private showVoicePermissionsDialog;
     joinVoiceChannel(channelId: string): Promise<void>;

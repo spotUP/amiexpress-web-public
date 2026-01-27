@@ -7089,20 +7089,23 @@ var init_dockable_panel = __esm({
           if (child === this.titleBar || child === this.minimizeButton || child === this.closeButton) {
             continue;
           }
-          if (child.items && Array.isArray(child.items)) {
-            const items = child.items;
-            for (const item of items) {
+          const listItems = child.items;
+          if (listItems && Array.isArray(listItems) && listItems.length > 0) {
+            for (const item of listItems) {
               const cleanItem = stripFormatting(String(item));
-              maxContentWidth = Math.max(maxContentWidth, cleanItem.length);
-              if (this.options.label?.includes("Sidebar") && cleanItem.length > 10) {
-                const debugMsg = `[CalcSize] List item: "${cleanItem}" (${cleanItem.length} chars)`;
-                if (this.screen?.log) {
-                  this.screen.log(debugMsg);
+              const itemWidth = cleanItem.length;
+              if (itemWidth > maxContentWidth) {
+                maxContentWidth = itemWidth;
+                if (this.options.label?.includes("Sidebar")) {
+                  const debugMsg = `[CalcSize] Longest item so far: "${cleanItem}" (${itemWidth} chars), maxWidth now: ${maxContentWidth}`;
+                  if (this.screen?.log) {
+                    this.screen.log(debugMsg);
+                  }
+                  console.log(debugMsg);
                 }
-                console.log(debugMsg);
               }
             }
-            totalContentHeight = Math.max(totalContentHeight, items.length);
+            totalContentHeight = Math.max(totalContentHeight, listItems.length);
           }
           const childContent = child.content || "";
           if (childContent) {
@@ -7124,8 +7127,10 @@ var init_dockable_panel = __esm({
         const borderWidth = this.border ? 2 : 0;
         const borderHeight = this.border ? 2 : 0;
         const titleBarHeight = this.titleBar ? 1 : 0;
+        const childPaddingBuffer = 3;
+        const widthBuffer = 1;
         return {
-          width: maxContentWidth + borderWidth,
+          width: maxContentWidth + borderWidth + childPaddingBuffer + widthBuffer,
           height: totalContentHeight + borderHeight + titleBarHeight
         };
       }

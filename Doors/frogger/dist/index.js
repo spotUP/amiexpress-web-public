@@ -11,6 +11,7 @@ exports.rpcHandlers = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-input-manager");
 const frogger_game_1 = require("./game/frogger-game");
 const server_1 = require("./server");
 Object.defineProperty(exports, "rpcHandlers", { enumerable: true, get: function () { return server_1.rpcHandlers; } });
@@ -68,6 +69,7 @@ let gameLoop = null;
 let game = null;
 let doorContext; // Will be set on start
 let inputManager = null;
+let gamepadManager = null;
 /**
  * Initialize neo-blessed screen
  */
@@ -544,6 +546,11 @@ function cleanup() {
         inputManager.disable();
         inputManager = null;
     }
+    // Clean up gamepad manager
+    if (gamepadManager) {
+        gamepadManager.destroy();
+        gamepadManager = null;
+    }
     if (screen) {
         screen.removeAllListeners();
         screen.destroy();
@@ -571,6 +578,107 @@ door.onStart(async (ctx) => {
         debugName: 'Frogger'
     });
     inputManager.enable();
+    // Set up gamepad support
+    gamepadManager = new gamepad_input_manager_1.GamepadInputManager(ctx.session);
+    // D-pad for frog movement
+    gamepadManager.on('dpad:up', () => {
+        if (gameData.state === 'playing') {
+            game?.handleDirection('up');
+        }
+        else if (gameData.state === 'menu') {
+            gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+            showMenu();
+        }
+    });
+    gamepadManager.on('dpad:down', () => {
+        if (gameData.state === 'playing') {
+            game?.handleDirection('down');
+        }
+        else if (gameData.state === 'menu') {
+            gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+            showMenu();
+        }
+    });
+    gamepadManager.on('dpad:left', () => {
+        if (gameData.state === 'playing') {
+            game?.handleDirection('left');
+        }
+    });
+    gamepadManager.on('dpad:right', () => {
+        if (gameData.state === 'playing') {
+            game?.handleDirection('right');
+        }
+    });
+    // A button for select/confirm
+    gamepadManager.on('button:a', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'menu') {
+            switch (gameData.menuSelection) {
+                case 0:
+                    startGame();
+                    break;
+                case 1:
+                    showHighscores();
+                    break;
+                case 2:
+                    showHelp();
+                    break;
+                case 3:
+                    cleanup();
+                    doorContext?.close();
+                    break;
+            }
+        }
+        else if (gameData.state === 'highscores') {
+            showMenu();
+        }
+    });
+    // START button for pause
+    gamepadManager.on('button:start', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing') {
+            showPauseScreen();
+        }
+        else if (gameData.state === 'paused') {
+            if (menuBox) {
+                menuBox.destroy();
+                menuBox = null;
+            }
+            gameData.state = 'playing';
+            game?.render();
+        }
+    });
+    // B or SELECT button for back/quit
+    gamepadManager.on('button:b', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing' || gameData.state === 'paused') {
+            gameData.state = 'menu';
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+            }
+            showMenu();
+        }
+        else if (gameData.state === 'menu') {
+            cleanup();
+            doorContext?.close();
+        }
+    });
+    gamepadManager.on('button:select', (pressed) => {
+        if (!pressed)
+            return;
+        if (gameData.state === 'playing' || gameData.state === 'paused') {
+            gameData.state = 'menu';
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+            }
+            showMenu();
+        }
+    });
     showMenu();
 });
 door.onInput((ctx, key) => {

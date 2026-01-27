@@ -13,7 +13,11 @@ function invalidateCache(element) {
 function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, sfs, sso, scon, cu, SW, chatLog, typingBar) {
     let sv = true;
     function ucl() {
-        const lo = sv ? SW : 0;
+        // CRITICAL: Use actual sidebar panel width, not static constant
+        // fitToContent can expand sidebar beyond initial SIDEBAR_WIDTH
+        const sidebarPanel = chl.parent;
+        const actualSidebarWidth = sv ? (sidebarPanel?.width || SW) : 0;
+        const lo = actualSidebarWidth;
         const sw = s.width || 80;
         const wd = sw - lo; // Width is full screen minus left offset
         // Update position and width for chat panel and drawing canvas

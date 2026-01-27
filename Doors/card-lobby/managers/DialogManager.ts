@@ -4,7 +4,7 @@
  */
 
 import blessed, { Screen, Box, Button, List, ScrollableBox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createList, createButton, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox, createList, createButton, createText, createTextbox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { UnoColor, HouseRule } from '../lib/uno-engine';
 import {
   type DoorSession,
@@ -33,6 +33,7 @@ export class DialogManager {
   }
 
   setModalActive(value: boolean): void {
+    console.log('[DialogManager] setModalActive:', value, '(was:', this.modalActive + ')');
     this.modalActive = value;
   }
 
@@ -233,12 +234,29 @@ export class DialogManager {
   }
 
   async showListDialog(title: string, items: string[]): Promise<number | null> {
-    if (this.modalActive) return null;
+    console.log('[DialogManager] showListDialog called:', { title, itemCount: items.length });
+
+    if (this.modalActive) {
+      console.log('[DialogManager] BLOCKED - modalActive is true');
+      return null;
+    }
+
+    console.log('[DialogManager] Setting modalActive = true');
     this.modalActive = true;
+
+    console.log('[DialogManager] Showing overlayShade...');
+    console.log('[DialogManager] overlayShade.hidden BEFORE:', this.overlayShade.hidden);
+    console.log('[DialogManager] overlayShade.visible BEFORE:', (this.overlayShade as any).visible);
+    console.log('[DialogManager] overlayShade.z BEFORE:', (this.overlayShade as any).z);
 
     this.overlayShade.show();
 
+    console.log('[DialogManager] overlayShade.hidden AFTER:', this.overlayShade.hidden);
+    console.log('[DialogManager] overlayShade.visible AFTER:', (this.overlayShade as any).visible);
+    console.log('[DialogManager] overlayShade.z AFTER:', (this.overlayShade as any).z);
+
     return new Promise((resolve) => {
+      console.log('[DialogManager] Creating List element...');
       const list = new List({
         parent: this.overlayShade,
         top: 'center',
@@ -259,7 +277,43 @@ export class DialogManager {
         vi: true,
       });
 
+      console.log('[DialogManager] List created');
+      console.log('[DialogManager] List.hidden:', list.hidden);
+      console.log('[DialogManager] List.visible:', (list as any).visible);
+      console.log('[DialogManager] List.z:', (list as any).z);
+      console.log('[DialogManager] List.parent === overlayShade:', list.parent === this.overlayShade);
+
+      // Dump element tree for debugging
+      console.log('[DialogManager] === Element Tree ===');
+      console.log('[DialogManager] Screen children:', this.screen.children.map((c: any) => ({
+        type: c.type,
+        z: c.z,
+        hidden: c.hidden,
+        visible: c.visible
+      })));
+
+      // Find overlayShade's parent
+      const desktop = this.screen.children.find((c: any) =>
+        c.children && c.children.some((child: any) => child === this.overlayShade)
+      );
+      if (desktop) {
+        console.log('[DialogManager] Desktop children:', (desktop as any).children.map((c: any) => ({
+          type: c.type,
+          z: c.z,
+          hidden: c.hidden,
+          visible: c.visible
+        })));
+      }
+
+      console.log('[DialogManager] OverlayShade children:', this.overlayShade.children.map((c: any) => ({
+        type: c.type,
+        z: c.z,
+        hidden: c.hidden,
+        visible: c.visible
+      })));
+
       const cleanup = (value: number | null): void => {
+        console.log('[DialogManager] Cleanup called with value:', value);
         list.destroy();
         this.overlayShade.hide();
         this.modalActive = false;
@@ -269,8 +323,21 @@ export class DialogManager {
 
       list.on('select', (_: any, index: number) => cleanup(index));
       list.key(['escape', 'q'], () => cleanup(null));
+
+      console.log('[DialogManager] Focusing list...');
+
+      // Ensure dialog stays on top and focused
+      this.overlayShade.setFront();
+      list.setFront();
       list.focus();
+
+      console.log('[DialogManager] List focused');
+      console.log('[DialogManager] List.focused:', (list as any).focused);
+
+      console.log('[DialogManager] Rendering screen...');
       this.screen.render();
+      console.log('[DialogManager] Screen rendered');
+      console.log('[DialogManager] showListDialog setup complete - waiting for user interaction');
     });
   }
 
@@ -296,6 +363,10 @@ export class DialogManager {
         this.screen.render();
         resolve(result);
       };
+
+      // Ensure prompt stays on top and focused
+      this.overlayShade.setFront();
+      prompt.setFront();
 
       prompt.showInput(text, value, (err, result) => {
         if (err) {
@@ -331,6 +402,10 @@ export class DialogManager {
         resolve(value);
       };
 
+      // Ensure question dialog stays on top and focused
+      this.overlayShade.setFront();
+      question.setFront();
+
       question.once('answer', (answer: boolean) => cleanup(answer));
       question.ask(text);
       this.screen.render();
@@ -358,6 +433,10 @@ export class DialogManager {
         this.screen.render();
         resolve();
       };
+
+      // Ensure message stays on top
+      this.overlayShade.setFront();
+      message.setFront();
 
       message.display(text, cleanup);
       this.screen.render();
@@ -474,7 +553,7 @@ export class DialogManager {
         style: { fg: 'cyan' },
       });
 
-      const numberInput = blessed.textbox({
+      const numberInput = createTextbox({
         parent: dialog,
         top: 2,
         left: 2,
@@ -492,7 +571,7 @@ export class DialogManager {
         style: { fg: 'cyan' },
       });
 
-      const nameInput = blessed.textbox({
+      const nameInput = createTextbox({
         parent: dialog,
         top: 5,
         left: 2,
@@ -510,7 +589,7 @@ export class DialogManager {
         style: { fg: 'cyan' },
       });
 
-      const descInput = blessed.textbox({
+      const descInput = createTextbox({
         parent: dialog,
         top: 8,
         left: 2,

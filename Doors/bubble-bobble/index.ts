@@ -5,6 +5,8 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
+import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
 import { BubbleBobbleGame } from "./game/bubble-bobble-game";
 import { rpcHandlers } from "./server";
 import { BubbleBobbleData, InputKey, Direction } from "./game/types";
@@ -88,6 +90,7 @@ let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let game: BubbleBobbleGame | null = null;
 let doorContext: any; // Will be set on start
+let gamepadManager: GamepadInputManager | null = null;
 
 function initScreen(): void {
   screen = blessed.screen({
@@ -567,6 +570,10 @@ function cleanup(): void {
     clearInterval(keepAlive);
     keepAlive = null;
   }
+  if (gamepadManager) {
+    gamepadManager.destroy();
+    gamepadManager = null;
+  }
   if (screen) {
     screen.removeAllListeners();
     screen.destroy();
@@ -587,6 +594,103 @@ door.onStart(async (ctx: any) => {
     /* cached */
   }
   initScreen();
+
+  // Set up gamepad support
+  gamepadManager = new GamepadInputManager(ctx.session);
+
+  // D-pad/analog for movement
+  gamepadManager.on('dpad:left', () => {
+    if (gameData.state === 'playing') {
+      game?.handleMove('left');
+    }
+  });
+
+  gamepadManager.on('dpad:right', () => {
+    if (gameData.state === 'playing') {
+      game?.handleMove('right');
+    }
+  });
+
+  gamepadManager.on('axis:left-x', (value: number) => {
+    if (gameData.state === 'playing') {
+      if (value < -0.3) {
+        game?.handleMove('left');
+      } else if (value > 0.3) {
+        game?.handleMove('right');
+      }
+    }
+  });
+
+  // Menu navigation
+  gamepadManager.on('dpad:up', () => {
+    if (gameData.state === 'menu') {
+      gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
+      showMenu();
+    }
+  });
+
+  gamepadManager.on('dpad:down', () => {
+    if (gameData.state === 'menu') {
+      gameData.menuSelection = Math.min(3, gameData.menuSelection + 1);
+      showMenu();
+    }
+  });
+
+  // A button for jump
+  gamepadManager.on('button:a', (pressed: boolean) => {
+    if (!pressed) return;
+
+    if (gameData.state === 'playing') {
+      game?.handleJump();
+    } else if (gameData.state === 'menu') {
+      switch (gameData.menuSelection) {
+        case 0: startGame(); break;
+        case 1: showHighscores(); break;
+        case 2: showHelp(); break;
+        case 3: cleanup(); doorContext?.close(); break;
+      }
+    }
+  });
+
+  // B button for bubble
+  gamepadManager.on('button:b', (pressed: boolean) => {
+    if (!pressed) return;
+
+    if (gameData.state === 'playing') {
+      game?.handleBubble();
+    }
+  });
+
+  // START for pause
+  gamepadManager.on('button:start', (pressed: boolean) => {
+    if (!pressed) return;
+
+    if (gameData.state === 'playing') {
+      showPauseScreen();
+    } else if (gameData.state === 'paused') {
+      if (menuBox) {
+        menuBox.destroy();
+        menuBox = null;
+      }
+      gameData.state = 'playing';
+      game?.render();
+    }
+  });
+
+  // SELECT for quit
+  gamepadManager.on('button:select', (pressed: boolean) => {
+    if (!pressed) return;
+
+    if (gameData.state === 'playing' || gameData.state === 'paused') {
+      gameData.state = 'menu';
+      if (gameLoop) {
+        clearInterval(gameLoop);
+        gameLoop = null;
+      }
+      showMenu();
+    }
+  });
+
   showMenu();
 });
 

@@ -31,6 +31,14 @@ import { UnoGameEngine, type UnoGameSnapshot } from '../lib/uno-engine';
 const cardEngine = new CardEngine();
 
 export class GameStateManager {
+  private ai?: any; // CardGameAI instance (optional)
+
+  /**
+   * Set the AI system for intelligent bot play
+   */
+  public setAI(ai: any): void {
+    this.ai = ai;
+  }
   async finalizeHoldemHand(
     table: LobbyTable,
     engine: PokerEngine,
@@ -210,7 +218,7 @@ export class GameStateManager {
       saveTableHand: (table: LobbyTable, engine: PokerEngine, beforeStacks: Record<string, number>) => void;
       persistState: () => Promise<void>;
       updateTablePanel: () => void;
-      performBotAction: (engine: PokerEngine, seat: number, playerId: string) => Promise<void>;
+      performBotAction: (engine: PokerEngine, seat: number, playerId: string, table: LobbyTable) => Promise<void>;
       finalizeHoldemHand: (table: LobbyTable, engine: PokerEngine, beforeStacks: Record<string, number>) => Promise<void>;
       maybeAutoDeal: (table: LobbyTable) => Promise<void>;
       pushNotice: (message: string) => void;
@@ -239,7 +247,7 @@ export class GameStateManager {
           return;
         }
 
-        await callbacks.performBotAction(handState.engine, actionSeat, actor.id);
+        await callbacks.performBotAction(handState.engine, actionSeat, actor.id, table);
         callbacks.saveTableHand(table, handState.engine, handState.beforeStacks);
         await callbacks.persistState();
         safety += 1;
@@ -273,6 +281,125 @@ export class GameStateManager {
   }
 
   async performBotAction(
+    engine: PokerEngine,
+    seat: number,
+    playerId: string,
+    pushEvent: (message: string) => void,
+    table?: LobbyTable,
+  ): Promise<void> {
+    // Use AI if available, otherwise fall back to legacy random bot
+    if (this.ai && table) {
+      return this.performBotActionAI(engine, seat, playerId, pushEvent, table);
+    }
+    return this.performBotActionLegacy(engine, seat, playerId, pushEvent);
+  }
+
+  /**
+   * AI-powered bot action (new system)
+   */
+  private async performBotActionAI(
+    engine: PokerEngine,
+    seat: number,
+    playerId: string,
+    pushEvent: (message: string) => void,
+    table: LobbyTable,
+  ): Promise<void> {
+    const actorSeat = engine.state.players[seat];
+    if (!actorSeat) return;
+
+    // Get bot difficulty from table player
+    const tablePlayer = table.players.find((p) => p.userId === playerId);
+    const difficulty = tablePlayer?.botDifficulty ?? 'medium';
+
+    try {
+      // Make AI decision
+      const decision = await this.ai.makePokerDecision({
+        engine,
+        seat,
+        playerId,
+        difficulty,
+      });
+
+      // Execute the decision
+      const currentBet = getCurrentBet(engine);
+      const playerBet = getPlayerBet(engine, seat);
+      const toCall = Math.max(0, currentBet - playerBet);
+
+      switch (decision.action) {
+        case 'fold':
+          // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+          engine.act({ type: PokerAction.FOLD, playerId });
+          pushEvent(`${actorSeat.name} folds`);
+          break;
+
+        case 'check':
+          // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+          engine.act({ type: PokerAction.CHECK, playerId });
+          pushEvent(`${actorSeat.name} checks`);
+          break;
+
+        case 'call':
+          // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+          engine.act({ type: PokerAction.CALL, playerId });
+          pushEvent(`${actorSeat.name} calls ${toCall}`);
+          break;
+
+        case 'bet':
+          if (decision.amount) {
+            // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+            engine.act({ type: PokerAction.BET, playerId, amount: decision.amount });
+            pushEvent(`${actorSeat.name} bets ${decision.amount}`);
+          } else {
+            // Fallback: check if amount missing
+            // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+            engine.act({ type: PokerAction.CHECK, playerId });
+            pushEvent(`${actorSeat.name} checks`);
+          }
+          break;
+
+        case 'raise':
+          if (decision.amount) {
+            // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+            engine.act({ type: PokerAction.RAISE, playerId, amount: decision.amount });
+            pushEvent(`${actorSeat.name} raises to ${decision.amount}`);
+          } else {
+            // Fallback: call if amount missing
+            // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+            engine.act({ type: PokerAction.CALL, playerId });
+            pushEvent(`${actorSeat.name} calls ${toCall}`);
+          }
+          break;
+
+        case 'all-in':
+          // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+          engine.act({ type: PokerAction.CALL, playerId });
+          pushEvent(`${actorSeat.name} is all-in!`);
+          break;
+      }
+    } catch (error) {
+      // Fallback to safe action on error
+      try {
+        const currentBet = getCurrentBet(engine);
+        const playerBet = getPlayerBet(engine, seat);
+        const toCall = Math.max(0, currentBet - playerBet);
+
+        if (toCall === 0) {
+          // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+          engine.act({ type: PokerAction.CHECK, playerId });
+        } else {
+          // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+          engine.act({ type: PokerAction.FOLD, playerId });
+        }
+      } catch {
+        // If even fallback fails, do nothing
+      }
+    }
+  }
+
+  /**
+   * Legacy random bot action (backward compatibility)
+   */
+  private async performBotActionLegacy(
     engine: PokerEngine,
     seat: number,
     playerId: string,

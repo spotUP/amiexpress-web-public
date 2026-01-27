@@ -194,15 +194,15 @@ export class UIManager {
 
     const height = (this.screen.height as number) || 24;
     const width = (this.screen.width as number) || 80;
-    const topOffset = 1;
-    const statusHeight = 1;
-    const logHeight = 4;
-    const tableHeight = height - topOffset - statusHeight;
-    const mainHeight = tableHeight - logHeight;
+    const topOffset = 1;  // Space for top bar
+    const statusHeight = 1;  // Bottom status bar
+    const logHeight = 4;  // Activity log height
+    const mainHeight = height - topOffset - statusHeight - logHeight;  // Main content area
 
-    // Better layout: 30% lobby (min 25 chars), 70% table
+    // Split: 30% lobby, 70% table (share border at junction)
     const leftWidth = Math.max(25, Math.floor(width * 0.30));
-    const rightWidth = width - leftWidth;
+    const rightWidth = width - leftWidth + 1;  // +1 to share border with lobby
+
     this.layout = {
       width,
       height,
@@ -210,11 +210,12 @@ export class UIManager {
       statusHeight,
       logHeight,
       mainHeight,
-      tableHeight,
+      tableHeight: mainHeight,
       leftWidth,
       rightWidth,
     };
 
+    // Lobby window - left side
     this.lobbyWindow = createBox({
       parent: this.desktop,
       top: topOffset,
@@ -226,10 +227,11 @@ export class UIManager {
       style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
     });
 
+    // Table window - right side (shares border with lobby at leftWidth-1)
     this.tableWindow = createBox({
       parent: this.desktop,
       top: topOffset,
-      left: leftWidth,
+      left: leftWidth - 1,  // Share border with lobby window
       width: rightWidth,
       height: mainHeight,
       border: { type: 'line' },
@@ -239,16 +241,30 @@ export class UIManager {
 
     let tableListMap: Record<number, number | null> = {};
 
-    // Use SDK ListTable for clean table display
-    this.lobbyList = new ListTable({
+    // Help text at top
+    const helpBar = createBox({
       parent: this.lobbyWindow,
       top: 0,
       left: 0,
+      width: '100%',
+      height: 1,
+      style: { fg: 'yellow', bg: 'blue' },
+      content: ' J:Join  O:Observe  C:Create ',
+    });
+
+    // Use SDK ListTable for clean table display
+    this.lobbyList = new ListTable({
+      parent: this.lobbyWindow,
+      top: 1,
+      left: 0,
       width: '100%-2',
-      height: '100%-2',
+      height: '100%-3',
       headers: ['ID', 'Game', 'Stakes', 'Players', 'Status'],
       rows: [],
       interactive: true,
+      keys: true,   // Enable keyboard navigation
+      vi: true,     // Enable vi-style arrow key navigation
+      mouse: true,  // Enable mouse clicks
       style: {
         fg: 'white',
         selected: { fg: 'black', bg: UI_THEME.highlightBg },
@@ -265,7 +281,7 @@ export class UIManager {
       onLobbySelect(index, tableListMap);
     });
 
-    // Action bar at bottom
+    // Action bar at bottom with clearer instructions
     this.lobbyActions = createBox({
       parent: this.lobbyWindow,
       bottom: 0,
@@ -273,7 +289,7 @@ export class UIManager {
       width: '100%',
       height: 1,
       style: { fg: 'black', bg: 'cyan' },
-      content: ' C:Create J:Join O:Observe F:Filter R:Refresh ',
+      content: ' F:Filter R:Refresh Q:Quit ',
     }) as any;
 
     // Use SDK box instead of blessed.scrollabletext
@@ -648,16 +664,30 @@ export class UIManager {
   }
 
   buildOverlay(): void {
+    // CRITICAL: Parent overlayShade to screen (not desktop) so it works in browser mode
+    // Desktop gets hidden in browser mode, but overlayShade must always be visible
     this.overlayShade = createBox({
-      parent: this.desktop,
+      parent: this.screen,
       top: 0,
       left: 0,
       width: '100%',
       height: '100%',
       hidden: true,
+      clickable: true,  // Enable mouse handling to prevent focus issues
+      mouse: true,
       style: {
         bg: 'black',
       },
+    });
+
+    // Set z-index after creation to ensure dialogs appear on top of all UI (browser widget, etc.)
+    (this.overlayShade as any).z = 9999;
+
+    // Consume mouse clicks on overlay to prevent focus loss from dialogs
+    // Clicking the overlay should do nothing (user must interact with dialog or press ESC)
+    this.overlayShade.on('click', () => {
+      // Do nothing - prevent click from propagating and causing focus issues
+      this.screen.render();
     });
   }
 

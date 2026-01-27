@@ -14,6 +14,7 @@
  * - Q: Quit to menu
  */
 import { ClientDoor, AudioEngine, KeyStateTracker, } from '@amiexpress/bbs-door-sdk/client';
+import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 // =============================================================================
 // ANSI Escape Codes and Colors
 // =============================================================================
@@ -187,6 +188,7 @@ class ArkanoidGame {
         this.lastUpdate = 0;
         this.musicStarted = false;
         this.heldKeys = new Set(); // Track held keys for smooth movement
+        this.gamepadAxis = 0; // Track analog stick position
         this.door = new ClientDoor({
             name: 'Arkanoid',
             version: '2.0.0',
@@ -203,6 +205,12 @@ class ArkanoidGame {
         this.renderer = new Renderer();
         this.data = this.createInitialGameData();
         this.keyTracker = new KeyStateTracker();
+        // Initialize gamepad support (will activate when controller connects)
+        this.gamepad = new GamepadInputManager(null, {
+            deadzone: 0.15,
+            pollRate: 16,
+        });
+        this.setupGamepadHandlers();
         this.setupEventHandlers();
     }
     createInitialGameData() {
@@ -259,6 +267,104 @@ class ArkanoidGame {
         }
         speed += (this.data.level - 1) * 0.05;
         return Math.min(speed, 2);
+    }
+    setupGamepadHandlers() {
+        // Analog stick for paddle movement
+        this.gamepad.on('axis:left-x', (value, controllerId) => {
+            this.gamepadAxis = value;
+        });
+        // D-pad for paddle movement
+        this.gamepad.on('dpad:left', () => {
+            if (this.data.state === 'playing') {
+                this.movePaddle(-1);
+            }
+        });
+        this.gamepad.on('dpad:right', () => {
+            if (this.data.state === 'playing') {
+                this.movePaddle(1);
+            }
+        });
+        // A button to launch ball or unpause
+        this.gamepad.on('button:a', (pressed, value, controllerId) => {
+            if (!pressed)
+                return;
+            if (this.data.state === 'playing') {
+                if (this.data.balls.some(b => !b.active)) {
+                    this.launchBall();
+                }
+            }
+            else if (this.data.state === 'paused') {
+                this.data.state = 'playing';
+                this.door.send(this.render());
+            }
+            else if (this.data.state === 'menu') {
+                switch (this.data.menuSelection) {
+                    case 0:
+                        this.startGame();
+                        break;
+                    case 1:
+                        this.cycleDifficulty();
+                        break;
+                    case 2:
+                        this.data.state = 'highscores';
+                        break;
+                    case 3:
+                        this.data.state = 'help';
+                        break;
+                    case 4:
+                        this.quit();
+                        return;
+                }
+                this.door.send(this.render());
+            }
+        });
+        // START button to pause/unpause
+        this.gamepad.on('button:start', (pressed, value, controllerId) => {
+            if (!pressed)
+                return;
+            if (this.data.state === 'playing') {
+                this.data.state = 'paused';
+                this.door.send(this.render());
+            }
+            else if (this.data.state === 'paused') {
+                this.data.state = 'playing';
+                this.door.send(this.render());
+            }
+        });
+        // B or SELECT button to quit/back
+        this.gamepad.on('button:b', (pressed) => {
+            if (!pressed)
+                return;
+            if (this.data.state === 'playing' || this.data.state === 'paused') {
+                this.data.state = 'menu';
+                this.stopMusic();
+                this.door.send(this.render());
+            }
+        });
+        this.gamepad.on('button:select', (pressed) => {
+            if (!pressed)
+                return;
+            if (this.data.state === 'playing' || this.data.state === 'paused') {
+                this.data.state = 'menu';
+                this.stopMusic();
+                this.door.send(this.render());
+            }
+        });
+        // D-pad up/down for menu navigation
+        this.gamepad.on('dpad:up', () => {
+            if (this.data.state === 'menu') {
+                const maxOptions = 4;
+                this.data.menuSelection = (this.data.menuSelection - 1 + maxOptions + 1) % (maxOptions + 1);
+                this.door.send(this.render());
+            }
+        });
+        this.gamepad.on('dpad:down', () => {
+            if (this.data.state === 'menu') {
+                const maxOptions = 4;
+                this.data.menuSelection = (this.data.menuSelection + 1) % (maxOptions + 1);
+                this.door.send(this.render());
+            }
+        });
     }
     setupEventHandlers() {
         this.door.onConnect(async (user) => {
@@ -347,6 +453,13 @@ class ArkanoidGame {
                 }
                 if (this.heldKeys.has('arrowright') || this.heldKeys.has('d')) {
                     this.movePaddle(1);
+                }
+                // Process gamepad analog stick for smooth paddle movement
+                if (Math.abs(this.gamepadAxis) > 0.1) {
+                    const direction = this.gamepadAxis > 0 ? 1 : -1;
+                    const intensity = Math.abs(this.gamepadAxis);
+                    const movement = Math.ceil(direction * PADDLE_SPEED * intensity);
+                    this.movePaddle(movement);
                 }
                 this.update(delta);
                 this.door.send(this.render());
@@ -1154,6 +1267,7 @@ class ArkanoidGame {
         this.door.send('\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
         this.stopMusic();
         this.keyTracker.stop();
+        this.gamepad?.destroy();
         this.door.shutdown();
     }
     start() {

@@ -74,6 +74,7 @@ export interface TablePlayer {
   role: PlayerRole;
   joinedAt: number;
   isBot?: boolean;
+  botDifficulty?: 'easy' | 'medium' | 'hard' | 'expert'; // AI difficulty level
 }
 
 export interface TableObserver {

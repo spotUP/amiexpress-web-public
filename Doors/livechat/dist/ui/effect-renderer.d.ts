@@ -17,6 +17,6 @@
 export declare function renderEffectsForInput(text: string): string;
 /**
  * Enable live effect rendering for a textarea
- * Overrides the _updateContent method to render effects in real-time
+ * Hooks into the change event to update display with rendered effects
  */
 export declare function enableLiveEffectRendering(textarea: any): void;

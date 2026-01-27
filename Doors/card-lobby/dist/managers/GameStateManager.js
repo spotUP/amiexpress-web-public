@@ -14,6 +14,12 @@ const lib_1 = require("../lib");
 const uno_engine_1 = require("../lib/uno-engine");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
 class GameStateManager {
+    /**
+     * Set the AI system for intelligent bot play
+     */
+    setAI(ai) {
+        this.ai = ai;
+    }
     async finalizeHoldemHand(table, engine, beforeStacks, lobby, profiles, currentProfile, callbacks) {
         if (!lobby || !currentProfile)
             return;
@@ -166,7 +172,7 @@ class GameStateManager {
                     callbacks.updateTablePanel();
                     return;
                 }
-                await callbacks.performBotAction(handState.engine, actionSeat, actor.id);
+                await callbacks.performBotAction(handState.engine, actionSeat, actor.id, table);
                 callbacks.saveTableHand(table, handState.engine, handState.beforeStacks);
                 await callbacks.persistState();
                 safety += 1;
@@ -196,7 +202,108 @@ class GameStateManager {
             callbacks.updateTablePanel();
         }
     }
-    async performBotAction(engine, seat, playerId, pushEvent) {
+    async performBotAction(engine, seat, playerId, pushEvent, table) {
+        // Use AI if available, otherwise fall back to legacy random bot
+        if (this.ai && table) {
+            return this.performBotActionAI(engine, seat, playerId, pushEvent, table);
+        }
+        return this.performBotActionLegacy(engine, seat, playerId, pushEvent);
+    }
+    /**
+     * AI-powered bot action (new system)
+     */
+    async performBotActionAI(engine, seat, playerId, pushEvent, table) {
+        const actorSeat = engine.state.players[seat];
+        if (!actorSeat)
+            return;
+        // Get bot difficulty from table player
+        const tablePlayer = table.players.find((p) => p.userId === playerId);
+        const difficulty = tablePlayer?.botDifficulty ?? 'medium';
+        try {
+            // Make AI decision
+            const decision = await this.ai.makePokerDecision({
+                engine,
+                seat,
+                playerId,
+                difficulty,
+            });
+            // Execute the decision
+            const currentBet = (0, lib_1.getCurrentBet)(engine);
+            const playerBet = (0, lib_1.getPlayerBet)(engine, seat);
+            const toCall = Math.max(0, currentBet - playerBet);
+            switch (decision.action) {
+                case 'fold':
+                    // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                    engine.act({ type: lib_1.PokerAction.FOLD, playerId });
+                    pushEvent(`${actorSeat.name} folds`);
+                    break;
+                case 'check':
+                    // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                    engine.act({ type: lib_1.PokerAction.CHECK, playerId });
+                    pushEvent(`${actorSeat.name} checks`);
+                    break;
+                case 'call':
+                    // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                    engine.act({ type: lib_1.PokerAction.CALL, playerId });
+                    pushEvent(`${actorSeat.name} calls ${toCall}`);
+                    break;
+                case 'bet':
+                    if (decision.amount) {
+                        // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                        engine.act({ type: lib_1.PokerAction.BET, playerId, amount: decision.amount });
+                        pushEvent(`${actorSeat.name} bets ${decision.amount}`);
+                    }
+                    else {
+                        // Fallback: check if amount missing
+                        // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                        engine.act({ type: lib_1.PokerAction.CHECK, playerId });
+                        pushEvent(`${actorSeat.name} checks`);
+                    }
+                    break;
+                case 'raise':
+                    if (decision.amount) {
+                        // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                        engine.act({ type: lib_1.PokerAction.RAISE, playerId, amount: decision.amount });
+                        pushEvent(`${actorSeat.name} raises to ${decision.amount}`);
+                    }
+                    else {
+                        // Fallback: call if amount missing
+                        // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                        engine.act({ type: lib_1.PokerAction.CALL, playerId });
+                        pushEvent(`${actorSeat.name} calls ${toCall}`);
+                    }
+                    break;
+                case 'all-in':
+                    // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                    engine.act({ type: lib_1.PokerAction.CALL, playerId });
+                    pushEvent(`${actorSeat.name} is all-in!`);
+                    break;
+            }
+        }
+        catch (error) {
+            // Fallback to safe action on error
+            try {
+                const currentBet = (0, lib_1.getCurrentBet)(engine);
+                const playerBet = (0, lib_1.getPlayerBet)(engine, seat);
+                const toCall = Math.max(0, currentBet - playerBet);
+                if (toCall === 0) {
+                    // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                    engine.act({ type: lib_1.PokerAction.CHECK, playerId });
+                }
+                else {
+                    // @ts-expect-error - PokerAction values are compatible with ActionType at runtime
+                    engine.act({ type: lib_1.PokerAction.FOLD, playerId });
+                }
+            }
+            catch {
+                // If even fallback fails, do nothing
+            }
+        }
+    }
+    /**
+     * Legacy random bot action (backward compatibility)
+     */
+    async performBotActionLegacy(engine, seat, playerId, pushEvent) {
         const actorSeat = engine.state.players[seat];
         if (!actorSeat)
             return;
