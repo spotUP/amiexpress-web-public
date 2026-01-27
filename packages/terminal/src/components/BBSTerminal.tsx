@@ -9,6 +9,8 @@ import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
+import { GamepadManager } from '../utils/gamepad-manager';
+import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 
 // RIP Graphics types (inline to avoid package dependency)
 const RIP_WIDTH = 640;
@@ -139,6 +141,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const pendingUploadFiles = useRef<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const transferTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gamepadManagerRef = useRef<GamepadManager | null>(null);
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -446,6 +449,32 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     term.open(terminalRef.current);
     terminalInstance.current = term;
+
+    // Custom keyboard handler for Shift+Arrow keys (for text selection in doors)
+    // xterm.js doesn't send proper escape sequences for Shift+Arrow by default
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      // Only handle Shift+Arrow keys
+      if (!event.shiftKey) return true; // Let xterm handle it
+
+      const keyMap: Record<string, string> = {
+        'ArrowUp': '\x1B[1;2A',      // Shift+Up
+        'ArrowDown': '\x1B[1;2B',    // Shift+Down
+        'ArrowRight': '\x1B[1;2C',   // Shift+Right
+        'ArrowLeft': '\x1B[1;2D',    // Shift+Left
+      };
+
+      const sequence = keyMap[event.key];
+      if (sequence) {
+        console.log('[BBSTerminal] Sending Shift+Arrow:', event.key, '→', JSON.stringify(sequence)); // DEBUG
+        // Send the proper escape sequence with Shift modifier
+        socketRef.current?.emit('command', sequence);
+        // Prevent xterm from processing this key
+        return false;
+      }
+
+      // Let xterm handle all other keys
+      return true;
+    });
 
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
@@ -915,6 +944,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const { cols, rows } = term;
       socket.emit('terminal-size', { cols, rows });
       console.log(`[Terminal] Sent initial size: ${cols}x${rows}`);
+
+      // Initialize gamepad support
+      if (!gamepadManagerRef.current) {
+        gamepadManagerRef.current = new GamepadManager({
+          onEvent: (event: AnyGamepadEvent) => {
+            if (socket.connected) {
+              socket.emit('gamepad-event', event);
+            }
+          },
+          config: {
+            deadzone: 0.15,
+            pollRate: 16,  // 60fps
+          },
+        });
+        gamepadManagerRef.current.start();
+        console.log('[Gamepad] Gamepad support initialized');
+      }
 
       onConnect?.();
       term.focus();
@@ -1849,6 +1895,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Cleanup
     return () => {
       mediaHandlerRef.current?.destroy();
+      if (gamepadManagerRef.current) {
+        gamepadManagerRef.current.stop();
+        gamepadManagerRef.current = null;
+      }
       socket.disconnect();
       socket.offAny(handleDoorMessageEvent);
       term.dispose();

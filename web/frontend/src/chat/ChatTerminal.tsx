@@ -64,6 +64,31 @@ export default function ChatTerminal() {
     terminalInstance.current = term;
     console.log('[ChatTerminal] Terminal opened and instance stored');
 
+    // Custom keyboard handler for Shift+Arrow keys (for text selection in livechat)
+    // xterm.js doesn't send proper escape sequences for Shift+Arrow by default
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      // Only handle Shift+Arrow keys
+      if (!event.shiftKey) return true; // Let xterm handle it
+
+      const keyMap: Record<string, string> = {
+        'ArrowUp': '\x1B[1;2A',      // Shift+Up
+        'ArrowDown': '\x1B[1;2B',    // Shift+Down
+        'ArrowRight': '\x1B[1;2C',   // Shift+Right
+        'ArrowLeft': '\x1B[1;2D',    // Shift+Left
+      };
+
+      const sequence = keyMap[event.key];
+      if (sequence) {
+        // Send the proper escape sequence with Shift modifier
+        socket.emit('command', sequence);
+        // Prevent xterm from processing this key
+        return false;
+      }
+
+      // Let xterm handle all other keys
+      return true;
+    });
+
     // Load canvas addon for better performance
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
