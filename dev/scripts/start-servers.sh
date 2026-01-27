@@ -17,7 +17,7 @@ print_usage() {
 Usage: ./dev/scripts/start-servers.sh [options]
 
 Options:
-  --debug | -v | --verbose   Enable debug mode (full logs)
+  --debug | -v | --verbose   Enable debug mode (full logs + profiling)
   --quick | -q               FAST START: Skip all builds, use existing
   --full | --all             Open BBS + Admin/Settings + SDK (default)
   --sdk-only                 Open SDK preview only; build SDK only
@@ -31,6 +31,15 @@ Note: Door file watcher is ENABLED by default. Backend auto-restarts when
 
 Quick mode (--quick) skips: npm checks, SDK build, door builds, frontend builds,
 TypeScript check. Use for fast debugging when dependencies haven't changed.
+
+Debug mode (--debug) enables:
+  - DEBUG_68K: Verbose 68K CPU execution tracing
+  - DEBUG_EXEC: ExecLibrary calls (GetMsg, ReplyMsg, etc.)
+  - DEBUG_DOS: DosLibrary file operations
+  - DEBUG_FILE: FileManager operations
+  - DEBUG_TRAP: Library trap handler debugging
+  - DOOR_PROFILE: Performance profiling (iterations/sec, timing breakdown)
+  - XIM_DEBUG_*: XIM protocol debugging
 EOF
 }
 
@@ -570,8 +579,11 @@ if [ "$WATCH_DOORS" = true ]; then
   printf "%b\n" "   ${CYAN}Door file watcher will auto-restart backend when doors change${RESET}"
   if [ "$DEBUG_MODE" = true ]; then
     printf "%b\n" "   ${CYAN}DEBUG_68K enabled for verbose 68K logging${RESET}"
+    printf "%b\n" "   ${CYAN}DEBUG_EXEC/DOS/FILE/TRAP enabled for library debugging${RESET}"
+    printf "%b\n" "   ${CYAN}DOOR_PROFILE enabled for performance profiling${RESET}"
     # Start in background with job control for process group
-    (cd "$REPO_ROOT" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
+    # All debug flags enabled: 68K execution, library calls, file ops, trap handlers, profiling
+    (cd "$REPO_ROOT" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
   else
     # Start in background with job control for process group
     (cd "$REPO_ROOT" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning|\[WATCH\]|Restarting)") &
@@ -582,8 +594,11 @@ else
   printf "%b\n" "${GREEN}[OK]${RESET}"
   printf "%b\n" "   ${CYAN}XIM protocol debugging enabled (logs/xim-debug.json)${RESET}"
   if [ "$DEBUG_MODE" = true ]; then
-    # DEBUG MODE: Show all logs and save to file (DEBUG_68K=1 enables verbose 68K logging)
-    (cd "$REPO_ROOT/web/backend" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+    # DEBUG MODE: Show all logs and save to file (all debug flags enabled)
+    # DEBUG_68K=1 enables verbose 68K logging
+    # DEBUG_EXEC/DOS/FILE/TRAP=1 enables library/file/trap debugging (sync file I/O logs)
+    # DOOR_PROFILE=1 enables performance profiling output
+    (cd "$REPO_ROOT/web/backend" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
   else
     # NORMAL MODE: Clean output, no verbose 68K logging (DEBUG_68K not set)
     (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
