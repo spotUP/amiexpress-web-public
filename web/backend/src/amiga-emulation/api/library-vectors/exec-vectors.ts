@@ -9,8 +9,13 @@ import * as fs from "fs";
 import * as path from "path";
 import { getSystemTime } from '../../../utils/date-time.util';
 
+// PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
+const TRAP_DEBUG_ENABLED = process.env.DEBUG_TRAP === '1';
+
 // File-based debug logging for trap handlers
 function logTrap(message: string): void {
+  if (!TRAP_DEBUG_ENABLED) return;
+
   try {
     const bbsRoot = process.env.BBS_DATA_DIR || '~/Code/amiexpress-web';
     const logFile = path.join(bbsRoot, "logs", "backend.log");

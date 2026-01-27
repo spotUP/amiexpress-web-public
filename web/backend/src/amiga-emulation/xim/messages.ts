@@ -276,12 +276,18 @@ console.log(`[XIMMessageParser] writeCommand: msgAddr=0x${msgAddr.toString(16)} 
    * Write semaphore/filler pointers
    */
   writeSemaphore(msgAddr: number, value: number): void {
-    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const msgLen = this.getMessageLength(msgAddr);
+    const layout = this.getMessageLayout(msgLen);
     const offsets = this.getLayoutOffsets(layout);
+    console.error(`[XIMMessageParser] writeSemaphore: msgAddr=0x${msgAddr.toString(16)}, value=0x${value.toString(16)}, msgLen=${msgLen}, layout=${layout}, semOffset=0x${offsets.semaphore.toString(16)}`);
     if (!this.hasField(msgAddr, offsets.semaphore, 4)) {
+      console.error(`[XIMMessageParser] writeSemaphore: SKIPPED - hasField returned false (msgLen=${msgLen} < offset+size=${offsets.semaphore + 4})`);
       return;
     }
     this.writeValue(msgAddr, offsets.semaphore, value, 4);
+    // Verify the write
+    const readback = this.emulator.readMemory32(msgAddr + offsets.semaphore);
+    console.error(`[XIMMessageParser] writeSemaphore: Wrote to msgAddr+0x${offsets.semaphore.toString(16)}, readback=0x${readback.toString(16)}`);
   }
 
   writeFiller1(msgAddr: number, value: number): void {

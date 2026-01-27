@@ -1704,14 +1704,21 @@ console.log(`[executeTypeScriptDoor] Door completed successfully`);
     // Disable game mode when door exits
     disableGameMode(socket, session);
 
-    // Clear door active flag and input handler
-    delete session.inDoorManager;
+    // Clear door active flag and input handler - MUST match 68K door cleanup
+    // CRITICAL: Set to false, don't just delete, to ensure consistent state
+    session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door exits
+    session.clientDoorActive = false; // Reset for hybrid doors (set by executeClientDoor)
     delete session.doorInputHandler;
     delete session.bbsApi;
+    // CRITICAL: Reset subState IMMEDIATELY - this prevents input from being swallowed
+    // socket-handlers.ts checks: if (session.inDoorManager || session.subState === DOOR_RUNNING)
+    // If subState stays as DOOR_RUNNING after door exits, BBS input breaks
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     if (wrappedSocket?._doorCleanup) {
       wrappedSocket._doorCleanup();
     }
-console.log(`[executeTypeScriptDoor] Cleared inDoorManager and doorInputHandler`);
+console.log(`[executeTypeScriptDoor] Cleared inDoorManager, doorInputHandler, mouseEventsEnabled, clientDoorActive, subState`);
 
     // Reset menu input mode (express.e returns to MENU with shortcuts off)
     session.cmdShortcuts = false;
@@ -1802,9 +1809,14 @@ console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error)
 console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err);
     }
 
-    delete session.inDoorManager;
+    // Clear door active flag - MUST match normal exit cleanup
+    session.inDoorManager = false;
+    session.mouseEventsEnabled = false;
+    session.clientDoorActive = false; // Reset for hybrid doors
     delete session.doorInputHandler;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.menuPause = false;
+    socket.emit('door-active', false);
 
     // Only display menu if user is logged in
     if (session.state === BBSState.LOGGEDON && session.user) {

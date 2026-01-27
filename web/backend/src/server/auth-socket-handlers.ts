@@ -466,6 +466,20 @@ console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sy
       const ansiBuffer = getAnsiBuffer(socket);
       ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
 
+      // Register node with MULTICOM manager for WHO doors
+      try {
+        const { multicomManager, ENV_MENU } = await import('../nodes/MulticomManager.js');
+        multicomManager.updateNode(
+          session.nodeId,
+          user.username,
+          user.location || 'Unknown',
+          ENV_MENU  // User just logged in, at menu
+        );
+        console.error(`[LOGIN] Registered node ${session.nodeId} with MULTICOM: ${user.username}`);
+      } catch (error) {
+        console.error(`[LOGIN] Failed to register node with MULTICOM:`, error);
+      }
+
       // Load command history from database
       const { loadHistory } = require('../utils/command-history.util');
       loadHistory(session, user.id).catch((err: any) => {

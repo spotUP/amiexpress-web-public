@@ -550,7 +550,7 @@ debugLog(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
 
     // express.e uses the core expressVer string; avoid using web/app versions here.
     const raw = typeof session.expressVer === 'string' ? session.expressVer : '';
-    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.3';
+    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.6';
 
     const normalized = expressVer.startsWith('v') || expressVer.startsWith('V')
       ? expressVer.slice(1)
@@ -565,7 +565,7 @@ debugLog(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
       if (Number.isFinite(major)) {
         return `v${major}`;
       }
-      return 'v5.3';
+      return 'v5.6';
     }
 
     const major = parseInt(normalized, 10);
@@ -573,7 +573,7 @@ debugLog(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
       return `v${major}`;
     }
 
-    return 'v5.3';
+    return 'v5.6';
   }
 
   /**

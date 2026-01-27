@@ -525,6 +525,19 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
     }
   });
 
+  // Handle gamepad events
+  socket.on('gamepad-event', (event: any) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    // Gamepad events are handled by the door's input handler if active
+    // TODO: Implement proper gamepad routing to doors
+    if (session.inDoorManager) {
+      // Gamepad events would need a dedicated handler - for now, log
+      console.log('[socket-handlers] gamepad-event received while in door, event:', event);
+    }
+  });
+
   socket.on('command', (data: string) => {
 console.error('[COMMAND-HANDLER-ENTRY] COMMAND EVENT FIRED!', socket.id);
 console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
@@ -892,6 +905,17 @@ console.log(`[DISCONNECT] User reconnected during grace period, skipping cleanup
     if (!session) {
       deleteSession(socket.id);
       return;
+    }
+
+    // Clear node from MULTICOM manager
+    if (session.nodeId) {
+      try {
+        const { multicomManager } = require('../nodes/MulticomManager.js');
+        multicomManager.clearNode(session.nodeId);
+        console.error(`[DISCONNECT] Cleared node ${session.nodeId} from MULTICOM`);
+      } catch (error) {
+        console.error(`[DISCONNECT] Failed to clear node from MULTICOM:`, error);
+      }
     }
 
     // Handle internode chat cleanup if user was in chat

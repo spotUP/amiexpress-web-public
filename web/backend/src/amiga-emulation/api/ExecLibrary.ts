@@ -259,7 +259,14 @@ debugLog(
    * File-based debug logging for visibility (writes to backend.log directly)
    * This bypasses console.log filtering issues
    */
+  // PERFORMANCE: Debug logging disabled by default - causes severe slowdown
+  // due to synchronous file I/O on every GetMsg call (30-40ms polling loops)
+  // Enable with DEBUG_EXEC=1 environment variable if needed for debugging
+  private static readonly EXEC_DEBUG_ENABLED = process.env.DEBUG_EXEC === '1';
+
   private logExecDebug(message: string): void {
+    if (!ExecLibrary.EXEC_DEBUG_ENABLED) return;
+
     try {
       // Use BBS_DATA_DIR or fallback to known path
       const bbsRoot =

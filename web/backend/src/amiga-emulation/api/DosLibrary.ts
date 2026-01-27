@@ -238,7 +238,13 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
   /**
    * Append a filesystem debug line to backend.log for 68k door debugging.
    */
+  // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
+  // Enable with DEBUG_DOS=1 environment variable if needed for debugging
+  private static readonly DOS_DEBUG_ENABLED = process.env.DEBUG_DOS === '1';
+
   private logDoorFile(message: string): void {
+    if (!DosLibrary.DOS_DEBUG_ENABLED) return;
+
     try {
       const logFile = path.join(this.rootPath, "logs", "backend.log");
       const line = `[DoorFile] ${getSystemTime().toISOString()} ${message}\n`;

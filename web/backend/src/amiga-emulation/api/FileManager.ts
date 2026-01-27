@@ -19,6 +19,9 @@ import { AmigaFileCache } from './AmigaFileCache';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
 
+// PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
+const FILE_DEBUG_ENABLED = process.env.DEBUG_FILE === '1';
+
 /** Callback type for sysop debug messages */
 export type DoorDebugCallback = (message: string, level: 'info' | 'warn' | 'error') => void;
 
@@ -193,13 +196,13 @@ console.log(`  BPTR 2 (stdout): ${stdout.toString()}`);
   open(amiPath: string, mode: number): number {
 console.log(`[FileManager] Open: "${amiPath}" mode=${mode}`);
     const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
-    const logToFile = (msg: string) => {
+    const logToFile = FILE_DEBUG_ENABLED ? (msg: string) => {
       try {
         amigafs.appendFileSync(logPath, `[FileManager] ${getSystemTime().toISOString()} ${msg}\n`, { encoding: 'utf8' });
       } catch {
         /* ignore */
       }
-    };
+    } : () => {};
     logToFile(`Open "${amiPath}" mode=${mode} currentDir="${this.currentDirAmi}"`);
 
     // Check for special devices first
@@ -311,13 +314,17 @@ console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will 
     }
 
     // Determine file open mode
-    let fileMode: 'r' | 'w' | 'rw';
+    // CRITICAL: On AmigaDOS, MODE_OLDFILE means "file must exist" but STILL allows writing!
+    // Many doors (ByteComment, etc.) open with MODE_OLDFILE and then write to the file.
+    // Only MODE_NEWFILE creates/truncates. MODE_OLDFILE and MODE_READWRITE both allow read+write.
+    // NOTE: AmigaDOS Open() has no pure read-only mode - all modes allow writing.
+    let fileMode: 'w' | 'rw';
     if (mode === 1006) {
       fileMode = 'w'; // MODE_NEWFILE - write, create, truncate
     } else if (mode === 1005) {
-      fileMode = 'r'; // MODE_OLDFILE - read existing
+      fileMode = 'rw'; // MODE_OLDFILE - file must exist, but allows read AND write
     } else if (mode === 1004) {
-      fileMode = 'rw'; // MODE_READWRITE - read/write
+      fileMode = 'rw'; // MODE_READWRITE - read/write, create if doesn't exist
     } else {
 console.error(`[FileManager] Unknown mode: ${mode}`);
       this.lastErrorCode = this.ERROR_OBJECT_WRONG_TYPE;
@@ -328,18 +335,8 @@ console.error(`[FileManager] Unknown mode: ${mode}`);
     // Skip memory caching for T: (temp) files - they may be modified by Execute()
     // and we need to read fresh content from disk each time
     const isTempFile = upperAmiPath.startsWith('T:');
-    if (fileMode === 'r' && this.fileCache && !isTempFile) {
-      const cached = this.fileCache.load(amiPath, this.currentDirSysPath);
-      if (cached && cached.isDirectory) {
-console.error(`[FileManager] "${amiPath}" points to directory, cannot open as file`);
-        this.lastErrorCode = this.ERROR_OBJECT_WRONG_TYPE;
-        return 0;
-      }
-      if (cached && cached.data) {
-        sysPath = cached.sysPath; // Preserve resolved case
-        memoryBuffer = cached.data;
-      }
-    }
+    // File caching is only for read-only operations, which AmigaDOS Open() doesn't support
+    // Cache lookup removed - all Open() modes allow writing
 
     // Create file handle
     // For temp files (T:), skip snapshotSize since Execute() may rewrite them
@@ -361,8 +358,9 @@ console.error(`[FileManager] Failed to open file: ${sysPath}`);
       if (fsError) {
         this.lastErrorCode = this.mapNodeErrorToAmigaDOS(fsError);
       } else {
-        // Default to NOT_FOUND for read, WRITE_PROTECTED for write
-        this.lastErrorCode = fileMode === 'r' ? this.ERROR_OBJECT_NOT_FOUND : this.ERROR_WRITE_PROTECTED;
+        // Default error for open failure - file not found or write protected
+        // All AmigaDOS Open() modes allow writing, so check if file exists to choose error
+        this.lastErrorCode = fileExists ? this.ERROR_WRITE_PROTECTED : this.ERROR_OBJECT_NOT_FOUND;
       }
       return 0; // Failed
     }

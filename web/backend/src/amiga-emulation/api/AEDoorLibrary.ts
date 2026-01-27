@@ -498,6 +498,9 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
     const stringPtr = this.emulator.readMemory32(
       state.difaceAddr + DIFACE_STRING_PTR_OFFSET
     );
+    // DEBUG: Log what the door reads
+    const stringContent = this.readCString(stringPtr, 40);
+    console.log(`[AEDoorLibrary] getString() -> 0x${stringPtr.toString(16)}, content: "${stringContent}"`);
     this.emulator.setRegister(0, stringPtr);
     return stringPtr;
   }
@@ -549,6 +552,10 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
       this.emulator.setRegister(0, 0);
       return 0;
     }
+
+    // DEBUG: Log the result string
+    const resultStr = this.readCString(state.stringPtr, 40);
+    console.log(`[AEDoorLibrary] Prompt() completed -> stringPtr=0x${state.stringPtr.toString(16)} content: "${resultStr}"`);
 
     // Return string pointer (where user input is stored)
     this.emulator.setRegister(0, state.stringPtr);
@@ -799,6 +806,10 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
       return 0;
     }
 
+    // DEBUG: Log the result string
+    const resultStr = this.readCString(state.stringPtr, 40);
+    console.log(`[AEDoorLibrary] GetStr() completed -> stringPtr=0x${state.stringPtr.toString(16)} content: "${resultStr}"`);
+
     // Return string pointer (where user input is stored)
     this.emulator.setRegister(0, state.stringPtr);
     return state.stringPtr;
@@ -829,6 +840,8 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
 
     // Copy FROM stringPtr (library's buffer with GetDT result) TO destAddr (door's buffer)
     const source = this.readCString(state.stringPtr, maxlen);
+    // DEBUG: Log what's being copied
+    console.log(`[AEDoorLibrary] copyStr() from 0x${state.stringPtr.toString(16)} to 0x${destAddr.toString(16)}: "${source.slice(0, 40)}"`);
     if (destAddr) {
       this.writeCString(destAddr, source, maxlen);
       this.emulator.setRegister(0, destAddr);

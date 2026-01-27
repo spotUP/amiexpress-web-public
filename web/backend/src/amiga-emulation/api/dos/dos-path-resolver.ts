@@ -197,7 +197,8 @@ export class DosPathResolver {
     // Handle Doors: device - doors directory root
     if (upperPath.startsWith('DOORS:')) {
       const relativePath = amigaPath.substring(6);
-      const resolved = path.join(this.rootPath, 'doors', relativePath);
+      let resolved = path.join(this.rootPath, 'doors', relativePath);
+      resolved = this.findCaseInsensitive(resolved);
       debugLog(`[DosPathResolver] Doors: -> ${resolved}`);
       return resolved;
     }
@@ -210,7 +211,8 @@ export class DosPathResolver {
     // Handle S: device - Amiga system scripts/config
     if (upperPath.startsWith('S:')) {
       const relativePath = amigaPath.substring(2);
-      const resolved = path.join(this.rootPath, 'S', relativePath);
+      let resolved = path.join(this.rootPath, 'S', relativePath);
+      resolved = this.findCaseInsensitive(resolved);
       debugLog(`[DosPathResolver] S: -> ${resolved}`);
       return resolved;
     }

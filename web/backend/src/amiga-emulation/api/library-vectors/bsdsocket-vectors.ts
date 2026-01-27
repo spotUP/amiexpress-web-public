@@ -189,8 +189,7 @@ export const BSDSOCKET_VECTORS: LibraryVector[] = [
     offset: -126,
     name: "WaitSelect",
     handler: (emu, lib: BsdSocketLibrary) => {
-      console.log(`[BsdSocketLibrary] WaitSelect() - stub, returning 0`);
-      return 0;
+      return lib.waitSelect();
     },
   },
 

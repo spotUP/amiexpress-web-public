@@ -15,6 +15,21 @@ import { parseInfoFile } from "../../utils/amiga-command-parser.util.js";
 import { debugLog } from "../../utils/debug-log";
 import * as fs from "fs";
 import * as path from "path";
+import * as net from "net";
+
+// Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
+interface TelnetSessionState {
+  usernamePrompt: string;
+  username: string;
+  passwordPrompt: string;
+  password: string;
+  connection: net.Socket | null;
+  connected: boolean;
+  loginSent: boolean;
+  originalInputHandler: ((data: string) => void) | null;
+  // For blocking reply - store message address to reply when session ends
+  pendingMsgAddr: number;
+}
 
 export interface MessageProcessingConfig {
   suppressCallbacks: boolean;
@@ -96,6 +111,19 @@ debugLog(`[DoorMessageHandler] string: ${str ?? ""}`);
   private doorSummaryPtr: number = 0;
   private aePortAddress: number = 0;
   private sentInitialMessage: boolean = false;
+
+  // Telnet session state for TELNET_CONNECT (express.e:3051-3302)
+  private telnetState: TelnetSessionState = {
+    usernamePrompt: '',
+    username: '',
+    passwordPrompt: '',
+    password: '',
+    connection: null,
+    connected: false,
+    loginSent: false,
+    originalInputHandler: null,
+    pendingMsgAddr: 0
+  };
 
   constructor(
     emulator: MoiraEmulator,
@@ -1957,29 +1985,36 @@ debugLog(`[DoorMessageHandler]   CON_CURSOR: ${data ? 'ON' : 'OFF'}`);
         break;
 
       case XIMCommand.TELNET_CONNECT:
-        // express.e:4127-4128: Connect to telnet host
-debugLog(`[DoorMessageHandler]   TELNET_CONNECT: "${str}" port=${data}`);
-        // Telnet connectivity handled by telnet-connect door
-        break;
+        // express.e:3051-3302: Connect to telnet host and establish passthrough
+        // This is a BLOCKING call - door waits until user disconnects (ESC)
+        debugLog(`[DoorMessageHandler]   TELNET_CONNECT: "${str}" port=${data}`);
+        this.handleTelnetConnect(str, data, msgAddr);
+        this.emulator.pause();
+        debugLog(`[DoorMessageHandler]   TELNET_CONNECT: Emulator paused, waiting for telnet session to end`);
+        return; // Don't reply yet - will reply when telnet session ends
 
       case XIMCommand.TELNET_USERNAME_PROMPT:
-        // express.e:4129-4130: Set telnet username prompt
-debugLog(`[DoorMessageHandler]   TELNET_USERNAME_PROMPT: "${str}"`);
+        // express.e:3271-3276: Set telnet username prompt for auto-login
+        debugLog(`[DoorMessageHandler]   TELNET_USERNAME_PROMPT: "${str}"`);
+        this.telnetState.usernamePrompt = str;
         break;
 
       case XIMCommand.TELNET_USERNAME:
-        // express.e:4131-4132: Set telnet username
-debugLog(`[DoorMessageHandler]   TELNET_USERNAME: "${str}"`);
+        // express.e:3271-3276: Set telnet username for auto-login
+        debugLog(`[DoorMessageHandler]   TELNET_USERNAME: "${str}"`);
+        this.telnetState.username = str;
         break;
 
       case XIMCommand.TELNET_PASSWORD_PROMPT:
-        // express.e:4133-4134: Set telnet password prompt
-debugLog(`[DoorMessageHandler]   TELNET_PASSWORD_PROMPT: "${str}"`);
+        // express.e:3277-3284: Set telnet password prompt for auto-login
+        debugLog(`[DoorMessageHandler]   TELNET_PASSWORD_PROMPT: "${str}"`);
+        this.telnetState.passwordPrompt = str;
         break;
 
       case XIMCommand.TELNET_PASSWORD:
-        // express.e:4135-4136: Set telnet password
-debugLog(`[DoorMessageHandler]   TELNET_PASSWORD: (hidden)`);
+        // express.e:3277-3284: Set telnet password for auto-login
+        debugLog(`[DoorMessageHandler]   TELNET_PASSWORD: (hidden)`);
+        this.telnetState.password = str;
         break;
       case XIMCommand.GET_CMD_TOOLTYPE:
         // express.e:4137-4140: Read tooltype from command file
@@ -2222,7 +2257,7 @@ debugLog(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
     }
 
     const raw = typeof session.expressVer === 'string' ? session.expressVer : '';
-    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.3';
+    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.6';
 
     const normalized = expressVer.startsWith('v') || expressVer.startsWith('V')
       ? expressVer.slice(1)
@@ -2237,7 +2272,7 @@ debugLog(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
       if (Number.isFinite(major)) {
         return `v${major}`;
       }
-      return 'v5.3';
+      return 'v5.6';
     }
 
     const major = parseInt(normalized, 10);
@@ -2245,7 +2280,7 @@ debugLog(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
       return `v${major}`;
     }
 
-    return 'v5.3';
+    return 'v5.6';
   }
 
   /**
@@ -2481,5 +2516,295 @@ console.warn(`[DoorMessageHandler] MCI processing failed, displaying raw: ${mciE
 console.error(`[DoorMessageHandler] Error reading file ${filePath}:`, error?.message);
       return false;
     }
+  }
+
+  // =========================================================================
+  // TELNET_CONNECT Implementation (express.e:3051-3302)
+  // Establishes TCP connection to remote telnet server and passes data through
+  // =========================================================================
+
+  /**
+   * Handle TELNET_CONNECT command (XIM 706)
+   * Opens TCP socket to remote host and establishes bidirectional passthrough
+   * Per express.e:3051-3302: telnetConnect() function
+   */
+  private handleTelnetConnect(host: string, port: number, msgAddr: number): void {
+    // Default to standard telnet port if not specified
+    if (port === 0) port = 23;
+
+    // Store message address for reply when session ends (blocking call)
+    this.telnetState.pendingMsgAddr = msgAddr;
+
+    debugLog(`[DoorMessageHandler] TELNET_CONNECT: Connecting to ${host}:${port}`);
+    this.socket.emit('ansi-output', `\r\nConnecting to ${host}:${port}...\r\n`);
+
+    // Close any existing connection first
+    if (this.telnetState.connection) {
+      debugLog(`[DoorMessageHandler] TELNET_CONNECT: Closing existing connection`);
+      this.telnetState.connection.destroy();
+      this.telnetState.connection = null;
+    }
+
+    // Create TCP connection with 30 second timeout
+    const telnetSocket = net.createConnection({
+      host,
+      port,
+      timeout: 30000
+    });
+
+    this.telnetState.connection = telnetSocket;
+    this.telnetState.connected = false;
+    this.telnetState.loginSent = false;
+
+    telnetSocket.on('connect', () => {
+      this.telnetState.connected = true;
+      debugLog(`[DoorMessageHandler] TELNET_CONNECT: Connected to ${host}:${port}`);
+      this.socket.emit('ansi-output', `Connected to ${host}.\r\n`);
+      this.socket.emit('ansi-output', "Escape character is '^]'.\r\n\r\n");
+    });
+
+    telnetSocket.on('data', (data: Buffer) => {
+      // Filter telnet IAC commands, pass through clean data
+      const filtered = this.filterTelnetIAC(data, telnetSocket);
+      if (filtered.length > 0) {
+        // Convert to string and emit to user's terminal
+        this.socket.emit('ansi-output', filtered.toString('binary'));
+      }
+      // Check for auto-login prompts (express.e:3271-3284)
+      this.checkAutoLogin(data, telnetSocket);
+    });
+
+    telnetSocket.on('close', () => {
+      debugLog(`[DoorMessageHandler] TELNET_CONNECT: Connection closed`);
+      this.telnetState.connected = false;
+      this.telnetState.connection = null;
+      this.socket.emit('ansi-output', '\r\nConnection closed.\r\n');
+      this.cleanupTelnetSession();
+    });
+
+    telnetSocket.on('error', (err: Error) => {
+      debugLog(`[DoorMessageHandler] TELNET_CONNECT: Error - ${err.message}`);
+      this.socket.emit('ansi-output', `\r\nConnection error: ${err.message}\r\n`);
+      this.cleanupTelnetSession();
+    });
+
+    telnetSocket.on('timeout', () => {
+      debugLog(`[DoorMessageHandler] TELNET_CONNECT: Connection timeout`);
+      this.socket.emit('ansi-output', '\r\nConnection timed out.\r\n');
+      telnetSocket.destroy();
+      this.cleanupTelnetSession();
+    });
+
+    // Set up input handler to forward user input to telnet
+    this.setupTelnetInputHandler(telnetSocket);
+  }
+
+  /**
+   * Filter telnet IAC (Interpret As Command) sequences
+   * Per express.e:3218-3269
+   *
+   * IAC codes:
+   * - 255 (IAC): Interpret As Command marker
+   * - 251 (WILL): Sender wants to do option
+   * - 252 (WONT): Sender refuses option
+   * - 253 (DO): Sender wants receiver to do option
+   * - 254 (DONT): Sender wants receiver to not do option
+   * - 250 (SB): Subnegotiation begin
+   * - 240 (SE): Subnegotiation end
+   */
+  private filterTelnetIAC(data: Buffer, telnetSocket: net.Socket): Buffer {
+    const IAC = 255;
+    const WILL = 251;
+    const WONT = 252;
+    const DO = 253;
+    const DONT = 254;
+    const SB = 250;
+    const SE = 240;
+    const ECHO = 1;
+    const SGA = 3;  // Suppress Go Ahead
+
+    const filtered: number[] = [];
+    let i = 0;
+
+    while (i < data.length) {
+      if (data[i] === IAC && i + 1 < data.length) {
+        const cmd = data[i + 1];
+
+        if (cmd === IAC) {
+          // Escaped IAC (255 255) -> output single 255
+          filtered.push(IAC);
+          i += 2;
+        } else if (cmd === WILL && i + 2 < data.length) {
+          const option = data[i + 2];
+          debugLog(`[DoorMessageHandler] Telnet IAC WILL ${option}`);
+
+          // Per express.e:3218-3240
+          // WILL ECHO -> respond DO ECHO
+          // WILL SGA -> respond DO SGA
+          if (option === ECHO || option === SGA) {
+            telnetSocket.write(Buffer.from([IAC, DO, option]));
+            debugLog(`[DoorMessageHandler] Telnet responded DO ${option}`);
+          } else {
+            // For other options, respond DONT
+            telnetSocket.write(Buffer.from([IAC, DONT, option]));
+            debugLog(`[DoorMessageHandler] Telnet responded DONT ${option}`);
+          }
+          i += 3;
+        } else if (cmd === WONT && i + 2 < data.length) {
+          const option = data[i + 2];
+          debugLog(`[DoorMessageHandler] Telnet IAC WONT ${option}`);
+          // Acknowledge with DONT
+          telnetSocket.write(Buffer.from([IAC, DONT, option]));
+          i += 3;
+        } else if (cmd === DO && i + 2 < data.length) {
+          const option = data[i + 2];
+          debugLog(`[DoorMessageHandler] Telnet IAC DO ${option}`);
+          // Per express.e: respond WONT to all DO requests
+          telnetSocket.write(Buffer.from([IAC, WONT, option]));
+          debugLog(`[DoorMessageHandler] Telnet responded WONT ${option}`);
+          i += 3;
+        } else if (cmd === DONT && i + 2 < data.length) {
+          const option = data[i + 2];
+          debugLog(`[DoorMessageHandler] Telnet IAC DONT ${option}`);
+          // Acknowledge with WONT
+          telnetSocket.write(Buffer.from([IAC, WONT, option]));
+          i += 3;
+        } else if (cmd === SB) {
+          // Skip subnegotiation until SE
+          debugLog(`[DoorMessageHandler] Telnet IAC SB - skipping subnegotiation`);
+          let j = i + 2;
+          while (j < data.length - 1) {
+            if (data[j] === IAC && data[j + 1] === SE) {
+              j += 2;
+              break;
+            }
+            j++;
+          }
+          i = j;
+        } else {
+          // Unknown command, skip IAC + cmd
+          debugLog(`[DoorMessageHandler] Telnet IAC ${cmd} - skipping`);
+          i += 2;
+        }
+      } else {
+        // Regular data byte, pass through
+        filtered.push(data[i]);
+        i++;
+      }
+    }
+
+    return Buffer.from(filtered);
+  }
+
+  /**
+   * Check received data for username/password prompts and auto-login
+   * Per express.e:3271-3284
+   */
+  private checkAutoLogin(data: Buffer, telnetSocket: net.Socket): void {
+    const text = data.toString();
+
+    // Check for username prompt
+    if (this.telnetState.username && this.telnetState.usernamePrompt) {
+      if (text.toLowerCase().includes(this.telnetState.usernamePrompt.toLowerCase())) {
+        debugLog(`[DoorMessageHandler] Auto-login: sending username`);
+        telnetSocket.write(this.telnetState.username + '\r\n');
+        this.telnetState.username = ''; // Clear after use
+      }
+    }
+
+    // Check for password prompt
+    if (this.telnetState.password && this.telnetState.passwordPrompt) {
+      if (text.toLowerCase().includes(this.telnetState.passwordPrompt.toLowerCase())) {
+        debugLog(`[DoorMessageHandler] Auto-login: sending password`);
+        telnetSocket.write(this.telnetState.password + '\r\n');
+        this.telnetState.password = ''; // Clear after use
+        this.telnetState.loginSent = true;
+      }
+    }
+  }
+
+  /**
+   * Set up input handler to forward user input to telnet socket
+   * Per express.e:3095-3120 - handle user input during telnet session
+   */
+  private setupTelnetInputHandler(telnetSocket: net.Socket): void {
+    // Store the original input handler to restore later
+    // We'll intercept door:input events during telnet session
+
+    const telnetInputHandler = (data: string) => {
+      // ESC (0x1B) or Ctrl+] (0x1D) disconnects per express.e:3095-3100
+      if (data === '\x1b' || data === '\x1d') {
+        debugLog(`[DoorMessageHandler] Telnet: User requested disconnect`);
+        this.socket.emit('ansi-output', '\r\n[Disconnecting...]\r\n');
+        telnetSocket.destroy();
+        return;
+      }
+
+      // Forward input to telnet socket if connected
+      if (this.telnetState.connected && telnetSocket && !telnetSocket.destroyed) {
+        telnetSocket.write(data);
+      }
+    };
+
+    // Add telnet input handler
+    this.telnetState.originalInputHandler = this.socket.listeners('door:input')[0] as ((data: string) => void) | undefined || null;
+
+    // Remove existing handlers temporarily
+    this.socket.removeAllListeners('door:input');
+
+    // Add our telnet-specific handler
+    this.socket.on('door:input', telnetInputHandler);
+
+    debugLog(`[DoorMessageHandler] Telnet input handler set up`);
+  }
+
+  /**
+   * Clean up telnet session and restore normal input handling
+   */
+  private cleanupTelnetSession(): void {
+    debugLog(`[DoorMessageHandler] Cleaning up telnet session`);
+
+    // Close connection if still open
+    if (this.telnetState.connection && !this.telnetState.connection.destroyed) {
+      this.telnetState.connection.destroy();
+    }
+
+    // Remove telnet input handler
+    this.socket.removeAllListeners('door:input');
+
+    // Restore original handler if we saved one
+    if (this.telnetState.originalInputHandler) {
+      this.socket.on('door:input', this.telnetState.originalInputHandler);
+    } else {
+      // Re-setup the standard input handler
+      this.setupInputHandler();
+    }
+
+    // Reply to pending TELNET_CONNECT message (blocking call complete)
+    const pendingMsgAddr = this.telnetState.pendingMsgAddr;
+    if (pendingMsgAddr) {
+      debugLog(`[DoorMessageHandler] Telnet session ended - replying to TELNET_CONNECT at 0x${pendingMsgAddr.toString(16)}`);
+      this.execLibrary.putMsg(this.doorReplyPortAddr, pendingMsgAddr, {
+        suppressDoorCallback: true,
+      });
+      // Resume emulator now that blocking call is complete
+      this.emulator.resume();
+      debugLog(`[DoorMessageHandler] Emulator resumed after telnet session`);
+    }
+
+    // Reset telnet state
+    this.telnetState = {
+      usernamePrompt: '',
+      username: '',
+      passwordPrompt: '',
+      password: '',
+      connection: null,
+      connected: false,
+      loginSent: false,
+      originalInputHandler: null,
+      pendingMsgAddr: 0
+    };
+
+    debugLog(`[DoorMessageHandler] Telnet session cleaned up`);
   }
 }

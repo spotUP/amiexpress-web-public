@@ -646,13 +646,26 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
       let lastYieldTime = Date.now();
       const YIELD_INTERVAL_MS = 10; // Yield every 10ms to allow other users to run
 
+      // PERFORMANCE PROFILING: Track where time is spent (enabled via DOOR_PROFILE=1)
+      const ENABLE_PROFILING = process.env.DOOR_PROFILE === '1';
+      let profileStart = 0;
+      let profileTrapHandling = 0;
+      let profileBatchExec = 0;
+      let profileYieldTime = 0;
+      let profileLoopIters = 0;
+      let profileTrapCount = 0;
+      let profileLastReport = Date.now();
+
       while (this.executionState.isRunning) {
+        if (ENABLE_PROFILING) profileStart = Date.now();
         // === STEP 0: Yield to event loop if too much time has elapsed ===
         // CRITICAL: This prevents blocking other users when running CPU-intensive doors
         const now = Date.now();
         if (now - lastYieldTime >= YIELD_INTERVAL_MS) {
+          const yieldStart = ENABLE_PROFILING ? Date.now() : 0;
           await new Promise((resolve) => setImmediate(resolve));
           lastYieldTime = Date.now();
+          if (ENABLE_PROFILING) profileYieldTime += Date.now() - yieldStart;
         }
 
         // === STEP 1: Check if paused (async input) ===
@@ -913,10 +926,12 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // === STEP 4: Check if PC is at a trap address (before batch execution) ===
         const isTrapAddr = this.libraryTraps?.isTrapAddress(pc);
         if (isTrapAddr) {
+          if (ENABLE_PROFILING) profileTrapCount++;
+          const trapStart = ENABLE_PROFILING ? Date.now() : 0;
           // Handle the trap
-          const trapHandled = await this.checkAndHandleLibraryTrap(pc);
+          const trapHandled = this.checkAndHandleLibraryTrap(pc);
           if (trapHandled) {
-            await this.handleTrapExecution(pc);
+            this.handleTrapExecution(pc);
 
             // === STEP 4B: Check if WaitPort returned 0 (no messages) ===
             // Doors like Bulls/FR use tight WaitPort loops and need immediate XIM polling.
@@ -937,10 +952,13 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
               execLib.clearNeedsXIMPoll();
             }
 
+            if (ENABLE_PROFILING) profileTrapHandling += Date.now() - trapStart;
+            if (ENABLE_PROFILING) profileLoopIters++;
             continue;
           }
           // Check for ILLEGAL instruction if trap wasn't handled by library
-          if (await this.handleIllegalInstruction(pc)) {
+          if (this.handleIllegalInstruction(pc)) {
+            if (ENABLE_PROFILING) profileTrapHandling += Date.now() - trapStart;
             continue;
           }
         }
@@ -952,7 +970,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // Combined with time-based yielding (10ms), this ensures responsive multi-user experience
         const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 5000;
         const pcBeforeBatch = this.emulator.getRegister(16);
+        const batchStart = ENABLE_PROFILING ? Date.now() : 0;
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
+        if (ENABLE_PROFILING) profileBatchExec += Date.now() - batchStart;
 
         // CRITICAL: If pause was set during batch execution (e.g., by doorMessageCallback
         // for a blocking XIM command like JH_LI/JH_HK), immediately yield to handlePausedState
@@ -1153,30 +1173,49 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
         }
 
         // === STEP 5B: Poll for XIM messages from native AEDoor.library ===
-        // ALWAYS call pollXIMMessages - it will auto-detect XIM doors by checking
-        // if AEDoorPort exists, even if doorType is configured as SIM.
-        // This handles cases where .info file is missing or has wrong TYPE.
+        // PERFORMANCE: Only poll if NOT using callback-based processing
+        // Callback-based processing handles messages synchronously in PutMsg - no async polling needed
+        // Also skip if door type is known to be non-XIM (TIM/SIM/IIM/SUP use DoorControl instead)
         const execLib5b = this.libraryManager?.execLibrary;
         if (execLib5b?.getNeedsXIMPoll()) {
           execLib5b.clearNeedsXIMPoll();
         }
-        await this.pollXIMMessages();
+        // Only poll if: (1) not using callback, AND (2) either XIM type or auto-detected XIM port
+        if (!this.usingDoorMessageCallback && (this.config.doorType === "XIM" || this.detectedXIMPort)) {
+          await this.pollXIMMessages();
+        }
 
         // === STEP 5C: Poll for TIM/SIM messages from DoorControl port ===
         // TIM, SIM, IIM, SUP doors all use DoorControl{n} port (per express.e:4316-4320)
         // Only XIM doors use AEDoorPort - all others use DoorControl
         // CRITICAL: Default to SIM if doorType not specified
+        // PERFORMANCE: Only poll for non-XIM doors (XIM handled above or via callback)
         const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
-        const usesDoorControl = effectiveDoorType === "TIM" ||
-                                effectiveDoorType === "SIM" ||
-                                effectiveDoorType === "IIM" ||
-                                effectiveDoorType === "SUP";
-        if (usesDoorControl) {
+        if (effectiveDoorType !== "XIM" && !this.detectedXIMPort) {
           await this.pollTIMMessages();
         }
 
-        // === STEP 6: Yield to allow other async operations ===
-        await new Promise((resolve) => setImmediate(resolve));
+        // === STEP 6: Yield handled by time-based check at top of loop (YIELD_INTERVAL_MS) ===
+        // REMOVED: Per-iteration setImmediate was causing severe slowdown for 68K doors
+        // that print characters one at a time. Each character triggers a trap, and yielding
+        // after every trap made output appear in "slow motion". The 10ms time-based yield
+        // at the top of the loop is sufficient for multi-user responsiveness.
+
+        // PERFORMANCE PROFILING: Report every second
+        if (ENABLE_PROFILING) {
+          profileLoopIters++;
+          const profileNow = Date.now();
+          if (profileNow - profileLastReport >= 1000) {
+            const totalTime = profileNow - profileLastReport;
+            console.log(`[DOOR_PROFILE] iters=${profileLoopIters} traps=${profileTrapCount} batchMs=${profileBatchExec} trapMs=${profileTrapHandling} yieldMs=${profileYieldTime} total=${totalTime}ms`);
+            profileLoopIters = 0;
+            profileTrapCount = 0;
+            profileBatchExec = 0;
+            profileTrapHandling = 0;
+            profileYieldTime = 0;
+            profileLastReport = profileNow;
+          }
+        }
       }
 
 debugLog(
@@ -1447,7 +1486,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toS
     return false;
   }
 
-  private async checkAndHandleLibraryTrap(pc: number): Promise<boolean> {
+  private checkAndHandleLibraryTrap(pc: number): boolean {
     if (!this.libraryTraps) {
       return false;
     }
@@ -1478,7 +1517,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toS
     return false;
   }
 
-  private async handleTrapExecution(pc: number): Promise<void> {
+  private handleTrapExecution(pc: number): void {
     // Track library trap calls for debugging
     const a6 = this.emulator.getRegister(14);
     let offset = pc - a6;
@@ -1507,13 +1546,13 @@ console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toS
     // Track DOS.Write() calls
     if (offset === -48 || pc === 0xfffffed0) {
       this.executionState.writeCallCount++;
-      await this.logWriteCall(pc);
+      this.logWriteCall(pc);
     }
 
     // Track AEDoor.library calls
     if (a6 === 0xff4000 || (a6 >= 0xff4000 && a6 <= 0xff4fff)) {
       this.executionState.aedoorCallCount++;
-      await this.logAEDoorCall(pc, offset);
+      this.logAEDoorCall(pc, offset);
     }
 
     this.executionState.iterationCount++;
@@ -1742,20 +1781,23 @@ debugLog(
         )} [A2]=0x${memA2.toString(16)} lastPCs=[${lastPcTrace}]`
       );
     }
-    await new Promise((resolve) => setImmediate(resolve));
+    // REMOVED: Per-trap setImmediate was causing severe slowdown for 68K doors.
+    // This method is called on EVERY library trap (every character printed, every API call).
+    // Yielding here causes "slow motion" output. The time-based yield at top of execution
+    // loop (every YIELD_INTERVAL_MS) is sufficient for event loop responsiveness.
   }
 
-  private async handleIllegalInstruction(pc: number): Promise<boolean> {
+  private handleIllegalInstruction(pc: number): boolean {
     const instrAtPC = this.emulator.readMemory16(pc);
     if (instrAtPC === 0x4afc) {
       // ILLEGAL instruction
 debugLog(
-        `[DoorLifecycleManager] 🔥 ILLEGAL DETECTED at PC=0x${pc.toString(16)}`
+        `[DoorLifecycleManager] ILLEGAL DETECTED at PC=0x${pc.toString(16)}`
       );
       const handled = this.emulator.handleIllegal(pc);
       if (handled) {
         this.executionState.iterationCount++;
-        await new Promise((resolve) => setImmediate(resolve));
+        // Note: No yield here - illegal instructions are rare and shouldn't block
         return true;
       }
     }
@@ -2097,6 +2139,19 @@ debugLog(
   private detectedXIMPort = false; // AUTO-DETECT: Set true when door creates AEDoorPort
 
   private async pollXIMMessages(): Promise<void> {
+    // PERFORMANCE FIX 2026-01-23: Skip polling entirely if doorMessageCallback is active
+    // The callback processes ALL messages synchronously during PutMsg - no async polling needed!
+    // Check this FIRST before any other work to minimize overhead.
+    if (this.usingDoorMessageCallback) {
+      return;
+    }
+
+    // CRITICAL: Skip polling if we're already waiting for user input
+    // This prevents processing duplicate JH_PM/JH_HK/JH_LI messages while waiting
+    if (this.ximProtocol?.isWaitingForLineInput()) {
+      return;
+    }
+
     this.pollCount++;
 
     // Initialize protocol on first poll
@@ -2105,20 +2160,6 @@ debugLog(
       // - BBS waits for door to send JH_REGISTER first
       // - BBS does NOT pre-send INIT/STAT (that caused our polling to consume them)
       // - JH_REGISTER handler has 500ms fallback for old-style doors
-    }
-
-    // CRITICAL: Skip polling if we're already waiting for user input
-    // This prevents processing duplicate JH_PM/JH_HK/JH_LI messages while waiting
-    // The door may have sent multiple messages during batch execution before we paused
-    if (this.ximProtocol?.isWaitingForLineInput()) {
-      return;
-    }
-
-    // PERFORMANCE FIX 2026-01-14: Skip polling entirely if doorMessageCallback is active
-    // The callback processes ALL messages synchronously during PutMsg - no async polling needed!
-    // This eliminates the duplicate processing that was causing 2-3x slowdown.
-    if (this.usingDoorMessageCallback) {
-      return;
     }
 
     const execLib = this.libraryManager?.execLibrary;
@@ -2494,7 +2535,7 @@ debugLog(
     }
   }
 
-  private async logWriteCall(pc: number): Promise<void> {
+  private logWriteCall(pc: number): void {
     const fileHandle = this.emulator.getRegister(8); // A0 = file handle
     const buffer = this.emulator.getRegister(9); // A1 = buffer
     const length = this.emulator.getRegister(0); // D0 = length
@@ -2524,7 +2565,7 @@ debugLog(
     });
   }
 
-  private async logAEDoorCall(pc: number, offset: number): Promise<void> {
+  private logAEDoorCall(pc: number, offset: number): void {
     const functionName = this.getAEDoorFunctionName(offset);
 debugLog(
       `[DoorLifecycleManager] *** AEDoor.library CALL #${this.executionState.aedoorCallCount} ***`

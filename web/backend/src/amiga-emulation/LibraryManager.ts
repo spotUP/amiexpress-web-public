@@ -700,14 +700,20 @@ debugLog("[LibraryManager] intuition.library opened, installing vectors...");
       if (name.toLowerCase() === "bsdsocket.library") {
 debugLog("[LibraryManager] bsdsocket.library opened, installing vectors...");
         this.libraryTraps!.installBsdSocketVectors();
+        // CRITICAL: Sync new trap addresses to MOIRA for batch execution
+        this.libraryTraps!.syncTrapAddressesToMoira();
       }
       if (name.toLowerCase() === "amisslmaster.library") {
 debugLog("[LibraryManager] amisslmaster.library opened, installing vectors...");
         this.libraryTraps!.installAmiSSLMasterVectors();
+        // CRITICAL: Sync new trap addresses to MOIRA for batch execution
+        this.libraryTraps!.syncTrapAddressesToMoira();
       }
       if (name.toLowerCase() === "amissl.library") {
 debugLog("[LibraryManager] amissl.library opened, installing vectors...");
         this.libraryTraps!.installAmiSSLVectors();
+        // CRITICAL: Sync new trap addresses to MOIRA for batch execution
+        this.libraryTraps!.syncTrapAddressesToMoira();
       }
       if (name.toLowerCase() === "graphics.library") {
 debugLog(

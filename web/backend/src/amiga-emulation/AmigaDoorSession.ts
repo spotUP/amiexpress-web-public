@@ -699,18 +699,27 @@ debugLog(
             "[AmigaDoorSession] bsdsocket.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installBsdSocketVectors();
+          // CRITICAL: Sync new trap addresses to MOIRA for batch execution
+          this.sharedState.libraryTraps.syncTrapAddressesToMoira();
+debugLog("[AmigaDoorSession] bsdsocket trap addresses synced to MOIRA");
         }
         if (name.toLowerCase() === "amisslmaster.library") {
 debugLog(
             "[AmigaDoorSession] amisslmaster.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installAmiSSLMasterVectors();
+          // CRITICAL: Sync new trap addresses to MOIRA for batch execution
+          this.sharedState.libraryTraps.syncTrapAddressesToMoira();
+debugLog("[AmigaDoorSession] amisslmaster trap addresses synced to MOIRA");
         }
         if (name.toLowerCase() === "amissl.library") {
 debugLog(
             "[AmigaDoorSession] amissl.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installAmiSSLVectors();
+          // CRITICAL: Sync new trap addresses to MOIRA for batch execution
+          this.sharedState.libraryTraps.syncTrapAddressesToMoira();
+debugLog("[AmigaDoorSession] amissl trap addresses synced to MOIRA");
         }
       }
     );
