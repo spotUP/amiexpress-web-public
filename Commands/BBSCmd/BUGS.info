@@ -1,0 +1,5 @@
+CMDNAME=BUGS
+LOCATION=Doors/bug-tracker
+TYPE=TS
+SECLEVEL=0
+DESCRIPTION=Comprehensive bug tracking and issue management system

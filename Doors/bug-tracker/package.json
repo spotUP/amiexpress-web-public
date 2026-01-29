@@ -1,0 +1,23 @@
+{
+  "name": "bug-tracker",
+  "version": "1.0.0",
+  "description": "Comprehensive bug tracking system for AmiExpress BBS",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:watch": "node esbuild.config.mjs --watch"
+  },
+  "doorInfo": {
+    "name": "Bug Tracker",
+    "author": "AmiExpress",
+    "version": "1.0.0",
+    "description": "Comprehensive bug tracking and issue management system"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}

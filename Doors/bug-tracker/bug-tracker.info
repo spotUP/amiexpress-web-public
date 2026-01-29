@@ -1,0 +1,12 @@
+MENUNAME=Bug Tracker
+CMDNAME=bugs
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Comprehensive bug tracking and issue management system
+CATEGORY=Utilities
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1
+PRELOADER=YES
