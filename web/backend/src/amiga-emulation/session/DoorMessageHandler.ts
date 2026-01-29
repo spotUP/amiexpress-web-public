@@ -341,6 +341,18 @@ debugLog("[DoorMessageHandler] Sending INIT/STAT to door's task port (pr_MsgPort
     const bbsName = (this.config.bbsSession as any)?.bbsName || 'AmiExpress-Web';
     const sysopName = (this.config.bbsSession as any)?.sysopName || 'Sysop';
 
+    // Get numeric user status fields for doors like ZooStats that read from BBSInfo structure
+    const user = this.config.bbsSession?.user;
+    const secLevel = user?.secLevel ?? 10;
+    // user.id can be string or number, ensure we get a number
+    const userSlot = typeof user?.id === 'string' ? parseInt(user.id, 10) || this.resolveNodeId() : (user?.id ?? this.resolveNodeId());
+    const currentConf = (this.config.bbsSession as any)?.currentConf ?? 1;
+    // timeRemaining can be at bbsSession level (already in minutes) or user.timeLimit (in seconds)
+    const sessionTimeRemaining = (this.config.bbsSession as any)?.timeRemaining;
+    const timeRemaining = sessionTimeRemaining ?? Math.floor((user?.timeLimit ?? 3600) / 60);
+    const uploads = user?.uploads ?? 0;
+    const downloads = user?.downloads ?? 0;
+
     populateDoorInfoStructs(this.emulator, this.doorInfoAddr, this.nodeStatusAddr, {
       aePort: this.doorPortAddress || this.execLibrary.getDoorPortAddress() || 0,
       replyPort: this.doorReplyPortAddr,
@@ -350,6 +362,13 @@ debugLog("[DoorMessageHandler] Sending INIT/STAT to door's task port (pr_MsgPort
       cliName,
       bbsName,
       sysopName,
+      // Numeric fields for doors like ZooStats
+      secLevel,
+      userSlot,
+      conference: currentConf,
+      timeRemaining,
+      uploads,
+      downloads,
     });
     if (!this.doorInfoAddr || !this.nodeStatusAddr) {
 console.warn(

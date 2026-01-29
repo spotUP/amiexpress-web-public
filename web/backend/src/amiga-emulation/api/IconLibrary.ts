@@ -67,6 +67,8 @@ console.log(`[icon.library] *** GetDiskObject CALLED *** namePtr=0x${namePtr.toS
 
     // Translate AmigaOS device assignments to Unix paths
     const upperName = name.toUpperCase();
+    let hasDevicePrefix = false;
+
     if (upperName.startsWith('PROGDIR:')) {
       // PROGDIR: - door's own directory (e.g., PROGDIR:AquaScan -> /path/to/Doors/AquaScan/AquaScan)
       const relativePath = name.substring(8); // Skip "PROGDIR:"
@@ -77,21 +79,32 @@ console.log(`[icon.library]   Translated PROGDIR: -> ${name}`);
 console.log(`[icon.library]   WARNING: PROGDIR: used but doorDirectory not set`);
         name = relativePath;
       }
+      hasDevicePrefix = true;
     } else if (upperName.startsWith('DOORS:')) {
       name = 'Doors/' + name.substring(6);
 console.log(`[icon.library]   Translated DOORS: -> ${name}`);
+      hasDevicePrefix = true;
     } else if (upperName.startsWith('BBS:')) {
       name = name.substring(4);
 console.log(`[icon.library]   Translated BBS: -> ${name}`);
+      hasDevicePrefix = true;
     } else if (upperName.startsWith('SYS:')) {
       name = 'system/' + name.substring(4);
 console.log(`[icon.library]   Translated SYS: -> ${name}`);
+      hasDevicePrefix = true;
     }
 
     // Convert to absolute path
     let infoPath = name;
     if (!path.isAbsolute(name)) {
-      infoPath = path.join(this.bbsRoot, name);
+      // For bare filenames without device prefix, use door directory (current dir) if available
+      // This matches AmigaOS behavior where bare filenames are relative to current directory
+      if (!hasDevicePrefix && this.doorDirectory) {
+        infoPath = path.join(this.doorDirectory, name);
+console.log(`[icon.library]   Using door directory for bare filename: ${infoPath}`);
+      } else {
+        infoPath = path.join(this.bbsRoot, name);
+      }
     }
 
     // Add .info extension if not present
@@ -748,29 +761,145 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
     try {
       if (!fs.existsSync(infoPath)) return null;
 
-      // Use native buffer reading instead of 'strings' command
       const buffer = fs.readFileSync(infoPath);
       const tooltypes: string[] = [];
-      let currentString = '';
 
-      for (let i = 0; i < buffer.length; i++) {
-        const charCode = buffer[i];
-        if (charCode >= 32 && charCode <= 126) {
-          currentString += String.fromCharCode(charCode);
-        } else {
-          if (currentString.length >= 2) {
-            const trimmed = currentString.trim();
-            // Validate: Amiga tooltypes usually look like KEY=VALUE or KEY
-            if (trimmed && !trimmed.startsWith('\x1b') && (trimmed.includes('=') || /^[A-Z0-9_]{2,64}$/.test(trimmed.toUpperCase()))) {
-              tooltypes.push(trimmed);
+
+      // Amiga .info files store tooltypes as length-prefixed strings near the end.
+      // We look for patterns that match valid tooltypes (KEY=VALUE or single keywords).
+      // The format typically has 4-byte length prefix (big-endian) followed by the string.
+
+      // Strategy: Scan backwards from end of file to find tooltype section
+      // Look for consecutive length-prefixed strings that look like tooltypes
+
+      // First approach: Look for known tooltype patterns to find the section
+      let tooltypeStart = -1;
+
+      // Search for first occurrence of a tooltype pattern (KEY=VALUE where KEY is uppercase)
+      for (let i = 0; i < buffer.length - 10; i++) {
+        // Check if this could be a length byte followed by valid tooltype chars
+        const possibleLen = buffer.readUInt32BE(i);
+        if (possibleLen > 0 && possibleLen < 512 && i + 4 + possibleLen <= buffer.length) {
+          // Check if this looks like a valid tooltype
+          const strStart = i + 4;
+          let isValid = true;
+          let hasEquals = false;
+
+          // First char should be uppercase letter or underscore
+          const firstChar = buffer[strStart];
+          if (!((firstChar >= 65 && firstChar <= 90) || firstChar === 95)) { // A-Z or _
+            continue;
+          }
+
+          // Scan the string for validity
+          for (let j = 0; j < possibleLen; j++) {
+            const c = buffer[strStart + j];
+            if (c === 61) hasEquals = true; // '='
+            // Allow printable ASCII
+            if (c < 32 || c > 126) {
+              // Allow ANSI escape codes (0x1b) in values
+              if (c === 0x1b) continue;
+              isValid = false;
+              break;
             }
           }
-          currentString = '';
+
+          // Valid tooltype should have uppercase key and either be a flag or KEY=VALUE
+          // Require at least 3 chars for flags without '=', and prefer ones with '='
+          if (isValid && (hasEquals || (possibleLen >= 3 && possibleLen <= 32))) {
+            // Additional validation: for flags without '=', the whole string should be UPPERCASE
+            if (!hasEquals) {
+              let allUpperOrDigit = true;
+              for (let j = 0; j < possibleLen; j++) {
+                const c = buffer[strStart + j];
+                if (!((c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95)) { // A-Z, 0-9, _
+                  allUpperOrDigit = false;
+                  break;
+                }
+              }
+              if (!allUpperOrDigit) continue;
+            }
+            tooltypeStart = i;
+            break;
+          }
         }
       }
-      if (currentString.length >= 2) tooltypes.push(currentString);
 
-      return tooltypes;
+      if (tooltypeStart < 0) {
+        // Fallback: Just extract any valid-looking strings with '=' in them
+        let currentString = '';
+        for (let i = 0; i < buffer.length; i++) {
+          const charCode = buffer[i];
+          if (charCode >= 32 && charCode <= 126) {
+            currentString += String.fromCharCode(charCode);
+          } else {
+            if (currentString.length >= 4 && currentString.includes('=')) {
+              // Remove any leading garbage (length bytes that got included)
+              const equalsPos = currentString.indexOf('=');
+              if (equalsPos > 0) {
+                // Find the start of the KEY (first uppercase letter)
+                let keyStart = 0;
+                for (let j = 0; j < equalsPos; j++) {
+                  const c = currentString.charCodeAt(j);
+                  if ((c >= 65 && c <= 90) || c === 95) { // A-Z or _
+                    keyStart = j;
+                    break;
+                  }
+                }
+                if (keyStart > 0) {
+                  currentString = currentString.substring(keyStart);
+                }
+                tooltypes.push(currentString);
+              }
+            } else if (currentString.length >= 2 && /^[A-Z0-9_]+$/.test(currentString)) {
+              // Standalone flag (no =)
+              tooltypes.push(currentString);
+            }
+            currentString = '';
+          }
+        }
+        return tooltypes.length > 0 ? tooltypes : null;
+      }
+
+      // Parse length-prefixed strings starting from tooltypeStart
+      let offset = tooltypeStart;
+      while (offset + 4 < buffer.length) {
+        const len = buffer.readUInt32BE(offset);
+
+        // Sanity check: length should be reasonable
+        if (len === 0 || len > 512 || offset + 4 + len > buffer.length) {
+          break;
+        }
+
+        // Read the string
+        const str = buffer.toString('ascii', offset + 4, offset + 4 + len);
+
+        // Validate it looks like a tooltype
+        if (str.length >= 2) {
+          // Find start of actual key (skip any binary prefix)
+          let keyStart = 0;
+          for (let j = 0; j < str.length; j++) {
+            const c = str.charCodeAt(j);
+            if ((c >= 65 && c <= 90) || c === 95) { // A-Z or _
+              keyStart = j;
+              break;
+            }
+          }
+          const cleanStr = keyStart > 0 ? str.substring(keyStart) : str;
+          if (cleanStr.includes('=') || /^[A-Z0-9_]+$/.test(cleanStr)) {
+            tooltypes.push(cleanStr);
+          } else {
+            // Might be end of tooltypes section
+            break;
+          }
+        }
+
+        // Move to next entry (length + string + padding to word boundary)
+        offset += 4 + len;
+        if (offset % 2 !== 0) offset++; // Word align
+      }
+
+      return tooltypes.length > 0 ? tooltypes : null;
     } catch (e) {
       return null;
     }

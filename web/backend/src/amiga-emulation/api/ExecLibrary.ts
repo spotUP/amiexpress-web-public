@@ -4535,8 +4535,10 @@ debugLog(
         16
       )}, this.bbsTask.address=0x${this.bbsTask.address.toString(16)}`
     );
-    // Allocate memory for MsgPort structure (34 bytes)
-    const portAddr = this.allocMem(34, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    // CRITICAL FIX: Allocate 512 bytes (0x200) for MsgPort extended structure
+    // Amixlib doors (like GetAnswer) access offsets up to 0x147 (327 bytes) from port base.
+    // Zero-filling prevents garbage characters appearing in door output.
+    const portAddr = this.allocMem(512, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
     if (portAddr === 0) {
 console.warn("[ExecLibrary]   CreateMsgPort failed: AllocMem returned 0");
       return 0;
@@ -4646,8 +4648,10 @@ debugLog(`[ExecLibrary]   priority: ${priority}`);
 debugLog(
       `[ExecLibrary]   Current task: 0x${this.currentTask.address.toString(16)}`
     );
-    // Allocate memory for MsgPort structure (34 bytes)
-    const portAddr = this.allocMem(34, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    // CRITICAL FIX: Allocate 512 bytes (0x200) for MsgPort extended structure
+    // Amixlib doors (like GetAnswer) access offsets up to 0x147 (327 bytes) from port base.
+    // Zero-filling prevents garbage characters appearing in door output.
+    const portAddr = this.allocMem(512, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
     if (portAddr === 0) {
 console.warn("[ExecLibrary]   CreatePort failed: AllocMem returned 0");
       return 0;
@@ -4946,8 +4950,12 @@ debugLog(
    * @returns Port address
    */
   createLightweightPort(name: string): number {
-    // Allocate port structure (34 bytes for MsgPort)
-    const portAddr = this.allocMem(34, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    // CRITICAL FIX: Allocate 512 bytes (0x200) for MsgPort extended structure
+    // Amixlib doors (like GetAnswer) access offsets up to 0x147 (327 bytes) from port base.
+    // Standard MsgPort is only 34 bytes, but doors expect extended data area after it.
+    // Example: GetAnswer reads from AEDoorPort + 0x147 for user data.
+    // Zero-filling prevents garbage characters appearing in door output.
+    const portAddr = this.allocMem(512, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
     if (!portAddr) {
 console.error(
         `[ExecLibrary] Failed to allocate memory for lightweight port "${name}"`
@@ -5020,6 +5028,10 @@ debugLog(
       )}, msg=0x${msgAddr.toString(16)})`
     );
 
+    // DEBUG: Trace message content when sending to AEDoorPort to find spurious JH_LI source
+    // This helps debug GetAnswer "D" prefix issue
+    const pc = this.emulator.getRegister(16); // Program counter
+    const portName = this.messagePorts.get(portAddr)?.name || '';
     const originalPortAddr = portAddr;
     let port: MessagePort | undefined = this.messagePorts.get(portAddr);
 

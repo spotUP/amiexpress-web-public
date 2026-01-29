@@ -94,10 +94,19 @@ export class XIMSystemCommandsHandler {
 
   /**
    * Handle door registration (JH_REGISTER)
-   * From E sources (express.e:3379)
+   * From E sources (express.e:3379-3381)
+   *
+   * express.e JH_REGISTER does NOT output msg.string - it only:
+   *   msg.command := IF loggedOnUser<>NIL THEN userLineLen ELSE 29
+   *   nodesPtr[] := nodesPtr[]+1
+   * Doors that need output use JH_WRITE/JH_SM AFTER registration.
    */
   handleRegister(msg: XIMMessage): void {
     debugLog(`[XIMSystem] Door registering with BBS, data=${msg.data}`);
+
+    // NOTE: express.e does NOT output msg.string for JH_REGISTER (see lines 3379-3381)
+    // Doors display their banners via JH_WRITE/JH_SM after registration, not via JH_REGISTER.
+    // Previous "compatibility" output was incorrect and caused doubled output.
 
     // express.e: for JH_REGISTER, return userLineLen in msg->Command (not Data).
     const rawLineLen =

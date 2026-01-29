@@ -18,6 +18,13 @@ export function populateDoorInfoStructs(
     cliName?: string;
     bbsName?: string;      // From bbsConfig.info (disk-based)
     sysopName?: string;    // From bbsConfig.info (disk-based)
+    // Numeric fields for doors like ZooStats that read user status
+    secLevel?: number;     // Security level (0-255)
+    userSlot?: number;     // User slot number
+    conference?: number;   // Current conference number
+    timeRemaining?: number; // Time remaining in minutes
+    uploads?: number;      // Upload count
+    downloads?: number;    // Download count
   }
 ): void {
   if (!doorInfoAddr || doorInfoAddr < 0x100) return;
@@ -81,6 +88,38 @@ console.log(`[door-info.util] Writing: user="${user}" loc="${loc}" bbsName="${bb
     // Update DoorInfo pointers to match library expectations
     emulator.writeMemory32(doorInfoAddr + 0x1c, bbsInfoAddr + 0xdc);  // Point to location string
     emulator.writeMemory32(doorInfoAddr + 0x20, bbsInfoAddr + 0x14);  // Point to user name string
+
+    // Write numeric fields for doors like ZooStats that read user status
+    // These match the node user file structure layout (after strings)
+    const secLevel = opts.secLevel ?? 10;
+    const userSlot = opts.userSlot ?? opts.nodeId ?? 1;
+    const conference = opts.conference ?? 1;
+    const timeRemaining = opts.timeRemaining ?? 60;
+    const uploads = opts.uploads ?? 0;
+    const downloads = opts.downloads ?? 0;
+
+    // Write to BBSInfo at offsets matching node user file structure:
+    // Offset 0x00-0x02: userSlot (INT, 2 bytes, big-endian for 68K)
+    // Offset 0x02-0x04: secLevel (INT, 2 bytes)
+    // Offset 0x04-0x06: conference (INT, 2 bytes)
+    // Offset 0x06-0x08: timeRemaining (INT, 2 bytes)
+    emulator.writeMemory16(bbsInfoAddr + 0x00, userSlot);
+    emulator.writeMemory16(bbsInfoAddr + 0x02, secLevel);
+    emulator.writeMemory16(bbsInfoAddr + 0x04, conference);
+    emulator.writeMemory16(bbsInfoAddr + 0x06, timeRemaining);
+    emulator.writeMemory16(bbsInfoAddr + 0x08, uploads);
+    emulator.writeMemory16(bbsInfoAddr + 0x0a, downloads);
+
+    // Also write to nodeStatusAddr for doors that read from there
+    if (nodeStatusAddr && nodeStatusAddr >= 0x100) {
+      emulator.writeMemory16(nodeStatusAddr + 0x00, userSlot);
+      emulator.writeMemory16(nodeStatusAddr + 0x02, secLevel);
+      emulator.writeMemory16(nodeStatusAddr + 0x04, conference);
+      emulator.writeMemory16(nodeStatusAddr + 0x06, timeRemaining);
+    }
+
+console.log(`[door-info.util] Numeric fields: slot=${userSlot} secLevel=${secLevel} conf=${conference} time=${timeRemaining}`);
+console.log(`[door-info.util] Written to BBSInfo+0x00: slot, +0x02: secLevel, +0x04: conf, +0x06: time`);
 
     // VERIFY what was written
 console.log(`[door-info.util] ===== Verification (Reading Back) =====`);

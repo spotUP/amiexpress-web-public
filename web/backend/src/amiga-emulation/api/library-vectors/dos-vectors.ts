@@ -500,4 +500,37 @@ export const DOS_VECTORS: LibraryVector[] = [
       return emu.getRegister(0);
     },
   },
+  // Pattern matching functions - V36/V37
+  {
+    offset: -840,
+    name: "ParsePattern",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ParsePattern();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -846,
+    name: "MatchPattern",
+    handler: (emu, lib: DosLibrary) => {
+      lib.MatchPattern();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -966,
+    name: "ParsePatternNoCase",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ParsePatternNoCase();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -972,
+    name: "MatchPatternNoCase",
+    handler: (emu, lib: DosLibrary) => {
+      lib.MatchPatternNoCase();
+      return emu.getRegister(0);
+    },
+  },
 ];

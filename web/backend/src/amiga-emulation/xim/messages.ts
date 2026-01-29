@@ -107,6 +107,14 @@ export class XIMMessageParser {
       : undefined;
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
 
+    // DEBUG: Dump raw bytes at string offset to trace "D" issue
+    const strBytes: number[] = [];
+    for (let i = 0; i < 16; i++) {
+      strBytes.push(this.emulator.readMemory(stringAddr + i) & 0xff);
+    }
+    const strHex = strBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+    console.log(`[XIMMessageParser] RAW STRING @0x${stringAddr.toString(16)}: ${strHex}`);
+
     // Read the string (200 bytes starting at offset 24)
     const messageString = this.emulator.readString(
       stringAddr,
@@ -642,11 +650,11 @@ console.log(`[XIMMessageParser] writeCommand: msgAddr=0x${msgAddr.toString(16)} 
   }
 
   private getMessageLayout(messageLength: number): 'short' | 'long' {
-    // jhMessage is size 0x100 with LONG fields (axcommon.e/AE docs).
-    // Only treat smaller, non-standard sizes as 16-bit "short" layouts.
-    if (messageLength && messageLength < 0x100) {
-      return 'short';
-    }
+    // All XIM doors use LONG layout (command at 0xe0) regardless of mn_Length.
+    // The mn_Length varies based on how much data the door uses, but the
+    // jhMessage structure format is always LONG per axcommon.e/AE docs.
+    // Evidence: GetAnswer (Amixlib) uses msgLen=236 but cmd at 0xe0.
+    // The "short" layout (cmd at 0xde) was a wrong assumption - no doors use it.
     return 'long';
   }
 

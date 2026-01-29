@@ -322,6 +322,28 @@ console.log(`[AEDoorLibrary] Wrote node ID ${nodeId} to BBSInfo+0xf`);
     this.writeCString(bbsInfoAddr + 0x150, dateStr, 19);   // Date at +0x150
     this.writeCString(bbsInfoAddr + 0x170, timeStr, 19);   // Time at +0x170
 
+    // Write numeric fields for doors like ZooStats that read user status from BBSInfo
+    // user.id can be string or number
+    const userIdRaw = this.sessionData?.user?.id;
+    const userSlot = typeof userIdRaw === 'string' ? parseInt(userIdRaw, 10) || nodeId : (userIdRaw ?? nodeId);
+    const secLevel = this.sessionData?.user?.secLevel ?? 10;
+    const conference = (this.sessionData as any)?.currentConf ?? 1;
+    // timeRemaining can be at session level (minutes) or user.timeLimit (seconds)
+    const sessionTimeRemaining = (this.sessionData as any)?.timeRemaining;
+    const timeRemaining = sessionTimeRemaining ?? Math.floor((this.sessionData?.user?.timeLimit ?? 3600) / 60);
+    const uploads = this.sessionData?.user?.uploads ?? 0;
+    const downloads = this.sessionData?.user?.downloads ?? 0;
+
+    // Write numeric values to BBSInfo structure (16-bit integers, big-endian for 68K)
+    this.emulator.writeMemory16(bbsInfoAddr + 0x00, userSlot);      // User slot at +0x00
+    this.emulator.writeMemory16(bbsInfoAddr + 0x02, secLevel);      // Security level at +0x02
+    this.emulator.writeMemory16(bbsInfoAddr + 0x04, conference);    // Conference at +0x04
+    this.emulator.writeMemory16(bbsInfoAddr + 0x06, timeRemaining); // Time remaining at +0x06
+    this.emulator.writeMemory16(bbsInfoAddr + 0x08, uploads);       // Uploads at +0x08
+    this.emulator.writeMemory16(bbsInfoAddr + 0x0a, downloads);     // Downloads at +0x0a
+
+console.log(`[AEDoorLibrary] Numeric fields: slot=${userSlot} secLevel=${secLevel} conf=${conference} time=${timeRemaining}`);
+
     // CRITICAL: Do NOT overwrite DoorInfo+0x1c (dif_Data) and DoorInfo+0x20 (dif_String)!
     // These MUST point to the message buffer (JHM_Data and JHM_String), not to BBSInfo.
     // They are correctly set in createComm() and used by getData/getString/prompt/etc.

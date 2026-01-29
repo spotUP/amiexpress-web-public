@@ -660,6 +660,21 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
       return;
     }
 
+    // CMD 40: Custom prompt+input command used by doors like GetAnswer
+    // The door sends a prompt string and expects to wait for user input
+    // Handle like JH_PM (prompt message) - display string and wait for line input
+    if (msg.command === 40) {
+      debugLog(`[XIMProtocol] CMD 40 (custom prompt): "${msg.string}" - treating as prompt+input`);
+      // Wait for line input via the IO handler
+      // handleLineInput will display the string as the prompt
+      // CRITICAL: Set data to positive value to force handleLineInput to wait for input
+      // (data=0 causes auto-reply which breaks input prompts)
+      // Create a copy of msg with data set to 80 (typical line length)
+      const inputMsg = { ...msg, data: msg.data > 0 ? msg.data : 80 };
+      await this.ioHandler.handleLineInput(inputMsg);
+      return;
+    }
+
     // Commands 21-99: Undefined gap between JH_* (0-20) and DT_* (100+) ranges
     // Some doors echo back the JH_REGISTER reply command value (which contains userLineLen).
     // Common values: 23 (user line length), 29 (default when no user logged in)

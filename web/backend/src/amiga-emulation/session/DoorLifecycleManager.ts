@@ -2744,6 +2744,13 @@ debugLog(
     //
     // express.e shows BBS waits for door to send JH_REGISTER first, but doors like RTW
     // check pr_MsgPort expecting Workbench-style startup (since pr_CLI == 0).
+
+    // CRITICAL: Also populate DoorInfo/BBSInfo structure for XIM doors that read user data
+    // from memory (like ZooStats) rather than using XIM commands
+    if (this.messageHandler) {
+      this.messageHandler.sendInitAndStatusMessages();
+    }
+
     if (this.libraryManager?.execLibrary && this.config.doorType === "XIM") {
       try {
         const execLib = this.libraryManager.execLibrary;

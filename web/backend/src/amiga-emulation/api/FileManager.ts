@@ -418,6 +418,13 @@ console.error(`[FileManager] Read from invalid BPTR: ${bptr}`);
 
     const data = fh.read(length);
 
+    // DEBUG: Log read operations for answers files
+    if (fh.amiPath.toLowerCase().includes('answers') && data.length > 0) {
+      const preview = data.slice(0, Math.min(data.length, 150)).toString('utf8').replace(/[\r\n]/g, '\\n');
+console.log(`[FileManager] ANSWERS READ BPTR=${bptr} file="${fh.amiPath}" len=${data.length}`);
+console.log(`[FileManager] ANSWERS DATA: "${preview}"`);
+    }
+
     // DEBUG: Log read operations for dRE!WAll debugging
     if (fh.amiPath.includes('dRE!WAll') && data.length > 0 && data.length <= 200) {
       const preview = data.slice(0, Math.min(data.length, 100));
