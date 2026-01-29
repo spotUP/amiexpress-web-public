@@ -66,6 +66,8 @@ export { Panel } from './widgets/panel';
 export type { PanelOptions } from './widgets/panel';
 export { DockablePanel } from './widgets/dockable-panel';
 export type { DockablePanelOptions, DockPosition, PanelState } from './widgets/dockable-panel';
+export { KanbanBoard } from './widgets/kanban-board';
+export type { KanbanBoardOptions, KanbanColumn, KanbanMoveEvent } from './widgets/kanban-board';
 export { DropdownMenu, dropdownMenu } from './widgets/dropdown-menu';
 export type { DropdownMenuOptions, DropdownMenuItem } from './widgets/dropdown-menu';
 export { MenuBar } from './widgets/menu-bar';

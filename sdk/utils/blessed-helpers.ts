@@ -88,8 +88,25 @@ function checkForUnsupportedAnsi(content: string, context: string): void {
 }
 
 /**
+ * Parse a percentage dimension string like "50%", "100%", or "100%-5"
+ * Returns { percent: number, offset: number } or null if not a percentage string
+ */
+function parsePercentageDimension(value: string): { percent: number; offset: number } | null {
+  if (typeof value !== 'string' || !value.includes('%')) return null;
+
+  // Match patterns like "50%", "100%", "100%-5", "50%+10"
+  const match = value.match(/^(\d+)%([+-]\d+)?$/);
+  if (!match) return null;
+
+  const percent = parseInt(match[1], 10) / 100;
+  const offset = match[2] ? parseInt(match[2], 10) : 0;
+  return { percent, offset };
+}
+
+/**
  * Setup auto-resize handler for elements with percentage widths/heights
  * Ensures percentage-based dimensions update correctly when screen resizes
+ * Handles formats: "50%", "100%", "100%-5", "50%+10"
  */
 function setupAutoResize(element: any, options?: any): void {
   if (!options) return;
@@ -110,20 +127,18 @@ function setupAutoResize(element: any, options?: any): void {
     // Update dimensions on screen resize
     element.screen.on('resize', () => {
       if (hasPercentageWidth && element.parent) {
-        // Recalculate percentage width
         const parentWidth = (element.parent as any).width || element.screen.width;
-        if (typeof originalWidth === 'string' && originalWidth.endsWith('%')) {
-          const percent = parseInt(originalWidth, 10) / 100;
-          element.position.width = Math.floor(parentWidth * percent);
+        const parsed = parsePercentageDimension(originalWidth);
+        if (parsed) {
+          element.position.width = Math.floor(parentWidth * parsed.percent) + parsed.offset;
         }
       }
 
       if (hasPercentageHeight && element.parent) {
-        // Recalculate percentage height
         const parentHeight = (element.parent as any).height || element.screen.height;
-        if (typeof originalHeight === 'string' && originalHeight.endsWith('%')) {
-          const percent = parseInt(originalHeight, 10) / 100;
-          element.position.height = Math.floor(parentHeight * percent);
+        const parsed = parsePercentageDimension(originalHeight);
+        if (parsed) {
+          element.position.height = Math.floor(parentHeight * parsed.percent) + parsed.offset;
         }
       }
 
@@ -136,10 +151,45 @@ function setupAutoResize(element: any, options?: any): void {
 }
 
 /**
+ * Fix layout constraints that neo-blessed doesn't handle correctly.
+ *
+ * Neo-blessed widgets don't properly respect 'bottom' and 'right' constraints
+ * when calculating dimensions. This function converts:
+ * - bottom: N (without height) -> height: '100%-N' (accounting for top)
+ * - right: N (without width) -> width: '100%-N' (accounting for left)
+ */
+function fixLayoutConstraints<T extends ElementOptions>(options: T): T {
+  const processed = { ...options } as any;
+
+  // FIX: Convert 'bottom' to explicit height calculation
+  // When bottom is specified without height, calculate height as '100%-N'
+  if (processed.bottom !== undefined && processed.height === undefined) {
+    const top = typeof processed.top === 'number' ? processed.top : 0;
+    const bottom = typeof processed.bottom === 'number' ? processed.bottom : 0;
+    const offset = top + bottom;
+    processed.height = offset > 0 ? `100%-${offset}` : '100%';
+    delete processed.bottom;
+  }
+
+  // FIX: Convert 'right' to explicit width calculation
+  // When right is specified without width, calculate width as '100%-N'
+  if (processed.right !== undefined && processed.width === undefined) {
+    const left = typeof processed.left === 'number' ? processed.left : 0;
+    const right = typeof processed.right === 'number' ? processed.right : 0;
+    const offset = left + right;
+    processed.width = offset > 0 ? `100%-${offset}` : '100%';
+    delete processed.right;
+  }
+
+  return processed as T;
+}
+
+/**
  * Process options to ensure tags work correctly
  * - Forces tags: true (cannot be overridden)
  * - Warns if tags: false was attempted
  * - Converts ANSI codes in content
+ * - Fixes layout constraints (bottom/right)
  */
 function processElementOptions<T extends ElementOptions>(
   options: T | undefined,
@@ -161,7 +211,8 @@ function processElementOptions<T extends ElementOptions>(
     processed.content = ansiToTags(processed.content);
   }
 
-  return processed;
+  // Fix layout constraints (bottom/right -> height/width)
+  return fixLayoutConstraints(processed);
 }
 
 /**
@@ -296,12 +347,30 @@ export function createList(options?: ListOptions): List {
     );
   }
 
+  // Ensure style object exists with hover defaults
+  const style = processedOptions.style || {};
+  const itemStyle = (style as any).item || {};
+
+  // Set default hover style if not provided (subtle highlight)
+  if (!itemStyle.hover) {
+    itemStyle.hover = {
+      bg: 'blue',
+      fg: 'white',
+    };
+  }
+
+  // Merge styles back
+  (style as any).item = itemStyle;
+  processedOptions.style = style;
+
   return blessed.list({
     ...processedOptions,
     tags: true,        // FORCED AFTER spread - cannot be overridden
     focusable: true,   // Enable keyboard navigation (arrow keys, vi keys)
     keys: true,        // Enable keyboard interaction
     mouse: true,       // Enable mouse interaction
+    scrollable: true,  // Enable scrolling (including scrollwheel)
+    alwaysScroll: true, // Always show scrollbar and enable scrollwheel
   });
 }
 
@@ -456,6 +525,25 @@ export function createButton(options?: ButtonOptions): Button {
 
   return button;
 }
+
+/**
+ * Create a KanbanBoard with drag-and-drop support
+ *
+ * @example
+ * const board = createKanbanBoard({
+ *   parent: screen,
+ *   columns: [
+ *     { id: 'todo', label: 'TODO', items: ['Task 1', 'Task 2'] },
+ *     { id: 'doing', label: 'IN PROGRESS', items: ['Task 3'] },
+ *     { id: 'done', label: 'DONE', items: [] }
+ *   ]
+ * });
+ *
+ * board.on('move', (data) => {
+ *   console.log(`Moved item from ${data.fromColumn} to ${data.toColumn}`);
+ * });
+ */
+export { KanbanBoard, type KanbanBoardOptions, type KanbanColumn, type KanbanMoveEvent } from '../engines/ui/blessed/widgets/kanban-board';
 
 /**
  * Common Neo-Blessed color tags for easy reference
@@ -918,6 +1006,15 @@ export function createScreen(
     screen.on('cursor-style', (style: string) => {
       bbs.setCursorStyle(style);
     });
+  }
+
+  // Enable slow connection mode for modem emulation
+  // This uses differential rendering (~50-200 chars/frame) instead of full redraws (~1920 chars)
+  // Critical for usable performance when output is throttled character-by-character
+  if (bbs && bbs.modemEmulationEnabled) {
+    const bps = bbs.modemBps || 0;
+    console.log(`[createScreen] Modem emulation detected (${bps} bps) - enabling slow connection mode`);
+    screen.enableSlowConnectionMode();
   }
 
   return screen;

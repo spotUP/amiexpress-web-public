@@ -94,6 +94,11 @@ export class Screen extends Element {
   private _dirtyElements: Set<Element> = new Set();
   private _fullRedrawNeeded: boolean = true;
 
+  // Slow connection mode - uses TRUE differential rendering (only changed cells are output)
+  // When enabled, does NOT invalidate lastBuffer on each render, dramatically reducing output
+  // Perfect for modem emulation where every byte counts
+  private _slowConnectionMode: boolean = false;
+
   constructor(options: ScreenOptions & { input?: any; output?: (data: string) => void; responsive?: boolean } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
@@ -667,6 +672,38 @@ export class Screen extends Element {
   }
 
   /**
+   * Enable slow connection mode for modem emulation
+   *
+   * When enabled, uses TRUE differential rendering - only cells that have
+   * actually changed are output to the terminal. This dramatically reduces
+   * output volume, making blessed usable with modem speed emulation.
+   *
+   * Normal mode: ~1920 characters per render (full screen)
+   * Slow mode: ~50-200 characters per render (only changes)
+   *
+   * Call this when modem emulation is active (bps > 0).
+   */
+  enableSlowConnectionMode(): void {
+    this._slowConnectionMode = true;
+    console.log('[Screen] Slow connection mode ENABLED - using differential rendering');
+  }
+
+  /**
+   * Disable slow connection mode (use full redraws)
+   */
+  disableSlowConnectionMode(): void {
+    this._slowConnectionMode = false;
+    console.log('[Screen] Slow connection mode DISABLED - using full redraws');
+  }
+
+  /**
+   * Check if slow connection mode is enabled
+   */
+  isSlowConnectionModeEnabled(): boolean {
+    return this._slowConnectionMode;
+  }
+
+  /**
    * Create a blank line
    */
   blankLine(ch: string = ' ', attr: number = 0x000): [number, string][] {
@@ -895,19 +932,16 @@ export class Screen extends Element {
     const bufHeight = this.buffer.length;
     const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
 
-    // ALWAYS clear the full buffer to prevent rendering corruption
-    // The previous optimization (only clearing dirty regions) caused issues because:
-    // 1. Dirty region was captured before elements rendered
-    // 2. Elements expanded the dirty region during render via _markDirty()
-    // 3. Cells in the expanded region weren't cleared, causing buffer == lastBuffer
-    // 4. _diff() skipped those cells, leaving stale content on terminal
-    // The cost of clearing 80x24 = 1920 cells is negligible vs. the rendering/output cost
+    // Clear the buffer to prepare for rendering
+    // In slow connection mode: Use TRUE differential rendering (don't touch lastBuffer)
+    // In normal mode: Invalidate lastBuffer to force full redraw (prevents corruption)
     for (let y = 0; y < bufHeight; y++) {
       for (let x = 0; x < bufWidth; x++) {
         this.buffer[y][x] = [dattr, ' '];
-        // AGGRESSIVE FIX: Also invalidate lastBuffer to force ALL cells to be output
-        // This disables differential rendering optimization but ensures correct display
-        if (this.lastBuffer[y] && this.lastBuffer[y][x]) {
+        // Only invalidate lastBuffer in normal mode (full redraws)
+        // In slow connection mode, keep lastBuffer intact for differential rendering
+        // This reduces output from ~1920 chars to ~50-200 chars per render
+        if (!this._slowConnectionMode && this.lastBuffer[y] && this.lastBuffer[y][x]) {
           this.lastBuffer[y][x] = [-1, '\x00'];
         }
       }

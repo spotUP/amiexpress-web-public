@@ -68,10 +68,11 @@ export class List extends Element {
     this.wrapItemsEnabled = options.wrapItems !== false;
 
     // Ensure default hover style for interactive lists
+    // Use blue bg for hover (distinct from cyan selected style)
     if (this.interactive) {
       this.style.item = this.style.item || {};
       if (!this.style.item.hover && !this.style.hover) {
-        this.style.item.hover = { bg: 'cyan', fg: 'black' };
+        this.style.item.hover = { bg: 'blue', fg: 'white' };
       }
     }
 
@@ -200,8 +201,8 @@ export class List extends Element {
 
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
-      // Only show hover highlight when list is NOT focused (prevents confusing dual-selection look)
-      const isHovered = index === this._hoveredItem && !isSelected && !this.focused;
+      // Show hover highlight on non-selected items (even when focused)
+      const isHovered = index === this._hoveredItem && !isSelected;
 
       // Clearer selection markers: >> for focused, > for unfocused selection (ASCII-safe)
       const marker = isSelected ? (this.focused ? '>>' : '> ') : '  ';

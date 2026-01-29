@@ -148,7 +148,7 @@ export class DockablePanel extends Panel {
       draggable: normalizedOptions.draggable !== false,
       mouse: true,
       keys: true,
-      focusable: true,  // Enable Tab cycling and focus events
+      focusable: normalizedOptions.focusable !== false,  // Respect user's focusable setting, default to true
       clickable: true,  // Enable click events for panel activation
     });
 
