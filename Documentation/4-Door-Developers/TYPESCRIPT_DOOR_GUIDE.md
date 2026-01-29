@@ -1190,6 +1190,427 @@ export async function runDoor(doorSession: any): Promise<void> {
 - `Doors/grandmaster/ui/menu.ts` - Multi-panel menu with descriptions
 - `Doors/whip/ui/main-menu.ts` - Simple menu with stats
 - `Doors/whip/ui/kanban-board.ts` - Complex multi-column board
+- `Doors/bug-tracker/app.ts` - Full implementation with all patterns below
+
+---
+
+## View Management Patterns (Best Practices)
+
+These patterns emerged from real-world door development and solve common issues with navigation, focus, and cleanup.
+
+### Three-Part Layout Pattern
+
+**Every view should have three parts:**
+
+1. **Header** - Title bar with summary info (NOT focusable)
+2. **Content** - Main List or scrollable Box (focusable)
+3. **Footer** - Action hints and keyboard shortcuts (NOT focusable)
+
+```typescript
+private showMyView(): void {
+  this.currentView = 'myview';
+  this.clearMain();
+
+  // 1. Header - NOT focusable
+  createBox({
+    parent: this.mainContainer,
+    top: 0,
+    left: 1,
+    width: '98%',
+    height: 3,
+    border: { type: 'line' },
+    label: ' View Title ',
+    style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+    content: ' Summary info here',
+    tags: true,
+    focusable: false,  // CRITICAL: Headers are not focusable
+  });
+
+  // 2. Content - focusable List or scrollable Box
+  const contentList = createList({
+    parent: this.mainContainer,
+    top: 3,
+    left: 1,
+    width: '98%',
+    height: '100%-6',  // Leave room for header (3) and footer (3)
+    border: { type: 'line' },
+    items: ['Item 1', 'Item 2', 'Item 3'],
+    style: {
+      fg: 'white',
+      bg: 'black',
+      border: { fg: 'cyan' },
+      selected: { fg: 'black', bg: 'cyan' },
+      item: { fg: 'white', bg: 'black' },
+    },
+    padding: { left: 1 },
+    // Lists are focusable by default via createList
+  });
+
+  // 3. Footer - NOT focusable
+  createBox({
+    parent: this.mainContainer,
+    bottom: 0,
+    left: 1,
+    width: '98%',
+    height: 3,
+    border: { type: 'line' },
+    style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+    content: ' {cyan-fg}[Enter]{/} Select   {red-fg}[ESC]{/} Back',
+    tags: true,
+    focusable: false,  // CRITICAL: Footers are not focusable
+  });
+
+  contentList.focus();
+  this.screen.render();
+}
+```
+
+**Why this matters:**
+- Consistent visual layout across all screens
+- Users can't tab to headers/footers (which would be confusing)
+- Footer always shows available actions
+- Arrow keys work predictably on content
+
+### Focus Management: `focusable: false`
+
+**All non-interactive boxes must have `focusable: false`:**
+
+```typescript
+// Header boxes - NEVER focusable
+createBox({
+  parent: screen,
+  content: 'Header',
+  focusable: false,  // CRITICAL
+});
+
+// Footer boxes - NEVER focusable
+createBox({
+  parent: screen,
+  content: 'Footer hints',
+  focusable: false,  // CRITICAL
+});
+
+// Stats/info panels - NEVER focusable
+createBox({
+  parent: screen,
+  content: 'Statistics: ...',
+  focusable: false,  // CRITICAL
+});
+
+// Labels - NEVER focusable
+createBox({
+  parent: screen,
+  content: 'Field Label:',
+  focusable: false,  // CRITICAL
+});
+```
+
+**What IS focusable:**
+- Lists (menus, selections)
+- Textboxes (input fields)
+- Buttons
+- Scrollable content boxes (for reading/scrolling)
+
+**Symptoms of missing `focusable: false`:**
+- Users can tab to header/footer
+- Focus "disappears" (on non-interactive element)
+- Tab order is confusing
+
+### View State Management
+
+**Use a `currentView` property to track which view is active:**
+
+```typescript
+type ViewName = 'menu' | 'list' | 'detail' | 'edit' | 'settings';
+
+class MyDoor {
+  private currentView: ViewName = 'menu';
+
+  private showMainMenu(): void {
+    this.currentView = 'menu';
+    this.clearMain();
+    // ... build menu view
+  }
+
+  private showList(): void {
+    this.currentView = 'list';
+    this.clearMain();
+    // ... build list view
+  }
+}
+```
+
+**Why track view state?**
+1. Prevent key handlers from firing in wrong view
+2. Conditional behavior based on current view
+3. ESC key returns to correct parent view
+
+```typescript
+// Key handlers check current view
+this.registerKey(['s', 'S'], () => {
+  if (this.currentView === 'menu') {  // Only on menu
+    this.showSettings();
+  }
+});
+
+// Global Q only quits from main menu
+this.screen.key(['q', 'Q'], () => {
+  if (this.currentView === 'menu') {  // Only on menu
+    this.quit();
+  }
+});
+```
+
+### Key Handler Cleanup Pattern
+
+**Key handlers accumulate if not cleaned up between views!**
+
+```typescript
+class MyDoor {
+  private keyHandlers: { keys: string[]; handler: () => void }[] = [];
+
+  // Register a key handler (tracks it for cleanup)
+  private registerKey(keys: string | string[], handler: () => void): void {
+    const keyArray = Array.isArray(keys) ? keys : [keys];
+    this.keyHandlers.push({ keys: keyArray, handler });
+    this.screen.key(keyArray, handler);
+  }
+
+  // Clear all view-specific key handlers
+  private clearKeyHandlers(): void {
+    this.keyHandlers.forEach(({ keys, handler }) => {
+      this.screen.unkey(keys, handler);
+    });
+    this.keyHandlers = [];
+  }
+
+  // Clear main container AND key handlers
+  private clearMain(): void {
+    this.clearKeyHandlers();  // CRITICAL: Clear handlers first
+    const children = [...this.mainContainer.children];
+    children.forEach(child => child.detach());
+  }
+}
+```
+
+**Symptoms of missing key handler cleanup:**
+- Keys fire multiple times per press
+- Old view's keys work in new view
+- Memory leaks (handlers accumulate)
+
+### ESC Key Race Condition Fix
+
+**ESC handlers must use `setImmediate()` to avoid race conditions:**
+
+```typescript
+// WRONG - May cause race condition
+this.registerKey(['escape'], () => {
+  if (this.currentView === 'detail') {
+    this.showMainMenu();  // Can conflict with global ESC
+  }
+});
+
+// CORRECT - Use setImmediate to defer
+this.registerKey(['escape'], () => {
+  if (this.currentView === 'detail') {
+    setImmediate(() => this.showMainMenu());  // Deferred execution
+  }
+});
+```
+
+**Why `setImmediate()`?**
+- ESC triggers both local and global handlers
+- Without deferral, view change happens mid-event
+- `setImmediate()` ensures event processing completes first
+
+### Complete View Management Example
+
+```typescript
+import { createScreen, createBox, createList, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import type { Screen, Box, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+type ViewName = 'menu' | 'detail';
+
+class MyDoor {
+  private screen!: Screen;
+  private inputManager!: DoorInputManager;
+  private currentView: ViewName = 'menu';
+  private mainContainer!: Box;
+  private keyHandlers: { keys: string[]; handler: () => void }[] = [];
+
+  async run(): Promise<void> {
+    this.screen = createScreen(this.ctx.bbs, { title: 'My Door', mouse: true });
+    this.inputManager = new DoorInputManager(this.ctx, this.screen, {
+      enableGameMode: false,
+      enableGrabKeys: true,
+      enableMouse: true,
+    });
+    this.inputManager.enable();
+
+    // Create base layout
+    this.createBaseLayout();
+    this.showMainMenu();
+
+    await new Promise<void>((resolve) => {
+      this.screen.once('destroy', resolve);
+    });
+  }
+
+  private createBaseLayout(): void {
+    // Global header (always visible)
+    createBox({
+      parent: this.screen,
+      top: 0, left: 0, width: '100%', height: 3,
+      content: '{center}{bold}My Door{/bold}{/center}',
+      style: { fg: 'white', bg: 'blue' },
+      tags: true,
+      focusable: false,
+    });
+
+    // Main container for views
+    this.mainContainer = createBox({
+      parent: this.screen,
+      top: 3, left: 0, width: '100%', bottom: 3,
+      focusable: false,
+    });
+
+    // Global footer (always visible)
+    createBox({
+      parent: this.screen,
+      bottom: 0, left: 0, width: '100%', height: 3,
+      content: '{center}Q=Quit | Arrow Keys | Enter{/center}',
+      style: { fg: 'white', bg: 'blue' },
+      tags: true,
+      focusable: false,
+    });
+
+    // Global Q quits only from menu
+    this.screen.key(['q', 'Q'], () => {
+      if (this.currentView === 'menu') this.quit();
+    });
+  }
+
+  private registerKey(keys: string | string[], handler: () => void): void {
+    const keyArray = Array.isArray(keys) ? keys : [keys];
+    this.keyHandlers.push({ keys: keyArray, handler });
+    this.screen.key(keyArray, handler);
+  }
+
+  private clearKeyHandlers(): void {
+    this.keyHandlers.forEach(({ keys, handler }) => {
+      this.screen.unkey(keys, handler);
+    });
+    this.keyHandlers = [];
+  }
+
+  private clearMain(): void {
+    this.clearKeyHandlers();
+    [...this.mainContainer.children].forEach(child => child.detach());
+  }
+
+  private showMainMenu(): void {
+    this.currentView = 'menu';
+    this.clearMain();
+
+    // Header (not focusable)
+    createBox({
+      parent: this.mainContainer,
+      top: 0, left: 1, width: '98%', height: 3,
+      content: ' Welcome!',
+      border: { type: 'line' },
+      focusable: false,
+    });
+
+    // Menu list (focusable)
+    const menuList = createList({
+      parent: this.mainContainer,
+      top: 3, left: 1, width: '98%', height: '100%-6',
+      items: ['[V] View Details', '[Q] Quit'],
+      border: { type: 'line' },
+      style: { selected: { fg: 'black', bg: 'cyan' } },
+    });
+
+    // Footer (not focusable)
+    createBox({
+      parent: this.mainContainer,
+      bottom: 0, left: 1, width: '98%', height: 3,
+      content: ' {cyan-fg}[Enter]{/} Select   {red-fg}[Q]{/} Quit',
+      border: { type: 'line' },
+      tags: true,
+      focusable: false,
+    });
+
+    menuList.on('select', (_item: any, index: number) => {
+      if (this.currentView === 'menu') {
+        if (index === 0) this.showDetail();
+        if (index === 1) this.quit();
+      }
+    });
+
+    this.registerKey(['v', 'V'], () => {
+      if (this.currentView === 'menu') this.showDetail();
+    });
+
+    menuList.focus();
+    this.screen.render();
+  }
+
+  private showDetail(): void {
+    this.currentView = 'detail';
+    this.clearMain();
+
+    createBox({
+      parent: this.mainContainer,
+      top: 0, left: 1, width: '98%', height: 3,
+      content: ' Detail View',
+      border: { type: 'line' },
+      focusable: false,
+    });
+
+    const contentBox = createBox({
+      parent: this.mainContainer,
+      top: 3, left: 1, width: '98%', height: '100%-6',
+      content: 'Detail content here...',
+      border: { type: 'line' },
+      scrollable: true,
+      focusable: true,
+    });
+
+    createBox({
+      parent: this.mainContainer,
+      bottom: 0, left: 1, width: '98%', height: 3,
+      content: ' {red-fg}[ESC]{/} Back',
+      border: { type: 'line' },
+      tags: true,
+      focusable: false,
+    });
+
+    // ESC with setImmediate to avoid race condition
+    this.registerKey(['escape'], () => {
+      if (this.currentView === 'detail') {
+        setImmediate(() => this.showMainMenu());
+      }
+    });
+
+    contentBox.focus();
+    this.screen.render();
+  }
+
+  private quit(): void {
+    this.clearKeyHandlers();
+    this.inputManager.disable();
+    this.screen.destroy();
+  }
+}
+```
+
+**Key takeaways:**
+1. Every view follows three-part layout (Header, Content, Footer)
+2. All non-interactive boxes have `focusable: false`
+3. `currentView` tracks active view for conditional key handling
+4. `registerKey`/`clearKeyHandlers` prevents handler accumulation
+5. ESC handlers use `setImmediate()` to avoid race conditions
+6. `clearMain()` cleans both children AND key handlers
 
 ---
 
@@ -2437,11 +2858,182 @@ button.on('press', () => {
 });
 ```
 
+## CRITICAL: Textbox Width Issues and Solutions
+
+**WARNING**: Neo-blessed textboxes have a known issue where they ignore explicit `width` constraints and expand beyond their parent container. This section documents the ONLY working patterns.
+
+### The Problem
+
+```typescript
+// ❌ BROKEN - Textbox ignores width and extends past modal
+const nameInput = blessed.textbox({
+  parent: modal,
+  top: 1,
+  left: 10,
+  width: 50,        // IGNORED!
+  height: 1,        // Too small without border
+  inputOnFocus: true,
+  style: { bg: 'blue' }
+});
+
+// ❌ ALSO BROKEN - createTextbox has same issue
+const nameInput = createTextbox({
+  parent: modal,
+  top: 1,
+  left: 10,
+  width: 50,        // IGNORED!
+  height: 1,
+  ...
+});
+```
+
+### The Solution: Bordered Textboxes
+
+**The ONLY reliable pattern** is to use `blessed.textbox()` directly with:
+1. `border: { type: 'line' }` - REQUIRED for width to work
+2. `height: 3` - 1 for top border + 1 for content + 1 for bottom border
+3. `left: 1, right: 1` - Use edge constraints instead of explicit width
+4. `label: ' Field Name '` - Put label ON the border, not as separate element
+
+```typescript
+// ✅ WORKING PATTERN - Bordered textbox with label on border
+const nameInput = blessed.textbox({
+  parent: modal,
+  top: 1,
+  left: 1,
+  right: 1,           // Edge constraint - works!
+  height: 3,          // MUST be 3 for bordered textbox
+  border: { type: 'line' },
+  label: ' Name ',    // Label on border - clean look
+  keys: true,
+  mouse: true,
+  inputOnFocus: true,
+  value: existingValue,
+  style: {
+    fg: 'white',
+    bg: 'black',
+    border: { fg: 'cyan' },
+  }
+});
+```
+
+### Complete Working Form Example
+
+```typescript
+async function showProjectEditor(screen: Screen, project: Project): Promise<Project | null> {
+  return new Promise(async (resolve) => {
+    screen.program.enableMouse();
+
+    // Modal container
+    const modal = blessed.box({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 24,
+      border: { type: 'line' },
+      style: { border: { fg: 'yellow' }, bg: 'black' },
+      label: ' New Project ',
+      tags: true,
+    });
+
+    // ✅ CORRECT: Bordered textbox with label on border
+    const nameInput = blessed.textbox({
+      parent: modal,
+      top: 1,
+      left: 1,
+      right: 1,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Name ',
+      keys: true,
+      mouse: true,
+      inputOnFocus: true,
+      value: project.name,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
+    });
+
+    // ✅ Lists work fine with percentage widths
+    const typeList = blessed.list({
+      parent: modal,
+      top: 5,
+      left: 1,
+      width: '48%',
+      height: 9,
+      border: { type: 'line' },
+      label: ' Type ',
+      items: ['demo', 'intro', 'code'],
+      style: { border: { fg: 'cyan' }, selected: { bg: 'cyan', fg: 'black' } }
+    } as any);
+
+    // ✅ Another bordered textbox
+    const descInput = blessed.textbox({
+      parent: modal,
+      top: 15,
+      left: 1,
+      right: 1,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Description (optional) ',
+      keys: true,
+      mouse: true,
+      inputOnFocus: true,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
+    });
+
+    // Buttons still use SDK helper
+    const saveBtn = createButton({
+      parent: modal,
+      top: 19,
+      left: 17,
+      width: 12,
+      height: 3,
+      content: ' Save ',
+      style: { bg: 'green' }
+    });
+
+    nameInput.focus();
+    screen.render();
+  });
+}
+```
+
+### Key Rules for Form Dialogs
+
+| Element | Pattern | Notes |
+|---------|---------|-------|
+| Text input | `blessed.textbox()` + border + height 3 | Only working pattern |
+| Label | `label: ' Name '` on textbox border | Don't use separate label elements |
+| Width constraint | `left: 1, right: 1` | NOT explicit `width` |
+| Selection list | `blessed.list()` + `width: '48%'` | Percentage widths work |
+| Buttons | `createButton()` | SDK helper works fine |
+| Long text in lists | `.substring(0, 25)` | Truncate to prevent wrapping |
+
+### What NOT to Do
+
+```typescript
+// ❌ DON'T: Separate label elements (they get covered)
+blessed.box({ content: 'Name:', ... });
+const input = blessed.textbox({ ... });
+
+// ❌ DON'T: Height 1 textbox (needs height 3 with border)
+blessed.textbox({ height: 1, border: { type: 'line' } });
+
+// ❌ DON'T: Explicit width on textbox (gets ignored)
+blessed.textbox({ width: 50, ... });
+
+// ❌ DON'T: createTextbox for form inputs (width issues)
+createTextbox({ width: 50, ... });
+
+// ❌ DON'T: blessed.text() for labels (doesn't render)
+blessed.text({ content: 'Name:', ... });
+```
+
 ## Reference Implementations
 
 Study these working examples:
 
-- **`Doors/whip/ui/task-editor.ts`** - Complete form with inputs, lists, buttons
+- **`Doors/whip/ui/project-editor.ts`** - Complete form with bordered textboxes (FIXED)
 - **`Doors/whip/ui/project-list.ts`** - List view with create/edit/delete dialogs
 - **`Doors/whip/ui/kanban-board.ts`** - Multi-column kanban with modals
 - **`Doors/grandmaster/ui/menu.ts`** - Complex menu system with mouse support

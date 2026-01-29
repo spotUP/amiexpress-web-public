@@ -484,13 +484,111 @@ const list = blessed.list({
 ```
 
 ### Text Input
+
+**CRITICAL: Neo-Blessed Textbox Width Bug**
+
+Textboxes with explicit `width` property **completely ignore the width constraint** and expand beyond their parent container. This is a known neo-blessed bug.
+
+**Working Pattern - Bordered Textboxes:**
 ```typescript
+// WORKING PATTERN - Use bordered textboxes with edge constraints
 const textbox = blessed.textbox({
-  parent: this.screen,
+  parent: modal,
+  top: 1,
+  left: 1,
+  right: 1,           // Edge constraint - NOT explicit width!
+  height: 3,          // MUST be 3 (border + content + border)
+  border: { type: 'line' },
+  label: ' Field Name ',  // Label ON the border
+  keys: true,
+  mouse: true,
   inputOnFocus: true,
-  style: { fg: 'white', bg: 'black' }
+  value: '',
+  style: {
+    fg: 'white',
+    bg: 'black',
+    border: { fg: 'cyan' }
+  }
 });
 textbox.focus();
+```
+
+**Key Rules for Textboxes:**
+
+| Rule | Description |
+|------|-------------|
+| Use `blessed.textbox()` directly | NOT `createTextbox()` SDK helper |
+| MUST have border | `border: { type: 'line' }` |
+| MUST have `height: 3` | 1 border + 1 content + 1 border |
+| Use edge constraints | `left: 1, right: 1` NOT explicit `width` |
+| Put label on border | `label: ' Name '` with spaces |
+| NO separate label elements | They get covered by the textbox |
+
+**What NOT to Do:**
+```typescript
+// BROKEN - Width is ignored, textbox expands past modal
+const textbox = blessed.textbox({
+  parent: modal,
+  width: 50,              // IGNORED!
+  height: 1,              // Too small for bordered
+  // No border
+});
+
+// BROKEN - Separate labels get covered
+const label = blessed.text({ content: 'Name:' });  // Gets hidden!
+const textbox = blessed.textbox({ /* ... */ });
+
+// BROKEN - createTextbox() has same width bug
+const textbox = createTextbox({ width: 50 });  // IGNORED!
+```
+
+**Complete Form Example:**
+```typescript
+// Modal container
+const modal = blessed.box({
+  parent: screen,
+  top: 'center',
+  left: 'center',
+  width: 60,
+  height: 16,
+  border: { type: 'line' },
+  style: { border: { fg: 'yellow' }, bg: 'black' },
+  label: ' Edit Item '
+});
+
+// Name input - bordered textbox
+const nameInput = blessed.textbox({
+  parent: modal,
+  top: 1,
+  left: 1,
+  right: 1,
+  height: 3,
+  border: { type: 'line' },
+  label: ' Name ',
+  keys: true,
+  mouse: true,
+  inputOnFocus: true,
+  style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
+});
+
+// Description input - bordered textbox
+const descInput = blessed.textbox({
+  parent: modal,
+  top: 5,
+  left: 1,
+  right: 1,
+  height: 3,
+  border: { type: 'line' },
+  label: ' Description ',
+  keys: true,
+  mouse: true,
+  inputOnFocus: true,
+  style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
+});
+
+// Get values
+const name = nameInput.getValue();
+const desc = descInput.getValue();
 ```
 
 ---
