@@ -807,6 +807,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
 
+      // Ctrl+C while door/game is active: terminate the door
+      if (ev.ctrlKey && ev.key === 'c' && (doorActive.current || gameMode.current) && socketRef.current?.connected) {
+        ev.preventDefault();
+        console.log('[BBSTerminal] Ctrl+C pressed in game mode - sending door:terminate');
+        terminalInstance.current?.write('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
+        socketRef.current.emit('door:terminate');
+        return;
+      }
+
       // Game mode: send raw keydown events with custom key repeat
       if (gameMode.current && socketRef.current?.connected) {
         // Ignore browser key repeat - we handle our own repeat logic
@@ -1884,6 +1893,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         loginState.current === 'password-reset'
         // Note: 'registering' removed - server handles registration input including pause prompts
       ) {
+        return;
+      }
+      // Ctrl+C (0x03) while door is active: terminate the door
+      if (data === '\x03' && doorActive.current) {
+        console.log('[BBSTerminal] Ctrl+C pressed while door active - sending door:terminate');
+        term.write('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
+        socket.emit('door:terminate');
         return;
       }
       socket.emit('command', data);
