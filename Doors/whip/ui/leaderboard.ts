@@ -18,47 +18,55 @@ export async function showLeaderboard(
     const users = await dataManager.loadUsers();
     const sortedUsers = Object.values(users).sort((a, b) => b.points - a.points);
 
-    // Header
+    // Header - NOT focusable
     const header = createBox({
       fixed: true,
       parent: screen,
       top: 0,
       left: 0,
       width: '100%',
-      height: 2,
-      content: `{center}{bold}{cyan-fg}TOP SCENERS{/cyan-fg}{/bold}\n` +
-               `{center}Demo Scene Leaderboard{/center}`,
-      style: { fg: 'white', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      content: `{center}{bold}{cyan-fg}TOP SCENERS{/cyan-fg}{/bold} - Demo Scene Leaderboard{/center}\n` +
+               `{center}Total Sceners: {bold}${sortedUsers.length}{/bold} | Your Rank: {bold}#${currentUser.rank}{/bold}{/center}`,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      tags: true,
+      focusable: false,
     });
 
-    // Table header
+    // Table header - NOT focusable
     const tableHeaderWidth = screen.width - 4;
     const tableHeader = createBox({
       fixed: true,
       parent: screen,
       top: 3,
-      left: 2,
-      width: tableHeaderWidth,
+      left: 1,
+      width: '98%',
       height: 2,
       content: ' {bold}RANK  HANDLE          LEVEL      POINTS  TASKS  PROJECTS  ACHIEVEMENTS{/bold}\n' +
                ' ' + '='.repeat(tableHeaderWidth - 2),  // Dynamic separator width
-      style: { fg: 'cyan', bg: 'black' }
+      style: { fg: 'cyan', bg: 'black' },
+      tags: true,
+      focusable: false,
     });
 
-    // Leaderboard table
+    // Leaderboard table - focusable (scrollable content)
     const table = createBox({
       fixed: true,
       parent: screen,
       top: 5,
-      left: 2,
-      width: screen.width - 4,
-      height: screen.height - 8,
+      left: 1,
+      width: '98%',
+      height: '100%-8',
+      border: { type: 'line' },
+      label: ' Leaderboard ',
       scrollable: true,
       alwaysScroll: true,
       mouse: true,
       keys: true,
       vi: true,
-      style: { bg: 'black' }
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      focusable: true,
     });
 
     let content = '';
@@ -95,16 +103,20 @@ export async function showLeaderboard(
     table.setContent(content);
     table.focus();
 
-    // Instructions
+    // Footer - NOT focusable
     const instructions = createBox({
       fixed: true,
       parent: screen,
       bottom: 0,
       left: 0,
       width: '100%',
-      height: 1,
-      content: `{center}[UP/DOWN] Scroll  |  [Q] Back{/center}`,
-      style: { fg: 'gray', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      content: ` {cyan-fg}[Up/Down]{/cyan-fg} Scroll   {red-fg}[Q/ESC]{/red-fg} Back\n` +
+               ` {gray-fg}Scrollwheel supported{/gray-fg}`,
+      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      tags: true,
+      focusable: false,
     });
 
     screen.render();

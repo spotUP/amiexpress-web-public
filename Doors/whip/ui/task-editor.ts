@@ -1,8 +1,5 @@
 import {
-  createBox,
-  createTextbox,
   createButton,
-  createList
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -63,182 +60,136 @@ async function showTaskEditor(
     screen.program.enableMouse();
 
     // Modal container
-    const modal = createBox({
-      fixed: true,
+    const modal = blessed.box({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 70,
+      width: 68,
       height: 22,
       border: { type: 'line' },
       style: {
         border: { fg: 'yellow' },
         bg: 'black'
       },
-      label: isNew ? ' New Task ' : ' Edit Task '
+      label: isNew ? ' New Task ' : ' Edit Task ',
+      tags: true,
     });
 
-    // Title field
-    const titleLabel = createBox({
-      fixed: true,
+    // Title input - bordered textbox with label on border (WORKING PATTERN)
+    const titleInput = blessed.textbox({
       parent: modal,
       top: 1,
-      left: 2,
-      width: '100%-4',
-      height: 1,
-      content: 'Title:',
-      style: { fg: 'white', bg: 'black' }
-    });
-
-    const titleInput = createTextbox({
-      parent: modal,
-      top: 2,
-      left: 2,
-      width: '100%-4',
-      height: 1,
+      left: 1,
+      right: 1,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Title ',
       keys: true,
       mouse: true,
       inputOnFocus: true,
       value: task.title,
       style: {
         fg: 'white',
-        bg: 'blue',
-        focus: { bg: 'lightblue', fg: 'black' }
+        bg: 'black',
+        border: { fg: 'cyan' },
       }
     });
 
-    // Category label
-    const categoryLabel = createBox({
-      fixed: true,
-      parent: modal,
-      top: 4,
-      left: 2,
-      width: '100%-4',
-      height: 1,
-      content: 'Category:',
-      style: { fg: 'white', bg: 'black' }
-    });
-
     // Category list
-    const categoryList = createList({
+    const categoryList = blessed.list({
       parent: modal,
       top: 5,
-      left: 2,
-      width: 30,
-      height: 7,
+      left: 1,
+      width: '48%',
+      height: 9,
       border: { type: 'line' },
-      style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' },
-        bg: 'black'
-      },
+      label: ' Category ',
+      tags: true,
       keys: true,
       vi: true,
       mouse: true,
+      focusable: true,
       items: CATEGORIES,
-      selected: CATEGORIES.indexOf(task.category)
-    });
-
-    // Priority label
-    const priorityLabel = createBox({
-      fixed: true,
-      parent: modal,
-      top: 4,
-      left: 35,
-      width: 30,
-      height: 1,
-      content: 'Priority:',
-      style: { fg: 'white', bg: 'black' }
-    });
+      selected: CATEGORIES.indexOf(task.category),
+      style: {
+        border: { fg: 'cyan' },
+        selected: { bg: 'cyan', fg: 'black' },
+        item: { fg: 'white', bg: 'black' },
+        bg: 'black'
+      },
+    } as any);
 
     // Priority list
-    const priorityList = createList({
+    const priorityList = blessed.list({
       parent: modal,
       top: 5,
-      left: 35,
-      width: 30,
-      height: 7,
+      left: '50%',
+      right: 1,
+      height: 6,
       border: { type: 'line' },
-      style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' },
-        bg: 'black'
-      },
+      label: ' Priority ',
+      tags: true,
       keys: true,
       vi: true,
       mouse: true,
+      focusable: true,
       items: PRIORITIES,
-      selected: PRIORITIES.indexOf(task.priority)
-    });
+      selected: PRIORITIES.indexOf(task.priority),
+      style: {
+        border: { fg: 'cyan' },
+        selected: { bg: 'cyan', fg: 'black' },
+        item: { fg: 'white', bg: 'black' },
+        bg: 'black'
+      },
+    } as any);
 
-    // Points label
-    const pointsLabel = createBox({
-      fixed: true,
+    // Points input - bordered textbox
+    const pointsInput = blessed.textbox({
       parent: modal,
-      top: 13,
-      left: 2,
-      width: 20,
-      height: 1,
-      content: 'Points:',
-      style: { fg: 'white', bg: 'black' }
-    });
-
-    const pointsInput = createTextbox({
-      parent: modal,
-      top: 14,
-      left: 2,
-      width: 20,
-      height: 1,
+      top: 12,
+      left: '50%',
+      right: 1,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Points ',
       keys: true,
       mouse: true,
       inputOnFocus: true,
       value: task.points.toString(),
       style: {
         fg: 'white',
-        bg: 'blue',
-        focus: { bg: 'lightblue', fg: 'black' }
+        bg: 'black',
+        border: { fg: 'cyan' },
       }
     });
 
-    // Description label
-    const descLabel = createBox({
-      fixed: true,
+    // Description input - bordered textbox
+    const descInput = blessed.textbox({
       parent: modal,
-      top: 16,
-      left: 2,
-      width: '100%-4',
-      height: 1,
-      content: 'Description (optional):',
-      style: { fg: 'white', bg: 'black' }
-    });
-
-    // Description input
-    const descInput = createTextbox({
-      parent: modal,
-      top: 17,
-      left: 2,
-      width: '100%-4',
-      height: 3,  // Multi-line input
+      top: 15,
+      left: 1,
+      right: 1,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Description (optional) ',
       keys: true,
       mouse: true,
       inputOnFocus: true,
       value: task.description || '',
       style: {
         fg: 'white',
-        bg: 'blue',
-        focus: { bg: 'lightblue', fg: 'black' }
+        bg: 'black',
+        border: { fg: 'cyan' },
       }
     });
 
-    // Save button
+    // Buttons
     const saveBtn = createButton({
       parent: modal,
-      bottom: 1,
+      top: 19,
       left: 15,
       width: 12,
-      height: 3,
+      height: 1,
       content: ' Save ',
       align: 'center',
       keys: true,
@@ -251,13 +202,12 @@ async function showTaskEditor(
       }
     });
 
-    // Cancel button
     const cancelBtn = createButton({
       parent: modal,
-      bottom: 1,
-      left: 40,
+      top: 19,
+      left: 38,
       width: 12,
-      height: 3,
+      height: 1,
       content: ' Cancel ',
       align: 'center',
       keys: true,
@@ -276,13 +226,12 @@ async function showTaskEditor(
       screen.render();
     };
 
-    // Save handler
     const save = async () => {
       task.title = titleInput.getValue();
       task.category = CATEGORIES[categoryList.selected!] as TaskCategory;
       task.priority = PRIORITIES[priorityList.selected!] as TaskPriority;
       task.points = parseInt(pointsInput.getValue()) || 10;
-      task.description = descInput.getValue();  // Save description
+      task.description = descInput.getValue();
 
       if (!task.title.trim()) {
         const msg = blessed.message({
@@ -293,83 +242,41 @@ async function showTaskEditor(
           height: 'shrink',
           padding: 2,
           border: { type: 'line' },
-          style: {
-            border: { fg: 'red' },
-            bg: 'black'
-          },
+          style: { border: { fg: 'red' }, bg: 'black' },
           label: ' Error '
         });
-
-        msg.display('Task title cannot be empty!\n\nPress any key to continue.', () => {
+        msg.display('Task title cannot be empty!', () => {
           screen.remove(msg);
           screen.render();
         });
-
         return;
       }
 
       if (isNew) {
         await dataManager.addTask(task);
-
-        // Emit event for new task
         if (bbsApi?.emitCustomEvent && project) {
-          bbsApi.emitCustomEvent(
-            'task_created',
-            `Created new ${task.category} task "${task.title}" (${task.points} pts) in "${project.name}"`,
-            {
-              projectId: project.id,
-              projectName: project.name,
-              taskId: task.id,
-              taskCategory: task.category,
-              taskPriority: task.priority,
-              points: task.points
-            }
-          );
+          bbsApi.emitCustomEvent('task_created', `Created ${task.category} task "${task.title}"`, {
+            projectId: project.id, taskId: task.id, taskCategory: task.category
+          });
         }
       } else {
         task.updatedAt = new Date().toISOString();
         await dataManager.updateTask(task);
-
-        // Emit event for updated task
-        if (bbsApi?.emitCustomEvent && project) {
-          bbsApi.emitCustomEvent(
-            'task_updated',
-            `Updated task "${task.title}" in "${project.name}"`,
-            {
-              projectId: project.id,
-              projectName: project.name,
-              taskId: task.id,
-              taskCategory: task.category
-            }
-          );
-        }
       }
 
       cleanup();
       resolve();
     };
 
-    saveBtn.on('press', () => {
-      save();
-    });
-    cancelBtn.on('press', () => {
-      cleanup();
-      resolve();
-    });
+    saveBtn.on('press', () => { save(); });
+    cancelBtn.on('press', () => { cleanup(); resolve(); });
 
-    // Key handler for ESC and Enter
     const keyHandler = (ch: any, key: any) => {
-      if (key.name === 'escape') {
-        cleanup();
-        resolve();
-      } else if (key.name === 'enter' && key.ctrl) {
-        save();
-      }
+      if (key.name === 'escape') { cleanup(); resolve(); }
+      else if (key.name === 'enter' && key.ctrl) { save(); }
     };
 
     screen.on('keypress', keyHandler);
-
-    // Focus title input initially
     titleInput.focus();
     screen.render();
   });

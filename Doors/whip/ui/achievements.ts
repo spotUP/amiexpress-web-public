@@ -40,45 +40,41 @@ export async function showAchievements(
     const unlocked = allAchievements.filter(a => currentUser.achievements.includes(a.id));
     const locked = allAchievements.filter(a => !currentUser.achievements.includes(a.id));
 
-    // Header
+    // Header - NOT focusable
     const header = createBox({
       fixed: true,
       parent: screen,
       top: 0,
       left: 0,
       width: '100%',
-      height: 2,
-      content: `{center}{bold}{cyan-fg}YOUR ACHIEVEMENTS{/cyan-fg}{/bold}\n` +
-               `{center}Track your progress and accomplishments{/center}`,
-      style: { fg: 'white', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      content: `{center}{bold}{cyan-fg}YOUR ACHIEVEMENTS{/cyan-fg}{/bold} - Track your progress{/center}\n` +
+               `{center}Unlocked: {bold}{green-fg}${unlocked.length}{/green-fg}{/bold} / ${allAchievements.length}  |  Points from Achievements: {bold}${unlocked.reduce((sum, a) => sum + a.points, 0)}{/bold}{/center}`,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      tags: true,
+      focusable: false,
     });
 
-    // Stats
-    const stats = createBox({
-      fixed: true,
-      parent: screen,
-      top: 4,
-      left: 2,
-      width: screen.width - 4,
-      height: 1,
-      content: `{center}Unlocked: {bold}{green-fg}${unlocked.length}{/green-fg}{/bold} / ${allAchievements.length}  |  Total Points from Achievements: {bold}${unlocked.reduce((sum, a) => sum + a.points, 0)}{/bold}{/center}`,
-      style: { bg: 'black' }
-    });
+    // Stats moved to header - remove this separate stats box
 
-    // Content area
+    // Content area - focusable (scrollable)
     const content = createBox({
       fixed: true,
       parent: screen,
-      top: 6,
-      left: 2,
-      width: screen.width - 4,
-      height: screen.height - 9,
+      top: 3,
+      left: 1,
+      width: '98%',
+      height: '100%-6',
+      border: { type: 'line' },
+      label: ' Achievements ',
       scrollable: true,
       alwaysScroll: true,
       mouse: true,
       keys: true,
       vi: true,
-      style: { bg: 'black' }
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      focusable: true,
     });
 
     let contentText = '';
@@ -113,16 +109,20 @@ export async function showAchievements(
     content.setContent(contentText);
     content.focus();
 
-    // Instructions
+    // Footer - NOT focusable
     const instructions = createBox({
       fixed: true,
       parent: screen,
       bottom: 0,
       left: 0,
       width: '100%',
-      height: 1,
-      content: `{center}[UP/DOWN] Scroll  |  [Q] Back{/center}`,
-      style: { fg: 'gray', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      content: ` {cyan-fg}[Up/Down]{/cyan-fg} Scroll   {red-fg}[Q/ESC]{/red-fg} Back\n` +
+               ` {gray-fg}Scrollwheel supported{/gray-fg}`,
+      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      tags: true,
+      focusable: false,
     });
 
     screen.render();
@@ -142,7 +142,6 @@ export async function showAchievements(
     const cleanup = () => {
       screen.off('keypress', keyHandler);
       screen.remove(header);
-      screen.remove(stats);
       screen.remove(content);
       screen.remove(instructions);
     };

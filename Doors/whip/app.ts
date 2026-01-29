@@ -15,6 +15,8 @@ import { showPartyTimeline } from './ui/party-timeline';
 import { showLeaderboard } from './ui/leaderboard';
 import { showAchievements } from './ui/achievements';
 import { createTask } from './ui/task-editor';
+import { createProject } from './ui/project-editor';
+import { showMyTasks } from './ui/my-tasks';
 
 export class WhipApp {
   private screen: Screen;
@@ -196,9 +198,7 @@ export class WhipApp {
   }
 
   private async showNewProject(): Promise<void> {
-    // For v1.0 MVP, we'll implement a simple project creation
-    // This will be expanded in the project-list UI component
-    await this.showProjectList();
+    await createProject(this.screen, this.currentUser, this.dataManager, this.bbsApi);
   }
 
   private async showProjectList(): Promise<void> {
@@ -254,9 +254,7 @@ export class WhipApp {
   }
 
   private async showMyTasks(): Promise<void> {
-    // Show tasks assigned to current user across all projects
-    // For MVP, we'll use the project list to navigate
-    await this.showProjectList();
+    await showMyTasks(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
   }
 
   private async showPartyTimeline(): Promise<void> {

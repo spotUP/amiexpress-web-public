@@ -75,31 +75,48 @@ export class PartyCalendar {
     const parties: Party[] = [];
 
     try {
-      // demoparty.net XML structure: <parties><party>...</party></parties>
-      const partyNodes = xmlData?.parties?.party || [];
+      // demoparty.net XML is RSS format: <rss><channel><item>...</item></channel></rss>
+      const items = xmlData?.rss?.channel?.[0]?.item || [];
+      console.log('[PartyCalendar] Found', items.length, 'items in RSS feed');
 
-      for (const node of partyNodes) {
-        // Extract data from XML node
-        const name = node.name?.[0] || '';
-        const dateStr = node.date?.[0] || '';
-        const location = node.location?.[0] || '';
-        const url = node.url?.[0] || '';
+      for (const item of items) {
+        // Extract data from RSS item with demopartynet namespace
+        const name = item['demopartynet:title']?.[0] || item.title?.[0] || '';
+        const startDateStr = item['demopartynet:startDate']?.[0] || '';
+        const url = item['demopartynet:url']?.[0] || item.link?.[0] || '';
+        const country = item['demopartynet:country']?.[0] || '';
+
+        // Parse location from description HTML if available
+        let location = country ? country.toUpperCase() : 'Unknown';
+        const description = item.description?.[0] || '';
+        const locationMatch = description.match(/<dt>Location<\/dt>\s*<dd>([^<]+)/);
+        if (locationMatch) {
+          location = locationMatch[1].trim();
+        }
 
         // Skip if missing required fields
-        if (!name || !dateStr) continue;
+        if (!name || !startDateStr) {
+          console.log('[PartyCalendar] Skipping item, missing name or date:', name);
+          continue;
+        }
 
         // Parse date and filter to only upcoming parties
-        const partyDate = new Date(dateStr);
+        const partyDate = new Date(startDateStr);
         const now = new Date();
-        if (partyDate < now) continue;
+        if (partyDate < now) {
+          continue;
+        }
 
         // Generate ID from name
         const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+        // Format date as YYYY-MM-DD
+        const formattedDate = partyDate.toISOString().split('T')[0];
+
         parties.push({
           id,
           name,
-          date: dateStr,
+          date: formattedDate,
           location: location || 'Unknown',
           url: url || undefined,
           categories: [], // demoparty.net doesn't provide categories in the feed
@@ -107,7 +124,7 @@ export class PartyCalendar {
         });
       }
     } catch (error) {
-      console.error('Error parsing demoparty.net XML:', error);
+      console.error('[PartyCalendar] Error parsing demoparty.net XML:', error);
     }
 
     return parties;

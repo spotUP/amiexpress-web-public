@@ -30,33 +30,37 @@ export async function showProjectList(
     let projects = await dataManager.loadProjects();
     let selectedIndex = 0;
 
-    // Header
+    // Header - NOT focusable
     const header = createBox({
       fixed: true,
       parent: screen,
       top: 0,
       left: 0,
       width: '100%',
-      height: 2,
-      content: `{center}{bold}{cyan-fg}ALL PROJECTS{/cyan-fg}{/bold}\n` +
-               `{center}Manage your demo scene projects{/center}`,
-      style: { fg: 'white', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      content: `{center}{bold}{cyan-fg}ALL PROJECTS{/cyan-fg}{/bold} - Manage your demo scene projects{/center}\n` +
+               `{center}Total: {bold}${projects.length}{/bold} projects{/center}`,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      tags: true,
+      focusable: false,
     });
 
-    // Project list container
+    // Project list container - NOT focusable (list inside is)
     const listBox = createBox({
       fixed: true,
       parent: screen,
       top: 3,
-      left: 2,
-      width: screen.width - 4,
-      height: screen.height - 7,
+      left: 1,
+      width: '98%',
+      height: '100%-6',
       border: { type: 'line' },
       label: ' Projects ',
       style: {
         border: { fg: 'cyan' },
         bg: 'black'
-      }
+      },
+      focusable: false,
     });
 
     const list = createList({
@@ -78,16 +82,20 @@ export async function showProjectList(
       }
     });
 
-    // Instructions
+    // Footer - NOT focusable
     const footer = createBox({
       fixed: true,
       parent: screen,
       bottom: 0,
       left: 0,
       width: '100%',
-      height: 1,
-      content: `{center}[N] New  |  [E] Edit  |  [D] Delete  |  [Enter] Select  |  [Q] Back{/center}`,
-      style: { fg: 'gray', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      content: ` {cyan-fg}[N]{/cyan-fg} New   {cyan-fg}[E]{/cyan-fg} Edit   {cyan-fg}[D]{/cyan-fg} Delete   {cyan-fg}[Enter]{/cyan-fg} Select   {red-fg}[Q/ESC]{/red-fg} Back\n` +
+               ` {gray-fg}Arrow Keys to navigate | Mouse click supported{/gray-fg}`,
+      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      tags: true,
+      focusable: false,
     });
 
     const cleanup = () => {
@@ -204,7 +212,7 @@ async function showProjectEditor(
   return new Promise((resolve) => {
     screen.program.enableMouse();
 
-    // Modal container
+    // Modal container - NOT focusable (children are)
     const modal = createBox({
       fixed: true,
       parent: screen,
@@ -217,10 +225,11 @@ async function showProjectEditor(
         border: { fg: 'yellow' },
         bg: 'black'
       },
-      label: isNew ? ' New Project ' : ' Edit Project '
+      label: isNew ? ' New Project ' : ' Edit Project ',
+      focusable: false,
     });
 
-    // Name field
+    // Name field - label NOT focusable
     const nameLabel = createBox({
       fixed: true,
       parent: modal,
@@ -229,7 +238,8 @@ async function showProjectEditor(
       width: '100%-4',
       height: 1,
       content: 'Project Name:',
-      style: { fg: 'white', bg: 'black' }
+      style: { fg: 'white', bg: 'black' },
+      focusable: false,
     });
 
     const nameInput = createTextbox({
@@ -249,7 +259,7 @@ async function showProjectEditor(
       }
     });
 
-    // Type label
+    // Type label - NOT focusable
     const typeLabel = createBox({
       fixed: true,
       parent: modal,
@@ -258,7 +268,8 @@ async function showProjectEditor(
       width: 30,
       height: 1,
       content: 'Type:',
-      style: { fg: 'white', bg: 'black' }
+      style: { fg: 'white', bg: 'black' },
+      focusable: false,
     });
 
     // Type list
@@ -282,7 +293,7 @@ async function showProjectEditor(
       selected: PROJECT_TYPES.indexOf(project.type)
     });
 
-    // Status label
+    // Status label - NOT focusable
     const statusLabel = createBox({
       fixed: true,
       parent: modal,
@@ -291,7 +302,8 @@ async function showProjectEditor(
       width: 30,
       height: 1,
       content: 'Status:',
-      style: { fg: 'white', bg: 'black' }
+      style: { fg: 'white', bg: 'black' },
+      focusable: false,
     });
 
     // Status list
@@ -316,7 +328,7 @@ async function showProjectEditor(
       selected: statuses.indexOf(project.status)
     });
 
-    // Description label
+    // Description label - NOT focusable
     const descLabel = createBox({
       fixed: true,
       parent: modal,
@@ -325,7 +337,8 @@ async function showProjectEditor(
       width: '100%-4',
       height: 1,
       content: 'Description (optional):',
-      style: { fg: 'white', bg: 'black' }
+      style: { fg: 'white', bg: 'black' },
+      focusable: false,
     });
 
     const descInput = createTextbox({

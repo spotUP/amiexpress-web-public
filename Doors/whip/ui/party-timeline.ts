@@ -33,27 +33,30 @@ export async function showPartyTimeline(
       if (listBox) screen.remove(listBox);
       if (instructions) screen.remove(instructions);
 
-      // Header
+      // Header - NOT focusable
       header = createBox({
-      fixed: true,
+        fixed: true,
         parent: screen,
         top: 0,
         left: 0,
         width: '100%',
-        height: 2,
-        content: `{center}{bold}{cyan-fg}PARTY TIMELINE 2026{/cyan-fg}{/bold}\n` +
-                 `{center}Upcoming Demo Parties{/center}`,
-        style: { fg: 'white', bg: 'black' }
+        height: 3,
+        border: { type: 'line' },
+        content: `{center}{bold}{cyan-fg}PARTY TIMELINE 2026{/cyan-fg}{/bold} - Upcoming Demo Parties{/center}\n` +
+                 `{center}Upcoming: {bold}${upcomingParties.length}{/bold} parties{/center}`,
+        style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+        tags: true,
+        focusable: false,
       });
 
-      // Party list container
+      // Party list container - focusable (scrollable)
       listBox = createBox({
-      fixed: true,
+        fixed: true,
         parent: screen,
         top: 3,
-        left: 2,
-        width: screen.width - 4,
-        height: screen.height - 6,
+        left: 1,
+        width: '98%',
+        height: '100%-6',
         border: { type: 'line' },
         label: ' Parties ',
         style: {
@@ -64,7 +67,8 @@ export async function showPartyTimeline(
         alwaysScroll: true,
         mouse: true,
         keys: true,
-        vi: true
+        vi: true,
+        focusable: true,
       });
 
       if (upcomingParties.length === 0) {
@@ -129,16 +133,20 @@ export async function showPartyTimeline(
 
       listBox.focus();
 
-      // Instructions
+      // Footer - NOT focusable
       instructions = createBox({
-      fixed: true,
+        fixed: true,
         parent: screen,
         bottom: 0,
         left: 0,
         width: '100%',
-        height: 1,
-        content: `{center}[UP/DOWN] Scroll  |  [R] Refresh  |  [Q] Back{/center}`,
-        style: { fg: 'gray', bg: 'black' }
+        height: 3,
+        border: { type: 'line' },
+        content: ` {cyan-fg}[Up/Down]{/cyan-fg} Scroll   {cyan-fg}[R]{/cyan-fg} Refresh from demoparty.net   {red-fg}[Q/ESC]{/red-fg} Back\n` +
+                 ` {gray-fg}Scrollwheel supported{/gray-fg}`,
+        style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+        tags: true,
+        focusable: false,
       });
 
       screen.render();

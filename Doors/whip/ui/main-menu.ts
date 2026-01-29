@@ -1,4 +1,5 @@
-import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import type { MenuSelection } from '../types/session';
@@ -17,9 +18,8 @@ export async function showMainMenu(
     // Clear screen
     screen.clearRegion(0, screen.width, 0, screen.height);
     screen.alloc();
-    // Note: Removed 200ms artificial delay - blessed doesn't need it
 
-    // Get stats for footer
+    // Get stats for display
     const projects = await dataManager.loadProjects();
     const tasks = await dataManager.loadTasks();
     const parties = await dataManager.loadParties();
@@ -29,50 +29,47 @@ export async function showMainMenu(
       ? Math.ceil((new Date(upcomingParty.date).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
       : null;
 
-    // Header
+    // ========================================================================
+    // HEADER - Title and user stats (NOT focusable)
+    // ========================================================================
+    const levelColor = getLevelColor(user.level);
+    const levelStars = getLevelStars(user.level);
+
     const header = createBox({
       parent: screen,
       top: 0,
       left: 0,
       width: '100%',
       height: 3,
-      fixed: true,
-      content: `{center}{bold}{cyan-fg}W H I P   v 1 . 0{/cyan-fg}{/bold}\n` +
-               `{center}Demo Scene Project Management{/center}`,
-      style: { fg: 'white', bg: 'black' }
+      border: { type: 'line' },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'cyan' },
+      },
+      content: `{center}{bold}{cyan-fg}W H I P   v 1 . 0{/cyan-fg}{/bold} - Demo Scene Project Management{/center}\n` +
+               `{center}Handle: {bold}${user.handle}{/bold}  |  Level: {${levelColor}-fg}${user.level.toUpperCase()}{/${levelColor}-fg} (${levelStars})  |  Points: {bold}${formatPoints(user.points)}{/bold}  |  Rank: {bold}#${user.rank}{/bold}{/center}`,
+      tags: true,
+      focusable: false,
     });
 
-    // User info bar
-    const levelColor = getLevelColor(user.level);
-    const levelStars = getLevelStars(user.level);
-    const userInfo = createBox({
+    // ========================================================================
+    // CONTENT - Main container (NOT focusable, list inside is)
+    // ========================================================================
+    const mainContainer = createBox({
       parent: screen,
       top: 3,
       left: 0,
       width: '100%',
-      height: 1,
-      fixed: true,
-      content: `{center}Handle: {bold}${user.handle}{/bold}  |  Level: {${levelColor}-fg}${user.level.toUpperCase()}{/${levelColor}-fg} (${levelStars})  |  Points: {bold}${formatPoints(user.points)}{/bold}  |  Rank: {bold}#${user.rank}{/bold}{/center}`,
-      style: { fg: 'white', bg: 'black' }
-    });
-
-    // Menu box
-    const menuBox = createBox({
-      parent: screen,
-      top: 5,
-      left: 'center',
-      width: 45,
-      height: 13,  // 9 items + 2 padding + 2 border
-      fixed: true,
-      border: { type: 'line' },
-      label: ' MAIN MENU ',
+      height: '100%-6',  // Leave room for header (3) and footer (3)
       style: {
-        border: { fg: 'cyan' },
-        bg: 'black'
-      }
+        fg: 'white',
+        bg: 'black',
+      },
+      focusable: false,
     });
 
-    // Menu items - Quick Task first for easy access
+    // Menu items
     const menuItems = [
       { key: 'T', label: 'Quick Task (New)', value: 'quick-task' as MenuSelection },
       { key: 'N', label: 'New Project', value: 'new-project' as MenuSelection },
@@ -85,63 +82,122 @@ export async function showMainMenu(
       { key: 'Q', label: 'Quit', value: 'quit' as MenuSelection }
     ];
 
-    const list = createList({
+    // Menu box with border - explicit height (9 items + 2 border + 2 padding = 13)
+    const menuBox = createBox({
+      parent: mainContainer,
+      top: 1,
+      left: 1,
+      width: '50%',
+      height: 13,
+      border: { type: 'line' },
+      label: ' MAIN MENU ',
+      style: {
+        border: { fg: 'cyan' },
+        bg: 'black'
+      },
+      focusable: false,
+    });
+
+    // Menu list (focusable) - use blessed.list directly to avoid SDK's forced scrollable
+    const list = blessed.list({
       parent: menuBox,
       top: 1,
       left: 1,
-      width: '100%-2',
-      height: menuItems.length,
+      width: '100%-4',
+      height: 9,  // 9 menu items - exact fit, no scrolling needed
       items: menuItems.map(item => `[{bold}${item.key}{/bold}] ${item.label}`),
+      tags: true,
       keys: true,
       vi: true,
       mouse: true,
+      focusable: true,
       style: {
         selected: { bg: 'cyan', fg: 'black' },
-        item: { fg: 'white' }
-      }
+        item: { fg: 'white', bg: 'black' }
+      },
+      padding: { left: 1 },
+    } as any);
+
+    // Build stats content
+    let statsContent = '';
+    statsContent += `{cyan-fg}Projects:{/cyan-fg}  {bold}${projects.length}{/bold}\n`;
+    statsContent += `{cyan-fg}Tasks:{/cyan-fg}     {bold}${tasks.length}{/bold}\n`;
+
+    const completedTasks = tasks.filter(t => t.status === 'done').length;
+    const activeTasks = tasks.filter(t => t.status !== 'done').length;
+    statsContent += `{cyan-fg}Active:{/cyan-fg}    {bold}${activeTasks}{/bold}\n`;
+    statsContent += `{cyan-fg}Completed:{/cyan-fg} {bold}${completedTasks}{/bold}\n`;
+    statsContent += '\n';
+
+    if (upcomingParty && daysUntilParty !== null) {
+      statsContent += `{yellow-fg}UPCOMING PARTY:{/yellow-fg}\n`;
+      statsContent += `{bold}${upcomingParty.name}{/bold}\n`;
+      statsContent += `in {bold}${daysUntilParty}{/bold} days`;
+    } else {
+      statsContent += `{gray-fg}No upcoming parties{/gray-fg}`;
+    }
+
+    // Stats box on right side - same height as menu box (13)
+    const statsBox = createBox({
+      parent: mainContainer,
+      top: 1,
+      right: 1,
+      width: '45%',
+      height: 13,
+      border: { type: 'line' },
+      label: ' STATS ',
+      content: statsContent,
+      style: {
+        border: { fg: 'yellow' },
+        bg: 'black'
+      },
+      padding: { left: 1, top: 1 },
+      focusable: false,
     });
 
-    // Footer with stats and helpful messaging for first-time users
-    let footerContent = '';
-
-    // Show getting started hint if no projects exist (store reference for cleanup)
+    // Getting started hint if no projects
     let gettingStarted: any = null;
     if (projects.length === 0) {
       gettingStarted = createBox({
-        parent: screen,
-        bottom: 2,  // Position above footer (not hardcoded top)
-        left: 'center',
-        width: 60,
-        height: 3,
-        fixed: true,
+        parent: mainContainer,
+        bottom: 1,
+        left: 1,
+        width: '98%',
+        height: 5,
         border: { type: 'line' },
-        content: `{center}{bold}{cyan-fg}Getting Started:{/cyan-fg}{/bold}\n` +
-                 `Press {bold}[T]{/bold} to create your first task, or\n` +
-                 `Press {bold}[N]{/bold} to create a project!{/center}`,
+        label: ' Getting Started ',
+        content: `{center}{bold}{cyan-fg}Welcome to WHIP!{/cyan-fg}{/bold}{/center}\n` +
+                 `{center}Press {bold}[T]{/bold} to create your first quick task{/center}\n` +
+                 `{center}Press {bold}[N]{/bold} to create a new project{/center}`,
         style: {
-          border: { fg: 'yellow' },
+          border: { fg: 'green' },
           fg: 'white',
           bg: 'black'
-        }
+        },
+        tags: true,
+        focusable: false,
       });
     }
 
-    if (upcomingParty && daysUntilParty !== null) {
-      footerContent = `{center}UPCOMING: {bold}{yellow-fg}${upcomingParty.name}{/yellow-fg}{/bold} in {bold}${daysUntilParty}{/bold} days | `;
-    } else {
-      footerContent = `{center}`;
-    }
-    footerContent += `Active Projects: {bold}${projects.length}{/bold} | Tasks: {bold}${tasks.length}{/bold}{/center}`;
-
+    // ========================================================================
+    // FOOTER - Keyboard hints (NOT focusable)
+    // ========================================================================
     const footer = createBox({
       parent: screen,
       bottom: 0,
       left: 0,
       width: '100%',
-      height: 1,
-      fixed: true,
-      content: footerContent,
-      style: { fg: 'gray', bg: 'black' }
+      height: 3,
+      border: { type: 'line' },
+      style: {
+        fg: 'gray',
+        bg: 'black',
+        border: { fg: 'gray' },
+      },
+      content: ` {cyan-fg}[Enter]{/cyan-fg} Select   {cyan-fg}[Hotkey]{/cyan-fg} Quick Action   {red-fg}[Q]{/red-fg} Quit\n` +
+               ` {gray-fg}Arrow Keys to navigate | Mouse click supported{/gray-fg}`,
+      tags: true,
+      focusable: false,
     });
 
     // Focus the list
@@ -173,9 +229,8 @@ export async function showMainMenu(
       screen.off('keypress', keyHandler);
       list.removeAllListeners('select');
       screen.remove(header);
-      screen.remove(userInfo);
-      screen.remove(menuBox);
-      if (gettingStarted) screen.remove(gettingStarted);  // Clean up getting started box
+      screen.remove(mainContainer);
+      if (gettingStarted) screen.remove(gettingStarted);
       screen.remove(footer);
     };
 

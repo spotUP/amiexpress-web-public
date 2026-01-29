@@ -12,7 +12,7 @@ import { getPriorityColor, calculateLevel } from '../core/gamification';
 import { editTask, createTask } from './task-editor';
 
 const COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'testing', 'done'];
-const COLUMN_LABELS = {
+const COLUMN_LABELS: Record<TaskStatus, string> = {
   'todo': 'TODO',
   'in-progress': 'IN PROGRESS',
   'testing': 'TESTING',
@@ -31,10 +31,24 @@ export async function showKanbanBoard(
     screen.program.enableMouse();
     screen.clearRegion(0, screen.width, 0, screen.height);
     screen.alloc();
-    // Note: Removed 200ms artificial delay for better responsiveness
 
     let currentColumn = 0;
     let tasks = await dataManager.getTasksForProject(project.id);
+
+    // Drag and drop state
+    let dragState: {
+      active: boolean;
+      task: Task | null;
+      fromColumn: number;
+      fromIndex: number;
+      ghost: any;
+    } = {
+      active: false,
+      task: null,
+      fromColumn: -1,
+      fromIndex: -1,
+      ghost: null
+    };
 
     // Get party info if linked
     let partyInfo = '';
@@ -47,23 +61,29 @@ export async function showKanbanBoard(
       }
     }
 
-    // Header
+    // Header - NOT focusable
     const header = createBox({
       parent: screen,
       top: 0,
       left: 0,
       width: '100%',
-      height: 2,
+      height: 3,
       fixed: true,
-      content: `{center}{bold}{cyan-fg}PROJECT: ${project.name}{/cyan-fg}{/bold}${partyInfo}\n` +
-               `{center}Kanban Board{/center}`,
-      style: { fg: 'white', bg: 'black' }
+      border: { type: 'line' },
+      content: `{center}{bold}{cyan-fg}PROJECT: ${project.name}{/cyan-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
+               `{center}Tasks: {bold}${tasks.length}{/bold} | Todo: {bold}${tasks.filter(t => t.status === 'todo').length}{/bold} | In Progress: {bold}${tasks.filter(t => t.status === 'in-progress').length}{/bold} | Done: {bold}${tasks.filter(t => t.status === 'done').length}{/bold}{/center}`,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      tags: true,
+      focusable: false,
     });
 
-    // Column containers
-    const colWidth = 20;  // Wider columns for better readability (4 × 20 = 80 chars)
+    // Column containers - calculate width based on screen width
+    // Leave 1 char margin on right to ensure border is visible
+    const totalWidth = screen.width - 1;
+    const colWidth = Math.floor(totalWidth / 4);
     const columnBoxes: any[] = [];
     const columnLists: any[] = [];
+    const leftMargin = 0;
 
     for (let i = 0; i < COLUMNS.length; i++) {
       const status = COLUMNS[i];
@@ -72,16 +92,17 @@ export async function showKanbanBoard(
       const box = createBox({
         parent: screen,
         top: 3,
-        left: i * colWidth,  // No spacing needed - columns are adjacent
+        left: leftMargin + (i * colWidth),
         width: colWidth,
-        height: screen.height - 6,
+        height: '100%-6',
         fixed: true,
         border: { type: 'line' },
         label: ` ${label} `,
         style: {
           border: { fg: i === currentColumn ? 'yellow' : 'cyan' },
           bg: 'black'
-        }
+        },
+        focusable: false,
       });
 
       const list = createList({
@@ -101,20 +122,27 @@ export async function showKanbanBoard(
         }
       });
 
+      // Store column index for drag handling
+      (list as any)._columnIndex = i;
+
       columnBoxes.push(box);
       columnLists.push(list);
     }
 
-    // Footer
+    // Footer - NOT focusable
     const footer = createBox({
       parent: screen,
       bottom: 0,
       left: 0,
       width: '100%',
-      height: 1,
+      height: 3,
       fixed: true,
-      content: `{center}[LEFT/RIGHT] Column  |  [UP/DOWN] Task  |  [Enter] Edit  |  [N] New  |  [M] Move  |  [D] Delete  |  [Q] Back{/center}`,
-      style: { fg: 'gray', bg: 'black' }
+      border: { type: 'line' },
+      content: ` {cyan-fg}[Arrows]{/cyan-fg} Navigate   {cyan-fg}[Enter]{/cyan-fg} Edit   {cyan-fg}[N]{/cyan-fg} New   {cyan-fg}[M]{/cyan-fg} Move   {cyan-fg}[D]{/cyan-fg} Delete   {red-fg}[Q/ESC]{/red-fg} Back\n` +
+               ` {yellow-fg}Drag & Drop:{/yellow-fg} Click and drag tasks between columns`,
+      style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+      tags: true,
+      focusable: false,
     });
 
     // Debounce timer for navigation updates
@@ -122,7 +150,6 @@ export async function showKanbanBoard(
     let isUpdating = false;
 
     const updateListsImmediate = () => {
-      // Update UI synchronously without data reload
       for (let i = 0; i < COLUMNS.length; i++) {
         columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
       }
@@ -131,16 +158,14 @@ export async function showKanbanBoard(
     };
 
     const updateLists = async (immediate: boolean = false) => {
-      if (isUpdating && !immediate) return;  // Skip if update already in progress
+      if (isUpdating && !immediate) return;
 
-      // Cancel pending update
       if (updateTimeout) {
         clearTimeout(updateTimeout);
         updateTimeout = null;
       }
 
       if (immediate) {
-        // Immediate update (after data changes)
         isUpdating = true;
         tasks = await dataManager.getTasksForProject(project.id);
 
@@ -148,15 +173,28 @@ export async function showKanbanBoard(
           const status = COLUMNS[i];
           const columnTasks = tasks.filter(t => t.status === status);
 
+          const maxTitleLen = Math.max(8, colWidth - 12);
+
           const items = columnTasks.map(task => {
+            const priorityInitial = task.priority[0].toUpperCase();
             const priorityColor = getPriorityColor(task.priority);
-            return `{${priorityColor}-fg}#${task.id.substring(0, 4)}{/${priorityColor}-fg} ${task.title.substring(0, 14)}\n  [${task.priority}] ${task.points}pts`;
+            const title = task.title.length > maxTitleLen
+              ? task.title.substring(0, maxTitleLen - 2) + '..'
+              : task.title;
+            return `${title} {${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points}`;
           });
 
-          columnLists[i].setItems(items.length > 0 ? items : ['{gray-fg}(empty){/gray-fg}']);
+          // Clear items first, then set new ones to ensure proper refresh
+          columnLists[i].clearItems();
+          columnLists[i].setItems(items.length > 0 ? items : []);
         }
 
-        // Update column borders to show active column
+        // Update header with new counts
+        header.setContent(
+          `{center}{bold}{cyan-fg}PROJECT: ${project.name}{/cyan-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
+          `{center}Tasks: {bold}${tasks.length}{/bold} | Todo: {bold}${tasks.filter(t => t.status === 'todo').length}{/bold} | In Progress: {bold}${tasks.filter(t => t.status === 'in-progress').length}{/bold} | Done: {bold}${tasks.filter(t => t.status === 'done').length}{/bold}{/center}`
+        );
+
         for (let i = 0; i < COLUMNS.length; i++) {
           columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
         }
@@ -165,40 +203,201 @@ export async function showKanbanBoard(
         screen.render();
         isUpdating = false;
       } else {
-        // Debounced update for navigation (50ms delay)
         updateTimeout = setTimeout(async () => {
           updateTimeout = null;
           await updateLists(true);
         }, 50);
-
-        // Update UI immediately for responsiveness
         updateListsImmediate();
       }
     };
 
-    await updateLists(true);  // Initial load
+    await updateLists(true);
+
+    // Get column index from screen X position
+    const getColumnFromX = (x: number): number => {
+      for (let i = 0; i < COLUMNS.length; i++) {
+        const colLeft = leftMargin + (i * colWidth);
+        const colRight = colLeft + colWidth;
+        if (x >= colLeft && x < colRight) {
+          return i;
+        }
+      }
+      return -1;
+    };
+
+    // Start drag operation
+    const startDrag = (colIndex: number, itemIndex: number, x: number, y: number) => {
+      const columnTasks = tasks.filter(t => t.status === COLUMNS[colIndex]);
+      if (itemIndex >= columnTasks.length) return;
+
+      const task = columnTasks[itemIndex];
+
+      dragState = {
+        active: true,
+        task: task,
+        fromColumn: colIndex,
+        fromIndex: itemIndex,
+        ghost: createBox({
+          parent: screen,
+          top: y - 1,
+          left: x - 8,
+          width: 18,
+          height: 3,
+          border: { type: 'line' },
+          content: task.title.length > 14 ? task.title.substring(0, 12) + '..' : task.title,
+          style: {
+            fg: 'white',
+            bg: 'blue',
+            border: { fg: 'yellow' }
+          },
+          tags: true,
+        })
+      };
+
+      screen.render();
+    };
+
+    // Update drag ghost position
+    const updateDrag = (x: number, y: number) => {
+      if (!dragState.active || !dragState.ghost) return;
+
+      dragState.ghost.top = y - 1;
+      dragState.ghost.left = x - 8;
+
+      // Highlight potential drop target
+      const targetCol = getColumnFromX(x);
+      for (let i = 0; i < COLUMNS.length; i++) {
+        if (i === targetCol && targetCol !== dragState.fromColumn) {
+          columnBoxes[i].style.border.fg = 'green';
+        } else if (i === currentColumn) {
+          columnBoxes[i].style.border.fg = 'yellow';
+        } else {
+          columnBoxes[i].style.border.fg = 'cyan';
+        }
+      }
+
+      screen.render();
+    };
+
+    // End drag operation
+    const endDrag = async (x: number, y: number) => {
+      if (!dragState.active || !dragState.task) return;
+
+      // Capture task info before resetting state
+      const taskToMove = dragState.task;
+      const fromCol = dragState.fromColumn;
+
+      // Remove ghost
+      if (dragState.ghost) {
+        screen.remove(dragState.ghost);
+        dragState.ghost = null;
+      }
+
+      const targetCol = getColumnFromX(x);
+
+      // Reset drag state first to prevent re-entry
+      dragState = {
+        active: false,
+        task: null,
+        fromColumn: -1,
+        fromIndex: -1,
+        ghost: null
+      };
+
+      // If dropped on different column, move the task
+      if (targetCol !== -1 && targetCol !== fromCol) {
+        const newStatus = COLUMNS[targetCol];
+        try {
+          await moveTask(screen, taskToMove, newStatus, dataManager, achievementManager, user, project, bbsApi);
+        } catch (err) {
+          console.error('[Kanban] Move task failed:', err);
+        }
+        await updateLists(true);
+      } else {
+        // Dropped on same column or outside - just refresh to reset borders
+        for (let i = 0; i < COLUMNS.length; i++) {
+          columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+        }
+        screen.render();
+      }
+    };
+
+    // Set up drag handlers for each list
+    for (let i = 0; i < columnLists.length; i++) {
+      const list = columnLists[i];
+      const colIndex = i;  // Capture for closure
+
+      list.on('mouse', (data: any) => {
+        if (data.action === 'mousedown') {
+          // Skip if already dragging
+          if (dragState.active) return;
+
+          const columnTasks = tasks.filter(t => t.status === COLUMNS[colIndex]);
+          if (columnTasks.length === 0) return;
+
+          // Get the selected item index - blessed updates this on mousedown
+          const selectedIndex = list.selected ?? 0;
+          if (selectedIndex >= columnTasks.length) return;
+
+          currentColumn = colIndex;
+
+          // Capture coordinates and start drag immediately
+          const mouseX = data.x;
+          const mouseY = data.y;
+
+          startDrag(colIndex, selectedIndex, mouseX, mouseY);
+        }
+      });
+    }
+
+    // Global mouse handler for drag operations
+    const mouseHandler = (data: any) => {
+      if (!dragState.active) return;
+
+      if (data.action === 'mousemove') {
+        updateDrag(data.x, data.y);
+      } else if (data.action === 'mouseup' || data.action === 'mouserelease') {
+        endDrag(data.x, data.y);
+      }
+    };
+
+    // Also handle element mouse events that might capture the release
+    const elementMouseHandler = (data: any) => {
+      if (!dragState.active) return;
+      if (data.action === 'mouseup' || data.action === 'mouserelease') {
+        endDrag(data.x, data.y);
+      }
+    };
+
+    screen.on('mouse', mouseHandler);
+    // Listen on each column for mouseup in case screen doesn't get it
+    columnLists.forEach(list => list.on('mouse', elementMouseHandler));
 
     const cleanup = () => {
-      if (updateTimeout) clearTimeout(updateTimeout);  // Clean up debounce timer
+      if (updateTimeout) clearTimeout(updateTimeout);
       screen.off('keypress', keyHandler);
+      screen.off('mouse', mouseHandler);
+      columnLists.forEach(list => list.off('mouse', elementMouseHandler));
+      if (dragState.ghost) screen.remove(dragState.ghost);
       screen.remove(header);
       columnBoxes.forEach(box => screen.remove(box));
       screen.remove(footer);
     };
 
     const keyHandler = (ch: any, key: any) => {
-      // Handle synchronous navigation immediately
+      // Ignore keys during drag
+      if (dragState.active) return;
+
       if (key.name === 'left' || key.name === 'right') {
         if (key.name === 'left') {
           currentColumn = Math.max(0, currentColumn - 1);
         } else {
           currentColumn = Math.min(COLUMNS.length - 1, currentColumn + 1);
         }
-        updateLists(false);  // Debounced update
+        updateLists(false);
         return;
       }
 
-      // Handle async operations
       (async () => {
         const columnTasks = tasks.filter(t => t.status === COLUMNS[currentColumn]);
 
@@ -208,13 +407,13 @@ export async function showKanbanBoard(
             const selectedIndex = columnLists[currentColumn].selected || 0;
             const task = columnTasks[selectedIndex];
             await editTask(screen, task, user, dataManager, achievementManager, project, bbsApi);
-            await updateLists(true);  // Immediate update after data change
+            await updateLists(true);
           }
           break;
 
         case 'n':
           await createTask(screen, project, user, dataManager, bbsApi);
-          await updateLists(true);  // Immediate update after data change
+          await updateLists(true);
           break;
 
         case 'm':
@@ -224,7 +423,7 @@ export async function showKanbanBoard(
             const newStatus = await selectMoveDestination(screen);
             if (newStatus) {
               await moveTask(screen, task, newStatus, dataManager, achievementManager, user, project, bbsApi);
-              await updateLists(true);  // Immediate update after data change
+              await updateLists(true);
             }
           }
           break;
@@ -237,7 +436,6 @@ export async function showKanbanBoard(
             if (confirmed) {
               await dataManager.deleteTask(task.id);
 
-              // Emit event for deleted task
               if (bbsApi?.emitCustomEvent) {
                 bbsApi.emitCustomEvent(
                   'task_deleted',
@@ -251,14 +449,13 @@ export async function showKanbanBoard(
                 );
               }
 
-              await updateLists(true);  // Immediate update after data change
+              await updateLists(true);
             }
           }
           break;
 
         case 'q':
         case 'escape':
-          if (updateTimeout) clearTimeout(updateTimeout);  // Clean up timer
           cleanup();
           resolve();
           break;
@@ -284,7 +481,8 @@ async function selectMoveDestination(screen: Screen): Promise<TaskStatus | null>
       style: {
         border: { fg: 'yellow' },
         bg: 'black'
-      }
+      },
+      focusable: false,
     });
 
     const list = createList({
@@ -342,11 +540,9 @@ async function moveTask(
   task.status = newStatus;
   task.updatedAt = new Date().toISOString();
 
-  // Check if task moved to "done" - award points and check achievements
   if (newStatus === 'done' && oldStatus !== 'done') {
     task.completedAt = new Date().toISOString();
 
-    // Award points to user
     const userData = await dataManager.getUser(user.userId);
     if (userData) {
       userData.points += task.points;
@@ -354,7 +550,6 @@ async function moveTask(
       userData.level = calculateLevel(userData.points);
       await dataManager.updateUser(userData);
 
-      // Emit event for completed task
       if (bbsApi?.emitCustomEvent) {
         bbsApi.emitCustomEvent(
           'task_completed',
@@ -371,10 +566,8 @@ async function moveTask(
         );
       }
 
-      // Check achievements
       const newAchievements = await achievementManager.checkAchievements(userData);
 
-      // Show achievement notifications if any were unlocked
       if (newAchievements.length > 0) {
         const achievements = await dataManager.loadAchievements();
         for (const achievementId of newAchievements) {
@@ -382,7 +575,6 @@ async function moveTask(
           if (achievement) {
             await showAchievementUnlock(screen, achievement);
 
-            // Emit event for unlocked achievement
             if (bbsApi?.emitCustomEvent) {
               bbsApi.emitCustomEvent(
                 'achievement_unlocked',
@@ -401,7 +593,6 @@ async function moveTask(
       }
     }
   } else if (newStatus !== oldStatus) {
-    // Emit event for task moved to different column
     if (bbsApi?.emitCustomEvent) {
       bbsApi.emitCustomEvent(
         'task_moved',
