@@ -38,7 +38,7 @@ import { displayScreen } from '../handlers/screen.handler';
 import { handleCommand } from '../handlers/command.handler';
 import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { initializeSecurity } from '../utils/security.util';
-import { triggerSamiLogRefresh } from '../services/SamiLogService';
+import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
 import { runSamiLogUpdate } from '../services/SamiLogRunner';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -979,6 +979,13 @@ console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - active socket det
   // Log user logout if they were logged in (express.e:9493 callersLog)
   if (session.user) {
     await callersLog(session.user.id, session.user.username, 'Logged off');
+
+    // Update SAmiLog.Store with this session's caller entry
+    try {
+      await updateStoreFromCallersLog(session.nodeId || 1, { ignoreSysop: false });
+    } catch (err) {
+      console.error('[SamiLog] Failed to update store on logout:', err);
+    }
 
     // Emit BBS event for LiveChat integration
     try {

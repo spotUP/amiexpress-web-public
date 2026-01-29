@@ -74,6 +74,12 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   if (shouldDisplayMenu) {
     screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
 
+    // Clear any pagination that displayScreen might have set up - the menu prompt
+    // handles input, not paginated screen continuation. This fixes the "enter twice" bug
+    // where the first keypress after ? command was consumed by pagination handler.
+    session.paginatedScreen = undefined;
+    session.lastScreenHadPause = false;
+
     // Load MENU .keys if present (express.e:6567-6573)
     session.cmdShortcuts = false;
     if (session.shortcuts) session.shortcuts.clear();
@@ -94,8 +100,9 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   }
 
   // express.e: after menu display, reset doorExpertMode and emit newline
+  // Note: express.e uses '\b\n' where \b is carriage return in E language, maps to \r\n
   session.doorExpertMode = false;
-  socket.emit('ansi-output', '\b\n');
+  socket.emit('ansi-output', '\r\n');
 
   if (typeof processOlmMessageQueue === 'function') {
     processOlmMessageQueue(socket, session, true);

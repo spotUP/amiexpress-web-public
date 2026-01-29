@@ -208,6 +208,26 @@ export class BBSApi {
   }
 
   /**
+   * Check if modem emulation is enabled
+   * When true, output is throttled character-by-character to simulate modem speeds
+   * Used by blessed SDK to enable slow connection mode (differential rendering)
+   */
+  get modemEmulationEnabled(): boolean {
+    return this.session?.modemEmulationEnabled === true;
+  }
+
+  /**
+   * Get modem emulation speed in bps
+   * 0 = disabled, otherwise simulated baud rate (300, 1200, 2400, 9600, etc.)
+   */
+  get modemBps(): number {
+    if (!this.session?.modemEmulationEnabled) {
+      return 0;
+    }
+    return this.session?.modemBps || this.session?.user?.baud || 0;
+  }
+
+  /**
    * Write PETSCII content to terminal
    * Emits 'petscii-output' event which triggers PetMe64 font on frontend
    * For real C64 terminals, this is converted to raw PETSCII bytes

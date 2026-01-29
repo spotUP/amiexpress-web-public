@@ -233,8 +233,9 @@ console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
    * CRITICAL: Must match exact E struct layout from axobjects.e
    */
   private userToBuffer(user: User, nodeId: number = 0): Buffer {
-    // Calculate exact size (match E struct)
-    const size = 31 + 9 + 30 + 13 + (2 * 13) + (4 * 13) + 10 + (2 * 3) + (4 * 14) + (1 * 6);
+    // Calculate exact size (match E struct with 68K word alignment)
+    // name[31] + pass[9] + location[30] + phoneNumber[13] + 1 padding + INTs + LONGs + CHARs
+    const size = 31 + 9 + 30 + 13 + 1 + (2 * 13) + (4 * 13) + 10 + (2 * 3) + (4 * 14) + (1 * 6);
     const buffer = Buffer.alloc(size);
     let offset = 0;
 
@@ -253,6 +254,11 @@ console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
     // phoneNumber[13]
     this.writeString(buffer, user.phoneNumber || '', 13, offset);
     offset += 13;
+
+    // 1 byte padding after phoneNumber[13] to align slotNumber (INT) to even address
+    // 68K requires word alignment for 16-bit values
+    buffer.writeUInt8(0, offset);
+    offset += 1;
 
     // slotNumber: INT
     const slot = Math.min(Math.max(nodeId, 0), 32767);
@@ -491,6 +497,9 @@ console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
     offset += 30;
     user.phoneNumber = this.readString(buffer, 13, offset);
     offset += 13;
+
+    // Skip 1 byte padding (word alignment for 68K)
+    offset += 1;
 
     user.slotNumber = buffer.readInt16BE(offset);
     offset += 2;

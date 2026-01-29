@@ -12,7 +12,7 @@
 
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, UserFlags } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
@@ -22,6 +22,29 @@ import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu } from '../command-handler/menu';
 import { config } from '../../config';
+
+/**
+ * checkScreenClear - express.e:2013-2018
+ *
+ * PROC checkScreenClear()
+ *   IF((loggedOnUserKeys.userFlags AND USER_SCRNCLR))
+ *     sendCLS()
+ *     RETURN TRUE
+ *   ENDIF
+ * ENDPROC FALSE
+ *
+ * Sends form feed (ASCII 12) if user has screen clear flag enabled.
+ * Returns true if screen was cleared, false otherwise.
+ */
+function checkScreenClear(socket: any, session: BBSSession): boolean {
+  const userFlags = session.user?.userFlags || 0;
+  if (userFlags & UserFlags.SCRNCLR) {
+    // sendCLS() - express.e:5224-5228 sends ASCII 12 (form feed)
+    socket.emit('ansi-output', '\x0c');
+    return true;
+  }
+  return false;
+}
 import { formatBytesCompact } from '../../utils/byte-format.util';
 import { formatDateSlash } from '../../utils/date-format.util';
 
@@ -58,7 +81,7 @@ export function setDisplayFileCommandsDependencies(deps: {
  * PROC internalCommandQuestionMark()
  *   IF (loggedOnUser.expert="X")
  *     checkScreenClear()
- *     await displayScreen(SCREEN_MENU)
+ *     displayScreen(SCREEN_MENU)
  *   ENDIF
  * ENDPROC RESULT_SUCCESS
  *
@@ -73,6 +96,9 @@ export async function handleQuestionMarkCommand(socket: any, session: BBSSession
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
+
+  // express.e:24596 - checkScreenClear() sends CLS if user has SCRNCLR flag
+  checkScreenClear(socket, session);
 
   // In expert mode, explicitly redraw the menu and reset input state.
   session.menuPause = false;

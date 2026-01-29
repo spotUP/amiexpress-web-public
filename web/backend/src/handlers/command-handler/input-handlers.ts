@@ -539,6 +539,9 @@ console.log("✅ In READ_COMMAND state, reading line input");
     const input = session.inputBuffer || "";
     session.inputBuffer = "";
 
+    // Echo newline to move cursor to next line (terminal doesn't auto-echo in raw mode)
+    socket.emit("ansi-output", "\r\n");
+
     // Add command to history if non-empty
     if (input.length > 0) {
       const { addToHistory } = require("../utils/command-history.util");

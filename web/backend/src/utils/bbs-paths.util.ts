@@ -195,6 +195,20 @@ export class BBSPaths {
       return path.join(this.system(), subpath);
     }
 
+    // RAM: assign (RAM disk - temp directory)
+    const ramMatch = amigaPath.match(/^RAM:(.*)$/i);
+    if (ramMatch) {
+      const subpath = ramMatch[1].replace(/\//g, path.sep);
+      return path.join(process.env.RAM_DIR || '/tmp/ram', subpath);
+    }
+
+    // T: assign (temp directory - usually RAM:T)
+    const tempMatch = amigaPath.match(/^T:(.*)$/i);
+    if (tempMatch) {
+      const subpath = tempMatch[1].replace(/\//g, path.sep);
+      return path.join(process.env.RAM_DIR || '/tmp/ram', 'T', subpath);
+    }
+
     // No assign - return as-is (relative or absolute)
     return amigaPath;
   }

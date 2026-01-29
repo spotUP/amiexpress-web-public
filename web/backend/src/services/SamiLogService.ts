@@ -812,7 +812,8 @@ function formatActions(flag1: number, flag2: number): string {
   // Pos 6: Sysop (Flag1 Bit 4)
   const s = (flag1 & (1 << 4)) ? 'S' : '-';
   
-  return `[${h}${c}${p}${d}${u}${s}]`;
+  // Use parentheses instead of brackets to avoid [H being interpreted as ANSI cursor home
+  return `(${h}${c}${p}${d}${u}${s})`;
 }
 
 function formatDurationHMM(usageStr: string): string {
@@ -928,7 +929,9 @@ console.warn('[SamiLog] Failed to read templates:', e);
       }
 
       const name = e.name.padEnd(17).substring(0, 17);
-      const location = e.location.padEnd(20).substring(0, 20);
+      // Escape brackets in location to avoid ANSI sequence conflicts (e.g., [33m[d gets parsed as escape)
+      const escapedLocation = e.location.replace(/\[/g, '(').replace(/\]/g, ')');
+      const location = escapedLocation.padEnd(20).substring(0, 20);
       
       // Option L: Logoff Times
       const time = (options.logoffTimes ? e.offTime : e.onTime).trim().padEnd(8);
@@ -937,21 +940,24 @@ console.warn('[SamiLog] Failed to read templates:', e);
       const duration = formatDurationHMM(e.usage).padStart(4);
       
       // Option S: Show Files
+      // Column widths: Up-K = 4 chars, Dn-K = 4 chars (no trailing space on last column)
       let upStat, dnStat;
       if (options.showFiles) {
         upStat = e.upFiles.trim().padStart(4);
-        dnStat = e.dnFiles.trim().padStart(5);
+        dnStat = e.dnFiles.trim().padStart(4);
       } else {
         const upKbNum = parseInt(e.upKb.trim()) || 0;
         const dnKbNum = parseInt(e.dnKb.trim()) || 0;
         upStat = formatTraffic(upKbNum).padStart(4);
-        dnStat = formatTraffic(dnKbNum).padStart(5);
+        dnStat = formatTraffic(dnKbNum).padStart(4);
       }
 
+      // Column format: time(8) + 1space + actions(8) + 1space + duration(4) + 1space + up(4) + 1space + dn(4) = 76
+      // Note: Header "On-Time" is 7 chars + 2 spaces = 9, so data time(8) + 1 space = 9 to align
       if (options.noAnsi) {
-        output += `${col1}${col2} ${name}${location}${time}  ${actions} ${duration} ${upStat} ${dnStat}\n`;
+        output += `${col1}${col2} ${name}${location}${time} ${actions} ${duration} ${upStat} ${dnStat}\n`;
       } else {
-        output += `${ANSI_RED}${col1}${col2}${ANSI_WHITE} ${ANSI_GREEN}${name}${ANSI_YELLOW}${location}${ANSI_BLUE}${time}  ${ANSI_MAGENTA}${actions}${ANSI_CYAN} ${duration} ${ANSI_RED}${upStat} ${ANSI_GREEN}${dnStat}${ANSI_RESET}\n`;
+        output += `${ANSI_RED}${col1}${col2}${ANSI_WHITE} ${ANSI_GREEN}${name}${ANSI_YELLOW}${location}${ANSI_BLUE}${time} ${ANSI_MAGENTA}${actions}${ANSI_CYAN} ${duration} ${ANSI_RED}${upStat} ${ANSI_GREEN}${dnStat}${ANSI_RESET}\n`;
       }
     }
 
@@ -973,16 +979,22 @@ console.warn('[SamiLog] Failed to read templates:', e);
     // 6. Version
     output += '                                                                      v2.00 \n';
 
-    // 7. Stats Bars
+    // 7. Stats Bars - Original format is 76 chars:
+    // " Calls: 0000 / Y'day: 0000 | U: 0000 / 00000k | D: 0000 / 00000k | Hrs: 000 "
     const daily = readDailyStats(buffer);
     const records = readRecords(buffer);
 
-    let bar1 = ` Calls: ${daily.calls.toString().padStart(4)} / Y'day: ${daily.yesterdayCalls.toString().padStart(4)} | U: ${daily.upFiles.toString().padStart(4)} / ${daily.upKBytes}k | D: ${daily.dnFiles.toString().padStart(4)} / ${daily.dnKBytes}k | Hrs: ${Math.floor(daily.usedMins/60).toString().padStart(3)} `;
+    // Format KB values with fixed 5-digit width (max 99999k = 97MB)
+    const formatKb5 = (kb: number): string => Math.min(kb, 99999).toString().padStart(5);
+
+    let bar1 = ` Calls: ${Math.min(daily.calls, 9999).toString().padStart(4)} / Y'day: ${Math.min(daily.yesterdayCalls, 9999).toString().padStart(4)} | U: ${Math.min(daily.upFiles, 9999).toString().padStart(4)} / ${formatKb5(daily.upKBytes)}k | D: ${Math.min(daily.dnFiles, 9999).toString().padStart(4)} / ${formatKb5(daily.dnKBytes)}k | Hrs: ${Math.min(Math.floor(daily.usedMins/60), 999).toString().padStart(3)} `;
     if (options.noAnsi) bar1 = bar1.replace(/\|/g, '-');
     output += bar1 + '\n';
 
     if (!options.noRecords) {
-      let bar2 = ` The Records - Calls: ${records.calls.toString().padStart(4)} | U: ${records.upFiles.toString().padStart(4)} / D${formatTraffic(records.upKBytes, true)} | D: ${records.dnFiles.toString().padStart(4)} / @${formatTraffic(records.dnKBytes, true)} | Hrs: ${Math.floor(records.usedMins/60).toString().padStart(3)} `;
+      // Records line is slightly different format, also 76 chars:
+      // " The Records - Calls: 0000 | U: 0000 / 00000k | D: 0000 / 00000k | Hrs: 000 "
+      let bar2 = ` The Records - Calls: ${Math.min(records.calls, 9999).toString().padStart(4)} | U: ${Math.min(records.upFiles, 9999).toString().padStart(4)} / ${formatKb5(records.upKBytes)}k | D: ${Math.min(records.dnFiles, 9999).toString().padStart(4)} / ${formatKb5(records.dnKBytes)}k | Hrs: ${Math.min(Math.floor(records.usedMins/60), 999).toString().padStart(3)} `;
       if (options.noAnsi) bar2 = bar2.replace(/\|/g, '-');
       output += bar2 + '\n';
     }

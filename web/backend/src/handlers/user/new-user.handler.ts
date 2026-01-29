@@ -20,6 +20,7 @@ import { displayScreen, doPause } from '../screen.handler';
 import { config } from '../../config';
 import { ConfigService } from '../../services/config.service';
 import { userFileManager } from '../../services/UserFileManager';
+import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { emitUserLogin } from '../../services/bbs-event-emitter';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
@@ -888,9 +889,13 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
   }
 
   socket.emit('ansi-output', 'Yes..\r\n\r\n');
-  await persistQuestionnaireAnswers(session);
-  session.newUserData.questionnaire = undefined;
+  // Create account first to get the slot number (express.e:30054-30060 creates user before answers)
   await createAccount(socket, session);
+  // Now persist questionnaire answers with the correct slot number
+  // The slot number is the user's position in USER.DATA (0-indexed)
+  const slotNumber = userDatabaseManager.getUserCount() - 1;
+  await persistQuestionnaireAnswers(session, slotNumber);
+  session.newUserData.questionnaire = undefined;
 }
 
 async function beginQuestionnaire(socket: Socket, session: any): Promise<boolean> {
@@ -1003,7 +1008,7 @@ console.warn('[NEW USER] Unable to load questionnaire script:', scriptPath, erro
   }
 }
 
-async function persistQuestionnaireAnswers(session: any): Promise<void> {
+async function persistQuestionnaireAnswers(session: any, slotNumber: number): Promise<void> {
   const questionnaire: QuestionnaireState | undefined = session.newUserData.questionnaire;
   if (!questionnaire) return;
 
@@ -1013,11 +1018,20 @@ async function persistQuestionnaireAnswers(session: any): Promise<void> {
   }
 
   const now = getSystemTime();
-  const dateStr = now.toISOString().split('T')[0];
-  const timeStr = now.toTimeString().split(' ')[0];
+  // Format: MM-DD-YY (HH:MM:SS) [slotNumber] username (CONNECT baudRate) location
+  // Per express.e:30354 - uses loggedOnUser.slotNumber (user's slot in USER.DATA)
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const dateStr = `${month}-${day}-${year}`;
+  const timeStr = `(${hours}:${minutes}:${seconds})`;
+  const baudRate = session.connectionBaud || '115200';
   const header: string[] = [
     '**************************************************************',
-    `${dateStr} ${timeStr} [${session.nodeId || 0}] ${session.newUserData.username || 'NEW'} (${session.newUserData.location || 'Unknown'})`,
+    `${dateStr} ${timeStr} [${slotNumber}] ${session.newUserData.username || 'NEW'} (CONNECT ${baudRate}) ${session.newUserData.location || 'Unknown'}`,
     ''
   ];
 
@@ -1026,16 +1040,17 @@ async function persistQuestionnaireAnswers(session: any): Promise<void> {
   }
   header.push('');
 
-  const content = header.join('\r\n');
+  // Use Unix line endings (LF) to match original AmiExpress format
+  const content = header.join('\n');
 
   try {
-    amigafs.writeFileSync(questionnaire.tempAnswerPath, `${content}\r\n`, 'utf8');
+    amigafs.writeFileSync(questionnaire.tempAnswerPath, `${content}\n`, 'utf8');
   } catch (error) {
 console.warn('[NEW USER] Failed to write TempAns file:', error);
   }
 
   try {
-    amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\r\n`, 'utf8');
+    amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\n`, 'utf8');
   } catch (error) {
 console.warn('[NEW USER] Failed to append Answers file:', error);
   }

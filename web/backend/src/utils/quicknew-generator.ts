@@ -114,9 +114,11 @@ console.error('[QuickNew] Error generating QuickNew screen:', error);
   const timePart = now.toTimeString().split(' ')[0];
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  const footer = `[44;33m  QuickNew V2.2 (Web)[36m Date : ${month}-${day}-${String(now.getFullYear()).slice(
-    -2
-  )}  [35m Time : ${timePart}  \r\n[0m`;
+  const year = String(now.getFullYear()).slice(-2);
+  // Build footer content without ANSI codes to calculate padding
+  const footerText = `  QuickNew V2.2 (Web) Date : ${month}-${day}-${year}   Time : ${timePart}  `;
+  const paddedFooter = footerText.padEnd(80, ' ');
+  const footer = `[44;33m${paddedFooter}[0m`;
 
   output.push(footer);
   output.push('~SP.');
@@ -305,8 +307,10 @@ console.warn(`[QuickNew] Invalid dir path: ${sectionCfg.dirPath}`);
       // Get file areas for this conference (prefer database, fallback to disk)
       let areas = await db.getFileAreas(confId);
       const bbsRoot = config.getConfig().dataDir;
+      let usingDiskAreas = false;
 
       if (areas.length === 0) {
+        usingDiskAreas = true;
         const diskAreas = loadConferenceFileAreas(bbsRoot, confId);
         // Map disk areas to match the expected structure (only need id for lookup)
         areas = diskAreas.map(a => ({
@@ -323,17 +327,31 @@ console.warn(`[QuickNew] Invalid dir path: ${sectionCfg.dirPath}`);
         }));
       }
 
-      const area = areas.find(a => a.id === dirNum) || areas[dirNum - 1];
+      // Find area by name pattern "Conference X - Dir Y" or use array index
+      // Note: area.id is database auto-increment, NOT the dir number
+      const dirPattern = new RegExp(`(Conference\\s*${confId}|Conf\\s*${confId}).*Dir\\s*${dirNum}`, 'i');
+      let area = areas.find(a => dirPattern.test(a.name));
+      if (!area) {
+        // Fallback: use array index (assumes areas ordered by dir number within conference)
+        area = areas[dirNum - 1];
+      }
 
       if (!area) {
 console.warn(`[QuickNew] Area not found for ${sectionCfg.dirPath}`);
         continue;
       }
 
-      // Get file entries (prefer database, fallback to parsing DIR1 file)
-      let files = await db.getFileEntries(area.id, { status: 'active', limit: 200 });
-      
+      // Get file entries:
+      // - If areas came from database, query database for files
+      // - If areas came from disk, skip database (would match wrong area IDs) and parse DIR file
+      let files: any[] = [];
+
+      if (!usingDiskAreas) {
+        files = await db.getFileEntries(area.id, { status: 'active', limit: 200 });
+      }
+
       if (files.length === 0) {
+        // Fallback to parsing DIR file from disk
         const dirFilePath = path.join(bbsRoot, `Conf${confId}`, `DIR${dirNum}`);
         const diskFiles = parseDirFile(dirFilePath);
         files = diskFiles.map(f => ({
@@ -387,7 +405,10 @@ console.error(`[QuickNew] Error processing section ${sectionCfg.dirPath}:`, erro
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   const year = String(now.getFullYear()).slice(-2);
-  const footer = `[44;33m  QuickNew V2.2 (Web)[36m Date : ${month}-${day}-${year}  [35m Time : ${timePart}  \r\n[0m`;
+  // Build footer content without ANSI codes to calculate padding
+  const footerText = `  QuickNew V2.2 (Web) Date : ${month}-${day}-${year}   Time : ${timePart}  `;
+  const paddedFooter = footerText.padEnd(80, ' ');
+  const footer = `[44;33m${paddedFooter}[0m`;
 
   output.push(footer);
   output.push('~SP.');
