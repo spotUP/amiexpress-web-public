@@ -5169,8 +5169,8 @@ var init_dockable_panel = __esm({
           draggable: normalizedOptions.draggable !== false,
           mouse: true,
           keys: true,
-          focusable: true,
-          // Enable Tab cycling and focus events
+          focusable: normalizedOptions.focusable !== false,
+          // Respect user's focusable setting, default to true
           clickable: true
           // Enable click events for panel activation
         });
@@ -7338,6 +7338,15 @@ var init_dockable_panel = __esm({
   }
 });
 
+// ../../sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js
+var init_kanban_board = __esm({
+  "../../sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js"() {
+    "use strict";
+    init_box();
+    init_list();
+  }
+});
+
 // ../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js
 var DropdownMenu;
 var init_dropdown_menu = __esm({
@@ -8449,6 +8458,7 @@ var init_blessed = __esm({
     init_contextmenu();
     init_panel();
     init_dockable_panel();
+    init_kanban_board();
     init_dropdown_menu();
     init_menu_bar();
     init_mobile_carousel();
