@@ -855,6 +855,9 @@ debugLog(
     // Log to door file only (no console spam)
     this.logDoorFile(`READ handle=${handle} len=${length}`);
 
+    // Log to door file only (no console spam)
+    this.logDoorFile(`READ handle=${handle} len=${length}`);
+
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
       const dataBuffer = this.fileManager.read(handle, length);
@@ -863,16 +866,6 @@ debugLog(
       // Bulk copy data to emulator memory (much faster than byte-by-byte)
       if (bytesRead > 0) {
         this.emulator.writeMemoryBuffer(bufferAddr, dataBuffer);
-
-        // DEBUG: For 100-byte reads (likely dRE!WAll data), log what we're returning
-        if (bytesRead === 100) {
-          const preview = dataBuffer.slice(0, 64);
-          const hex = Array.from(preview).map(b => b.toString(16).padStart(2, '0')).join(' ');
-          const ascii = Array.from(preview).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
-console.log(`[DEBUG READ 100-byte file] Returned ${bytesRead} bytes to bufferAddr=0x${bufferAddr.toString(16)}`);
-console.log(`[DEBUG READ] First 64 bytes HEX: ${hex}`);
-console.log(`[DEBUG READ] First 64 bytes ASCII: "${ascii}"`);
-        }
       }
 
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
@@ -1978,9 +1971,12 @@ console.error(`[dos.library] FClose: NULL handle`);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const filename = this.readString(namePtr);
 
+console.log(`[dos.library] DeleteFile("${filename}")`);
 debugLog(`[dos.library] DeleteFile("${filename}")`);
 
-    const realPath = this.pathResolver.resolve(filename);
+    // Use PathManager for path resolution (handles RAM:, T:, etc. via assigns)
+    let realPath = this.pathManager?.amiToSysPath(filename) || this.pathResolver.resolve(filename);
+console.log(`[dos.library] DeleteFile: resolved "${filename}" -> "${realPath}"`);
     if (!realPath) {
 console.error(
         `[dos.library] DeleteFile: Failed to resolve path "${filename}"`
@@ -3475,6 +3471,43 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+      return;
+    }
+
+    // DELETE command - delete a file
+    if (upperName.startsWith('DELETE ') || upperName.startsWith('C:DELETE ')) {
+      const parts = commandPart.trim().split(/\s+/);
+      const targetFile = parts.length > 1 ? parts.slice(1).join(' ') : '';
+
+      if (targetFile) {
+        const sysPath = this.pathManager?.amiToSysPath(targetFile, process.cwd()) || this.pathResolver.resolve(targetFile);
+        console.log(`[dos.library] Execute("${name}") -> DELETE command, target: "${targetFile}" -> "${sysPath}"`);
+
+        if (sysPath && amigafs.existsSync(sysPath)) {
+          try {
+            amigafs.unlinkSync(sysPath);
+            console.log(`[dos.library] Execute DELETE: Successfully deleted "${sysPath}"`);
+            // Close owned output handle if we opened it
+            if (ownedOutputHandle && this.fileManager) {
+              this.fileManager.close(ownedOutputHandle);
+            }
+            this.emulator.setRegister(CPURegister.D0, -1); // Success (DOSTRUE)
+            this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+            return;
+          } catch (err: any) {
+            console.error(`[dos.library] Execute DELETE: Failed to delete "${sysPath}":`, err.message || err);
+          }
+        } else {
+          console.warn(`[dos.library] Execute DELETE: File not found: "${sysPath}"`);
+        }
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, 0); // Failure
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -5487,16 +5520,16 @@ debugLog(
     switch (offset) {
       // File operations
       case -30:
-        this.Open();
+        this.emulator.setRegister(CPURegister.D0, this.Open());
         return true;
       case -36:
-        this.Close();
+        this.emulator.setRegister(CPURegister.D0, this.Close());
         return true;
       case -42:
-        this.Read();
+        this.emulator.setRegister(CPURegister.D0, this.Read());
         return true;
       case -48:
-        this.Write();
+        this.emulator.setRegister(CPURegister.D0, this.Write());
         return true;
       case -66:
         this.Seek();
@@ -5736,6 +5769,20 @@ debugLog(
         return true;
       case -954: // VPrintf
         this.VPrintf();
+        return true;
+
+      // Pattern matching functions - V37+ (LVO from dos_lib.i)
+      case -840: // ParsePattern
+        this.ParsePattern();
+        return true;
+      case -846: // MatchPattern
+        this.MatchPattern();
+        return true;
+      case -966: // ParsePatternNoCase
+        this.ParsePatternNoCase();
+        return true;
+      case -972: // MatchPatternNoCase
+        this.MatchPatternNoCase();
         return true;
 
       default:
@@ -6163,6 +6210,403 @@ debugLog(`[dos.library] VPrintf("${format.substring(0, 50)}${format.length > 50 
 
     const result = this.emulator.getRegister(CPURegister.D0);
     this.emulator.setRegister(CPURegister.D0, result === 0 ? output.length : -1);
+  }
+
+  // ============================================================================
+  // PATTERN MATCHING FUNCTIONS - V37+
+  // ============================================================================
+
+  // Pattern token constants (from dos/dosasl.i)
+  private static readonly P_ANY = 0x80;      // Token for '*' or '#?'
+  private static readonly P_SINGLE = 0x81;   // Token for '?'
+  private static readonly P_ORSTART = 0x82;  // Token for '('
+  private static readonly P_ORNEXT = 0x83;   // Token for '|'
+  private static readonly P_OREND = 0x84;    // Token for ')'
+  private static readonly P_NOT = 0x85;      // Token for '~'
+  private static readonly P_NOTEND = 0x86;   // End of NOT group
+  private static readonly P_NOTCLASS = 0x87; // Token for '^'
+  private static readonly P_CLASS = 0x88;    // Token for '[]'
+  private static readonly P_REPBEG = 0x89;   // Token for '['
+  private static readonly P_REPEND = 0x8A;   // Token for ']'
+  private static readonly P_STOP = 0x8B;     // Token to force end
+
+  /**
+   * ParsePattern() - LVO -840 (V36+)
+   *
+   * Tokenizes a pattern string for use with MatchPattern().
+   * Case-sensitive version.
+   *
+   * Parameters:
+   *   D1 = Source pattern (C-string)
+   *   D2 = Dest buffer for tokenized pattern
+   *   D3 = DestLength (must be >= 2*strlen(Source)+2)
+   *
+   * Returns:
+   *   D0 = 1 if pattern contains wildcards, 0 if no wildcards, -1 on error
+   */
+  public ParsePattern(): void {
+    const sourceAddr = this.emulator.getRegister(CPURegister.D1);
+    const destAddr = this.emulator.getRegister(CPURegister.D2);
+    const destLength = this.emulator.getRegister(CPURegister.D3);
+
+    const source = this.emulator.readString(sourceAddr);
+    const result = this.tokenizePattern(source, destAddr, destLength, false);
+    this.emulator.setRegister(CPURegister.D0, result);
+
+    debugLog(`[dos.library] ParsePattern("${source}") -> ${result}`);
+  }
+
+  /**
+   * MatchPattern() - LVO -846 (V36+)
+   *
+   * Matches a string against a tokenized pattern.
+   * Case-sensitive version.
+   *
+   * Parameters:
+   *   D1 = Tokenized pattern (from ParsePattern)
+   *   D2 = String to match
+   *
+   * Returns:
+   *   D0 = 1 (TRUE) if match, 0 (FALSE) if no match
+   */
+  public MatchPattern(): void {
+    const patternAddr = this.emulator.getRegister(CPURegister.D1);
+    const strAddr = this.emulator.getRegister(CPURegister.D2);
+
+    const str = this.emulator.readString(strAddr);
+    const result = this.matchTokenizedPattern(patternAddr, str, false);
+    this.emulator.setRegister(CPURegister.D0, result ? 1 : 0);
+
+    debugLog(`[dos.library] MatchPattern(pat, "${str}") -> ${result ? 'TRUE' : 'FALSE'}`);
+  }
+
+  /**
+   * ParsePatternNoCase() - LVO -966 (V37+)
+   *
+   * Tokenizes a pattern string for use with MatchPatternNoCase().
+   * Case-insensitive version - converts pattern to uppercase.
+   *
+   * Parameters:
+   *   D1 = Source pattern (C-string)
+   *   D2 = Dest buffer for tokenized pattern
+   *   D3 = DestLength (must be >= 2*strlen(Source)+2)
+   *
+   * Returns:
+   *   D0 = 1 if pattern contains wildcards, 0 if no wildcards, -1 on error
+   *
+   * Used by GetAnswer door to parse search patterns like "*spot*".
+   */
+  public ParsePatternNoCase(): void {
+    const sourceAddr = this.emulator.getRegister(CPURegister.D1);
+    const destAddr = this.emulator.getRegister(CPURegister.D2);
+    const destLength = this.emulator.getRegister(CPURegister.D3);
+
+    const source = this.emulator.readString(sourceAddr);
+    const result = this.tokenizePattern(source, destAddr, destLength, true);
+    this.emulator.setRegister(CPURegister.D0, result);
+
+    debugLog(`[dos.library] ParsePatternNoCase("${source}") -> ${result}`);
+  }
+
+  /**
+   * MatchPatternNoCase() - LVO -972 (V37+)
+   *
+   * Matches a string against a tokenized pattern (case-insensitive).
+   *
+   * Parameters:
+   *   D1 = Tokenized pattern (from ParsePatternNoCase)
+   *   D2 = String to match
+   *
+   * Returns:
+   *   D0 = 1 (TRUE) if match, 0 (FALSE) if no match
+   *
+   * Used by GetAnswer door to search for usernames in answers files.
+   */
+  public MatchPatternNoCase(): void {
+    const patternAddr = this.emulator.getRegister(CPURegister.D1);
+    const strAddr = this.emulator.getRegister(CPURegister.D2);
+
+    const str = this.emulator.readString(strAddr);
+    const result = this.matchTokenizedPattern(patternAddr, str, true);
+    this.emulator.setRegister(CPURegister.D0, result ? 1 : 0);
+
+    debugLog(`[dos.library] MatchPatternNoCase(pat, "${str}") -> ${result ? 'TRUE' : 'FALSE'}`);
+  }
+
+  /**
+   * Tokenize a pattern string into AmigaDOS pattern tokens.
+   *
+   * AmigaDOS wildcard syntax:
+   *   * or #?  - Match any sequence of characters
+   *   ?        - Match any single character
+   *   ~(pat)   - Match anything NOT matching pattern
+   *   (a|b|c)  - Match any of a, b, or c
+   *   [abc]    - Match any character in set
+   *   [~abc]   - Match any character NOT in set
+   *   '        - Quote next character literally
+   *
+   * @param source Source pattern string
+   * @param destAddr Address to write tokenized pattern
+   * @param destLength Maximum length of destination buffer
+   * @param caseInsensitive If true, convert characters to uppercase
+   * @returns 1 if wildcards found, 0 if no wildcards, -1 on error
+   */
+  private tokenizePattern(source: string, destAddr: number, destLength: number, caseInsensitive: boolean): number {
+    if (destLength < 2) {
+      this.lastError = 303; // ERROR_BUFFER_OVERFLOW
+      return -1;
+    }
+
+    let hasWildcards = false;
+    const tokens: number[] = [];
+    let i = 0;
+
+    while (i < source.length) {
+      const ch = source[i];
+
+      // Check for buffer overflow (need room for token + terminator)
+      if (tokens.length >= destLength - 1) {
+        this.lastError = 303; // ERROR_BUFFER_OVERFLOW
+        return -1;
+      }
+
+      if (ch === '*') {
+        // '*' is shorthand for '#?' (match any)
+        tokens.push(DosLibrary.P_ANY);
+        hasWildcards = true;
+        i++;
+      } else if (ch === '#' && source[i + 1] === '?') {
+        // '#?' matches any sequence
+        tokens.push(DosLibrary.P_ANY);
+        hasWildcards = true;
+        i += 2;
+      } else if (ch === '?') {
+        // '?' matches any single character
+        tokens.push(DosLibrary.P_SINGLE);
+        hasWildcards = true;
+        i++;
+      } else if (ch === '~') {
+        // '~' negation - followed by (pattern)
+        tokens.push(DosLibrary.P_NOT);
+        hasWildcards = true;
+        i++;
+      } else if (ch === '(') {
+        // Start of OR group
+        tokens.push(DosLibrary.P_ORSTART);
+        hasWildcards = true;
+        i++;
+      } else if (ch === '|') {
+        // OR separator
+        tokens.push(DosLibrary.P_ORNEXT);
+        i++;
+      } else if (ch === ')') {
+        // End of OR group
+        tokens.push(DosLibrary.P_OREND);
+        i++;
+      } else if (ch === '[') {
+        // Character class
+        tokens.push(DosLibrary.P_CLASS);
+        hasWildcards = true;
+        i++;
+        // Read characters until ']'
+        while (i < source.length && source[i] !== ']') {
+          let classChar = source.charCodeAt(i);
+          if (caseInsensitive && classChar >= 97 && classChar <= 122) {
+            classChar -= 32; // Convert to uppercase
+          }
+          tokens.push(classChar);
+          i++;
+        }
+        tokens.push(0); // End of class
+        if (i < source.length) i++; // Skip ']'
+      } else if (ch === "'") {
+        // Quote next character literally
+        i++;
+        if (i < source.length) {
+          let literalChar = source.charCodeAt(i);
+          if (caseInsensitive && literalChar >= 97 && literalChar <= 122) {
+            literalChar -= 32; // Convert to uppercase
+          }
+          tokens.push(literalChar);
+          i++;
+        }
+      } else {
+        // Regular character
+        let charCode = source.charCodeAt(i);
+        if (caseInsensitive && charCode >= 97 && charCode <= 122) {
+          charCode -= 32; // Convert to uppercase
+        }
+        tokens.push(charCode);
+        i++;
+      }
+    }
+
+    // Add terminator
+    tokens.push(0);
+
+    // Write tokens to memory
+    for (let j = 0; j < tokens.length; j++) {
+      this.emulator.writeMemory(destAddr + j, tokens[j]);
+    }
+
+    return hasWildcards ? 1 : 0;
+  }
+
+  /**
+   * Match a string against a tokenized pattern.
+   *
+   * @param patternAddr Address of tokenized pattern in memory
+   * @param str String to match
+   * @param caseInsensitive If true, do case-insensitive matching
+   * @returns true if match, false if no match
+   */
+  private matchTokenizedPattern(patternAddr: number, str: string, caseInsensitive: boolean): boolean {
+    // Read tokenized pattern from memory
+    const tokens: number[] = [];
+    let addr = patternAddr;
+    let token: number;
+    let maxTokens = 1024; // Safety limit
+
+    while ((token = this.emulator.readMemory(addr)) !== 0 && maxTokens-- > 0) {
+      tokens.push(token);
+      addr++;
+    }
+
+    // Convert string to uppercase if case-insensitive
+    const matchStr = caseInsensitive ? str.toUpperCase() : str;
+
+    // Match using recursive descent
+    return this.matchTokens(tokens, 0, matchStr, 0);
+  }
+
+  /**
+   * Recursive pattern matcher for tokenized patterns.
+   */
+  private matchTokens(tokens: number[], patIdx: number, str: string, strIdx: number): boolean {
+    while (patIdx < tokens.length) {
+      const token = tokens[patIdx];
+
+      if (token === DosLibrary.P_ANY) {
+        // Match any sequence - try matching 0 or more characters
+        patIdx++;
+        // Try matching at current position and all subsequent positions
+        for (let i = strIdx; i <= str.length; i++) {
+          if (this.matchTokens(tokens, patIdx, str, i)) {
+            return true;
+          }
+        }
+        return false;
+      } else if (token === DosLibrary.P_SINGLE) {
+        // Match any single character
+        if (strIdx >= str.length) {
+          return false;
+        }
+        patIdx++;
+        strIdx++;
+      } else if (token === DosLibrary.P_ORSTART) {
+        // OR group - find matching alternative
+        patIdx++;
+        let depth = 1;
+        let startIdx = patIdx;
+
+        while (depth > 0 && patIdx < tokens.length) {
+          if (tokens[patIdx] === DosLibrary.P_ORSTART) depth++;
+          else if (tokens[patIdx] === DosLibrary.P_OREND) depth--;
+          else if (tokens[patIdx] === DosLibrary.P_ORNEXT && depth === 1) {
+            // Try this alternative
+            if (this.matchTokensUntilOr(tokens, startIdx, patIdx, str, strIdx)) {
+              // Skip to end of OR group
+              while (depth > 0 && patIdx < tokens.length) {
+                if (tokens[patIdx] === DosLibrary.P_ORSTART) depth++;
+                else if (tokens[patIdx] === DosLibrary.P_OREND) depth--;
+                patIdx++;
+              }
+              return this.matchTokens(tokens, patIdx, str, strIdx);
+            }
+            startIdx = patIdx + 1;
+          }
+          patIdx++;
+        }
+        // Try last alternative
+        return this.matchTokensUntilOr(tokens, startIdx, patIdx - 1, str, strIdx);
+      } else if (token === DosLibrary.P_NOT) {
+        // Negation - match if pattern does NOT match
+        patIdx++;
+        // Find end of NOT group
+        let depth = 1;
+        let endIdx = patIdx;
+        while (depth > 0 && endIdx < tokens.length) {
+          if (tokens[endIdx] === DosLibrary.P_ORSTART) depth++;
+          else if (tokens[endIdx] === DosLibrary.P_OREND) depth--;
+          endIdx++;
+        }
+        // Check if pattern matches
+        if (!this.matchTokens(tokens.slice(patIdx, endIdx), 0, str.substring(strIdx), 0)) {
+          patIdx = endIdx;
+          strIdx++; // Consume one character
+        } else {
+          return false;
+        }
+      } else if (token === DosLibrary.P_CLASS) {
+        // Character class
+        if (strIdx >= str.length) {
+          return false;
+        }
+        patIdx++;
+        let matched = false;
+        let negate = false;
+        const ch = str.charCodeAt(strIdx);
+
+        // Check for negation
+        if (patIdx < tokens.length && tokens[patIdx] === 0x7E) { // '~'
+          negate = true;
+          patIdx++;
+        }
+
+        // Check each character in class
+        while (patIdx < tokens.length && tokens[patIdx] !== 0) {
+          if (tokens[patIdx] === ch) {
+            matched = true;
+          }
+          patIdx++;
+        }
+        patIdx++; // Skip terminator
+
+        if (negate) matched = !matched;
+        if (!matched) return false;
+        strIdx++;
+      } else if (token < 0x80) {
+        // Regular character
+        if (strIdx >= str.length) {
+          return false;
+        }
+        if (str.charCodeAt(strIdx) !== token) {
+          return false;
+        }
+        patIdx++;
+        strIdx++;
+      } else {
+        // Unknown token - skip
+        patIdx++;
+      }
+    }
+
+    // Pattern exhausted - check if string is also exhausted
+    return strIdx === str.length;
+  }
+
+  /**
+   * Helper to match tokens until P_ORNEXT or P_OREND.
+   */
+  private matchTokensUntilOr(tokens: number[], start: number, end: number, str: string, strIdx: number): boolean {
+    const subTokens = tokens.slice(start, end);
+    // Recursively match with remaining string
+    for (let i = strIdx; i <= str.length; i++) {
+      if (this.matchTokens(subTokens, 0, str, strIdx)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

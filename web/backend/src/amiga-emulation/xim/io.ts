@@ -323,6 +323,9 @@ export class XIMIOHandler {
         }
         // Don't output file path as fallback - it's not meant to be displayed
       } else {
+        // Per express.e:2202-2203: StrCopy(outputString,defaultOutput) then aePuts(outputString)
+        // The BBS always outputs the default text, even with maxLen=0
+        // If door sends garbage (e.g., uninitialized buffer), express.e would display it too
         this.directEmit('ansi-output', defaultText);
       }
       // CRITICAL FIX: For confirm-only prompts (data=0), door expects empty confirmation response
@@ -1394,7 +1397,9 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
     // Pattern: [ followed by optional ? (DEC private), params (digits/semicolons), and command letter
     // Examples: [32m -> ESC[32m, [0m -> ESC[0m, [2J -> ESC[2J, [?25l -> ESC[?25l
     // Only convert if not already preceded by ESC
-    converted = converted.replace(/(?<!\x1b)\[([?]?\d*(?:;\d*)*[A-Za-z])/g, '\x1b[$1');
+    // IMPORTANT: Require at least one digit (\d+) to avoid matching text like "[zOOROPA"
+    // which would incorrectly become ESC[z (eaten by terminal) + "OOROPA"
+    converted = converted.replace(/(?<!\x1b)\[([?]?\d+(?:;\d*)*[A-Za-z])/g, '\x1b[$1');
 
     // Check for incomplete ANSI escape sequence at end of text
     // CSI format: ESC [ (params) (letter) where letter terminates the sequence
