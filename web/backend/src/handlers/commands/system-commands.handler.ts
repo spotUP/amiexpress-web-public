@@ -119,10 +119,9 @@ console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
 
   if (!logoffDisplayed) {
     // Fallback if Logoff.txt doesn't exist
+    // express.e:25047 internalCommandG - no header, just processes logoff
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.headerBox('Goodbye!'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.successLine('Thank you for calling ' + (session.user?.bbsName || 'AmiExpress BBS')));
+    socket.emit('ansi-output', 'Thank you for calling ' + (session.user?.bbsName || 'AmiExpress BBS') + '\r\n');
     socket.emit('ansi-output', '\r\n');
   }
 
@@ -296,8 +295,7 @@ console.log('[ENV] Mail - Enter');
   };
 
   // Start message entry flow - express.e:10768-10788 (recipient prompt)
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Enter Message'));
+  // express.e:24860-24870 internalCommandE - no header, calls mail functions
   socket.emit('ansi-output', '\r\n');
 
   // If recipient was provided in params, skip to subject

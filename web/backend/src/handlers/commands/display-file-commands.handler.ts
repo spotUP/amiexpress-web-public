@@ -321,7 +321,7 @@ function showFlaggedFiles(socket: any, session: BBSSession): void {
   if (flagged.length === 0) {
     socket.emit('ansi-output', AnsiUtil.colorize('No files currently flagged', 'yellow') + '\r\n');
   } else {
-    socket.emit('ansi-output', AnsiUtil.headerBox('Flagged Files'));
+    // express.e flagged files display - no header, direct list
     socket.emit('ansi-output', '\r\n');
 
     let totalSize = 0;
@@ -507,8 +507,7 @@ export async function handleFileStatusCommand(socket: any, session: BBSSession):
 async function displayFileStatus(socket: any, session: BBSSession): Promise<void> {
   const conferenceId = session.currentConf || 1;
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('File Statistics'));
+  // express.e:24141-24161 fileStatus() - column headers, no decorative header
   socket.emit('ansi-output', '\r\n');
 
   // Get conference file statistics

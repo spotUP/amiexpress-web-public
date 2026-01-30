@@ -116,54 +116,43 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
 
   emitText(socket, '\x1b[2J\x1b[H');
 
-console.log('[ENV] Doors');
+  console.log('[ENV] Doors');
 
+  // express.e:24217-24224 - Table header (exact format from who() function)
   emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.headerBox('Online Users (WHO)'));
   emitText(socket, '\r\n');
+  emitText(socket, '\x1b[0;34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
+  emitText(socket, '\x1b[0;34m|\x1b[0;33mNd#\x1b[0;34m|\x1b[0;36m Name/Handle         \x1b[0;34m|\x1b[0;36m Location            \x1b[0;34m|\x1b[0;36m Action              \x1b[0;34m|\x1b[0;36mChat\x1b[0m\x1b[0;34m|\x1b[0m\r\n');
+  emitText(socket, '\x1b[0;34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
 
-  // Get all online users - express.e:26097 calls who(0)
+  // Get all online users - express.e:24231-24377
   const allOnlineUsers = Array.from(_sessions.values())
     .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
     .map(sess => ({
       username: sess.user!.username,
-      realname: sess.user!.realname || 'Unknown',
-      conference: sess.currentConfName || 'General',
-      idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-      node: sess.nodeId ? `Node ${sess.nodeId}` : 'Web1', // Virtual node number
-      quiet: sess.user!.quietNode || false
+      location: sess.user!.location || '',
+      nodeId: sess.nodeId || 0,
+      chatEnabled: !(sess.user!.quietNode || false),
+      action: _getActivityFromSubState(sess.subState as any)
     }));
 
-  if (allOnlineUsers.length === 0) {
-    emitText(socket, 'No users currently online.\r\n');
-  } else {
-    // Column headers
-    emitText(socket, AnsiUtil.colorize('User Name'.padEnd(16), 'cyan'));
-    emitText(socket, AnsiUtil.colorize('Real Name'.padEnd(20), 'cyan'));
-    emitText(socket, AnsiUtil.colorize('Conference'.padEnd(15), 'cyan'));
-    emitText(socket, AnsiUtil.colorize('Idle  Node', 'cyan'));
-    emitText(socket, '\r\n');
-    emitText(socket, '='.repeat(75) + '\r\n');
+  // Output each user row - express.e:24257-24377 format
+  allOnlineUsers.forEach(userInfo => {
+    const nodeStr = String(userInfo.nodeId).padStart(2, '0');
+    const nameStr = userInfo.username.substring(0, 19).padEnd(19);
+    const locStr = userInfo.location.substring(0, 19).padEnd(19);
+    const actionStr = userInfo.action.substring(0, 19).padEnd(19);
+    const chatStr = userInfo.chatEnabled ? '\x1b[0;32mYES' : '\x1b[0;31mNO ';
 
-    // User list
-    allOnlineUsers.forEach(userInfo => {
-      // Respect quiet mode - sysops can see all users (express.e who() function logic)
-      if (!userInfo.quiet || session.user?.secLevel === 255) {
-        const idleStr = userInfo.idle > 0 ? userInfo.idle.toString().padStart(4) : '    ';
-        const quietIndicator = userInfo.quiet ? AnsiUtil.colorize(' (Q)', 'yellow') : '';
+    // express.e:24370-24375 - Row format
+    emitText(socket, `\x1b[0;34m| \x1b[0m${nodeStr}\x1b[0;34m| \x1b[0;33m${nameStr} \x1b[0;34m|\x1b[0;35m ${locStr} \x1b[0;34m|\x1b[0m ${actionStr} \x1b[0;34m|${chatStr}\x1b[0;34m|\x1b[0m\r\n`);
+  });
 
-        emitText(socket,
-          userInfo.username.padEnd(16) +
-          userInfo.realname.padEnd(20) +
-          userInfo.conference.padEnd(15) +
-          idleStr + '  ' +
-          userInfo.node + quietIndicator + '\r\n'
-        );
-      }
-    });
-  }
-
+  // express.e:24381-24382 - Table footer
+  emitText(socket, '\x1b[0;34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
+  emitText(socket, '\x1b[0;34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
   emitText(socket, '\r\n');
+
   emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   session.menuPause = false;
   session.paginatedScreen = undefined;
@@ -193,55 +182,44 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 
   emitText(socket, '\x1b[2J\x1b[H');
 
-console.log('[ENV] Doors');
+  console.log('[ENV] Doors');
 
+  // express.e:24239-24250 - who(1) is debug mode showing memory pointers
+  // WEB_WHD: Extended web version showing more user details
+  // Uses same table format as WHO for consistency
   emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.headerBox('Online Users (Detailed)'));
   emitText(socket, '\r\n');
+  emitText(socket, '\x1b[0;34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
+  emitText(socket, '\x1b[0;34m|\x1b[0;33mNd#\x1b[0;34m|\x1b[0;36m Name/Handle         \x1b[0;34m|\x1b[0;36m Location            \x1b[0;34m|\x1b[0;36m Action              \x1b[0;34m|\x1b[0;36mChat\x1b[0m\x1b[0;34m|\x1b[0m\r\n');
+  emitText(socket, '\x1b[0;34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
 
-  // Get all online users with detailed status - express.e:26107 calls who(1)
+  // Get all online users with detailed status
   const detailedOnlineUsers = Array.from(_sessions.values())
     .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
     .map(sess => ({
       username: sess.user!.username,
-      realname: sess.user!.realname || 'Unknown',
-      conference: sess.currentConfName || 'General',
-      idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-      node: sess.nodeId ? `Node ${sess.nodeId}` : 'Web1', // Virtual node number
-      quiet: sess.user!.quietNode || false,
-      subState: sess.subState || 'UNKNOWN',
-      // Determine activity based on substate
+      location: sess.user!.location || '',
+      nodeId: sess.nodeId || 0,
+      chatEnabled: !(sess.user!.quietNode || false),
       activity: _getActivityFromSubState(sess.subState as any)
     }));
 
-  if (detailedOnlineUsers.length === 0) {
-    emitText(socket, 'No users currently online.\r\n');
-  } else {
-    // Column headers (detailed view includes activity)
-    emitText(socket, AnsiUtil.colorize('User Name'.padEnd(16), 'cyan'));
-    emitText(socket, AnsiUtil.colorize('Real Name'.padEnd(20), 'cyan'));
-    emitText(socket, AnsiUtil.colorize('Activity'.padEnd(20), 'cyan'));
-    emitText(socket, AnsiUtil.colorize('Node', 'cyan'));
-    emitText(socket, '\r\n');
-    emitText(socket, '='.repeat(75) + '\r\n');
+  // Output each user row using same format as WHO
+  detailedOnlineUsers.forEach(userInfo => {
+    const nodeStr = String(userInfo.nodeId).padStart(2, '0');
+    const nameStr = userInfo.username.substring(0, 19).padEnd(19);
+    const locStr = userInfo.location.substring(0, 19).padEnd(19);
+    const actionStr = userInfo.activity.substring(0, 19).padEnd(19);
+    const chatStr = userInfo.chatEnabled ? '\x1b[0;32mYES' : '\x1b[0;31mNO ';
 
-    // Detailed user list
-    detailedOnlineUsers.forEach(userInfo => {
-      // Respect quiet mode
-      if (!userInfo.quiet || session.user?.secLevel === 255) {
-        const quietIndicator = userInfo.quiet ? AnsiUtil.colorize(' (Q)', 'yellow') : '';
+    emitText(socket, `\x1b[0;34m| \x1b[0m${nodeStr}\x1b[0;34m| \x1b[0;33m${nameStr} \x1b[0;34m|\x1b[0;35m ${locStr} \x1b[0;34m|\x1b[0m ${actionStr} \x1b[0;34m|${chatStr}\x1b[0;34m|\x1b[0m\r\n`);
+  });
 
-        emitText(socket,
-          userInfo.username.padEnd(16) +
-          userInfo.realname.padEnd(20) +
-          userInfo.activity.padEnd(20) +
-          userInfo.node + quietIndicator + '\r\n'
-        );
-      }
-    });
-  }
-
+  // Table footer
+  emitText(socket, '\x1b[0;34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
+  emitText(socket, '\x1b[0;34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
   emitText(socket, '\r\n');
+
   emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   session.menuPause = false;
   session.paginatedScreen = undefined;
@@ -295,8 +273,9 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
     return `${bps} bps`;
   })();
 
+  // express.e:25730-25732 - exact format with colored asterisks
   emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.headerBox('USER CONFIGURATION'));
+  emitText(socket, '                       \x1b[0;34m*\x1b[0m--\x1b[0;33mUSER CONFIGURATION\x1b[0m--\x1b[0;34m*\x1b[0m\r\n');
   emitText(socket, '\r\n');
 
   // Option 0: Login Name - express.e:25724-25728

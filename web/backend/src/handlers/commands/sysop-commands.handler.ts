@@ -57,8 +57,7 @@ export function handleRemoteShellCommand(socket: any, session: BBSSession): void
 
 console.log('[ENV] Shell');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Remote Shell'));
+  // express.e:24424-24451 internalCommand0 - no header, prompts for password then runs shell
   socket.emit('ansi-output', '\r\n');
 
   // Original AmiExpress (express.e:24424-24451):
@@ -132,8 +131,7 @@ export async function handleCallersLogCommand(socket: any, session: BBSSession, 
 
 console.log('[ENV] Sysop');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Callers Log'));
+  // express.e:24464-24509 - no header, displays callers log directly
   socket.emit('ansi-output', '\r\n');
 
   // Original AmiExpress (express.e:24470-24509):
@@ -207,8 +205,7 @@ export function handleEditDirectoryFilesCommand(socket: any, session: BBSSession
 
 console.log('[ENV] Emacs');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Edit Directory Files'));
+  // express.e:24511-24515 - no header, calls editDirFile directly
   socket.emit('ansi-output', '\r\n');
 
   // Original AmiExpress (express.e:24514):
@@ -261,8 +258,7 @@ export function handleEditAnyFileCommand(socket: any, session: BBSSession, param
 
 console.log('[ENV] Emacs');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Edit Any File'));
+  // express.e:24517-24521 - no header, calls editAnyFile directly
   socket.emit('ansi-output', '\r\n');
 
   // Original AmiExpress (express.e:24520):
@@ -315,8 +311,7 @@ export function handleChangeDirectoryCommand(socket: any, session: BBSSession, p
 
 console.log('[ENV] Sysop');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Navigate Filesystem'));
+  // express.e:24523-24527 - no header, calls myDirAnyWhere directly
   socket.emit('ansi-output', '\r\n');
 
   // Original AmiExpress (express.e:24526):

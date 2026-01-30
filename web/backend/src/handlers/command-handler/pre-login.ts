@@ -126,9 +126,11 @@ console.log('[RIP] RIP graphics mode enabled - 640x350 EGA');
       session.screenHeight = 24; // Standard terminal height
     }
 
-    // express.e:29543-29544 - Quick logon flag (for future use)
+    // express.e:29545 - IF (InStr(tempStr,'Q',0)>=0) AND (sopt.qLogon<>0) THEN quickFlag:=TRUE
+    // Quick logon flag - skip bulletins during login
     if (hasQ) {
-      session.tempData.quickLogon = true;
+      session.quickFlag = true;
+console.log('[QUICK] Quick logon enabled - will skip bulletins per express.e:29545');
     }
 
     // Determine graphics mode string for logging

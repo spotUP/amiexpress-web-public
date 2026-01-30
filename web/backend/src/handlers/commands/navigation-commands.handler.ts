@@ -59,31 +59,29 @@ export function setNavigationCommandsDependencies(deps: {
  * 1:1 port from express.e:25622-25644 internalCommandT()
  */
 export function handleTimeCommand(socket: any, session: BBSSession): void {
-  // express.e:25625 - DateStamp(dt.stamp)
+  // express.e:25625-25627 - DateStamp(dt.stamp)
   const now = getSystemTime();
 
-  // express.e:25633-25638 - Display date and time
-  const dateString = now.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  // express.e:25629 - dt.format:=FORMAT_USA (MM-DD-YY format)
+  // express.e:25632-25633 - dt.strdate:=datestring, dt.strtime:=timestring
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  const dateString = `${month}-${day}-${year}`;
 
-  const timeString = now.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-  });
+  // AmigaOS FORMAT_USA time is HH:MM:SS (24-hour)
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timeString = `${hours}:${minutes}:${seconds}`;
 
+  // express.e:25636-25640 - aePuts('\b\nIt is ') + datestring + ' ' + timestring + '\b\n'
+  socket.emit('ansi-output', '\r\nIt is ');
+  socket.emit('ansi-output', dateString);
+  socket.emit('ansi-output', ' ');
+  socket.emit('ansi-output', timeString);
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('It is ', 'white'));
-  socket.emit('ansi-output', AnsiUtil.colorize(dateString, 'cyan'));
-  socket.emit('ansi-output', AnsiUtil.colorize(' ', 'white'));
-  socket.emit('ansi-output', AnsiUtil.colorize(timeString, 'cyan'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\r\n');
+
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

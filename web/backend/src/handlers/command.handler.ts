@@ -117,6 +117,8 @@ import {
   handleNodeManagementCommand,
   handleConferenceMaintenanceCommand,
   handleJMInput,
+  handleNMInput,
+  handleNMConfirm,
   handleCMInput,
   handleCMNumericInput,
   setMessageCommandsDependencies
@@ -179,7 +181,16 @@ import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
   handleMessageReaderNav,
-  setMessagingDependencies
+  setMessagingDependencies,
+  setMoveEditDependencies,
+  handleMsgMoveConfInput,
+  handleMsgMoveMsgBaseInput,
+  handleMsgMoveConfirm,
+  handleMsgEditHeaderFrom,
+  handleMsgEditHeaderTo,
+  handleMsgEditHeaderSubject,
+  handleMsgEditHeaderPrivate,
+  handleChooseTranslatorInput
 } from './message/messaging.handler';
 import {
   runSysCommand as execSysCommand,
@@ -433,6 +444,36 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       await handleAccountEditInput(socket, session, data);
       return;
 
+    // User Notes View (express.e:21679-21739)
+    case LoggedOnSubState.USER_NOTES_VIEW:
+      const { handleUserNotesInput, handleUserNotesLineInput } = require('./user/account-edit-input.handler');
+      // Check if in notes editing mode (line input)
+      if (session.tempData?.notesEditing) {
+        if (data === '\r' || data === '\n') {
+          const line = (session.inputBuffer || '').trim();
+          session.inputBuffer = '';
+          await handleUserNotesLineInput(socket, session, line);
+        } else if (data === '\x7f' || data === '\b') {
+          if (session.inputBuffer?.length) {
+            session.inputBuffer = session.inputBuffer.slice(0, -1);
+            emitText(socket, '\b \b');
+          }
+        } else if (data.length === 1 && data >= ' ' && data <= '~') {
+          session.inputBuffer = (session.inputBuffer || '') + data;
+          emitText(socket, data);
+        }
+      } else {
+        // Single-key command mode
+        await handleUserNotesInput(socket, session, data);
+      }
+      return;
+
+    // Conference Accounting (express.e:22045-22250)
+    case LoggedOnSubState.CONF_ACCOUNTING_VIEW:
+      const { handleConferenceAccountingInput } = require('./user/account-edit-input.handler');
+      await handleConferenceAccountingInput(socket, session, data);
+      return;
+
     // Forward message states (express.e forwardMSG:9807-9871)
     case LoggedOnSubState.FORWARD_MESSAGE_TO:
       if (data === '\r' || data === '\n') {
@@ -545,6 +586,12 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       const toolFlags = getConferenceToolFlags(confNumber);
 
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
+        // express.e:29853-29855 - Quick logon skips bulletins
+        if (session.quickFlag) {
+          displayFlowLog('skip BULL (quickFlag per express.e:29853)');
+          session.subState = LoggedOnSubState.AUTO_REJOIN;
+          continue;
+        }
         // Skip BULL if we just came from QuickNew and need to continue
         if (!toolFlags.noBulls) {
           displayFlowLog('showing BULL');
@@ -587,10 +634,9 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
-        displayFlowLog('SKIPPING confScan (N door stuck in polling loop - needs investigation)');
-        // TEMPORARILY DISABLED: N door (AquaScan) enters infinite GetMsg polling after EXPRESS_VERSION
-        // const { performConferenceScan } = require('./message/message-scan.handler');
-        // await performConferenceScan(socket, session);
+        displayFlowLog('CONF_SCAN: performing conference scan');
+        const { performConferenceScan } = require('./message/message-scan.handler');
+        await performConferenceScan(socket, session);
         // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -2767,6 +2813,142 @@ console.log(' In conference selection state');
     return;
   }
 
+  // Handle M (Move Message) conference input - express.e:27024-27049
+  if (session.subState === LoggedOnSubState.MSG_MOVE_CONF_INPUT) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgMoveConfInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle M (Move Message) msgbase input - express.e:27058-27084
+  if (session.subState === LoggedOnSubState.MSG_MOVE_MSGBASE_INPUT) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgMoveMsgBaseInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle M (Move Message) confirmation - express.e:11846-11849
+  if (session.subState === LoggedOnSubState.MSG_MOVE_CONFIRM) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgMoveConfirm(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle EH (Edit Header) From input - express.e:11611-11621
+  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_FROM) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgEditHeaderFrom(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle EH (Edit Header) To input - express.e:11623-11629
+  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_TO) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgEditHeaderTo(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle EH (Edit Header) Subject input - express.e:11630-11634
+  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_SUBJECT) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgEditHeaderSubject(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle EH (Edit Header) Private Y/N - express.e:11636-11648
+  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_PRIVATE) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgEditHeaderPrivate(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle TS (Choose Translator) input - express.e:11391-11417
+  if (session.subState === LoggedOnSubState.MSG_CHOOSE_TRANSLATOR) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleChooseTranslatorInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
   // Handle J (Join Conference) input
   if (session.subState === LoggedOnSubState.JOIN_CONF_INPUT) {
 console.log(' In JOIN_CONF_INPUT state');
@@ -2837,8 +3019,22 @@ console.log(' Conference number entered:', input);
 
   // Handle JM (Join Message Base) input
   if (session.subState === LoggedOnSubState.JM_INPUT) {
-console.log(' In JM input state');
+    console.log(' In JM input state');
     handleJMInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle NM (Node Management) input - express.e:25294-25366
+  if (session.subState === LoggedOnSubState.NM_INPUT) {
+    console.log(' In NM input state');
+    handleNMInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle NM confirmation (Y/n) - express.e:25326-25363
+  if (session.subState === LoggedOnSubState.NM_CONFIRM) {
+    console.log(' In NM confirm state');
+    handleNMConfirm(socket, session, data.trim());
     return;
   }
 

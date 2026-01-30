@@ -70,16 +70,9 @@ export function handleRelogonCommand(socket: any, session: BBSSession, params: s
     return;
   }
 
+  // express.e:25534-25537 internalCommandRL - no header, just sets flag and calls G
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Relogon'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'This will disconnect you and return you to the login prompt.\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.complexPrompt([
-    { text: 'Are you sure you want to relogon? ', color: 'white' },
-    { text: '(Y/N)', color: 'cyan' },
-    { text: ': ', color: 'white' }
-  ]));
+  socket.emit('ansi-output', 'Are you sure you want to relogon? (Y/N): ');
 
   // Wait for confirmation
   session.subState = LoggedOnSubState.RL_CONFIRM;
@@ -129,10 +122,9 @@ export function handleViewFileCommand(socket: any, session: BBSSession, params: 
     return;
   }
 
-console.log('[ENV] Viewing');
+  console.log('[ENV] Viewing');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('View Text File'));
+  // express.e:25675-25682 internalCommandV - no header, calls viewAFile()
   socket.emit('ansi-output', '\r\n');
 
   // If params provided, try to view file immediately
@@ -223,10 +215,9 @@ export async function handleZippySearchCommand(socket: any, session: BBSSession,
     return;
   }
 
-console.log('[ENV] Files');
+  console.log('[ENV] Files');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Zippy Text Search'));
+  // express.e:26129-26137 internalCommandZ - no header, just processes search
   socket.emit('ansi-output', '\r\n');
 
   // Parse params - express.e:26134-26137
@@ -358,12 +349,9 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     return;
   }
 
-console.log('[ENV] Zoom');
+  console.log('[ENV] Zoom');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Zoo Mail (QWK Download)'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Download your messages in QWK offline format.\r\n');
+  // express.e ZOOM command - no decorative header
   socket.emit('ansi-output', '\r\n');
 
   // Check if user has any unread messages
@@ -452,8 +440,7 @@ console.error('[ZOOM] QWK generation error:', error);
  * @param params - Help topic to search for
  */
 export function handleHelpFilesCommand(socket: any, session: BBSSession, params: string = ''): void {
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Help File Viewer'));
+  // express.e:25089-25110 internalCommandUpHat - no header, searches help/ directory
   socket.emit('ansi-output', '\r\n');
 
   if (!params.trim()) {

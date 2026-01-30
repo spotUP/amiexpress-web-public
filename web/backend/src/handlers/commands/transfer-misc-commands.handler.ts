@@ -93,10 +93,7 @@ export function handleZmodemUploadCommand(socket: any, session: BBSSession): voi
 
 console.log('[ENV] Uploading');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Zmodem Upload'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'This command starts an immediate Zmodem upload.\r\n');
+  // express.e:25608-25619 internalCommandRZ - no header, directly starts upload
   socket.emit('ansi-output', '\r\n');
 
   // Start ZMODEM receive directly into the node playpen (matches express.e uploadaFile -> fileReceive path).
@@ -182,17 +179,8 @@ export function handleSysopUploadCommand(socket: any, session: BBSSession, param
 
 console.log('[ENV] Uploading');
 
+  // express.e:25660-25664 internalCommandUS - no header, calls sysopUpload()
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Sysop Upload'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Special sysop upload mode - bypasses ratio checks.\r\n');
-  socket.emit('ansi-output', '\r\n');
-
-  // Original AmiExpress (express.e:25664):
-  // - Calls sysopUpload()
-  // - No ratio checks
-  // - No security restrictions beyond ACS_SYSOP_COMMANDS
-  // Web version: Call upload interface
 
   _displayUploadInterface(socket, session, params);
 }
@@ -206,31 +194,15 @@ console.log('[ENV] Uploading');
  * Web version: Shows when the node started and total uptime.
  */
 export function handleNodeUptimeCommand(socket: any, session: BBSSession): void {
-console.log('[ENV] Stats');
+  console.log('[ENV] Stats');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Node Uptime'));
-  socket.emit('ansi-output', '\r\n');
-
-  // Original AmiExpress (express.e:25670-25672):
-  // - formatLongDateTime(nodeStart, tempStr2)
-  // - StringF(tempStr, 'Node %d was started at %s.', node, tempStr2)
-  // - aePuts(tempStr)
-
-  // Web version: Show node start time and uptime
+  // express.e:25667-25672 internalCommandUP format:
+  // StringF(tempStr,'\b\nNode \d was started at \s.\b\n',node,tempStr2)
   const nodeStartTime = session.nodeStartTime || Date.now();
   const startTime = new Date(nodeStartTime).toLocaleString();
-  const uptimeMs = Date.now() - nodeStartTime;
-  const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
-  const uptimeMins = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
 
-  socket.emit('ansi-output', AnsiUtil.colorize('Node 1 was started at ', 'cyan'));
-  socket.emit('ansi-output', AnsiUtil.colorize(startTime, 'yellow'));
-  socket.emit('ansi-output', '.\r\n');
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('Uptime: ', 'cyan'));
-  socket.emit('ansi-output', AnsiUtil.colorize(`${uptimeHours}h ${uptimeMins}m`, 'green'));
-  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `Node ${session.nodeId || 1} was started at ${startTime}.\r\n`);
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
@@ -712,13 +684,10 @@ export function handleDownloadWithStatusCommand(socket: any, session: BBSSession
 
 console.log('[ENV] Files');
 
+  // express.e:28302 - DS maps to internalCommandD which calls beginDLF
+  // beginDLF calls downloadAFile which calls displayULStats
+  // NO header - just displays stats then prompts for filespec
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Download Files (with status)'));
-  socket.emit('ansi-output', '\r\n');
-
-  // Original AmiExpress:
-  // DS is just an alias to D command with status display enabled
-  // Web version: Call download interface
 
   _displayDownloadInterface(socket, session, params);
 }

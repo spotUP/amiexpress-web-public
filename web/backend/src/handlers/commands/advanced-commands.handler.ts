@@ -28,8 +28,15 @@ interface Message {
   author?: string;
 }
 
+interface MessageBase {
+  id: number;
+  name: string;
+  conferenceId: number;
+}
+
 // Dependencies injected from index.ts
 let _conferences: Conference[] = [];
+let _messageBases: MessageBase[] = [];
 let _messages: Message[] = [];
 let _checkConfAccess: (user: any, conferenceId: number) => boolean;
 
@@ -38,10 +45,12 @@ let _checkConfAccess: (user: any, conferenceId: number) => boolean;
  */
 export function setAdvancedCommandsDependencies(deps: {
   conferences: Conference[];
+  messageBases?: MessageBase[];
   messages: Message[];
   checkConfAccess: typeof _checkConfAccess;
 }) {
   _conferences = deps.conferences;
+  _messageBases = deps.messageBases || [];
   _messages = deps.messages;
   _checkConfAccess = deps.checkConfAccess;
 }
@@ -204,41 +213,50 @@ export function handleGreetingsCommand(socket: any, session: BBSSession): void {
  *
  * Scans all accessible conferences for new messages addressed to the user.
  */
-export function handleMailScanCommand(socket: any, session: BBSSession): void {
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Mailscan'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Scanning all conferences for new messages...\r\n\r\n');
+export async function handleMailScanCommand(socket: any, session: BBSSession): Promise<void> {
+  // express.e:25250-25269 internalCommandMS
+  // Loops through all accessible conferences/msgbases calling joinConf with FORCE_MAILSCAN_ALL
+  const { joinConference, FORCE_MAILSCAN_ALL } = require('../operations/conference.handler');
+
+  socket.emit('ansi-output', '\r\nScanning conferences for mail...\r\n\r\n');
+
+  // Save current conference/msgbase to restore later
+  const savedConf = session.currentConf;
+  const savedMsgBase = session.currentMsgBase;
 
   // Get all conferences user has access to
   const accessibleConferences = _conferences.filter(conf => _checkConfAccess(session.user, conf.id));
-
-  let totalNewMessages = 0;
   let scannedConferences = 0;
 
-  accessibleConferences.forEach(conf => {
-    const confMessages = _messages.filter(msg =>
-      msg.conferenceId === conf.id &&
-      msg.timestamp > (session.user?.lastLogin || new Date(0)) &&
-      (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-    );
+  // express.e:25260-25268 - Loop through all conferences and message bases
+  for (const conf of accessibleConferences) {
+    // Get message bases for this conference
+    const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf.id);
 
-    if (confMessages.length > 0) {
-      socket.emit('ansi-output', AnsiUtil.colorize(`${conf.name}:`, 'yellow'));
-      socket.emit('ansi-output', ` ${confMessages.length} new message(s)\r\n`);
-      totalNewMessages += confMessages.length;
+    for (const msgBase of confMsgBases) {
+      // express.e:25264 - joinConf(conf,msgbase,TRUE,FALSE,FORCE_MAILSCAN_ALL)
+      // TRUE = silent display, FALSE = not auto-rejoin
+      const result = await joinConference(socket, session, conf.id, msgBase.id, true, false, FORCE_MAILSCAN_ALL);
+      if (!result) {
+        // express.e:25267 - EXIT mystat=RESULT_FAILURE
+        break;
+      }
     }
     scannedConferences++;
-  });
+  }
+
+  // Restore original conference/msgbase
+  if (savedConf && savedMsgBase) {
+    await joinConference(socket, session, savedConf, savedMsgBase, true, false, 1); // FORCE_MAILSCAN_SKIP
+  }
 
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', `Total new messages: ${totalNewMessages}\r\n`);
   socket.emit('ansi-output', `Conferences scanned: ${scannedConferences}\r\n`);
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
   session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
