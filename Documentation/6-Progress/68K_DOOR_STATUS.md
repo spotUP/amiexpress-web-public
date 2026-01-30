@@ -6,12 +6,13 @@ Last updated: 2026-01-29
 
 | Status | Count |
 |--------|-------|
-| Working | 6 |
+| Working | 42 |
 | Needs Testing | 1 |
 | Partial | 3 |
-| Broken | 2 |
-| Untested | 55 |
-| **Total** | **67** |
+| Broken | 1 |
+| Complex/Deferred | 1 |
+| Untested | 18 |
+| **Total** | **66** |
 
 ---
 
@@ -24,6 +25,18 @@ Last updated: 2026-01-29
 | ED | Doors:5D-Edit/5D-Edit | Text editor - needs Dir files populated |
 | conftop | DOORS:CONFTOP/CONFTOP020.X | Batch utility - shows version and exits |
 | ga | Doors:GetAnswer/GetAnswer | Answer viewer - use Ctrl+C to exit (door loops by design) |
+| J | Doors:emp_tools/joincnf | Conference joiner |
+| S | doors:ustats/stats | ZooStats user statistics |
+| Z | Doors:5D-ZippySearch/5D-ZippySearch | Zippy search |
+| games | doors:5D-AdiMenu/5D-AdiMenu | Games menu |
+| req | BBS:Doors/Request/Request | File request - fixed VFPrintf offset and config paths |
+| SIZE | DOORS:SizeCheck/SizeCheck | Conference size checker - counts files/bytes per directory |
+| RTW | DOORS:RTW/rtw | Real Time Who - shows who's online across nodes |
+
+### BBSLink Gateway (TELNET_CONNECT Working)
+
+All BBSLink doors work via TELNET_CONNECT (XIM 706):
+arcl, assn, bbsc, bcr, bord, dark, dkns, dmas, dmud, falc, fhon, fish, hack, junk, legn, lmon, lord2, mega, mmot, mzkl, netr, ooii, teos, vsys
 
 ### AquaScan (All Working)
 
@@ -45,8 +58,8 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 | Cmd | Location | Issue |
 |-----|----------|-------|
 | I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
-| S | doors:ustats/stats | ZooStats works but user/level/conf values x256 (BBSInfo byte order) |
 | fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
+| ulist | Doors:5D-User/5D-User | Needs T:5D-USER_DATA.{node} file - who's online door |
 
 ---
 
@@ -58,11 +71,18 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 ---
 
+## Complex / Deferred
+
+| Cmd | Location | Issue |
+|-----|----------|-------|
+| MRC | doors:mrc/mrc_door | Input works but 30s polling delay - needs deeper investigation |
+
+---
+
 ## Broken Doors
 
 | Cmd | Location | Issue |
 |-----|----------|-------|
-| J | Doors:emp_tools/joincnf | Conference joiner - not working |
 | wall | dOORS:dRE/dRE!WAll/dRE!WAll | Data corruption - see dRE_WALL_HANDOFF.md |
 
 ---
@@ -79,32 +99,22 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 | AMIGAGCC | DOORS:AMIGAGCC/amiga-gcc-hunk | |
 | CDEMO | Doors/INTERACTIVE-DEMO/interactive-demo | Interactive demo |
 | DEL | DOORS:-mgs!-MgzListMan/MGZLISTMAN | Magazine list manager |
-| GLC | DOORS:glc/glcviewer | GLC viewer |
 | Kick | Doors:!!!War!!!/WarKick'Em/WarKick'Em | War game |
 | MINIMAL | DOORS:SDKTEST/MINIMAL | Test door |
-| MRC | doors:mrc/mrc_door | Multi-relay chat |
 | MRCSTAT1 | doors:mrc/mrcstat1 | MRC stats |
 | mrcstat2 | doors:mrc/mrcstat2 | MRC stats |
 | Olm | DOORS:!!!WAR!!!/WAROLM/WAROLM | War game OLM |
-| RTW | DOORS:RTW/RTW | |
 | SDKTEST | DOORS:SDKTEST/SIMPLETEST | Test door |
-| SIZE | DOORS:SizeCheck/SizeCheck | Size checker |
 | XIMVBCC | Doors/XIMVBCC/xim-vbcc | VBCC test door |
-| Z | Doors:5D-ZippySearch/5D-ZippySearch | Zippy search |
 | bk | BBS:doors/bytekiller/bytekiller | ByteKiller |
 | ctop | DOORS:CONFTOP/ctop | Conference top |
-| games | doors:5D-AdiMenu/5D-AdiMenu | Games menu |
 | nuke | Doors:Bossnuke/Bossnuke | Boss nuke |
-| req | BBS:Doors/Request/Request | File request |
 | TList | Doors:SRH/TList/TLP2 | T-List |
-| ulist | Doors:5D-User/5D-User | User list |
 | DUPESTART1 | DOORS:CONFTOP/CONFTOP020.X | Conftop variant |
 
 ### BBSLink Gateway Doors
 
-All route through bbslink door gateway (require network):
-
-arcl, assn, bbsc, bcr, bord, dark, dkns, dmas, dmud, falc, fhon, fish, hack, junk, legn, lmon, lord2, mega, mmot, mzkl, netr, ooii, teos, vsys
+Moved to Working - see BBSLink Gateway (TELNET_CONNECT Working) section above.
 
 ---
 
@@ -122,6 +132,49 @@ arcl, assn, bbsc, bcr, bord, dark, dkns, dmas, dmud, falc, fhon, fish, hack, jun
 ---
 
 ## Session Notes
+
+### 2026-01-30: MRC Investigation (Deferred)
+
+**MRC (Multi-Relay Chat):**
+- Fixed GETKEY/JH_CK (cmd 500) - was consuming input, now just peeks
+- Fixed duplicate switch case bug: JH_CK and GETKEY both = 500, JH_CK case matched first
+- Input flow verified working: queueInput → inputQueue → GETKEY(peek) → JH_HK(consume)
+- **Issue:** MRC polls GETKEY every ~30 seconds (network timeout behavior)
+- Characters ARE delivered and displayed, but with 30s delay between polls
+- Likely needs network connectivity investigation (MRC is a chat client)
+- **Status:** Deferred - too complex for quick fix, input technically works
+
+### 2026-01-29: Request Door VFPrintf + Config Fix
+
+### 2026-01-29: Request Door VFPrintf + Config Fix
+
+**Request (req):**
+- Fixed VFPrintf offset: was -564, should be -354 (dos-vectors.ts)
+- View was showing raw format strings `%s %-12.12s %s` instead of data
+- Root cause: VFPrintf at wrong offset meant calls went to wrong function
+- Fixed config paths in Request.info - had extra `BBS/` prefix
+- Added WORK: assign handling in bbs-paths.util.ts
+- Set `BULL.MID_STRING=[34m|[0m]` (ANSI colored pipe)
+- Door now works: Add/Delete/View file requests, writes messages
+
+### 2026-01-29: 5D-AdiMenu (games) + JH_SF Fix
+
+**5D-AdiMenu (games):**
+- Fixed JH_SF missing base path candidate - only tried `.txt`, `.TXT`, etc. but not exact path
+- File `Text/games` (no extension) wasn't found because candidates list didn't include base path
+- Fix: Added `resolved` as first candidate before extension variants
+- File: `web/backend/src/amiga-emulation/xim/io.ts` line 1135
+
+### 2026-01-29: ZippySearch + JH_WRITE Fix
+
+**5D-ZippySearch (Z):**
+- Fixed JH_WRITE newline bug - `msg.data` was incorrectly interpreted as newline flag
+- express.e:3382-3385 shows JH_WRITE just calls `aePuts(msg.string)` with no newline logic
+- Fix: Changed `addNewline = msg.data === 1` to `addNewline = false`
+- File: `web/backend/src/amiga-emulation/xim/io.ts` line 461
+
+**Screen Fix:**
+- Fixed `~CC_gl` → `~CC_GLC` in `Screens/logon20.txt` (gl command didn't exist)
 
 ### 2026-01-29: GetAnswer + Ctrl+C Abort
 
@@ -165,5 +218,5 @@ arcl, assn, bbsc, bcr, bord, dark, dkns, dmas, dmud, falc, fhon, fish, hack, jun
 **TurboLister (DD):** Working after JH_WRITE reply fix
 **5D-Edit (ED):** Working - needs Dir files populated
 **Conftop:** Working - batch utility
-**Joincnf (J):** Broken - prevents conference changes
+**Joincnf (J):** Now working (fixed later)
 **ByteComment (fake):** Partial - needs files to test
