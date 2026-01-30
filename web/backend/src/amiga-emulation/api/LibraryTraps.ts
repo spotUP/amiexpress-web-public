@@ -51,7 +51,9 @@ import {
   BSDSOCKET_VECTORS,
   AMISSLMASTER_VECTORS,
   AMISSL_VECTORS,
+  DREAMDOOR_VECTORS,
 } from "./library-vectors";
+import { DreamDoorLibrary } from "./DreamDoorLibrary";
 
 // Performance: Verbose logging is disabled by default
 // Set DEBUG_LIBRARY_TRAPS=1 to enable detailed library call tracing
@@ -84,6 +86,7 @@ export class LibraryTraps {
   private bsdSocketLibrary: BsdSocketLibrary | null = null;
   private amisslMasterLibrary: AmiSSLMasterLibrary | null = null;
   private amisslLibrary: AmiSSLLibrary | null = null;
+  private dreamDoorLibrary: DreamDoorLibrary | null = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -273,6 +276,13 @@ export class LibraryTraps {
    */
   setAmiSSLLibrary(lib: AmiSSLLibrary): void {
     this.amisslLibrary = lib;
+  }
+
+  /**
+   * Set the dreamdoor.library instance
+   */
+  setDreamDoorLibrary(lib: DreamDoorLibrary): void {
+    this.dreamDoorLibrary = lib;
   }
 
   /**
@@ -556,8 +566,15 @@ console.log(
     for (const vector of AEDOOR_VECTORS) {
       const trapAddr = aedoorBase + vector.offset;
 
+      // DEBUG: Read what's at the address BEFORE we write
+      const beforeWrite = this.emulator.readMemory16(trapAddr);
+
       // Write ILLEGAL instruction at vector address to trigger trap
       this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+      // DEBUG: Verify the write succeeded
+      const afterWrite = this.emulator.readMemory16(trapAddr);
+      const writeSucceeded = afterWrite === 0x4AFC;
 
       // Store mapping of address to handler
       this.trapMap.set(trapAddr, vector);
@@ -571,10 +588,11 @@ console.log(
       this.offsetMap.get(vector.offset)!.push(vector);
       this.offsetLibraryMap.get(vector.offset)!.push(this.aedoorLibrary);
 
+      // Log with before/after to diagnose trap installation issues
+      const beforeStr = beforeWrite === 0x4EF9 ? "JMP" : beforeWrite === 0x4AFC ? "ILLEGAL" : `0x${beforeWrite.toString(16)}`;
+      const status = writeSucceeded ? "OK" : "FAILED";
 console.log(
-        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
-          vector.offset
-        })`
+        `  [${vector.name}] 0x${trapAddr.toString(16)} (offset ${vector.offset}): was ${beforeStr} -> now ${afterWrite === 0x4AFC ? "ILLEGAL" : `0x${afterWrite.toString(16)}`} [${status}]`
       );
     }
 
@@ -1083,6 +1101,42 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
   }
 
   /**
+   * Install dreamdoor.library vectors (DayDream BBS compatibility)
+   */
+  installDreamDoorVectors(): void {
+    if (!this.dreamDoorLibrary) {
+      console.error("[LibraryTraps] Cannot install dreamdoor vectors: library not set");
+      return;
+    }
+
+    const dreamdoorBase = this.execLibrary.getLibraryBase("dreamdoor.library");
+    if (dreamdoorBase === 0) {
+      console.error("[LibraryTraps] Cannot install dreamdoor vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing dreamdoor.library vectors at base 0x${dreamdoorBase.toString(16)}`);
+
+    for (const vector of DREAMDOOR_VECTORS) {
+      const trapAddr = dreamdoorBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.dreamDoorLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.dreamDoorLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${DREAMDOOR_VECTORS.length} dreamdoor.library vectors`);
+  }
+
+  /**
    * Install stub handlers for any remaining LVOs we know about for a library.
    * Uses offsets parsed from dev/docs/LVOs.i and only installs if not already trapped.
    */
@@ -1148,6 +1202,19 @@ console.log(
    */
   handleTrap(pc: number): boolean {
     const vector = this.trapMap.get(pc);
+
+    // DEBUG: Log AEDoor-related calls to trace trap matching
+    const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
+    if (aedoorBase !== 0) {
+      const offset = pc - aedoorBase;
+      // Check if PC is in the AEDoor vector range (-30 to -200)
+      if (offset >= -200 && offset <= 0) {
+        const a6 = this.emulator.getRegister(14); // A6
+        const instrAtPC = this.emulator.readMemory16(pc);
+        const matched = vector ? "MATCHED" : "NOT IN TRAPMAP";
+console.log(`[LibraryTraps] AEDoor call? PC=0x${pc.toString(16)} offset=${offset} A6=0x${a6.toString(16)} instr=0x${instrAtPC.toString(16)} [${matched}]`);
+      }
+    }
 
     if (!vector) {
       // BUG FIX: Don't do broad range checking - it's catching ROM execution!

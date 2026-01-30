@@ -6,13 +6,13 @@ Last updated: 2026-01-30
 
 | Status | Count |
 |--------|-------|
-| Working | 45 |
+| Working | 46 |
 | Needs Testing | 1 |
 | Partial | 10 |
-| Broken | 3 |
+| Broken | 1 |
 | Complex/Deferred | 1 |
 | Untested | 0 |
-| **Total** | **60** |
+| **Total** | **59** |
 
 ---
 
@@ -35,6 +35,7 @@ Last updated: 2026-01-30
 | TList | Doors:SRH/TList/TLP2 | T-List BBS listing - line-by-line intro (press n to skip, Enter/y to continue) |
 | MRCSTAT1 | doors:mrc/mrcstat1 | MRC stats |
 | nuke | Doors:Bossnuke/Bossnuke | Boss nuke - prompts for password |
+| AEHELP | DOORS:AEHELP/aehelp | AEDoor help |
 
 ### BBSLink Gateway (TELNET_CONNECT Working)
 
@@ -62,7 +63,7 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 |-----|----------|-------|
 | I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
 | fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
-| ulist | Doors:5D-User/5D-User | Needs T:5D-USER_DATA.{node} file - who's online door |
+| ulist | Doors:5D-User/5D-User | Non-standard XIM - no reply port, expects pre-populated data on AEDoorPort (multi-node design) |
 | ctop | DOORS:CONFTOP/ctop | MSGBASE_LOC fixed, but door exits silently without output |
 
 ---
@@ -88,8 +89,6 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 | Cmd | Location | Issue |
 |-----|----------|-------|
 | wall | dOORS:dRE/dRE!WAll/dRE!WAll | Data corruption - see dRE_WALL_HANDOFF.md |
-| AEDOOR | Doors/AEDOOR/aedoor | Binary not found - path issue |
-| AEHELP | Doors/AEHELP/aehelp | Binary not found - path issue |
 
 ---
 
@@ -99,7 +98,7 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 |-----|----------|-------|
 | I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
 | fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
-| ulist | Doors:5D-User/5D-User | Needs T:5D-USER_DATA.{node} file - who's online door |
+| ulist | Doors:5D-User/5D-User | Non-standard XIM - no reply port, expects pre-populated data on AEDoorPort (multi-node design) |
 | ctop | DOORS:CONFTOP/ctop | MSGBASE_LOC fixed, but door exits silently without output |
 | Kick | Doors:!!!War!!!/WarKick'Em/WarKick'Em | Prints goodbye text and exits immediately - no game interface |
 | DEL | DOORS:-mgs!-MgzListMan/MGZLISTMAN | Exits silently without output |
@@ -136,6 +135,20 @@ Moved to Working - see BBSLink Gateway (TELNET_CONNECT Working) section above.
 ---
 
 ## Session Notes
+
+### 2026-01-30: 5D-User (ulist) Investigation
+
+**5D-User (Who's Online Door):**
+- Door uses non-standard XIM implementation - no AEDoor.library
+- Does NOT create a reply port (unlike RTW which has AEDoorRP.xxx)
+- Only references `AEDoorPort%s` - no reply port string
+- Door flow: FindPort → GetMsg (expects data already there) → exits if empty
+- Never sends XIM queries (DT_NAME, etc.) because GetMsg check fails first
+- Uses `T:5D-USER_DATA.%d` as temp file to store gathered data
+- References `BBS:User.Data` for user database
+- References `Doors:5D-Page/5D-Page.User%ld` (5D-Page door not present)
+- **Finding:** Door designed for multi-node environment where nodes push data to each other
+- **Status:** Partial - requires pre-populated port data or multi-node setup
 
 ### 2026-01-30: ctop Testing + MSGBASE_LOC Fix
 

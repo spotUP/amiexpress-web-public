@@ -357,6 +357,7 @@ export interface BBSSessionData {
   transferRawActive?: boolean;
   transferRawSink?: (buf: Buffer) => void;
   transferManager?: any;
+  executingScreenCommand?: boolean; // True when running via ~CC_ MCI code from screen display
 }
 
 /**

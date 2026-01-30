@@ -1,8 +1,0 @@
-BBSCMD=GL
-TYPE=TS
-LOCATION=Doors/glc-viewer
-DESCRIPTION=Global Last Callers (alias for GLC)
-ACCESS=10
-MULTINODE=NO
-PRIORITY=SAME
-CATEGORY=Utility

@@ -20,6 +20,7 @@ import {
 import { IntuitionLibrary } from "./api/IntuitionLibrary";
 import { BsdSocketLibrary } from "./api/BsdSocketLibrary";
 import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./api/AmiSSLLibrary";
+import { DreamDoorLibrary } from "./api/DreamDoorLibrary";
 import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
@@ -54,6 +55,7 @@ export class LibraryManager {
   public bsdSocketLibrary: BsdSocketLibrary | null = null;
   public amisslMasterLibrary: AmiSSLMasterLibrary | null = null;
   public amisslLibrary: AmiSSLLibrary | null = null;
+  public dreamDoorLibrary: DreamDoorLibrary | null = null;
   public libraryTraps: LibraryTraps | null = null;
   public ximProtocol: XIMProtocol | null = null;
   public bbsApiLibrary: BbsApiLibrary | null = null;
@@ -590,6 +592,11 @@ debugLog("[LibraryManager] Creating network libraries (bsdsocket, amissl)...");
     // Connect amissl to bsdsocket for TLS upgrade
     this.amisslLibrary.setBsdSocketLibrary(this.bsdSocketLibrary);
 
+debugLog("[LibraryManager] Creating dreamdoor.library (DayDream BBS compatibility)...");
+    this.dreamDoorLibrary = new DreamDoorLibrary(this.emulator);
+    // Set session data for DreamDoor operations
+    this.dreamDoorLibrary.setSession(this.config.bbsSession, this.socket);
+
 debugLog("[LibraryManager] Installing library call traps...");
 
     this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
@@ -618,6 +625,7 @@ debugLog("[LibraryManager] Installing library call traps...");
     this.libraryTraps.setBsdSocketLibrary(this.bsdSocketLibrary);
     this.libraryTraps.setAmiSSLMasterLibrary(this.amisslMasterLibrary);
     this.libraryTraps.setAmiSSLLibrary(this.amisslLibrary);
+    this.libraryTraps.setDreamDoorLibrary(this.dreamDoorLibrary);
 
     // Set up callback so OpenAmiSSL() triggers vector installation
     const libraryTrapsRef = this.libraryTraps;
@@ -641,7 +649,7 @@ debugLog("[LibraryManager] Pre-opening utility.library and installing vectors...
     // CRITICAL: AquaScan and other doors call GetDiskObject for config files
     // XIMProtocol also uses iconLibrary directly to pre-load command .info files
 debugLog("[LibraryManager] Pre-opening icon.library and installing vectors...");
-    this.execLibrary.openLibraryHybrid("icon.library", 36, false);
+    this.execLibrary.openLibraryHybrid("icon.library", 37, false);
     this.libraryTraps.installIconVectors();
 
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {

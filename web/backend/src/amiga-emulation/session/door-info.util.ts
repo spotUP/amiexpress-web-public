@@ -85,9 +85,23 @@ console.log(`[door-info.util] Writing: user="${user}" loc="${loc}" bbsName="${bb
     writeCString(emulator, bbsInfoAddr + 0x170, timeStr.slice(0, 19));    // Time
     writeCString(emulator, bbsInfoAddr + 0x190, sysopName.slice(0, 30));  // Sysop name
 
-    // Update DoorInfo pointers to match library expectations
-    emulator.writeMemory32(doorInfoAddr + 0x1c, bbsInfoAddr + 0xdc);  // Point to location string
-    emulator.writeMemory32(doorInfoAddr + 0x20, bbsInfoAddr + 0x14);  // Point to user name string
+    // CRITICAL FIX 2026-01-30: Do NOT overwrite DoorInfo+0x1c and DoorInfo+0x20!
+    // These are dif_DataPtr and dif_StringPtr which MUST point to jhMessage.data
+    // and jhMessage.string respectively (set correctly by AEDoorLibrary.createComm).
+    //
+    // Previously this code was setting them to BBSInfo offsets (username/location),
+    // which broke JH_HK character input - the native AEDoor.library's HotKey()
+    // function reads from dif_String (DoorInfo+0x20), and if it points to the
+    // username instead of jhMessage.string, it reads "sysop" instead of the
+    // character the user typed!
+    //
+    // The BBSInfo structure is separate at DoorInfo+0x46. Doors can access user
+    // info via GetName()/GetLocation() library calls which use BBSInfo, not via
+    // dif_DataPtr/dif_StringPtr.
+    //
+    // REMOVED:
+    // emulator.writeMemory32(doorInfoAddr + 0x1c, bbsInfoAddr + 0xdc);  // WRONG - overwrote dif_DataPtr
+    // emulator.writeMemory32(doorInfoAddr + 0x20, bbsInfoAddr + 0x14);  // WRONG - overwrote dif_StringPtr
 
     // Write numeric fields for doors like ZooStats that read user status
     // These match the node user file structure layout (after strings)
@@ -136,24 +150,18 @@ console.log(`[door-info.util] Read back from BBSInfo+0xdc: "${readBackLoc}" (len
 console.log(`[door-info.util] Read back from BBSInfo+0x120: "${readBackBBS}"`);
 console.log(`[door-info.util] Read back from BBSInfo+0x150: "${readBackDate}"`);
 console.log(`[door-info.util] Read back from BBSInfo+0x170: "${readBackTime}"`);
-console.log(`[door-info.util] DoorInfo+0x1c pointer: 0x${ptr1c.toString(16)} (should be 0x${(bbsInfoAddr + 0xdc).toString(16)})`);
-console.log(`[door-info.util] DoorInfo+0x20 pointer: 0x${ptr20.toString(16)} (should be 0x${(bbsInfoAddr + 0x14).toString(16)})`);
+// NOTE: DoorInfo+0x1c (dif_DataPtr) and DoorInfo+0x20 (dif_StringPtr) are set by
+    // AEDoorLibrary.createComm() to point to jhMessage.data and jhMessage.string
+    // respectively. We no longer overwrite them here.
+console.log(`[door-info.util] DoorInfo+0x1c pointer: 0x${ptr1c.toString(16)} (dif_DataPtr - should point to jhMessage.data)`);
+console.log(`[door-info.util] DoorInfo+0x20 pointer: 0x${ptr20.toString(16)} (dif_StringPtr - should point to jhMessage.string)`);
 
-    // Verify pointers point to correct addresses
-    if (ptr1c === bbsInfoAddr + 0xdc && ptr20 === bbsInfoAddr + 0x14) {
-console.log(`[door-info.util] ✓ Pointers are CORRECT`);
-    } else {
-console.log(`[door-info.util] ✗ ERROR: Pointers are WRONG!`);
-    }
-
-    // Read what the pointers actually point to
-    if (ptr20 !== 0) {
-      const userViaPtr = readCString(emulator, ptr20, 198);
-console.log(`[door-info.util] Via DoorInfo+0x20 pointer: "${userViaPtr}"`);
-    }
-    if (ptr1c !== 0) {
-      const locViaPtr = readCString(emulator, ptr1c, 60);
-console.log(`[door-info.util] Via DoorInfo+0x1c pointer: "${locViaPtr}"`);
+    // Verify BBSInfo strings are accessible
+    if (ptr20 !== 0 && ptr20 !== bbsInfoAddr + 0x14) {
+      // Good - not pointing to BBSInfo.username anymore (which was the bug)
+console.log(`[door-info.util] [OK] dif_StringPtr correctly points to jhMessage.string, not BBSInfo.username`);
+    } else if (ptr20 === bbsInfoAddr + 0x14) {
+console.log(`[door-info.util] [WARNING] dif_StringPtr points to BBSInfo.username - this will break JH_HK input!`);
     }
 
 console.log(`[door-info.util] ===== End Verification =====`);

@@ -1644,29 +1644,310 @@ debugLog(`[DoorMessageHandler]   BB_DROPDTR: Dropping DTR (hangup)`);
         break;
 
       case XIMCommand.ENVSTAT:
+        // express.e:3677-3683: Get/set environment status
+        if (data !== 0) {
+          // Read: return current stat (default to 0 = idle)
+          const currentStat = (this.config.bbsSession as any)?.envStat || 0;
+debugLog(`[DoorMessageHandler]   ENVSTAT GET: ${currentStat}`);
+          this.writeStringToMessage(msgAddr, String(currentStat));
+        } else {
+          // Write: set environment status
+          const newStat = parseInt(str) || 0;
+debugLog(`[DoorMessageHandler]   ENVSTAT SET: ${newStat}`);
+          if ((this.config.bbsSession as any)) {
+            (this.config.bbsSession as any).envStat = newStat;
+          }
+        }
+        break;
+
       case XIMCommand.SV_NEWMSG:
+        // express.e:3684-3685: Set environment message
+debugLog(`[DoorMessageHandler]   SV_NEWMSG: "${str}"`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).envMessage = str;
+        }
+        break;
+
       case XIMCommand.PRV_COMMAND:
+        // express.e:3816-3818: Process command passthrough
+debugLog(`[DoorMessageHandler]   PRV_COMMAND: "${str}"`);
+        // This would execute a BBS command - store for later processing
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).pendingCommand = str;
+        }
+        break;
+
       case XIMCommand.PRV_GROUP:
+        // express.e:3819-3830: Set conference group info
+debugLog(`[DoorMessageHandler]   PRV_GROUP: "${str}"`);
+        // Format: "NN<name 37 chars><location 54 chars>"
+        // Conference number at start, name at +2, location at +40
+        break;
+
       case XIMCommand.DT_DUMP:
+        // express.e:3667-3668: Dump active user data to string
+        {
+          const user = (this.config.bbsSession as any)?.user;
+          const dumpStr = user ? `${user.name || 'Unknown'}|${user.location || ''}|${user.accessLevel || 0}` : 'No user';
+debugLog(`[DoorMessageHandler]   DT_DUMP: "${dumpStr}"`);
+          this.writeStringToMessage(msgAddr, dumpStr);
+        }
+        break;
+
       case XIMCommand.DT_MSGCODE:
+        // express.e:3669-3676: Door message code flag (0/1/2)
+        if (data === 1) {
+          (this.config.bbsSession as any).doorMsgCode = 1;
+debugLog(`[DoorMessageHandler]   DT_MSGCODE: SET to 1`);
+        } else if (data === 2) {
+          (this.config.bbsSession as any).doorMsgCode = 0;
+debugLog(`[DoorMessageHandler]   DT_MSGCODE: SET to 0`);
+        } else {
+          const code = (this.config.bbsSession as any)?.doorMsgCode || 0;
+debugLog(`[DoorMessageHandler]   DT_MSGCODE: GET = ${code}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, code);
+        }
+        break;
+
       case XIMCommand.DT_QUICKFLAG:
+        // express.e:3900-3901: Quick login flag
+debugLog(`[DoorMessageHandler]   DT_QUICKFLAG: SET to ${data}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).quickFlag = data !== 0;
+        }
+        break;
+
       case XIMCommand.DT_GOODFILE:
+        // express.e:3902-3903: Good file flag for file checking
+debugLog(`[DoorMessageHandler]   DT_GOODFILE: SET to ${data}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).aeGoodFile = data;
+        }
+        break;
+
       case XIMCommand.DT_ADDBIT:
+        // express.e:3853-3854: Add temporary security flag bit
+debugLog(`[DoorMessageHandler]   DT_ADDBIT: Adding bit ${data}`);
+        {
+          const session = this.config.bbsSession as any;
+          if (session) {
+            session.tempSecurityFlags = (session.tempSecurityFlags || 0) | (1 << data);
+          }
+        }
+        break;
+
       case XIMCommand.DT_REMBIT:
+        // express.e:3855-3856: Remove temporary security flag bit
+debugLog(`[DoorMessageHandler]   DT_REMBIT: Removing bit ${data}`);
+        {
+          const session = this.config.bbsSession as any;
+          if (session) {
+            session.tempSecurityFlags = (session.tempSecurityFlags || 0) & ~(1 << data);
+          }
+        }
+        break;
+
       case XIMCommand.DT_QUERYBIT:
+        // express.e:3857-3858: Query security bit - returns 1 if set, 0 if not
+        {
+          const session = this.config.bbsSession as any;
+          const flags = session?.tempSecurityFlags || 0;
+          const userFlags = session?.user?.accessFlags || 0;
+          const allFlags = flags | userFlags;
+          const hasFlag = (allFlags & (1 << data)) !== 0 ? 1 : 0;
+debugLog(`[DoorMessageHandler]   DT_QUERYBIT: bit ${data} = ${hasFlag}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, hasFlag);
+        }
+        break;
+
       case XIMCommand.DT_FILECODE:
+        // express.e:3945-3946: File check symbol code
+debugLog(`[DoorMessageHandler]   DT_FILECODE: SET to ${data}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).checksym = data;
+        }
+        break;
+
       case XIMCommand.DT_LANGUAGE:
+        // express.e:3884-3898: Screen type extension (txt, ans, etc)
+        if (data !== 0) {
+          // Read: return screen type extension
+          const screenType = (this.config.bbsSession as any)?.user?.screenType || 0;
+          const extensions = ['txt', 'ans', 'avt', 'rip', 'vtx'];
+          const ext = extensions[screenType] || 'txt';
+debugLog(`[DoorMessageHandler]   DT_LANGUAGE GET: "${ext}"`);
+          this.writeStringToMessage(msgAddr, ext);
+        } else {
+          // Write: set screen type by extension
+debugLog(`[DoorMessageHandler]   DT_LANGUAGE SET: "${str}"`);
+          const extensions = ['txt', 'ans', 'avt', 'rip', 'vtx'];
+          const idx = extensions.indexOf(str.toLowerCase());
+          if (idx >= 0 && (this.config.bbsSession as any)?.user) {
+            (this.config.bbsSession as any).user.screenType = idx;
+          }
+        }
+        break;
+
       case XIMCommand.DT_TRANSLATOR:
+        // express.e:4094-4099: User language translator
+        if (data !== 0) {
+          const lang = (this.config.bbsSession as any)?.userLanguage || '';
+debugLog(`[DoorMessageHandler]   DT_TRANSLATOR GET: "${lang}"`);
+          this.writeStringToMessage(msgAddr, lang);
+        } else {
+debugLog(`[DoorMessageHandler]   DT_TRANSLATOR SET: "${str}"`);
+          if ((this.config.bbsSession as any)) {
+            (this.config.bbsSession as any).userLanguage = str;
+          }
+        }
+        break;
+
       case XIMCommand.DT_HOST_LANGUAGE:
+        // express.e:4101-4106: Host language
+        if (data !== 0) {
+          const lang = (this.config.bbsSession as any)?.hostLanguage || 'en';
+debugLog(`[DoorMessageHandler]   DT_HOST_LANGUAGE GET: "${lang}"`);
+          this.writeStringToMessage(msgAddr, lang);
+        } else {
+debugLog(`[DoorMessageHandler]   DT_HOST_LANGUAGE SET: "${str}"`);
+          if ((this.config.bbsSession as any)) {
+            (this.config.bbsSession as any).hostLanguage = str;
+          }
+        }
+        break;
+
       case XIMCommand.DT_GEOGRAPHIC:
-      // REMOVED: case XIMCommand.DT_SIZEUPLOAD: - conflicts with real DT_CONFACCESS (146)
+        // express.e:4113-4114: Geographic/BBS location string
+        {
+          const bbsLoc = (this.config.bbsSession as any)?.bbsLocation || 'The Internet';
+debugLog(`[DoorMessageHandler]   DT_GEOGRAPHIC: "${bbsLoc}"`);
+          this.writeStringToMessage(msgAddr, bbsLoc);
+        }
+        break;
+
+      case XIMCommand.DT_SIZEUPLOAD:
+        // express.e:4115-4117: Human-readable upload size (e.g., "1.5mb")
+        {
+          const user = (this.config.bbsSession as any)?.user;
+          const bytes = user?.bytesUploaded || 0;
+          const sizeStr = this.formatByteSize(bytes);
+debugLog(`[DoorMessageHandler]   DT_SIZEUPLOAD: "${sizeStr}"`);
+          this.writeStringToMessage(msgAddr, sizeStr);
+        }
+        break;
+
       case XIMCommand.DT_SIZEDOWNLOAD:
+        // express.e:4118-4120: Human-readable download size
+        {
+          const user = (this.config.bbsSession as any)?.user;
+          const bytes = user?.bytesDownloaded || 0;
+          const sizeStr = this.formatByteSize(bytes);
+debugLog(`[DoorMessageHandler]   DT_SIZEDOWNLOAD: "${sizeStr}"`);
+          this.writeStringToMessage(msgAddr, sizeStr);
+        }
+        break;
+
       case XIMCommand.DT_CONFACCESS2:
+        // express.e:4141-4150: Extended conference access (25 chars)
+        if (data !== 0) {
+          // Read: return conf access string (X for access, _ for no access)
+          const session = this.config.bbsSession as any;
+          const numConfs = Math.min(25, session?.numConferences || 9);
+          let accessStr = '';
+          for (let i = 1; i <= numConfs; i++) {
+            const hasAccess = session?.user?.confAccess?.[i] !== false;
+            accessStr += hasAccess ? 'X' : '_';
+          }
+debugLog(`[DoorMessageHandler]   DT_CONFACCESS2 GET: "${accessStr}"`);
+          this.writeStringToMessage(msgAddr, accessStr);
+        } else {
+          // Write: set conference access from string
+debugLog(`[DoorMessageHandler]   DT_CONFACCESS2 SET: "${str}"`);
+          const session = this.config.bbsSession as any;
+          if (session?.user) {
+            session.user.confAccess = session.user.confAccess || {};
+            for (let i = 0; i < str.length && i < 25; i++) {
+              session.user.confAccess[i + 1] = str[i] === 'X';
+            }
+          }
+        }
+        break;
+
       case XIMCommand.DT_CBYTESUPLOAD:
+        // express.e:4151-4159: Conference bytes uploaded (same as DT_BYTESUPLOAD for current conf)
+        if (data !== 0) {
+          const user = (this.config.bbsSession as any)?.user;
+          const bytes = user?.bytesUploaded || 0;
+debugLog(`[DoorMessageHandler]   DT_CBYTESUPLOAD GET: ${bytes}`);
+          this.writeStringToMessage(msgAddr, String(bytes));
+        } else {
+debugLog(`[DoorMessageHandler]   DT_CBYTESUPLOAD SET: ${str}`);
+          if ((this.config.bbsSession as any)?.user) {
+            (this.config.bbsSession as any).user.bytesUploaded = parseInt(str) || 0;
+          }
+        }
+        break;
+
       case XIMCommand.DT_CBYTESDOWNLOAD:
+        // express.e:4160-4168: Conference bytes downloaded
+        if (data !== 0) {
+          const user = (this.config.bbsSession as any)?.user;
+          const bytes = user?.bytesDownloaded || 0;
+debugLog(`[DoorMessageHandler]   DT_CBYTESDOWNLOAD GET: ${bytes}`);
+          this.writeStringToMessage(msgAddr, String(bytes));
+        } else {
+debugLog(`[DoorMessageHandler]   DT_CBYTESDOWNLOAD SET: ${str}`);
+          if ((this.config.bbsSession as any)?.user) {
+            (this.config.bbsSession as any).user.bytesDownloaded = parseInt(str) || 0;
+          }
+        }
+        break;
+
       case XIMCommand.DT_CFILESUPLOAD:
+        // express.e:4169-4175: Conference files uploaded
+        if (data !== 0) {
+          const user = (this.config.bbsSession as any)?.user;
+          const files = user?.filesUploaded || user?.uploads || 0;
+debugLog(`[DoorMessageHandler]   DT_CFILESUPLOAD GET: ${files}`);
+          this.writeStringToMessage(msgAddr, String(files));
+        } else {
+debugLog(`[DoorMessageHandler]   DT_CFILESUPLOAD SET: ${str}`);
+          if ((this.config.bbsSession as any)?.user) {
+            (this.config.bbsSession as any).user.uploads = parseInt(str) || 0;
+          }
+        }
+        break;
+
       case XIMCommand.DT_CFILESDOWNLOAD:
+        // express.e:4176-4182: Conference files downloaded
+        if (data !== 0) {
+          const user = (this.config.bbsSession as any)?.user;
+          const files = user?.filesDownloaded || user?.downloads || 0;
+debugLog(`[DoorMessageHandler]   DT_CFILESDOWNLOAD GET: ${files}`);
+          this.writeStringToMessage(msgAddr, String(files));
+        } else {
+debugLog(`[DoorMessageHandler]   DT_CFILESDOWNLOAD SET: ${str}`);
+          if ((this.config.bbsSession as any)?.user) {
+            (this.config.bbsSession as any).user.downloads = parseInt(str) || 0;
+          }
+        }
+        break;
+
       case XIMCommand.DT_CALLEDTODAY:
+        // express.e:4189-4195: Times called today
+        if (data !== 0) {
+          const user = (this.config.bbsSession as any)?.user;
+          const calls = user?.timesOnToday || 1;
+debugLog(`[DoorMessageHandler]   DT_CALLEDTODAY GET: ${calls}`);
+          this.writeStringToMessage(msgAddr, String(calls));
+        } else {
+debugLog(`[DoorMessageHandler]   DT_CALLEDTODAY SET: ${str}`);
+          if ((this.config.bbsSession as any)?.user) {
+            (this.config.bbsSession as any).user.timesOnToday = parseInt(str) || 0;
+          }
+        }
+        break;
+
       case XIMCommand.BB_PCONFNAME:
         // express.e:3779-3785: Get conference name by number (1-9)
         // Uses getConfName(temp) to read NAME.n from ConfConfig.info
@@ -1787,40 +2068,192 @@ debugLog(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
         break;
 
       case XIMCommand.BB_CONFACCOUNT:
+        // express.e:4183-4188: Check if conference accounting is enabled
+        if (data !== 0) {
+          // Returns YES if conference accounting enabled, NO otherwise
+          const confAccounting = (this.config.bbsSession as any)?.confAccounting || false;
+debugLog(`[DoorMessageHandler]   BB_CONFACCOUNT GET: ${confAccounting ? 'YES' : 'NO'}`);
+          this.writeStringToMessage(msgAddr, confAccounting ? 'YES' : 'NO');
+        } else {
+debugLog(`[DoorMessageHandler]   BB_CONFACCOUNT SET: ignored (not implemented)`);
+        }
+        break;
+
       case XIMCommand.EDITOR_STRUCT:
+        // express.e:3929-3934: Copy editor struct to/from door memory
+        // data=1: copy from door to BBS, data=0: copy from BBS to door
+debugLog(`[DoorMessageHandler]   EDITOR_STRUCT: ${data ? 'READ from door' : 'WRITE to door'} (not implemented)`);
+        break;
+
       case XIMCommand.LOAD_CONFDB:
+        // express.e:3935-3936: Load conference database
+debugLog(`[DoorMessageHandler]   LOAD_CONFDB: slot=${data}, nodeId=${(this.config.bbsSession as any)?.nodeId || 1}`);
+        // Would load conf db into memory at msg.filler1
+        break;
+
       case XIMCommand.SAVE_CONFDB:
+        // express.e:3937-3939: Save conference database
+debugLog(`[DoorMessageHandler]   SAVE_CONFDB: slot=${data}, nodeId=${(this.config.bbsSession as any)?.nodeId || 1}`);
+        // Would save conf db from memory at msg.filler1
+        break;
+
       case XIMCommand.GET_CONFNUM:
-      case XIMCommand.MOD_TYPE:
-      case XIMCommand.MSGBASE_LOC:
-        // MSGBASE_LOC (604): Return message base path for current conference
-        // ctop.e uses this to access message headers for top uploaders
+        // express.e:3940-3942: Get conference name and location by number
+        // Writes conf name to filler1, location to filler2
         {
+          const confNum = data;
+debugLog(`[DoorMessageHandler]   GET_CONFNUM: ${confNum}`);
+          try {
+            const { loadConfConfig } = require('../../services/conf-config.service');
+            const bbsRoot = (this.config.bbsSession as any)?.bbsRoot || process.cwd();
+            const confConfig = loadConfConfig(bbsRoot);
+            const confName = confConfig?.entries[confNum - 1]?.name || `Conference ${confNum}`;
+            const confLoc = confConfig?.entries[confNum - 1]?.location || `BBS:Conf${confNum}/`;
+            // Would write to filler1 and filler2 memory locations
+debugLog(`[DoorMessageHandler]   GET_CONFNUM: name="${confName}", loc="${confLoc}"`);
+          } catch (error) {
+debugLog(`[DoorMessageHandler]   GET_CONFNUM: Error - ${error}`);
+          }
+        }
+        break;
+
+      case XIMCommand.MOD_TYPE:
+        // express.e:3943-3944: Return 1 if privileged command, 0 if not
+        {
+          const isPrivCmd = (this.config.bbsSession as any)?.isPrivilegedCommand || false;
+debugLog(`[DoorMessageHandler]   MOD_TYPE: ${isPrivCmd ? 1 : 0}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, isPrivCmd ? 1 : 0);
+        }
+        break;
+
+      case XIMCommand.MSGBASE_LOC:
+        // express.e:3967-3973: Get/set message base location path
+        if (data !== 0) {
+          // Read: return current message base path
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
           const msgBaseLoc = `BBS:Conf${confNum}/MsgBase/`;
-debugLog(`[DoorMessageHandler]   MSGBASE_LOC: "${msgBaseLoc}"`);
+debugLog(`[DoorMessageHandler]   MSGBASE_LOC GET: "${msgBaseLoc}"`);
           this.writeStringToMessage(msgAddr, msgBaseLoc);
+        } else {
+          // Write: set message base path
+debugLog(`[DoorMessageHandler]   MSGBASE_LOC SET: "${str}"`);
+          if ((this.config.bbsSession as any)) {
+            (this.config.bbsSession as any).msgBaseLocation = str;
+          }
         }
         break;
 
       case XIMCommand.ACP_COMMAND:
+        // express.e:3947-3948: Send command to ACP (AmiExpress Control Panel)
+debugLog(`[DoorMessageHandler]   ACP_COMMAND: "${str}" data=${data}`);
+        // Would send command to ACP daemon if running
+        break;
+
       case XIMCommand.BYPASS_CSI_CHECK:
+        // express.e:3949-3950: Not implemented in original
+debugLog(`[DoorMessageHandler]   BYPASS_CSI_CHECK: Not implemented`);
+        break;
+
       case XIMCommand.SENTBY:
+        // express.e:3951-3952: Return sentby files access level
+        {
+          const sentbyLevel = (this.config.bbsSession as any)?.sentbyLevel || 0;
+debugLog(`[DoorMessageHandler]   SENTBY: ${sentbyLevel}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, sentbyLevel);
+        }
+        break;
+
       case XIMCommand.SETOVERIDE:
+        // express.e:3953-3954: Set override mode
+debugLog(`[DoorMessageHandler]   SETOVERIDE: ${data}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).overrideMode = data;
+        }
+        break;
+
       case XIMCommand.FULLEDIT:
+        // express.e:3955-3956: Full editor mode - not implemented in original
+debugLog(`[DoorMessageHandler]   FULLEDIT: Not implemented`);
+        break;
+
       case XIMCommand.SETMCIOFF:
+        // express.e:3957-3958: Turn MCI processing off (data != 0) or on (data == 0)
+debugLog(`[DoorMessageHandler]   SETMCIOFF: ${data !== 0 ? 'MCI OFF' : 'MCI ON'}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).mciOff = data !== 0;
+        }
+        break;
+
       case XIMCommand.GET_CUSTOM_MSGBASE_PARAM1:
+        // express.e:3959-3960: Return custom message base parameter 1
+        {
+          const param1 = (this.config.bbsSession as any)?.customMsgParam1 || 0;
+debugLog(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_PARAM1: ${param1}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, param1);
+        }
+        break;
+
       case XIMCommand.GET_CUSTOM_MSGBASE_PARAM2:
+        // express.e:3961-3962: Return custom message base parameter 2
+        {
+          const param2 = (this.config.bbsSession as any)?.customMsgParam2 || 0;
+debugLog(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_PARAM2: ${param2}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, param2);
+        }
+        break;
+
       case XIMCommand.LAST_READ:
+        // express.e:3963-3964: Last message read conference number
+        {
+          const lastRead = (this.config.bbsSession as any)?.lastMsgReadConf || 0;
+debugLog(`[DoorMessageHandler]   LAST_READ: ${lastRead}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, lastRead);
+        }
+        break;
+
       case XIMCommand.LAST_SCANNED:
+        // express.e:3965-3966: Last new message read conference number
+        {
+          const lastScanned = (this.config.bbsSession as any)?.lastNewReadConf || 0;
+debugLog(`[DoorMessageHandler]   LAST_SCANNED: ${lastScanned}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, lastScanned);
+        }
+        break;
+
       case XIMCommand.SER_INOUT:
+        // express.e:3982-3985: Set serial I/O flags (in and out)
+debugLog(`[DoorMessageHandler]   SER_INOUT: ${data}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).serInFlag = data;
+          (this.config.bbsSession as any).serOutFlag = data;
+        }
+        break;
+
       case XIMCommand.MEMCONF:
+        // express.e:4015-4020: Get memory conference pointer
+        // Returns pointer to conference memory structure
+debugLog(`[DoorMessageHandler]   MEMCONF: Returning 0 (not supported)`);
+        // msg.filler1 would point to memConf structure
+        break;
+
       case XIMCommand.SET_SERSHARED:
+        // express.e:4021-4022: Set serial shared flag
+debugLog(`[DoorMessageHandler]   SET_SERSHARED: ${data}`);
+        if ((this.config.bbsSession as any)) {
+          (this.config.bbsSession as any).serShared = data !== 0;
+        }
+        break;
+
       case XIMCommand.PASSWORD_HASH:
         // express.e:4029-4035: Get password hash
-        // Returns empty hash for now (requires user session integration)
-debugLog(`[DoorMessageHandler]   PASSWORD_HASH: Returning empty hash`);
-        this.writeStringToMessage(msgAddr, "");
+        // If legacy (type 0), calculates hash from password
+        // Otherwise returns stored 32-char hash
+        {
+          const user = (this.config.bbsSession as any)?.user;
+          const pwdHash = user?.passwordHash || '';
+debugLog(`[DoorMessageHandler]   PASSWORD_HASH: ${pwdHash ? '(hash present)' : '(empty)'}`);
+          this.writeStringToMessage(msgAddr, pwdHash.substring(0, 40));
+        }
         break;
 
       case XIMCommand.GET_MENU_COMMAND_CHAR:
@@ -1886,8 +2319,21 @@ debugLog(`[DoorMessageHandler]   DISABLE_FILE_ATTACH: ${data !== 0 ? 'DISABLED' 
         break;
 
       case XIMCommand.QWKZOOM_REC:
-        // express.e:4055-4059: QWK zoom record number
-debugLog(`[DoorMessageHandler]   QWKZOOM_REC: Not implemented`);
+        // express.e:4055-4061: QWK zoom record number (floating point)
+        if (data !== 0) {
+          // Read: Return float message record number as string
+          const floatMsgRecNum = (this.config.bbsSession as any)?.floatMsgRecNum || 0.0;
+          const numStr = floatMsgRecNum.toFixed(2);
+debugLog(`[DoorMessageHandler]   QWKZOOM_REC GET: ${numStr}`);
+          this.writeStringToMessage(msgAddr, numStr);
+        } else {
+          // Write: Parse string as float and store
+          const newVal = parseFloat(str) || 0.0;
+debugLog(`[DoorMessageHandler]   QWKZOOM_REC SET: ${newVal}`);
+          if ((this.config.bbsSession as any)) {
+            (this.config.bbsSession as any).floatMsgRecNum = newVal;
+          }
+        }
         break;
 
       case XIMCommand.REL_CONF:
@@ -2114,11 +2560,33 @@ debugLog(`[DoorMessageHandler]   LOGON_UPASS: Not supported`);
         break;
 
       case XIMCommand.SIG_LI:
-        // express.e:4205-4207: Get password input
-debugLog(`[DoorMessageHandler]   SIG_LI: Password input`);
-        // Password input would be handled via Socket.IO
-        this.writeStringToMessage(msgAddr, "");
-        break;
+        // express.e:4205-4207: Secure line input (password mode with asterisks)
+        // getPass2(msg.string, NIL, 0, msg.data, tempstring)
+        // msg.string = prompt to display, msg.data = max length, returns input in msg.string
+        {
+          const prompt = str || "";
+          const maxLen = data || 20;
+debugLog(`[DoorMessageHandler]   SIG_LI: Password prompt="${prompt}" maxLen=${maxLen}`);
+          // Store state for password input handling
+          this.activeInput = {
+            msgAddr: msgAddr,
+            maxlen: maxLen,
+            command: command,
+            replyPortAddr: this.doorReplyPortAddr,
+            resumeCallback: () => {
+              this.emulator.resume();
+            }
+          };
+          // Send prompt and enable password mode (hidden input)
+          if (prompt) {
+            this.socket.emit("ansi-output", prompt);
+          }
+          // Emit password mode to frontend for masked input
+          this.socket.emit("door:password-mode", { enabled: true, maxLength: maxLen });
+          // Pause emulator while waiting for input
+          this.emulator.pause();
+          return; // Don't reply - will reply when input received
+        }
       case XIMCommand.NODE_DEVICE:
         // express.e:3848-3849: Get serial device name
         {
@@ -2137,9 +2605,30 @@ debugLog(`[DoorMessageHandler]   NODE_UNIT: ${unitNumber}`);
         }
         break;
 
+      case XIMCommand.NODE_NUMBER:
+        // express.e:3853-3855: Get node number
+        {
+          const nodeNum = this.config.bbsSession?.nodeId || 1;
+debugLog(`[DoorMessageHandler]   NODE_NUMBER: ${nodeNum}`);
+          this.writeStringToMessage(msgAddr, String(nodeNum));
+        }
+        break;
+
       case XIMCommand.UNKNOWN4:
-        // Unknown/undocumented command
-debugLog(`[DoorMessageHandler]   UNKNOWN4: Not implemented`);
+        // express.e:4208-4214: Unknown value storage (general purpose variable)
+        if (data !== 0) {
+          // Read: return stored value
+          const unknownValue = (this.config.bbsSession as any)?.unknownValue || 0;
+debugLog(`[DoorMessageHandler]   UNKNOWN4 GET: ${unknownValue}`);
+          this.writeStringToMessage(msgAddr, String(unknownValue));
+        } else {
+          // Write: store value
+          const newValue = parseInt(str) || 0;
+debugLog(`[DoorMessageHandler]   UNKNOWN4 SET: ${newValue}`);
+          if ((this.config.bbsSession as any)) {
+            (this.config.bbsSession as any).unknownValue = newValue;
+          }
+        }
         break;
 
       // NOTE: CONF_ACCESS is handled earlier in the switch statement (around line 1285)
@@ -2835,5 +3324,23 @@ console.error(`[DoorMessageHandler] Error reading file ${filePath}:`, error?.mes
     };
 
     debugLog(`[DoorMessageHandler] Telnet session cleaned up`);
+  }
+
+  /**
+   * Format byte size to human-readable string (e.g., "1.5mb")
+   * Per express.e:3336-3370 calcSizeText()
+   */
+  private formatByteSize(bytes: number): string {
+    if (bytes < 1024) {
+      return `${bytes}b`;
+    } else if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)}kb`;
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024)).toFixed(1)}mb`;
+    } else if (bytes < 1024 * 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}gb`;
+    } else {
+      return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)}tb`;
+    }
   }
 }

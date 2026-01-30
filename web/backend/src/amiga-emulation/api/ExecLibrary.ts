@@ -183,7 +183,10 @@ export class ExecLibrary {
   private readonly BSDSOCKET_LIB_ADDR = 0x0f2000; // bsdsocket.library at 968KB
   private readonly AMISSLMASTER_LIB_ADDR = 0x0f4000; // amisslmaster.library at 976KB
   private readonly AMISSL_LIB_ADDR = 0x0f6000; // amissl.library at 984KB
-  private nextStubLibraryAddr = 0x0f8000; // fallback base for unknown stub libraries
+  private readonly DREAMDOOR_LIB_ADDR = 0x0f8000; // dreamdoor.library at 992KB
+  private readonly REXXSUPPORT_LIB_ADDR = 0x0fa000; // rexxsupport.library at 1000KB
+  private readonly REXXARPLIB_LIB_ADDR = 0x0fc000; // rexxarplib.library at 1008KB
+  private nextStubLibraryAddr = 0x100000; // fallback base for unknown stub libraries (1MB+)
   private readonly PORT_LIST_OFFSET = 392;
   private currentStackLower = 0;
   private currentStackUpper = 0;
@@ -1095,7 +1098,7 @@ debugLog(
       case "dos.library":
         return { address: this.DOS_LIB_ADDR, version: 37, revision: 0 };
       case "icon.library":
-        return { address: this.ICON_LIB_ADDR, version: 36, revision: 0 };
+        return { address: this.ICON_LIB_ADDR, version: 37, revision: 0 };
       case "intuition.library":
         return {
           address: this.INTUITION_LIB_ADDR,
@@ -1137,6 +1140,27 @@ debugLog(
           version: 4,
           revision: 0,
           stubJumpTableEntries: 500,
+        };
+      case "dreamdoor.library":
+        return {
+          address: this.DREAMDOOR_LIB_ADDR,
+          version: 1,
+          revision: 0,
+          stubJumpTableEntries: 20,
+        };
+      case "rexxsupport.library":
+        return {
+          address: this.REXXSUPPORT_LIB_ADDR,
+          version: 34,
+          revision: 0,
+          stubJumpTableEntries: 30,
+        };
+      case "rexxarplib.library":
+        return {
+          address: this.REXXARPLIB_LIB_ADDR,
+          version: 34,
+          revision: 0,
+          stubJumpTableEntries: 30,
         };
       default:
         return null;

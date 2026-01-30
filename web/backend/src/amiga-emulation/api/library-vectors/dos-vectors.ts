@@ -368,7 +368,14 @@ export const DOS_VECTORS: LibraryVector[] = [
     },
   },
   // -366: SetVBuf
-  // -372: DupLockFromFH
+  {
+    offset: -372,
+    name: "DupLockFromFH",
+    handler: (emu, lib: DosLibrary) => {
+      lib.DupLockFromFH();
+      return emu.getRegister(0);
+    },
+  },
   {
     offset: -378,
     name: "OpenFromLock",
@@ -377,8 +384,22 @@ export const DOS_VECTORS: LibraryVector[] = [
       return emu.getRegister(0);
     },
   },
-  // -384: ParentOfFH
-  // -390: ExamineFH
+  {
+    offset: -384,
+    name: "ParentOfFH",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ParentOfFH();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -390,
+    name: "ExamineFH",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ExamineFH();
+      return emu.getRegister(0);
+    },
+  },
   // -396: SetFileDate
   {
     offset: -402,
@@ -389,7 +410,14 @@ export const DOS_VECTORS: LibraryVector[] = [
     },
   },
   // -408: NameFromFH
-  // -414: SplitName
+  {
+    offset: -414,
+    name: "SplitName",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SplitName();
+      return emu.getRegister(0);
+    },
+  },
   // -420: SameLock
   // -426: SetMode
   // -432: ExAll
@@ -432,13 +460,40 @@ export const DOS_VECTORS: LibraryVector[] = [
   // -504: RunCommand
   // -510: GetConsoleTask
   // -516: SetConsoleTask
-  // -522: GetFileSysTask
-  // -528: SetFileSysTask
+  {
+    offset: -522,
+    name: "GetFileSysTask",
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetFileSysTask();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -528,
+    name: "SetFileSysTask",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetFileSysTask();
+      return emu.getRegister(0);
+    },
+  },
   // -534: GetArgStr
   // -540: SetArgStr
-  // -546: FindCliProc
-  // -552: MaxCli
-  // ... more process management functions ...
+  {
+    offset: -546,
+    name: "FindCliProc",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FindCliProc();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -552,
+    name: "MaxCli",
+    handler: (emu, lib: DosLibrary) => {
+      lib.MaxCli();
+      return emu.getRegister(0);
+    },
+  },
 
   // ============================================
   // Date/Time Routines

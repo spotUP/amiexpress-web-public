@@ -3722,6 +3722,119 @@ debugLog(
   }
 
   /**
+   * MaxCli - Returns the highest CLI process number possibly in use (V36)
+   * Returns: D0 = highest CLI number that may be in use
+   *
+   * CLI numbers are reused, and are usually as small as possible.
+   * To find all CLIs, scan using FindCliProc() from 1 to MaxCli().
+   */
+  MaxCli(): void {
+    // Return a reasonable max CLI number for BBS environment
+    // Most Amiga systems have 10-20 CLI processes max
+    const maxCli = 20;
+    debugLog(`[dos.library] MaxCli() -> ${maxCli}`);
+    this.emulator.setRegister(CPURegister.D0, maxCli);
+  }
+
+  /**
+   * FindCliProc - Find a CLI by number (V36)
+   * D1 = CLI number (1-based)
+   * Returns: D0 = pointer to Process structure (NULL if not found)
+   *
+   * Finds a CLI by its number, returning the process structure.
+   */
+  FindCliProc(): void {
+    const cliNum = this.emulator.getRegister(CPURegister.D1);
+    debugLog(`[dos.library] FindCliProc(num=${cliNum})`);
+
+    // For BBS doors, we don't have real CLI processes
+    // Return NULL for all queries (no processes found)
+    this.emulator.setRegister(CPURegister.D0, 0);
+  }
+
+  /**
+   * SplitName - Splits out a component of a pathname into a buffer (V36)
+   * D1 = name (STRPTR) - pathname being parsed
+   * D2 = separator (UBYTE) - separator character to split by
+   * D3 = buf (STRPTR) - output buffer
+   * D4 = oldpos (WORD) - starting position in name
+   * D5 = size (LONG) - buffer size
+   * Returns: D0 = newpos (WORD) - new position for next call, -1 for last one
+   *
+   * This routine splits out the next piece of a name from a given file name.
+   */
+  SplitName(): void {
+    const namePtr = this.emulator.getRegister(CPURegister.D1);
+    const separator = this.emulator.getRegister(CPURegister.D2) & 0xff;
+    const bufPtr = this.emulator.getRegister(CPURegister.D3);
+    const oldPos = this.emulator.getRegister(CPURegister.D4) & 0xffff; // WORD
+    const size = this.emulator.getRegister(CPURegister.D5);
+
+    const name = this.readString(namePtr);
+    const sepChar = String.fromCharCode(separator);
+
+    debugLog(`[dos.library] SplitName(name="${name}", sep='${sepChar}', oldPos=${oldPos}, size=${size})`);
+
+    if (oldPos >= name.length || size <= 0) {
+      // No more to parse
+      this.emulator.writeMemory(bufPtr, 0); // Empty string
+      this.emulator.setRegister(CPURegister.D0, -1); // Signal end
+      return;
+    }
+
+    // Find next separator starting from oldPos
+    let endPos = name.indexOf(sepChar, oldPos);
+    if (endPos === -1) {
+      // No separator found - this is the last component
+      endPos = name.length;
+    }
+
+    // Copy component to buffer (up to size-1 characters)
+    const component = name.substring(oldPos, endPos);
+    const copyLen = Math.min(component.length, size - 1);
+    for (let i = 0; i < copyLen; i++) {
+      this.emulator.writeMemory(bufPtr + i, component.charCodeAt(i));
+    }
+    this.emulator.writeMemory(bufPtr + copyLen, 0); // Null terminator
+
+    // Calculate new position
+    let newPos: number;
+    if (endPos >= name.length) {
+      newPos = -1; // Last component
+    } else {
+      newPos = endPos + 1; // Skip past separator
+    }
+
+    debugLog(`[dos.library] SplitName: component="${component.substring(0, copyLen)}", newPos=${newPos}`);
+    this.emulator.setRegister(CPURegister.D0, newPos & 0xffff);
+  }
+
+  /**
+   * GetFileSysTask - Returns the default filesystem task (V36)
+   * Returns: D0 = pointer to filesystem task (MsgPort)
+   *
+   * Returns the task that will handle DOS operations if no
+   * filesystem is specified.
+   */
+  GetFileSysTask(): void {
+    debugLog(`[dos.library] GetFileSysTask() -> 0 (stub)`);
+    // Return NULL - no default filesystem task in emulation
+    this.emulator.setRegister(CPURegister.D0, 0);
+  }
+
+  /**
+   * SetFileSysTask - Sets the default filesystem task (V36)
+   * D1 = task (pointer to MsgPort)
+   * Returns: D0 = previous filesystem task
+   */
+  SetFileSysTask(): void {
+    const task = this.emulator.getRegister(CPURegister.D1);
+    debugLog(`[dos.library] SetFileSysTask(task=0x${task.toString(16)}) -> 0 (stub)`);
+    // Return NULL - we don't track filesystem tasks
+    this.emulator.setRegister(CPURegister.D0, 0);
+  }
+
+  /**
    * GetCliProgramName - Get program name from CLI structure (V36+)
    * D1 = buffer pointer
    * D2 = buffer length
@@ -4594,6 +4707,210 @@ debugLog(
     this.writeString(bufAddr, path);
 debugLog(`[dos.library] NameFromFH returned: ${path}`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * DupLockFromFH - Gets a lock on an open file (V36)
+   * D1 = fh (BPTR)
+   * Returns: D0 = lock (BPTR) or NULL for failure
+   *
+   * Obtain a lock on the object associated with fh. Only works if the
+   * file was opened using a non-exclusive mode.
+   */
+  DupLockFromFH(): void {
+    const fhBptr = this.emulator.getRegister(CPURegister.D1);
+
+    debugLog(`[dos.library] DupLockFromFH(fh=0x${fhBptr.toString(16)})`);
+
+    // Find the open file
+    const file = this.openFiles.get(fhBptr);
+    if (!file) {
+      console.error(`[dos.library] DupLockFromFH: Invalid file handle 0x${fhBptr.toString(16)}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    const filePath = file.realPath || file.name;
+    debugLog(`[dos.library] DupLockFromFH: File path is ${filePath}`);
+
+    // Create a new lock for this path (shared access)
+    const lockId = this.nextLockId++;
+    const mode = -2; // ACCESS_READ (shared)
+    const bptr = this.allocateFileLock(lockId, mode);
+    const memAddr = bptr << 2;
+
+    this.locks.set(lockId, {
+      id: lockId,
+      path: filePath,
+      mode: mode,
+      amigaPath: file.name,
+      memAddr: memAddr,
+      bptr: bptr,
+    });
+
+    debugLog(`[dos.library] DupLockFromFH: Created lock ${lockId}, BPTR=0x${bptr.toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, bptr);
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+  }
+
+  /**
+   * ParentOfFH - Returns a lock on the parent directory of a file (V36)
+   * D1 = fh (BPTR)
+   * Returns: D0 = lock on parent directory (BPTR) or NULL for failure
+   *
+   * Returns a shared lock on the parent directory of the filehandle.
+   */
+  ParentOfFH(): void {
+    const fhBptr = this.emulator.getRegister(CPURegister.D1);
+
+    debugLog(`[dos.library] ParentOfFH(fh=0x${fhBptr.toString(16)})`);
+
+    // Find the open file
+    const file = this.openFiles.get(fhBptr);
+    if (!file) {
+      console.error(`[dos.library] ParentOfFH: Invalid file handle 0x${fhBptr.toString(16)}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    const filePath = file.realPath || file.name;
+    debugLog(`[dos.library] ParentOfFH: File path is ${filePath}`);
+
+    // Get the parent directory path
+    const lastSep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf(':'));
+    if (lastSep < 0) {
+      // No parent directory (root level)
+      console.error(`[dos.library] ParentOfFH: No parent for ${filePath}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    // Get parent path (include ':' but not '/')
+    const parentPath = filePath[lastSep] === ':'
+      ? filePath.substring(0, lastSep + 1)
+      : filePath.substring(0, lastSep);
+
+    debugLog(`[dos.library] ParentOfFH: Parent path is ${parentPath}`);
+
+    // Convert to Amiga path for parent
+    const amigaFilePath = file.name;
+    const amigaParentPath = amigaFilePath.substring(0, amigaFilePath.lastIndexOf('/') > 0
+      ? amigaFilePath.lastIndexOf('/')
+      : amigaFilePath.lastIndexOf(':') + 1);
+
+    // Create a new lock for the parent directory (shared access)
+    const lockId = this.nextLockId++;
+    const mode = -2; // ACCESS_READ (shared)
+    const bptr = this.allocateFileLock(lockId, mode);
+    const memAddr = bptr << 2;
+
+    this.locks.set(lockId, {
+      id: lockId,
+      path: parentPath,
+      mode: mode,
+      amigaPath: amigaParentPath || parentPath,
+      memAddr: memAddr,
+      bptr: bptr,
+    });
+
+    debugLog(`[dos.library] ParentOfFH: Created lock ${lockId}, BPTR=0x${bptr.toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, bptr);
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+  }
+
+  /**
+   * ExamineFH - Gets information on an open file (V36)
+   * D1 = fh (BPTR)
+   * D2 = fib (pointer to FileInfoBlock, must be longword aligned)
+   * Returns: D0 = success (BOOL)
+   *
+   * Examines a filehandle and returns information about the file in the
+   * FileInfoBlock.
+   */
+  ExamineFH(): void {
+    const fhBptr = this.emulator.getRegister(CPURegister.D1);
+    const fibPtr = this.emulator.getRegister(CPURegister.D2);
+
+    debugLog(`[dos.library] ExamineFH(fh=0x${fhBptr.toString(16)}, fib=0x${fibPtr.toString(16)})`);
+
+    // Find the open file
+    const file = this.openFiles.get(fhBptr);
+    if (!file) {
+      console.error(`[dos.library] ExamineFH: Invalid file handle 0x${fhBptr.toString(16)}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    const filePath = file.realPath || file.name;
+    debugLog(`[dos.library] ExamineFH: File path is ${filePath}`);
+
+    try {
+      const stats = amigafs.statSync(filePath);
+      const fileName = path.basename(filePath);
+
+      // Clear FileInfoBlock (260 bytes)
+      for (let i = 0; i < 260; i++) {
+        this.emulator.writeMemory(fibPtr + i, 0);
+      }
+
+      // fib_DiskKey (4 bytes)
+      this.writeLong(fibPtr, 0);
+
+      // fib_DirEntryType (4 bytes) - negative = file, positive = dir
+      const dirEntryType = stats.isDirectory() ? 2 : -3;
+      this.emulator.writeMemory(fibPtr + 4, (dirEntryType >> 24) & 0xff);
+      this.emulator.writeMemory(fibPtr + 5, (dirEntryType >> 16) & 0xff);
+      this.emulator.writeMemory(fibPtr + 6, (dirEntryType >> 8) & 0xff);
+      this.emulator.writeMemory(fibPtr + 7, dirEntryType & 0xff);
+
+      // fib_FileName (108 bytes BCPL string)
+      this.writeBCPLString(fibPtr + 8, fileName, 107);
+
+      // fib_Protection (4 bytes)
+      const protection = stats.isDirectory() ? 0 : 0x0f;
+      this.emulator.writeMemory32(fibPtr + 116, protection);
+
+      // fib_EntryType (4 bytes) - same as fib_DirEntryType
+      this.emulator.writeMemory(fibPtr + 120, (dirEntryType >> 24) & 0xff);
+      this.emulator.writeMemory(fibPtr + 121, (dirEntryType >> 16) & 0xff);
+      this.emulator.writeMemory(fibPtr + 122, (dirEntryType >> 8) & 0xff);
+      this.emulator.writeMemory(fibPtr + 123, dirEntryType & 0xff);
+
+      // fib_Size (4 bytes) - file size
+      const size = stats.size;
+      this.emulator.writeMemory32(fibPtr + 124, size);
+
+      // fib_NumBlocks (4 bytes) - number of blocks
+      const numBlocks = Math.ceil(size / 512);
+      this.emulator.writeMemory32(fibPtr + 128, numBlocks);
+
+      // fib_Date (12 bytes DateStamp) - ds_Days, ds_Minute, ds_Tick
+      const mtime = stats.mtime;
+      const amigaEpoch = new Date('1978-01-01T00:00:00Z');
+      const diffMs = mtime.getTime() - amigaEpoch.getTime();
+      const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const mins = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60));
+      const ticks = Math.floor(((diffMs % (1000 * 60)) / 1000) * 50);
+
+      this.emulator.writeMemory32(fibPtr + 132, days);
+      this.emulator.writeMemory32(fibPtr + 136, mins);
+      this.emulator.writeMemory32(fibPtr + 140, ticks);
+
+      // fib_Comment (80 bytes BCPL string) - leave empty
+      this.emulator.writeMemory(fibPtr + 144, 0);
+
+      debugLog(`[dos.library] ExamineFH: Success - ${fileName}, size=${size}`);
+      this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(`[dos.library] ExamineFH: Error examining ${filePath}:`, error);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+    }
   }
 
   /**

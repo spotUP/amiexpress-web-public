@@ -527,6 +527,18 @@ console.error('[LOGIN] EXECUTE_ON_LOGON failed:', err);
 console.error('[LOGIN] MAIL_ON_LOGON failed:', err);
       });
 
+      // Run LOGON syscmds - mirroring express.e LOGOFF pattern (express.e:8222, 8231)
+      // This allows sysops to define LOGON and LOGONn syscmds to run at login time
+      try {
+        const { runSysCommand } = require('../handlers/command-execution.handler');
+        // Run generic LOGON syscmd (if exists)
+        await runSysCommand(socket, session, 'LOGON', '');
+        // Run node-specific LOGONn syscmd (if exists)
+        await runSysCommand(socket, session, `LOGON${session.nodeId || 0}`, '');
+      } catch (err) {
+        console.error('[LOGIN] LOGON syscmd failed:', err);
+      }
+
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
       // This fixes the multi-socket connection issue where new sockets get fresh sessions
 console.log(`[SESSION-MIGRATION] User ${user.id} logged in on socket ${socket.id}`);
