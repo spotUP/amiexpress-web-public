@@ -655,8 +655,19 @@ debugLog(`[XIMIOHandler] Arrow key: ${JSON.stringify(token)} -> code ${arrowCode
       return String.fromCharCode(arrowCode);
     }
 
-    // For other escape sequences, return just first char
-    // (shouldn't happen in normal operation, but be safe)
+    // Ignore unrecognized escape sequences (Home, End, Insert, Delete, Page Up/Down, etc.)
+    // These would confuse 68K doors if we passed ESC or partial sequences
+    // Terminal sequences we ignore:
+    //   \x1b[H, \x1b[1~ (Home), \x1b[F, \x1b[4~ (End)
+    //   \x1b[2~ (Insert), \x1b[3~ (Delete)
+    //   \x1b[5~ (Page Up), \x1b[6~ (Page Down)
+    //   \x1bOP-\x1bOS, \x1b[15~-\x1b[24~ (Function keys - handled by BBS, not doors)
+    if (token.length > 1 && token.startsWith('\x1b')) {
+debugLog(`[XIMIOHandler] Ignoring unrecognized escape sequence: ${JSON.stringify(token)}`);
+      return '';  // Return empty to skip this input
+    }
+
+    // For other multi-char tokens (shouldn't happen), return first char
     if (token.length > 1) {
 debugLog(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0)}`);
     }
@@ -720,6 +731,13 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
     if (this.inputQueue.length > 0) {
       const token = this.inputQueue.shift()!;
       const keyData = this.processHotkeyToken(token);
+
+      // Skip ignored escape sequences (Home, End, Page Up/Down, etc.)
+      if (keyData === '') {
+debugLog(`[XIMIOHandler] JH_HK: Skipping ignored key sequence, waiting for next input`);
+        // Don't reply yet - wait for more input
+        return;
+      }
 
       // TEST 2026-01-23: Try CR instead of LF - maybe door expects CR?
       // Amiga uses LF for Enter/newline, not CR. Web terminals send CR when Enter is pressed.
@@ -844,6 +862,13 @@ debugLog(`[XIMIOHandler] JH_HK: Timeout expired after ${doorTimeout}s, returning
 
     const msg = this.hotkeyMessage;
     const keyData = this.processHotkeyToken(char);
+
+    // Skip ignored escape sequences (Home, End, Page Up/Down, etc.)
+    if (keyData === '') {
+debugLog(`[XIMIOHandler] JH_HK completeHotkey: Skipping ignored key sequence, waiting for more input`);
+      // Don't complete the hotkey - keep waiting for valid input
+      return;
+    }
 
     // TEST 2026-01-23: Try CR instead of LF - maybe door expects CR?
     // Amiga uses LF for Enter/newline, not CR. Web terminals send CR when Enter is pressed.
