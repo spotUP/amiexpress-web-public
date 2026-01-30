@@ -621,8 +621,22 @@ debugLog(
    * @returns Single character code to return to door
    */
   private processHotkeyToken(token: string): string {
-    // Single character - return as-is
+    // Single character - convert web terminal codes to Amiga codes
     if (token.length === 1) {
+      const code = token.charCodeAt(0);
+
+      // DEL (0x7F) -> BS (0x08): Web terminals send DEL for backspace, Amiga expects BS
+      if (code === 0x7f) {
+        debugLog(`[XIMIOHandler] Converting DEL (0x7f) to BS (0x08) for Amiga`);
+        return '\x08';
+      }
+
+      // CR (0x0D) -> LF (0x0A): Web terminals send CR for Enter, Amiga uses LF
+      if (code === 0x0d) {
+        debugLog(`[XIMIOHandler] Converting CR (0x0d) to LF (0x0a) for Amiga`);
+        return '\x0a';
+      }
+
       return token;
     }
 
