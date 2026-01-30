@@ -224,8 +224,10 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
     }
 
     const buffer = fs.readFileSync(filePath);
+
+    // For small files or non-standard .info files, use fallback string extraction
     if (buffer.length < DISK_OBJECT_SIZE) {
-      return tooltypes; // Too small to be a valid .info file
+      return parseInfoFileFallback(buffer, filePath, session, socket);
     }
 
     // Verify magic number (0xE310)

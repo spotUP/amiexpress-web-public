@@ -1034,6 +1034,8 @@ debugLog(
       XIMCommand.QUIET_DOWNLOAD,
       // Password
       XIMCommand.PASSWORD_HASH,
+      // Message base location
+      XIMCommand.MSGBASE_LOC,
     ];
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
 debugLog(
@@ -1193,6 +1195,19 @@ debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorPara
       // Password hash
       case XIMCommand.PASSWORD_HASH:
         this.bbsInfoHandler.handlePasswordHash(msg);
+        break;
+
+      // Message base location
+      case XIMCommand.MSGBASE_LOC:
+        {
+          // MSGBASE_LOC (604): Return message base path for current conference
+          // ctop.e uses this to access message headers for top uploaders
+          const confNum = (this.bbsSession as any)?.currentConf || 1;
+          const msgBaseLoc = `BBS:Conf${confNum}/MsgBase/`;
+debugLog(`[XIMProtocol] MSGBASE_LOC: "${msgBaseLoc}"`);
+          this.messageParser.writeMessageString(msg.msgAddr, msgBaseLoc);
+          this.sendReply(msg, 1);
+        }
         break;
     }
   }

@@ -1,18 +1,18 @@
 # 68K Door Status Tracker
 
-Last updated: 2026-01-29
+Last updated: 2026-01-30
 
 ## Summary
 
 | Status | Count |
 |--------|-------|
-| Working | 42 |
+| Working | 45 |
 | Needs Testing | 1 |
-| Partial | 3 |
-| Broken | 1 |
+| Partial | 10 |
+| Broken | 3 |
 | Complex/Deferred | 1 |
-| Untested | 18 |
-| **Total** | **66** |
+| Untested | 0 |
+| **Total** | **60** |
 
 ---
 
@@ -32,6 +32,9 @@ Last updated: 2026-01-29
 | req | BBS:Doors/Request/Request | File request - fixed VFPrintf offset and config paths |
 | SIZE | DOORS:SizeCheck/SizeCheck | Conference size checker - counts files/bytes per directory |
 | RTW | DOORS:RTW/rtw | Real Time Who - shows who's online across nodes |
+| TList | Doors:SRH/TList/TLP2 | T-List BBS listing - line-by-line intro (press n to skip, Enter/y to continue) |
+| MRCSTAT1 | doors:mrc/mrcstat1 | MRC stats |
+| nuke | Doors:Bossnuke/Bossnuke | Boss nuke - prompts for password |
 
 ### BBSLink Gateway (TELNET_CONNECT Working)
 
@@ -60,6 +63,7 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 | I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
 | fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
 | ulist | Doors:5D-User/5D-User | Needs T:5D-USER_DATA.{node} file - who's online door |
+| ctop | DOORS:CONFTOP/ctop | MSGBASE_LOC fixed, but door exits silently without output |
 
 ---
 
@@ -84,6 +88,25 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 | Cmd | Location | Issue |
 |-----|----------|-------|
 | wall | dOORS:dRE/dRE!WAll/dRE!WAll | Data corruption - see dRE_WALL_HANDOFF.md |
+| AEDOOR | Doors/AEDOOR/aedoor | Binary not found - path issue |
+| AEHELP | Doors/AEHELP/aehelp | Binary not found - path issue |
+
+---
+
+## Partial Doors
+
+| Cmd | Location | Issue |
+|-----|----------|-------|
+| I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
+| fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
+| ulist | Doors:5D-User/5D-User | Needs T:5D-USER_DATA.{node} file - who's online door |
+| ctop | DOORS:CONFTOP/ctop | MSGBASE_LOC fixed, but door exits silently without output |
+| Kick | Doors:!!!War!!!/WarKick'Em/WarKick'Em | Prints goodbye text and exits immediately - no game interface |
+| DEL | DOORS:-mgs!-MgzListMan/MGZLISTMAN | Exits silently without output |
+| Olm | DOORS:!!!WAR!!!/WAROLM/WAROLM | UI works but node data scrambled - DT_NAME/DT_LOCATION/BB_NODEID return wrong values |
+| mrcstat2 | doors:mrc/mrcstat2 | Scrambled data |
+| DUPESTART1 | DOORS:CONFTOP/CONFTOP020.X | Reset date is out of range error |
+| bk | BBS:doors/bytekiller/bytekiller | Can't find ACP.Icon - needs config |
 
 ---
 
@@ -91,26 +114,7 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 ### Standard Doors
 
-| Cmd | Location | Description |
-|-----|----------|-------------|
-| AEDOOR | Doors/AEDOOR/aedoor | |
-| AEHELP | Doors/AEHELP/aehelp | |
-| AMIGA68K | DOORS:SDKTEST/AMIGA68K | Test door |
-| AMIGAGCC | DOORS:AMIGAGCC/amiga-gcc-hunk | |
-| CDEMO | Doors/INTERACTIVE-DEMO/interactive-demo | Interactive demo |
-| DEL | DOORS:-mgs!-MgzListMan/MGZLISTMAN | Magazine list manager |
-| Kick | Doors:!!!War!!!/WarKick'Em/WarKick'Em | War game |
-| MINIMAL | DOORS:SDKTEST/MINIMAL | Test door |
-| MRCSTAT1 | doors:mrc/mrcstat1 | MRC stats |
-| mrcstat2 | doors:mrc/mrcstat2 | MRC stats |
-| Olm | DOORS:!!!WAR!!!/WAROLM/WAROLM | War game OLM |
-| SDKTEST | DOORS:SDKTEST/SIMPLETEST | Test door |
-| XIMVBCC | Doors/XIMVBCC/xim-vbcc | VBCC test door |
-| bk | BBS:doors/bytekiller/bytekiller | ByteKiller |
-| ctop | DOORS:CONFTOP/ctop | Conference top |
-| nuke | Doors:Bossnuke/Bossnuke | Boss nuke |
-| TList | Doors:SRH/TList/TLP2 | T-List |
-| DUPESTART1 | DOORS:CONFTOP/CONFTOP020.X | Conftop variant |
+*No untested doors remaining*
 
 ### BBSLink Gateway Doors
 
@@ -132,6 +136,21 @@ Moved to Working - see BBSLink Gateway (TELNET_CONNECT Working) section above.
 ---
 
 ## Session Notes
+
+### 2026-01-30: ctop Testing + MSGBASE_LOC Fix
+
+**MSGBASE_LOC Fix (cmd 604):**
+- Was falling through to empty string handler in DoorMessageHandler
+- Root cause: XIMProtocol.handleMessage routes to specialized handlers; DoorMessageHandler.processCommand is only a fallback
+- Fixed by adding MSGBASE_LOC to isBBSInfoCommand list and handleBBSInfoCommand switch in XIMProtocol.ts
+- Now correctly returns `BBS:Conf{N}/MsgBase/` path
+
+**ctop (Conference Top Uploaders):**
+- MSGBASE_LOC fix confirmed working - returns correct path
+- Door queries BBS values successfully, but exits silently without output
+- No WriteStr/JH_WRITE calls detected - door doesn't reach output code
+- Missing BB_MAINLINE call suggests early exit or binary differs from source
+- **Status:** Partial - emulation OK, door-specific issue
 
 ### 2026-01-30: MRC Investigation (Working with Caveat)
 

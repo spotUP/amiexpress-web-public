@@ -1792,6 +1792,17 @@ debugLog(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
       case XIMCommand.SAVE_CONFDB:
       case XIMCommand.GET_CONFNUM:
       case XIMCommand.MOD_TYPE:
+      case XIMCommand.MSGBASE_LOC:
+        // MSGBASE_LOC (604): Return message base path for current conference
+        // ctop.e uses this to access message headers for top uploaders
+        {
+          const confNum = (this.config.bbsSession as any)?.currentConf || 1;
+          const msgBaseLoc = `BBS:Conf${confNum}/MsgBase/`;
+debugLog(`[DoorMessageHandler]   MSGBASE_LOC: "${msgBaseLoc}"`);
+          this.writeStringToMessage(msgAddr, msgBaseLoc);
+        }
+        break;
+
       case XIMCommand.ACP_COMMAND:
       case XIMCommand.BYPASS_CSI_CHECK:
       case XIMCommand.SENTBY:
@@ -1802,7 +1813,6 @@ debugLog(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
       case XIMCommand.GET_CUSTOM_MSGBASE_PARAM2:
       case XIMCommand.LAST_READ:
       case XIMCommand.LAST_SCANNED:
-      case XIMCommand.MSGBASE_LOC:
       case XIMCommand.SER_INOUT:
       case XIMCommand.MEMCONF:
       case XIMCommand.SET_SERSHARED:
