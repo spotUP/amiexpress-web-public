@@ -458,7 +458,8 @@ debugLog('[XIMIOHandler] Line input completed, reply sent, resuming emulator');
    */
   handleWrite(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
-    const addNewline = msg.data === 1;
+    // NOTE: msg.data is NOT a newline flag - express.e just calls aePuts(msg.string)
+    // with no newline logic. aePuts outputs text as-is without adding newlines.
 
 debugLog(
       '[XIMIOHandler] Door writing to terminal (JH_WRITE):',
@@ -472,8 +473,8 @@ debugLog(
     //   ENDIF
     let bytesWritten = 0;
     if (!this.state.transfering && !this.state.doorSilent) {
-      // aePuts does NOT increment lineCount or check for pause.
-      bytesWritten = this.emitText(text, addNewline, false, false, msg);
+      // aePuts does NOT add newlines - output text as-is
+      bytesWritten = this.emitText(text, false, false, false, msg);
     }
 
     this.reply(msg, bytesWritten);
@@ -482,25 +483,23 @@ debugLog(
 
   /**
    * Handle keyboard input request (GETKEY)
-   * From E sources (express.e:3811)
+   * From E sources (express.e:3811-3813):
+   *   CASE GETKEY
+   *     IF checkInput() THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
+   *     msg.string[1]:=0
+   *
+   * IMPORTANT: GETKEY only checks if input is available - does NOT consume.
+   * The actual character is consumed by JH_FetchKey (cmd 17).
    */
   handleGetKey(msg: XIMMessage): void {
-    // Check if we have queued input
+    // Check if we have queued input - do NOT consume (just peek)
     if (this.inputQueue.length > 0) {
-      const char = this.inputQueue.shift()!;
-      const charCode = char.charCodeAt(0);
-
-      // Write "1<char>\0" to embedded string buffer (E sources format)
-      this.messageParser.writeMessageString(
-        msg.msgAddr,
-        String.fromCharCode(0x31, charCode)
-      );
-
+      // Write "1\0" to string buffer - input is available
+      this.messageParser.writeMessageString(msg.msgAddr, '1');
       this.reply(msg, 1);
     } else {
-      // Write "0\0" to string buffer
+      // Write "0\0" to string buffer - no input available
       this.messageParser.writeMessageString(msg.msgAddr, '0');
-
       this.reply(msg, 0);
     }
   }
@@ -967,8 +966,6 @@ debugLog('  [WAITING] No input, pausing emulator');
    * From E sources (express.e:3465-3472)
    */
   handleFetchKey(msg: XIMMessage): void {
-debugLog('[XIMIOHandler] JH_FetchKey - Non-blocking key check');
-
     if (this.state.carrierDropped) {
       this.messageParser.writeCommand(msg.msgAddr, 0);
       this.reply(msg, -1);
@@ -978,40 +975,42 @@ debugLog('[XIMIOHandler] JH_FetchKey - Non-blocking key check');
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
       this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
-debugLog(`  [READ] Key available: '${char}'`);
       this.reply(msg, 1, char);
       return;
     }
 
     this.messageParser.writeCommand(msg.msgAddr, 0);
-debugLog('  [NO INPUT] No key available');
     this.reply(msg, 1, '');
   }
 
   /**
-   * Handle JH_CK (QuickKey check) - non-blocking, include port in Command
-   * From express.e JH_CK case
+   * Handle JH_CK / GETKEY (command 500) - check if input is available
+   * From express.e:3811-3813:
+   *   CASE GETKEY
+   *     IF checkInput() THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
+   *     msg.string[1]:=0
+   *
+   * IMPORTANT: This only checks availability - does NOT consume input.
+   * JH_FetchKey (cmd 17) is used to actually get the character.
    */
   handleCheckKey(msg: XIMMessage): void {
-debugLog('[XIMIOHandler] JH_CK - QuicKey check');
+    const hasInput = this.inputQueue.length > 0;
 
     if (this.state.carrierDropped) {
-      this.messageParser.writeCommand(msg.msgAddr, 0);
+      this.messageParser.writeMessageString(msg.msgAddr, '0');
       this.reply(msg, -1);
       return;
     }
 
-    if (this.inputQueue.length > 0) {
-      const char = this.inputQueue.shift()!;
-      this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
-debugLog(`  [READ] QuicKey: '${char}'`);
-      this.reply(msg, 1, char);
-      return;
+    if (hasInput) {
+      // Input available - write "1" to string, do NOT consume
+      this.messageParser.writeMessageString(msg.msgAddr, '1');
+      this.reply(msg, 1);
+    } else {
+      // No input - write "0" to string
+      this.messageParser.writeMessageString(msg.msgAddr, '0');
+      this.reply(msg, 0);
     }
-
-    this.messageParser.writeCommand(msg.msgAddr, 0);
-debugLog('  [NO INPUT] No key available');
-    this.reply(msg, 1, '');
   }
 
   /**
@@ -1132,6 +1131,7 @@ console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
         parsed.ext && parsed.ext.length > 0
           ? [resolved]
           : [
+              resolved, // Try exact path first (no extension)
               `${resolved}.txt`,
               `${resolved}.TXT`,
               `${resolved}.txt.gr`,
