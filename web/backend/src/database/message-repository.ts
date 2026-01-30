@@ -255,6 +255,88 @@ console.error(`[Database] Failed to delete message file from disk:`, error);
     }
   }
 
+  /**
+   * Move message to different conference/msgbase
+   * From express.e:11827-11911 (moveMSG)
+   */
+  async moveMessage(id: number, destConferenceId: number, destMessageBaseId: number): Promise<void> {
+    // Get current message
+    const selectStmt = this.prepare('SELECT * FROM messages WHERE id = ?');
+    const row = selectStmt.get(id) as any;
+
+    if (!row) {
+      throw new Error(`Message ${id} not found`);
+    }
+
+    const srcConferenceId = row.conferenceid;
+    const srcMsgNumber = row.id;
+
+    // Update database record with new conference/msgbase
+    const updateStmt = this.prepare(`
+      UPDATE messages SET conferenceid = ?, messagebaseid = ?
+      WHERE id = ?
+    `);
+    updateStmt.run(destConferenceId, destMessageBaseId, id);
+
+    // CRITICAL: Move files for Amiga door compatibility
+    try {
+      const fullMessage: Message = {
+        id: row.id,
+        subject: row.subject,
+        body: row.body,
+        author: row.author,
+        timestamp: new Date(row.timestamp * 1000),
+        conferenceId: destConferenceId, // NEW conference
+        messageBaseId: destMessageBaseId, // NEW msgbase
+        isPrivate: row.isprivate === 1,
+        toUser: row.touser,
+        parentId: row.parentid,
+        attachments: JSON.parse(row.attachments || '[]'),
+        edited: row.edited === 1,
+        editedBy: row.editedby,
+        editedAt: row.editedat ? new Date(row.editedat * 1000) : undefined
+      };
+
+      // Get next message number in destination conference
+      // For simplicity, use current id as msgNumber (web version doesn't use sequential numbering)
+      const destMsgNumber = srcMsgNumber;
+
+      // Create new .msg file in destination
+      messageFileManager.updateMessageFile(fullMessage, destConferenceId, destMsgNumber);
+
+      // Create HeaderFile entry in destination
+      const timestamp = Math.floor(fullMessage.timestamp.getTime() / 1000);
+      messageIndexManager.updateMessageHeader(destConferenceId, destMsgNumber, {
+        status: fullMessage.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
+        toName: fullMessage.toUser || 'ALL',
+        fromName: fullMessage.author,
+        subject: fullMessage.subject,
+        msgDate: timestamp
+      });
+
+      // Delete old .msg file and mark as deleted in old HeaderFile
+      messageFileManager.deleteMessageFile(srcConferenceId, srcMsgNumber);
+      messageIndexManager.deleteMessageHeader(srcConferenceId, srcMsgNumber);
+
+      console.log(`[Database] Moved message ${id} from conf ${srcConferenceId} to conf ${destConferenceId}`);
+    } catch (error) {
+      console.error(`[Database] Failed to move message files on disk:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to move message files on disk`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: id,
+          srcConferenceId,
+          destConferenceId
+        },
+        DebugSeverity.WARNING
+      );
+    }
+  }
+
   async updateReadPointer(userId: number, conferenceId: number, messageBaseId: number, lastRead: number): Promise<void> {
 
     const stmt = this.prepare(`

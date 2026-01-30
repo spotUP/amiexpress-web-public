@@ -209,6 +209,13 @@ export class BBSPaths {
       return path.join(process.env.RAM_DIR || '/tmp/ram', 'T', subpath);
     }
 
+    // WORK: assign (BBS root directory)
+    const workMatch = amigaPath.match(/^WORK:(.*)$/i);
+    if (workMatch) {
+      const subpath = workMatch[1].replace(/\//g, path.sep);
+      return path.join(this.root(), subpath);
+    }
+
     // No assign - return as-is (relative or absolute)
     return amigaPath;
   }

@@ -104,7 +104,22 @@ export enum LoggedOnSubState {
   FORWARD_MESSAGE_SUBJECT = 'forward_message_subject',          // Forward message subject input
   FORWARD_MESSAGE_PRIVATE = 'forward_message_private',          // Forward message privacy choice
   FORWARD_MESSAGE_DELETE_ORIGINAL = 'forward_message_delete_original', // Delete original message confirmation
+
+  // Sysop message commands (M/E/EH/EM) - express.e:11105-11148, 12169-12189
+  MSG_MOVE_CONF_INPUT = 'msg_move_conf_input',          // Move message: conference number input
+  MSG_MOVE_MSGBASE_INPUT = 'msg_move_msgbase_input',    // Move message: msgbase number input
+  MSG_MOVE_CONFIRM = 'msg_move_confirm',                // Move message: Y/n confirmation
+  MSG_EDIT_HEADER_FROM = 'msg_edit_header_from',        // Edit header: From input
+  MSG_EDIT_HEADER_TO = 'msg_edit_header_to',            // Edit header: To input
+  MSG_EDIT_HEADER_SUBJECT = 'msg_edit_header_subject',  // Edit header: Subject input
+  MSG_EDIT_HEADER_PRIVATE = 'msg_edit_header_private',  // Edit header: Private Y/n
+
+  // Translation commands (T/TS/T!/T*) - express.e:11065-11103
+  MSG_CHOOSE_TRANSLATOR = 'msg_choose_translator',      // TS: Choose language number input
+
   JM_INPUT = 'jm_input',                                // Jump to message number input
+  NM_INPUT = 'nm_input',                                // Node Management input - express.e:25294-25366
+  NM_CONFIRM = 'nm_confirm',                            // Node Management confirmation
   RL_CONFIRM = 'rl_confirm',                            // Read last message confirmation
 
   // Door operations
@@ -129,6 +144,8 @@ export enum LoggedOnSubState {
   ACCOUNT_EDITOR_SEARCH_NAME = 'account_editor_search_name', // Search by name input
   ACCOUNT_EDITOR_EDIT = 'account_editor_edit',              // Single-char editing (editInfo)
   ACCOUNT_EDITOR_BULK = 'account_editor_bulk',              // Bulk account editor input
+  USER_NOTES_VIEW = 'user_notes_view',                      // User notes view/edit - express.e:21679-21739
+  CONF_ACCOUNTING_VIEW = 'conf_accounting_view',            // Conference accounting - express.e:22045-22250
 
   // Chat operations
   CHAT_PAGE_SYSOP = 'chat_page_sysop',

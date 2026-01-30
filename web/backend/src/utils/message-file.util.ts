@@ -32,6 +32,7 @@ export interface MessageFile {
   msgNum: number;         // Message number (ID)
   body: string;           // Message body (plain text, newline separated)
   isPrivate?: boolean;    // Private message flag (not in file, derived from to != 'ALL')
+  receivedAt?: Date;      // express.e:8915-8926 - When recipient read the message (mailHeader.recv)
 }
 
 /**
@@ -225,6 +226,19 @@ console.error(`[Message] Invalid format in ${msgFilePath}`);
       return null;
     }
 
+    // Read received timestamp from companion file (express.e:8915-8926 mailHeader.recv)
+    const recvPath = path.join(messagesDir, `${msgNum}.recv`);
+    let receivedAt: Date | undefined;
+    try {
+      const recvContent = await fs.readFile(recvPath, 'utf-8');
+      const timestamp = parseInt(recvContent.trim(), 10);
+      if (!isNaN(timestamp) && timestamp > 0) {
+        receivedAt = new Date(timestamp);
+      }
+    } catch {
+      // No .recv file means not yet received - that's fine
+    }
+
     return {
       from: lines[0],
       to: lines[1],
@@ -232,13 +246,47 @@ console.error(`[Message] Invalid format in ${msgFilePath}`);
       date: lines[3],
       msgNum: parseInt(lines[4]),
       body: lines.slice(5).join('\n'),
-      isPrivate: lines[1].toUpperCase() !== 'ALL'
+      isPrivate: lines[1].toUpperCase() !== 'ALL',
+      receivedAt
     };
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       return null;  // Message doesn't exist
     }
     throw error;
+  }
+}
+
+/**
+ * Mark message as received (express.e:8943-8949)
+ * Creates companion file {msgNum}.recv with timestamp
+ */
+export async function markMessageReceived(
+  confNum: number,
+  msgNum: number,
+  bbsDataPath: string
+): Promise<void> {
+  const messagesDir = getMessagesDir(confNum, bbsDataPath);
+  const recvPath = path.join(messagesDir, `${msgNum}.recv`);
+  const timestamp = Date.now();
+  await fs.writeFile(recvPath, timestamp.toString(), 'utf-8');
+}
+
+/**
+ * Check if message has been received
+ */
+export async function isMessageReceived(
+  confNum: number,
+  msgNum: number,
+  bbsDataPath: string
+): Promise<boolean> {
+  const messagesDir = getMessagesDir(confNum, bbsDataPath);
+  const recvPath = path.join(messagesDir, `${msgNum}.recv`);
+  try {
+    await fs.access(recvPath);
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -98,6 +98,7 @@ export interface Message {
   edited?: boolean;
   editedBy?: string;
   editedAt?: Date;
+  receivedAt?: Date;  // express.e:8915-8926 - When recipient read the message (mailHeader.recv)
 }
 
 export interface FileArea {

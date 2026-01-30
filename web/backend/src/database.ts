@@ -705,6 +705,16 @@ console.log('[+] Added hold_access_level column');
 console.log('[+] Added local_upload_path column');
       }
 
+      // Messages table migrations - express.e:8915-8926 (Recv'd field)
+console.log('Checking for missing columns in messages table...');
+      const messagesInfo = this.db.prepare('PRAGMA table_info(messages)').all() as any[];
+      const messagesColumns = messagesInfo.map(col => col.name);
+
+      if (!messagesColumns.includes('receivedat')) {
+        this.db.exec('ALTER TABLE messages ADD COLUMN receivedat INTEGER');
+console.log('[+] Added receivedat column to messages (express.e:8915-8926)');
+      }
+
 console.log('All migrations completed successfully');
     } catch (error) {
 console.error('Error running migrations:', error);
@@ -814,7 +824,8 @@ console.error('Error running migrations:', error);
           attachments TEXT,
           edited INTEGER DEFAULT 0,
           editedby TEXT,
-          editedat INTEGER
+          editedat INTEGER,
+          receivedat INTEGER
         )
       `);
 
@@ -2098,6 +2109,10 @@ console.log(`[Database] Password updated for user ${userId}`);
 
   async deleteMessage(...args: Parameters<MessageRepository['deleteMessage']>) {
     return this.messageRepo!.deleteMessage(...args);
+  }
+
+  async moveMessage(...args: Parameters<MessageRepository['moveMessage']>) {
+    return this.messageRepo!.moveMessage(...args);
   }
 
   async updateReadPointer(...args: Parameters<MessageRepository['updateReadPointer']>) {
