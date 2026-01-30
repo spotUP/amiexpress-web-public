@@ -8,7 +8,7 @@ import { IntuitionLibrary } from "../IntuitionLibrary";
 
 export const INTUITION_VECTORS: LibraryVector[] = [
   {
-    offset: -72, // LVO -72 CloseWindow
+    offset: -72, // LVO -72 CloseWindow (function #8)
     name: "CloseWindow",
     handler: (emu, lib: IntuitionLibrary) => {
       lib.CloseWindow();
@@ -16,7 +16,7 @@ export const INTUITION_VECTORS: LibraryVector[] = [
     },
   },
   {
-    offset: -78, // LVO -78 CloseScreen
+    offset: -66, // LVO -66 CloseScreen (function #7)
     name: "CloseScreen",
     handler: (emu, lib: IntuitionLibrary) => {
       lib.CloseScreen();
@@ -48,7 +48,7 @@ export const INTUITION_VECTORS: LibraryVector[] = [
     },
   },
   {
-    offset: -282, // LVO -282 RefreshGadgets
+    offset: -222, // LVO -222 RefreshGadgets (function #33)
     name: "RefreshGadgets",
     handler: (emu, lib: IntuitionLibrary) => {
       lib.RefreshGadgets();
@@ -64,7 +64,7 @@ export const INTUITION_VECTORS: LibraryVector[] = [
     },
   },
   {
-    offset: -438, // LVO -438 OpenWorkBench
+    offset: -210, // LVO -210 OpenWorkBench (function #31)
     name: "OpenWorkBench",
     handler: (emu, lib: IntuitionLibrary) => {
       lib.OpenWorkBench();

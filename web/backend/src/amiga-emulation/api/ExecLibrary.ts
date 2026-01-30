@@ -2097,6 +2097,13 @@ debugLog(
         } library at 0x${result.address.toString(16)}`
       );
 
+      // Always log dos.library opens as they're critical for door operation
+      if (name.toLowerCase() === "dos.library") {
+        console.log(
+          `[ExecLibrary] *** dos.library opened - base=0x${result.address.toString(16)} *** Door should store this and use it for all DOS calls`
+        );
+      }
+
       return result.address;
     } else {
 debugLog(`[ExecLibrary]   Hybrid OpenLibrary FAILED - returning NULL`);

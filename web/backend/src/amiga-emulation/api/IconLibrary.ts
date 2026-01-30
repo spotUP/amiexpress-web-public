@@ -830,7 +830,8 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
         let currentString = '';
         for (let i = 0; i < buffer.length; i++) {
           const charCode = buffer[i];
-          if (charCode >= 32 && charCode <= 126) {
+          // Allow printable ASCII (32-126) plus ESC (0x1B) for ANSI codes in values
+          if ((charCode >= 32 && charCode <= 126) || charCode === 0x1b) {
             currentString += String.fromCharCode(charCode);
           } else {
             if (currentString.length >= 4 && currentString.includes('=')) {
@@ -871,8 +872,8 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
           break;
         }
 
-        // Read the string
-        const str = buffer.toString('ascii', offset + 4, offset + 4 + len);
+        // Read the string (use latin1/binary to preserve ESC and other control chars)
+        const str = buffer.toString('latin1', offset + 4, offset + 4 + len);
 
         // Validate it looks like a tooltype
         if (str.length >= 2) {

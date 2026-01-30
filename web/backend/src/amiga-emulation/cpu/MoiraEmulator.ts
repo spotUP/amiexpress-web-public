@@ -785,10 +785,16 @@ console.log("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
     }
 
     // Fallback: Simulate RTS with D0=0 for unhandled ILLEGAL
+    // Always log unhandled ILLEGAL instructions as they may indicate missing trap handlers
+    const a6 = this.getRegister(CPURegister.A6);
+    console.log(
+      `[MoiraEmulator] *** UNHANDLED ILLEGAL at PC=0x${pc.toString(16)} A6=0x${a6.toString(16)} ***`
+    );
+    console.log(
+      `[MoiraEmulator]   If this is a library call, expected offset would be PC-A6=${(pc - a6).toString(10)} (0x${(pc - a6 >>> 0).toString(16)})`
+    );
     if (DEBUG_68K) {
-console.log(
-        "[MoiraEmulator] Unhandled ILLEGAL - simulating RTS (D0=0)"
-      );
+      console.log("[MoiraEmulator] Simulating RTS (D0=0)");
     }
     this.setRegister(CPURegister.D0, 0);
 

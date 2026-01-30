@@ -3089,23 +3089,22 @@ console.error(
 
     try {
       // Convert Amiga protection bits to Unix mode
-      // Amiga bits (inverted): R=bit0, W=bit1, E=bit2, D=bit3
-      // 0 = operation allowed, 1 = operation protected
-      const amigaRead = !(protect & 0x01);    // R bit inverted
-      const amigaWrite = !(protect & 0x02);   // W bit inverted
-      const amigaExec = !(protect & 0x04);    // E bit inverted
+      // Amiga protection bits (from dos/dos.h) - SET bit means PROTECTED (denied):
+      //   Bit 0 (FIBB_DELETE)  = 0x01 - Delete protection
+      //   Bit 1 (FIBB_EXECUTE) = 0x02 - Execute protection
+      //   Bit 2 (FIBB_WRITE)   = 0x04 - Write protection
+      //   Bit 3 (FIBB_READ)    = 0x08 - Read protection
+      // When bit is SET (1), operation is DENIED. When CLEAR (0), operation is ALLOWED.
+      const canRead = !(protect & 0x08);     // Bit 3 = Read protection
+      const canWrite = !(protect & 0x04);    // Bit 2 = Write protection
+      const canExec = !(protect & 0x02);     // Bit 1 = Execute protection
+      // Bit 0 (Delete) has no Unix equivalent, ignored
 
-      // Map to Unix permissions (owner only, group/other read if file is readable)
+      // Map to Unix permissions (owner + group/other read if readable)
       let unixMode = 0;
-      if (amigaRead) unixMode |= 0o400;  // Owner read
-      if (amigaWrite) unixMode |= 0o200; // Owner write
-      if (amigaExec) unixMode |= 0o100;  // Owner execute
-
-      // Add group/other read if owner can read
-      if (amigaRead) {
-        unixMode |= 0o040; // Group read
-        unixMode |= 0o004; // Other read
-      }
+      if (canRead) unixMode |= 0o444;   // Read for all
+      if (canWrite) unixMode |= 0o200;  // Write for owner only
+      if (canExec) unixMode |= 0o111;   // Execute for all
 
       fs.chmodSync(realPath, unixMode);
 debugLog(
@@ -3217,6 +3216,7 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
     let outputHandle = this.emulator.getRegister(CPURegister.D3);
+    console.log(`[DosLibrary] *** Execute() CALLED *** command="${name}" namePtr=0x${namePtr.toString(16)} outputHandle=0x${outputHandle.toString(16)}`);
 
     // Parse shell redirection (">file" or ">>file") from command string
     // AmigaDOS Execute() expects the shell to handle redirection, so we parse it here
@@ -3474,16 +3474,98 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       return;
     }
 
+    // COPY command - copy a file (used by Request door for delete operations)
+    if (upperName.startsWith('COPY ') || upperName.startsWith('C:COPY ')) {
+      const parts = commandPart.trim().split(/\s+/);
+      console.log(`[dos.library] *** EXECUTE COPY DEBUG ***`);
+      console.log(`[dos.library]   Raw command: "${name}"`);
+      console.log(`[dos.library]   Command part: "${commandPart}"`);
+      console.log(`[dos.library]   Parts array (${parts.length}): ${JSON.stringify(parts)}`);
+
+      // Format: COPY <source> <dest>
+      if (parts.length >= 3) {
+        const sourceFile = parts[1];
+        const destFile = parts[2];
+
+        console.log(`[dos.library]   Source arg: "${sourceFile}"`);
+        console.log(`[dos.library]   Dest arg: "${destFile}"`);
+
+        const sourcePath = this.pathManager?.amiToSysPath(sourceFile, process.cwd()) || this.pathResolver.resolve(sourceFile);
+        const destPath = this.pathManager?.amiToSysPath(destFile, process.cwd()) || this.pathResolver.resolve(destFile);
+
+        console.log(`[dos.library] Execute("${name}") -> COPY command: "${sourceFile}" -> "${destFile}"`);
+        console.log(`[dos.library] Execute COPY: Resolved paths: "${sourcePath}" -> "${destPath}"`);
+
+        // Check source existence
+        const sourceExists = sourcePath ? amigafs.existsSync(sourcePath) : false;
+        console.log(`[dos.library]   Source exists: ${sourceExists}`);
+        if (sourceExists && sourcePath) {
+          try {
+            const stat = amigafs.statSync(sourcePath);
+            console.log(`[dos.library]   Source size: ${stat.size} bytes`);
+          } catch (e) {
+            console.log(`[dos.library]   Source stat failed: ${e}`);
+          }
+        }
+
+        if (sourcePath && destPath && sourceExists) {
+          try {
+            // Read source file and write to dest
+            const content = amigafs.readFileSync(sourcePath);
+            console.log(`[dos.library]   Read ${content.length} bytes from source`);
+            amigafs.writeFileSync(destPath, content);
+            console.log(`[dos.library] Execute COPY: Successfully copied "${sourcePath}" to "${destPath}" (${content.length} bytes)`);
+
+            // Verify dest was created
+            const destExists = amigafs.existsSync(destPath);
+            console.log(`[dos.library]   Dest exists after copy: ${destExists}`);
+
+            // Close owned output handle if we opened it
+            if (ownedOutputHandle && this.fileManager) {
+              this.fileManager.close(ownedOutputHandle);
+            }
+            this.emulator.setRegister(CPURegister.D0, -1); // Success (DOSTRUE)
+            this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+            return;
+          } catch (err: any) {
+            console.error(`[dos.library] Execute COPY: Failed to copy "${sourcePath}" to "${destPath}":`, err.message || err);
+          }
+        } else {
+          console.warn(`[dos.library] Execute COPY: Source file not found or path resolution failed`);
+          console.warn(`[dos.library]   sourcePath: "${sourcePath}" (exists: ${sourceExists})`);
+          console.warn(`[dos.library]   destPath: "${destPath}"`);
+        }
+      } else {
+        console.warn(`[dos.library] Execute COPY: Invalid syntax - need at least 3 parts: "${commandPart}"`);
+        console.warn(`[dos.library]   Got ${parts.length} parts: ${JSON.stringify(parts)}`);
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, 0); // Failure
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
     // DELETE command - delete a file
     if (upperName.startsWith('DELETE ') || upperName.startsWith('C:DELETE ')) {
       const parts = commandPart.trim().split(/\s+/);
       const targetFile = parts.length > 1 ? parts.slice(1).join(' ') : '';
 
+      console.log(`[dos.library] *** EXECUTE DELETE DEBUG ***`);
+      console.log(`[dos.library]   Raw command: "${name}"`);
+      console.log(`[dos.library]   Target file: "${targetFile}"`);
+
       if (targetFile) {
         const sysPath = this.pathManager?.amiToSysPath(targetFile, process.cwd()) || this.pathResolver.resolve(targetFile);
         console.log(`[dos.library] Execute("${name}") -> DELETE command, target: "${targetFile}" -> "${sysPath}"`);
 
-        if (sysPath && amigafs.existsSync(sysPath)) {
+        const fileExists = sysPath ? amigafs.existsSync(sysPath) : false;
+        console.log(`[dos.library]   File exists: ${fileExists}`);
+
+        if (sysPath && fileExists) {
           try {
             amigafs.unlinkSync(sysPath);
             console.log(`[dos.library] Execute DELETE: Successfully deleted "${sysPath}"`);
@@ -3500,6 +3582,83 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         } else {
           console.warn(`[dos.library] Execute DELETE: File not found: "${sysPath}"`);
         }
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, 0); // Failure
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    // RENAME command - rename a file (used by Request door for delete operations)
+    if (upperName.startsWith('RENAME ') || upperName.startsWith('C:RENAME ')) {
+      const parts = commandPart.trim().split(/\s+/);
+      console.log(`[dos.library] *** EXECUTE RENAME DEBUG ***`);
+      console.log(`[dos.library]   Raw command: "${name}"`);
+      console.log(`[dos.library]   Command part: "${commandPart}"`);
+      console.log(`[dos.library]   Parts array (${parts.length}): ${JSON.stringify(parts)}`);
+
+      // Format: RENAME <source> <dest>
+      if (parts.length >= 3) {
+        const sourceFile = parts[1];
+        const destFile = parts[2];
+
+        console.log(`[dos.library]   Source arg: "${sourceFile}"`);
+        console.log(`[dos.library]   Dest arg: "${destFile}"`);
+
+        const sourcePath = this.pathManager?.amiToSysPath(sourceFile, process.cwd()) || this.pathResolver.resolve(sourceFile);
+        const destPath = this.pathManager?.amiToSysPath(destFile, process.cwd()) || this.pathResolver.resolve(destFile);
+
+        console.log(`[dos.library] Execute("${name}") -> RENAME command: "${sourceFile}" -> "${destFile}"`);
+        console.log(`[dos.library] Execute RENAME: Resolved paths: "${sourcePath}" -> "${destPath}"`);
+
+        // Check source existence
+        const sourceExists = sourcePath ? amigafs.existsSync(sourcePath) : false;
+        console.log(`[dos.library]   Source exists: ${sourceExists}`);
+        if (sourceExists && sourcePath) {
+          try {
+            const stat = amigafs.statSync(sourcePath);
+            console.log(`[dos.library]   Source size: ${stat.size} bytes`);
+          } catch (e) {
+            console.log(`[dos.library]   Source stat failed: ${e}`);
+          }
+        }
+
+        // Check if dest already exists
+        const destExists = destPath ? amigafs.existsSync(destPath) : false;
+        console.log(`[dos.library]   Dest already exists: ${destExists}`);
+
+        if (sourcePath && destPath && sourceExists) {
+          try {
+            amigafs.renameSync(sourcePath, destPath);
+            console.log(`[dos.library] Execute RENAME: Successfully renamed "${sourcePath}" to "${destPath}"`);
+
+            // Verify dest exists and source is gone
+            const newDestExists = amigafs.existsSync(destPath);
+            const sourceStillExists = amigafs.existsSync(sourcePath);
+            console.log(`[dos.library]   After rename: dest exists=${newDestExists}, source still exists=${sourceStillExists}`);
+
+            // Close owned output handle if we opened it
+            if (ownedOutputHandle && this.fileManager) {
+              this.fileManager.close(ownedOutputHandle);
+            }
+            this.emulator.setRegister(CPURegister.D0, -1); // Success (DOSTRUE)
+            this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+            return;
+          } catch (err: any) {
+            console.error(`[dos.library] Execute RENAME: Failed to rename "${sourcePath}" to "${destPath}":`, err.message || err);
+          }
+        } else {
+          console.warn(`[dos.library] Execute RENAME: Source file not found or path resolution failed`);
+          console.warn(`[dos.library]   sourcePath: "${sourcePath}" (exists: ${sourceExists})`);
+          console.warn(`[dos.library]   destPath: "${destPath}"`);
+        }
+      } else {
+        console.warn(`[dos.library] Execute RENAME: Invalid syntax - need at least 3 parts: "${commandPart}"`);
+        console.warn(`[dos.library]   Got ${parts.length} parts: ${JSON.stringify(parts)}`);
       }
 
       // Close owned output handle if we opened it
@@ -3684,16 +3843,32 @@ debugLog(`[dos.library] WaitForChar: Regular file, atEOF=${atEOF}`);
     const fmt = this.readString(fmtAddr);
 debugLog(`[dos.library] VFPrintf(fh=${fileHandle}, fmt="${fmt}")`);
 
+    // Parse format string and arguments first
+    const formatted = this.formatString(fmt, argvAddr);
+
+    // Try FileManager first if enabled (handles files opened via new file system)
+    if (this.useNewFileSystem && this.fileManager) {
+      const result = this.fileManager.write(fileHandle, Buffer.from(formatted, "binary"));
+      if (result.bytesWritten >= 0) {
+        // Handle console output if FileManager indicates it
+        if (result.consoleData && this.outputCallback) {
+          this.outputCallback(result.consoleData.toString("binary"));
+        }
+        this.emulator.setRegister(CPURegister.D0, formatted.length);
+debugLog(`[dos.library] VFPrintf (FileManager): Wrote ${formatted.length} bytes`);
+        return;
+      }
+      // Fall through to check legacy openFiles if FileManager doesn't have this handle
+    }
+
+    // Legacy: check openFiles map
     const file = this.openFiles.get(fileHandle);
     if (!file) {
       this.emulator.setRegister(CPURegister.D0, -1); // EOF
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-debugLog(`[dos.library] VFPrintf: Invalid file handle`);
+debugLog(`[dos.library] VFPrintf: Invalid file handle ${fileHandle}`);
       return;
     }
-
-    // Parse format string and arguments (simple implementation)
-    const formatted = this.formatString(fmt, argvAddr);
 
     // Write to file or console
     if (file.isConsole) {
@@ -3714,72 +3889,129 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
   }
 
   /**
-   * Helper: Simple printf-style formatting (RawDoFmt compatible)
-   * Supports: %s (string), %ld/%d (decimal), %lx/%x (hex), %c (char)
+   * Helper: Printf-style formatting (RawDoFmt compatible)
+   * Supports: %s, %ld/%d, %lx/%x, %c with width/precision/alignment
+   * Format: %[-][width][.precision][l]specifier
    */
   private formatString(fmt: string, argvAddr: number): string {
     let result = "";
     let argIndex = 0;
+    let i = 0;
 
-    for (let i = 0; i < fmt.length; i++) {
+    while (i < fmt.length) {
       if (fmt[i] === "%" && i + 1 < fmt.length) {
-        const spec = fmt[i + 1];
-        let longFormat = false;
+        i++; // Skip '%'
 
-        // Check for 'l' prefix (e.g., %ld, %lx)
-        if (spec === "l" && i + 2 < fmt.length) {
-          longFormat = true;
-          i++; // Skip 'l'
+        // Check for %%
+        if (fmt[i] === "%") {
+          result += "%";
+          i++;
+          continue;
         }
 
-        const actualSpec = longFormat ? fmt[i + 1] : spec;
+        // Parse flags
+        let leftAlign = false;
+        let zeroPad = false;
+        while (i < fmt.length && (fmt[i] === "-" || fmt[i] === "0")) {
+          if (fmt[i] === "-") leftAlign = true;
+          if (fmt[i] === "0") zeroPad = true;
+          i++;
+        }
 
-        switch (actualSpec) {
-          case "s": {
-            // String pointer
-            const strPtr = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            const str = this.readString(strPtr);
-            result += str;
-            argIndex++;
+        // Parse width
+        let width = 0;
+        while (i < fmt.length && fmt[i] >= "0" && fmt[i] <= "9") {
+          width = width * 10 + parseInt(fmt[i]);
+          i++;
+        }
+
+        // Parse precision
+        let precision = -1;
+        if (i < fmt.length && fmt[i] === ".") {
+          i++;
+          precision = 0;
+          while (i < fmt.length && fmt[i] >= "0" && fmt[i] <= "9") {
+            precision = precision * 10 + parseInt(fmt[i]);
             i++;
+          }
+        }
+
+        // Check for 'l' modifier
+        let longFormat = false;
+        if (i < fmt.length && fmt[i] === "l") {
+          longFormat = true;
+          i++;
+        }
+
+        // Get specifier
+        if (i >= fmt.length) break;
+        const specifier = fmt[i];
+        i++;
+
+        // Get value and format it
+        let formatted = "";
+        switch (specifier) {
+          case "s": {
+            const strPtr = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            let str = strPtr ? this.readString(strPtr) : "";
+            if (precision >= 0 && str.length > precision) {
+              str = str.substring(0, precision);
+            }
+            // Debug: log string pointer and value for VFPrintf debugging
+            if (str.length <= 20) {
+              debugLog(`[dos.library] formatString: %s argIdx=${argIndex} strPtr=0x${strPtr.toString(16)} str="${str}" len=${str.length}`);
+            }
+            formatted = str;
+            argIndex++;
             break;
           }
           case "d": {
-            // Decimal integer
             const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            // Handle as signed
             const signed = value > 0x7fffffff ? value - 0x100000000 : value;
-            result += signed.toString(10);
+            formatted = signed.toString(10);
             argIndex++;
-            i++;
+            break;
+          }
+          case "u": {
+            const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            formatted = (value >>> 0).toString(10);
+            argIndex++;
             break;
           }
           case "x": {
-            // Hexadecimal
             const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            result += value.toString(16);
+            formatted = value.toString(16);
             argIndex++;
-            i++;
+            break;
+          }
+          case "X": {
+            const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            formatted = value.toString(16).toUpperCase();
+            argIndex++;
             break;
           }
           case "c": {
-            // Character
             const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            result += String.fromCharCode(value & 0xff);
+            formatted = String.fromCharCode(value & 0xff);
             argIndex++;
-            i++;
             break;
           }
           default:
-            // Unknown format, just output as-is
-            result += "%" + (longFormat ? "l" : "") + actualSpec;
-            i++;
+            formatted = "%" + specifier;
             break;
         }
 
-        if (longFormat) i++; // Skip the format character after 'l'
+        // Apply width padding
+        if (width > 0 && formatted.length < width) {
+          const padChar = zeroPad && !leftAlign ? "0" : " ";
+          const padding = padChar.repeat(width - formatted.length);
+          formatted = leftAlign ? formatted + padding : padding + formatted;
+        }
+
+        result += formatted;
       } else {
         result += fmt[i];
+        i++;
       }
     }
 
@@ -5535,9 +5767,11 @@ debugLog(
         this.Seek();
         return true;
       case -72:
+        console.log(`[DosLibrary] handleCall -72: DeleteFile() called`);
         this.DeleteFile();
         return true;
       case -78:
+        console.log(`[DosLibrary] handleCall -78: Rename() called`);
         this.Rename();
         return true;
 
@@ -5603,16 +5837,15 @@ debugLog(
         this.UnLoadSeg();
         return true;
 
+      // -162: dosPrivate1 (private, not implemented)
+      // -168: dosPrivate2 (private, not implemented)
+
       // Device/handler
-      case -162:
+      case -174: // DeviceProc - FIXED from -162 per NDK dos_lib.fd
         this.DeviceProc();
         return true;
 
-      // File attributes
-      // -168 = QueuePacket (not implemented)
-      // -174 = DeviceProc (not implemented)
-
-      // File attributes (STANDARD Amiga offsets from NDK LVOs.i)
+      // File attributes (STANDARD Amiga offsets from NDK dos_lib.fd)
       case -180: // _LVOSetComment
         this.SetComment();
         return true;
@@ -5631,8 +5864,14 @@ debugLog(
         this.WaitForChar();
         return true;
 
-      // Buffered I/O (V36+) - CORRECTED LVO OFFSETS (was -588 to -684, now correct)
-      case -306: // FGetC - CORRECTED from -642
+      // Buffered I/O (V36+) - CORRECTED LVO OFFSETS per NDK dos_lib.fd
+      case -294: // SelectInput
+        this.emulator.setRegister(CPURegister.D0, this.SelectInput());
+        return true;
+      case -300: // SelectOutput
+        this.emulator.setRegister(CPURegister.D0, this.SelectOutput());
+        return true;
+      case -306: // FGetC
         this.emulator.setRegister(CPURegister.D0, this.FGetC());
         return true;
       case -312: // FPutC - CORRECTED from -648
@@ -5729,18 +5968,16 @@ debugLog(
       case -918: // FindVar - CORRECTED from -924 (off by 6)
         this.FindVarEnhanced();
         return true;
-      case -126:
-        this.CurrentDir();
-        return true;
 
-      // Directory operations - FIXED LVO offsets
-      case -210: // ParentDir (was incorrectly SetSignal - that's exec.library -306)
+      // Directory operations - FIXED LVO offsets per NDK dos_lib.fd
+      case -210: // ParentDir
         this.ParentDir();
         return true;
-      case -216: // IsInteractive (was incorrectly PutStr - that's -948)
+      case -216: // IsInteractive
         this.IsInteractive();
         return true;
-      case -222: // Execute (was incorrectly VPrintf - that's -954)
+      case -222: // Execute
+        console.log(`[DosLibrary] handleCall -222: Execute() called`);
         this.Execute();
         return true;
 
