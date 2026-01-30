@@ -12,6 +12,10 @@ import {
 } from '../services/file-areas-loader';
 import { Door, DoorSession, ChatState } from '../types';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import type { Server as SocketIOServer } from 'socket.io';
+
+// Store io reference for dependency injection
+let _io: SocketIOServer | null = null;
 import {
   callersLog,
   getRecentCallerActivity,
@@ -67,7 +71,7 @@ import { setInfoCommandsDependencies } from '../handlers/commands/info-commands.
 import { setUtilityCommandsDependencies } from '../handlers/commands/utility-commands.handler';
 import { setSysopCommandsDependencies } from '../handlers/commands/sysop-commands.handler';
 import { setTransferMiscCommandsDependencies } from '../handlers/commands/transfer-misc-commands.handler';
-import { setMessagingDependencies } from '../handlers/message/messaging.handler';
+import { setMessagingDependencies, setMoveEditDependencies } from '../handlers/message/messaging.handler';
 import {
   setFileAreas,
   setFileEntries,
@@ -250,9 +254,11 @@ console.error('[Webhook Init] Error initializing default webhook:', error);
 
 /**
  * Initialize database and inject dependencies into all handlers
+ * @param io - Optional Socket.IO server instance for handlers that need socket access
  */
-export async function initializeData() {
+export async function initializeData(io?: SocketIOServer) {
   try {
+    if (io) _io = io;
     ensureArosRomsAvailable();
 
     // Initialize database schema first
@@ -470,6 +476,8 @@ export async function initializeData() {
     setMessageCommandsDependencies({
       messageBases,
       conferences,
+      sessions,
+      io: _io || undefined,
       joinConference,
       displayScreen: displayScreen as any,
       resetNewMailScanPointers,
@@ -529,6 +537,12 @@ export async function initializeData() {
       loadMsgPointers,
       validatePointers,
       updateReadPointer
+    });
+
+    // Inject dependencies for sysop message move/edit commands (M/EH)
+    setMoveEditDependencies({
+      conferences,
+      messageBases
     });
 
     // Initialize DI container (new Clean Architecture approach)

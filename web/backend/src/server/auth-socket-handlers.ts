@@ -369,8 +369,9 @@ console.log('Too many login errors, disconnecting');
             DebugSeverity.WARNING
           );
           // express.e:29209 - aePuts('Invalid PassWord\b\n')
-          socket.emit('login-failed', 'Invalid PassWord\r\n');
           // Match express.e: immediately re-prompt for password without asking for username again
+          // Pass retryFrom='password' so frontend knows to keep username and only retry password
+          socket.emit('login-failed', { reason: 'Invalid PassWord', retryFrom: 'password' });
           socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
           socket.emit('prompt-password');
           if (!handleFailure()) return;
@@ -705,8 +706,14 @@ console.log('[AUTH] =============================================');
         // Fall through to normal bulletin display flow below
       }
 
-      // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
-      const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
+      // express.e:29853-29855 - IF (quickFlag=FALSE) IF (displayScreen(SCREEN_LOGON)) THEN doPause()
+      // When quickFlag is set (user entered 'Q' at ANSI prompt), skip LOGON screen
+      let logonDisplayed = false;
+      if (!session.quickFlag) {
+        logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
+      } else {
+console.log('[LOGIN] Quick logon - skipping LOGON screen per express.e:29853');
+      }
 
       // express.e:29859-29861 - After LOGON screen, state:=STATE_LOGGEDON (main loop processes it)
       // Begin bulletin flow: BULL -> NODE_BULL -> confScan -> CONF_BULL -> MENU

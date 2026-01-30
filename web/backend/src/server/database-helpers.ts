@@ -307,14 +307,14 @@ console.error('[searchFilesAdvanced] Error:', error);
  */
 export async function resetNewMailScanPointers(conferenceId: number, messageBaseId: number): Promise<number> {
   try {
-    const result = await db.query(`
-      UPDATE msg_pointers
-      SET lastnewreadconf = 0
-      WHERE conferenceid = $1 AND messagebaseid = $2
+    const result = await db.run(`
+      UPDATE conf_base
+      SET last_new_read_conf = 0
+      WHERE conference_id = $1 AND message_base_id = $2
     `, [conferenceId, messageBaseId]);
-    return (result as any).rowCount || 0;
+    return (result as any).changes || 0;
   } catch (error) {
-console.error('[resetNewMailScanPointers] Error:', error);
+    console.error('[resetNewMailScanPointers] Error:', error);
     return 0;
   }
 }
@@ -324,14 +324,14 @@ console.error('[resetNewMailScanPointers] Error:', error);
  */
 export async function resetLastMessageReadPointers(conferenceId: number, messageBaseId: number): Promise<number> {
   try {
-    const result = await db.query(`
-      UPDATE msg_pointers
-      SET lastmsgreadconf = 0
-      WHERE conferenceid = $1 AND messagebaseid = $2
+    const result = await db.run(`
+      UPDATE conf_base
+      SET last_msg_read_conf = 0
+      WHERE conference_id = $1 AND message_base_id = $2
     `, [conferenceId, messageBaseId]);
-    return (result as any).rowCount || 0;
+    return (result as any).changes || 0;
   } catch (error) {
-console.error('[resetLastMessageReadPointers] Error:', error);
+    console.error('[resetLastMessageReadPointers] Error:', error);
     return 0;
   }
 }
@@ -350,11 +350,11 @@ export async function getConferenceStats(conferenceId: number, messageBaseId: nu
       WHERE conferenceid = $1 AND messagebaseid = $2
     `, [conferenceId, messageBaseId]);
 
-    // Get user count with pointers for this conference
+    // Get user count with entries for this conference
     const userResult = await db.query(`
-      SELECT COUNT(DISTINCT userid) as count
-      FROM msg_pointers
-      WHERE conferenceid = $1 AND messagebaseid = $2
+      SELECT COUNT(DISTINCT user_id) as count
+      FROM conf_base
+      WHERE conference_id = $1 AND message_base_id = $2
     `, [conferenceId, messageBaseId]);
 
     return {
@@ -364,7 +364,7 @@ export async function getConferenceStats(conferenceId: number, messageBaseId: nu
       userCount: parseInt(userResult.rows[0].count)
     };
   } catch (error) {
-console.error('[getConferenceStats] Error:', error);
+    console.error('[getConferenceStats] Error:', error);
     return {
       messageCount: 0,
       lowestMsgNum: 0,

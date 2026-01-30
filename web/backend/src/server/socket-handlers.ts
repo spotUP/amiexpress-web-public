@@ -883,10 +883,12 @@ console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${sock
 
     // GRACE PERIOD: Wait 3 seconds for potential reconnection before cleanup
     // This prevents kicking users out during brief network hiccups
+    // Skip grace period if sysop explicitly kicked the user via NM command
     const reconnectGracePeriod = 3000; // 3 seconds
     const sessionBeforeDelay = getSession(socket.id);
 
-    if (sessionBeforeDelay) {
+console.log(`[DISCONNECT] sessionBeforeDelay.sysopKicked=${sessionBeforeDelay?.sysopKicked}, nodeId=${sessionBeforeDelay?.nodeId}`);
+    if (sessionBeforeDelay && !sessionBeforeDelay.sysopKicked) {
 console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
       await new Promise(resolve => setTimeout(resolve, reconnectGracePeriod));
 
@@ -896,6 +898,8 @@ console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconn
 console.log(`[DISCONNECT] User reconnected during grace period, skipping cleanup`);
         return; // User reconnected, skip cleanup
       }
+    } else if (sessionBeforeDelay?.sysopKicked) {
+console.log(`[DISCONNECT] Sysop kicked user, skipping grace period`);
     }
 
     // End session log tracking
@@ -946,6 +950,13 @@ console.log(`[DISCONNECT] User ${userId} still has other sockets connected - kee
         return;
       }
 
+      // Skip 15-second grace period if sysop explicitly kicked the user
+      if (session.sysopKicked) {
+console.log(`[DISCONNECT] Sysop kicked user ${userId}, skipping disconnect grace period`);
+        await finalizeDisconnectCleanup(socket, session, socket.id);
+        return;
+      }
+
       const nodeId = session.nodeId || 0;
       const timer = setTimeout(() => {
         void finalizeDisconnectCleanup(socket, session, socket.id);
@@ -965,11 +976,14 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
 
   if (userId) {
     const stillConnected = Array.from(socketToUser.values()).includes(userId);
+console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId}, stillConnected=${stillConnected}, socketToUser.size=${socketToUser.size}`);
     if (stillConnected) {
 console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - active socket detected`);
       pendingDisconnects.delete(userId);
       return;
     }
+  } else {
+console.log(`[DISCONNECT] finalizeDisconnectCleanup: no userId, session.nodeId=${session.nodeId}`);
   }
 
   if (userId) {
@@ -1146,9 +1160,12 @@ console.error('[LOGOFF] SAmiLog update failed:', error);
     }
     userSessions.delete(userId);
     if (session.nodeId) {
+console.log(`[DISCONNECT] Deleting session for node ${session.nodeId} from sessions map`);
       sessions.delete(session.nodeId.toString());
+console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
     }
   } else {
+console.log(`[DISCONNECT] No userId, calling deleteSession for socket ${socketId}`);
     deleteSession(socketId);
   }
 

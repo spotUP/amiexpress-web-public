@@ -372,6 +372,7 @@ export interface BBSSession {
   currentStat: number; // Current environment status (what user is doing) - express.e:308
   quietFlag: boolean; // Whether node is in quiet mode (invisible to WHO) - express.e:309
   blockOLM: boolean; // Whether to block Online Messages (OLM) - express.e:310
+  sysopKicked?: boolean; // Session was forcibly disconnected by sysop via NM command - skip grace period
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
@@ -454,6 +455,7 @@ export interface BBSSession {
   pagesAllowed?: number; // Number of pages allowed (-1 = unlimited, 0 = none)
   quietMode?: boolean; // Quiet mode preference
   relogon?: boolean; // Flag for relogon after goodbye
+  quickFlag?: boolean; // Quick logon flag (express.e:116) - skip bulletins when 'Q' entered at ANSI prompt
 
   // Screen-triggered command execution
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
@@ -1444,7 +1446,7 @@ console.log(
 (async () => {
   try {
 console.log("Initializing database and loading data...");
-    await initializeData();
+    await initializeData(io);
 
     // Initialize operator chat handler
     const { initOperatorChatHandler } = await import(
