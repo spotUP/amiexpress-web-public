@@ -216,7 +216,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         currentConf: sessionData.currentConf,
         savedAt: Date.now(),
       };
-      localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(sessionState));
+      sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(sessionState));
       console.log('[Session Persistence] Session state saved:', sessionState);
     } catch (error) {
       console.error('[Session Persistence] Failed to save session state:', error);
@@ -226,12 +226,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const getStoredSessionState = useCallback(() => {
     if (typeof window === 'undefined') return null;
     try {
-      const stored = localStorage.getItem(SESSION_STATE_KEY);
+      const stored = sessionStorage.getItem(SESSION_STATE_KEY);
       if (!stored) return null;
       const sessionState = JSON.parse(stored);
       // Only use session if it's less than 2 minutes old (connection state recovery window)
       if (Date.now() - sessionState.savedAt > 120000) {
-        localStorage.removeItem(SESSION_STATE_KEY);
+        sessionStorage.removeItem(SESSION_STATE_KEY);
         return null;
       }
       return sessionState;
@@ -243,7 +243,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   const clearSessionState = useCallback(() => {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem(SESSION_STATE_KEY);
+    sessionStorage.removeItem(SESSION_STATE_KEY);
     console.log('[Session Persistence] Session state cleared');
   }, []);
 
@@ -1568,8 +1568,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     });
 
-    socket.on('login-failed', (reason: string) => {
-      console.log('Login failed:', reason);
+    socket.on('login-failed', (data: string | { reason: string; retryFrom?: 'username' | 'password' }) => {
+      // Handle both old string format and new object format
+      const reason = typeof data === 'string' ? data : data.reason;
+      const retryFrom = typeof data === 'object' ? data.retryFrom : 'username';
+
+      console.log('Login failed:', reason, 'retryFrom:', retryFrom);
       localStorage.removeItem('bbs_auth_token');
       clearSessionState();
       const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
@@ -1578,10 +1582,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         localStorage.removeItem('bbs_saved_password');
         term.write('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
       }
-      // Always return to manual prompt so input is accepted; prompt text comes from backend
-      loginState.current = 'username';
-      username.current = '';
-      password.current = '';
+
+      // If retrying from password, keep username and wait for prompt-password event
+      // If retrying from username (default), clear everything and go back to username prompt
+      if (retryFrom === 'password') {
+        // Keep username, just clear password - prompt-password event will set state
+        password.current = '';
+      } else {
+        // Go back to username entry
+        loginState.current = 'username';
+        username.current = '';
+        password.current = '';
+      }
     });
 
     socket.on('user-not-found', (data: { username: string; prompt: string }) => {
