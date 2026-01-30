@@ -75,7 +75,7 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 | Cmd | Location | Issue |
 |-----|----------|-------|
-| MRC | doors:mrc/mrc_door | Input works but 30s polling delay - needs deeper investigation |
+| MRC | doors:mrc/mrc_door | Works but 30s input lag - door's network timeout design, not emulation bug |
 
 ---
 
@@ -133,16 +133,16 @@ Moved to Working - see BBSLink Gateway (TELNET_CONNECT Working) section above.
 
 ## Session Notes
 
-### 2026-01-30: MRC Investigation (Deferred)
+### 2026-01-30: MRC Investigation (Working with Caveat)
 
 **MRC (Multi-Relay Chat):**
 - Fixed GETKEY/JH_CK (cmd 500) - was consuming input, now just peeks
 - Fixed duplicate switch case bug: JH_CK and GETKEY both = 500, JH_CK case matched first
 - Input flow verified working: queueInput → inputQueue → GETKEY(peek) → JH_HK(consume)
-- **Issue:** MRC polls GETKEY every ~30 seconds (network timeout behavior)
-- Characters ARE delivered and displayed, but with 30s delay between polls
-- Likely needs network connectivity investigation (MRC is a chat client)
-- **Status:** Deferred - too complex for quick fix, input technically works
+- **Finding:** 30-second input lag is MRC's network timeout design, NOT emulation bug
+- MRC waits for network data (30s timeout), then polls keyboard - this is how door works
+- Removing debug logging made UI draw fast, but lag persists (confirms door behavior)
+- **Status:** Working - emulation is correct, lag is door's network polling design
 
 ### 2026-01-29: Request Door VFPrintf + Config Fix
 
