@@ -14,7 +14,7 @@ services:
     env: docker
     region: oregon
     plan: starter
-    autoDeploy: true
+    autoDeploy: false
     branch: main
 
     dockerfilePath: ./Dockerfile
