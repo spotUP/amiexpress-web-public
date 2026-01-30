@@ -47,6 +47,7 @@ export class XIMIOHandler {
   // Hotkey/pause state
   private waitingForHotkey: boolean = false;
   private hotkeyMessage: XIMMessage | null = null;
+  private hotkeyTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private waitingForExtHotkey: boolean = false;
   private extHotkeyMessage: XIMMessage | null = null;
   private waitingForPause: boolean = false;
@@ -725,15 +726,20 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       this.emulator.writeMemory(stringAddr, keyCode);
       this.emulator.writeMemory(stringAddr + 1, 0);  // Null terminator
 
+      // FIX 2026-01-30: Also update strPtr to point to embedded buffer
+      // Some doors (like dRE!WAll) may read characters via strPtr for storage
+      const strPtrUpdated = this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+console.log(`[DEBUG JH_HK handleHotkey] Updated strPtr to 0x${stringAddr.toString(16)}: ${strPtrUpdated ? 'OK' : 'FAILED (msg too small)'}`);
+
       // DEBUG: Check if door has stringPtr (separate buffer from embedded msg.string)
       const stringPtr = msg.stringPtr || 0;
-console.log(`[DEBUG JH_HK handleHotkey] msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
+console.log(`[DEBUG JH_HK handleHotkey] Original msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
 
       // If door has stringPtr, write character there too
       if (stringPtr && stringPtr !== stringAddr) {
         this.emulator.writeMemory(stringPtr, keyCode);
         this.emulator.writeMemory(stringPtr + 1, 0);
-console.log(`[DEBUG JH_HK handleHotkey] ALSO wrote to stringPtr at 0x${stringPtr.toString(16)}`);
+console.log(`[DEBUG JH_HK handleHotkey] ALSO wrote to original stringPtr at 0x${stringPtr.toString(16)}`);
       }
 
       // Write XIM port to msg.command (express.e line 3447)
@@ -770,10 +776,39 @@ console.log(`[DEBUG JH_HK] msg.string[0-31] ASCII: "${msgStrAscii}"`);
 
     // No input available - pause emulator and wait for user input
     // express.e:3438-3448 shows readChar(doorTimeout) which BLOCKS until input
-    // Returning -1 immediately breaks doors that expect blocking behavior
+    // CRITICAL: express.e uses a timeout (doorTimeout), we must too!
 debugLog('[XIMIOHandler] JH_HK: No input available, pausing emulator to wait');
     this.waitingForHotkey = true;
     this.hotkeyMessage = msg;
+
+    // Get doorTimeout from state (in seconds), default 30 seconds for screen commands, 300 for interactive
+    // express.e line 125: doorTimeout=INPUT_TIMEOUT (default ~300 seconds)
+    // For doors run via ~CC_ during screen display, use shorter timeout
+    const isScreenCommand = this.bbsSession?.executingScreenCommand || false;
+    const defaultTimeout = isScreenCommand ? 30 : 300; // 30s for screen commands, 5min for interactive
+    const doorTimeout = (this.state as any).doorTimeout || defaultTimeout;
+debugLog(`[XIMIOHandler] JH_HK: Setting timeout ${doorTimeout}s (isScreenCommand=${isScreenCommand})`);
+
+    // Set up timeout - when it expires, return msg.data=-1 (timeout/carrier drop)
+    // express.e:3440-3441: IF (ch<0) THEN msg.data:=-1
+    this.hotkeyTimeoutId = setTimeout(() => {
+      if (this.waitingForHotkey && this.hotkeyMessage) {
+debugLog(`[XIMIOHandler] JH_HK: Timeout expired after ${doorTimeout}s, returning -1`);
+        const timeoutMsg = this.hotkeyMessage;
+        this.waitingForHotkey = false;
+        this.hotkeyMessage = null;
+        this.hotkeyTimeoutId = null;
+
+        // Write empty string to msg.string (ch=-1 means no character)
+        const stringAddr = timeoutMsg.msgAddr + 0x14;  // MESSAGE_STRING_OFFSET
+        this.emulator.writeMemory(stringAddr, 0);  // Null byte = no character
+
+        // Reply with data=-1 to indicate timeout
+        this.reply(timeoutMsg, -1);
+        this.emulator.resume();
+      }
+    }, doorTimeout * 1000);
+
     this.emulator.pause();
   }
 
@@ -785,6 +820,12 @@ debugLog('[XIMIOHandler] JH_HK: No input available, pausing emulator to wait');
   private completeHotkey(char: string): void {
     if (!this.hotkeyMessage) {
       return;
+    }
+
+    // Clear the timeout since we got input
+    if (this.hotkeyTimeoutId) {
+      clearTimeout(this.hotkeyTimeoutId);
+      this.hotkeyTimeoutId = null;
     }
 
     const msg = this.hotkeyMessage;
@@ -837,15 +878,21 @@ debugLog('========================================');
     this.emulator.writeMemory(stringAddr, keyCode);
     this.emulator.writeMemory(stringAddr + 1, 0);  // Null terminator
 
+    // FIX 2026-01-30: Also update strPtr to point to embedded buffer
+    // Some doors (like dRE!WAll) may read characters via strPtr for storage
+    // while reading from embedded buffer for echo. Without this, strPtr stays NULL.
+    const strPtrUpdated = this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+console.log(`[DEBUG JH_HK completeHotkey] Updated strPtr to 0x${stringAddr.toString(16)}: ${strPtrUpdated ? 'OK' : 'FAILED (msg too small)'}`);
+
     // DEBUG: Check if door has stringPtr (separate buffer from embedded msg.string)
     const stringPtr = msg.stringPtr || 0;
-console.log(`[DEBUG JH_HK completeHotkey] msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
+console.log(`[DEBUG JH_HK completeHotkey] Original msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
 
     // If door has stringPtr, write character there too
     if (stringPtr && stringPtr !== stringAddr) {
       this.emulator.writeMemory(stringPtr, keyCode);
       this.emulator.writeMemory(stringPtr + 1, 0);
-console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to stringPtr at 0x${stringPtr.toString(16)}`);
+console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${stringPtr.toString(16)}`);
     }
 
     // Write XIM port to msg.command (express.e line 3447)
