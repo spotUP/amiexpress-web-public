@@ -40,10 +40,42 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
   // Blank = ALL (express.e:10793-10795)
   if (recipient === '') {
     session.tempData.messageEntry.toUser = 'ALL';
-  } else {
-    session.tempData.messageEntry.toUser = recipient;
+    emitText(socket, '\r\n');
+    promptForSubject(socket, session);
+    return;
   }
 
+  // Check for EALL - express.e:10800-10816
+  const recipientLower = recipient.toLowerCase();
+  if (recipientLower === 'eall') {
+    // express.e:10810 - Check ACS_EALL_MESSAGES permission
+    if (checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
+      session.tempData.messageEntry.toUser = 'EALL';
+      emitText(socket, '\r\n');
+      promptForSubject(socket, session);
+    } else {
+      // express.e:10814 - No permission, reject
+      emitText(socket, '\r\n');
+      emitText(socket, AnsiUtil.errorLine('User does not exist!!'));
+      emitText(socket, '\r\n');
+      emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+    }
+    return;
+  }
+
+  // Check for SYSOP - express.e:10818-10820 maps to slot 1
+  if (recipientLower === 'sysop') {
+    // Map SYSOP to actual sysop username (slot 1)
+    session.tempData.messageEntry.toUser = 'SYSOP';
+    emitText(socket, '\r\n');
+    promptForSubject(socket, session);
+    return;
+  }
+
+  // Regular recipient
+  session.tempData.messageEntry.toUser = recipient;
   emitText(socket, '\r\n');
   promptForSubject(socket, session);
 }

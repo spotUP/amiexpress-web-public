@@ -109,13 +109,10 @@ console.error(`Error reading BullHelp file: ${bullHelpPath}`, error);
       socket.emit('ansi-output', AnsiUtil.errorLine('Error reading bulletin help.'));
     }
   } else {
-    // No BullHelp file found - just show a simple list
+    // express.e:24618-24620 - no BullHelp.txt means no bulletins available
+    // myError(ERR_NO_BULLS) equivalent - express.e:24619
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.header('Available Bulletins'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '  1. Bulletin #1\r\n');
-    socket.emit('ansi-output', '  2. Bulletin #2\r\n');
-    socket.emit('ansi-output', '  3. Bulletin #3\r\n');
+    socket.emit('ansi-output', 'Sorry, there are no bulletins available.\r\n');
     socket.emit('ansi-output', '\r\n');
   }
 }

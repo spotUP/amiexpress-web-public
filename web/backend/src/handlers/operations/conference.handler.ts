@@ -13,6 +13,11 @@ import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 
 import type { BBSSession } from '../../index';
 
+// express.e forceMailScan constants
+export const FORCE_MAILSCAN_NONE = 0;   // Normal - check checkMailConfScan()
+export const FORCE_MAILSCAN_SKIP = 1;   // Skip mail scan entirely
+export const FORCE_MAILSCAN_ALL = 2;    // Force mail scan (MS command)
+
 interface Conference {
   id: number;
   name: string;
@@ -94,8 +99,12 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
  * Join conference function (joinConf equivalent)
  * @param auto - If true, this is an auto-rejoin during login (express.e:5066-5088)
  *               Auto-rejoin displays user stats (S command) and "Auto-ReJoined" message
+ * @param forceMailScan - Mail scan mode (express.e:5119-5124)
+ *               FORCE_MAILSCAN_NONE (0) = check checkMailConfScan()
+ *               FORCE_MAILSCAN_SKIP (1) = skip mail scan
+ *               FORCE_MAILSCAN_ALL (2) = force mail scan (MS command)
  */
-export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false, auto: boolean = false) {
+export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false, auto: boolean = false, forceMailScan: number = FORCE_MAILSCAN_NONE) {
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
     if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
@@ -159,6 +168,29 @@ console.error('[joinConference] Failed to load/validate message pointers:', err)
       nodeFileManager.writeNodeUserFile(session.nodeId, session.user);
     } catch (err) {
 console.warn('[joinConference] Failed to sync node user file:', err);
+    }
+  }
+
+  // express.e:5119-5124 - Mail scan logic
+  // Runs when: not auto-rejoin AND not skipping AND (forced OR checkMailConfScan)
+  if (!auto && forceMailScan !== FORCE_MAILSCAN_SKIP) {
+    const shouldScan = forceMailScan === FORCE_MAILSCAN_ALL; // TODO: || checkMailConfScan(confId, msgBaseNum)
+    if (shouldScan && session.user) {
+      try {
+        const { db } = require('../../database');
+        // Count new messages addressed to this user in this conference/msgbase
+        const newMessages = await db.getNewMessagesForUser(
+          session.user.username,
+          confId,
+          msgBaseId,
+          session.lastNewReadConf || 0
+        );
+        if (newMessages && newMessages.length > 0) {
+          socket.emit('ansi-output', `\r\n\x1b[33m${conference.name}\x1b[0m: ${newMessages.length} new message(s)\r\n`);
+        }
+      } catch (err) {
+console.warn('[joinConference] Mail scan error:', err);
+      }
     }
   }
 

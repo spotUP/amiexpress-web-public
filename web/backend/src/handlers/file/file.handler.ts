@@ -131,13 +131,9 @@ console.log('Parsed params:', parsedParams);
   // Check for non-stop flag (NS parameter)
   const nonStopDisplay = parsedParams.includes('NS');
 
+  // express.e:27636 - just outputs \b\n, NO header
   const output: string[] = [];
   output.push('\r\n');
-  if (reverse) {
-    output.push('\x1b[36m-= File Areas (Reverse) =-\x1b[0m\r\n');
-  } else {
-    output.push('\x1b[36m-= File Areas =-\x1b[0m\r\n');
-  }
 
   // Get file areas for current conference (like AmiExpress DIR structure)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
@@ -264,8 +260,8 @@ export function displaySelectedFileAreas(
 
 // displayFileMaintenance() - File maintenance/search (FM command)
 export async function displayFileMaintenance(socket: any, session: BBSSession, params: string) {
-  emitText(socket, '\x1b[36m-= File Maintenance =-\x1b[0m\r\n');
-  emitText(socket, 'File maintenance and search functionality.\r\n\r\n');
+  // express.e:24889-24907 internalCommandFM - no header, just processes params
+  emitText(socket, '\r\n');
 
   // Parse parameters (like AmiExpress FM command)
   const parsedParams = parseParams(params);
@@ -631,8 +627,8 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
 // ===== File Status (FS command) =====
 
 export async function displayFileStatus(socket: any, session: BBSSession, params: string) {
+  // express.e:24141-24161 fileStatus() - no header, just column headers
   emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.headerBox('FILE STATUS'));
 
   // Parse parameters to determine scope (like fileStatus(opt) in AmiExpress)
   const parsedParams = parseParams(params);
@@ -915,7 +911,8 @@ console.log('🔍 [Upload Debug] fileAreas data:', fileAreas.map(a => ({ id: a.i
 console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.length);
 
   if (currentFileAreas.length === 0) {
-    emitText(socket, '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
+    // express.e:25646 internalCommandU - no header
+    emitText(socket, '\r\n');
     emitText(socket, 'No file areas available in this conference.\r\n');
     emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -923,9 +920,8 @@ console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.l
     return;
   }
 
-  // Display upload message (like UPLOADMSG.TXT)
-  emitText(socket, '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
-  emitText(socket, 'Upload your files to share with the community.\r\n\r\n');
+  // express.e:25646-25656 internalCommandU -> uploadaFile - no header
+  emitText(socket, '\r\n');
 
   // Display user stats (like displayULStats in AmiExpress)
   const user = session.user!;
@@ -954,52 +950,73 @@ console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.l
 }
 
 export function displayDownloadInterface(socket: any, session: BBSSession, params: string) {
-console.log('displayDownloadInterface called with params:', params);
+  console.log('[D/DS] displayDownloadInterface called with params:', params);
 
-  // Check if there are file directories to download from (NDIRS check)
+  // Check if there are file directories to download from - express.e:19961-19964
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
   if (currentFileAreas.length === 0) {
-    emitText(socket, '\x1b[36m-= Download Files =-\x1b[0m\r\n');
-    emitText(socket, 'No file areas available in this conference.\r\n');
+    // express.e:19962-19963 - myError(5) = "Sorry, this function is not available."
+    emitText(socket, '\r\nSorry, no file directories available in this conference.\r\n');
     emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  // Display download message (like DOWNLOADMSG.TXT)
-  emitText(socket, '\x1b[36m-= Download Files =-\x1b[0m\r\n');
-  emitText(socket, 'Download files from our collection.\r\n\r\n');
-
-  // Display user stats (like displayULStats in AmiExpress)
   const user = session.user!;
-  emitText(socket, '\x1b[32mYour Download Statistics:\x1b[0m\r\n');
-  emitText(socket, `Files Downloaded: ${user.downloads || 0}\r\n`);
-  emitText(socket, `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
 
-  // Display current protocol (simplified)
-  emitText(socket, '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+  // express.e:19981 - displayULStats(loggedOnUser, loggedOnUserMisc)
+  // Shows download/upload stats in express.e format
+  const dlBytes = user.bytesDownload || 0;
+  const ulBytes = user.bytesUpload || 0;
+  const dlKB = Math.floor(dlBytes / 1024);
+  const ulKB = Math.floor(ulBytes / 1024);
 
-  // express.e:20031-20033 - "Space between filenames. Wildcards permitted."
-  emitText(socket, 'Space between filenames.  ');
-  // Check ACS_FILE_EXPANSION for wildcard support (express.e:20032)
-  const { checkSecurity } = require('../utils/acs.util');
-  const { ACSPermission } = require('../constants/acs-permissions');
-  if (!checkSecurity(user, ACSPermission.FILE_EXPANSION)) {
-    emitText(socket, 'No ');
+  emitText(socket, `Number of Downloads      : ${user.downloads || 0} (${dlKB}k total)\r\n`);
+  emitText(socket, `Number of Uploads        : ${user.uploads || 0} (${ulKB}k total)\r\n`);
+
+  // express.e:19701-12713 - bytesADL (daily byte allowance)
+  // For web, we show "Infinite" since there's no modem speed limit
+  emitText(socket, 'Todays Bytes Available   : Infinite\r\n');
+
+  // express.e:19983-19991 - Check ratio and show files available
+  const ratio = user.secLibrary || 0; // User's file ratio setting
+  if (ratio > 0) {
+    const uploads = user.uploads || 0;
+    const downloads = user.downloads || 0;
+    const filesAvail = (ratio * (uploads + 1)) - downloads;
+    emitText(socket, `Files Avail before UL    : ${filesAvail}\r\n`);
+    if (filesAvail < 1) {
+      // express.e:19988-19990 - exceedRatio()
+      emitText(socket, '\r\nYou have exceeded your ratio, you must upload first.\r\n\r\n');
+      emitText(socket, '\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
   }
-  emitText(socket, 'Wildcards permitted.\r\n\r\n');
 
-  // Display file areas for download
-  emitText(socket, '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
-  currentFileAreas.forEach((area, index) => {
-    emitText(socket, `${index + 1}. ${area.name} - ${area.description}\r\n`);
-  });
+  emitText(socket, '\r\n');
 
-  // Prompt for file area selection
-  emitText(socket, '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILES_SELECT_AREA;
-  session.tempData = { downloadMode: true, fileAreas: currentFileAreas };
+  // express.e:20031-20033 - Download prompt with wildcard info
+  emitText(socket, 'Space between filenames.  ');
+  const { checkSecurity } = require('../../utils/acs.util');
+  const { ACSPermission } = require('../../constants/acs-permissions');
+  if (checkSecurity(user, ACSPermission.FILE_EXPANSION)) {
+    emitText(socket, 'Wildcards permitted.');
+  } else {
+    emitText(socket, 'No wildcards permitted.');
+  }
+  emitText(socket, '\r\n\r\n');
+
+  // Show download prompt - express.e:19784-19788 downloadPrompt()
+  // Format: "X mins, Y bytes, Filespec(Z): "
+  const minsLeft = session.timeRemaining || 60;
+  emitText(socket, `${minsLeft} mins, Infinite bytes, Filespec(1): `);
+
+  // Set state to accept filename input - use FILES_DOWNLOAD_SELECT for filename entry
+  session.subState = LoggedOnSubState.FILES_DOWNLOAD_SELECT;
+  session.tempData = { downloadMode: true, fileAreas: currentFileAreas, fileSpec: 1 };
 }
 
 // ===== Utility Functions =====
@@ -1109,18 +1126,17 @@ console.log('startFileUpload called for area:', fileArea.name);
 export function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
 console.log('startFileDownload called for area:', fileArea.name);
 
+  // express.e:24853-24857 internalCommandD -> beginDLF -> downloadAFile
+  // The download process uses displayULStats() for the header info
   emitText(socket, `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n`);
-  emitText(socket, '\x1b[36m-= Download Files =-\x1b[0m\r\n');
-  emitText(socket, 'Download files from our collection.\r\n\r\n');
 
-  // Display user stats (like displayULStats in AmiExpress)
+  // express.e:12680-12710 displayULStats format - no decorative header
   const user = session.user!;
-  emitText(socket, '\x1b[32mYour Download Statistics:\x1b[0m\r\n');
-  emitText(socket, `Files Downloaded: ${user.downloads || 0}\r\n`);
-  emitText(socket, `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
-
-  // Display current protocol (WebSocket-based)
-  emitText(socket, '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+  const dlKB = Math.floor((user.bytesDownload || 0) / 1024);
+  const ulKB = Math.floor((user.bytesUpload || 0) / 1024);
+  emitText(socket, `Number of Downloads      : ${user.downloads || 0} (${dlKB}k total)\r\n`);
+  emitText(socket, `Number of Uploads        : ${user.uploads || 0} (${ulKB}k total)\r\n`);
+  emitText(socket, 'Todays Bytes Available   : Infinite\r\n');
 
   // Check if user has download access to this area
   if (fileArea.downloadAccess > (session.user?.secLevel || 0)) {

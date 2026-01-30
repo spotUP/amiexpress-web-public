@@ -153,8 +153,8 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
 console.log('[ENV] Mail');
 
   // express.e:24662-24664 - Start private message to sysop
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Comment to Sysop'));
+  // express.e:24658-24669 - no header, goes directly to mail entry
+  // internalCommandC just calls enterComment(MAIL_SYSOP_COMMENT,currentConf,1)
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n`);
   socket.emit('ansi-output', 'To: sysop\r\n');

@@ -162,8 +162,8 @@ export class FileListingHandler {
     }
     session.menuPause = false;
 
+    // express.e:27626-27636 displayFileList - just newline, no header
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.headerBox('FILE LISTING'));
 
     // Get list of DIR files (express.e: numbered DIR1, DIR2, etc. only)
     const allDirFiles = await getDirFiles(session.currentConf, bbsDataPath);
