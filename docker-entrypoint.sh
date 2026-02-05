@@ -76,12 +76,22 @@ else
 
     # Force re-initialize Screens if requested (fixes empty placeholder files)
     if [ "$FORCE_REINIT_SCREENS" = "1" ]; then
-        echo "[Entrypoint] FORCE_REINIT_SCREENS=1 - Re-copying Screens directory..."
+        echo "[Entrypoint] FORCE_REINIT_SCREENS=1 - Re-copying all Screens directories..."
+        # Re-copy root Screens
         if [ -d "$DEFAULT_DATA_DIR/Screens" ]; then
             rm -rf "$BBS_DATA_DIR/Screens"
             cp -r "$DEFAULT_DATA_DIR/Screens" "$BBS_DATA_DIR/Screens"
-            echo "[Entrypoint] Screens directory re-initialized from default-data"
+            echo "[Entrypoint] Root Screens directory re-initialized"
         fi
+        # Re-copy conference Screens (Conf1-Conf14)
+        for conf in Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 Conf11 Conf12 Conf13 Conf14; do
+            if [ -d "$DEFAULT_DATA_DIR/$conf/Screens" ]; then
+                rm -rf "$BBS_DATA_DIR/$conf/Screens"
+                cp -r "$DEFAULT_DATA_DIR/$conf/Screens" "$BBS_DATA_DIR/$conf/Screens"
+                echo "[Entrypoint] $conf/Screens re-initialized"
+            fi
+        done
+        echo "[Entrypoint] All Screens directories re-initialized from default-data"
     fi
 fi
 
