@@ -35,6 +35,17 @@ echo "[Entrypoint] FORCE_REINIT_CONFIG: $FORCE_REINIT_CONFIG"
 # Create data directories if they don't exist
 mkdir -p "$BBS_DATA_DIR" "$DATABASE_DIR" "$ROM_DIR"
 
+# Create symlinks for consistent path structure (matches local dev environment)
+# This allows code to use /app/Doors instead of /app/data/bbs/Doors
+if [ ! -L "/app/Doors" ] && [ ! -d "/app/Doors" ]; then
+    ln -s "$BBS_DATA_DIR/Doors" /app/Doors
+    echo "[Entrypoint] Created symlink: /app/Doors -> $BBS_DATA_DIR/Doors"
+fi
+if [ ! -L "/app/Libs" ] && [ ! -d "/app/Libs" ]; then
+    ln -s "$BBS_DATA_DIR/Libs" /app/Libs
+    echo "[Entrypoint] Created symlink: /app/Libs -> $BBS_DATA_DIR/Libs"
+fi
+
 # Ensure AROS ROM files are available (for 68K door emulation)
 echo "[Entrypoint] Checking AROS ROM files..."
 echo "[Entrypoint]   Source: /app/default-data/amiga-roms/"

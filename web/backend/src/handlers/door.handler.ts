@@ -1502,8 +1502,9 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
       return;
     }
 
-    // Get BBS root directory (use BBS_ROOT env var or default to project root)
-    const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+    // Get BBS root directory (use BBS_DATA_DIR env var or default to project root)
+    // In Docker, /app/Doors symlinks to /app/data/bbs/Doors for path consistency
+    const projectRoot = process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..');
 
     // For hybrid doors, use the server entry point from package.json
     // Check if path is a directory and if it has a package.json with server entry
