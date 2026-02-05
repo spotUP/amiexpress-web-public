@@ -4,6 +4,26 @@ const DEFAULT_FAILURE_WINDOW_MS = 30_000; // 30 seconds
 const DEFAULT_FAILURE_LIMIT = 4;
 const DEFAULT_BAN_DURATION_MS = 15 * 60_000; // 15 minutes
 
+// Localhost/internal IPs are whitelisted from rate limiting
+// This is needed for health checks, load balancer probes, and internal services
+const WHITELISTED_IPS = new Set([
+  '127.0.0.1',
+  '::1',
+  '::ffff:127.0.0.1',
+  'localhost',
+]);
+
+function isWhitelisted(ip: string): boolean {
+  if (!ip) return false;
+  // Exact match
+  if (WHITELISTED_IPS.has(ip)) return true;
+  // Check for IPv6 localhost variations
+  if (ip.startsWith('::ffff:127.')) return true;
+  // Docker/Render internal networks (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+  if (ip.startsWith('10.') || ip.startsWith('172.') || ip.startsWith('192.168.')) return true;
+  return false;
+}
+
 type TimestampList = number[];
 
 export class IpBanManager {
@@ -13,6 +33,8 @@ export class IpBanManager {
 
   allowConnection(ip: string): boolean {
     if (!ip || ip === 'unknown') return true;
+    // Whitelist internal/localhost IPs (health checks, load balancers)
+    if (isWhitelisted(ip)) return true;
     const now = Date.now();
     if (this.isCurrentlyBanned(ip, now)) {
       return false;
@@ -35,6 +57,8 @@ console.warn(`[Security] ${ip} exceeded ${DEFAULT_CONNECTION_LIMIT} connections 
 
   recordFailure(ip: string): boolean {
     if (!ip || ip === 'unknown') return true;
+    // Whitelist internal/localhost IPs
+    if (isWhitelisted(ip)) return true;
     const now = Date.now();
     if (this.isCurrentlyBanned(ip, now)) {
       return false;
