@@ -590,6 +590,18 @@ setInterval(() => {
   }
 }, MEMORY_LOG_INTERVAL);
 
+// SIGTERM handler - Render sends this before killing the container
+// This helps diagnose if crashes are due to health check timeouts
+process.on("SIGTERM", () => {
+  console.log("[SHUTDOWN] SIGTERM received - Render is stopping the container");
+  console.log("[SHUTDOWN] This is normal for deployments, but unexpected during operation");
+  // Log memory state before shutdown
+  const mem = process.memoryUsage();
+  console.log(`[SHUTDOWN] Memory at exit: heap=${Math.round(mem.heapUsed/1024/1024)}MB rss=${Math.round(mem.rss/1024/1024)}MB`);
+  // Give logs time to flush
+  setTimeout(() => process.exit(0), 1000);
+});
+
 // Socket.IO global error handler
 io.engine.on("connection_error", (err: any) => {
 console.error("[Socket.IO] Connection error:", err);

@@ -643,8 +643,9 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
       let earlyTraceCount = 0;
 
       // MULTI-USER FIX: Track time since last yield to prevent blocking other users
+      // CRITICAL: Yields allow health checks to respond (prevents Render.com restarts)
       let lastYieldTime = Date.now();
-      const YIELD_INTERVAL_MS = 10; // Yield every 10ms to allow other users to run
+      const YIELD_INTERVAL_MS = 5; // Yield every 5ms to allow health checks and other users
 
       // PERFORMANCE PROFILING: Track where time is spent (enabled via DOOR_PROFILE=1)
       const ENABLE_PROFILING = process.env.DOOR_PROFILE === '1';
@@ -983,9 +984,11 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // === STEP 5: BATCH EXECUTION using executeUntilTrap() ===
         // Execute instructions in tight C++ loop until a trap address is hit.
         // This is MUCH faster than single-instruction execution for CPU-intensive doors.
-        // MULTI-USER: Reduced from 50000 to 5000 to prevent blocking other users
-        // Combined with time-based yielding (10ms), this ensures responsive multi-user experience
-        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 5000;
+        // CRITICAL: Batch execution blocks the event loop (runs in C++ N-API).
+        // Batch too large = health check timeouts on Render.com = container restart.
+        // MULTI-USER: Reduced from 50000 to 2000 to prevent blocking
+        // Combined with time-based yielding (5ms), this ensures responsive multi-user experience
+        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 2000;
         const pcBeforeBatch = this.emulator.getRegister(16);
         const batchStart = ENABLE_PROFILING ? Date.now() : 0;
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
