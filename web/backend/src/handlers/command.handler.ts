@@ -1499,9 +1499,9 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     }
 
     const { handleOperatorChatKeystroke, handleUserChatMessage, handleUserQuitChat } = require('./operator-chat.handler');
-    const { container, DI_TOKENS } = require('../container');
-    const db = container.resolve(DI_TOKENS.Database);
-    const repository = db.getOperatorChatRepository();
+    const { getDatabase } = require('./command-handler/dependency-injection');
+    const db = getDatabase();
+    const repository = db?.getOperatorChatRepository();
     const {
       shouldOpenPicker,
       createPickerState,
