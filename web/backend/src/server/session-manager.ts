@@ -29,6 +29,10 @@ const CONNECTION_WINDOW = 60000; // 60 second window
  * Check if IP address has exceeded connection rate limit
  */
 export function checkConnectionLimit(ip: string): boolean {
+  // Whitelist localhost/internal IPs (health checks, load balancer probes)
+  if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1' || ip === 'localhost') {
+    return true;
+  }
   const now = Date.now();
   const connections = recentConnections.get(ip) || [];
 

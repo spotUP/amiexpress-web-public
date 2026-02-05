@@ -461,13 +461,26 @@ console.log('[Telnet Server] Stopped');
    */
   private handleConnection(socket: Socket): void {
     const remoteAddress = socket.remoteAddress || 'unknown';
-console.log(`[Telnet Server] New connection from ${remoteAddress}`);
+
+    // Silently ignore localhost probe connections (Render.com internal health checks/service discovery)
+    // These spam the logs but don't represent real user connections
+    const isLocalhost = remoteAddress === '::1' || remoteAddress === '127.0.0.1' ||
+                        remoteAddress === '::ffff:127.0.0.1' || remoteAddress === 'localhost';
+
+    // Localhost probes: just close immediately without creating a session
+    // This prevents resource waste from Render.com health probes hitting the telnet port
+    if (isLocalhost) {
+      socket.end();
+      return;
+    }
+
+    console.log(`[Telnet Server] New connection from ${remoteAddress}`);
 
     // Reduce input latency (especially noticeable under modem emulation)
     socket.setNoDelay(true);
 
     if (!ipBanManager.allowConnection(remoteAddress)) {
-console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
+      console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
       socket.write('Too many requests. Try again later.\r\n');
       socket.end();
       return;
@@ -475,7 +488,7 @@ console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (s
 
     // Check rate limiting (express.e uses similar connection tracking)
     if (!checkConnectionLimit(remoteAddress)) {
-console.warn(`[Telnet Server] Rate limit exceeded for ${remoteAddress}`);
+      console.warn(`[Telnet Server] Rate limit exceeded for ${remoteAddress}`);
       socket.write('Too many connections. Please try again later.\r\n');
       socket.end();
       return;
