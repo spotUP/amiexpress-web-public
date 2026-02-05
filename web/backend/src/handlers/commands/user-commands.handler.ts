@@ -422,7 +422,12 @@ console.log('[ENV] Join Conference');
 
   if (newConf < 1 || newConf > _conferences.length) {
     // AmiExpress shows JOINCONF screen, or if not found, show conference list
-    const screenDisplayed = await _displayScreen(socket, session, 'JOINCONF');
+    let screenDisplayed = false;
+    if (typeof _displayScreen === 'function') {
+      screenDisplayed = await _displayScreen(socket, session, 'JOINCONF');
+    } else {
+      console.error('[user-commands] _displayScreen not initialized - dependencies may not be set');
+    }
     if (!screenDisplayed) {
       // No JOINCONF screen file - show the built-in conference list
       displayConferenceList(socket, session);
@@ -467,7 +472,9 @@ console.log('[ENV] Join Conference');
 
   // express.e:25169-25179 - Prompt for message base if invalid
   if (newMsgBase < 1 || newMsgBase > msgBaseCount) {
-    await _displayScreen(socket, session, 'CONF_JOINMSGBASE');
+    if (typeof _displayScreen === 'function') {
+      await _displayScreen(socket, session, 'CONF_JOINMSGBASE');
+    }
 
     // Clear any pagination state from displayScreen so the next input goes to
     // the message base prompt, not a pause handler (express.e:25169-25179)
