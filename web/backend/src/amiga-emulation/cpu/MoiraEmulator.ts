@@ -344,6 +344,23 @@ console.log(`[MoiraEmulator] ROM mapped to 0xF80000-0xFFFFFF`);
 console.log(`[MoiraEmulator] Exception vectors copied to 0x000000`);
   }
 
+  /**
+   * Load AROS extension ROM at 0xE00000
+   * This is required for AROS which splits the ROM into main + extension
+   */
+  loadExtensionROM(extRomData: Uint8Array, baseAddress: number = 0xE00000): void {
+    if (!this.cpu || !this.module) throw new Error("Emulator not initialized");
+
+console.log(`[MoiraEmulator] Loading extension ROM (${extRomData.length} bytes) at 0x${baseAddress.toString(16)}`);
+
+    // Write extension ROM data directly to memory
+    for (let i = 0; i < extRomData.length; i++) {
+      this.writeMemory(baseAddress + i, extRomData[i]);
+    }
+
+console.log(`[MoiraEmulator] Extension ROM loaded at 0x${baseAddress.toString(16)}-0x${(baseAddress + extRomData.length - 1).toString(16)}`);
+  }
+
   loadProgram(binary: Uint8Array, address: number = 0x1000): void {
     if (!this.cpu || !this.module) throw new Error("Emulator not initialized");
 

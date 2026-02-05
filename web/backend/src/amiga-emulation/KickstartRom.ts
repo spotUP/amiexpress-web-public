@@ -14,10 +14,19 @@ export class KickstartRom {
   private romData: Uint8Array | null = null;
   private romSize: number = 0;
 
-  // Amiga ROM is mapped to 0xF80000 - 0xFFFFFF (512KB)
+  // AROS extension ROM support (mapped at 0xE00000)
+  private extRomData: Uint8Array | null = null;
+  private extRomSize: number = 0;
+  private isAros: boolean = false;
+
+  // Main Amiga ROM is mapped to 0xF80000 - 0xFFFFFF (512KB)
   private readonly ROM_START = 0xF80000;
   private readonly ROM_END = 0xFFFFFF;
   private readonly ROM_SIZE = 512 * 1024; // 512KB
+
+  // AROS extension ROM is mapped to 0xE00000 - 0xE7FFFF (512KB)
+  private readonly EXT_ROM_START = 0xE00000;
+  private readonly EXT_ROM_END = 0xE7FFFF;
 
   constructor() {
     this.loadRom();
@@ -87,15 +96,24 @@ console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpp
 console.log(`[ROM] Loading AROS ROM (open-source) from: ${basePath}`);
           const arosRom = amigafs.readFileSync(arosRomFile) as Buffer;
           const arosExt = amigafs.readFileSync(arosExtFile) as Buffer;
-          this.romSize = arosRom.length + arosExt.length;
-          this.romData = new Uint8Array(this.romSize);
-          this.romData.set(new Uint8Array(arosRom), 0);
-          this.romData.set(new Uint8Array(arosExt), arosRom.length);
-console.log(`[ROM] Loaded AROS ROM: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
-console.log(`[ROM]   - aros-rom.bin: ${arosRom.length} bytes`);
-console.log(`[ROM]   - aros-ext.bin: ${arosExt.length} bytes`);
-console.log(`[ROM] AROS ROM loaded successfully`);
-console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+
+          // AROS requires separate memory mappings:
+          // - aros-rom.bin at 0xF80000 (main ROM)
+          // - aros-ext.bin at 0xE00000 (extension ROM)
+          this.isAros = true;
+
+          // Main ROM at 0xF80000
+          this.romSize = arosRom.length;
+          this.romData = new Uint8Array(arosRom);
+
+          // Extension ROM at 0xE00000
+          this.extRomSize = arosExt.length;
+          this.extRomData = new Uint8Array(arosExt);
+
+console.log(`[ROM] Loaded AROS ROM with proper memory mapping:`);
+console.log(`[ROM]   - aros-rom.bin: ${arosRom.length} bytes at 0x${this.ROM_START.toString(16).toUpperCase()}-0x${this.ROM_END.toString(16).toUpperCase()}`);
+console.log(`[ROM]   - aros-ext.bin: ${arosExt.length} bytes at 0x${this.EXT_ROM_START.toString(16).toUpperCase()}-0x${this.EXT_ROM_END.toString(16).toUpperCase()}`);
+console.log(`[ROM] AROS ROM loaded successfully (total: ${(arosRom.length + arosExt.length) / 1024}KB)`);
           return true;
         }
       }
@@ -140,21 +158,47 @@ console.error('[ROM] Kickstart ROM:');
   }
 
   /**
-   * Check if address is in ROM range
+   * Check if address is in ROM range (main ROM or AROS extension ROM)
    */
   public isRomAddress(address: number): boolean {
-    return address >= this.ROM_START && address <= this.ROM_END;
+    // Main ROM range
+    if (address >= this.ROM_START && address <= this.ROM_END) {
+      return true;
+    }
+    // AROS extension ROM range
+    if (this.isAros && this.extRomData && address >= this.EXT_ROM_START && address <= this.EXT_ROM_END) {
+      return true;
+    }
+    return false;
   }
 
   /**
-   * Read byte from ROM
+   * Check if address is in AROS extension ROM range
+   */
+  public isExtRomAddress(address: number): boolean {
+    return this.isAros && this.extRomData !== null &&
+           address >= this.EXT_ROM_START && address <= this.EXT_ROM_END;
+  }
+
+  /**
+   * Read byte from ROM (handles both main ROM and AROS extension ROM)
    */
   public readByte(address: number): number {
+    // Check AROS extension ROM first (0xE00000-0xE7FFFF)
+    if (this.isExtRomAddress(address)) {
+      const offset = address - this.EXT_ROM_START;
+      if (offset >= this.extRomSize) {
+        return 0;
+      }
+      return this.extRomData![offset];
+    }
+
+    // Main ROM (0xF80000-0xFFFFFF)
     if (!this.romData) {
       throw new Error('ROM not loaded');
     }
 
-    if (!this.isRomAddress(address)) {
+    if (address < this.ROM_START || address > this.ROM_END) {
       throw new Error(`Address 0x${address.toString(16)} is not in ROM range`);
     }
 
@@ -279,5 +323,54 @@ console.log('[ROM] ================================');
    */
   public getSize(): number {
     return this.romSize;
+  }
+
+  /**
+   * Check if using AROS ROM
+   */
+  public isArosRom(): boolean {
+    return this.isAros;
+  }
+
+  /**
+   * Get extension ROM data (AROS only)
+   */
+  public getExtRomData(): Uint8Array | null {
+    return this.extRomData;
+  }
+
+  /**
+   * Get extension ROM size
+   */
+  public getExtSize(): number {
+    return this.extRomSize;
+  }
+
+  /**
+   * Get extension ROM start address
+   */
+  public getExtRomStart(): number {
+    return this.EXT_ROM_START;
+  }
+
+  /**
+   * Get extension ROM end address
+   */
+  public getExtRomEnd(): number {
+    return this.EXT_ROM_END;
+  }
+
+  /**
+   * Get main ROM start address
+   */
+  public getRomStart(): number {
+    return this.ROM_START;
+  }
+
+  /**
+   * Get main ROM end address
+   */
+  public getRomEnd(): number {
+    return this.ROM_END;
   }
 }

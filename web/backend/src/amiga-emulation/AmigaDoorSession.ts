@@ -331,6 +331,17 @@ debugLog(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeToolt
       // Map ROM into emulator memory at 0xF80000-0xFFFFFF
       const romData = this.sharedState.kickstartRom.getRomData();
       this.emulator.loadROM(romData);
+debugLog("[AmigaDoorSession] ✅ Main ROM loaded and mapped to 0xF80000-0xFFFFFF");
+
+      // For AROS, also load extension ROM at 0xE00000-0xE7FFFF
+      if (this.sharedState.kickstartRom.isArosRom()) {
+        const extRomData = this.sharedState.kickstartRom.getExtRomData();
+        if (extRomData) {
+          const extRomStart = this.sharedState.kickstartRom.getExtRomStart();
+          this.emulator.loadExtensionROM(extRomData, extRomStart);
+debugLog(`[AmigaDoorSession] ✅ AROS Extension ROM loaded at 0x${extRomStart.toString(16)}`);
+        }
+      }
 debugLog("[AmigaDoorSession] ✅ Kickstart ROM loaded and mapped to memory");
 
       // Initialize Library Manager (Phase 2)

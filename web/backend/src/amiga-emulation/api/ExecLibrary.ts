@@ -127,6 +127,9 @@ export class ExecLibrary {
 
   private static readonly ROM_START = 0xf80000;
   private static readonly ROM_END = 0xffffff;
+  // AROS extension ROM range
+  private static readonly EXT_ROM_START = 0xe00000;
+  private static readonly EXT_ROM_END = 0xe7ffff;
   private static readonly RTC_MATCHWORD = 0x4afc;
   private static readonly RTF_AUTOINIT = 1 << 7;
   private static readonly NT_LIBRARY = 9;
@@ -1205,41 +1208,62 @@ debugLog(
   }
 
   private scanRomResidents(): Map<string, number> {
-debugLog(
-      `[ExecLibrary] Scanning ROM for resident modules (0x${ExecLibrary.ROM_START.toString(
-        16
-      )} - 0x${ExecLibrary.ROM_END.toString(16)})...`
-    );
     const map = new Map<string, number>();
-    const start = ExecLibrary.ROM_START;
-    const end = ExecLibrary.ROM_END;
-    for (let addr = start; addr + 24 <= end; addr += 2) {
-      if (this.emulator.readMemory16(addr) !== ExecLibrary.RTC_MATCHWORD) {
-        continue;
-      }
-      const matchTag = this.emulator.readMemory32(addr + 2);
-      if (matchTag !== addr) {
-        continue;
-      }
-      const namePtr = this.emulator.readMemory32(addr + 14);
-      if (namePtr) {
-        const name = this.emulator.readString(namePtr, 128);
-        if (name) {
+
+    // Helper function to scan a ROM range
+    const scanRange = (start: number, end: number, label: string) => {
 debugLog(
-            `[ExecLibrary]   Found ROM resident: ${name} at 0x${addr.toString(
-              16
-            )}`
-          );
-          map.set(name.toLowerCase(), addr);
+        `[ExecLibrary] Scanning ${label} for resident modules (0x${start.toString(16)} - 0x${end.toString(16)})...`
+      );
+      let foundCount = 0;
+      for (let addr = start; addr + 24 <= end; addr += 2) {
+        try {
+          if (this.emulator.readMemory16(addr) !== ExecLibrary.RTC_MATCHWORD) {
+            continue;
+          }
+          const matchTag = this.emulator.readMemory32(addr + 2);
+          if (matchTag !== addr) {
+            continue;
+          }
+          const namePtr = this.emulator.readMemory32(addr + 14);
+          if (namePtr) {
+            const name = this.emulator.readString(namePtr, 128);
+            if (name) {
+debugLog(
+                `[ExecLibrary]   Found ROM resident: ${name} at 0x${addr.toString(16)}`
+              );
+              map.set(name.toLowerCase(), addr);
+              foundCount++;
+            }
+          }
+          const endSkip = this.emulator.readMemory32(addr + 6);
+          if (endSkip > addr && endSkip <= end) {
+            addr = (endSkip & ~1) - 2;
+          }
+        } catch (e) {
+          // Memory read error - skip this address
+          continue;
         }
       }
-      const endSkip = this.emulator.readMemory32(addr + 6);
-      if (endSkip > addr && endSkip <= end) {
-        addr = (endSkip & ~1) - 2;
+debugLog(`[ExecLibrary] ${label} scan: ${foundCount} modules found`);
+    };
+
+    // Scan main ROM (0xF80000-0xFFFFFF)
+    scanRange(ExecLibrary.ROM_START, ExecLibrary.ROM_END, "Main ROM");
+
+    // For AROS, also scan extension ROM (0xE00000-0xE7FFFF)
+    // Check if extension ROM is mapped by trying to read from it
+    try {
+      const testByte = this.emulator.readMemory16(ExecLibrary.EXT_ROM_START);
+      if (testByte !== 0) {
+        scanRange(ExecLibrary.EXT_ROM_START, ExecLibrary.EXT_ROM_END, "Extension ROM (AROS)");
       }
+    } catch (e) {
+      // Extension ROM not mapped - this is normal for Kickstart
     }
+
 debugLog(
-      `[ExecLibrary] ROM resident scan complete: ${map.size} modules found`
+      `[ExecLibrary] ROM resident scan complete: ${map.size} total modules found`
     );
     if (map.size > 0) {
 debugLog(
