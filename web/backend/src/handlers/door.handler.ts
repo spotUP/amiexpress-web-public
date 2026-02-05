@@ -25,6 +25,7 @@ import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
+import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -450,7 +451,7 @@ let doorSessions: DoorSession[] = [];
 let db: Database;
 let callersLog: (userId: string | null, username: string, action: string, details?: string, nodeId?: number) => Promise<void>;
 let getRecentCallerActivity: (limit?: number, nodeId?: number) => Promise<any[]>;
-let LoggedOnSubState: any;
+let LoggedOnSubState: any = LoggedOnSubStateImport;
 
 // Injection functions
 export function setDoors(doorList: Door[]) {
