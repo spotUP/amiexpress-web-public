@@ -29,7 +29,7 @@ export class IconLibrary {
   private doorDirectory: string = ''; // Set by AmigaDoorSession for PROGDIR: device
   private doorCommand: string = ''; // The command used to launch this door (e.g., "N", "FR")
 
-  constructor(emulator: MoiraEmulator, bbsRoot: string = '~/Code/amiexpress-web') {
+  constructor(emulator: MoiraEmulator, bbsRoot: string = process.env.BBS_DATA_DIR || process.cwd()) {
     this.emulator = emulator;
     this.bbsRoot = bbsRoot;
   }

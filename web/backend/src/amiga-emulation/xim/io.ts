@@ -1389,7 +1389,7 @@ debugLog(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
         resultString = 'PGDOORS:';
         break;
       case 8: // BBS location path
-        resultString = bbsSession.bbsPath || '~/Code/amiexpress-web/reference-boardBBS';
+        resultString = bbsSession.bbsPath || process.env.BBS_DATA_DIR || process.cwd();
         break;
       case 9: // Long date format
         const date = getSystemTime();

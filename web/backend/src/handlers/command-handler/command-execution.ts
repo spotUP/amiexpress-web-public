@@ -530,19 +530,8 @@ console.error("[GA] Fatal error:", error);
     }
 
     default:
-      // Temporary hook: BVDBG TS debug door (BullView handshake logger)
-      if (command.toUpperCase() === 'BVDBG') {
-        const door = {
-          name: 'BullView Debug',
-          command: 'BVDBG',
-          type: 'TS',
-          path: '~/Code/amiexpress-web/Doors/BVDBG/index.ts',
-          accessLevel: 0,
-          parameters: [],
-        } as any;
-        await executeDoor(socket, session, door);
-        return;
-      }
+      // NOTE: BVDBG test hook removed - door-specific hack with hardcoded path
+      // Doors should use .info file registration and proper door system
 
       // Check if command matches a door (BBSCMD)
 console.log(`[Command Handler] Checking for door match: "${command}"`);

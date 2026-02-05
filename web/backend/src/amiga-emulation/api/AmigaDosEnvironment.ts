@@ -99,11 +99,12 @@ console.log(
     );
 
     // Initialize stub libraries
+    const bbsRoot = process.env.BBS_DATA_DIR || process.cwd();
     this.execLibrary = new ExecLibrary(emulator);
     this.dosLibrary = new DosLibrary(emulator);
     this.intuitionLibrary = new IntuitionLibrary(emulator);
     this.amiexpressLibrary = new AmiExpressLibrary(emulator, bbsSession);
-    this.iconLibrary = new IconLibrary(emulator);
+    this.iconLibrary = new IconLibrary(emulator, bbsRoot);
 
     // Initialize library loader for native libraries
     this.libraryLoader = new LibraryLoader(emulator, options?.libraryPaths);

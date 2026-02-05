@@ -18,6 +18,9 @@ import { callersLogManager } from '../../services/CallersLogManager';
 import { startSysopPage } from '../../handlers/chat/chat.handler';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { ximLogger } from '../../utils/XIMLogger';
+
+// Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
+const BB_DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'bb-conflocal-debug.log');
 import { debugLog } from '../../utils/debug-log';
 
 export class XIMBBSInfoHandler {
@@ -210,7 +213,7 @@ debugLog(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
           // DEBUG: Write to file for visibility
           const debugLine = `[BB_CONFLOCAL] ${new Date().toISOString()} confId=${confId} value="${value}" incomingString="${msg.string}" msgAddr=0x${msg.msgAddr.toString(16)}\n`;
           try {
-            fs.appendFileSync('~/Code/amiexpress-web/logs/bb-conflocal-debug.log', debugLine);
+            fs.appendFileSync(BB_DEBUG_LOG_PATH, debugLine);
           } catch (e) { /* ignore */ }
 
           ximLogger.log('info', 'send', 'SYSTEM', this.bbsSession?.nodeId || 1, {
@@ -326,7 +329,7 @@ debugLog(`[XIMBBSInfo] ENVSTAT [WRITE]: ${newStatus}`);
         // Write to debug file
         const debugLine = `[BB_CONFLOCAL WRITE] ${new Date().toISOString()} wrote="${value}" verify="${verify}" msgAddr=0x${msg.msgAddr.toString(16)} stringOffset=0x${DoorConstants.MESSAGE_STRING_OFFSET.toString(16)}\n`;
         try {
-          fs.appendFileSync('~/Code/amiexpress-web/logs/bb-conflocal-debug.log', debugLine);
+          fs.appendFileSync(BB_DEBUG_LOG_PATH, debugLine);
         } catch (e) { /* ignore */ }
       }
       if (msg.command === XIMCommand.BB_CONFNUM) {

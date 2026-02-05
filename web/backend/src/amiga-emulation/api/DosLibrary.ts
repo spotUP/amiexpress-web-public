@@ -12,6 +12,9 @@ import { initializeENVFiles } from "../utils/env-initializer";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
+// Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
+const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'fgets-debug.log');
+
 // Import modular DOS components
 import {
   // Constants
@@ -1683,7 +1686,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     // DEBUG: Log FGets call
     const fs = require('fs');
     try {
-      fs.appendFileSync('~/Code/amiexpress-web/logs/fgets-debug.log',
+      fs.appendFileSync(FGETS_DEBUG_LOG,
         `[FGets] ${new Date().toISOString()} handle=0x${handle.toString(16)} bufPtr=0x${bufPtr.toString(16)} maxLen=${maxLen}\n`);
     } catch (e) { /* ignore */ }
 
@@ -1710,7 +1713,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     // DEBUG: Log result
     try {
       const result = bytesRead === 0 ? 'EOF/empty' : `${bytesRead} bytes`;
-      fs.appendFileSync('~/Code/amiexpress-web/logs/fgets-debug.log',
+      fs.appendFileSync(FGETS_DEBUG_LOG,
         `[FGets] Result: ${result}\n`);
     } catch (e) { /* ignore */ }
 

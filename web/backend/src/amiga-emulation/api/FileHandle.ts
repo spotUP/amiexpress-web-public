@@ -9,6 +9,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
 
+// Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
+const DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'filehandle-debug.log');
+
 export class FileHandle {
   /** File descriptor or stream object */
   private fd: number | null = null;
@@ -187,14 +190,14 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
       // Log to file for debugging (only if not permanently locked)
       try {
         const logLine = `[FileHandle] MEMORY: ${this.amiPath} bufLen=${this.memoryBuffer.length} pos=${this.position} avail=${available} reading=${bytesToRead} eofSeekCount=${this.eofSeekBackCount}\n`;
-        fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', logLine);
+        fs.appendFileSync(DEBUG_LOG_PATH, logLine);
       } catch {}
 
       // If we've detected an infinite seek loop pattern (hit EOF, seeked back multiple times), force EOF
       if (this.eofSeekBackCount >= 3) {
         this.permanentEof = true;
         try {
-          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+          fs.appendFileSync(DEBUG_LOG_PATH,
             `[FileHandle] LOOP DETECTED: ${this.amiPath} - LOCKING to permanent EOF after ${this.eofSeekBackCount} seek-back cycles\n`);
         } catch {}
         return Buffer.alloc(0);
@@ -227,7 +230,7 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
       if (this.eofSeekBackCount >= 3) {
         this.permanentEof = true;
         try {
-          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+          fs.appendFileSync(DEBUG_LOG_PATH,
             `[FileHandle] FILE LOOP DETECTED: ${this.amiPath} - LOCKING to permanent EOF after ${this.eofSeekBackCount} seek-back cycles\n`);
         } catch {}
         return Buffer.alloc(0);
@@ -240,13 +243,13 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
         const available = this.snapshotSize - this.position;
         try {
           const logLine = `[FileHandle] FILE: ${this.amiPath} snapshot=${this.snapshotSize} pos=${this.position} avail=${available} req=${length} eofSeekCount=${this.eofSeekBackCount}\n`;
-          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', logLine);
+          fs.appendFileSync(DEBUG_LOG_PATH, logLine);
         } catch {}
         if (available <= 0) {
           // Already at or past the snapshot EOF - return empty (EOF)
           this.justReturnedEof = true;
           try {
-            fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', `[FileHandle] FILE EOF: ${this.amiPath}\n`);
+            fs.appendFileSync(DEBUG_LOG_PATH, `[FileHandle] FILE EOF: ${this.amiPath}\n`);
           } catch {}
           return Buffer.alloc(0);
         }
@@ -254,7 +257,7 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
       } else {
         try {
           const logLine = `[FileHandle] FILE NO-SNAPSHOT: ${this.amiPath} pos=${this.position} req=${length}\n`;
-          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', logLine);
+          fs.appendFileSync(DEBUG_LOG_PATH, logLine);
         } catch {}
       }
 
@@ -354,7 +357,7 @@ console.error(`[FileHandle] Write error:`, error);
 
       // Log seeks for debugging
       try {
-        fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+        fs.appendFileSync(DEBUG_LOG_PATH,
           `[FileHandle] SEEK: ${this.amiPath} from=${oldPos} to=${targetPos} whence=${whence} offset=${position} justEof=${this.justReturnedEof}\n`);
       } catch {}
 
@@ -362,14 +365,14 @@ console.error(`[FileHandle] Write error:`, error);
       if (this.justReturnedEof && targetPos < oldPos) {
         this.eofSeekBackCount++;
         try {
-          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+          fs.appendFileSync(DEBUG_LOG_PATH,
             `[FileHandle] EOF-SEEK-BACK: ${this.amiPath} count=${this.eofSeekBackCount} (seeking backwards after EOF)\n`);
         } catch {}
         // If excessive seeks, lock to permanent EOF (door may be in seek-only loop)
         if (this.eofSeekBackCount >= 10) {
           this.permanentEof = true;
           try {
-            fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+            fs.appendFileSync(DEBUG_LOG_PATH,
               `[FileHandle] SEEK LOOP LOCK: ${this.amiPath} - excessive seek-back cycles (${this.eofSeekBackCount}), locking to EOF\n`);
           } catch {}
           return -1; // Return error to signal EOF/failure
@@ -408,7 +411,7 @@ console.error(`[FileHandle] Write error:`, error);
 
       // Log seeks for debugging
       try {
-        fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+        fs.appendFileSync(DEBUG_LOG_PATH,
           `[FileHandle] FILE SEEK: ${this.amiPath} from=${oldPos} to=${targetPos} whence=${whence} offset=${position} justEof=${this.justReturnedEof}\n`);
       } catch {}
 
@@ -416,14 +419,14 @@ console.error(`[FileHandle] Write error:`, error);
       if (this.justReturnedEof && targetPos < oldPos) {
         this.eofSeekBackCount++;
         try {
-          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+          fs.appendFileSync(DEBUG_LOG_PATH,
             `[FileHandle] FILE EOF-SEEK-BACK: ${this.amiPath} count=${this.eofSeekBackCount} (seeking backwards after EOF)\n`);
         } catch {}
         // If excessive seeks, lock to permanent EOF (door may be in seek-only loop)
         if (this.eofSeekBackCount >= 10) {
           this.permanentEof = true;
           try {
-            fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+            fs.appendFileSync(DEBUG_LOG_PATH,
               `[FileHandle] FILE SEEK LOOP LOCK: ${this.amiPath} - excessive seek-back cycles (${this.eofSeekBackCount}), locking to EOF\n`);
           } catch {}
           return -1; // Return error to signal EOF/failure
