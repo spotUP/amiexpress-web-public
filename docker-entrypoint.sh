@@ -23,6 +23,8 @@ FORCE_REINIT_SCREENS="${FORCE_REINIT_SCREENS:-0}"
 FORCE_REINIT_ROMS="${FORCE_REINIT_ROMS:-0}"
 # Set FORCE_REINIT_CONFIG=1 to force re-copy .info config files (ConfConfig.info, bbsConfig.info, Conf*.info)
 FORCE_REINIT_CONFIG="${FORCE_REINIT_CONFIG:-0}"
+# Set FORCE_REINIT_DOORS=1 to force re-copy TypeScript doors (updates old doors on persistent disk)
+FORCE_REINIT_DOORS="${FORCE_REINIT_DOORS:-0}"
 
 echo "[Entrypoint] Starting AmiExpress-Web..."
 echo "[Entrypoint] BBS_DATA_DIR: $BBS_DATA_DIR"
@@ -31,6 +33,7 @@ echo "[Entrypoint] ROM_DIR: $ROM_DIR"
 echo "[Entrypoint] FORCE_REINIT_SCREENS: $FORCE_REINIT_SCREENS"
 echo "[Entrypoint] FORCE_REINIT_ROMS: $FORCE_REINIT_ROMS"
 echo "[Entrypoint] FORCE_REINIT_CONFIG: $FORCE_REINIT_CONFIG"
+echo "[Entrypoint] FORCE_REINIT_DOORS: $FORCE_REINIT_DOORS"
 
 # Create data directories if they don't exist
 mkdir -p "$BBS_DATA_DIR" "$DATABASE_DIR" "$ROM_DIR"
@@ -184,6 +187,16 @@ else
             fi
         done
         echo "[Entrypoint] All Screens directories re-initialized"
+    fi
+
+    # Force re-initialize Doors if requested (updates TypeScript doors to latest versions)
+    if [ "$FORCE_REINIT_DOORS" = "1" ]; then
+        echo "[Entrypoint] FORCE_REINIT_DOORS=1 - Re-copying all Doors..."
+        if [ -d "$DEFAULT_DATA_DIR/Doors" ]; then
+            rm -rf "$BBS_DATA_DIR/Doors"
+            cp -r "$DEFAULT_DATA_DIR/Doors" "$BBS_DATA_DIR/Doors"
+            echo "[Entrypoint] Doors directory re-initialized from default-data"
+        fi
     fi
 fi
 

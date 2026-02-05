@@ -1624,30 +1624,59 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
     // Debug: Log what was imported to diagnose validation failures
     console.log(`[executeTypeScriptDoor] doorModule keys: ${Object.keys(doorModule || {}).join(', ')}`);
     console.log(`[executeTypeScriptDoor] doorModule.default: ${typeof doorModule?.default}`);
-    if (doorModule?.default) {
-      console.log(`[executeTypeScriptDoor] doorModule.default.execute: ${typeof doorModule.default.execute}`);
-      console.log(`[executeTypeScriptDoor] doorModule.default.getConfig: ${typeof doorModule.default.getConfig}`);
-      // Log prototype chain for debugging
-      const proto = Object.getPrototypeOf(doorModule.default);
-      if (proto) {
-        console.log(`[executeTypeScriptDoor] Prototype methods: ${Object.getOwnPropertyNames(proto).join(', ')}`);
-      }
-    }
 
+    // Check for SDK pattern (default export with execute/getConfig)
     const isSDKDoor = doorModule.default &&
                      typeof doorModule.default.execute === 'function' &&
                      typeof doorModule.default.getConfig === 'function';
 
-    if (!isSDKDoor) {
-      // More detailed error message to help debug
-      const reason = !doorModule.default ? 'no default export' :
+    // Check for legacy runDoor pattern (for backward compatibility with old door versions)
+    const hasRunDoor = typeof doorModule.runDoor === 'function';
+
+    if (!isSDKDoor && !hasRunDoor) {
+      // Neither pattern found - show error
+      const reason = !doorModule.default && !hasRunDoor ? 'no default export or runDoor function' :
+                     !doorModule.default ? 'no default export' :
                      typeof doorModule.default.execute !== 'function' ? `execute is ${typeof doorModule.default.execute}` :
                      `getConfig is ${typeof doorModule.default.getConfig}`;
-      console.error(`[executeTypeScriptDoor] SDK validation failed: ${reason}`);
-      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: Must export ServerDoor instance as default export (${reason})\x1b[0m\r\n`);
+      console.error(`[executeTypeScriptDoor] Door validation failed: ${reason}`);
+      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: ${reason}\x1b[0m\r\n`);
       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Handle legacy runDoor pattern
+    if (hasRunDoor && !isSDKDoor) {
+      console.log(`[executeTypeScriptDoor] Legacy runDoor pattern detected, executing...`);
+      disableShortcuts(session);
+      session.inDoorManager = true;
+      socket.emit('door:status', { status: 'running' });
+      socket.emit('door-active', true);
+
+      const { createBBSApi } = require('../doors/BBSApi');
+      const bbsApi = createBBSApi(socket, session);
+      session.bbsApi = bbsApi;
+      const legacySocket = createDoorSocketWrapper(socket, session, bbsApi);
+
+      try {
+        await doorModule.runDoor({
+          socket: legacySocket,
+          bbsSession: session,
+          user: session.user,
+          bbs: bbsApi,
+          params: door.parameters || []
+        });
+      } finally {
+        // Cleanup
+        session.inDoorManager = false;
+        session.doorInputHandler = undefined;
+        socket.emit('door:status', { status: 'closed' });
+        socket.emit('door-active', false);
+        enableShortcuts(session);
+        console.log(`[executeTypeScriptDoor] Legacy door ${door.name} completed`);
+      }
       return;
     }
 
