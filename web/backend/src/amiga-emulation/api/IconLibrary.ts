@@ -350,12 +350,14 @@ console.log(`[icon.library]   ERROR: Tooltype array too large (>1000 entries) - 
   private lazyLoadCommandTooltypes(pointerAddr: number, tooltypeName: string): number {
 console.log(`[icon.library]   Searching through ${this.diskObjects.size} loaded DiskObjects for "${tooltypeName}"`);
 
-    // WORKAROUND: Some doors check DOORUSE.V5.6 but expect the mode value from DOORUSE.<cmd>
-    // If looking for DOORUSE.V5.6, try DOORUSE.FR, DOORUSE.CS, etc. FIRST (prefer mode over version)
+    // When doors check DOORUSE.V5.6 (version check), they actually want the mode value
+    // from any DOORUSE.* entry. Dynamically find ALL DOORUSE.* entries instead of
+    // hardcoding specific command codes (FR, CS, NSU, etc.) - that would be door-specific.
     const altNames: string[] = [];
     if (tooltypeName.toUpperCase().startsWith('DOORUSE.V')) {
-      // Try DOORUSE.FR, DOORUSE.CS, etc. FIRST (these have the mode value like "REVSCAN")
-      altNames.push('DOORUSE.FR', 'DOORUSE.CS', 'DOORUSE.NSU', 'DOORUSE.N');
+      // Collect all DOORUSE.* entries from loaded DiskObjects dynamically
+      const dooruseEntries = this.findAllDoortypeEntries('DOORUSE.');
+      altNames.push(...dooruseEntries);
       altNames.push(tooltypeName); // Try original as last resort
     } else {
       altNames.push(tooltypeName);
@@ -390,6 +392,45 @@ console.log(`[icon.library]   ✓ Returning tooltype string at 0x${tooltypeStrPt
 
 console.log(`[icon.library]   Lazy load failed - tooltype "${tooltypeName}" not found in any loaded DiskObject`);
     return 0;
+  }
+
+  /**
+   * Dynamically find all tooltype entries matching a prefix (e.g., "DOORUSE.")
+   * This avoids hardcoding specific door command codes like FR, CS, NSU, etc.
+   * Returns unique tooltype names found across all loaded DiskObjects.
+   */
+  private findAllDoortypeEntries(prefix: string): string[] {
+    const found = new Set<string>();
+    const upperPrefix = prefix.toUpperCase();
+
+    for (const [addr] of this.diskObjects.entries()) {
+      const toolTypesPtr = this.emulator.readMemory32(addr + 54); // do_ToolTypes at offset 54
+      if (toolTypesPtr === 0) continue;
+
+      let index = 0;
+      while (index < 1000) {
+        const tooltypeStrPtr = this.emulator.readMemory32(toolTypesPtr + (index * 4));
+        if (tooltypeStrPtr === 0) break; // End of array
+
+        const tooltypeStr = this.readString(tooltypeStrPtr);
+        const upperTooltypeStr = tooltypeStr.toUpperCase();
+
+        // Match prefix (e.g., "DOORUSE.FR" matches "DOORUSE.")
+        if (upperTooltypeStr.startsWith(upperPrefix)) {
+          // Extract just the tooltype name (before =)
+          const eqPos = tooltypeStr.indexOf('=');
+          const name = eqPos > 0 ? tooltypeStr.substring(0, eqPos) : tooltypeStr;
+          found.add(name);
+        }
+        index++;
+      }
+    }
+
+    const result = Array.from(found);
+    if (result.length > 0) {
+console.log(`[icon.library]   Found ${result.length} ${prefix}* entries: ${result.join(', ')}`);
+    }
+    return result;
   }
 
   /**

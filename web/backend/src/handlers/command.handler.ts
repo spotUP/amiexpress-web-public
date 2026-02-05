@@ -903,13 +903,14 @@ console.error('[handleCommand] Error handling paginated screen input:', error);
   // Special handling for WHO2 helper tools (NI/NO) - these must run without authentication
   // NI (NodeIn) executes on connection, NO (NodeOut) executes on logout
   // They create tracking files that WHO2 door reads to display connected users
+  // NOTE: This is a generic feature - any door can use this pattern for node tracking
   if (data === 'DOORS:who/NI' || data === 'DOORS:who/No') {
 console.log(`[WHO2] Executing helper tool: ${data}`);
-    const fs = require('fs');
-    const path = require('path');
     const nodeId = session.nodeId || 0;
     const username = session.user?.username || 'Guest';
-    const whoDir = path.join(process.cwd(), '../../doors/who');
+    // Use proper BBS data directory resolution instead of hardcoded relative path
+    const dataDir = config.get('dataDir') || process.cwd();
+    const whoDir = path.join(dataDir, 'Doors', 'who');
 
     try {
       // Ensure directory exists (use amigafs for case-insensitive matching)
@@ -3889,182 +3890,10 @@ console.error('[DOORMAN] Fatal error:', error);
       return;
     }
 
-    case 'GA': { // GetAnswer - Test simple Amiga door (8KB XIM door)
-      try {
-console.log('[GA] Starting GetAnswer door...');
-        const { AmigaDoorSession } = await import('../amiga-emulation/AmigaDoorSession');
-        // Door path is relative to project root, not backend directory
-        const doorPath = path.join(process.cwd(), '../../doors/GetAnswer/GetAnswer');
-
-console.log(`[GA] Door path: ${doorPath}`);
-
-        if (!amigafs.existsSync(doorPath)) {
-          emitText(socket, '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
-          return;
-        }
-
-        emitText(socket, '\r\n\x1b[36m Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n');
-
-        const amigaSession = new AmigaDoorSession(socket, {
-          executablePath: doorPath,
-          timeout: 600,
-          stack: 4096
-        });
-
-        const logDoorDebug = (message: string) => {
-          try {
-            const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
-            const line = `[DoorDebug] ${getSystemTime().toISOString()} ${message}\n`;
-            amigafs.appendFileSync(logPath, line, { encoding: 'utf8' });
-          } catch (err) {
-console.error('[GA] Failed to log door debug:', err);
-          }
-        };
-
-        // Route user keystrokes to the door while it runs
-        session.inDoorManager = true;
-        session.subState = LoggedOnSubState.DOOR_RUNNING;
-        session.doorInputHandler = (data: string) => {
-          try {
-            const shared: any = (amigaSession as any).sharedState || {};
-            logDoorDebug(`KEY door=GA data=${JSON.stringify(data)}`);
-            // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
-            // This prevents double-delivery when XIM completes a hotkey/line input
-            const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
-            if (shared.ximProtocol) {
-              shared.ximProtocol.queueInput(data);
-            }
-            if (shared.dosLibrary && !ximWaitingForInput) {
-              shared.dosLibrary.queueInput(data);
-            }
-          } catch (err) {
-console.error('[GA] Error routing door input:', err);
-          }
-        };
-        try {
-          const { setSession, userSessions } = await import('../server/session-manager');
-          setSession(socket.id, session);
-          if ((session as any).user?.id) {
-            userSessions.set((session as any).user.id, session);
-          }
-        } catch (err) {
-console.error('[GA] Failed to persist session for door input:', err);
-        }
-
-        await amigaSession.start();
-
-        // Restore state after door exit
-        session.inDoorManager = false;
-        session.mouseEventsEnabled = false; // Reset mouse events when door exits
-        delete session.doorInputHandler;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        try {
-          const { setSession, userSessions } = await import('../server/session-manager');
-          setSession(socket.id, session);
-          if ((session as any).user?.id) {
-            userSessions.set((session as any).user.id, session);
-          }
-        } catch (_) {
-          /* ignore */
-        }
-
-        emitText(socket, '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-      } catch (error) {
-console.error('[GA] Fatal error:', error);
-        emitText(socket, '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
-        emitText(socket, `${(error as Error).message}\r\n`);
-        emitText(socket, `${(error as Error).stack}\r\n\r\n`);
-        session.inDoorManager = false;
-        session.mouseEventsEnabled = false; // Reset mouse events when door exits
-        delete session.doorInputHandler;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-      }
-      return;
-    }
-
-    case 'MULTITOP': { // MultiTop - Top users door from reference-board
-      try {
-console.log('[MULTITOP] Starting MultiTop door...');
-        const { AmigaDoorSession } = await import('../amiga-emulation/AmigaDoorSession');
-        const doorPath = path.join(process.cwd(), '../../doors/MultiTopDoor');
-
-console.log(`[MULTITOP] Door path: ${doorPath}`);
-
-        if (!amigafs.existsSync(doorPath)) {
-          emitText(socket, '\r\n\x1b[31mMultiTop door not found!\x1b[0m\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = false;
-          return;
-        }
-
-        emitText(socket, '\r\n\x1b[36mStarting MultiTop (37KB)...\x1b[0m\r\n\r\n');
-
-        const amigaSession = new AmigaDoorSession(socket, {
-          executablePath: doorPath,
-          timeout: 600,
-          bbsSession: session // Use actual session with proper nodeId
-        });
-
-        await amigaSession.start();
-
-        emitText(socket, '\r\n\x1b[32mMultiTop door session completed.\x1b[0m\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-      } catch (error) {
-console.error('[MULTITOP] Fatal error:', error);
-        emitText(socket, '\r\n\x1b[31mError starting MultiTop door:\x1b[0m\r\n');
-        emitText(socket, `${(error as Error).message}\r\n`);
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-      }
-      return;
-    }
-
-    case 'WH': { // What - Test door with message ports
-      try {
-console.log('[WH] Starting What door...');
-        const { AmigaDoorSession } = await import('../amiga-emulation/AmigaDoorSession');
-        // Door path
-        const doorPath = path.join(process.cwd(), '../../Doors/What/WHAT');
-
-console.log(`[WH] Door path: ${doorPath}`);
-
-        if (!amigafs.existsSync(doorPath)) {
-          emitText(socket, '\r\n\x1b[31mWhat door not found!\x1b[0m\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = false;
-          return;
-        }
-
-        emitText(socket, '\r\n\x1b[36mStarting What door (AEDoorPort test)...\x1b[0m\r\n\r\n');
-
-        const amigaSession = new AmigaDoorSession(socket, {
-          executablePath: doorPath,
-          timeout: 600
-        });
-
-        await amigaSession.start();
-
-        emitText(socket, '\r\n\x1b[32mWhat door session completed.\x1b[0m\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
-      } catch (error) {
-console.error('[WH] Fatal error:', error);
-        emitText(socket, '\r\n\x1b[31mError starting What door:\x1b[0m\r\n');
-        emitText(socket, `${(error as Error).message}\r\n`);
-        emitText(socket, `${(error as Error).stack}\r\n\r\n`);
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
-      }
-      return;
-    }
+    // NOTE: Test door commands (GA, MULTITOP, WH) removed - door-specific hacks
+    // Doors should be accessed through proper door system:
+    // 1. Register door with .info file in Commands/
+    // 2. Access via door menu (DOORS command) or command matching below
 
     default:
       // express.e:28228 - Command priority:
