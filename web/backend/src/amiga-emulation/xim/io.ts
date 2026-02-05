@@ -170,13 +170,16 @@ export class XIMIOHandler {
 
     // Parse input into tokens, preserving ANSI escape sequences
     const tokens = this.parseInputTokens(data);
+    console.log(`[XIMIOHandler] queueInput: data="${data.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
 
     for (const token of tokens) {
       // Handle input during pause
       if (this.waitingForPause) {
+        console.log(`[XIMIOHandler] Pause active - received token: "${token.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`);
         this.pauseInputBuffer += token;
         // Check for completion (Enter or space typically resumes)
         if (token === '\r' || token === '\n' || token === ' ') {
+          console.log('[XIMIOHandler] Pause completion key received - calling completePauseInput()');
           this.completePauseInput();
         }
         continue;
@@ -1569,6 +1572,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
     // Handle @READUSERKEYS - trigger a pause after outputting all text
     if (this.readUserKeysPending && pendingMsg) {
       this.readUserKeysPending = false;
+      console.log('[XIMIOHandler] @READUSERKEYS triggered pause - setting waitingForPause=true');
       debugLog('[XIMIOHandler] @READUSERKEYS triggered pause');
       this.waitingForPause = true;
       this.pauseReply = { msg: pendingMsg, data: 1 };
@@ -1825,8 +1829,10 @@ debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
    * Complete a pending pause when user acknowledges it.
    */
   private completePauseInput(): void {
+    console.log(`[XIMIOHandler] completePauseInput called - waitingForPause=${this.waitingForPause} hasPauseReply=${!!this.pauseReply}`);
     if (!this.waitingForPause || !this.pauseReply) return;
 
+    console.log('[XIMIOHandler] completePauseInput - sending reply and resuming emulator');
 debugLog('[XIMIOHandler] Pause acknowledged, resuming');
     
     const { msg, data } = this.pauseReply;
