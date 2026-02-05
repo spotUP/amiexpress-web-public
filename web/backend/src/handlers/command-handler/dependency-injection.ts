@@ -19,7 +19,12 @@ import { container, DI_TOKENS } from '../../container';
 // ============================================================================
 
 export function getDatabase(): any {
-  return container.resolve(DI_TOKENS.Database);
+  try {
+    return container.resolve(DI_TOKENS.Database);
+  } catch {
+    // Return undefined if not yet initialized - callers must handle this
+    return undefined;
+  }
 }
 
 export function getConfig(): any {

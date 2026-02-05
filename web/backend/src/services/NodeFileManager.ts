@@ -102,7 +102,7 @@ interface UserKeysFileStruct {
 export class NodeFileManager {
   private bbsRoot: string;
 
-  constructor(bbsRoot: string = '~/Code/amiexpress-web') {
+  constructor(bbsRoot: string = './data/bbs') {
     this.bbsRoot = bbsRoot;
   }
 
@@ -553,5 +553,6 @@ console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
   }
 }
 
-// Export singleton instance
-export const nodeFileManager = new NodeFileManager();
+// Export singleton instance - use BBS_DATA_DIR env var for proper path resolution
+const bbsDataDir = process.env.BBS_DATA_DIR || './data/bbs';
+export const nodeFileManager = new NodeFileManager(bbsDataDir);

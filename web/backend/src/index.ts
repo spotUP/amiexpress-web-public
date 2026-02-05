@@ -529,16 +529,21 @@ console.error("[CRITICAL] Unhandled Promise Rejection:", reason);
 console.error("[CRITICAL] Promise:", promise);
 console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
   // Log to file for debugging
-  const fs = require("fs");
-  const logPath = join(
-    config.get("dataDir") || "./data",
-    "logs/unhandled-errors.log"
-  );
-  const timestamp = getSystemTime().toISOString();
-  const errorLog = `\n\n=== UNHANDLED REJECTION at ${timestamp} ===\n${
-    reason?.stack || reason
-  }\n`;
-  fs.appendFileSync(logPath, errorLog, "utf8");
+  try {
+    const fs = require("fs");
+    const logsDir = join(config.get("dataDir") || "./data", "logs");
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const logPath = join(logsDir, "unhandled-errors.log");
+    const timestamp = getSystemTime().toISOString();
+    const errorLog = `\n\n=== UNHANDLED REJECTION at ${timestamp} ===\n${
+      reason?.stack || reason
+    }\n`;
+    fs.appendFileSync(logPath, errorLog, "utf8");
+  } catch (logError) {
+    console.error("[CRITICAL] Failed to write error log:", logError);
+  }
   // Don't exit - keep server running
 });
 
@@ -546,14 +551,19 @@ process.on("uncaughtException", (error: Error) => {
 console.error("[CRITICAL] Uncaught Exception:", error);
 console.error("[CRITICAL] Stack:", error.stack);
   // Log to file for debugging
-  const fs = require("fs");
-  const logPath = join(
-    config.get("dataDir") || "./data",
-    "logs/unhandled-errors.log"
-  );
-  const timestamp = getSystemTime().toISOString();
-  const errorLog = `\n\n=== UNCAUGHT EXCEPTION at ${timestamp} ===\n${error.stack}\n`;
-  fs.appendFileSync(logPath, errorLog, "utf8");
+  try {
+    const fs = require("fs");
+    const logsDir = join(config.get("dataDir") || "./data", "logs");
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const logPath = join(logsDir, "unhandled-errors.log");
+    const timestamp = getSystemTime().toISOString();
+    const errorLog = `\n\n=== UNCAUGHT EXCEPTION at ${timestamp} ===\n${error.stack}\n`;
+    fs.appendFileSync(logPath, errorLog, "utf8");
+  } catch (logError) {
+    console.error("[CRITICAL] Failed to write error log:", logError);
+  }
   // Don't exit - keep server running unless it's truly fatal
   // Only exit for critical errors that could corrupt state
   const fatalErrors = ["EADDRINUSE", "EACCES", "EMFILE"];
