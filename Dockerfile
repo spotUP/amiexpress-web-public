@@ -160,7 +160,9 @@ RUN echo "[Docker] Verifying frontend dist was copied:" && \
     echo "[Docker] Fonts:" && \
     ls -la /app/web/frontend/dist/fonts/ || echo "No fonts directory!"
 COPY --from=config-builder /app/web/config-app/dist ./web/config-app/dist
+# Copy SDK dist AND package.json (required for module resolution via symlinks)
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
+COPY --from=sdk-builder /app/sdk/package.json ./sdk/package.json
 COPY --from=sdk-preview-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist
 COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dist
 
