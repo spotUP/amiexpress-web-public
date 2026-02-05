@@ -1738,13 +1738,19 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       searchLocations.push({ dir: path.join(baseDir, 'Bulletins'), desc: 'Bulletins' });
     }
 
-    // ALWAYS add standard fallbacks (Node -> Global) to ensure compatibility
+    // Add standard fallbacks based on screen type to ensure compatibility
     // with systems that share screens or use simplified directory structures.
+    // IMPORTANT: NODE type screens (NODE_BULL, LOGON, etc.) should NOT fallback to
+    // global Screens/ directory - this prevents duplicate display (e.g., BULL and
+    // NODE_BULL both showing Screens/BULL.TXT). Per express.e:6546-6634, NODE screens
+    // only search in nodeScreenDir.
     if (!searchLocations.some(l => l.dir === nodeDir)) {
       searchLocations.push({ dir: nodeDir, desc: `Node${nodeId} (Fallback)` });
       searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens (Fallback)` });
     }
-    if (!searchLocations.some(l => l.dir === globalScreensDir)) {
+    // Only add global Screens/ fallback for non-NODE type screens
+    // This prevents NODE_BULL from showing the same content as BULL
+    if (screenDirType !== ScreenDirType.NODE && !searchLocations.some(l => l.dir === globalScreensDir)) {
       searchLocations.push({ dir: globalScreensDir, desc: 'Screens (Fallback)' });
     }
     
@@ -1969,31 +1975,20 @@ console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
     }
   }
 
-  // AmiExpress commonly reuses LOGONxx files or BULLxx files for bulletins.
-  // If the explicit screen name was not found, try known fallbacks.
+  // express.e:6544-6640 - Screens are loaded from specific directories based on type:
+  // - NODE screens (LOGON, NODE_BULL, etc.): nodeScreenDir (NodeN/Screens/)
+  // - CONF screens (MENU, CONF_BULL, etc.): confScreenDir (ConfN/Screens/)
+  // - GLOBAL screens (BULL, ONENODE, etc.): cmds.bbsLoc (Screens/)
+  // If a screen isn't found in its designated directory, express.e simply doesn't
+  // display it (returns FALSE from displayScreen). No cross-directory fallbacks.
   const upper = screenName.toUpperCase();
-  if (upper === 'BULL' || upper === 'NODE_BULL' || upper === 'CONF_BULL') {
-    const fallbackCandidates = [
-      path.join(baseDir, 'Screens', 'BULL20!.TXT'),
-      path.join(baseDir, `Node${nodeId}`, 'logon20.txt'),
-      path.join(baseDir, `Node${nodeId}`, 'logon10.txt'),
-    ];
-    for (const fallback of fallbackCandidates) {
-      const candidate = findCaseInsensitive(path.dirname(fallback), path.basename(fallback));
-      if (candidate && amigafs.existsSync(candidate)) {
-        try {
-        const content = readScreenText(candidate);
-          screenDebug(`[loadScreenFile]  Using fallback screen for ${screenName}: ${candidate}`);
-          return { content, isPetscii: false, isRip: false, filePath: candidate };
-        } catch (error) {
-          SysopDebugUtil.debugFileError(null, session, 'read', candidate, error as Error, DebugSeverity.WARNING);
-console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(error as Error).message}`);
-        }
-      }
-    }
-  }
-
+  const screenDirType = getScreenDirType(screenName);
+  const expectedDir = screenDirType === ScreenDirType.NODE ? `Node${nodeId}/Screens/` :
+                      screenDirType === ScreenDirType.CONF ? `Conf${conferenceId || session?.relConfNum}/Screens/` :
+                      'Screens/';
 console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
+console.warn(`[loadScreenFile]  Expected location: ${expectedDir}${getScreenFileName(screenName)}.TXT`);
+console.warn(`[loadScreenFile]  Per express.e:6544-6640, ${screenName} screens should be in ${expectedDir}`);
 console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
 try {
   const fs = require('fs');
