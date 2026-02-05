@@ -52,7 +52,7 @@ services:
       # Set to 1 to force re-copy Screens from default-data (fixes empty placeholders)
       # After deploy completes, set back to 0
       - key: FORCE_REINIT_SCREENS
-        value: 1
+        value: 0
 
     # Persistent disk for ALL BBS data (database, users, messages, files)
     # This data survives deployments and is NOT overwritten
