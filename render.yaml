@@ -53,6 +53,10 @@ services:
       # After deploy completes, set back to 0
       - key: FORCE_REINIT_SCREENS
         value: 0
+      # Set to 1 to force re-copy AROS ROM files (fixes missing 68K emulation)
+      # After deploy completes, set back to 0
+      - key: FORCE_REINIT_ROMS
+        value: 1
 
     # Persistent disk for ALL BBS data (database, users, messages, files)
     # This data survives deployments and is NOT overwritten

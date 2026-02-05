@@ -16,24 +16,58 @@ set -e
 BBS_DATA_DIR="${BBS_DATA_DIR:-/app/data/bbs}"
 DATABASE_DIR="${DATABASE_DIR:-/app/data/db}"
 DEFAULT_DATA_DIR="/app/default-data"
+ROM_DIR="${ROM_DIR:-/app/data/amiga-roms}"
 # Set FORCE_REINIT_SCREENS=1 to force re-copy Screens directory (fixes empty placeholders)
 FORCE_REINIT_SCREENS="${FORCE_REINIT_SCREENS:-0}"
+# Set FORCE_REINIT_ROMS=1 to force re-copy AROS ROM files
+FORCE_REINIT_ROMS="${FORCE_REINIT_ROMS:-0}"
 
 echo "[Entrypoint] Starting AmiExpress-Web..."
 echo "[Entrypoint] BBS_DATA_DIR: $BBS_DATA_DIR"
 echo "[Entrypoint] DATABASE_DIR: $DATABASE_DIR"
+echo "[Entrypoint] ROM_DIR: $ROM_DIR"
 echo "[Entrypoint] FORCE_REINIT_SCREENS: $FORCE_REINIT_SCREENS"
+echo "[Entrypoint] FORCE_REINIT_ROMS: $FORCE_REINIT_ROMS"
 
 # Create data directories if they don't exist
-mkdir -p "$BBS_DATA_DIR" "$DATABASE_DIR"
+mkdir -p "$BBS_DATA_DIR" "$DATABASE_DIR" "$ROM_DIR"
 
 # Ensure AROS ROM files are available (for 68K door emulation)
-ROM_DIR="${ROM_DIR:-/app/data/amiga-roms}"
-mkdir -p "$ROM_DIR"
-if [ -f "/app/default-data/amiga-roms/aros-rom.bin" ] && [ ! -f "$ROM_DIR/aros-rom.bin" ]; then
+echo "[Entrypoint] Checking AROS ROM files..."
+echo "[Entrypoint]   Source: /app/default-data/amiga-roms/"
+ls -la /app/default-data/amiga-roms/ 2>/dev/null || echo "  (not found in image)"
+echo "[Entrypoint]   Target: $ROM_DIR/"
+ls -la "$ROM_DIR/" 2>/dev/null || echo "  (directory empty)"
+
+# Copy ROM files if missing or force reinit requested
+if [ "$FORCE_REINIT_ROMS" = "1" ]; then
+    echo "[Entrypoint] FORCE_REINIT_ROMS=1 - Forcing ROM file copy..."
+    if [ -f "/app/default-data/amiga-roms/aros-rom.bin" ]; then
+        cp -v /app/default-data/amiga-roms/aros-rom.bin "$ROM_DIR/"
+        cp -v /app/default-data/amiga-roms/aros-ext.bin "$ROM_DIR/"
+        echo "[Entrypoint] AROS ROM files force-copied to $ROM_DIR"
+    else
+        echo "[Entrypoint] ERROR: AROS ROM files not found in Docker image!"
+    fi
+elif [ -f "/app/default-data/amiga-roms/aros-rom.bin" ] && [ ! -f "$ROM_DIR/aros-rom.bin" ]; then
     echo "[Entrypoint] Copying AROS ROM files to $ROM_DIR..."
-    cp /app/default-data/amiga-roms/aros-rom.bin "$ROM_DIR/"
-    cp /app/default-data/amiga-roms/aros-ext.bin "$ROM_DIR/"
+    cp -v /app/default-data/amiga-roms/aros-rom.bin "$ROM_DIR/"
+    cp -v /app/default-data/amiga-roms/aros-ext.bin "$ROM_DIR/"
+    echo "[Entrypoint] AROS ROM files copied successfully"
+elif [ -f "$ROM_DIR/aros-rom.bin" ]; then
+    echo "[Entrypoint] AROS ROM files already exist at $ROM_DIR"
+else
+    echo "[Entrypoint] WARNING: AROS ROM files not found in Docker image at /app/default-data/amiga-roms/"
+fi
+
+# Final ROM status check
+echo "[Entrypoint] Final ROM status:"
+if [ -f "$ROM_DIR/aros-rom.bin" ] && [ -f "$ROM_DIR/aros-ext.bin" ]; then
+    echo "[Entrypoint]   [OK] aros-rom.bin: $(ls -la "$ROM_DIR/aros-rom.bin" | awk '{print $5}') bytes"
+    echo "[Entrypoint]   [OK] aros-ext.bin: $(ls -la "$ROM_DIR/aros-ext.bin" | awk '{print $5}') bytes"
+else
+    echo "[Entrypoint]   [ERROR] AROS ROM files missing - 68K doors will NOT work!"
+    echo "[Entrypoint]   Set FORCE_REINIT_ROMS=1 in render.yaml to attempt re-copy"
 fi
 
 # Initialize BBS data ONLY if the directory is empty (first run)
