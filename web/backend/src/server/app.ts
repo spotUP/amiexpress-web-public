@@ -30,11 +30,14 @@ console.log('[CORS] Configured origins:', corsOrigins);
 
 app.use(cors({
   origin: (origin, callback) => {
-console.log('[CORS] Request origin:', origin);
+    // Silence health check CORS logs (no origin = internal requests)
+    // Only log if there's an actual origin header
+    if (origin) {
+      console.log('[CORS] Request origin:', origin);
+    }
 
-    // Allow requests with no origin (mobile apps, Postman, curl, telnet clients, same-origin requests)
+    // Allow requests with no origin (mobile apps, Postman, curl, telnet clients, same-origin requests, health checks)
     if (!origin) {
-console.log('[CORS] No origin header - allowing (same-origin or non-browser request)');
       return callback(null, true);
     }
 

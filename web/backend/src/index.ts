@@ -573,6 +573,23 @@ console.error("[CRITICAL] Fatal error - shutting down");
   }
 });
 
+// Memory monitoring and heartbeat (helps diagnose Render.com crashes)
+const MEMORY_LOG_INTERVAL = 60000; // Log every 60 seconds
+let lastHeartbeat = Date.now();
+setInterval(() => {
+  const mem = process.memoryUsage();
+  const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const rssMB = Math.round(mem.rss / 1024 / 1024);
+  const now = Date.now();
+  const uptime = Math.round((now - lastHeartbeat) / 1000);
+  console.log(`[HEARTBEAT] Alive, heap: ${heapMB}MB, rss: ${rssMB}MB, interval: ${uptime}s`);
+  lastHeartbeat = now;
+  // Warn if memory is getting high (Render Starter plan has 512MB limit)
+  if (rssMB > 400) {
+    console.warn(`[MEMORY WARNING] RSS ${rssMB}MB approaching 512MB limit!`);
+  }
+}, MEMORY_LOG_INTERVAL);
+
 // Socket.IO global error handler
 io.engine.on("connection_error", (err: any) => {
 console.error("[Socket.IO] Connection error:", err);
