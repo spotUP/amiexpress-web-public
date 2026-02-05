@@ -65,6 +65,16 @@ services:
       # After deploy completes, set back to 0
       - key: FORCE_REINIT_DOORS
         value: 1
+      # RAM optimization settings for 512MB Render.com limit
+      # Emulator memory per door (default: 4MB, increase to 8 or 16 if doors crash)
+      - key: EMULATOR_MEMORY_MB
+        value: 4
+      # Amiga file cache limit (default: 2MB)
+      - key: AMIGA_FILE_CACHE_MB
+        value: 2
+      # General file cache limit (default: 4MB)
+      - key: FILE_CACHE_MB
+        value: 4
 
     # Persistent disk for ALL BBS data (database, users, messages, files)
     # This data survives deployments and is NOT overwritten

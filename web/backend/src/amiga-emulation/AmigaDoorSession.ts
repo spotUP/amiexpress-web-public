@@ -289,8 +289,12 @@ debugLog(
         /* ignore */
       }
 
-      // Initialize emulator (16MB for full 24-bit address space)
-      this.emulator = new MoiraEmulator(16 * 1024 * 1024);
+      // Initialize emulator with configurable memory size
+      // Default: 4MB (sufficient for 95%+ of doors). Set EMULATOR_MEMORY_MB=8 or 16 for demanding doors.
+      const memSizeMB = parseInt(process.env.EMULATOR_MEMORY_MB || '4', 10);
+      const memSize = Math.max(2, Math.min(16, memSizeMB)) * 1024 * 1024;
+      debugLog(`[AmigaDoorSession] Emulator memory: ${memSizeMB}MB`);
+      this.emulator = new MoiraEmulator(memSize);
       await this.emulator.initialize();
 debugLog("[AmigaDoorSession] ✅ Emulator initialized");
 
@@ -997,6 +1001,14 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     multicomManager.unregisterEmulator(sessionId);
 
 debugLog(`[AmigaDoorSession] Cleared node ${nodeId} and unregistered MULTICOM for session ${sessionId}`);
+
+    // Cleanup library state to release memory (RAM optimization)
+    if (this.sharedState.execLibrary) {
+      this.sharedState.execLibrary.cleanup();
+    }
+    if (this.sharedState.dosLibrary) {
+      this.sharedState.dosLibrary.cleanup();
+    }
 
     // Cleanup emulator
     if (this.emulator) {

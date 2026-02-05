@@ -7304,4 +7304,21 @@ debugLog(`[dos.library] Allocated FileHandle struct at 0x${addr.toString(16)} (B
   getStdoutBptr(): number {
     return this.stdoutBptr;
   }
+
+  /**
+   * Cleanup method for RAM optimization - called when door session ends
+   * Clears all tracked state to prevent memory leaks between door sessions
+   */
+  cleanup(): void {
+    // Clear all tracked state (file handles use buffered I/O, no FDs to close)
+    this.openFiles.clear();
+    this.locks.clear();
+    this.dirIterators.clear();
+    this.envVarCache.clear();
+    this.envNormalizedMap.clear();
+    this.inputBuffer = "";
+    this.rawInputBuffers = [];
+    this.stdinBptr = 0;
+    this.stdoutBptr = 0;
+  }
 }

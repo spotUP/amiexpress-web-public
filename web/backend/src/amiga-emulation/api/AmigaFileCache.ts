@@ -16,13 +16,41 @@ export interface CachedAmigaFile {
  * load the same config/BBS data do not keep hitting the host filesystem. All lookups
  * go through PathManager so assigns like PROGDIR:, ENV:, and mixed-case paths resolve
  * exactly like an Amiga filesystem.
+ *
+ * Memory optimization: LRU eviction when cache exceeds configurable size limit.
+ * Default: 2MB. Set AMIGA_FILE_CACHE_MB environment variable to adjust.
  */
 export class AmigaFileCache {
   private cache: Map<string, CachedAmigaFile> = new Map();
   private pathManager: PathManager;
+  private maxSizeBytes: number;
+  private currentSizeBytes: number = 0;
 
   constructor(pathManager: PathManager) {
     this.pathManager = pathManager;
+    const maxMB = parseInt(process.env.AMIGA_FILE_CACHE_MB || '2', 10);
+    this.maxSizeBytes = Math.max(1, Math.min(64, maxMB)) * 1024 * 1024;
+  }
+
+  /**
+   * Evict oldest entries if adding newSize would exceed limit
+   */
+  private evictIfNeeded(newSize: number): void {
+    while (this.currentSizeBytes + newSize > this.maxSizeBytes && this.cache.size > 0) {
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+      for (const [key, entry] of this.cache) {
+        if (entry.loadedAt < oldestTime) {
+          oldestTime = entry.loadedAt;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) {
+        const entry = this.cache.get(oldestKey)!;
+        this.currentSizeBytes -= entry.size;
+        this.cache.delete(oldestKey);
+      }
+    }
   }
 
   /**
@@ -75,7 +103,10 @@ export class AmigaFileCache {
       };
     }
 
+    // Evict old entries if needed before adding new one
+    this.evictIfNeeded(entry.size);
     this.cache.set(key, entry);
+    this.currentSizeBytes += entry.size;
     return entry;
   }
 
@@ -85,9 +116,25 @@ export class AmigaFileCache {
   invalidate(amiPath?: string): void {
     if (!amiPath) {
       this.cache.clear();
+      this.currentSizeBytes = 0;
       return;
     }
     const key = AmigaFileCache.normalizeKey(amiPath);
-    this.cache.delete(key);
+    const entry = this.cache.get(key);
+    if (entry) {
+      this.currentSizeBytes -= entry.size;
+      this.cache.delete(key);
+    }
+  }
+
+  /**
+   * Get cache statistics for monitoring
+   */
+  getStats(): { entries: number; sizeBytes: number; maxSizeBytes: number } {
+    return {
+      entries: this.cache.size,
+      sizeBytes: this.currentSizeBytes,
+      maxSizeBytes: this.maxSizeBytes
+    };
   }
 }

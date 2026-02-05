@@ -48,10 +48,10 @@ export class FileCache {
   /**
    * Create file cache
    *
-   * @param maxSizeMB - Maximum cache size in megabytes (default: 16MB)
+   * @param maxSizeMB - Maximum cache size in megabytes (default: 4MB, configurable via FILE_CACHE_MB)
    */
-  constructor(maxSizeMB: number = 16) {
-    this.maxSizeBytes = maxSizeMB * 1024 * 1024;
+  constructor(maxSizeMB: number = parseInt(process.env.FILE_CACHE_MB || '4', 10)) {
+    this.maxSizeBytes = Math.max(1, Math.min(64, maxSizeMB)) * 1024 * 1024;
   }
 
   /**
@@ -257,8 +257,9 @@ export class FileCache {
 /**
  * Global file cache instance
  * Shared across all handlers for maximum efficiency
+ * Default: 4MB (configurable via FILE_CACHE_MB environment variable)
  */
-export const fileCache = new FileCache(16); // 16MB default
+export const fileCache = new FileCache(); // Uses constructor default (4MB or FILE_CACHE_MB)
 
 /**
  * Helper: Read screen file with caching

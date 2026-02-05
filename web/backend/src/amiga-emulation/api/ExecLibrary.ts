@@ -6525,4 +6525,17 @@ debugLog(
 
     return result;
   }
+
+  /**
+   * Cleanup method for RAM optimization - called when door session ends
+   * Releases all tracked allocations to prevent memory leaks between doors
+   */
+  cleanup(): void {
+    this.allocations.clear();
+    this.allocVecBlocks?.clear();
+    this.messagePorts.clear();
+    this.publicPorts.clear();
+    this.freeList = [];
+    this.allocatedSignals = 0;
+  }
 }
