@@ -214,7 +214,7 @@ Node*/DORINFO*.def
 Node*/TempAns
 
 # Runtime-generated files (context optimization)
-Bulletins/bull*.txt
+# Bulletins/bull*.txt - need defaults in Docker
 batch[0-9]
 batch[0-9][0-9]
 *.user
@@ -314,8 +314,9 @@ Node[0-9]*/
 User.data
 User.keys
 node*.user
-Bulletins/bull*.txt
-Screens/quicknew*.txt
+# Bulletins and quicknew are generated but we need defaults for Docker
+# Bulletins/bull*.txt
+# Screens/quicknew*.txt
 # handoff.md
 Env/
 
