@@ -1740,17 +1740,16 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
 
     // Add standard fallbacks based on screen type to ensure compatibility
     // with systems that share screens or use simplified directory structures.
-    // IMPORTANT: NODE type screens (NODE_BULL, LOGON, etc.) should NOT fallback to
-    // global Screens/ directory - this prevents duplicate display (e.g., BULL and
-    // NODE_BULL both showing Screens/BULL.TXT). Per express.e:6546-6634, NODE screens
-    // only search in nodeScreenDir.
     if (!searchLocations.some(l => l.dir === nodeDir)) {
       searchLocations.push({ dir: nodeDir, desc: `Node${nodeId} (Fallback)` });
       searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens (Fallback)` });
     }
-    // Only add global Screens/ fallback for non-NODE type screens
-    // This prevents NODE_BULL from showing the same content as BULL
-    if (screenDirType !== ScreenDirType.NODE && !searchLocations.some(l => l.dir === globalScreensDir)) {
+    // Add global Screens/ fallback EXCEPT for NODE_BULL
+    // NODE_BULL must NOT fallback to Screens/ because BULL already displays Screens/BULL.TXT
+    // This prevents the same bulletin from being shown twice during login flow.
+    // Per express.e:6551-6553, NODE_BULL specifically uses nodeScreenDir for BULL.TXT
+    const isNodeBull = screenName.toUpperCase() === 'NODE_BULL';
+    if (!isNodeBull && !searchLocations.some(l => l.dir === globalScreensDir)) {
       searchLocations.push({ dir: globalScreensDir, desc: 'Screens (Fallback)' });
     }
     
