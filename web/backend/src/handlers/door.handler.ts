@@ -1669,12 +1669,13 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
           params: door.parameters || []
         });
       } finally {
-        // Cleanup
+        // Cleanup - match SDK door cleanup pattern
         session.inDoorManager = false;
         session.doorInputHandler = undefined;
+        session.mouseEventsEnabled = false;
         socket.emit('door:status', { status: 'closed' });
         socket.emit('door-active', false);
-        enableShortcuts(session);
+        disableGameMode(socket, session);
         console.log(`[executeTypeScriptDoor] Legacy door ${door.name} completed`);
       }
       return;
