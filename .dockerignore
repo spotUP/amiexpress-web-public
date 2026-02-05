@@ -80,11 +80,8 @@ doors/**/node_modules
 Users/*.db
 Users/*.dat
 
-# Node files (generated)
-# Note: Node1-3 are needed for new user questionnaire scripts
-Node0
-Node4
-Node5
+# Node directories - ALL needed for BBS (Node0-Node40)
+# Do NOT exclude - they contain questionnaire scripts and node config
 
 # Batch files (generated)
 batch*
