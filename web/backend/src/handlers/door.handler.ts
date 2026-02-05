@@ -1513,18 +1513,27 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
         amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
       
       const doorDir = path.join(projectRoot, doorPath);
-      
-      // 🎯 FIX: Always prefer .ts source if it exists at the root of the door directory
-      // This prevents running stale compiled .js files when source has changed.
+      const isProduction = process.env.NODE_ENV === 'production';
+
+      // In production, prefer compiled dist/index.js (can't run .ts directly)
+      // In development, prefer .ts source for hot reloading
+      const distIndexJs = path.join(doorDir, 'dist', 'index.js');
       const rootIndexTs = path.join(doorDir, 'index.ts');
       const rootServerTs = path.join(doorDir, 'server.ts');
-      
-      if (amigafs.existsSync(rootIndexTs)) {
+
+      if (isProduction && amigafs.existsSync(distIndexJs)) {
+        doorPath = path.join(doorPath, 'dist', 'index.js');
+console.log(`[executeTypeScriptDoor] Production mode: using compiled dist/index.js`);
+      } else if (!isProduction && amigafs.existsSync(rootIndexTs)) {
         doorPath = path.join(doorPath, 'index.ts');
-console.log(`[executeTypeScriptDoor] Found root index.ts, using source instead of package.json main`);
-      } else if (amigafs.existsSync(rootServerTs)) {
+console.log(`[executeTypeScriptDoor] Dev mode: using source index.ts`);
+      } else if (!isProduction && amigafs.existsSync(rootServerTs)) {
         doorPath = path.join(doorPath, 'server.ts');
-console.log(`[executeTypeScriptDoor] Found root server.ts, using source instead of package.json main`);
+console.log(`[executeTypeScriptDoor] Dev mode: using source server.ts`);
+      } else if (amigafs.existsSync(distIndexJs)) {
+        // Fallback to dist even in dev if no .ts source
+        doorPath = path.join(doorPath, 'dist', 'index.js');
+console.log(`[executeTypeScriptDoor] Using compiled dist/index.js (no source found)`);
       } else {
         const packageJsonPath = path.join(doorDir, 'package.json');
         if (amigafs.existsSync(packageJsonPath)) {
