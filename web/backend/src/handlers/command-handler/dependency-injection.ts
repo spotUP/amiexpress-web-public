@@ -34,19 +34,39 @@ export function getConfig(): any {
 }
 
 export function getConferences(): any[] {
-  return container.resolve(DI_TOKENS.Conferences) as any[];
+  try {
+    return container.resolve(DI_TOKENS.Conferences) as any[];
+  } catch {
+    // Return empty array if not yet initialized
+    return [];
+  }
 }
 
 export function getMessageBases(): any[] {
-  return container.resolve(DI_TOKENS.MessageBases) as any[];
+  try {
+    return container.resolve(DI_TOKENS.MessageBases) as any[];
+  } catch {
+    // Return empty array if not yet initialized
+    return [];
+  }
 }
 
 export function getFileAreas(): any[] {
-  return container.resolve(DI_TOKENS.FileAreas) as any[];
+  try {
+    return container.resolve(DI_TOKENS.FileAreas) as any[];
+  } catch {
+    // Return empty array if not yet initialized
+    return [];
+  }
 }
 
 export function getDoors(): any[] {
-  return container.resolve(DI_TOKENS.Doors) as any[];
+  try {
+    return container.resolve(DI_TOKENS.Doors) as any[];
+  } catch {
+    // Return empty array if not yet initialized
+    return [];
+  }
 }
 
 export function getProcessOlmMessageQueue() {
