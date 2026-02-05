@@ -63,8 +63,11 @@ db/*.sqlite3
 logs/*.log
 
 # Large binary files (will be in volume)
+# BUT keep AROS ROM files needed for 68K door emulation
 data/amiga-roms/*
 !data/amiga-roms/.gitkeep
+!data/amiga-roms/aros-rom.bin
+!data/amiga-roms/aros-ext.bin
 
 # Door binaries (Render build needs them in context)
 !Doors/**
