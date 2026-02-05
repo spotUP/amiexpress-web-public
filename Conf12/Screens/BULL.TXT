@@ -1,2 +1,2 @@
 ~f|
-Placeholder screen BULL.TXT
+~SS_BBS:Bulletins/bull6.txt
