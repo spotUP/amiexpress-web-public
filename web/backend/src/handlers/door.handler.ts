@@ -1513,27 +1513,18 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
         amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
       
       const doorDir = path.join(projectRoot, doorPath);
-      const isProduction = process.env.NODE_ENV === 'production';
-
-      // In production, prefer compiled dist/index.js (can't run .ts directly)
-      // In development, prefer .ts source for hot reloading
-      const distIndexJs = path.join(doorDir, 'dist', 'index.js');
+      
+      // 🎯 FIX: Always prefer .ts source if it exists at the root of the door directory
+      // This prevents running stale compiled .js files when source has changed.
       const rootIndexTs = path.join(doorDir, 'index.ts');
       const rootServerTs = path.join(doorDir, 'server.ts');
-
-      if (isProduction && amigafs.existsSync(distIndexJs)) {
-        doorPath = path.join(doorPath, 'dist', 'index.js');
-console.log(`[executeTypeScriptDoor] Production mode: using compiled dist/index.js`);
-      } else if (!isProduction && amigafs.existsSync(rootIndexTs)) {
+      
+      if (amigafs.existsSync(rootIndexTs)) {
         doorPath = path.join(doorPath, 'index.ts');
-console.log(`[executeTypeScriptDoor] Dev mode: using source index.ts`);
-      } else if (!isProduction && amigafs.existsSync(rootServerTs)) {
+console.log(`[executeTypeScriptDoor] Found root index.ts, using source instead of package.json main`);
+      } else if (amigafs.existsSync(rootServerTs)) {
         doorPath = path.join(doorPath, 'server.ts');
-console.log(`[executeTypeScriptDoor] Dev mode: using source server.ts`);
-      } else if (amigafs.existsSync(distIndexJs)) {
-        // Fallback to dist even in dev if no .ts source
-        doorPath = path.join(doorPath, 'dist', 'index.js');
-console.log(`[executeTypeScriptDoor] Using compiled dist/index.js (no source found)`);
+console.log(`[executeTypeScriptDoor] Found root server.ts, using source instead of package.json main`);
       } else {
         const packageJsonPath = path.join(doorDir, 'package.json');
         if (amigafs.existsSync(packageJsonPath)) {
@@ -1630,12 +1621,30 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
       // No package.json or parse error - not a problem
     }
 
+    // Debug: Log what was imported to diagnose validation failures
+    console.log(`[executeTypeScriptDoor] doorModule keys: ${Object.keys(doorModule || {}).join(', ')}`);
+    console.log(`[executeTypeScriptDoor] doorModule.default: ${typeof doorModule?.default}`);
+    if (doorModule?.default) {
+      console.log(`[executeTypeScriptDoor] doorModule.default.execute: ${typeof doorModule.default.execute}`);
+      console.log(`[executeTypeScriptDoor] doorModule.default.getConfig: ${typeof doorModule.default.getConfig}`);
+      // Log prototype chain for debugging
+      const proto = Object.getPrototypeOf(doorModule.default);
+      if (proto) {
+        console.log(`[executeTypeScriptDoor] Prototype methods: ${Object.getOwnPropertyNames(proto).join(', ')}`);
+      }
+    }
+
     const isSDKDoor = doorModule.default &&
                      typeof doorModule.default.execute === 'function' &&
                      typeof doorModule.default.getConfig === 'function';
 
     if (!isSDKDoor) {
-      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: Must export ServerDoor instance as default export\x1b[0m\r\n`);
+      // More detailed error message to help debug
+      const reason = !doorModule.default ? 'no default export' :
+                     typeof doorModule.default.execute !== 'function' ? `execute is ${typeof doorModule.default.execute}` :
+                     `getConfig is ${typeof doorModule.default.getConfig}`;
+      console.error(`[executeTypeScriptDoor] SDK validation failed: ${reason}`);
+      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: Must export ServerDoor instance as default export (${reason})\x1b[0m\r\n`);
       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;

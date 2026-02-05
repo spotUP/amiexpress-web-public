@@ -191,6 +191,31 @@ fi
 echo "[Entrypoint] Current BBS data:"
 ls -la "$BBS_DATA_DIR" 2>/dev/null | head -20 || echo "  (empty)"
 
+# Create SDK symlinks for TypeScript doors
+# node_modules is excluded from Docker build, so we need to create the @amiexpress/bbs-door-sdk symlink
+# that points to /app/sdk for each TypeScript door that has a package.json
+echo "[Entrypoint] Setting up SDK symlinks for TypeScript doors..."
+TS_DOORS_COUNT=0
+if [ -d "$BBS_DATA_DIR/Doors" ]; then
+    for door_dir in "$BBS_DATA_DIR/Doors"/*; do
+        if [ -d "$door_dir" ] && [ -f "$door_dir/package.json" ]; then
+            # This is a TypeScript door - create SDK symlink
+            door_name=$(basename "$door_dir")
+            sdk_link_dir="$door_dir/node_modules/@amiexpress"
+            sdk_link="$sdk_link_dir/bbs-door-sdk"
+
+            if [ ! -L "$sdk_link" ]; then
+                mkdir -p "$sdk_link_dir"
+                # Create symlink to SDK - use absolute path
+                ln -sf /app/sdk "$sdk_link"
+                echo "[Entrypoint]   Created SDK symlink for $door_name"
+                TS_DOORS_COUNT=$((TS_DOORS_COUNT + 1))
+            fi
+        fi
+    done
+fi
+echo "[Entrypoint] SDK symlinks created for $TS_DOORS_COUNT TypeScript doors"
+
 # Create/reset default sysop user
 echo "[Entrypoint] Setting up default sysop user..."
 cd /app/web/backend
