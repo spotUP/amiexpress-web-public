@@ -73,9 +73,10 @@ else
     echo "[Entrypoint]   Set FORCE_REINIT_ROMS=1 in render.yaml to attempt re-copy"
 fi
 
-# Copy root-level .info configuration files (critical for conferences and BBS settings)
+# Copy root-level .info configuration files (critical for conferences and file areas)
 # These are binary Amiga icon files containing tooltypes (key=value pairs)
-INFO_FILES="ConfConfig.info bbsConfig.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info"
+# Note: bbsConfig.info is gitignored (user-specific) - backend uses defaults
+INFO_FILES="ConfConfig.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info"
 
 echo "[Entrypoint] Checking root .info configuration files..."
 
@@ -101,13 +102,11 @@ fi
 
 # Final config status check
 echo "[Entrypoint] Configuration file status:"
-for infofile in ConfConfig.info bbsConfig.info; do
-    if [ -f "$BBS_DATA_DIR/$infofile" ]; then
-        echo "[Entrypoint]   [OK] $infofile: $(ls -la "$BBS_DATA_DIR/$infofile" | awk '{print $5}') bytes"
-    else
-        echo "[Entrypoint]   [MISSING] $infofile - BBS will use fallback defaults"
-    fi
-done
+if [ -f "$BBS_DATA_DIR/ConfConfig.info" ]; then
+    echo "[Entrypoint]   [OK] ConfConfig.info: $(ls -la "$BBS_DATA_DIR/ConfConfig.info" | awk '{print $5}') bytes"
+else
+    echo "[Entrypoint]   [MISSING] ConfConfig.info - BBS will use fallback defaults"
+fi
 # Count Conf*.info files
 CONF_INFO_COUNT=$(ls -1 "$BBS_DATA_DIR"/Conf*.info 2>/dev/null | wc -l | tr -d ' ')
 echo "[Entrypoint]   [INFO] $CONF_INFO_COUNT conference .info files present"
