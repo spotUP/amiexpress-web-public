@@ -687,13 +687,16 @@ console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
 export async function runLoginBatches(nodeId: number): Promise<void> {
   const baseDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
+  const appRoot = process.cwd(); // App root where batch files live
   const day = getSystemTime().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
 
   const candidates = [
-    path.join(baseDir, batchName),
+    path.join(appRoot, batchName),           // App root batch files (primary)
+    path.join(baseDir, batchName),           // Data dir batch files
     path.join(bbsRoot, `Node${nodeId}`, batchName),
+    path.join(appRoot, batch000),            // App root batch000
     path.join(baseDir, batch000),
     path.join(bbsRoot, `Node${nodeId}`, batch000),
   ];
@@ -710,6 +713,7 @@ export async function runLoginBatches(nodeId: number): Promise<void> {
 export async function runLogoffBatches(nodeId: number): Promise<void> {
   const baseDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
+  const appRoot = process.cwd(); // App root where batch files live
   const day = getSystemTime().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
@@ -717,8 +721,10 @@ export async function runLogoffBatches(nodeId: number): Promise<void> {
 console.log(`[BatchScheduler] Running logoff batches for node ${nodeId}, day=${day} (${batchName})`);
 
   const candidates = [
-    path.join(baseDir, batchName),
+    path.join(appRoot, batchName),           // App root batch files (primary)
+    path.join(baseDir, batchName),           // Data dir batch files
     path.join(bbsRoot, `Node${nodeId}`, batchName),
+    path.join(appRoot, batch000),            // App root batch000
     path.join(baseDir, batch000),
     path.join(bbsRoot, `Node${nodeId}`, batch000),
   ];

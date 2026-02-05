@@ -648,7 +648,7 @@ ensureStoreExists();
 
 /**
  * Triggered at startup/login to guarantee the storage file exists.
- * Actual updates are handled by the 68K SAmiLog binary via SamiLogRunner.
+ * Actual updates are handled by batch scheduler parsing 'typescript:samilog' commands.
  */
 export async function triggerSamiLogRefresh(): Promise<void> {
   ensureStoreExists();

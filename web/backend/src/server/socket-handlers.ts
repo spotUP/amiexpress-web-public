@@ -39,7 +39,6 @@ import { handleCommand } from '../handlers/command.handler';
 import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
-import { runSamiLogUpdate } from '../services/SamiLogRunner';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
@@ -1122,23 +1121,8 @@ console.error(`[LOGOFF] Error deleting node files:`, error);
       );
     }
 
-    try {
-      await runSamiLogUpdate(session);
-    } catch (error) {
-console.error('[LOGOFF] SAmiLog update failed:', error);
-      SysopDebugUtil.debug(
-        socket,
-        session,
-        'Socket Connection',
-        `Failed to update SAmiLog on logoff`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-          username: session.user?.username,
-          nodeId: session.nodeId
-        },
-        DebugSeverity.WARNING
-      );
-    }
+    // SAmiLog update is handled by runLogoffBatches() which runs batch files
+    // containing 'typescript:samilog' commands - no separate call needed
   }
 
   // Release node back to available pool
