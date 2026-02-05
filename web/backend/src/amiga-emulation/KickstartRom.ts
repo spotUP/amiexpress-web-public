@@ -43,8 +43,12 @@ export class KickstartRom {
 
     const repoRoot = path.resolve(__dirname, '../../..');
     const backendRoot = path.join(repoRoot, 'web/backend');
+    // ROM_DIR env var is set in Docker to /app/data/amiga-roms
+    const romDirEnv = process.env.ROM_DIR;
     const arosRomPaths = Array.from(
       new Set([
+        // Docker persistent disk location (highest priority)
+        ...(romDirEnv ? [romDirEnv] : []),
         path.join(process.cwd(), 'data/amiga-roms'),
         path.join(backendRoot, 'data/amiga-roms'),
         path.join(repoRoot, 'data/amiga-roms'),
@@ -56,6 +60,8 @@ export class KickstartRom {
     const kickFilename = 'Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom';
     const kickPaths = Array.from(
       new Set([
+        // Docker persistent disk location (highest priority)
+        ...(romDirEnv ? [path.join(romDirEnv, kickFilename)] : []),
         path.join(process.cwd(), 'data/amiga-roms', kickFilename),
         path.join(backendRoot, 'data/amiga-roms', kickFilename),
         path.join(repoRoot, 'data/amiga-roms', kickFilename),
