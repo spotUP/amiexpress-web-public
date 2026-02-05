@@ -21,6 +21,8 @@ ROM_DIR="${ROM_DIR:-/app/data/amiga-roms}"
 FORCE_REINIT_SCREENS="${FORCE_REINIT_SCREENS:-0}"
 # Set FORCE_REINIT_ROMS=1 to force re-copy AROS ROM files
 FORCE_REINIT_ROMS="${FORCE_REINIT_ROMS:-0}"
+# Set FORCE_REINIT_CONFIG=1 to force re-copy .info config files (ConfConfig.info, bbsConfig.info, Conf*.info)
+FORCE_REINIT_CONFIG="${FORCE_REINIT_CONFIG:-0}"
 
 echo "[Entrypoint] Starting AmiExpress-Web..."
 echo "[Entrypoint] BBS_DATA_DIR: $BBS_DATA_DIR"
@@ -28,6 +30,7 @@ echo "[Entrypoint] DATABASE_DIR: $DATABASE_DIR"
 echo "[Entrypoint] ROM_DIR: $ROM_DIR"
 echo "[Entrypoint] FORCE_REINIT_SCREENS: $FORCE_REINIT_SCREENS"
 echo "[Entrypoint] FORCE_REINIT_ROMS: $FORCE_REINIT_ROMS"
+echo "[Entrypoint] FORCE_REINIT_CONFIG: $FORCE_REINIT_CONFIG"
 
 # Create data directories if they don't exist
 mkdir -p "$BBS_DATA_DIR" "$DATABASE_DIR" "$ROM_DIR"
@@ -69,6 +72,45 @@ else
     echo "[Entrypoint]   [ERROR] AROS ROM files missing - 68K doors will NOT work!"
     echo "[Entrypoint]   Set FORCE_REINIT_ROMS=1 in render.yaml to attempt re-copy"
 fi
+
+# Copy root-level .info configuration files (critical for conferences and BBS settings)
+# These are binary Amiga icon files containing tooltypes (key=value pairs)
+INFO_FILES="ConfConfig.info bbsConfig.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info"
+
+echo "[Entrypoint] Checking root .info configuration files..."
+
+# Force re-copy if requested
+if [ "$FORCE_REINIT_CONFIG" = "1" ]; then
+    echo "[Entrypoint] FORCE_REINIT_CONFIG=1 - Forcing re-copy of all .info config files..."
+    for infofile in $INFO_FILES; do
+        if [ -f "$DEFAULT_DATA_DIR/$infofile" ]; then
+            cp -v "$DEFAULT_DATA_DIR/$infofile" "$BBS_DATA_DIR/$infofile"
+        else
+            echo "[Entrypoint]   WARNING: $infofile not found in Docker image"
+        fi
+    done
+else
+    # Copy only if missing
+    for infofile in $INFO_FILES; do
+        if [ -f "$DEFAULT_DATA_DIR/$infofile" ] && [ ! -f "$BBS_DATA_DIR/$infofile" ]; then
+            cp -v "$DEFAULT_DATA_DIR/$infofile" "$BBS_DATA_DIR/$infofile"
+            echo "[Entrypoint]   Copied $infofile"
+        fi
+    done
+fi
+
+# Final config status check
+echo "[Entrypoint] Configuration file status:"
+for infofile in ConfConfig.info bbsConfig.info; do
+    if [ -f "$BBS_DATA_DIR/$infofile" ]; then
+        echo "[Entrypoint]   [OK] $infofile: $(ls -la "$BBS_DATA_DIR/$infofile" | awk '{print $5}') bytes"
+    else
+        echo "[Entrypoint]   [MISSING] $infofile - BBS will use fallback defaults"
+    fi
+done
+# Count Conf*.info files
+CONF_INFO_COUNT=$(ls -1 "$BBS_DATA_DIR"/Conf*.info 2>/dev/null | wc -l | tr -d ' ')
+echo "[Entrypoint]   [INFO] $CONF_INFO_COUNT conference .info files present"
 
 # Initialize BBS data ONLY if the directory is empty (first run)
 if [ ! -f "$BBS_DATA_DIR/.initialized" ]; then

@@ -57,6 +57,10 @@ services:
       # After deploy completes, set back to 0
       - key: FORCE_REINIT_ROMS
         value: 1
+      # Set to 1 to force re-copy .info config files (ConfConfig.info, bbsConfig.info, Conf*.info)
+      # After deploy completes, set back to 0
+      - key: FORCE_REINIT_CONFIG
+        value: 1
 
     # Persistent disk for ALL BBS data (database, users, messages, files)
     # This data survives deployments and is NOT overwritten
