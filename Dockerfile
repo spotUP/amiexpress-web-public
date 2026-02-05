@@ -189,19 +189,65 @@ COPY Conf10 /app/default-data/Conf10
 COPY Conf11 /app/default-data/Conf11
 COPY Conf12 /app/default-data/Conf12
 COPY Conf13 /app/default-data/Conf13
+COPY Conf14 /app/default-data/Conf14
 # Node directories contain questionnaire scripts for new user signup
 # Note: If build fails with "not found", check .dockerignore - these must NOT be excluded
+# Copying Node0-Node40 (41 nodes total)
+COPY Node0 /app/default-data/Node0
 COPY Node1 /app/default-data/Node1
 COPY Node2 /app/default-data/Node2
 COPY Node3 /app/default-data/Node3
+COPY Node4 /app/default-data/Node4
+COPY Node5 /app/default-data/Node5
+COPY Node6 /app/default-data/Node6
+COPY Node7 /app/default-data/Node7
+COPY Node8 /app/default-data/Node8
+COPY Node9 /app/default-data/Node9
+COPY Node10 /app/default-data/Node10
+COPY Node11 /app/default-data/Node11
+COPY Node12 /app/default-data/Node12
+COPY Node13 /app/default-data/Node13
+COPY Node14 /app/default-data/Node14
+COPY Node15 /app/default-data/Node15
+COPY Node16 /app/default-data/Node16
+COPY Node17 /app/default-data/Node17
+COPY Node18 /app/default-data/Node18
+COPY Node19 /app/default-data/Node19
+COPY Node20 /app/default-data/Node20
+COPY Node21 /app/default-data/Node21
+COPY Node22 /app/default-data/Node22
+COPY Node23 /app/default-data/Node23
+COPY Node24 /app/default-data/Node24
+COPY Node25 /app/default-data/Node25
+COPY Node26 /app/default-data/Node26
+COPY Node27 /app/default-data/Node27
+COPY Node28 /app/default-data/Node28
+COPY Node29 /app/default-data/Node29
+COPY Node30 /app/default-data/Node30
+COPY Node31 /app/default-data/Node31
+COPY Node32 /app/default-data/Node32
+COPY Node33 /app/default-data/Node33
+COPY Node34 /app/default-data/Node34
+COPY Node35 /app/default-data/Node35
+COPY Node36 /app/default-data/Node36
+COPY Node37 /app/default-data/Node37
+COPY Node38 /app/default-data/Node38
+COPY Node39 /app/default-data/Node39
+COPY Node40 /app/default-data/Node40
 
-# Copy Doors directly to /app/Doors (code expects them at project root, not data dir)
-# Note: amigafs module handles case-insensitive path resolution for AmigaOS compatibility
-# Copy built TypeScript doors (dist folders only for TS doors, full copy for 68K doors)
-COPY --from=doors-builder /app/Doors /app/Doors
+# Copy Doors to default-data (will be copied to persistent disk by entrypoint)
+# BBS expects Doors at $BBS_DATA_DIR/Doors/ (e.g., /app/data/bbs/Doors/)
+COPY --from=doors-builder /app/Doors /app/default-data/Doors
 
-# Copy Libs directory (contains AROS fallback kickstart and libraries for 68K emulation)
-COPY Libs /app/Libs
+# Copy Libs to default-data (will be copied to persistent disk by entrypoint)
+# BBS expects Libs at $BBS_DATA_DIR/Libs/ (e.g., /app/data/bbs/Libs/)
+COPY Libs /app/default-data/Libs
+
+# Copy AROS ROM files for 68K emulation (Kickstart not included - user must provide)
+# These go to /app/data/amiga-roms which is on persistent disk mount
+# The entrypoint will copy them if they don't exist on the persistent disk
+COPY data/amiga-roms/aros-rom.bin /app/default-data/amiga-roms/aros-rom.bin
+COPY data/amiga-roms/aros-ext.bin /app/default-data/amiga-roms/aros-ext.bin
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

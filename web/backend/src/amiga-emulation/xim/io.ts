@@ -894,9 +894,15 @@ debugLog('========================================');
     console.log(`[DEBUG JH_HK completeHotkey] msg.stringPtr = ${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
     console.log(`[DEBUG JH_HK completeHotkey] Expected string offset 0x14 = 0x${(msg.msgAddr + 0x14).toString(16)}`);
 
-    // Dump current A4 register (door's data base)
+    // Dump current registers for debugging
     const a4 = this.emulator.getRegister(12);  // A4 = register 12
+    const a5 = this.emulator.getRegister(13);  // A5 = register 13 (buffer in input func)
+    const sp = this.emulator.getRegister(15);  // A7/SP = register 15
+    const d4 = this.emulator.getRegister(4);   // D4 = buffer index in input func
+    const d5 = this.emulator.getRegister(5);   // D5 = character in input func
     console.log(`[DEBUG JH_HK completeHotkey] A4 (door data base) = 0x${a4.toString(16)}`);
+    console.log(`[DEBUG JH_HK completeHotkey] A5 = 0x${a5.toString(16)}, D4 = ${d4}, D5 = 0x${d5.toString(16)}`);
+    console.log(`[DEBUG JH_HK completeHotkey] SP (A7) = 0x${sp.toString(16)}`);
 
     // Read what door stored at 0x714(a4) - should be the message address
     if (a4 > 0x1000) {

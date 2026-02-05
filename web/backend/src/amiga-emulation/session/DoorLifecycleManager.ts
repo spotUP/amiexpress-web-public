@@ -916,6 +916,23 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           return;
         }
 
+        // DEBUG: Trace dRE!WAll storage instruction to debug character buffer issue
+        // PC=0x21d4 is "move.b d5, (a0)" - stores character to buffer
+        // Enable with: DREWALL_TRACE=1
+        if (process.env.DREWALL_TRACE === '1' && pc === 0x21d4) {
+          const d4 = this.emulator.getRegister(4);
+          const d5 = this.emulator.getRegister(5);
+          const a0 = this.emulator.getRegister(8);
+          const a5 = this.emulator.getRegister(13);
+          const sp = this.emulator.getRegister(15);
+          const char = String.fromCharCode(d5 & 0xff);
+          console.log(`[DREWALL_TRACE] PC=0x21d4 STORE: d5=0x${d5.toString(16)} ('${char}') -> (a0)=0x${a0.toString(16)}`);
+          console.log(`[DREWALL_TRACE]   a5=0x${a5.toString(16)} d4=${d4} (index) sp=0x${sp.toString(16)}`);
+          // Also read what's currently at the destination
+          const currentVal = this.emulator.readMemory(a0);
+          console.log(`[DREWALL_TRACE]   current value at a0: 0x${currentVal.toString(16)}`);
+        }
+
         this.debugMonitor?.setLastPCs(this.lastPCs);
         this.debugMonitor?.monitorExecBasePointer(pc);
         this.debugMonitor?.logA6Change(pc);
