@@ -84,14 +84,20 @@ else
             echo "[Entrypoint] Root Screens directory re-initialized"
         fi
         # Re-copy conference Screens (Conf1-Conf14)
+        # ALWAYS delete old Screens to remove any placeholder files, then copy if source exists
         for conf in Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 Conf11 Conf12 Conf13 Conf14; do
-            if [ -d "$DEFAULT_DATA_DIR/$conf/Screens" ]; then
+            # Always delete old screens (removes placeholders from persistent disk)
+            if [ -d "$BBS_DATA_DIR/$conf/Screens" ]; then
                 rm -rf "$BBS_DATA_DIR/$conf/Screens"
+                echo "[Entrypoint] Deleted old $conf/Screens"
+            fi
+            # Copy new screens if they exist in default-data
+            if [ -d "$DEFAULT_DATA_DIR/$conf/Screens" ]; then
                 cp -r "$DEFAULT_DATA_DIR/$conf/Screens" "$BBS_DATA_DIR/$conf/Screens"
-                echo "[Entrypoint] $conf/Screens re-initialized"
+                echo "[Entrypoint] $conf/Screens re-initialized from default-data"
             fi
         done
-        echo "[Entrypoint] All Screens directories re-initialized from default-data"
+        echo "[Entrypoint] All Screens directories re-initialized"
     fi
 fi
 
