@@ -1,17 +1,119 @@
-# Deployment Guide (Summary)
-**Detailed platform plays (Railway, unified deployment, webhook flows) are archived (`archive/RAILWAY_DEPLOYMENT.md`, `archive/UNIFIED_DEPLOYMENT.md`, `archive/DEPLOYMENT_SUMMARY.md`).**
+# Deployment Guide
 
-## 1. Deployment Model
-- AmiExpress-Web runs split: frontend (React) served statically, backend (Node/Express + WebSocket) exposes the classic BBS terminal via `xterm.js`.
-- Deploy with a process manager (PM2, systemd) or platform (Railway, Render). Use `dev/scripts/start-servers.sh` to launch nodes sequentially and `kill-servers.sh` to stop them cleanly before a restart.
-- Environment variables (`PORT`, `SOCKET_PORT`, `DATABASE_URL`, `SESSION_SECRET`, `BACKEND_HOST`) configure node counts, door ports, and node IDs.
+## Production Deployment: Hetzner VPS
 
-## 2. Preparation & Validation
-- Run `npm run build` in both frontend and backend before shipping. The backend output lives under `web/backend/dist`, and `node dist/src/index.js` should start clean without missing `SCREEN_FILES` or `DirX` errors.
-- Post-deploy, examine `logs/backend.log`, `logs/door-68k.log`, and `/tmp/bulls.out` to confirm doors, FR parsing, and footers work exactly like express.e (per `Documentation/4-Door-Developers/AQUASCAN_ANALYSIS_SUMMARY.md`).
+AmiExpress-Web runs on a Hetzner Cloud VPS with automatic deployment via GitHub Actions.
 
-## 3. Automation Hooks
-- Webhooks (see archives) trigger builds, door tests, or notifications. Integrate them with `WEBHOOKS_README` and `SYSOP_WEBHOOK_GUIDE` to know which commands they run.
-- The `PRODUCTION_READINESS` checklist ensures TLS, backups, and monitoring are in place before handing the BBS to end users.
+### Current Setup
 
-**More context on deployment loops, success criteria, and fallback plans is available in the archive; this summary captures the high-level playbook.**
+| Component | Value |
+|-----------|-------|
+| Provider | Hetzner Cloud |
+| Plan | CX22 (4GB RAM, 2 vCPU, 40GB SSD) |
+| Cost | ~€3.79/month |
+| Server IP | 203.0.113.10 |
+| Auto-deploy | GitHub Actions on push to `main` |
+
+### Access Points
+
+- **Web:** http://203.0.113.10:3001
+- **Telnet:** `telnet 203.0.113.10 2323`
+- **SSH (BBS):** `ssh -p 2222 user@203.0.113.10`
+- **Admin:** http://203.0.113.10:3001/admin
+
+### How Deployment Works
+
+1. Push code to `main` branch
+2. GitHub Actions runs `.github/workflows/deploy-hetzner.yml`
+3. Action SSHs into server and runs:
+   ```bash
+   cd /app/amiexpress
+   git pull origin main
+   docker compose up -d --build
+   ```
+4. Container rebuilds and restarts automatically
+
+### Server Management
+
+**SSH into server:**
+```bash
+ssh root@203.0.113.10
+```
+
+**Common commands:**
+```bash
+cd /app/amiexpress
+
+# View logs
+docker compose logs -f
+
+# Restart BBS
+docker compose restart
+
+# Full rebuild
+docker compose up -d --build
+
+# Check status
+docker compose ps
+
+# Health check
+./deploy/status.sh
+```
+
+### Environment Variables
+
+Configured in `/app/amiexpress/.env`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMULATOR_MEMORY_MB` | 8 | RAM per 68K door (MB) |
+| `FILE_CACHE_MB` | 8 | Screen/bulletin cache (MB) |
+| `AMIGA_FILE_CACHE_MB` | 4 | Amiga file cache (MB) |
+| `CORS_ORIGINS` | - | Allowed origins for CORS |
+| `DEBUG` | false | Enable debug logging |
+
+### Persistent Data
+
+Data is stored in Docker volume `amiexpress-bbs-data`:
+- `/app/data/bbs` - BBS files (Screens, Commands, Doors, etc.)
+- `/app/data/db` - SQLite database
+- `/app/data/amiga-roms` - AROS ROM files for 68K emulation
+
+### Force Reinit Flags
+
+Set these in `.env` temporarily to re-copy default data:
+
+```bash
+FORCE_REINIT_SCREENS=1   # Re-copy screen files
+FORCE_REINIT_DOORS=1     # Re-copy door files
+FORCE_REINIT_ROMS=1      # Re-copy ROM files
+FORCE_REINIT_CONFIG=1    # Re-copy .info config files
+```
+
+After deploy, set back to 0.
+
+### Troubleshooting
+
+**BBS won't start:**
+```bash
+docker compose logs --tail=100
+```
+
+**Out of memory:**
+- Check `EMULATOR_MEMORY_MB` setting
+- Consider upgrading to CX32 (8GB RAM)
+
+**Can't connect via Telnet:**
+- Check firewall allows port 2323
+- Verify container is running: `docker compose ps`
+
+### Backup
+
+```bash
+# Backup data volume
+docker run --rm -v amiexpress-bbs-data:/data -v $(pwd):/backup alpine tar czf /backup/bbs-backup-$(date +%Y%m%d).tar.gz /data
+```
+
+### Initial Setup
+
+See `deploy/README.md` for first-time VPS setup instructions.
