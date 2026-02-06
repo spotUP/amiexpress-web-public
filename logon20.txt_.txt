@@ -2,8 +2,6 @@
 ~SS_BBS:bulletins/bull6.txt| ~SP
 ~f
 ~CC_gl ~SP
-~CC_wall
-~CC_gwall
 ~f
 ~5SR_WORK:bbs/Screens/flt/flt ~SP
 ~f
