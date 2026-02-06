@@ -209,6 +209,7 @@ ls -la "$BBS_DATA_DIR" 2>/dev/null | head -20 || echo "  (empty)"
 # that points to /app/sdk for each TypeScript door that has a package.json
 echo "[Entrypoint] Setting up SDK symlinks for TypeScript doors..."
 TS_DOORS_COUNT=0
+NATIVE_REBUILD_COUNT=0
 if [ -d "$BBS_DATA_DIR/Doors" ]; then
     for door_dir in "$BBS_DATA_DIR/Doors"/*; do
         if [ -d "$door_dir" ] && [ -f "$door_dir/package.json" ]; then
@@ -224,10 +225,21 @@ if [ -d "$BBS_DATA_DIR/Doors" ]; then
                 echo "[Entrypoint]   Created SDK symlink for $door_name"
                 TS_DOORS_COUNT=$((TS_DOORS_COUNT + 1))
             fi
+
+            # Check if door has native modules that need rebuilding (e.g., better-sqlite3)
+            # Native modules built on macOS won't work in Linux Docker container
+            if grep -q '"better-sqlite3"' "$door_dir/package.json" 2>/dev/null; then
+                if [ -d "$door_dir/node_modules/better-sqlite3" ]; then
+                    echo "[Entrypoint]   Rebuilding native modules for $door_name..."
+                    (cd "$door_dir" && npm rebuild better-sqlite3 2>&1 | head -5) || echo "[Entrypoint]   Warning: rebuild failed for $door_name"
+                    NATIVE_REBUILD_COUNT=$((NATIVE_REBUILD_COUNT + 1))
+                fi
+            fi
         fi
     done
 fi
 echo "[Entrypoint] SDK symlinks created for $TS_DOORS_COUNT TypeScript doors"
+echo "[Entrypoint] Native modules rebuilt for $NATIVE_REBUILD_COUNT doors"
 
 # NOTE: Default sysop creation removed - first user to register becomes sysop (level 255)
 # The main application handles this automatically via new-user.handler.ts
