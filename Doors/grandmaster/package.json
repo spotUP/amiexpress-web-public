@@ -32,7 +32,7 @@
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk",
     "@types/better-sqlite3": "^7.6.13",
-    "better-sqlite3": "^10.1.0",
+    "better-sqlite3": "^12.5.0",
     "tone": "^15.0.4"
   },
   "devDependencies": {

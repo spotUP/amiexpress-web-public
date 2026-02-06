@@ -4,7 +4,7 @@
 # ============================================================================
 # Stage 1: Build SDK (needed by terminal and other packages)
 # ============================================================================
-FROM node:18-alpine AS sdk-builder
+FROM node:20-alpine AS sdk-builder
 
 WORKDIR /app/sdk
 
@@ -20,7 +20,7 @@ RUN npm ci --ignore-scripts && npm run build
 # ============================================================================
 # Stage 2: Build Terminal Package (needs SDK, needed by frontend)
 # ============================================================================
-FROM node:18-alpine AS terminal-builder
+FROM node:20-alpine AS terminal-builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ RUN npm run build
 # ============================================================================
 # Stage 3: Build Frontend (BBS Terminal)
 # ============================================================================
-FROM node:18-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app
 
@@ -63,7 +63,7 @@ RUN echo "[Build] Starting frontend vite build" && \
 # ============================================================================
 # Stage 4: Build Config App (Admin UI)
 # ============================================================================
-FROM node:18-alpine AS config-builder
+FROM node:20-alpine AS config-builder
 
 WORKDIR /app/web/config-app
 
@@ -76,7 +76,7 @@ RUN npm run build
 # ============================================================================
 # Stage 5: Build SDK Preview (needs SDK + terminal)
 # ============================================================================
-FROM node:18-alpine AS sdk-preview-builder
+FROM node:20-alpine AS sdk-preview-builder
 
 WORKDIR /app
 
@@ -95,7 +95,7 @@ RUN npm ci --ignore-scripts && npm run build
 # ============================================================================
 # Doors are now expected to be pre-built or built at runtime
 # This dramatically speeds up Docker builds
-FROM node:18-alpine AS doors-builder
+FROM node:20-alpine AS doors-builder
 WORKDIR /app
 COPY Doors ./Doors
 RUN echo "[Build] Doors stage - copying pre-built doors only"
@@ -103,7 +103,7 @@ RUN echo "[Build] Doors stage - copying pre-built doors only"
 # ============================================================================
 # Stage 7: Build Backend
 # ============================================================================
-FROM node:18-alpine AS backend-builder
+FROM node:20-alpine AS backend-builder
 
 # Install build tools needed for native modules (deasync, better-sqlite3)
 RUN apk add --no-cache python3 make g++ build-base
@@ -121,7 +121,7 @@ RUN npx tsc --project tsconfig.build.json
 # ============================================================================
 # Stage 8: Production Image
 # ============================================================================
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Install system dependencies (including build tools for native modules)
 RUN apk add --no-cache \
