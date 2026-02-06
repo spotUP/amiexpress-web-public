@@ -592,10 +592,10 @@ setInterval(() => {
   }
 }, MEMORY_LOG_INTERVAL);
 
-// SIGTERM handler - Render sends this before killing the container
+// SIGTERM handler - Docker/orchestrator sends this before stopping the container
 // This helps diagnose if crashes are due to health check timeouts
 process.on("SIGTERM", () => {
-  console.log("[SHUTDOWN] SIGTERM received - Render is stopping the container");
+  console.log("[SHUTDOWN] SIGTERM received - container is being stopped");
   console.log("[SHUTDOWN] This is normal for deployments, but unexpected during operation");
   // Log memory state before shutdown
   const mem = process.memoryUsage();
