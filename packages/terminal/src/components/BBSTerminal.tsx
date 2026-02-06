@@ -1980,6 +1980,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   }, [fontSize]);
 
+  // Focus terminal when clicking anywhere in the window
+  // This ensures keyboard input always goes to the terminal
+  useEffect(() => {
+    const handleWindowClick = () => {
+      terminalInstance.current?.focus();
+    };
+
+    window.addEventListener('click', handleWindowClick);
+    return () => {
+      window.removeEventListener('click', handleWindowClick);
+    };
+  }, []);
+
   // Focus terminal when clicked
   const handleClick = () => {
     terminalInstance.current?.focus();
