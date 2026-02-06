@@ -584,9 +584,11 @@ setInterval(() => {
   const uptime = Math.round((now - lastHeartbeat) / 1000);
   console.log(`[HEARTBEAT] Alive, heap: ${heapMB}MB, rss: ${rssMB}MB, interval: ${uptime}s`);
   lastHeartbeat = now;
-  // Warn if memory is getting high (Render Starter plan has 512MB limit)
-  if (rssMB > 400) {
-    console.warn(`[MEMORY WARNING] RSS ${rssMB}MB approaching 512MB limit!`);
+  // Warn if memory is getting high (configurable via MEMORY_LIMIT_MB, default 3072MB for 4GB servers)
+  const memLimitMB = parseInt(process.env.MEMORY_LIMIT_MB || "3072", 10);
+  const warnThreshold = Math.round(memLimitMB * 0.8); // Warn at 80% of limit
+  if (rssMB > warnThreshold) {
+    console.warn(`[MEMORY WARNING] RSS ${rssMB}MB approaching ${memLimitMB}MB limit!`);
   }
 }, MEMORY_LOG_INTERVAL);
 
