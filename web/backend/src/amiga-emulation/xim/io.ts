@@ -634,11 +634,10 @@ debugLog(
         return '\x08';
       }
 
-      // CR (0x0D) -> LF (0x0A): Web terminals send CR for Enter, Amiga uses LF
-      if (code === 0x0d) {
-        debugLog(`[XIMIOHandler] Converting CR (0x0d) to LF (0x0a) for Amiga`);
-        return '\x0a';
-      }
+      // NOTE: Do NOT convert CR to LF for hotkeys!
+      // express.e expects CR (0x0d) for Enter - see doPause() at line 5147:
+      //   UNTIL (ch=13) OR (ch=32) OR (ch<0)
+      // Converting CR to LF breaks Enter key in doors like AquaScan and Bulls.
 
       return token;
     }
