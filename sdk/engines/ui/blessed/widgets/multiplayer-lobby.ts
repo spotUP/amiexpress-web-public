@@ -433,17 +433,28 @@ export class MultiplayerLobby extends EventEmitter {
     const hasTeams = this.features.teams;
 
     // Determine column widths
-    const playerListWidth = this.features.slotBased ? 30 : 40;
+    const playerListWidth = this.features.slotBased ? 30 : 30;
     const rightPanelWidth = 40;
 
-    // Calculate heights for right panels to fit in available space
+    // Calculate heights dynamically based on available screen height
+    const screenHeight = typeof this.parent.height === 'number' ? this.parent.height : 24;
     const startRow = 1; // Start panels immediately below title
-    let roomSettingsHeight = 6;
-    let settingsEditorHeight = hasSettingsEditor ? Math.min(this.gameSettings.length + 2, 6) : 0;
+    const buttonRow = 1; // Reserve 1 row for buttons at bottom
+    const availableHeight = screenHeight - startRow - buttonRow - 1; // -1 for margin
+
+    // Count left-column panels
+    const leftPanelCount = 1 + (hasTeams ? 1 : 0) + 1 + (hasSettingsEditor ? 1 : 0); // player + team? + roomSettings + gameOptions?
+
+    // Distribute height among left panels (leave room for right panel content)
+    const baseLeftPanelHeight = Math.floor(availableHeight / leftPanelCount);
+
+    // Set heights with minimums
+    const playerListHeight = Math.max(5, Math.min(baseLeftPanelHeight, this.features.slotBased ? 6 : 8));
+    const teamSelectorHeight = hasTeams ? Math.max(4, Math.min(baseLeftPanelHeight, 5)) : 0;
+    let roomSettingsHeight = Math.max(4, Math.min(5, baseLeftPanelHeight));
+    let settingsEditorHeight = hasSettingsEditor ? Math.max(4, Math.min(this.gameSettings.length + 2, 5)) : 0;
     let chatHeight = hasChat ? 6 : 0;
     let leaderboardHeight = hasLeaderboard ? 4 : 0;
-    const teamSelectorHeight = hasTeams ? 6 : 0;
-    const playerListHeight = this.features.slotBased ? 6 : (hasTeams ? 12 : 14);
     const panelContentTop = 1;
     const panelContentWidth = (panelWidth: number) => Math.max(1, panelWidth - 2);
     const panelContentHeight = (panelHeight: number) => Math.max(1, panelHeight - 3);
@@ -602,7 +613,7 @@ export class MultiplayerLobby extends EventEmitter {
       this.updateSettingsEditor();
     }
 
-    const screenHeight = typeof this.parent.height === 'number' ? this.parent.height : 24;
+    // Reuse screenHeight from above
     const rightAvailableHeight = screenHeight - 2 - startRow;
 
     // Leaderboard panel (if enabled) - standalone panel above chat

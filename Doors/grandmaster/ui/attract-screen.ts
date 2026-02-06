@@ -1086,7 +1086,13 @@ export class AttractScreen {
     if (!this.running) return;
     this.running = false;
     this.demoRunning = false;
-    
+
+    // Stop the demo game screen if running (prevents game_over showing after attract exit)
+    if (this.gameScreen) {
+      this.gameScreen.stop();
+      this.gameScreen = null;
+    }
+
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
@@ -1119,6 +1125,13 @@ export class AttractScreen {
   cleanup(): void {
     this.running = false;
     this.demoRunning = false;
+
+    // Stop the demo game screen if running (prevents game_over showing after attract exit)
+    if (this.gameScreen) {
+      this.gameScreen.stop();
+      this.gameScreen = null;
+    }
+
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;

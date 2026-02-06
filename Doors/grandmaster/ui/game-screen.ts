@@ -20,6 +20,8 @@ import { ConnectedBlockRenderer } from '../effects/connected-blocks';
  */
 export class GameScreen {
   private running: boolean = false;
+  private stoppedEarly: boolean = false;  // True if stopped externally (not gameover)
+  private cleanedUp: boolean = false;  // Prevent double cleanup
   private boardBox: any;
   private nextBox: any;
   private holdBox: any;
@@ -124,10 +126,16 @@ export class GameScreen {
       const gameLoop = setInterval(() => {
         if (!this.running) {
           clearInterval(gameLoop);
-          this.showGameOver().then(() => {
+          // Only show game over if not stopped early (e.g., attract mode exit)
+          if (this.stoppedEarly) {
             this.cleanup();
             resolve();
-          });
+          } else {
+            this.showGameOver().then(() => {
+              this.cleanup();
+              resolve();
+            });
+          }
           return;
         }
 
@@ -1452,6 +1460,9 @@ export class GameScreen {
   }
 
   private cleanup(): void {
+    if (this.cleanedUp) return;  // Prevent double cleanup
+    this.cleanedUp = true;
+
     if (this.input) {
       this.input.reset();
     }
@@ -1463,5 +1474,17 @@ export class GameScreen {
     this.gradeBox?.destroy();
     this.sectionBox?.destroy();
     this.effectsBox?.destroy();
+  }
+
+  /**
+   * Stop the game loop early without showing game over (for attract mode exit)
+   */
+  stop(): void {
+    if (!this.running) return;
+    this.stoppedEarly = true;  // Prevent showGameOver from being called
+    this.running = false;
+    // Game loop will detect running=false and call cleanup() on next tick
+    // Call cleanup immediately for faster resource release
+    this.cleanup();
   }
 }
