@@ -1,0 +1,23 @@
+  name: Deploy to Hetzner
+
+  on:
+    push:
+      branches: [main]
+    workflow_dispatch:
+
+  jobs:
+    deploy:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Deploy to Hetzner VPS
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.HETZNER_HOST }}
+            username: root
+            key: ${{ secrets.HETZNER_SSH_KEY }}
+            script: |
+              cd /app/amiexpress
+              git pull origin main
+              docker compose up -d --build
+              echo "Deploy complete: $(date)"
+              
