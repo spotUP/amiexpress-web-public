@@ -220,10 +220,11 @@ if [ -d "$BBS_DATA_DIR/Doors" ]; then
 
             # Check if door has native dependencies that need installing
             # These can't be pre-built because macOS binaries don't work on Linux
+            # Check for actual .node binary, not just directory (FORCE_REINIT_DOORS may copy incompatible node_modules)
             if grep -q '"better-sqlite3"' "$door_dir/package.json" 2>/dev/null; then
-                if [ ! -d "$door_dir/node_modules/better-sqlite3" ]; then
+                if [ ! -f "$door_dir/node_modules/better-sqlite3/build/Release/better_sqlite3.node" ]; then
                     echo "[Entrypoint]   Installing dependencies for $door_name (has native modules)..."
-                    (cd "$door_dir" && npm install --omit=dev 2>&1 | tail -3) || echo "[Entrypoint]   Warning: npm install failed for $door_name"
+                    (cd "$door_dir" && rm -rf node_modules && npm install --omit=dev 2>&1 | tail -5) || echo "[Entrypoint]   Warning: npm install failed for $door_name"
                     NATIVE_INSTALL_COUNT=$((NATIVE_INSTALL_COUNT + 1))
                 fi
             fi
