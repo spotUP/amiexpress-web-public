@@ -51,6 +51,7 @@ import { TetriNetServerBrowser, type TetriNetServer } from './network/tetrinet-s
 import { TetriNetExternalAdapter } from './network/tetrinet-external-adapter';
 import { TetriNetEngine } from './core/tetrinet/tetrinet-engine';
 import { TetriNetScreen } from './ui/tetrinet-screen';
+import { getDefaultOptions, type TetriNetRule, type TetriNetGameOptions } from './core/tetrinet/game-rules';
 import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
@@ -734,32 +735,43 @@ export class GrandmasterApp {
   }
 
   /**
-   * Start a TetriNET game
+   * Start a TetriNET game (local, single-player with TetriNET rules)
    */
   private async startTetriNetGame(mode: string, settings: Record<string, unknown>): Promise<void> {
     // Disable mouse control during gameplay
     this.screen.program.disableMouse();
 
-    // TODO: Implement TetriNET game screen
-    // For now show placeholder
-    const placeholder = createDockable({
-      parent: this.screen,
-      top: 'center',
-      left: 'center',
-      width: 50,
-      height: 8,
-      border: { type: 'line' },
-      style: { border: { fg: 'yellow' } },
-      content: `{bold}{yellow-fg}TetriNET Game Starting{/yellow-fg}{/bold}\n\n` +
-        `Mode: ${mode}\n` +
-        `Level: ${settings.startingLevel || 1}\n\n` +
-        `{gray-fg}Game screen coming soon...{/gray-fg}`,
-      persistenceKey: 'grandmaster.app.tnet-placeholder',
+    // Get base options for the selected rule (standard, extended, classic)
+    const rule = (mode === 'extended' || mode === 'classic' || mode === 'standard')
+      ? mode as TetriNetRule
+      : 'standard';
+    const gameOptions: Partial<TetriNetGameOptions> = {
+      ...getDefaultOptions(rule),
+      // Apply any custom settings from lobby
+      startingLevel: (settings.startingLevel as number) || 0,
+      startingHeight: (settings.startingHeight as number) || 0,
+      delayBeforeSuddenDeath: (settings.suddenDeathDelay as number) ?? 3,
+      suddenDeathTick: (settings.suddenDeathTick as number) || 5,
+    };
+
+    // Create TetriNET engine
+    const gameEngine = new TetriNetEngine(this.state.settings, gameOptions);
+
+    // Create TetriNET screen (no network for local game)
+    const gameScreen = new TetriNetScreen({
+      screen: this.screen,
+      engine: gameEngine,
+      inputHandler: this.inputHandler,
+      sounds: this.sounds,
+      state: this.state,
+      playerName: this.state.playerName,
     });
 
-    this.screen.render();
-    await this.waitForKey();
-    placeholder.destroy();
+    // Run the game until completion
+    await gameScreen.run();
+
+    // Cleanup
+    gameScreen.cleanup();
 
     // Re-enable mouse control for menus
     this.screen.program.enableMouse();
