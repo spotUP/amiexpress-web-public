@@ -889,15 +889,19 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
   }
 
   socket.emit('ansi-output', 'Yes..\r\n\r\n');
+  // Save questionnaire data BEFORE createAccount deletes session.newUserData
+  const savedQuestionnaire = questionnaire;
+  const savedNewUserData = session.newUserData;
   // Create account first to get the slot number (express.e:30054-30060 creates user before answers)
   await createAccount(socket, session);
   // Now persist questionnaire answers with the correct slot number
   // The slot number is the user's position in USER.DATA (0-indexed)
   const slotNumber = userDatabaseManager.getUserCount() - 1;
+  // Temporarily restore newUserData for persistQuestionnaireAnswers
+  session.newUserData = savedNewUserData;
   await persistQuestionnaireAnswers(session, slotNumber);
-  if (session.newUserData) {
-    session.newUserData.questionnaire = undefined;
-  }
+  // Final cleanup
+  delete session.newUserData;
 }
 
 async function beginQuestionnaire(socket: Socket, session: any): Promise<boolean> {
@@ -1259,7 +1263,7 @@ console.error('[NewUser] Error writing user to disk files:', error);
     session.cmdShortcuts = false;
     if (session.shortcuts) session.shortcuts.clear();
 
-    // Clean up registration data
+    // Clean up registration data (questionnaire path saves/restores it)
     delete session.newUserData;
 
     // Send success to frontend
