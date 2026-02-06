@@ -226,13 +226,18 @@ if [ -d "$BBS_DATA_DIR/Doors" ]; then
                     echo "[Entrypoint]   Installing dependencies for $door_name (has native modules)..."
                     (cd "$door_dir" && rm -rf node_modules && npm install --omit=dev 2>&1 | tail -5) || echo "[Entrypoint]   Warning: npm install failed for $door_name"
                     NATIVE_INSTALL_COUNT=$((NATIVE_INSTALL_COUNT + 1))
+                    # Force recreate SDK symlink after npm install (npm creates wrong relative symlink from file:../../sdk)
+                    mkdir -p "$sdk_link_dir"
+                    rm -f "$sdk_link"
+                    ln -s /app/sdk "$sdk_link"
+                    echo "[Entrypoint]   Recreated SDK symlink for $door_name (after npm install)"
                 fi
             fi
 
-            # Create SDK symlink (always needed)
+            # Create SDK symlink if missing (for doors without native modules)
             if [ ! -L "$sdk_link" ]; then
                 mkdir -p "$sdk_link_dir"
-                ln -sf /app/sdk "$sdk_link"
+                ln -s /app/sdk "$sdk_link"
                 echo "[Entrypoint]   Created SDK symlink for $door_name"
                 TS_DOORS_COUNT=$((TS_DOORS_COUNT + 1))
             fi
