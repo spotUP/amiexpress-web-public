@@ -229,12 +229,8 @@ if [ -d "$BBS_DATA_DIR/Doors" ]; then
 fi
 echo "[Entrypoint] SDK symlinks created for $TS_DOORS_COUNT TypeScript doors"
 
-# Create/reset default sysop user
-echo "[Entrypoint] Setting up default sysop user..."
-cd /app/web/backend
-export DATABASE_DIR="$DATABASE_DIR"
-export DATABASE_FILE="${DATABASE_FILE:-amiexpress.db}"
-npx tsx scripts/create-default-sysop.ts || echo "[Entrypoint] WARNING: Failed to create sysop user"
+# NOTE: Default sysop creation removed - first user to register becomes sysop (level 255)
+# The main application handles this automatically via new-user.handler.ts
 
 # Execute the main command (typically: npx tsx src/index.ts)
 echo "[Entrypoint] Starting BBS server..."
