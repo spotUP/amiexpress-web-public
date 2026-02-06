@@ -895,7 +895,9 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
   // The slot number is the user's position in USER.DATA (0-indexed)
   const slotNumber = userDatabaseManager.getUserCount() - 1;
   await persistQuestionnaireAnswers(session, slotNumber);
-  session.newUserData.questionnaire = undefined;
+  if (session.newUserData) {
+    session.newUserData.questionnaire = undefined;
+  }
 }
 
 async function beginQuestionnaire(socket: Socket, session: any): Promise<boolean> {
@@ -1009,7 +1011,7 @@ console.warn('[NEW USER] Unable to load questionnaire script:', scriptPath, erro
 }
 
 async function persistQuestionnaireAnswers(session: any, slotNumber: number): Promise<void> {
-  const questionnaire: QuestionnaireState | undefined = session.newUserData.questionnaire;
+  const questionnaire: QuestionnaireState | undefined = session.newUserData?.questionnaire;
   if (!questionnaire) return;
 
   const nodeDir = getNodeDirectory(session);
