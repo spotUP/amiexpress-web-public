@@ -108,7 +108,26 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
   }
 
   async startMatch(): Promise<void> {
+    // Check if local player is the host
+    const state = this.getState();
+    const matchState = this.network.getMatchState();
+    if (!state || !matchState) return;
+
+    const localPlayerId = matchState.players.find(p => !p.isBot)?.id;
+    if (state.hostId && localPlayerId !== state.hostId) {
+      // Not the host, can't start match
+      return;
+    }
+
+    // Notify network (in case there's a real server)
     await this.network.startMatch();
+
+    // Local fallback: emit match events directly (like TetriNET pattern)
+    // This ensures the game starts even without server acknowledgment
+    this.emit('match:starting');
+    setTimeout(() => {
+      this.emit('match:started');
+    }, 500);
   }
 
   fillWithBots(count: number, difficulty?: number): void {
