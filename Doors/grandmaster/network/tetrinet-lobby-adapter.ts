@@ -52,6 +52,7 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
   private network: GrandmasterNetworkManager;
   private state: TetriNetLobbyState | null = null;
   private messageIdCounter: number = 0;
+  private pendingLocalPlayer: { name: string; slot: PlayerSlot } | null = null;
 
   constructor(network: GrandmasterNetworkManager) {
     super();
@@ -238,8 +239,22 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
       chatMessages: [],
     };
 
-    // Add self as first player
-    // Note: In real implementation, this would come from the network
+    // Add pending local player if set before createLobby was called
+    if (this.pendingLocalPlayer) {
+      const { name, slot } = this.pendingLocalPlayer;
+      this.pendingLocalPlayer = null;
+
+      this.state.localSlot = slot;
+      const player: TetriNetPlayer = {
+        slot,
+        name,
+        team: '',
+        ready: true, // Host is always ready
+      };
+      this.state.players.push(player);
+      this.emit('player:joined', this.convertPlayer(player));
+    }
+
     this.emit('state:updated');
 
     return lobbyId;
@@ -407,7 +422,11 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
    * Add local player to lobby (called after connection established)
    */
   addLocalPlayer(name: string, slot: PlayerSlot): void {
-    if (!this.state) return;
+    // If state doesn't exist yet, store for later (will be added in createLobby)
+    if (!this.state) {
+      this.pendingLocalPlayer = { name, slot };
+      return;
+    }
 
     this.state.localSlot = slot;
 
