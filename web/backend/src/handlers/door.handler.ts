@@ -1584,10 +1584,14 @@ console.log(`[executeTypeScriptDoor] Resolved path: ${doorPath}`);
 
 console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
-    // Note: ESM modules cannot be hot reloaded in Node.js. Use file watcher to auto-restart server.
-    // See dev/scripts/watch-doors.ts for automatic restart on door changes.
-    const importPath = `file://${resolvedDoorPath}`;
-console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
+    // CRITICAL: ESM module cache busting for development mode
+    // In development, append timestamp query parameter to force fresh imports every time
+    // This prevents stale code issues when doors are rebuilt without server restart
+    // In production, use stable paths for better performance and caching
+    const isDev = process.env.NODE_ENV !== 'production';
+    const cacheBuster = isDev ? `?t=${Date.now()}` : '';
+    const importPath = `file://${resolvedDoorPath}${cacheBuster}`;
+console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${isDev ? 'enabled' : 'disabled'})`);
 
     // Show animated preloader if PRELOADER or SHOWPRELOADER tooltype is set
     // Only show for doors that explicitly enable it (avoids delay for simple doors)
