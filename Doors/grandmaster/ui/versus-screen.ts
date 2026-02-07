@@ -6,7 +6,6 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from './dockable';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
@@ -33,6 +32,7 @@ export class VersusScreen {
   private minimapRenderer: MinimapRenderer;
   private opponentTracker: OpponentTracker;
   private botPlayer: BotPlayer | null = null;
+  private versusAI: any | null = null;  // VersusAI controller for CPU Battle mode
 
   // UI Elements
   private boardBox: any;
@@ -52,7 +52,7 @@ export class VersusScreen {
     state: AppState,
     network: GrandmasterNetworkManager | null,
     attackManager: AttackManager,
-    botDifficulty?: number
+    botOrAI?: number | any  // number = old botDifficulty, object = VersusAI controller
   ) {
     this.screen = screen;
     this.engine = engine;
@@ -64,9 +64,13 @@ export class VersusScreen {
     this.minimapRenderer = new MinimapRenderer({ height: 10, compact: true });
     this.opponentTracker = new OpponentTracker();
 
-    // Initialize bot player if difficulty provided (CPU Battle mode)
-    if (botDifficulty !== undefined) {
-      this.botPlayer = new BotPlayer(botDifficulty as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10);
+    // Check if AI controller was passed (new implementation)
+    if (botOrAI && typeof botOrAI === 'object') {
+      this.versusAI = botOrAI;
+    }
+    // Legacy: Initialize bot player if difficulty provided (old single-bot mode)
+    else if (typeof botOrAI === 'number') {
+      this.botPlayer = new BotPlayer(botOrAI as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10);
     }
 
     this.setupUI();
@@ -107,7 +111,7 @@ export class VersusScreen {
     });
 
     // Garbage queue indicator (right of board)
-    this.garbageIndicator = createDockable({
+    this.garbageIndicator = createBox({
       parent: this.screen,
       top: 1,
       left: 22,  // Right edge of board
@@ -116,11 +120,11 @@ export class VersusScreen {
       border: { type: 'line' },
       style: { border: { fg: 'red' } },
       content: '{red-fg}GARBAGE{/red-fg}',
-      persistenceKey: 'grandmaster.versus.garbage',
+      fixed: true,
     });
 
     // Attack indicator
-    this.attackIndicator = createDockable({
+    this.attackIndicator = createBox({
       parent: this.screen,
       top: 23,
       left: 22,
@@ -129,27 +133,28 @@ export class VersusScreen {
       border: { type: 'line' },
       style: { border: { fg: 'yellow' } },
       content: '',
-      persistenceKey: 'grandmaster.versus.attack',
+      fixed: true,
     });
 
     // Minimap container (right side)
-    const minimapPanel = createDockable({
+    // Screen width: 80, Board: 22, Garbage: 6, Remaining: 52 for minimap (includes borders)
+    const minimapPanel = createBox({
       parent: this.screen,
       top: 1,
       left: 28,  // Right of garbage indicator (22 + 6 = 28)
-      width: 50,
+      width: 52,  // Fits within 80 columns (28 + 52 = 80)
       height: 25,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
       label: ' Opponents ',
-      persistenceKey: 'grandmaster.versus.minimap',
+      fixed: true,
     });
 
     this.minimapContainer = createBox({
       parent: minimapPanel,
       top: 1,
       left: 1,
-      width: 48,
+      width: 50,  // Panel width (52) - 2 for borders = 50
       height: 23,
       content: '',
     });
@@ -232,8 +237,26 @@ export class VersusScreen {
         this.engine.update(deltaTime);
         this.inputHandler.update(deltaTime);
 
-        // Update bot AI if in CPU Battle mode
-        if (this.botPlayer) {
+        // Update AI opponents (new CPU Battle mode with multiple bots)
+        if (this.versusAI) {
+          this.versusAI.update(deltaTime);
+
+          // Update opponent minimaps every 100ms
+          if (now % 100 < deltaTime) {
+            const opponentBoards = this.versusAI.getOpponentBoards();
+            for (const opponent of opponentBoards) {
+              this.opponentTracker.updateOpponent(opponent.id, {
+                name: opponent.name,
+                board: opponent.board,
+                level: 0,
+                grade: '5',
+                alive: opponent.alive,
+              });
+            }
+          }
+        }
+        // Legacy: Update bot AI if in old single-bot CPU Battle mode
+        else if (this.botPlayer) {
           this.botPlayer.update(deltaTime, this.engine);
         }
 

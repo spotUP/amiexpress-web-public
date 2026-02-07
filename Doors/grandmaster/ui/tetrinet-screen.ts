@@ -13,7 +13,6 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from './dockable';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
@@ -37,6 +36,7 @@ export interface TetriNetScreenOptions {
   state: AppState;
   network?: GrandmasterNetworkManager;
   playerName: string;
+  aiController?: any;  // TetriNetAI controller for local mode
 }
 
 /**
@@ -50,6 +50,7 @@ export class TetriNetScreen {
   private state: AppState;
   private network: GrandmasterNetworkManager | null;
   private playerName: string;
+  private aiController: any | null;  // AI controller for local mode
 
   // UI Elements
   private boardBox: any;
@@ -74,6 +75,7 @@ export class TetriNetScreen {
     this.state = options.state;
     this.network = options.network || null;
     this.playerName = options.playerName;
+    this.aiController = options.aiController || null;
 
     this.setupUI();
     this.setupEngineCallbacks();
@@ -103,8 +105,8 @@ export class TetriNetScreen {
       fixed: true,
     });
 
-    // Preview box (right of board)
-    this.previewBox = createDockable({
+    // Preview box (right of board) - FIXED during gameplay, not dockable
+    this.previewBox = createBox({
       parent: this.screen,
       top: 1,
       left: 26,
@@ -113,7 +115,7 @@ export class TetriNetScreen {
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
       label: ' Next ',
-      persistenceKey: 'grandmaster.tnet.preview',
+      fixed: true,
     });
 
     // Inventory panel (below preview)
@@ -129,34 +131,36 @@ export class TetriNetScreen {
       parent: this.screen,
       top: 10,
       left: 26,
-      width: 25,
+      width: 26,  // Fill columns 26-51 exactly (26 columns)
     });
 
-    // Stats box (bottom left)
+    // Stats box (below board)
     this.statsBox = createBox({
       parent: this.screen,
-      top: 23,
+      top: 25,  // Board ends at line 24, stats starts at 25
       left: 0,
       width: 38,
-      height: 3,
+      height: 2,  // Reduced from 3 to fit in terminal
       content: '',
     });
 
-    // Sudden death box (above stats)
+    // Sudden death timer (shown when active, overlays bottom of board)
     this.suddenDeathBox = createBox({
       parent: this.screen,
-      bottom: 3,
+      top: 23,  // Overlays bottom of board during sudden death
       left: 0,
-      width: 38,
+      width: 26,  // Match board width
       height: 1,
       content: '',
+      style: { bg: 'red', fg: 'white' },  // High visibility during sudden death
     });
 
-    // Opponent boards (right side)
+    // Opponent boards (right side) - Fits 80 columns exactly
     this.opponentBoards = new OpponentBoards({
       parent: this.screen,
       top: 1,
       left: 52,
+      width: 28,  // Columns 52-79 (28 cols) fits in 80 total
       maxOpponents: 5,
     });
 
@@ -168,6 +172,12 @@ export class TetriNetScreen {
       boardWidth: 26,
       boardHeight: 24,
     });
+
+    // Ensure game board is always on top (can't be covered by dockable panels)
+    this.boardBox.setFront();
+    // Stats and sudden death should also be above dockable panels
+    this.statsBox.setFront();
+    this.suddenDeathBox.setFront();
   }
 
   /**
@@ -303,7 +313,26 @@ export class TetriNetScreen {
         this.engine.update(deltaTime);
         this.inputHandler.update(deltaTime);
 
-        // Send state to opponents
+        // Update AI opponents (local mode)
+        if (this.aiController) {
+          this.aiController.update(deltaTime);
+
+          // Update opponent display every 100ms
+          if (now % 100 < deltaTime) {
+            const aiOpponents = this.aiController.getOpponents();
+            const opponents = aiOpponents.map((ai: any) => ({
+              id: ai.id,
+              name: ai.name,
+              board: ai.engine.getBoard(),
+              level: ai.engine.getState().level,
+              alive: ai.alive,
+              hasImmunity: false,
+            }));
+            this.updateOpponents(opponents);
+          }
+        }
+
+        // Send state to opponents (network mode)
         if (this.network && now % 100 < deltaTime) {
           this.network.sendUpdate(this.engine.getState() as any);
         }
