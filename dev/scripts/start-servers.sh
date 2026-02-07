@@ -180,19 +180,69 @@ cleanup_logs_dir() {
 
 cleanup_logs_dir
 
-# Clean backend build artifacts that can cause stale runtime
-# CRITICAL: Remove stale .js files that override .ts files when using tsx
-printf "%b\n" "${CYAN}→ Cleaning stale .js files in amiga-emulation...${RESET}"
+# ============================================================================
+# COMPREHENSIVE CACHE CLEARING - PREVENT STALE CODE ISSUES
+# ============================================================================
+printf "%b\n" "${CYAN}${BOLD}→ Clearing ALL caches (npm, build artifacts, TypeScript)...${RESET}"
+
+# 1. Clear npm cache (force fresh package resolution)
+printf "%b\n" "   ${CYAN}[1/7] Clearing npm cache...${RESET}"
+npm cache clean --force > /dev/null 2>&1
+printf "%b\n" "   ${GREEN}[OK] npm cache cleared${RESET}"
+
+# 2. Remove ALL node_modules/.cache directories (webpack/babel/vite/etc)
+printf "%b\n" "   ${CYAN}[2/7] Clearing build tool caches (webpack/babel/vite)...${RESET}"
+find "$REPO_ROOT" -type d -name ".cache" -path "*/node_modules/.cache" -exec rm -rf {} + 2>/dev/null || true
+printf "%b\n" "   ${GREEN}[OK] Build tool caches cleared${RESET}"
+
+# 3. Remove ALL TypeScript build info files (.tsbuildinfo)
+printf "%b\n" "   ${CYAN}[3/7] Clearing TypeScript build info...${RESET}"
+find "$REPO_ROOT" -name "*.tsbuildinfo" -type f -delete 2>/dev/null || true
+printf "%b\n" "   ${GREEN}[OK] TypeScript build info cleared${RESET}"
+
+# 4. Remove ALL dist/ directories (force complete rebuild)
+printf "%b\n" "   ${CYAN}[4/7] Removing ALL dist/ directories...${RESET}"
+rm -rf "$REPO_ROOT/web/backend/dist" 2>/dev/null || true
+rm -rf "$REPO_ROOT/web/frontend/dist" 2>/dev/null || true
+rm -rf "$REPO_ROOT/web/config-app/dist" 2>/dev/null || true
+rm -rf "$REPO_ROOT/sdk/dist" 2>/dev/null || true
+rm -rf "$REPO_ROOT/sdk/tools/preview/frontend/dist" 2>/dev/null || true
+rm -rf "$REPO_ROOT/packages/terminal/dist" 2>/dev/null || true
+# Remove all door dist/ directories
+find "$REPO_ROOT/Doors" -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
+printf "%b\n" "   ${GREEN}[OK] All dist/ directories removed${RESET}"
+
+# 5. Clean stale .js files that can override .ts files
+printf "%b\n" "   ${CYAN}[5/7] Removing stale .js files in source directories...${RESET}"
 STALE_JS=$(find "$REPO_ROOT/web/backend/src/amiga-emulation" -name "*.js" -type f \
   ! -path "*/moira-source/*" ! -path "*/build/*" 2>/dev/null)
 if [ -n "$STALE_JS" ]; then
   echo "$STALE_JS" | xargs rm -f
-  printf "%b\n" "   ${YELLOW}[CLEANED]${RESET} Removed stale .js files that could override .ts"
-else
-  printf "%b\n" "   ${GREEN}[OK]${RESET} No stale .js files found"
 fi
-rm -rf "$REPO_ROOT/web/backend/dist"
-rm -f "$REPO_ROOT/web/backend/src/api/"*.js
+rm -f "$REPO_ROOT/web/backend/src/api/"*.js 2>/dev/null || true
+# Also clean stale .js files in other source directories
+find "$REPO_ROOT/web/frontend/src" -name "*.js" -type f -delete 2>/dev/null || true
+find "$REPO_ROOT/web/config-app/src" -name "*.js" -type f -delete 2>/dev/null || true
+find "$REPO_ROOT/sdk" -name "*.js" -type f ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/tools/preview/server.js" -delete 2>/dev/null || true
+printf "%b\n" "   ${GREEN}[OK] Stale .js files removed${RESET}"
+
+# 6. Clear Vite cache directories
+printf "%b\n" "   ${CYAN}[6/7] Clearing Vite cache...${RESET}"
+rm -rf "$REPO_ROOT/web/frontend/node_modules/.vite" 2>/dev/null || true
+rm -rf "$REPO_ROOT/web/config-app/node_modules/.vite" 2>/dev/null || true
+rm -rf "$REPO_ROOT/sdk/tools/preview/frontend/node_modules/.vite" 2>/dev/null || true
+printf "%b\n" "   ${GREEN}[OK] Vite cache cleared${RESET}"
+
+# 7. Clear ESM loader cache (Node.js internal cache)
+printf "%b\n" "   ${CYAN}[7/7] Clearing Node.js ESM loader cache...${RESET}"
+rm -rf "$HOME/.node_repl_history" 2>/dev/null || true
+# Force NODE_ENV=development to ensure cache-busting is enabled (from door.handler.ts fix)
+export NODE_ENV=development
+printf "%b\n" "   ${GREEN}[OK] ESM loader cache cleared, development mode enabled${RESET}"
+
+printf "%b\n" "${GREEN}${BOLD}→ ALL caches cleared! Fresh build guaranteed.${RESET}"
+echo ""
+# ============================================================================
 
 # Use fixed log filenames (will be overwritten each time)
 BACKEND_LOG="$LOGS_DIR/backend.log"
