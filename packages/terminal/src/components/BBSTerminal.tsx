@@ -142,6 +142,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const transferTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gamepadManagerRef = useRef<GamepadManager | null>(null);
+  const musicPlayerRef = useRef<HTMLAudioElement | null>(null);  // Background music player (for doors like GRANDMASTER)
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -895,6 +896,36 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('audio:volume', (data: { volume: number }) => {
       mediaHandler.setVolume(data.volume);
+    });
+
+    // Background music handlers (for doors like GRANDMASTER)
+    socket.on('audio:music', (data: { track: string; loop: boolean; volume: number; file: string }) => {
+      // Stop any existing music
+      if (musicPlayerRef.current) {
+        musicPlayerRef.current.pause();
+        musicPlayerRef.current.src = '';
+      }
+
+      // Create new audio element
+      const audio = new Audio(data.file);
+      audio.loop = data.loop;
+      audio.volume = Math.max(0, Math.min(1, data.volume));
+
+      audio.play().catch((err) => {
+        console.error('[BBSTerminal] Music playback failed:', err);
+      });
+
+      musicPlayerRef.current = audio;
+      console.log(`[BBSTerminal] Started playing music: ${data.track} (loop: ${data.loop}, volume: ${data.volume})`);
+    });
+
+    socket.on('audio:music:stop', () => {
+      if (musicPlayerRef.current) {
+        musicPlayerRef.current.pause();
+        musicPlayerRef.current.src = '';
+        musicPlayerRef.current = null;
+        console.log('[BBSTerminal] Stopped music');
+      }
     });
 
     socket.on('video:start-stream', async (data, callback) => {
