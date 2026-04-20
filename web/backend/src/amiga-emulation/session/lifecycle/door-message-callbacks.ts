@@ -1,0 +1,231 @@
+// door-message-callbacks.ts
+// Installs the two XIM-message callback paths used by DoorLifecycleManager.
+// Extracted from the constructor body so that file stays under the
+// 2000-line size budget. Behaviour unchanged — these are the same two
+// callbacks that existed inline in startLifecycle().
+//
+// Path A (setXIMProcessor):
+//   Called synchronously from AEDoor.library's trap handlers
+//   (AEDoorLibrary.waitForReply) while the emulator is inside a trap.
+//   waitForReply is a tight sync loop that cannot yield to the async
+//   pollXIMMessages task, so it drives message processing itself via
+//   this callback.
+//
+// Path B (setDoorMessageCallback):
+//   Invoked by ExecLibrary.putMsg whenever a door PutMsg()s a message
+//   to AEDoorPort, DoorReplyPort, or the door's own task port. Catches
+//   direct-XIM doors (RTW, Bulls, JoinCnf) that don't go through
+//   aedoor.library. Only AEDoorPort messages are processed; reply-port
+//   traffic is ignored here (those are replies TO the door).
+//
+// Blocking command semantics (shared by both paths): JH_HK (6),
+// JH_LI (0), JH_PM (5), JH_ExtHK (15) pre-pause the emulator so the
+// handler's own pause()/waitingFor* state takes effect before the
+// callback returns. Non-blocking commands rely on the handler's own
+// reply() having already run and set state.replyHandled — the callback
+// only falls back to replyMsg when the handler failed to reply.
+
+import type { LibraryManager } from "../../LibraryManager.js";
+import type { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
+import type { XIMProtocol } from "../../XIMProtocol.js";
+import type { ExecutionState } from "../DoorLifecycleManager.js";
+
+/** Blocking I/O XIM command codes — must pre-pause before handleMessage. */
+const BLOCKING_COMMANDS = [6, 0, 5, 15]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_ExtHK=15
+
+export interface MessageCallbackDeps {
+  libraryManager: LibraryManager;
+  emulator: MoiraEmulator;
+  executionState: ExecutionState;
+  /**
+   * Live accessor for the XIM protocol. Using a getter (vs a direct
+   * reference at install time) lets DoorLifecycleManager.setXIMProtocol
+   * swap the instance after callbacks are installed without rewiring.
+   */
+  getXimProtocol: () => XIMProtocol | null;
+  /** Set by doorMessageCallback on first AEDoorPort message. */
+  markUsingDoorMessageCallback: () => void;
+  /** Bump the per-batch message count after each AEDoorPort message. */
+  incrementMessagesHandled: () => void;
+}
+
+/** Install both XIM-message callback paths. */
+export function installMessageCallbacks(deps: MessageCallbackDeps): void {
+  installXIMProcessor(deps);
+  installDoorMessageCallback(deps);
+}
+
+/**
+ * Path A: synchronous XIM processor driven by AEDoor.library's trap
+ * handler while the emulator is stuck inside waitForReply. Pulls one
+ * message from bbsPortAddr, parses, handles, and (for non-blocking
+ * commands) replies synchronously so the tight loop can find a reply
+ * on the next iteration.
+ */
+function installXIMProcessor(deps: MessageCallbackDeps): void {
+  const { libraryManager, emulator, executionState, getXimProtocol } = deps;
+  if (!libraryManager?.aedoorLibrary || !libraryManager?.execLibrary) {
+    return;
+  }
+  const execLib = libraryManager.execLibrary;
+
+  libraryManager.aedoorLibrary.setXIMProcessor((bbsPortAddr: number) => {
+    // Get one message from the BBS port (the message the door just sent)
+    const msgAddr = execLib.getMsg(bbsPortAddr);
+    const ximProtocol = getXimProtocol();
+    if (!msgAddr || msgAddr === 0 || !ximProtocol) {
+      return;
+    }
+    const parsed = ximProtocol.parseMessage(msgAddr);
+
+    // CRITICAL FIX: Pre-pause for blocking I/O commands (same as
+    // doorMessageCallback). handleMessage is async, so pause() inside
+    // handlers won't take effect before the callback returns.
+    const hasQueuedInput = ximProtocol.hasQueuedInput?.() ?? false;
+    if (
+      BLOCKING_COMMANDS.includes(parsed.command) &&
+      emulator &&
+      !hasQueuedInput
+    ) {
+      emulator.pause();
+    }
+
+    // Handle synchronously - for JH_WRITE this just emits to socket and
+    // replies. Note: handleMessage is async but the sync parts run
+    // immediately.
+    // CRITICAL FIX 2026-01-16: For non-blocking commands, call replyMsg
+    // SYNCHRONOUSLY! The .then() callback won't run until the call stack
+    // is empty, but we're in a trap handler (synchronous loop in
+    // waitForReply). If we defer replyMsg to .then(), it never runs
+    // before waitForReply times out.
+    //
+    // For blocking commands (JH_HK, JH_LI, JH_PM, JH_ExtHK), we DON'T
+    // reply immediately — the input handler will call replyMsg when
+    // user input arrives.
+    const isBlockingCommand = BLOCKING_COMMANDS.includes(parsed.command);
+
+    if (isBlockingCommand) {
+      console.log(
+        `[DoorLifecycleManager] XIMProcessor: Blocking cmd=${parsed.command}, waiting for input`,
+      );
+      ximProtocol.handleMessage(parsed);
+      return;
+    }
+
+    // Non-blocking command - handle and reply synchronously.
+    // Handlers for DT_*, BB_* etc. are fully sync: their reply() writes
+    // msg.string AND calls replyMsg() before handleMessage returns, then
+    // marks state.replyHandled=true. Only fall back to replyMsg here
+    // when the handler did NOT already reply (e.g. unhandled command).
+    ximProtocol.handleMessage(parsed);
+    const replyHandled = ximProtocol.wasReplyHandled();
+    if (!ximProtocol.isWaitingForLineInput() && !replyHandled) {
+      console.log(
+        `[DoorLifecycleManager] XIMProcessor: Calling replyMsg SYNC for cmd=${parsed.command}`,
+      );
+      execLib.replyMsg(parsed.msgAddr);
+    } else if (replyHandled) {
+      console.log(
+        `[DoorLifecycleManager] XIMProcessor: SKIPPING replyMsg - handler already replied for cmd=${parsed.command}`,
+      );
+    }
+
+    // CRITICAL FIX 2026-01-17: Check if door requested shutdown (JH_SHUTDOWN)
+    if (ximProtocol.isShuttingDown()) {
+      console.log(
+        `[DoorLifecycleManager] XIMProcessor: Door sent JH_SHUTDOWN - stopping execution`,
+      );
+      executionState.isRunning = false;
+    }
+  });
+}
+
+/**
+ * Path B: doorMessageCallback for direct-XIM doors (RTW, Bulls, JoinCnf)
+ * that PutMsg directly without going through aedoor.library. Fires on
+ * PutMsg → AEDoorPort and processes messages there.
+ *
+ * Unlike Path A, this path uses the .then() pattern and does NOT
+ * fall back to replyMsg — XIM handlers already reply. Calling replyMsg
+ * here produced the "DOUBLED OUTPUT" regression fixed in 2026-01-20
+ * (see AmigaDoorSession.ts comment block for the post-mortem).
+ */
+function installDoorMessageCallback(deps: MessageCallbackDeps): void {
+  const {
+    libraryManager,
+    emulator,
+    executionState,
+    getXimProtocol,
+    markUsingDoorMessageCallback,
+    incrementMessagesHandled,
+  } = deps;
+  if (!libraryManager?.execLibrary) {
+    return;
+  }
+  const execLib = libraryManager.execLibrary;
+
+  execLib.setDoorMessageCallback((portAddr: number, msgAddr: number) => {
+    const ximProtocol = getXimProtocol();
+    if (!ximProtocol) {
+      return;
+    }
+    // Only process messages to AEDoorPort (door -> BBS). DoorReplyPort
+    // messages are replies going back TO the door, not commands.
+    const portName = (execLib.getPortName(portAddr) ?? "").toLowerCase();
+    if (!portName.startsWith("aedoorport")) {
+      return;
+    }
+    // PERFORMANCE FIX 2026-01-14: Mark that we're using callback-based
+    // processing. This prevents pollXIMMessages from double-processing
+    // the same messages.
+    markUsingDoorMessageCallback();
+    incrementMessagesHandled();
+
+    // Remove from queue and process immediately
+    execLib.removeMessageFromPort(portAddr, msgAddr);
+    const parsed = ximProtocol.parseMessage(msgAddr);
+
+    // CRITICAL FIX: For blocking I/O commands (JH_HK, JH_LI, JH_PM,
+    // JH_ExtHK), we MUST pause the emulator BEFORE calling handleMessage.
+    // handleMessage is async, and without this the pause() inside
+    // handleHotkey/etc won't take effect until AFTER this callback
+    // returns (due to await in handleMessage). This causes the door to
+    // continue executing and spin on GetMsg. ONLY pause if no input is
+    // already queued - otherwise the handler replies immediately.
+    const hasQueuedInput = ximProtocol.hasQueuedInput?.() ?? false;
+    if (
+      BLOCKING_COMMANDS.includes(parsed.command) &&
+      emulator &&
+      !hasQueuedInput
+    ) {
+      emulator.pause();
+    }
+
+    // Handle message synchronously for blocking commands, async for others
+    // Note: handleMessage is async but sync parts run immediately
+    ximProtocol.handleMessage(parsed).then(() => {
+      // CRITICAL FIX 2026-01-20: DO NOT call replyMsg here - XIM
+      // handlers already reply! Calling replyMsg here causes DOUBLE
+      // REPLIES which confuses door state machines. The door receives
+      // the same message twice → wrong branch logic → infinite loops.
+      // AmigaDoorSession.ts:415-420 documents this: "DOUBLED OUTPUT"
+      // when both callback and handler reply. XIM handlers (bbs-info.ts,
+      // data-query.ts, etc.) call reply() which calls replyMsg().
+      console.log(
+        `[DoorLifecycleManager] doorMessageCallback: Message handled for cmd=${parsed.command} (XIM handler replied)`,
+      );
+
+      // CRITICAL FIX 2026-01-17: Check if door requested shutdown
+      // (JH_SHUTDOWN). This check was only in pollXIMMessages but
+      // doorMessageCallback skips polling! Without this, session stays
+      // stuck in door_running state forever.
+      const currentXim = getXimProtocol();
+      if (currentXim && currentXim.isShuttingDown()) {
+        console.log(
+          `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - stopping execution`,
+        );
+        executionState.isRunning = false;
+      }
+    });
+  });
+}
