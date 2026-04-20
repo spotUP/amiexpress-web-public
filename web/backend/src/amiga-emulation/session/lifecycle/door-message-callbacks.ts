@@ -130,12 +130,16 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
       );
     }
 
-    // CRITICAL FIX 2026-01-17: Check if door requested shutdown (JH_SHUTDOWN)
+    // JH_SHUTDOWN is a cooperative signal: the door PutMsg's it, WaitPort's for
+    // the reply, then continues executing (often doing final cleanup/delivery
+    // like WarOLM which delivers cross-node OLM AFTER sending JH_SHUTDOWN at
+    // file 0xDCA, then RTS's out of main). Halting immediately on JH_SHUTDOWN
+    // kills code that hasn't run yet. The door exits naturally via RTS to the
+    // 0xffff00/0x1ff000 sentinel, detected by DoorExitDetector.
     if (ximProtocol.isShuttingDown()) {
       console.log(
-        `[DoorLifecycleManager] XIMProcessor: Door sent JH_SHUTDOWN - stopping execution`,
+        `[DoorLifecycleManager] XIMProcessor: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
       );
-      executionState.isRunning = false;
     }
   });
 }
@@ -367,16 +371,14 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
         `[DoorLifecycleManager] doorMessageCallback: Message handled for cmd=${parsed.command} (XIM handler replied)`,
       );
 
-      // CRITICAL FIX 2026-01-17: Check if door requested shutdown
-      // (JH_SHUTDOWN). This check was only in pollXIMMessages but
-      // doorMessageCallback skips polling! Without this, session stays
-      // stuck in door_running state forever.
+      // See comment in XIMProcessor path above: JH_SHUTDOWN is a cooperative
+      // signal, not a hard stop. Let the door continue and exit via the
+      // sentinel-PC path handled by DoorExitDetector.
       const currentXim = getXimProtocol();
       if (currentXim && currentXim.isShuttingDown()) {
         console.log(
-          `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - stopping execution`,
+          `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
         );
-        executionState.isRunning = false;
       }
     });
   });

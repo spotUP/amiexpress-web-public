@@ -635,6 +635,19 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
           continue;
         }
 
+        // === STEP 1.5: Honor DOS Delay() ===
+        // dos.library Delay() sets a deadline on the DosLibrary instance;
+        // without this check the door keeps executing and Delay is a
+        // no-op. That turns any busy-poll loop with `Delay(50)` between
+        // iterations (e.g. WarOLM's wait-for-idle STATS@N polling, or
+        // any door animating via Delay) into a 100% CPU spin. Sleep
+        // in small slices so we resume promptly when the deadline hits.
+        const dosLib = this.libraryManager?.dosLibrary;
+        if (dosLib?.isDelayed?.()) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          continue;
+        }
+
         // === STEP 2: Get current PC and handle door-specific logic ===
         const pc = this.emulator.getRegister(16);
         this.executionLogger.recordProgressByPc(pc);
@@ -1648,9 +1661,14 @@ console.log(`[DoorLifecycleManager] UPDATING to actual AEDoorPort: 0x${actualDoo
               console.log(`[DoorLifecycleManager] SKIPPING replyMsg - waiting for input`);
             }
 
-            // Check if door requested shutdown (JH_SHUTDOWN)
+            // JH_SHUTDOWN is a cooperative signal; the door keeps running
+            // after PutMsg+WaitPort+GetMsg (see
+            // door-message-callbacks.ts for the full rationale). Natural
+            // exit is handled by DoorExitDetector on the sentinel PC.
             if (this.ximProtocol.isShuttingDown()) {
-              this.executionState.isRunning = false;
+              debugLog(
+                `[DoorLifecycleManager] pollXIMMessages: JH_SHUTDOWN observed - continuing execution until natural exit`,
+              );
             }
           }
         }
