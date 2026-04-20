@@ -21,6 +21,7 @@ import { BBSPaths } from '../../utils/bbs-paths.util';
 import { resolveAssignPath } from '../../utils/path-util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
+import { wrapLine } from './line-wrap.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
@@ -1559,7 +1560,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
       const lineLooksLikeArt = looksLikeAsciiArt(visibleLine);
       const segments = lineLooksLikeArt
         ? [line]
-        : this.wrapLine(line, this.state.lineWrap);
+        : wrapLine(line, this.state.lineWrap);
 
       for (let s = 0; s < segments.length; s++) {
         const segment = segments[s];
@@ -1604,66 +1605,6 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
    * - Tab characters (expand to next 8-column tab stop)
    * - ANSI escape sequences (don't count toward visible width)
    */
-  private wrapLine(line: string, width: number): string[] {
-    if (width <= 0 || line.length === 0) {
-      return [line];
-    }
-
-    const segments: string[] = [];
-    let current = '';
-    let visibleCount = 0;
-
-    const flushCurrent = () => {
-      segments.push(current);
-      current = '';
-      visibleCount = 0;
-    };
-
-    let i = 0;
-    while (i < line.length) {
-      // Handle ANSI escape sequences (don't count toward visible width)
-      if (line[i] === '\x1b') {
-        const remainder = line.slice(i);
-        const escMatch = remainder.match(/^\x1b\[[0-9;]*[A-Za-z]/);
-        if (escMatch) {
-          current += escMatch[0];
-          i += escMatch[0].length;
-          continue;
-        }
-      }
-
-      // Handle tab characters - expand to next 8-column tab stop
-      if (line[i] === '\t') {
-        const tabWidth = 8 - (visibleCount % 8);
-        // Check if tab would cause overflow
-        if (visibleCount + tabWidth > width) {
-          flushCurrent();
-        }
-        current += line[i];
-        visibleCount += tabWidth;
-        i += 1;
-        if (visibleCount >= width) {
-          flushCurrent();
-        }
-        continue;
-      }
-
-      current += line[i];
-      visibleCount += 1;
-      i += 1;
-
-      if (visibleCount >= width) {
-        flushCurrent();
-      }
-    }
-
-    if (current.length > 0 || segments.length === 0) {
-      segments.push(current);
-    }
-
-    return segments;
-  }
-
   /**
    * Determine XIM port code (CONSOLE_PORT=1, SERIAL_PORT=2)
    *
