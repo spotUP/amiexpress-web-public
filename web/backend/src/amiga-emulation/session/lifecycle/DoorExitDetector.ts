@@ -9,14 +9,27 @@
 // lastA4ZeroLogged) that was previously stored on DoorLifecycleManager.
 // Everything else flows through a deps bag passed at construction.
 
+import * as path from "path";
 import { Socket } from "socket.io";
 import { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
 import { DoorConfig } from "../../DoorTypes.js";
 import { LibraryManager } from "../../LibraryManager.js";
 import { LibraryTraps } from "../../api/LibraryTraps.js";
 import { DoorLoader } from "../../DoorLoader.js";
+import { SysopDebugUtil } from "../../../utils/sysop-debug.util.js";
 import { debugLog } from "../../../utils/debug-log";
 import type { ExecutionState } from "../DoorLifecycleManager.js";
+
+/**
+ * Mutable code-region bounds shared by DoorLifecycleManager and
+ * DoorExitDetector. Passed by reference so the first-iteration compute
+ * done inside checkExitConditions is visible to code-region checks
+ * elsewhere in the parent manager's execution loop.
+ */
+export interface CodeBoundsRef {
+  lowerBound: number;
+  upperBound: number;
+}
 
 export interface DoorExitDetectorDeps {
   emulator: MoiraEmulator;
@@ -25,10 +38,14 @@ export interface DoorExitDetectorDeps {
   libraryManager: LibraryManager;
   doorLoader: DoorLoader;
   executionState: ExecutionState;
+  /** Shared code-region bounds (mutated on first checkExitConditions). */
+  codeBounds: CodeBoundsRef;
   /** Live getter — libraryTraps is assigned after construction. */
   getLibraryTraps: () => LibraryTraps | null;
   /** Ring of recent PCs for symbol-aware exit logs. Read-only here. */
   getLastPCs: () => number[];
+  /** Longer PC history snapshot used by crash reports. */
+  getPcHistory: () => number[];
   /** Callback — invoked when an exit condition fires. */
   terminate: () => void;
   /** Paused-state polling hooks (supplied by the parent manager). */
@@ -37,15 +54,10 @@ export interface DoorExitDetectorDeps {
 }
 
 export class DoorExitDetector {
-  // Computed once from the seglist header the first time checkExitConditions
-  // runs; caches the valid code-region bounds for subsequent calls.
-  private codeLowerBound: number = 0;
-  private codeUpperBound: number = 0;
   // Dedupe flag for the "A4 became zero" critical-error trace so we only
   // log it once per run even if PC bounces repeatedly through the same
   // invalid region.
   private lastA4ZeroLogged = false;
-  private lastA5OutOfRangeLogged: number = 0;
 
   constructor(private readonly deps: DoorExitDetectorDeps) {}
 
@@ -174,7 +186,7 @@ export class DoorExitDetector {
     }
 
     // Compute code bounds once from the seglist header so we can spot runaway PCs
-    if (this.codeLowerBound === 0 || this.codeUpperBound === 0) {
+    if (this.deps.codeBounds.lowerBound === 0 || this.deps.codeBounds.upperBound === 0) {
       try {
         const taskAddr = execLib.getCurrentTaskAddress();
         if (taskAddr !== null) {
@@ -182,8 +194,8 @@ export class DoorExitDetector {
           if (segListBptr) {
             const headerAddr = segListBptr << 2;
             const sizeLongs = emulator.readMemory32(headerAddr);
-            this.codeLowerBound = headerAddr + 8;
-            this.codeUpperBound = this.codeLowerBound + sizeLongs * 4;
+            this.deps.codeBounds.lowerBound = headerAddr + 8;
+            this.deps.codeBounds.upperBound = this.deps.codeBounds.lowerBound + sizeLongs * 4;
           }
         }
       } catch {
@@ -192,7 +204,7 @@ export class DoorExitDetector {
     }
 
     const romStart = 0xf80000;
-    const trapRegion = this.codeUpperBound + 0x2000; // allow a little headroom for stubs
+    const trapRegion = this.deps.codeBounds.upperBound + 0x2000; // allow a little headroom for stubs
     const a5 = emulator.getRegister(13);
     const execBase = execLib.getExecBaseAddress() ?? 0;
     const dosBase = execLib.getLibraryBase("dos.library") ?? 0;
@@ -227,8 +239,8 @@ export class DoorExitDetector {
     };
 
     if (
-      this.codeLowerBound &&
-      this.codeUpperBound &&
+      this.deps.codeBounds.lowerBound &&
+      this.deps.codeBounds.upperBound &&
       !inStubByA5 &&
       pc > trapRegion &&
       pc < romStart &&
@@ -292,7 +304,7 @@ export class DoorExitDetector {
         );
       }
       debugLog(
-        `[DoorLifecycleManager] WARNING: PC out of code region: pc=0x${pc.toString(16)} code=[0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}] sp=0x${sp.toString(16)} d0=0x${d0.toString(16)} d1=0x${d1.toString(16)} a0=0x${a0.toString(16)} a1=0x${a1.toString(16)} a4=0x${a4.toString(16)} a5=0x${a5.toString(16)} stack=[${stackWords.join(" ")}] lastPCs=[${lastPcTrace}] [-0x58(A5)]=0x${(memA5m58 ?? 0).toString(16)} [A0]=0x${(memA0 ?? 0).toString(16)} [A1+0x28]=0x${(memA1p28 ?? 0).toString(16)} [A4+0x8]=0x${(memA4p8 ?? 0).toString(16)} lastPCbytes=[${lastPcBytes}]`,
+        `[DoorLifecycleManager] WARNING: PC out of code region: pc=0x${pc.toString(16)} code=[0x${this.deps.codeBounds.lowerBound.toString(16)}-0x${this.deps.codeBounds.upperBound.toString(16)}] sp=0x${sp.toString(16)} d0=0x${d0.toString(16)} d1=0x${d1.toString(16)} a0=0x${a0.toString(16)} a1=0x${a1.toString(16)} a4=0x${a4.toString(16)} a5=0x${a5.toString(16)} stack=[${stackWords.join(" ")}] lastPCs=[${lastPcTrace}] [-0x58(A5)]=0x${(memA5m58 ?? 0).toString(16)} [A0]=0x${(memA0 ?? 0).toString(16)} [A1+0x28]=0x${(memA1p28 ?? 0).toString(16)} [A4+0x8]=0x${(memA4p8 ?? 0).toString(16)} lastPCbytes=[${lastPcBytes}]`,
       );
       // Smart PC bounds check: only terminate for definitely invalid addresses.
       // High memory execution (0x4fxxxx etc) is legitimate for dynamically
@@ -319,5 +331,127 @@ export class DoorExitDetector {
     }
 
     return false;
+  }
+
+  /**
+   * Handle a thrown error from the execution loop — assemble a crash dump
+   * (registers, stack, memory probes, PC history) and hand it to
+   * SysopDebugUtil.debugDoorCrash for sysop-visible reporting, then emit
+   * door:error on the socket and terminate the lifecycle.
+   */
+  async handleExecutionError(error: unknown): Promise<void> {
+    const { emulator, socket, config, executionState } = this.deps;
+    const pc = emulator.getRegister(16);
+    const sp = emulator.getRegister(15);
+    const doorName = path.basename(config.executablePath);
+
+    console.error("[DoorLifecycleManager] ERROR in execution loop:", error);
+    console.error(
+      `[DoorLifecycleManager] Iteration: ${executionState.iterationCount}`,
+    );
+    console.error(`[DoorLifecycleManager] PC: 0x${pc.toString(16)}`);
+    console.error(`[DoorLifecycleManager] SP: 0x${sp.toString(16)}`);
+    console.error(
+      `[DoorLifecycleManager] Stack: ${
+        error instanceof Error ? error.stack : "No stack"
+      }`,
+    );
+
+    // Gather all registers for the crash dump
+    const registers = {
+      d0: emulator.getRegister(0),
+      d1: emulator.getRegister(1),
+      d2: emulator.getRegister(2),
+      d3: emulator.getRegister(3),
+      d4: emulator.getRegister(4),
+      d5: emulator.getRegister(5),
+      d6: emulator.getRegister(6),
+      d7: emulator.getRegister(7),
+      a0: emulator.getRegister(8),
+      a1: emulator.getRegister(9),
+      a2: emulator.getRegister(10),
+      a3: emulator.getRegister(11),
+      a4: emulator.getRegister(12),
+      a5: emulator.getRegister(13),
+      a6: emulator.getRegister(14),
+    };
+
+    // Read stack contents (8 longwords starting at SP)
+    const stackContents: number[] = [];
+    try {
+      for (let i = 0; i < 8; i++) {
+        const addr = sp + i * 4;
+        if (addr >= 0 && addr < 0x1000000) {
+          stackContents.push(emulator.readMemory32(addr));
+        }
+      }
+    } catch {
+      // Ignore memory read errors during crash dump
+    }
+
+    // Gather memory at key locations
+    const memoryDump: { address: number; value: number; label?: string }[] = [];
+    try {
+      // A4-relative data (small data model)
+      const a4 = registers.a4;
+      if (a4 >= 0x7ffe) {
+        memoryDump.push({
+          address: a4 - 0x40,
+          value: emulator.readMemory32(a4 - 0x40),
+          label: "A4-0x40",
+        });
+        memoryDump.push({
+          address: a4 - 0x1c,
+          value: emulator.readMemory32(a4 - 0x1c),
+          label: "A4-0x1c",
+        });
+      }
+      // A5-relative frame (Amiga E runtime)
+      const a5 = registers.a5;
+      if (a5 > 0) {
+        memoryDump.push({
+          address: a5 - 0x28,
+          value: emulator.readMemory32(a5 - 0x28),
+          label: "A5-0x28 execbase",
+        });
+        memoryDump.push({
+          address: a5 - 0x2c,
+          value: emulator.readMemory32(a5 - 0x2c),
+          label: "A5-0x2c dosbase",
+        });
+      }
+      // Memory at PC (what instruction caused the crash)
+      if (pc > 0 && pc < 0x1000000) {
+        memoryDump.push({
+          address: pc,
+          value: emulator.readMemory32(pc),
+          label: "at PC",
+        });
+      }
+    } catch {
+      // Ignore memory read errors during crash dump
+    }
+
+    SysopDebugUtil.debugDoorCrash(socket, config.bbsSession, doorName, {
+      pc,
+      sp,
+      iteration: executionState.iterationCount,
+      error: error instanceof Error ? error.message : String(error),
+      registers,
+      pcHistory: [...this.deps.getPcHistory()],
+      stackContents,
+      memoryDump,
+      lastSignificantPC: executionState.lastSignificantPC,
+      writeCallCount: executionState.writeCallCount,
+      aedoorCallCount: executionState.aedoorCallCount,
+      stackBase: 0x6e74, // From DoorLoader
+      stackSize: config.stack || 8192,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    socket.emit("door:error", {
+      message: error instanceof Error ? error.message : "Execution error",
+    });
+    this.deps.terminate();
   }
 }

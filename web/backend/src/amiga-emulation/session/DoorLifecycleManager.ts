@@ -23,7 +23,8 @@ import {
   sendStartupMessage as sendStartupMessageHelper,
 } from "./lifecycle/DoorStartupHelper.js";
 import { installMessageCallbacks } from "./lifecycle/door-message-callbacks.js";
-import { DoorExitDetector } from "./lifecycle/DoorExitDetector.js";
+import { DoorExitDetector, type CodeBoundsRef } from "./lifecycle/DoorExitDetector.js";
+import { DoorTrapDispatcher } from "./lifecycle/DoorTrapDispatcher.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -88,8 +89,12 @@ export class DoorLifecycleManager {
   private libraryManager: LibraryManager;
   private doorLoader: DoorLoader;
   private messageHandler: DoorMessageHandler | null = null;
-  private codeLowerBound: number = 0;
-  private codeUpperBound: number = 0;
+  /**
+   * Shared code-region bounds. Mutated on first DoorExitDetector.checkExitConditions
+   * by reference so all readers in this file and the detector see the
+   * computed values in the same iteration.
+   */
+  private codeBounds: CodeBoundsRef = { lowerBound: 0, upperBound: 0 };
   private logger: DoorLogger | null = null;
   private debugMonitor: DebugMonitor | null = null;
 
@@ -120,6 +125,7 @@ export class DoorLifecycleManager {
   // size budget). Getters below preserve the legacy property access path.
   private executionLogger!: DoorExecutionLogger;
   private exitDetector!: DoorExitDetector;
+  private trapDispatcher!: DoorTrapDispatcher;
   private lastPCs: number[] = [];
   private traceRegs: boolean = false;
   private traceInterval: number = 500;
@@ -135,7 +141,6 @@ export class DoorLifecycleManager {
   private watchAutoLower: number = 0;
   private watchAutoUpper: number = 0;
   private lastA5OutOfRangeLogged: number = 0;
-  private lastA4ZeroLogged = false;
   private firstInvalidPCLogged = false;
   private loggedAedoorPc = new Set<number>();
   private loggedAedoorPcCount = 0;
@@ -211,11 +216,24 @@ debugLog(
       libraryManager: this.libraryManager,
       doorLoader: this.doorLoader,
       executionState: this.executionState,
+      codeBounds: this.codeBounds,
       getLibraryTraps: () => this.libraryTraps,
       getLastPCs: () => this.lastPCs,
+      getPcHistory: () => this.pcHistory,
       terminate: () => this.terminate(),
       pollXIMMessages: () => this.pollXIMMessages(),
       pollTIMMessages: () => this.pollTIMMessages(),
+    });
+
+    // Library-trap dispatch + call logging + illegal-instruction handling
+    // extracted to lifecycle/DoorTrapDispatcher.
+    this.trapDispatcher = new DoorTrapDispatcher({
+      emulator: this.emulator,
+      libraryManager: this.libraryManager,
+      executionState: this.executionState,
+      executionLogger: this.executionLogger,
+      getLibraryTraps: () => this.libraryTraps,
+      getLastPCs: () => this.lastPCs,
     });
 
     this.traceRegs = process.env.DOOR_TRACE_REGS === "1";
@@ -630,9 +648,9 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
 
       // TRACE: Detect first invalid PC and log what instruction caused it
       if (!this.firstInvalidPCLogged &&
-          this.codeLowerBound !== 0 && this.codeUpperBound !== 0 &&
+          this.codeBounds.lowerBound !== 0 && this.codeBounds.upperBound !== 0 &&
           pc !== 0 &&
-          (pc < this.codeLowerBound || pc > this.codeUpperBound)) {
+          (pc < this.codeBounds.lowerBound || pc > this.codeBounds.upperBound)) {
         this.firstInvalidPCLogged = true;
         const cpu = (this.emulator as any).cpu;
         let prevInstr = '???';
@@ -658,7 +676,7 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
           `  Previous PC: 0x${prevPC.toString(16)}\n` +
           `  Instruction: ${prevInstr}\n` +
           `  New PC: 0x${pc.toString(16)} (OUT OF BOUNDS)\n` +
-          `  Code region: 0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}\n` +
+          `  Code region: 0x${this.codeBounds.lowerBound.toString(16)}-0x${this.codeBounds.upperBound.toString(16)}\n` +
           `  D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} D2=0x${d2.toString(16)}\n` +
           `  A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} A2=0x${a2.toString(16)}\n` +
           `  A3=0x${a3.toString(16)} A4=0x${a4.toString(16)} A5=0x${a5.toString(16)} SP=0x${sp.toString(16)}\n` +
@@ -859,49 +877,10 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           return;
         }
 
-        // DEBUG: Trace dRE!WAll storage instruction to debug character buffer issue
-        // PC=0x21d4 is "move.b d5, (a0)" - stores character to buffer
-        // Enable with: DREWALL_TRACE=1
-        if (process.env.DREWALL_TRACE === '1' && pc === 0x21d4) {
-          const d4 = this.emulator.getRegister(4);
-          const d5 = this.emulator.getRegister(5);
-          const a0 = this.emulator.getRegister(8);
-          const a5 = this.emulator.getRegister(13);
-          const sp = this.emulator.getRegister(15);
-          const char = String.fromCharCode(d5 & 0xff);
-          console.log(`[DREWALL_TRACE] PC=0x21d4 STORE: d5=0x${d5.toString(16)} ('${char}') -> (a0)=0x${a0.toString(16)}`);
-          console.log(`[DREWALL_TRACE]   a5=0x${a5.toString(16)} d4=${d4} (index) sp=0x${sp.toString(16)}`);
-          // Also read what's currently at the destination
-          const currentVal = this.emulator.readMemory(a0);
-          console.log(`[DREWALL_TRACE]   current value at a0: 0x${currentVal.toString(16)}`);
-        }
-
-        // DEBUG dRE!WAll: Trace the line-input call boundary and empty-buffer check
-        // 0x2472 = bsr.w 0x2164 (line input) - log buffer addr before call
-        // 0x2478 = addq.l #1, d0 - just after line input returns, log D0 + buffer content
-        // 0x2480 = tst.b 0x8(a7) - the empty check - log exact byte it's reading
-        if (process.env.DREWALL_TRACE === '1' && (pc === 0x2472 || pc === 0x2478 || pc === 0x2480)) {
-          const d0 = this.emulator.getRegister(0);
-          const d4 = this.emulator.getRegister(4);
-          const a0 = this.emulator.getRegister(8);
-          const a5 = this.emulator.getRegister(13);
-          const sp = this.emulator.getRegister(15);
-          const bufAddr = (pc === 0x2472) ? a0 : sp + 8;
-          const bytes: number[] = [];
-          for (let i = 0; i < 32; i++) bytes.push(this.emulator.readMemory(bufAddr + i));
-          const hex = bytes.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join(' ');
-          const asc = bytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
-          const label = pc === 0x2472 ? 'PRE-INPUT (A0=buf)' : pc === 0x2478 ? 'POST-INPUT (SP+8=buf)' : 'TST.B (SP+8=buf)';
-          console.log(`[DREWALL_TRACE] PC=0x${pc.toString(16)} ${label}`);
-          console.log(`[DREWALL_TRACE]   D0=0x${d0.toString(16)} D4=${d4} A0=0x${a0.toString(16)} A5=0x${a5.toString(16)} SP=0x${sp.toString(16)} buf@0x${bufAddr.toString(16)}`);
-          console.log(`[DREWALL_TRACE]   bytes[0..15]: ${hex}`);
-          console.log(`[DREWALL_TRACE]   ascii[0..31]: "${asc}"`);
-        }
-
-        // PER-INSTRUCTION trace removed — runs too often under native-batch execution
-        // and fires per-instruction-callback which is hot. Use the CopyMem logger in
-        // ExecLibrary.copyMem + the WALL-LIST dump at Write() in DosLibrary instead.
-
+        // Historical dRE!WAll trace probes (PC=0x21d4 store, PC=0x2472/0x2478/0x2480
+        // line-input boundary, per-instruction trace) removed 2026-04-20 — the
+        // underlying bugs are fixed (commit d3dabc62c) and re-adding door-specific
+        // PC probes belongs in a debugging branch, not the hot loop.
         this.debugMonitor?.setLastPCs(this.lastPCs);
         this.debugMonitor?.monitorExecBasePointer(pc);
         this.debugMonitor?.logA6Change(pc);
@@ -915,9 +894,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           if (ENABLE_PROFILING) profileTrapCount++;
           const trapStart = ENABLE_PROFILING ? Date.now() : 0;
           // Handle the trap
-          const trapHandled = this.checkAndHandleLibraryTrap(pc);
+          const trapHandled = this.trapDispatcher.checkAndHandleLibraryTrap(pc);
           if (trapHandled) {
-            this.handleTrapExecution(pc);
+            this.trapDispatcher.handleTrapExecution(pc);
 
             // === STEP 4B: Check if WaitPort returned 0 (no messages) ===
             // Doors like Bulls/FR use tight WaitPort loops and need immediate XIM polling.
@@ -943,7 +922,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
             continue;
           }
           // Check for ILLEGAL instruction if trap wasn't handled by library
-          if (this.handleIllegalInstruction(pc)) {
+          if (this.trapDispatcher.handleIllegalInstruction(pc)) {
             if (ENABLE_PROFILING) profileTrapHandling += Date.now() - trapStart;
             continue;
           }
@@ -974,8 +953,8 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
         if (TRACE_PC_JUMPS && pcBeforeBatch > 0 && pcAfterBatch > 0) {
           const pcDelta = pcAfterBatch - pcBeforeBatch;
-          const isPCInCode = pcAfterBatch >= this.codeLowerBound && pcAfterBatch <= this.codeUpperBound;
-          const wasPCInCode = pcBeforeBatch >= this.codeLowerBound && pcBeforeBatch <= this.codeUpperBound;
+          const isPCInCode = pcAfterBatch >= this.codeBounds.lowerBound && pcAfterBatch <= this.codeBounds.upperBound;
+          const wasPCInCode = pcBeforeBatch >= this.codeBounds.lowerBound && pcBeforeBatch <= this.codeBounds.upperBound;
 
           // Log jumps > 0x1000 that cross code boundaries (likely RTS/BSR/JMP)
           if (Math.abs(pcDelta) > 0x1000 && (!isPCInCode || !wasPCInCode)) {
@@ -992,7 +971,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
                 `SP=0x${sp.toString(16)} [SP]=0x${stackVal0.toString(16)} [SP+4]=0x${stackVal4.toString(16)} ` +
                 `D0=0x${d0.toString(16)} A0=0x${a0.toString(16)} ` +
                 `inCode=${wasPCInCode}->${isPCInCode} ` +
-                `codeRegion=[0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`
+                `codeRegion=[0x${this.codeBounds.lowerBound.toString(16)}-0x${this.codeBounds.upperBound.toString(16)}]`
               );
             } catch {
               debugLog(
@@ -1050,7 +1029,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         const isInWaitLoop = this.emulator.isPaused() ||
                             (this.libraryManager?.execLibrary as any)?.currentTask?.isWaiting;
         const isXIMDoor = this.config.doorType === 'XIM' || this.detectedXIMPort;
-        const isPCInCodeRegion = pcAfterBatch >= this.codeLowerBound && pcAfterBatch <= this.codeUpperBound;
+        const isPCInCodeRegion = pcAfterBatch >= this.codeBounds.lowerBound && pcAfterBatch <= this.codeBounds.upperBound;
 
         // CRITICAL: Check if XIM door is waiting for user input (sent JH_HK/JH_LI, awaiting reply)
         // When waiting for input, doors poll GetMsg repeatedly - this is NORMAL, not stuck!
@@ -1125,7 +1104,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // Only detect invalid PC addresses (not stuck loops, those are handled above)
         if (isPCInvalid && !skipStuckDetection) {
 console.error(`[DoorLifecycleManager] Invalid PC detected: 0x${pcAfterBatch.toString(16)}`);
-console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}, code region: [0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`);
+console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}, code region: [0x${this.codeBounds.lowerBound.toString(16)}-0x${this.codeBounds.upperBound.toString(16)}]`);
           this.terminate();
           return;
         }
@@ -1210,330 +1189,15 @@ debugLog(
         "[DoorLifecycleManager] 🏁 Execution loop completed normally"
       );
     } catch (error) {
-      await this.handleExecutionError(error);
+      await this.exitDetector.handleExecutionError(error);
     }
   }
 
   // handlePausedState + formatPC + checkExitConditions extracted to
   // lifecycle/DoorExitDetector.
 
-  private checkAndHandleLibraryTrap(pc: number): boolean {
-    if (!this.libraryTraps) {
-      return false;
-    }
-
-    // Check for duplicate trap prevention
-    if (
-      this.executionState.lastInterceptedTrap === pc &&
-      this.executionState.iterationCount -
-        this.executionState.lastInterceptedIteration <=
-        2
-    ) {
-      this.executionState.lastInterceptedTrap = 0;
-      this.executionState.lastInterceptedIteration = 0;
-      return true;
-    }
-
-    const handled = this.libraryTraps.handleTrap(pc);
-    if (handled) {
-      this.executionState.lastInterceptedTrap = pc;
-      this.executionState.lastInterceptedIteration =
-        this.executionState.iterationCount;
-      // Record progress when library calls are made
-      this.executionState.lastProgressIteration = this.executionState.iterationCount;
-      this.executionState.lastProgressTime = Date.now();
-      return true;
-    }
-
-    return false;
-  }
-
-  private handleTrapExecution(pc: number): void {
-    // Track library trap calls for debugging
-    const a6 = this.emulator.getRegister(14);
-    let offset = pc - a6;
-
-    // Handle 16-bit signed offset wrapping
-    if (a6 < 0x10000 && offset > 0x8000 && offset < 0x1000000) {
-      const low16 = offset & 0xffff;
-      offset = low16 >= 0x8000 ? low16 - 0x10000 : low16;
-    } else if (offset > 0x7fffffff) {
-      offset = offset - 0x100000000;
-    }
-
-    const execLib = this.libraryManager.execLibrary;
-    if (!execLib) {
-      return;
-    }
-
-    const safeRead32 = (addr: number): number | null => {
-      try {
-        return this.emulator.readMemory32(addr >>> 0);
-      } catch {
-        return null;
-      }
-    };
-
-    // Track DOS.Write() calls
-    if (offset === -48 || pc === 0xfffffed0) {
-      this.executionState.writeCallCount++;
-      this.executionLogger.logWriteCall(pc);
-    }
-
-    // Track AEDoor.library calls
-    if (a6 === 0xff4000 || (a6 >= 0xff4000 && a6 <= 0xff4fff)) {
-      this.executionState.aedoorCallCount++;
-      this.executionLogger.logAEDoorCall(pc, offset);
-    }
-
-    this.executionState.iterationCount++;
-    // DO NOT update lastProgressIteration here - that defeats the loop guard!
-    // It should only be updated when actual progress is made (XIM messages, file I/O, etc.)
-    // Track A4/A5 changes to catch early corruption; log nearby frame slots
-    const a4 = this.emulator.getRegister(12);
-    const a5 = this.emulator.getRegister(13);
-    const instrWord = this.emulator.readMemory16(pc);
-    if (
-      (a4 !== 0 && a4 !== this.executionState.lastSignificantPC) ||
-      a5 !== this.executionState.lastInterceptedTrap
-    ) {
-      if (DEBUG_68K) {
-        const memA4m40 =
-          a4 !== 0 ? this.emulator.readMemory32((a4 - 0x40) >>> 0) : 0;
-        const memA4m1c =
-          a4 !== 0 ? this.emulator.readMemory32((a4 - 0x1c) >>> 0) : 0;
-debugLog(
-          `[DoorLifecycleManager] A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
-            16
-          )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
-            16
-          )} [-0x40]=0x${memA4m40.toString(16)} [-0x1c]=0x${memA4m1c.toString(
-            16
-          )}`
-        );
-      }
-      if (process.env.DEBUG_68K_NATIVE === '1') {
-        const execLib = this.libraryManager?.execLibrary;
-        const stackLower = execLib?.getStackLower?.() || 0;
-        const stackUpper = execLib?.getStackUpper?.() || 0;
-        if (
-          stackLower !== 0 &&
-          stackUpper !== 0 &&
-          (a5 < stackLower || a5 > stackUpper) &&
-          a5 !== this.lastA5OutOfRangeLogged
-        ) {
-          this.lastA5OutOfRangeLogged = a5;
-          const cpu = this.emulator['cpu'];
-debugLog(
-            `[DoorLifecycleManager] A5 out of stack range: A5=0x${a5.toString(
-              16
-            )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
-              16
-            )}] PC=0x${pc.toString(16)}`
-          );
-          const logCount = cpu ? cpu.nativeLoggedInstructions?.() || 0 : 0;
-          if (cpu && logCount > 0) {
-debugLog(
-              `[DoorLifecycleManager] Last ${Math.min(
-                logCount,
-                20
-              )} native instructions before A5 change:`
-            );
-            const start = Math.max(0, logCount - 20);
-            for (let i = start; i < logCount; i++) {
-              const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
-              const disasm = cpu.nativeDisassemble?.(logPc) || '???';
-debugLog(
-                `[DoorLifecycleManager]   0x${logPc.toString(16)}: ${disasm}`
-              );
-            }
-          }
-        }
-      }
-      this.executionState.lastSignificantPC = a4;
-      this.executionState.lastInterceptedTrap = a5;
-    }
-
-    // Generic probe for indirect jsr/jmp through A0/A1/A2 to catch runaway targets
-    const isIndirectJump =
-      instrWord === 0x4ed0 ||
-      instrWord === 0x4ed1 ||
-      instrWord === 0x4ed2 ||
-      instrWord === 0x4e90 ||
-      instrWord === 0x4e91 ||
-      instrWord === 0x4e92;
-    if (isIndirectJump) {
-      const targetRegIndex = 8 + (instrWord & 0x7);
-      const targetRegValue = this.emulator.getRegister(targetRegIndex);
-      const memTarget = safeRead32(targetRegValue);
-      const memA4m4c =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x4c) >>> 0) : 0;
-      const memA4m50 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x50) >>> 0) : 0;
-      const memA4m58 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x58) >>> 0) : 0;
-      const memA5m58 = safeRead32(a5 - 0x58);
-      const mem5cda = safeRead32(0x5cda);
-      const mem5cfa = safeRead32(0x5cfa);
-      const mem4b90 = safeRead32(0x4b90);
-      const sp = this.emulator.getRegister(15);
-      const lastPcTrace = this.lastPCs
-        .map((p) => `0x${p.toString(16)}`)
-        .join(",");
-      const formatVal = (value: number | null): string =>
-        value === null ? "<err>" : `0x${value.toString(16)}`;
-debugLog(
-        `[DoorLifecycleManager] INDIRECT-${instrWord >= 0x4ed0 ? "JMP" : "JSR"} pc=0x${pc.toString(
-          16
-        )} iter=${this.executionState.iterationCount} sp=0x${sp.toString(
-          16
-        )} targetReg=a${(instrWord & 0x7).toString(
-          16
-        )} target=0x${targetRegValue.toString(
-          16
-        )} [target]=${formatVal(memTarget)} A4=0x${a4.toString(
-          16
-        )} [-0x4c(A4)]=0x${memA4m4c.toString(
-          16
-        )} [-0x50(A4)]=0x${memA4m50.toString(
-          16
-        )} [-0x58(A4)]=0x${memA4m58.toString(
-          16
-        )} A5=0x${a5.toString(16)} [-0x58(A5)]=${formatVal(
-          memA5m58
-        )} [0x5cda]=${formatVal(mem5cda)} [0x5cfa]=${formatVal(
-          mem5cfa
-        )} [0x4b90]=${formatVal(mem4b90)} lastPCs=[${lastPcTrace}]`
-      );
-    }
-
-    // Focused trace for MultiTop vtable call region (offset ~0x3bb0 -> PC ~0x4bb0)
-    if (pc >= 0x4b20 && pc <= 0x4c30) {
-      const sp = this.emulator.getRegister(15);
-      const a0 = this.emulator.getRegister(8);
-      const a1 = this.emulator.getRegister(9);
-      const memA5m58 = this.emulator.readMemory32((a5 - 0x58) >>> 0);
-      const memA0 = this.emulator.readMemory32(a0 >>> 0);
-      const memA1p28 = this.emulator.readMemory32((a1 + 0x28) >>> 0);
-      const memA4p8 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 + 0x8) >>> 0) : 0;
-      const lastPcTrace = this.lastPCs
-        .map((p) => `0x${p.toString(16)}`)
-        .join(",");
-debugLog(
-        `[DoorLifecycleManager] VTABLE probe PC=0x${pc.toString(
-          16
-        )} iter=${this.executionState.iterationCount} SP=0x${sp.toString(
-          16
-        )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
-          16
-        )} A0=0x${a0.toString(16)} A1=0x${a1.toString(
-          16
-        )} [-0x58(A5)]=0x${memA5m58.toString(
-          16
-        )} [A0]=0x${memA0.toString(16)} [A1+0x28]=0x${memA1p28.toString(
-          16
-        )} [A4+0x8]=0x${memA4p8.toString(16)} lastPCs=[${lastPcTrace}]`
-      );
-    }
-
-    // Probe near the post-FreeArgs jump site (observed PCs ~0x5c90-0x5cfa before runaway)
-    if (pc >= 0x5c90 && pc <= 0x5d10) {
-      const sp = this.emulator.getRegister(15);
-      const a0 = this.emulator.getRegister(8);
-      const a1 = this.emulator.getRegister(9);
-      const memA5m58 = this.emulator.readMemory32((a5 - 0x58) >>> 0);
-      const memA0 = this.emulator.readMemory32(a0 >>> 0);
-      const memA1p28 = this.emulator.readMemory32((a1 + 0x28) >>> 0);
-      const memA4p8 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 + 0x8) >>> 0) : 0;
-      const lastPcTrace = this.lastPCs
-        .map((p) => `0x${p.toString(16)}`)
-        .join(",");
-debugLog(
-        `[DoorLifecycleManager] POST-FREEARGS probe PC=0x${pc.toString(
-          16
-        )} iter=${this.executionState.iterationCount} SP=0x${sp.toString(
-          16
-        )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
-          16
-        )} A0=0x${a0.toString(16)} A1=0x${a1.toString(
-          16
-        )} [-0x58(A5)]=0x${memA5m58.toString(
-          16
-        )} [A0]=0x${memA0.toString(16)} [A1+0x28]=0x${memA1p28.toString(
-        16
-        )} [A4+0x8]=0x${memA4p8.toString(
-          16
-        )} lastPCs=[${lastPcTrace}] SP=0x${sp.toString(16)}`
-      );
-    }
-
-    // Probe jmp return blocks around 0x4c52/0x4c54 that may jump via A0
-    if (pc >= 0x4c40 && pc <= 0x4c60) {
-      const sp = this.emulator.getRegister(15);
-      const a0 = this.emulator.getRegister(8);
-      const a1 = this.emulator.getRegister(9);
-      const a2 = this.emulator.getRegister(10);
-      const memA4m4c =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x4c) >>> 0) : 0;
-      const memA4m50 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x50) >>> 0) : 0;
-      const memA4m58 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x58) >>> 0) : 0;
-      const memA5m58 = this.emulator.readMemory32((a5 - 0x58) >>> 0);
-      const memA0 = this.emulator.readMemory32(a0 >>> 0);
-      const memA1 = this.emulator.readMemory32(a1 >>> 0);
-      const memA2 = this.emulator.readMemory32(a2 >>> 0);
-      const lastPcTrace = this.lastPCs
-        .map((p) => `0x${p.toString(16)}`)
-        .join(",");
-debugLog(
-        `[DoorLifecycleManager] JMP-A0 probe PC=0x${pc.toString(
-          16
-        )} iter=${this.executionState.iterationCount} SP=0x${sp.toString(
-          16
-        )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
-          16
-        )} A0=0x${a0.toString(16)} A1=0x${a1.toString(
-          16
-        )} A2=0x${a2.toString(
-          16
-        )} [-0x4c(A4)]=0x${memA4m4c.toString(
-          16
-        )} [-0x50(A4)]=0x${memA4m50.toString(
-          16
-        )} [-0x58(A4)]=0x${memA4m58.toString(
-          16
-        )} [-0x58(A5)]=0x${memA5m58.toString(
-          16
-        )} [A0]=0x${memA0.toString(16)} [A1]=0x${memA1.toString(
-          16
-        )} [A2]=0x${memA2.toString(16)} lastPCs=[${lastPcTrace}]`
-      );
-    }
-    // REMOVED: Per-trap setImmediate was causing severe slowdown for 68K doors.
-    // This method is called on EVERY library trap (every character printed, every API call).
-    // Yielding here causes "slow motion" output. The time-based yield at top of execution
-    // loop (every YIELD_INTERVAL_MS) is sufficient for event loop responsiveness.
-  }
-
-  private handleIllegalInstruction(pc: number): boolean {
-    const instrAtPC = this.emulator.readMemory16(pc);
-    if (instrAtPC === 0x4afc) {
-      // ILLEGAL instruction
-debugLog(
-        `[DoorLifecycleManager] ILLEGAL DETECTED at PC=0x${pc.toString(16)}`
-      );
-      const handled = this.emulator.handleIllegal(pc);
-      if (handled) {
-        this.executionState.iterationCount++;
-        // Note: No yield here - illegal instructions are rare and shouldn't block
-        return true;
-      }
-    }
-    return false;
-  }
+  // checkAndHandleLibraryTrap + handleTrapExecution + handleIllegalInstruction
+  // extracted to lifecycle/DoorTrapDispatcher.
 
   // Track PC history for debugging bad jumps
   private pcHistory: number[] = [];
@@ -2231,106 +1895,7 @@ debugLog(
   // logWriteCall + logAEDoorCall + getAEDoorFunctionName extracted to
   // lifecycle/DoorExecutionLogger.
 
-  private async handleExecutionError(error: unknown): Promise<void> {
-    const pc = this.emulator.getRegister(16);
-    const sp = this.emulator.getRegister(15);
-    const doorName = path.basename(this.config.executablePath);
-
-console.error("[DoorLifecycleManager] ERROR in execution loop:", error);
-console.error(
-      `[DoorLifecycleManager] Iteration: ${this.executionState.iterationCount}`
-    );
-console.error(`[DoorLifecycleManager] PC: 0x${pc.toString(16)}`);
-console.error(`[DoorLifecycleManager] SP: 0x${sp.toString(16)}`);
-console.error(
-      `[DoorLifecycleManager] Stack: ${
-        error instanceof Error ? error.stack : "No stack"
-      }`
-    );
-
-    // Gather all registers for crash dump
-    const registers = {
-      d0: this.emulator.getRegister(0),
-      d1: this.emulator.getRegister(1),
-      d2: this.emulator.getRegister(2),
-      d3: this.emulator.getRegister(3),
-      d4: this.emulator.getRegister(4),
-      d5: this.emulator.getRegister(5),
-      d6: this.emulator.getRegister(6),
-      d7: this.emulator.getRegister(7),
-      a0: this.emulator.getRegister(8),
-      a1: this.emulator.getRegister(9),
-      a2: this.emulator.getRegister(10),
-      a3: this.emulator.getRegister(11),
-      a4: this.emulator.getRegister(12),
-      a5: this.emulator.getRegister(13),
-      a6: this.emulator.getRegister(14),
-    };
-
-    // Read stack contents (8 longwords starting at SP)
-    const stackContents: number[] = [];
-    try {
-      for (let i = 0; i < 8; i++) {
-        const addr = sp + (i * 4);
-        if (addr >= 0 && addr < 0x1000000) { // Valid 24-bit address
-          stackContents.push(this.emulator.readMemory32(addr));
-        }
-      }
-    } catch {
-      // Ignore memory read errors during crash dump
-    }
-
-    // Gather memory at key locations
-    const memoryDump: { address: number; value: number; label?: string }[] = [];
-    try {
-      // A4-relative data (small data model)
-      const a4 = registers.a4;
-      if (a4 >= 0x7FFE) {
-        memoryDump.push({ address: a4 - 0x40, value: this.emulator.readMemory32(a4 - 0x40), label: 'A4-0x40' });
-        memoryDump.push({ address: a4 - 0x1c, value: this.emulator.readMemory32(a4 - 0x1c), label: 'A4-0x1c' });
-      }
-      // A5-relative frame (Amiga E runtime)
-      const a5 = registers.a5;
-      if (a5 > 0) {
-        memoryDump.push({ address: a5 - 0x28, value: this.emulator.readMemory32(a5 - 0x28), label: 'A5-0x28 execbase' });
-        memoryDump.push({ address: a5 - 0x2c, value: this.emulator.readMemory32(a5 - 0x2c), label: 'A5-0x2c dosbase' });
-      }
-      // Memory at PC (what instruction caused the crash)
-      if (pc > 0 && pc < 0x1000000) {
-        memoryDump.push({ address: pc, value: this.emulator.readMemory32(pc), label: 'at PC' });
-      }
-    } catch {
-      // Ignore memory read errors during crash dump
-    }
-
-    // Send detailed crash information to sysop
-    SysopDebugUtil.debugDoorCrash(
-      this.socket,
-      this.config.bbsSession,
-      doorName,
-      {
-        pc,
-        sp,
-        iteration: this.executionState.iterationCount,
-        error: error instanceof Error ? error.message : String(error),
-        registers,
-        pcHistory: [...this.pcHistory], // Copy of PC history
-        stackContents,
-        memoryDump,
-        lastSignificantPC: this.executionState.lastSignificantPC,
-        writeCallCount: this.executionState.writeCallCount,
-        aedoorCallCount: this.executionState.aedoorCallCount,
-        stackBase: 0x6e74, // From DoorLoader
-        stackSize: this.config.stack || 8192,
-        stack: error instanceof Error ? error.stack : undefined,
-      }
-    );
-
-    this.socket.emit("door:error", {
-      message: error instanceof Error ? error.message : "Execution error",
-    });
-    this.terminate();
-  }
+  // handleExecutionError extracted to lifecycle/DoorExitDetector.
 
   // logInitialState + sendStartupMessage extracted to
   // lifecycle/DoorStartupHelper.
