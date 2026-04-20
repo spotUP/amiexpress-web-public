@@ -271,6 +271,11 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
 
     this.pathResolver.ensureDirectory(this.bbsDataPath);
     this.pathResolver.ensureDirectory("/tmp/ram/ENV");
+    // RAM:T is the Amiga convention for volatile temp scratch (zOOsTAT writes
+    // ZOOSTAT.TMP here, ACP and many doors use it). On a real Amiga the
+    // startup-sequence pre-creates it with `makedir RAM:T`; mirror that here
+    // so Open(RAM:T/..., MODE_NEWFILE) doesn't ENOENT on a missing parent.
+    this.pathResolver.ensureDirectory("/tmp/ram/T");
     this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
   }
 
