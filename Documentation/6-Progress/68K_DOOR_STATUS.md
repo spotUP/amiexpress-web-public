@@ -1,18 +1,18 @@
 # 68K Door Status Tracker
 
-Last updated: 2026-01-30
+Last updated: 2026-04-20
 
 ## Summary
 
 | Status | Count |
 |--------|-------|
-| Working | 46 |
-| Needs Testing | 1 |
-| Partial | 10 |
-| Broken | 1 |
+| Working | 48 |
+| Needs Testing | 4 |
+| Partial | 5 |
+| Broken | 0 |
 | Complex/Deferred | 1 |
 | Untested | 0 |
-| **Total** | **59** |
+| **Total** | **58** |
 
 ---
 
@@ -36,6 +36,8 @@ Last updated: 2026-01-30
 | MRCSTAT1 | doors:mrc/mrcstat1 | MRC stats |
 | nuke | Doors:Bossnuke/Bossnuke | Boss nuke - prompts for password |
 | AEHELP | DOORS:AEHELP/aehelp | AEDoor help |
+| bk | BBS:doors/bytekiller/bytekiller | Fake-file nuker (end-to-end verified 2026-04-19). Needs `NUKER.n=<username>` entry in `bytekiller.info` for access. |
+| wall | dOORS:dRE/dRE!WAll/dRE!WAll | Wall writer — end-to-end verified 2026-04-20 (username + tag save correctly, absolute positioning + clear screen all render). Fixed by three layered XIM bugs: d3dabc62c. |
 
 ### BBSLink Gateway (TELNET_CONNECT Working)
 
@@ -57,17 +59,6 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 ---
 
-## Partial Doors
-
-| Cmd | Location | Issue |
-|-----|----------|-------|
-| I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
-| fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
-| ulist | Doors:5D-User/5D-User | Non-standard XIM - no reply port, expects pre-populated data on AEDoorPort (multi-node design) |
-| ctop | DOORS:CONFTOP/ctop | MSGBASE_LOC fixed, but door exits silently without output |
-
----
-
 ## Needs Testing
 
 | Cmd | Location | Notes |
@@ -86,9 +77,7 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 ## Broken Doors
 
-| Cmd | Location | Issue |
-|-----|----------|-------|
-| wall | dOORS:dRE/dRE!WAll/dRE!WAll | Data corruption - see dRE_WALL_HANDOFF.md |
+*None currently.* (`wall` moved to Working — see session notes 2026-04-20.)
 
 ---
 
@@ -96,16 +85,28 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 | Cmd | Location | Issue |
 |-----|----------|-------|
-| I | DOORS:EPUtils/SysInfo/SysInfo | Shows UI but date string appears for all fields |
-| fake | doors:bytekiller/byteComment | Shows prompt - needs files to fully test |
 | ulist | Doors:5D-User/5D-User | Non-standard XIM - no reply port, expects pre-populated data on AEDoorPort (multi-node design) |
 | ctop | DOORS:CONFTOP/ctop | MSGBASE_LOC fixed, but door exits silently without output |
 | Kick | Doors:!!!War!!!/WarKick'Em/WarKick'Em | Prints goodbye text and exits immediately - no game interface |
 | DEL | DOORS:-mgs!-MgzListMan/MGZLISTMAN | Exits silently without output |
-| Olm | DOORS:!!!WAR!!!/WAROLM/WAROLM | UI works but node data scrambled - DT_NAME/DT_LOCATION/BB_NODEID return wrong values |
-| mrcstat2 | doors:mrc/mrcstat2 | Scrambled data |
 | DUPESTART1 | DOORS:CONFTOP/CONFTOP020.X | Reset date is out of range error |
-| bk | BBS:doors/bytekiller/bytekiller | Can't find ACP.Icon - needs config |
+
+---
+
+## Needs Retest (post d3dabc62c + 2026-04-20 fixes)
+
+The DT_NAME stale-reply race (commit `d3dabc62c`, 2026-04-20) fixed a
+systemic bug where DT_*/BB_*/JH_* replies could ship stale msg.string
+contents in the AEDoor.library sync-trap path. Several "partial" doors
+reported symptoms consistent with that race — moved here pending
+re-test with the fix in place.
+
+| Cmd | Prior issue | Why likely fixed |
+|-----|-------------|------------------|
+| I SysInfo | "Location: sysop" — DT_LOCATION returning username | Stale buffer from prior DT_NAME call; now each DT_* reply marks state.replyHandled and Path 4 skips its fallback replyMsg |
+| Olm | "DT_NAME/DT_LOCATION/BB_NODEID return wrong values" | Same class of stale-reply race; was the canonical symptom that drove the investigation |
+| mrcstat2 | "Scrambled data" | Per 2026-04-19 triage already "may be correct" (OFFLINE expected in web port) — verify with MRC-connected session |
+| fake ByteComment | `Can't find \n.Icon` — GetDiskObject called with empty name | Fixed by IconLibrary empty-name fallback to door binary's own .info (commit pending) |
 
 ---
 
@@ -135,6 +136,63 @@ Moved to Working - see BBSLink Gateway (TELNET_CONNECT Working) section above.
 ---
 
 ## Session Notes
+
+### 2026-04-19: Automated triage of 9 partial doors via debug MCP
+
+Ran `run_door_sandbox` against every remaining partial via the new `/debug/api/sandbox/run-door` endpoint (no live BBS session needed). 3 root-cause buckets identified:
+
+**Bucket A — invalid PC at function prologue (4 doors)**: `fake` (ByteComment), `ulist` (5D-User), `Kick` (WarKick'Em), `Olm` (WAROLM). All four trap at the first `movem.l D1-D6/A0-A6, -(A7)` at PC 0x2008; new PC lands at 0x7fece (out of code region). Same instruction pattern — `opcode=0x48e7 operand=0x7efe2448`. Likely MOIRA address-error mishandling on push-to-allocated-stack, or incorrect next-PC for movem pre-decrement. Fix one, probably fix all four.
+
+**Bucket B — single-hunk (code-only) binaries (2 doors)**: `ctop`, `DEL` (MGZLISTMAN). Both log `No DATA segment found - allocating synthetic BSS`. `ctop` then stuck-loops with `No reply for command 100/128/149/...` — XIM replies never reach the door. Synthetic BSS appears to break the reply-port memory layout.
+
+**Bucket C — interactive timeouts (3 doors)**: `I` SysInfo, `mrcstat2`, `DUPESTART1`. Either waiting on input (need scripted input via sandbox) or exceeding the 8s default. SysInfo is known to reach `JH_SHUTDOWN` given enough time.
+
+**Follow-up live-session investigation (same day, via the new debug MCP):**
+
+- Launched `Olm` live via `POST /debug/api/sessions/5/input` with `"Olm\r"`.
+- `get_emulator_state` returned `PC: 0x77e2 (_PutMsg+0x12)` — symbol-annotated in real time using the HunkLoader `_PutMsg` entry. The door is *actually running* and executing in exec.library's PutMsg trampoline.
+- `read_memory addr=0x7fec0 len=64` showed `00 00 4a fc 00 00 00 00 ... 4a fc ...` — the "0x7fece" from the sandbox log is a **guard region filled with `4A FC` (ILLEGAL 68K opcode)**, not a real destination. The "FIRST INVALID PC DETECTED" log is a DoorLifecycleManager out-of-bounds *diagnostic*, not a fatal trap — the doors recover and continue.
+- `get_xim_tail` showed Olm drawing its WHO-selection screen (USER/LOCATION/ACTION table, cursor arrows, `RAWARROW` input). The rendered screen via `get_output_tail` shows the full UI with "Awating Connect" placeholders for empty nodes.
+
+**Revised understanding:**
+
+Bucket A (`fake`, `ulist`, `Kick`, `Olm`) was a **false positive** — the sandbox cuts them off before they finish init. Live, `Olm` runs fine. The other three likely do too (need live-session verification). The remaining uncertainty is whether per-node data (`DT_NAME`, `DT_LOCATION`, multicom) is populated correctly — Olm currently shows placeholders, which *might* be correct for empty nodes or might be the original "scrambled data" symptom in a new guise.
+
+**Sandbox caveat:** `run_door_sandbox` is unreliable for doors needing multi-node BBS state — `MulticomManager` reports "Writing 0 tracked nodes" in sandbox mode, so WHO/OLM-style doors exit or loop without their dependencies. Use live-session MCP tools (`send_input` + `wait_for_output` + `kill_door`) for this class of door.
+
+**Incidental fix:** `kill_door` endpoint now cascades through `socket.emit('door:terminate')` so the parent `AmigaDoorSession.terminate()` runs (previously only `DoorLifecycleManager.terminate()` fired, leaving a stale debug-registry entry).
+
+### 2026-04-19: MCP-driven live triage — node-5 sweep of 7 partials
+
+Ran each partial command through node 5 (sysop at `display_menu`) via `POST /debug/api/sessions/5/input` and collected the rendered screen. All 7 doors launched and produced output — status-doc entries need revision:
+
+| Cmd | Actual current behaviour |
+|-----|-------------------------|
+| `I` SysInfo | Renders its UI correctly with Port/Baud/Status fields. `Handle: sysop` is correct but `Location: sysop` is wrong (should be the user's location — DT_LOCATION is returning the username). Aborts with "A File Error has Occured!" before completing. Status-doc claim "date string for all fields" is outdated — current symptom is Location/DT_LOCATION. |
+| `mrcstat2` | Renders `MRC[OFFLINE] BBS[   ] Rms[   ] Usr[   ] Act[NUL]` — **this may actually be correct** (MRC isn't network-connected in the web port, so OFFLINE with empty fields is expected). Needs verification against a connected MRC session. Not scrambled. |
+| `fake` ByteComment | Prints banner then `Can`t find \n.Icon` — `GetDiskObject` called with empty name. Same class of bug bytekiller had; probably wants its own `.info` but passes an empty string. Fixable. |
+| `ulist` 5D-User | `[68K] ULIST exited with FAIL`. Matches known design (requires pre-populated multi-node data via AEDoorPort). |
+| `Kick` WarKick'Em | Prints goodbye banner and exits. Per status-doc, "no game interface" — this may be the door's intended behaviour for a non-authorised user. |
+| `DEL` MGZLISTMAN | Silent exit, no output. Still partial. |
+| `ctop` CONFTOP/ctop | Silent exit, no output. Still partial (same as before). |
+
+Key outcomes:
+- `mrcstat2` may already be working — move to "Working" pending MRC-connected validation.
+- SysInfo's bug is DT_LOCATION, not all-fields-date as documented.
+- ByteComment has a concrete bug that's a variant of the bytekiller GetDiskObject issue.
+- `DEL` and `ctop` are the most mysterious; deserve the next deep-dive.
+
+Autonomous triage via MCP is **working**. The `send_input`/`get_output_tail` loop on a clean menu-state session delivers the rendered screen per door in under 3 seconds, no manual intervention.
+
+### 2026-04-19: icon.library GetDiskObject Path Resolution + Synthetic ACP
+
+**Issue**: `GetDiskObject("ACP")` from bytekiller (and likely other legacy doors) returned NULL because icon.library only tried the door's own directory for bare filenames. On real AmigaOS, bare filenames resolve against the process's CurrentDir, which for BBS doors is the BBS root.
+
+**Fix** (`web/backend/src/amiga-emulation/api/IconLibrary.ts`):
+1. Build a candidate list: BBS root first, door directory as fallback. Matches AmigaOS semantics; doors using DOORS:/PROGDIR:/BBS: prefixes unaffected.
+2. When a door asks for "ACP" and no ACP.info exists, synthesize tooltypes from the running BBS state (BBS_LOCATION, NDIRS, USER_DATA, NODE<n>_LOCATION per Node directory, ULPATH.<n>/DLPATH.<n> pulled from each Conf<n>/ConfConfig.info). AmiExpress-Web renamed ACP.info to bbsConfig.info, so legacy doors calling GetDiskObject("ACP") previously had no way to read classic ACP tooltypes.
+
+**Verification**: bytekiller no longer prints "Can`t find ACP.Icon"; reads 43 synthesized tooltypes. Working doors (AquaScan, conftop) unaffected — same resolution paths, same behavior.
 
 ### 2026-01-30: 5D-User (ulist) Investigation
 

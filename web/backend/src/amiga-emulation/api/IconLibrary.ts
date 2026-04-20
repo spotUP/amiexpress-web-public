@@ -28,6 +28,7 @@ export class IconLibrary {
   private bbsRoot: string;
   private doorDirectory: string = ''; // Set by AmigaDoorSession for PROGDIR: device
   private doorCommand: string = ''; // The command used to launch this door (e.g., "N", "FR")
+  private doorBinaryName: string = ''; // Basename of the door executable (e.g., "ByteComment")
 
   constructor(emulator: MoiraEmulator, bbsRoot: string = process.env.BBS_DATA_DIR || process.cwd()) {
     this.emulator = emulator;
@@ -41,6 +42,19 @@ export class IconLibrary {
   setDoorCommand(command: string): void {
     this.doorCommand = command.toUpperCase();
 console.log(`[icon.library] Door command set to: ${this.doorCommand}`);
+  }
+
+  /**
+   * Set the door binary name (basename without .info extension).
+   * Used by GetDiskObject() as the fallback when the caller passes an
+   * empty/NULL name — doors like ByteComment read their own .info by
+   * passing WBStartup.sm_ArgList[0] which we haven't fully populated.
+   * On real Amiga the name would be the process name; our fallback is
+   * the executable basename which is the same thing in practice.
+   */
+  setDoorBinaryName(name: string): void {
+    this.doorBinaryName = name;
+console.log(`[icon.library] Door binary name set to: ${this.doorBinaryName}`);
   }
 
   /**
@@ -64,6 +78,19 @@ console.log(`[icon.library] PROGDIR: device set to ${doorPath}`);
     let name = this.readString(namePtr);
 
 console.log(`[icon.library] *** GetDiskObject CALLED *** namePtr=0x${namePtr.toString(16)}, name="${name}"`);
+
+    // Empty/NULL name → door is asking for its own .info by reading
+    // WBStartup.sm_ArgList[0].wa_Name (the launch name). We don't fully
+    // populate that struct, so legacy doors like ByteComment pass
+    // through an empty string and fail with "Can't find .Icon". Fall
+    // back to the door's binary name in its own directory — that's the
+    // effective match for what real AmigaOS would resolve.
+    if (!name || name.length === 0) {
+      if (this.doorBinaryName && this.doorDirectory) {
+        name = path.join(this.doorDirectory, this.doorBinaryName);
+console.log(`[icon.library]   Empty name → falling back to door binary: ${name}`);
+      }
+    }
 
     // Translate AmigaOS device assignments to Unix paths
     const upperName = name.toUpperCase();
@@ -94,35 +121,56 @@ console.log(`[icon.library]   Translated SYS: -> ${name}`);
       hasDevicePrefix = true;
     }
 
-    // Convert to absolute path
-    let infoPath = name;
-    if (!path.isAbsolute(name)) {
-      // For bare filenames without device prefix, use door directory (current dir) if available
-      // This matches AmigaOS behavior where bare filenames are relative to current directory
-      if (!hasDevicePrefix && this.doorDirectory) {
-        infoPath = path.join(this.doorDirectory, name);
-console.log(`[icon.library]   Using door directory for bare filename: ${infoPath}`);
-      } else {
-        infoPath = path.join(this.bbsRoot, name);
+    // Build candidate paths to try.
+    // Per AmigaOS semantics, bare filenames resolve against the process's CurrentDir.
+    // For BBS doors launched from BBS root, CurrentDir is BBS root — try that first.
+    // Fall back to door directory for doors that pass bare filenames for their own data.
+    const candidates: string[] = [];
+    if (path.isAbsolute(name)) {
+      candidates.push(name);
+    } else if (hasDevicePrefix) {
+      candidates.push(path.join(this.bbsRoot, name));
+    } else {
+      candidates.push(path.join(this.bbsRoot, name));
+      if (this.doorDirectory) {
+        candidates.push(path.join(this.doorDirectory, name));
       }
     }
 
     // Add .info extension if not present
-    if (!infoPath.endsWith('.info')) {
-      infoPath += '.info';
+    const candidatesWithExt = candidates.map(c =>
+      c.endsWith('.info') ? c : c + '.info'
+    );
+
+console.log(`[icon.library]   Candidates: ${candidatesWithExt.join(', ')}`);
+
+    // Try each candidate with case-insensitive resolution
+    let infoPath = '';
+    for (const candidate of candidatesWithExt) {
+      const resolved = amigafs.resolvePath(candidate);
+      if (resolved) {
+        infoPath = resolved;
+        break;
+      }
     }
 
-console.log(`[icon.library]   Looking for: ${infoPath}`);
-
-    // Check if file exists (case-insensitive for AmigaOS compatibility)
-    // Try case-insensitive resolution first
-    const resolvedPath = amigafs.resolvePath(infoPath);
-    if (!resolvedPath) {
+    if (!infoPath) {
+      // If the door asked for "ACP", synthesize tooltypes from the running BBS
+      // state. AmiExpress-Web renames ACP.info to bbsConfig.info, but legacy doors
+      // (bytekiller etc.) still call GetDiskObject("ACP").
+      if (upperName === 'ACP' || upperName.endsWith('/ACP') || upperName === 'BBS:ACP') {
+        const synthetic = this.synthesizeACPTooltypes();
+        if (synthetic.length > 0) {
+console.log(`[icon.library]   Synthesized ACP DiskObject with ${synthetic.length} tooltypes`);
+          const diskObjAddr = this.createFakeDiskObject(synthetic);
+          this.emulator.setRegister(CPURegister.D0, diskObjAddr);
+          return;
+        }
+      }
 console.log(`[icon.library]   File not found (case-insensitive) - returning NULL`);
       this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
-    infoPath = resolvedPath;
 console.log(`[icon.library]   Resolved (case-insensitive) to: ${infoPath}`);
 
     // Parse .info file to extract tooltypes
@@ -570,6 +618,76 @@ console.log(`[icon.library]   Match found: "${v}" == "${searchValue}"`);
 
 console.log(`[icon.library]   No match found`);
     this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+  }
+
+  /**
+   * Synthesize ACP.info tooltypes from the running BBS state.
+   * AmiExpress-Web doesn't ship a real ACP.info — config lives in bbsConfig.info
+   * and per-conference ConfConfig.info files. Legacy doors still call
+   * GetDiskObject("ACP") to read BBS paths; this assembles the tooltypes they expect.
+   */
+  private synthesizeACPTooltypes(): string[] {
+    const tooltypes: string[] = [];
+    try {
+      // BBS_LOCATION — required; "BBS:" is the Amiga-style root.
+      tooltypes.push('BBS_LOCATION=BBS:');
+
+      // NODE<n>_LOCATION — one per existing Node<n>/ directory.
+      const entries = fs.readdirSync(this.bbsRoot, { withFileTypes: true });
+      const nodeDirs = entries
+        .filter(e => e.isDirectory() && /^Node\d+$/i.test(e.name))
+        .map(e => {
+          const m = e.name.match(/\d+/);
+          return m ? parseInt(m[0], 10) : 0;
+        })
+        .filter(n => n > 0)
+        .sort((a, b) => a - b);
+      for (const n of nodeDirs) {
+        tooltypes.push(`NODE${n}_LOCATION=BBS:Node${n}/`);
+      }
+
+      // Per-conference ULPATH.<n>, DLPATH.<n>, NDIRS — read from ConfN/ConfConfig.info.
+      // PathManager aliases BBSn: → BBS: so paths like BBS2:Conf1/Upload/ imported
+      // from multi-drive installations resolve cleanly; no filtering needed here.
+      let maxNdirs = 0;
+      const confDirs = entries
+        .filter(e => e.isDirectory() && /^Conf\d+$/i.test(e.name))
+        .map(e => {
+          const m = e.name.match(/\d+/);
+          return m ? parseInt(m[0], 10) : 0;
+        })
+        .filter(n => n > 0)
+        .sort((a, b) => a - b);
+      for (const confNum of confDirs) {
+        const confInfoPath = path.join(this.bbsRoot, `Conf${confNum}`, 'ConfConfig.info');
+        const resolved = amigafs.resolvePath(confInfoPath);
+        if (!resolved) continue;
+        const confTools = this.parseInfoFile(resolved);
+        if (!confTools) continue;
+        for (const tt of confTools) {
+          const eq = tt.indexOf('=');
+          if (eq < 0) continue;
+          const key = tt.substring(0, eq).toUpperCase();
+          const value = tt.substring(eq + 1);
+          if (key === 'UPLOADS' || key === 'ULPATH' || key === 'UPLOAD') {
+            tooltypes.push(`ULPATH.${confNum}=${value}`);
+          } else if (key === 'DOWNLOADS' || key === 'DLPATH' || key === 'DOWNLOAD') {
+            tooltypes.push(`DLPATH.${confNum}=${value}`);
+          } else if (key === 'NDIRS') {
+            const n = parseInt(value, 10);
+            if (!isNaN(n) && n > maxNdirs) maxNdirs = n;
+          }
+        }
+      }
+      if (maxNdirs === 0) maxNdirs = 20;
+      tooltypes.push(`NDIRS=${maxNdirs}`);
+
+      // USER_DATA — path to user.data database file
+      tooltypes.push('USER_DATA=BBS:user.data');
+    } catch (err) {
+console.error('[icon.library] synthesizeACPTooltypes failed:', err);
+    }
+    return tooltypes;
   }
 
   /**

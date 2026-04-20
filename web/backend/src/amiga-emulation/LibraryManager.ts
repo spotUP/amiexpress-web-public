@@ -484,6 +484,10 @@ debugLog("[LibraryManager] Creating icon.library...");
     this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
     // Set door directory for PROGDIR: support in GetDiskObject
     this.iconLibrary.setDoorDirectory(doorDir);
+    // Set door binary basename so GetDiskObject can fall back to
+    // "<doorDir>/<binary>.info" when a door passes an empty name
+    // (ByteComment / similar — WBStartup.sm_ArgList[0] unpopulated).
+    this.iconLibrary.setDoorBinaryName(path.basename(this.config.executablePath));
     // Set door command for DOORUSE.* lookups (used by AquaScan and similar doors)
     if (this.config.doorId) {
       this.iconLibrary.setDoorCommand(this.config.doorId);
