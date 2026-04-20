@@ -6,13 +6,12 @@ Last updated: 2026-04-20
 
 | Status | Count |
 |--------|-------|
-| Working | 48 |
-| Needs Testing | 4 |
-| Partial | 5 |
+| Working | 49 |
+| Partial | 7 |
 | Broken | 0 |
 | Complex/Deferred | 1 |
 | Untested | 0 |
-| **Total** | **58** |
+| **Total** | **57** |
 
 ---
 
@@ -38,6 +37,7 @@ Last updated: 2026-04-20
 | AEHELP | DOORS:AEHELP/aehelp | AEDoor help |
 | bk | BBS:doors/bytekiller/bytekiller | Fake-file nuker (end-to-end verified 2026-04-19). Needs `NUKER.n=<username>` entry in `bytekiller.info` for access. |
 | wall | dOORS:dRE/dRE!WAll/dRE!WAll | Wall writer — end-to-end verified 2026-04-20 (username + tag save correctly, absolute positioning + clear screen all render). Fixed by three layered XIM bugs: d3dabc62c. |
+| mrcstat2 | doors:mrc/mrcstat2 | MRC status — OFFLINE display is correct for web port (no MRC network). |
 
 ### BBSLink Gateway (TELNET_CONNECT Working)
 
@@ -93,20 +93,18 @@ All AquaScan variants work correctly. File flagging persists after door exit.
 
 ---
 
-## Needs Retest (post d3dabc62c + 2026-04-20 fixes)
+## Retest results (post 2026-04-20 fixes)
 
-The DT_NAME stale-reply race (commit `d3dabc62c`, 2026-04-20) fixed a
-systemic bug where DT_*/BB_*/JH_* replies could ship stale msg.string
-contents in the AEDoor.library sync-trap path. Several "partial" doors
-reported symptoms consistent with that race — moved here pending
-re-test with the fix in place.
+Verified on a live BBS session after commits `d3dabc62c` (DT_NAME race),
+`c4aa65d9d` (IconLibrary empty-name fallback), and `95a6cf72c`
+(Execute VERSION path-addressed):
 
-| Cmd | Prior issue | Why likely fixed |
-|-----|-------------|------------------|
-| I SysInfo | "Location: sysop" — DT_LOCATION returning username | Stale buffer from prior DT_NAME call; now each DT_* reply marks state.replyHandled and Path 4 skips its fallback replyMsg |
-| Olm | "DT_NAME/DT_LOCATION/BB_NODEID return wrong values" | Same class of stale-reply race; was the canonical symptom that drove the investigation |
-| mrcstat2 | "Scrambled data" | Per 2026-04-19 triage already "may be correct" (OFFLINE expected in web port) — verify with MRC-connected session |
-| fake ByteComment | `Can't find \n.Icon` — GetDiskObject called with empty name | Fixed by IconLibrary empty-name fallback to door binary's own .info (commit pending) |
+| Cmd | Outcome |
+|-----|---------|
+| I SysInfo | **Mostly working.** Handle + Location correct (was DT_LOCATION returning username). "A File Error has Occured!" abort gone after Execute()/VERSION fix lets SysInfo populate T:SysInfo.TMP. Remaining: empty `Node` + `Sysop Status:` value wraps onto a second line (layout/BB_* field issue). |
+| mrcstat2 | **Working as designed.** Prints `MRC[OFFLINE] BBS[] Rms[] Usr[] Act[NUL]` — correct for web port where MRC network isn't connected. Marked Working. |
+| Olm | **Half-working.** UI renders, cursor navigation works. Empty nodes correctly show "Awating Connect". Active nodes (including the viewer's own slot) show `=================` placeholders instead of handle/location — MulticomManager writes the handle/location strings to singlePort structures but the door doesn't pick them up. Needs deeper investigation of MULTICOM offset layout vs what WAROLM reads. Other users' nodes also invisible across sessions (same root cause). |
+| fake ByteComment | **Half-working.** `Can't find .Icon` abort gone. Door reaches the comment prompt, reads input, writes Dir<N>. But the description field in the written Dir line ends up as `fail` instead of the typed comment. "fail" is not a literal in the binary; source unclear — possibly an archive-read fallback (file_id.diz extraction) or a wrong pointer in the write path. Needs 68K-level trace through the door's write-comment routine. |
 
 ---
 
