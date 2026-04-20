@@ -195,39 +195,113 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
       portName.startsWith("aeserver.") && !isOwnServerPort;
 
     if (isOtherAEServer) {
-      // Cross-node query (e.g. WarOLM asking AEServer.3 for node 3's
-      // handle/location while running on node 2). The port the door
-      // hit encodes the target nodeId; look up that node's live state
-      // in MulticomManager (shared across sessions) and write the
-      // appropriate field back into the msg's String[200] so the door
-      // sees the other node's user instead of an empty row.
+      // Cross-node PutMsg to AEServer.<otherNodeId>. Two cases:
+      //   (a) DT_NAME / DT_LOCATION read — answer from MulticomManager
+      //       (the sender wants to know who's on node N).
+      //   (b) JH_SM (Send Message) — the sender wants to deliver text
+      //       to node N's screen. This is WarOLM's OLM delivery path:
+      //       after target status hits IDLE, WarOLM loops over the
+      //       10-line buffer and PutMsg's a JH_SM per line to
+      //       AEServer.<target>. Route to target session's socket via
+      //       the existing olm.handler infrastructure.
       if (msgAddr && typeof (execLib as any).replyMsg === "function") {
         const STRING_OFFSET = 0x14;
         const STRING_LEN = 200;
         const COMMAND_OFFSET = 0xe0;
+        const JH_SM = 4;
+        const DT_NAME = 100;
+        const DT_LOCATION = 102;
 
         // Parse target nodeId from "AEServer.<N>"
         const dot = portName.indexOf(".");
         const targetNodeId =
           dot >= 0 ? parseInt(portName.slice(dot + 1), 10) : NaN;
 
-        // Read the query command (DT_NAME=100, DT_LOCATION=102, …)
+        // Read the query command (DT_NAME=100, DT_LOCATION=102, JH_SM=4, …)
         const command = emulator.readMemory32(msgAddr + COMMAND_OFFSET);
 
-        // Pull the other node's info from MulticomManager if available.
+        // Peek the string buffer for tracing (first 40 bytes, printable only)
+        let _peekStr = "";
+        for (let i = 0; i < 40; i++) {
+          const b = emulator.readMemory(msgAddr + STRING_OFFSET + i);
+          if (b === 0) break;
+          _peekStr += b >= 32 && b < 127 ? String.fromCharCode(b) : ".";
+        }
+        console.log(
+          `[X-NodeRoute] AEServer.${targetNodeId} cmd=${command} dataFlag=${emulator.readMemory32(
+            msgAddr + 0xdc,
+          )} str="${_peekStr}"`,
+        );
+
+        // ---------- (b) Cross-node JH_SM delivery ----------
+        if (
+          command === JH_SM &&
+          Number.isFinite(targetNodeId) &&
+          targetNodeId > 0
+        ) {
+          const DATA_OFFSET = 0xdc;
+          // JH_SM semantics: msg.data == 1 → print+newline, 0 → inline.
+          const data = emulator.readMemory32(msgAddr + DATA_OFFSET);
+
+          // Extract the NUL-terminated string from the jhMessage buffer
+          let text = "";
+          for (let i = 0; i < STRING_LEN; i++) {
+            const b = emulator.readMemory(msgAddr + STRING_OFFSET + i);
+            if (b === 0) break;
+            text += String.fromCharCode(b & 0xff);
+          }
+          try {
+            const {
+              getSocketIdByNodeId,
+              sessions,
+            } = require("../../../server/session-manager.js");
+            const targetSocketId = getSocketIdByNodeId(targetNodeId);
+            const targetSession = sessions.get(String(targetNodeId));
+            if (targetSocketId && targetSession) {
+              const io = (global as any).io;
+              if (io && typeof io.to === "function") {
+                const payload = data === 1 ? text + "\r\n" : text;
+                io.to(targetSocketId).emit("ansi-output", payload);
+              }
+            }
+          } catch {
+            /* session-manager not loadable — drop the msg silently */
+          }
+
+          execLib.removeMessageFromPort(portAddr, msgAddr);
+          (execLib as any).replyMsg(msgAddr);
+          return;
+        }
+
+        // ---------- (a) Cross-node data query ----------
+        const DT_SLOTNUMBER = 104;
         let reply = "";
         if (Number.isFinite(targetNodeId) && targetNodeId > 0) {
+          // DT_SLOTNUMBER must answer for any live target node, even if
+          // MulticomManager has no user record for it. WarOLM probes STATS@N
+          // first and only reaches us when the target is IDLE, so the caller
+          // has already proven the node exists. Returning an empty string
+          // here made WarOLM build a truncated path — `LISTS/` instead of
+          // `LISTS/<slot>` — which Open() then hit as a directory, IoErr=214.
+          //
+          // express.e: slot number is the user's user.db index. We use
+          // nodeId as a stable stand-in so cross-node doors can form
+          // per-user filenames without hitting the user db from inside the
+          // emulator.
+          if (command === DT_SLOTNUMBER) {
+            reply = String(targetNodeId);
+          }
           try {
             const { multicomManager } =
               require("../../../nodes/MulticomManager.js");
             const info = multicomManager.getNode?.(targetNodeId);
             if (info) {
-              if (command === 100 /* DT_NAME */) reply = info.username ?? "";
-              else if (command === 102 /* DT_LOCATION */)
-                reply = info.location ?? "";
+              if (command === DT_NAME) reply = info.username ?? "";
+              else if (command === DT_LOCATION) reply = info.location ?? "";
             }
           } catch {
-            /* MulticomManager not loadable — leave reply empty */
+            /* MulticomManager not loadable — DT_NAME/LOCATION stay empty,
+             * DT_SLOTNUMBER is already set above. */
           }
         }
 
