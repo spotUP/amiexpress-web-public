@@ -88,6 +88,15 @@ export class DoorLifecycleManager {
 
   // Execution state
   private executionState: ExecutionState;
+  /**
+   * Optional callback fired once when terminate() transitions the lifecycle
+   * from running to stopped, regardless of what triggered it (JH_SHUTDOWN,
+   * exit trap, stuck-loop detection, user `door:terminate`, etc.).
+   * AmigaDoorSession subscribes to this so its own cleanup runs on *every*
+   * exit path, not just user-initiated kills — otherwise the debug registry
+   * keeps stale entries long after a door has genuinely finished.
+   */
+  private onExitCallback: (() => void) | null = null;
   private lifecycleConfig: LifecycleConfig;
   private executionTimer: NodeJS.Timeout | null = null;
   private isPaused: boolean = false;
@@ -365,13 +374,18 @@ debugLog(
             console.log(`[DoorLifecycleManager] XIMProcessor: Blocking cmd=${parsed.command}, waiting for input`);
             self.ximProtocol.handleMessage(parsed);
           } else {
-            // Non-blocking command - handle and reply synchronously
-            // Most handlers are sync (no await), so handleMessage returns immediately
+            // Non-blocking command - handle and reply synchronously.
+            // Handlers for DT_*, BB_* etc. are fully sync: their reply() writes
+            // msg.string AND calls replyMsg() before handleMessage returns, then
+            // marks state.replyHandled=true. Only fall back to replyMsg here
+            // when the handler did NOT already reply (e.g. unhandled command).
             self.ximProtocol.handleMessage(parsed);
-            // Reply immediately - don't wait for .then()
-            if (!self.ximProtocol.isWaitingForLineInput()) {
+            const replyHandled = self.ximProtocol.wasReplyHandled();
+            if (!self.ximProtocol.isWaitingForLineInput() && !replyHandled) {
               console.log(`[DoorLifecycleManager] XIMProcessor: Calling replyMsg SYNC for cmd=${parsed.command}`);
               execLib.replyMsg(parsed.msgAddr);
+            } else if (replyHandled) {
+              console.log(`[DoorLifecycleManager] XIMProcessor: SKIPPING replyMsg - handler already replied for cmd=${parsed.command}`);
             }
 
             // CRITICAL FIX 2026-01-17: Check if door requested shutdown (JH_SHUTDOWN)
@@ -934,6 +948,32 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           console.log(`[DREWALL_TRACE]   current value at a0: 0x${currentVal.toString(16)}`);
         }
 
+        // DEBUG dRE!WAll: Trace the line-input call boundary and empty-buffer check
+        // 0x2472 = bsr.w 0x2164 (line input) - log buffer addr before call
+        // 0x2478 = addq.l #1, d0 - just after line input returns, log D0 + buffer content
+        // 0x2480 = tst.b 0x8(a7) - the empty check - log exact byte it's reading
+        if (process.env.DREWALL_TRACE === '1' && (pc === 0x2472 || pc === 0x2478 || pc === 0x2480)) {
+          const d0 = this.emulator.getRegister(0);
+          const d4 = this.emulator.getRegister(4);
+          const a0 = this.emulator.getRegister(8);
+          const a5 = this.emulator.getRegister(13);
+          const sp = this.emulator.getRegister(15);
+          const bufAddr = (pc === 0x2472) ? a0 : sp + 8;
+          const bytes: number[] = [];
+          for (let i = 0; i < 32; i++) bytes.push(this.emulator.readMemory(bufAddr + i));
+          const hex = bytes.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          const asc = bytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+          const label = pc === 0x2472 ? 'PRE-INPUT (A0=buf)' : pc === 0x2478 ? 'POST-INPUT (SP+8=buf)' : 'TST.B (SP+8=buf)';
+          console.log(`[DREWALL_TRACE] PC=0x${pc.toString(16)} ${label}`);
+          console.log(`[DREWALL_TRACE]   D0=0x${d0.toString(16)} D4=${d4} A0=0x${a0.toString(16)} A5=0x${a5.toString(16)} SP=0x${sp.toString(16)} buf@0x${bufAddr.toString(16)}`);
+          console.log(`[DREWALL_TRACE]   bytes[0..15]: ${hex}`);
+          console.log(`[DREWALL_TRACE]   ascii[0..31]: "${asc}"`);
+        }
+
+        // PER-INSTRUCTION trace removed — runs too often under native-batch execution
+        // and fires per-instruction-callback which is hot. Use the CopyMem logger in
+        // ExecLibrary.copyMem + the WALL-LIST dump at Write() in DosLibrary instead.
+
         this.debugMonitor?.setLastPCs(this.lastPCs);
         this.debugMonitor?.monitorExecBasePointer(pc);
         this.debugMonitor?.logA6Change(pc);
@@ -1280,12 +1320,34 @@ debugLog(
     await new Promise((resolve) => setImmediate(resolve));
   }
 
+  /**
+   * Format a PC value for logging. If the door binary had HUNK_SYMBOL entries,
+   * annotate with the nearest preceding symbol (e.g. "0x3272 (main+0x42)").
+   */
+  private formatPC(pc: number): string {
+    const resolver = this.doorLoader.getSymbolResolver();
+    if (resolver) return resolver.format(pc);
+    return `0x${(pc >>> 0).toString(16)}`;
+  }
+
   private checkExitConditions(pc: number): boolean {
     // Exit trap: Door returned to our sentinel address
     if (pc === 0xffff00 || pc === 0x1ff000) {
       const returnCode = this.emulator.getRegister(0);
+      // Pull the most recent non-trap PC from the recent-PC ring buffer (if any)
+      let lastRealPc = -1;
+      for (let i = this.lastPCs.length - 1; i >= 0; i--) {
+        const candidate = this.lastPCs[i];
+        if (candidate !== 0xffff00 && candidate !== 0x1ff000) {
+          lastRealPc = candidate;
+          break;
+        }
+      }
 debugLog(`[DoorLifecycleManager] === DOOR EXITED CLEANLY ===`);
 debugLog(`[DoorLifecycleManager] Return code (D0): ${returnCode}`);
+      if (lastRealPc >= 0) {
+debugLog(`[DoorLifecycleManager] Last PC before exit: ${this.formatPC(lastRealPc)}`);
+      }
 debugLog(
         `[DoorLifecycleManager] Total iterations: ${this.executionState.iterationCount}`
       );
@@ -1307,10 +1369,17 @@ debugLog(
       const a4 = this.emulator.getRegister(12);
       const a5 = this.emulator.getRegister(13);
       const sp = this.emulator.getRegister(15);
+      // Nearest preceding symbol from the last real PC (if we have symbols)
+      let lastRealPc = -1;
+      for (let i = this.lastPCs.length - 1; i >= 0; i--) {
+        const candidate = this.lastPCs[i];
+        if (candidate >= 0x100) { lastRealPc = candidate; break; }
+      }
+      const lastFormatted = lastRealPc >= 0 ? this.formatPC(lastRealPc) : 'unknown';
 debugLog(
         `[DoorLifecycleManager] PC in low memory (0x${pc.toString(
           16
-        )}) - likely stack corruption; SP=0x${sp.toString(
+        )}) - likely stack corruption; last-PC=${lastFormatted} SP=0x${sp.toString(
           16
         )} A4=0x${a4.toString(16)} A5=0x${a5.toString(16)}`
       );
@@ -2832,6 +2901,26 @@ debugLog("[DoorLifecycleManager] Terminating door lifecycle");
 debugLog("[DoorLifecycleManager] 🚪 Emitting door:status = terminated");
     this.socket.emit("door:status", { status: "terminated" });
 debugLog("[DoorLifecycleManager] Door lifecycle terminated");
+
+    // Fire one-shot exit hook so the parent AmigaDoorSession can run its
+    // full cleanup (unregister from debug registry, remove socket handlers,
+    // clear globals). Guarded in AmigaDoorSession.terminate() against
+    // re-entry; safe to call even if caller was already inside terminate.
+    const cb = this.onExitCallback;
+    this.onExitCallback = null;  // one-shot
+    if (cb) {
+      try { cb(); } catch (err) {
+console.error("[DoorLifecycleManager] onExit callback threw:", err);
+      }
+    }
+  }
+
+  /**
+   * Register a callback to fire once when terminate() completes.
+   * Overwrites any previously-registered callback.
+   */
+  setOnExit(cb: () => void): void {
+    this.onExitCallback = cb;
   }
 
   /**

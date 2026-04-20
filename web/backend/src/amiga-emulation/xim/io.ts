@@ -1458,17 +1458,31 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // as "[36m" instead of actual colored text.
     let converted = fullText.replace(/\x9b/g, '\x1b[');
 
+    // Convert Form Feed (0x0C) to ANSI clear screen + home cursor (ESC[2J ESC[H).
+    // On Amiga console.device, 0x0C (FF) is "Clear screen and home cursor" — doors
+    // like dRE!WAll send \f\n\r as their first output to clear the terminal before
+    // drawing at absolute positions [5;0H, [22;0H, [23;1H. xterm.js treats 0x0C as
+    // plain line-feed, so without this translation the door overlays its banner on
+    // top of whatever BBS content was on screen. See console.device docs and
+    // Documentation/6-Progress/dRE_WALL_HANDOFF.md.
+    converted = converted.replace(/\f/g, '\x1b[2J\x1b[H');
+
     // Filter out Amiga console.device specific codes that aren't standard ANSI:
-    // - [0 p = cursor off (Amiga-specific, not valid ANSI)
-    // - [1 p = cursor on (Amiga-specific, not valid ANSI)
-    // - [ p = toggle cursor (Amiga-specific)
+    // - ESC[0 p = cursor off (Amiga-specific, not valid ANSI)
+    // - ESC[1 p = cursor on (Amiga-specific, not valid ANSI)
+    // - ESC[ p = toggle cursor (Amiga-specific)
     // These have a space before the 'p' which makes them Amiga-specific.
-    // Standard ANSI cursor codes don't have a space (e.g., [?25h, [?25l)
-    const amigaCursorMatches = converted.match(/\[(\d*)\s+p/gi);
+    // Standard ANSI cursor codes don't have a space (e.g., [?25h, [?25l).
+    // The regex MUST include the leading ESC (\x1b) byte — stripping only
+    // "[0 p" leaves an orphaned ESC, which the incomplete-ANSI buffer at the
+    // bottom of this function captures and prepends to the NEXT JH_WRITE,
+    // corrupting sequences like ESC[5;0H into \x1b\x1b[5;0H and breaking
+    // absolute cursor positioning in doors like dRE!WAll.
+    const amigaCursorMatches = converted.match(/\x1b\[(\d*)\s+p/gi);
     if (amigaCursorMatches) {
 console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCursorMatches)}`);
     }
-    converted = converted.replace(/\[(\d*)\s+p/gi, '');
+    converted = converted.replace(/\x1b\[(\d*)\s+p/gi, '');
 
     // Handle @READUSERKEYS directive from MultiTop and similar doors
     // This directive should trigger a pause and wait for user keypress
@@ -1873,6 +1887,11 @@ debugLog('[XIMIOHandler] Pause complete, reply sent, resuming');
 debugLog('[XIMIOHandler] Sending reply to door:');
 debugLog(`  Message: 0x${msg.msgAddr.toString(16)}`);
 debugLog(`  Data: ${data}`);
+
+    // Mark reply as handled so callers (XIMProcessor / polling loop) skip their
+    // fallback replyMsg and we avoid double-delivering the same msg to the
+    // door's reply port queue.
+    this.state.replyHandled = true;
 
     if (typeof stringValue === 'string') {
       this.messageParser.writeMessageString(msg.msgAddr, stringValue);

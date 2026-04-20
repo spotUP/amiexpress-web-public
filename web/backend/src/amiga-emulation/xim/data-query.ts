@@ -56,6 +56,9 @@ export class XIMDataQueryHandler {
    *   - Door's getDT() checks if data < 0, returns null if carrier lost
    */
   handleDataQuery(msg: XIMMessage): void {
+    if (process.env.DREWALL_TRACE === '1' && msg.command === XIMCommand.DT_NAME) {
+      console.log(`[DT_NAME_DEBUG] handleDataQuery ENTRY cmd=${msg.command} data=${msg.data} isRead=${msg.data !== 0}`);
+    }
 debugLog(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
 debugLog(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
 
@@ -71,6 +74,11 @@ debugLog(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`)
     switch (msg.command) {
       case XIMCommand.DT_NAME:
         if (isRead) {
+          // DEBUG dRE!WAll: diagnose why username comes back empty
+          if (process.env.DREWALL_TRACE === '1') {
+            const uAny: any = user;
+            console.log(`[DT_NAME_DEBUG] isRead=true user=${user ? 'set' : 'UNDEFINED'} username="${uAny?.username ?? '<none>'}" doorCommand="${(this.bbsSession as any).doorCommand}" msgAddr=0x${msg.msgAddr.toString(16)} stringAddr=0x${stringAddr.toString(16)}`);
+          }
           // Context-aware handling: For file scanning doors (FR, N, F, CS, etc.),
           // DT_NAME returns number of files in current directory, not username
           const doorCommand = (this.bbsSession as any).doorCommand?.toUpperCase();
@@ -111,6 +119,9 @@ debugLog(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${co
             }
 
             const verify = this.messageParser.readString(stringAddr, 31);
+            if (process.env.DREWALL_TRACE === '1') {
+              console.log(`[DT_NAME_DEBUG] WROTE username="${username}" verify="${verify}" replyData=${replyData}`);
+            }
 debugLog(`  [READ] DT_NAME verify buffer: "${verify}"`);
 debugLog(`  [READ] DT_NAME: "${username}"`);
           }
@@ -1071,6 +1082,17 @@ debugLog(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
    * Send reply to door
    */
   private reply(msg: XIMMessage, data: number): void {
+    // DEBUG dRE!WAll: snapshot the string at 0x14 right before sending reply
+    if (process.env.DREWALL_TRACE === '1' && msg.command === XIMCommand.DT_NAME) {
+      const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+      const snap = this.messageParser.readString(stringAddr, 31);
+      const strPtr = this.emulator.readMemory32(msg.msgAddr + 16);
+      console.log(`[DT_NAME_DEBUG] reply() entry: embedded@0x${stringAddr.toString(16)}="${snap}" strPtr=0x${strPtr.toString(16)} replyData=${data}`);
+    }
+    // Mark reply as handled so callers (XIMProcessor / polling loop) skip their
+    // fallback replyMsg and we avoid double-delivering the same msg to the
+    // door's reply port queue.
+    this.state.replyHandled = true;
     // express.e replies only set msg.string/msg.data; do not modify strptr/fillers.
     this.messageParser.writeData(msg.msgAddr, data);
 
@@ -1094,7 +1116,15 @@ debugLog(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
 
     if (msgReplyPort !== 0) {
       // AEDoor.library mode: door polls its own reply port
+      if (process.env.DREWALL_TRACE === '1' && msg.command === XIMCommand.DT_NAME) {
+        const sa = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+        console.log(`[DT_NAME_DEBUG] pre-replyMsg embedded@0x${sa.toString(16)}="${this.messageParser.readString(sa, 31)}"`);
+      }
       this.execLibrary.replyMsg(msg.msgAddr);
+      if (process.env.DREWALL_TRACE === '1' && msg.command === XIMCommand.DT_NAME) {
+        const sa = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+        console.log(`[DT_NAME_DEBUG] post-replyMsg embedded@0x${sa.toString(16)}="${this.messageParser.readString(sa, 31)}"`);
+      }
       debugLog(`[XIMDataQuery] Reply sent via ReplyMsg to msg.replyPort=0x${msgReplyPort.toString(16)} (AEDoor.library mode)`);
     } else {
       // Native XIM mode: door polls AEDoorPort bidirectionally

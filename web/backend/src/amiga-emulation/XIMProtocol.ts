@@ -26,6 +26,7 @@ import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
 import { debugLog } from '../utils/debug-log';
+import { debugRegistry } from '../debug/DebugRegistry';
 import * as net from 'net';
 
 export { XIMCommand } from './xim/types';
@@ -474,6 +475,32 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
     const humanName = this.messageParser.getCommandName(msg.command);
     console.log(`[XIMProtocol] handleMessage: cmd=${msg.command} (${humanName}) usedXimInput=${this.state.usedXimInput} string="${msg.string?.substring(0, 50) || ''}"`);
 
+    // Push onto the live debug ring buffer (dev-only, no-op in production).
+    // CRITICAL: uses a top-level static import of debugRegistry — NOT `await import()`.
+    // Any async yield here would suspend handleMessage before handleDataQuery runs,
+    // and the synchronous AEDoor.library trap path (waitForReply → XIMProcessor
+    // callback in DoorLifecycleManager) would deliver a stale reply before the
+    // data-query handler had a chance to write msg.string. See dRE!WAll bug:
+    // Documentation/6-Progress/dRE_WALL_HANDOFF.md.
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        const rawNode = (this.bbsSession as any)?.nodeId ?? (this.bbsSession as any)?.nodeNumber;
+        const nodeId = typeof rawNode === "string" ? parseInt(rawNode, 10) : rawNode;
+        if (typeof nodeId === "number" && nodeId > 0) {
+          debugRegistry.pushXIM(nodeId, {
+            timestampMs: Date.now(),
+            direction: "rx",
+            cmd: msg.command,
+            cmdName: humanName,
+            data: msg.data ?? 0,
+            node: msg.nodeId ?? nodeId,
+            line: msg.lineNumber ?? 0,
+            str: (msg.string ?? "").slice(0, 200),
+          });
+        }
+      } catch { /* debug ring push failure is fine */ }
+    }
+
     // Log incoming message to XIM debug log
     ximDebugLogger.logMessage(msg.command, humanName, 'RECV', {
       msgAddr: `0x${msg.msgAddr.toString(16)}`,
@@ -603,6 +630,9 @@ debugLog(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (corr
       this.systemCommandsHandler.cancelOldStyleDoorTimer(msg.command);
     }
 
+    if (process.env.DREWALL_TRACE === '1' && msg.command === 100) {
+      console.log(`[DT_NAME_DEBUG] router: cmd=${msg.command} shuttingDown=${this.state.shuttingDown} isSystem=${this.isSystemCommand(msg.command)} isIO=${this.isIOCommand(msg.command)} isDataQ=${this.isDataQueryCommand(msg.command)}`);
+    }
     // Handle system commands first (register/shutdown and others)
     if (this.isSystemCommand(msg.command)) {
       this.handleSystemCommand(msg);

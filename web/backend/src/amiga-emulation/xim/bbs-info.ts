@@ -1003,6 +1003,10 @@ debugLog('[XIMBBSInfo] PASSWORD_HASH: (hidden)');
    * Send reply to door
    */
   private reply(msg: XIMMessage, data: number): void {
+    // Mark reply as handled so callers (XIMProcessor / polling loop) skip their
+    // fallback replyMsg and we avoid double-delivering the same msg to the
+    // door's reply port queue.
+    this.state.replyHandled = true;
     // express.e replies only set msg.string/msg.data; do not modify strptr/fillers.
     this.messageParser.writeData(msg.msgAddr, data);
 
