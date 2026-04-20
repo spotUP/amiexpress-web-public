@@ -14,6 +14,16 @@ import { Terminal } from '@xterm/xterm';
 // Terser strips literal \x1b from string constants during minification
 const ESC = String.fromCharCode(27);
 
+/**
+ * Soft-cap throughput applied when the UI's "MAX" option is selected
+ * (bps === 0 historically meant "no throttle"). Without a cap xterm.js
+ * paints a full 80×25 screen in a single ~16ms frame, making transient
+ * screens flash past too fast to read. 230400 bps (≈23 KB/s) paces a
+ * full screen at ~87ms — imperceptible for short echoes, visible for
+ * whole-screen updates.
+ */
+const MAX_SOFT_CAP_BPS = 230400;
+
 export interface ModemEmulatorOptions {
   bps: number; // Bits per second (1200, 2400, 9600, etc.)
 }
@@ -27,24 +37,52 @@ export class ModemEmulator {
   private enabled: boolean = false;
   private startTime: number = 0;
   private bytesSent: number = 0;
+  // While a door is running, skip throttling entirely regardless of bps.
+  // 68K doors drive interactive UIs (games, menus, dRE!WAll prompt echo)
+  // and their screen updates should feel instant. The soft-cap only
+  // applies to BBS navigation so transient prompts stay readable.
+  private doorActive: boolean = false;
 
   constructor(terminal: Terminal) {
     this.terminal = terminal;
   }
 
   /**
-   * Enable modem emulation at specified baud rate
+   * Toggle the "a door is running" bypass. While true, write() hands
+   * bytes to xterm immediately — no soft-cap, no queueing. Toggled by
+   * BBSTerminal in the `door-active` socket handler.
+   */
+  setDoorActive(active: boolean): void {
+    this.doorActive = active;
+    if (active) {
+      // Drain pending BBS-phase content so door output isn't behind it.
+      this.flushImmediate();
+    } else {
+      // Reset throttle budget so BBS resumption doesn't inherit stale timing.
+      this.startTime = performance.now();
+      this.bytesSent = 0;
+    }
+  }
+
+  /**
+   * Enable modem emulation at specified baud rate.
+   *
+   * Historically bps=0 meant "no throttle" (disabled). That produces
+   * screen flashes too fast to read, so bps=0 now maps to
+   * MAX_SOFT_CAP_BPS (230400 bps ≈ 87ms per 80×25 screen).
    */
   enable(bps: number): void {
-    this.bps = bps;
+    const effectiveBps = bps === 0 ? MAX_SOFT_CAP_BPS : bps;
+    this.bps = effectiveBps;
     // 10 bits per byte (1 start + 8 data + 1 stop)
-    this.bytesPerSecond = Math.max(1, Math.floor(bps / 10));
-    this.enabled = bps > 0;
+    this.bytesPerSecond = Math.max(1, Math.floor(effectiveBps / 10));
+    this.enabled = effectiveBps > 0;
     this.startTime = performance.now();
     this.bytesSent = 0;
 
     console.log(
-      `[ModemEmulator] Enabled at ${bps} bps (${this.bytesPerSecond} bytes/sec)`
+      `[ModemEmulator] Enabled at ${effectiveBps} bps (${this.bytesPerSecond} bytes/sec)` +
+        (bps === 0 ? ` — MAX soft-cap from bps=0` : '')
     );
   }
 
@@ -78,8 +116,10 @@ export class ModemEmulator {
    * Queue data for throttled output
    */
   write(data: string): void {
-    if (!this.enabled) {
-      // No throttling - write immediately
+    if (!this.enabled || this.doorActive) {
+      // No throttling — either the emulator is disabled or a 68K door
+      // is running and its output should feel instant. Soft-cap exists
+      // for BBS navigation only.
       this.terminal.write(data);
       return;
     }
