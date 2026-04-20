@@ -5,6 +5,7 @@
 
 import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
+import { SymbolResolver } from "./loader/SymbolResolver.js";
 import { ExecLibrary } from "./api/ExecLibrary.js";
 import { DoorConfig } from "./DoorTypes.js";
 import * as fs from "fs";
@@ -25,6 +26,16 @@ export class DoorLoader {
   private readonly exitTrapAddress = 0x1ff000;
   private logger: DoorLogger | null = null;
   private sharedBBSData: SharedBBSData | null = null;
+  private symbolResolver: SymbolResolver | null = null;
+
+  /**
+   * Returns a symbol resolver for the currently-loaded door, or null if the
+   * binary had no HUNK_SYMBOL entries. Lifecycle: populated inside loadDoor()
+   * after HunkLoader.parse() succeeds.
+   */
+  getSymbolResolver(): SymbolResolver | null {
+    return this.symbolResolver;
+  }
 
   constructor(
     emulator: MoiraEmulator,
@@ -134,6 +145,15 @@ debugLog(`[DoorLoader] Door binary size: ${binary.length} bytes`);
     // Parse Amiga HUNK format
     const hunkLoader = new HunkLoader();
     const hunkFile = hunkLoader.parse(Buffer.from(binary));
+
+    // Build symbol resolver from HUNK_SYMBOL entries (if any)
+    const resolver = new SymbolResolver(hunkFile);
+    if (resolver.hasSymbols()) {
+      this.symbolResolver = resolver;
+debugLog(`[DoorLoader] Loaded ${resolver.size} symbols — PC logs will be annotated`);
+    } else {
+      this.symbolResolver = null;
+    }
 
 debugLog(`[DoorLoader] Parsed ${hunkFile.segments.length} segments:`);
     this.logger?.info(`Parsed ${hunkFile.segments.length} segments`);
@@ -249,16 +269,26 @@ debugLog(`[DoorLoader] progName="${progName}" (from sessionCommand="${sessionCom
 
     let customArgs: string[] = [];
     const configArgs = Array.isArray(this.config.args) ? this.config.args : [];
-    if (configArgs.length > 0) {
-      // User provided explicit args - use those for any door type
-      customArgs = [...configArgs];
-debugLog(`[DoorLoader] Door with explicit args: ${JSON.stringify(customArgs)}`);
-    } else {
-      // Default CLI for all doors: pass node number (matches express.e tooling)
-      // This is critical for XIM doors which use the node number to find AEDoorPort{node}
-      // express.e: StringF(doorPort,'\s\d','AEDoorPort',node)
+    // express.e:4231 runDoor: XIM/SIM/TIM/IIM/SUP all build CLI as "<cmd> <node>".
+    // Runtime params (e.g. 'S U' for `N S U`) ride on XIM messages (cmd 113/152),
+    // NOT on the CLI. Honoring config.args verbatim here broke AquaScan — its
+    // ReadArgs template "NODE/N/A" expects a number and got "S U" → IoErr=115
+    // → RETURN_WARN during auto-newfiles-scan at login.
+    if (doorType === 'XIM') {
+      if (configArgs.length > 0) {
+debugLog(`[DoorLoader] XIM door: ignoring config.args=${JSON.stringify(configArgs)} per express.e:4231 (params delivered via XIM messages)`);
+      }
       customArgs = [nodeId.toString()];
-debugLog(`[DoorLoader] Door with default args: ["${nodeId}"] (node number for AEDoorPort${nodeId})`);
+debugLog(`[DoorLoader] XIM door CLI args=["${nodeId}"] (node number only, matches express.e runDoor)`);
+    } else if (configArgs.length > 0) {
+      // Non-XIM (SIM/TIM/AIM/etc.): preserve existing behavior for now. These
+      // use different IPC paths (DoorControl port, PARADOOR wrapper) and may
+      // rely on explicit args. Revisit per-type if a concrete door breaks.
+      customArgs = [...configArgs];
+debugLog(`[DoorLoader] ${doorType} door with explicit args: ${JSON.stringify(customArgs)}`);
+    } else {
+      customArgs = [nodeId.toString()];
+debugLog(`[DoorLoader] ${doorType} door with default args: ["${nodeId}"]`);
     }
     const argStringBase = customArgs.join(" ").trim();
     // AmigaDOS requires argument string to be terminated with newline (0x0A), NOT null
