@@ -18,6 +18,18 @@ export interface ModemEmulatorOptions {
   bps: number; // Bits per second (1200, 2400, 9600, etc.)
 }
 
+/**
+ * Soft-cap throughput applied when the UI's "MAX" option is selected
+ * (bps === 0 historically meant "no throttle"). Without a cap xterm.js
+ * paints a full 80×25 screen in a single ~16ms frame, making transient
+ * screens (brief prompts, pause messages, partial updates) flash past
+ * too fast to read. 230400 bps (≈23 KB/s) paces a full screen at ~87ms
+ * — imperceptible for short echoes, visible for whole-screen updates.
+ * Users who genuinely want raw no-throttle can set WEB_MODEM_MAX_BPS=0
+ * via the admin UI to disable the cap entirely (left as escape hatch).
+ */
+const MAX_SOFT_CAP_BPS = 230400;
+
 export class ModemEmulator {
   private terminal: Terminal;
   private bps: number = 0;
@@ -33,18 +45,25 @@ export class ModemEmulator {
   }
 
   /**
-   * Enable modem emulation at specified baud rate
+   * Enable modem emulation at specified baud rate.
+   *
+   * Historically bps=0 meant "no throttle" (disabled). That produces
+   * screen flashes that are too fast to read, so bps=0 now maps to
+   * MAX_SOFT_CAP_BPS (230400 bps ≈ 87ms per 80×25 screen). See
+   * MAX_SOFT_CAP_BPS comment for rationale.
    */
   enable(bps: number): void {
-    this.bps = bps;
+    const effectiveBps = bps === 0 ? MAX_SOFT_CAP_BPS : bps;
+    this.bps = effectiveBps;
     // 10 bits per byte (1 start + 8 data + 1 stop)
-    this.bytesPerSecond = Math.max(1, Math.floor(bps / 10));
-    this.enabled = bps > 0;
+    this.bytesPerSecond = Math.max(1, Math.floor(effectiveBps / 10));
+    this.enabled = effectiveBps > 0;
     this.startTime = performance.now();
     this.bytesSent = 0;
 
     console.log(
-      `[ModemEmulator] Enabled at ${bps} bps (${this.bytesPerSecond} bytes/sec)`
+      `[ModemEmulator] Enabled at ${effectiveBps} bps (${this.bytesPerSecond} bytes/sec)` +
+        (bps === 0 ? ` — MAX soft-cap from bps=0` : ""),
     );
   }
 

@@ -1422,15 +1422,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[PETSCII] PETSCII content written to terminal');
     });
 
-    // Modem speed emulation handler
+    // Modem speed emulation handler.
+    // NB: bps === 0 used to mean "disable throttling entirely", which let
+    // xterm.js paint a full 80×25 screen in a single ~16ms frame and made
+    // transient screens flash past unreadably. ModemEmulator.enable() now
+    // soft-caps bps=0 to MAX_SOFT_CAP_BPS (230400) so MAX still feels
+    // snappy but full-screen updates paint over ~87ms instead of 16ms.
+    // Always route through enable() to get that behaviour.
     socket.on('modem-speed', (bps: number) => {
       console.log(`[ModemEmulator] Speed changed to ${bps} bps`);
       if (modemEmulatorRef.current) {
-        if (bps > 0) {
-          modemEmulatorRef.current.enable(bps);
-        } else {
-          modemEmulatorRef.current.disable();
-        }
+        modemEmulatorRef.current.enable(bps);
       }
     });
 
