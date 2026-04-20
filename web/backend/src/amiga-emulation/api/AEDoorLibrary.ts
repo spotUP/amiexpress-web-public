@@ -612,7 +612,13 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
 
     // Handle XIM doors with state
     const stringAddr = this.emulator.getRegister(8); // A0 = string pointer
-    const newlineFlag = this.emulator.getRegister(1); // D1 = 0=NOLF, 1=LF
+    // Native aedoor.library libFunc11 masks D1 to bit 0:
+    //   MOVEQ #1,D7
+    //   AND.B D1,D7
+    // Other bits are ignored. SysInfo passes D1=2; without masking we were
+    // forwarding msg.data=2, which handleSendMessage (data !== 0) treated
+    // as "add newline" and injected extra blank lines between box sections.
+    const newlineFlag = this.emulator.getRegister(1) & 1; // D1 bit 0 only
     const fullText = this.readCString(stringAddr, 4096); // Read full string (may be > 198 chars)
 
     // Chunk string into 198-char pieces like native (DBEQ D1=0xC6)
@@ -632,10 +638,17 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
         chunkText += "\r\n";
       }
 
+      // Native aedoor.library WriteStr puts D1 (newline flag) into msg.data
+      // and the string into msg.string (embedded). `useStringPointer: true`
+      // would overwrite msg.data with state.stringPtr, causing every JH_SM
+      // to look like "data != 0 → add newline" to handleSendMessage and
+      // break multi-chunk box-drawing output (SysInfo borders, zOOsTAT).
+      // options.string already gets written to state.stringPtr inside
+      // dispatchCommand, so leaving useStringPointer off is the correct
+      // mirror of the 68K side.
       result = this.dispatchCommand(state, XIMCommand.JH_SM, {
         string: chunkText,
         data: isLastChunk ? newlineFlag : 0,
-        useStringPointer: true,
       });
 
       offset += chunkLen;
@@ -650,7 +663,6 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
       result = this.dispatchCommand(state, XIMCommand.JH_SM, {
         string: text,
         data: newlineFlag,
-        useStringPointer: true,
       });
     }
 
