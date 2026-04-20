@@ -933,9 +933,14 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // This is MUCH faster than single-instruction execution for CPU-intensive doors.
         // CRITICAL: Batch execution blocks the event loop (runs in C++ N-API).
         // Batch too large = health check timeouts on Render.com = container restart.
-        // MULTI-USER: Reduced from 50000 to 2000 to prevent blocking
-        // Combined with time-based yielding (5ms), this ensures responsive multi-user experience
-        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 2000;
+        // MULTI-USER: Default 2000 (down from 50000) to keep other users responsive.
+        // The 5ms time-based yield at top of this loop is what actually bounds
+        // latency; the batch is just the inner ceiling. Env override lets operators
+        // tune per deployment: single-user local = higher (5000-10000) = snappier
+        // door input echo; shared production = keep 2000 for fairness.
+        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP
+          ? 1
+          : Number(process.env.AEDOOR_BATCH_SIZE ?? 2000);
         const pcBeforeBatch = this.emulator.getRegister(16);
         const batchStart = ENABLE_PROFILING ? Date.now() : 0;
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
