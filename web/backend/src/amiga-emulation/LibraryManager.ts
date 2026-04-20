@@ -585,6 +585,14 @@ debugLog("[LibraryManager] Creating AEDoor.library...");
       this.config.bbsSession || {}
     );
 
+    // Let XIMProtocol observe AEDoorLibrary.isInWaitForReply() so that
+    // shouldInjectNativeInput can push input into replyPort while a
+    // synchronous trap-side waitForReply loop is holding the JS event
+    // loop (SysInfo / zOOsTAT pause prompts).
+    if (this.ximProtocol && typeof (this.ximProtocol as any).setAedoorLibrary === 'function') {
+      (this.ximProtocol as any).setAedoorLibrary(this.aedoorLibrary);
+    }
+
 debugLog("[LibraryManager] Creating utility.library...");
 
     this.utilityLibrary = new UtilityLibrary(this.emulator, this.socket);

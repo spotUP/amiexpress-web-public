@@ -1768,23 +1768,41 @@ console.warn(
     return this.emulator.readMemory32(state.dataPtr);
   }
 
-  private waitForReply(state: DoorInterfaceState, command: number): boolean {
-    for (let i = 0; i < 10000; i++) {
-      // CRITICAL FIX 2026-01-08: Process XIM messages synchronously!
-      // We're inside a trap handler, so the async polling loop can't run.
-      // The door sent a message to the BBS, we need to process it and send
-      // the reply before the door's getMsg finds it.
-      if (this.processXIMMessageCallback && state.bbsPortAddr) {
-        this.processXIMMessageCallback(state.bbsPortAddr);
-      }
+  /**
+   * True while a synchronous trap handler is blocked in waitForReply below.
+   * Used by XIMProtocol.shouldInjectNativeInput to decide whether the
+   * async socket input path should push a JH_HK message into the door's
+   * replyPort. Without injection, waitForReply can't see async user input
+   * because the tight loop holds the JS event loop (Amiga-sync semantics).
+   */
+  private inWaitForReply: boolean = false;
 
-      const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
-      if (msgAddr !== 0) {
-        return true;
+  isInWaitForReply(): boolean {
+    return this.inWaitForReply;
+  }
+
+  private waitForReply(state: DoorInterfaceState, command: number): boolean {
+    this.inWaitForReply = true;
+    try {
+      for (let i = 0; i < 10000; i++) {
+        // CRITICAL FIX 2026-01-08: Process XIM messages synchronously!
+        // We're inside a trap handler, so the async polling loop can't run.
+        // The door sent a message to the BBS, we need to process it and send
+        // the reply before the door's getMsg finds it.
+        if (this.processXIMMessageCallback && state.bbsPortAddr) {
+          this.processXIMMessageCallback(state.bbsPortAddr);
+        }
+
+        const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
+        if (msgAddr !== 0) {
+          return true;
+        }
       }
+      console.warn(`[AEDoorLibrary] No reply for command ${command} after 10000 iterations`);
+      return false;
+    } finally {
+      this.inWaitForReply = false;
     }
-    console.warn(`[AEDoorLibrary] No reply for command ${command} after 10000 iterations`);
-    return false;
   }
 
   /**

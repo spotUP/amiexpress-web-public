@@ -42,6 +42,18 @@ export class XIMProtocol {
   private doorCommand: string = ''; // Command name used to launch this door (e.g., "FR")
   private doorCommandAddr: number = 0; // Persistent memory address for door command string
   private iconLibrary: any = null; // IconLibrary for loading .info files
+  // Reference to AEDoorLibrary for hybrid-door input-injection gating.
+  // Wired up after construction because aedoor.library is built after XIMProtocol.
+  private aedoorLibrary: any = null;
+
+  /**
+   * Wire up AEDoorLibrary (used only by shouldInjectNativeInput to detect
+   * that a synchronous trap handler is stuck in waitForReply, where async
+   * user input needs to be pushed into the door's replyPort via PutMsg).
+   */
+  setAedoorLibrary(aedoorLibrary: any): void {
+    this.aedoorLibrary = aedoorLibrary;
+  }
 
   // Specialized handlers
   private messageParser: XIMMessageParser;
@@ -400,18 +412,27 @@ console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} w
       return false;
     }
 
-    // For native doors (detected after 500ms timer), always inject
+    // For native doors (detected by the 500ms post-register silence timer),
+    // always inject. cancelOldStyleDoorTimer() clears isNativeDoor the moment
+    // the door sends any XIM command, so this only stays true for doors that
+    // never speak XIM at all.
     if (isNativeDoor) {
       return true;
     }
 
-    // HYBRID DOORS: Some XIM doors (like zOOsTAT) use XIM for output but native
-    // GetMsg polling for input at pause prompts. If the door is registered,
-    // NOT waiting for XIM input, and has a valid door port, inject input.
-    // This handles doors that display "(Press Enter to continue)" via printf
-    // and wait via WaitPort/GetMsg instead of JH_HK.
-    if (isRegistered && !isWaiting && this.doorPort) {
-      debugLog(`[XIMProtocol] shouldInjectNativeInput: Hybrid door - injecting for registered non-waiting door`);
+    // AEDoor.library hybrid case: doors like SysInfo/zOOsTAT call
+    // AEDoor.library.Prompt(), whose C-side trap handler runs a synchronous
+    // waitForReply tight loop polling the door's replyPort. The loop holds
+    // the JS event loop, so async socket input can't land on the port in
+    // time — without injection the loop times out every 10000 iters and the
+    // door re-prompts forever. When waitForReply is active, push input as
+    // JH_HK messages into replyPort so the polling sees them.
+    //
+    // Critically scoped: WarOLM / dRE!WAll / AquaScan don't go through
+    // AEDoor.library.Prompt, so inWaitForReply is false for them and we
+    // still skip the eager injection that 2026-04-20 removed.
+    if (this.aedoorLibrary?.isInWaitForReply?.()) {
+      debugLog(`[XIMProtocol] shouldInjectNativeInput: AEDoor.library in waitForReply - injecting`);
       return true;
     }
 
