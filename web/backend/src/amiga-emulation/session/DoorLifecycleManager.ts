@@ -23,6 +23,7 @@ import {
   sendStartupMessage as sendStartupMessageHelper,
 } from "./lifecycle/DoorStartupHelper.js";
 import { installMessageCallbacks } from "./lifecycle/door-message-callbacks.js";
+import { DoorExitDetector } from "./lifecycle/DoorExitDetector.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -118,6 +119,7 @@ export class DoorLifecycleManager {
   // to lifecycle/DoorExecutionLogger to keep this file under the 2000-line
   // size budget). Getters below preserve the legacy property access path.
   private executionLogger!: DoorExecutionLogger;
+  private exitDetector!: DoorExitDetector;
   private lastPCs: number[] = [];
   private traceRegs: boolean = false;
   private traceInterval: number = 500;
@@ -199,6 +201,22 @@ debugLog(
       this.executionState,
       this.lifecycleConfig,
     );
+
+    // Exit detection + PC symbol formatting + paused-state polling
+    // extracted to lifecycle/DoorExitDetector.
+    this.exitDetector = new DoorExitDetector({
+      emulator: this.emulator,
+      socket: this.socket,
+      config: this.config,
+      libraryManager: this.libraryManager,
+      doorLoader: this.doorLoader,
+      executionState: this.executionState,
+      getLibraryTraps: () => this.libraryTraps,
+      getLastPCs: () => this.lastPCs,
+      terminate: () => this.terminate(),
+      pollXIMMessages: () => this.pollXIMMessages(),
+      pollTIMMessages: () => this.pollTIMMessages(),
+    });
 
     this.traceRegs = process.env.DOOR_TRACE_REGS === "1";
     this.traceInterval = Number(process.env.DOOR_TRACE_INTERVAL ?? 500);
@@ -595,7 +613,7 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
 
         // === STEP 1: Check if paused (async input) ===
         if (this.emulator.isPaused()) {
-          await this.handlePausedState();
+          await this.exitDetector.handlePausedState();
           continue;
         }
 
@@ -837,7 +855,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         }
 
         // === STEP 3: Check exit conditions ===
-        if (this.checkExitConditions(pc)) {
+        if (this.exitDetector.checkExitConditions(pc)) {
           return;
         }
 
@@ -1196,294 +1214,8 @@ debugLog(
     }
   }
 
-  private async handlePausedState(): Promise<void> {
-    // CRITICAL: While paused in Wait(), we must still poll for XIM messages!
-    // The door calls Wait() to wait for a reply from the BBS.
-    // We need to process the queued message and send a reply, which will
-    // call Signal() to wake the door from Wait().
-    //
-    // Without this, XIM doors deadlock:
-    // 1. Door sends message via PutMsg
-    // 2. Door calls Wait() to wait for reply
-    // 3. Wait() pauses emulator
-    // 4. Execution loop enters handlePausedState
-    // 5. Without XIM polling here, message is never processed
-    // 6. Reply is never sent, Signal() never called
-    // 7. Door stays paused forever until timeout
-
-    // CRITICAL: Default to SIM if doorType not specified
-    const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
-
-    if (effectiveDoorType === "XIM") {
-      await this.pollXIMMessages();
-    } else {
-      // TIM, SIM, IIM, SUP doors all use DoorControl port (per express.e:4316-4320)
-      const usesDoorControl = effectiveDoorType === "TIM" ||
-                              effectiveDoorType === "SIM" ||
-                              effectiveDoorType === "IIM" ||
-                              effectiveDoorType === "SUP";
-      if (usesDoorControl) {
-        await this.pollTIMMessages();
-      }
-    }
-
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-
-  /**
-   * Format a PC value for logging. If the door binary had HUNK_SYMBOL entries,
-   * annotate with the nearest preceding symbol (e.g. "0x3272 (main+0x42)").
-   */
-  private formatPC(pc: number): string {
-    const resolver = this.doorLoader.getSymbolResolver();
-    if (resolver) return resolver.format(pc);
-    return `0x${(pc >>> 0).toString(16)}`;
-  }
-
-  private checkExitConditions(pc: number): boolean {
-    // Exit trap: Door returned to our sentinel address
-    if (pc === 0xffff00 || pc === 0x1ff000) {
-      const returnCode = this.emulator.getRegister(0);
-      // Pull the most recent non-trap PC from the recent-PC ring buffer (if any)
-      let lastRealPc = -1;
-      for (let i = this.lastPCs.length - 1; i >= 0; i--) {
-        const candidate = this.lastPCs[i];
-        if (candidate !== 0xffff00 && candidate !== 0x1ff000) {
-          lastRealPc = candidate;
-          break;
-        }
-      }
-debugLog(`[DoorLifecycleManager] === DOOR EXITED CLEANLY ===`);
-debugLog(`[DoorLifecycleManager] Return code (D0): ${returnCode}`);
-      if (lastRealPc >= 0) {
-debugLog(`[DoorLifecycleManager] Last PC before exit: ${this.formatPC(lastRealPc)}`);
-      }
-debugLog(
-        `[DoorLifecycleManager] Total iterations: ${this.executionState.iterationCount}`
-      );
-
-      // Emit non-zero exit codes to sysop terminal for visibility
-      if (returnCode !== 0) {
-        const doorName = this.config.doorId || 'Unknown';
-        // AmigaDOS return codes: 0=OK, 5=WARN, 10=ERROR, 20=FAIL
-        const codeDesc = returnCode === 5 ? 'WARN' : returnCode === 10 ? 'ERROR' : returnCode === 20 ? 'FAIL' : `code ${returnCode}`;
-        this.socket.emit('ansi-output', `\x1b[33m[68K] ${doorName} exited with ${codeDesc}\x1b[0m\r\n`);
-      }
-
-      this.terminate();
-      return true;
-    }
-
-    // Low memory PC (crash/corruption)
-    if (pc < 0x100 && this.executionState.iterationCount > 100) {
-      const a4 = this.emulator.getRegister(12);
-      const a5 = this.emulator.getRegister(13);
-      const sp = this.emulator.getRegister(15);
-      // Nearest preceding symbol from the last real PC (if we have symbols)
-      let lastRealPc = -1;
-      for (let i = this.lastPCs.length - 1; i >= 0; i--) {
-        const candidate = this.lastPCs[i];
-        if (candidate >= 0x100) { lastRealPc = candidate; break; }
-      }
-      const lastFormatted = lastRealPc >= 0 ? this.formatPC(lastRealPc) : 'unknown';
-debugLog(
-        `[DoorLifecycleManager] PC in low memory (0x${pc.toString(
-          16
-        )}) - likely stack corruption; last-PC=${lastFormatted} SP=0x${sp.toString(
-          16
-        )} A4=0x${a4.toString(16)} A5=0x${a5.toString(16)}`
-      );
-      this.terminate();
-      return true;
-    }
-
-    const execLib = this.libraryManager.execLibrary;
-    if (!execLib) {
-      return false;
-    }
-
-    if (this.libraryTraps?.isTrapAddress(pc)) {
-      // Allow transitions through AEDoor/Exec trap stubs used for GetMsg/PutMsg
-      return false;
-    }
-
-    // Compute code bounds once from the seglist header so we can spot runaway PCs
-    if (this.codeLowerBound === 0 || this.codeUpperBound === 0) {
-      try {
-        const taskAddr = execLib.getCurrentTaskAddress();
-        if (taskAddr !== null) {
-          const segListBptr = this.emulator.readMemory32(taskAddr + 0x80);
-          if (segListBptr) {
-            const headerAddr = segListBptr << 2;
-            const sizeLongs = this.emulator.readMemory32(headerAddr);
-            this.codeLowerBound = headerAddr + 8;
-            this.codeUpperBound = this.codeLowerBound + sizeLongs * 4;
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    const romStart = 0xf80000;
-    const trapRegion = this.codeUpperBound + 0x2000; // allow a little headroom for stubs
-    const a5 = this.emulator.getRegister(13);
-    const execBase = execLib.getExecBaseAddress() ?? 0;
-    const dosBase = execLib.getLibraryBase("dos.library") ?? 0;
-    const intuitionBase = execLib.getLibraryBase("intuition.library") ?? 0;
-    const graphicsBase = execLib.getLibraryBase("graphics.library") ?? 0;
-    const utilityBase = execLib.getLibraryBase("utility.library") ?? 0;
-    const aedoorBase = execLib.getLibraryBase("AEDoor.library") ?? 0;
-    const iconBase = execLib.getLibraryBase("icon.library") ?? 0;
-    const execWindowLow = execBase ? execBase - 0x800 : 0;
-    const execWindowHigh = execBase ? execBase + 0x2000 : 0;
-    const dosWindowLow = dosBase ? dosBase - 0x800 : 0;
-    const dosWindowHigh = dosBase ? dosBase + 0x2000 : 0;
-    const stubBases = [
-      intuitionBase,
-      graphicsBase,
-      utilityBase,
-      aedoorBase,
-      iconBase,
-    ].filter((b) => b && b > 0) as number[];
-    // Broadly allow stubs: any PC within base-0x1000 .. base+0x400000 is allowed
-    const stubWindows = stubBases.map((b) => ({
-      low: b - 0x1000,
-      high: b + 0x400000,
-    }));
-    const inStubByA5 = stubBases.includes(a5);
-    const safeRead32 = (addr: number): number | null => {
-      try {
-        return this.emulator.readMemory32(addr >>> 0);
-      } catch {
-        return null;
-      }
-    };
-
-    if (
-      this.codeLowerBound &&
-      this.codeUpperBound &&
-      !inStubByA5 &&
-      pc > trapRegion &&
-      pc < romStart &&
-      !(pc >= execWindowLow && pc <= execWindowHigh) &&
-      !(pc >= dosWindowLow && pc <= dosWindowHigh) &&
-      !stubWindows.some((w) => pc >= w.low && pc <= w.high)
-    ) {
-      // If the PC landed inside the current stack bounds, assume a post-exit RTS into the stack
-      // and treat it as a clean termination rather than a crash.
-      const stackLower =
-        (this.libraryManager as any)?.execLibrary?.getStackLower?.() ?? null;
-      const stackUpper =
-        (this.libraryManager as any)?.execLibrary?.getStackUpper?.() ?? null;
-      if (
-        stackLower !== null &&
-        stackUpper !== null &&
-        pc >= stackLower &&
-        pc <= stackUpper + 0x100
-      ) {
-debugLog(
-          `[DoorLifecycleManager] PC reached stack region after exit (pc=0x${pc.toString(
-            16
-          )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
-            16
-          )}]) - treating as clean termination`
-        );
-        this.terminate();
-        return true;
-      }
-
-      const sp = this.emulator.getRegister(15);
-      const d0 = this.emulator.getRegister(0);
-      const d1 = this.emulator.getRegister(1);
-      const a4 = this.emulator.getRegister(12);
-      const a0 = this.emulator.getRegister(8);
-      const a1 = this.emulator.getRegister(9);
-      const stackWords: string[] = [];
-      for (let i = 0; i < 5; i++) {
-        try {
-          const word = this.emulator.readMemory32(sp + i * 4);
-          stackWords.push(`SP+${i * 4}=0x${word.toString(16)}`);
-        } catch {
-          stackWords.push(`SP+${i * 4}=<err>`);
-        }
-      }
-      const memA5m58 = safeRead32(a5 - 0x58);
-      const memA0 = safeRead32(a0);
-      const memA1p28 = safeRead32(a1 + 0x28);
-      const memA4p8 = safeRead32(a4 + 0x8);
-      const lastPcTrace = this.lastPCs
-        .map((p) => `0x${p.toString(16)}`)
-        .join(",");
-      const lastPcBytes = this.lastPCs
-        .map((p) => {
-          try {
-            const w = this.emulator.readMemory16(p >>> 0);
-            return `0x${p.toString(16)}:${w.toString(16)}`;
-          } catch {
-            return `0x${p.toString(16)}:<err>`;
-          }
-        })
-        .join(",");
-      if (a4 === 0 && !this.lastA4ZeroLogged) {
-        this.lastA4ZeroLogged = true;
-console.error(
-          `[DoorLifecycleManager] CRITICAL: A4 became 0 pc=0x${pc.toString(
-            16
-          )} sp=0x${sp.toString(16)} a5=0x${a5.toString(
-            16
-          )} a6=0x${this.emulator.getRegister(14).toString(
-            16
-          )} stack=[${stackWords.join(" ")}] lastPCs=[${lastPcTrace}]`
-        );
-      }
-debugLog(
-        `[DoorLifecycleManager] WARNING: PC out of code region: pc=0x${pc.toString(
-          16
-        )} code=[0x${this.codeLowerBound.toString(
-          16
-        )}-0x${this.codeUpperBound.toString(16)}] sp=0x${sp.toString(
-          16
-        )} d0=0x${d0.toString(16)} d1=0x${d1.toString(
-          16
-        )} a0=0x${a0.toString(16)} a1=0x${a1.toString(
-          16
-        )} a4=0x${a4.toString(16)} a5=0x${a5.toString(
-          16
-        )} stack=[${stackWords.join(
-          " "
-        )}] lastPCs=[${lastPcTrace}] [-0x58(A5)]=0x${(memA5m58 ?? 0).toString(
-          16
-        )} [A0]=0x${(memA0 ?? 0).toString(16)} [A1+0x28]=0x${(
-          memA1p28 ?? 0
-        ).toString(16)} [A4+0x8]=0x${(memA4p8 ?? 0).toString(
-          16
-        )} lastPCbytes=[${lastPcBytes}]`
-      );
-      // Smart PC bounds check: only terminate for definitely invalid addresses
-      // High memory execution (0x4fxxxx etc) is legitimate for dynamically loaded code
-      // But we should catch truly corrupted PCs:
-      // - PC = 0 (null pointer execution)
-      // - PC at odd address (68K requires even addresses)
-      // - PC in very low memory (below 0x400 is vectors/system area)
-      const isCriticallyInvalid =
-        pc === 0 ||                    // Null pointer
-        (pc & 1) !== 0 ||              // Odd address (illegal on 68K)
-        pc < 0x400;                    // System vectors area
-
-      if (isCriticallyInvalid) {
-console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toString(16)} - terminating`);
-        this.terminate();
-        return true;
-      }
-      if (this.emulator.isCallTrackingEnabled?.() && this.emulator.dumpCallStack) {
-        this.emulator.dumpCallStack();
-      }
-      // Otherwise just log warning but continue (legitimate high-memory code)
-    }
-
-    return false;
-  }
+  // handlePausedState + formatPC + checkExitConditions extracted to
+  // lifecycle/DoorExitDetector.
 
   private checkAndHandleLibraryTrap(pc: number): boolean {
     if (!this.libraryTraps) {
