@@ -313,6 +313,18 @@ console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will 
       this.emitDebug(`[68K] File not found: "${amiPath}"`, 'warn');
     }
 
+    // AmigaDOS MODE_OLDFILE (1005) requires the target to already exist.
+    // Our FileHandle 'rw' mapping uses O_CREAT, so without this guard a
+    // missing file would silently be created as 0 bytes — which fools doors
+    // that probe for existence via Open(..., MODE_OLDFILE). WarOLM's
+    // per-slot queue check in Doors/!!!War!!!/WarOLM/LISTS/<slot> relies on
+    // IoErr=205 to trigger its MODE_NEWFILE + Write fallback.
+    if (mode === 1005 && !fileExists) {
+      logToFile(`MODE_OLDFILE on missing "${sysPath}" -> IoErr=205`);
+      this.lastErrorCode = this.ERROR_OBJECT_NOT_FOUND;
+      return 0;
+    }
+
     // Determine file open mode
     // CRITICAL: On AmigaDOS, MODE_OLDFILE means "file must exist" but STILL allows writing!
     // Many doors (ByteComment, etc.) open with MODE_OLDFILE and then write to the file.
@@ -322,7 +334,7 @@ console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will 
     if (mode === 1006) {
       fileMode = 'w'; // MODE_NEWFILE - write, create, truncate
     } else if (mode === 1005) {
-      fileMode = 'rw'; // MODE_OLDFILE - file must exist, but allows read AND write
+      fileMode = 'rw'; // MODE_OLDFILE - file must exist (guarded above), allows read AND write
     } else if (mode === 1004) {
       fileMode = 'rw'; // MODE_READWRITE - read/write, create if doesn't exist
     } else {
