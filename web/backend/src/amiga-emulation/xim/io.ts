@@ -171,16 +171,16 @@ export class XIMIOHandler {
 
     // Parse input into tokens, preserving ANSI escape sequences
     const tokens = this.parseInputTokens(data);
-    console.log(`[XIMIOHandler] queueInput: data="${data.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
+    debugLog(`[XIMIOHandler] queueInput: data="${data.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
 
     for (const token of tokens) {
       // Handle input during pause
       if (this.waitingForPause) {
-        console.log(`[XIMIOHandler] Pause active - received token: "${token.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`);
+        debugLog(`[XIMIOHandler] Pause active - received token: "${token.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`);
         this.pauseInputBuffer += token;
         // Check for completion (Enter or space typically resumes)
         if (token === '\r' || token === '\n' || token === ' ') {
-          console.log('[XIMIOHandler] Pause completion key received - calling completePauseInput()');
+          debugLog('[XIMIOHandler] Pause completion key received - calling completePauseInput()');
           this.completePauseInput();
         }
         continue;
@@ -269,7 +269,7 @@ export class XIMIOHandler {
    */
   handleLineInput(msg: XIMMessage): void {
     // Mark that this door uses XIM input commands - prevents native input injection
-    console.log(`[XIMIOHandler] JH_LI (Line Input) received - setting usedXimInput=true`);
+    debugLog(`[XIMIOHandler] JH_LI (Line Input) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     if (this.state.carrierDropped) {
@@ -416,9 +416,9 @@ debugLog(
     );
 
     // DEBUG: Log message details before writing
-    console.log(`[DEBUG JH_LI] msgAddr=0x${msg.msgAddr.toString(16)} stringPtr=${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
-    console.log(`[DEBUG JH_LI] Writing result: "${result}" (${result.length} chars)`);
-    console.log(`[DEBUG JH_LI] MESSAGE_STRING_OFFSET=0x${DoorConstants.MESSAGE_STRING_OFFSET.toString(16)} (${DoorConstants.MESSAGE_STRING_OFFSET} decimal)`);
+    debugLog(`[DEBUG JH_LI] msgAddr=0x${msg.msgAddr.toString(16)} stringPtr=${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
+    debugLog(`[DEBUG JH_LI] Writing result: "${result}" (${result.length} chars)`);
+    debugLog(`[DEBUG JH_LI] MESSAGE_STRING_OFFSET=0x${DoorConstants.MESSAGE_STRING_OFFSET.toString(16)} (${DoorConstants.MESSAGE_STRING_OFFSET} decimal)`);
 
     // Write into embedded buffer
     this.messageParser.writeMessageString(msg.msgAddr, result);
@@ -429,8 +429,8 @@ debugLog(
     for (let i = 0; i < Math.min(result.length + 1, 40); i++) {
       verifyBuf.push(this.emulator.readMemory(stringAddr + i));
     }
-    console.log(`[DEBUG JH_LI] Embedded buffer at 0x${stringAddr.toString(16)}: ${verifyBuf.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
-    console.log(`[DEBUG JH_LI] As ASCII: "${verifyBuf.filter(b => b >= 32 && b < 127).map(b => String.fromCharCode(b)).join('')}"`);
+    debugLog(`[DEBUG JH_LI] Embedded buffer at 0x${stringAddr.toString(16)}: ${verifyBuf.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+    debugLog(`[DEBUG JH_LI] As ASCII: "${verifyBuf.filter(b => b >= 32 && b < 127).map(b => String.fromCharCode(b)).join('')}"`);
 
     // If a string pointer was provided by the door, mirror there too
     if (msg.stringPtr) {
@@ -439,7 +439,7 @@ debugLog(
         result,
         DoorConstants.MESSAGE_STRING_CAPACITY
       );
-      console.log(`[DEBUG JH_LI] Also wrote to stringPtr at 0x${msg.stringPtr.toString(16)}`);
+      debugLog(`[DEBUG JH_LI] Also wrote to stringPtr at 0x${msg.stringPtr.toString(16)}`);
     }
 
     // JH_LI/JH_PM reply: Data = 1 on success, -1 on timeout/carrier; String carries the input
@@ -579,7 +579,7 @@ debugLog(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ?
    */
   handlePromptMessage(msg: XIMMessage): void {
     // Mark that this door uses XIM input commands - prevents native input injection
-    console.log(`[XIMIOHandler] JH_PM (Prompt Message) received - setting usedXimInput=true`);
+    debugLog(`[XIMIOHandler] JH_PM (Prompt Message) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     const prompt = this.getMessageString(msg);
@@ -696,23 +696,23 @@ debugLog('[XIMIOHandler] JH_HK: Hotkey input request');
     this.state.lineCount = 0;
 
     // Mark that this door uses XIM input commands - prevents native input injection
-    console.log(`[XIMIOHandler] JH_HK (Hotkey) received - setting usedXimInput=true`);
+    debugLog(`[XIMIOHandler] JH_HK (Hotkey) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     // DEBUG: Comprehensive message address tracing
-    console.log(`[DEBUG JH_HK] ===== MESSAGE ADDRESS TRACE =====`);
-    console.log(`[DEBUG JH_HK] msg.msgAddr = 0x${msg.msgAddr.toString(16)}`);
-    console.log(`[DEBUG JH_HK] msg.stringPtr = ${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
-    console.log(`[DEBUG JH_HK] Expected string offset 0x14 = 0x${(msg.msgAddr + 0x14).toString(16)}`);
+    debugLog(`[DEBUG JH_HK] ===== MESSAGE ADDRESS TRACE =====`);
+    debugLog(`[DEBUG JH_HK] msg.msgAddr = 0x${msg.msgAddr.toString(16)}`);
+    debugLog(`[DEBUG JH_HK] msg.stringPtr = ${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
+    debugLog(`[DEBUG JH_HK] Expected string offset 0x14 = 0x${(msg.msgAddr + 0x14).toString(16)}`);
 
     // Dump current A4 register (door's data base)
     const a4 = this.emulator.getRegister(12);  // A4 = register 12
-    console.log(`[DEBUG JH_HK] A4 (door data base) = 0x${a4.toString(16)}`);
+    debugLog(`[DEBUG JH_HK] A4 (door data base) = 0x${a4.toString(16)}`);
 
     // Read what door stored at 0x714(a4) - should be the message address
     if (a4 > 0x1000) {
       const doorMsgAddr = this.emulator.readMemory32(a4 + 0x714);
-      console.log(`[DEBUG JH_HK] Door's msg at 0x714(A4) = 0x${doorMsgAddr.toString(16)}`);
+      debugLog(`[DEBUG JH_HK] Door's msg at 0x714(A4) = 0x${doorMsgAddr.toString(16)}`);
       if (doorMsgAddr !== msg.msgAddr) {
         console.error(`[DEBUG JH_HK] *** MISMATCH! Door's msg addr != our msg addr! ***`);
       }
@@ -747,7 +747,7 @@ debugLog(`[XIMIOHandler] JH_HK: Skipping ignored key sequence, waiting for next 
       // But some doors might expect CR - testing this hypothesis.
       let keyCode = keyData.charCodeAt(0);
       if (keyCode === 13) {
-        console.log(`[DEBUG JH_HK handleHotkey] Sending CR (0x0D) as-is - testing if door expects CR`);
+        debugLog(`[DEBUG JH_HK handleHotkey] Sending CR (0x0D) as-is - testing if door expects CR`);
         // keyCode = 10;  // DISABLED: Don't convert CR to LF
       }
 
@@ -764,17 +764,17 @@ debugLog(`[XIMIOHandler] JH_HK: Skipping ignored key sequence, waiting for next 
       // FIX 2026-01-30: Also update strPtr to point to embedded buffer
       // Some doors (like dRE!WAll) may read characters via strPtr for storage
       const strPtrUpdated = this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-console.log(`[DEBUG JH_HK handleHotkey] Updated strPtr to 0x${stringAddr.toString(16)}: ${strPtrUpdated ? 'OK' : 'FAILED (msg too small)'}`);
+debugLog(`[DEBUG JH_HK handleHotkey] Updated strPtr to 0x${stringAddr.toString(16)}: ${strPtrUpdated ? 'OK' : 'FAILED (msg too small)'}`);
 
       // DEBUG: Check if door has stringPtr (separate buffer from embedded msg.string)
       const stringPtr = msg.stringPtr || 0;
-console.log(`[DEBUG JH_HK handleHotkey] Original msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
+debugLog(`[DEBUG JH_HK handleHotkey] Original msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
 
       // If door has stringPtr, write character there too
       if (stringPtr && stringPtr !== stringAddr) {
         this.emulator.writeMemory(stringPtr, keyCode);
         this.emulator.writeMemory(stringPtr + 1, 0);
-console.log(`[DEBUG JH_HK handleHotkey] ALSO wrote to original stringPtr at 0x${stringPtr.toString(16)}`);
+debugLog(`[DEBUG JH_HK handleHotkey] ALSO wrote to original stringPtr at 0x${stringPtr.toString(16)}`);
       }
 
       // Write XIM port to msg.command (express.e line 3447)
@@ -783,15 +783,15 @@ console.log(`[DEBUG JH_HK handleHotkey] ALSO wrote to original stringPtr at 0x${
 
       const keyName = keyCode === 10 ? 'ENTER(LF)' : keyCode === 13 ? 'CR' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
 debugLog(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
-console.log(`[XIMIOHandler] JH_HK: Wrote keyCode=${keyCode} (${keyName}) to msg.string[0] at 0x${stringAddr.toString(16)}`);
-console.log(`[XIMIOHandler] JH_HK: Wrote ximPort=${ximPort} to msg.command`);
+debugLog(`[XIMIOHandler] JH_HK: Wrote keyCode=${keyCode} (${keyName}) to msg.string[0] at 0x${stringAddr.toString(16)}`);
+debugLog(`[XIMIOHandler] JH_HK: Wrote ximPort=${ximPort} to msg.command`);
 
       // CRITICAL FIX 2026-01-20: DON'T pass empty string to reply() - it overwrites msg.string!
       // Door needs to read the character from msg.string[0], so we must preserve it.
       // Passing undefined for stringValue skips writeMessageString() call.
-console.log(`[DEBUG JH_HK] BEFORE reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)} keyCode=${keyCode}`);
+debugLog(`[DEBUG JH_HK] BEFORE reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)} keyCode=${keyCode}`);
       this.reply(msg, 1);
-console.log(`[DEBUG JH_HK] AFTER reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)}`);
+debugLog(`[DEBUG JH_HK] AFTER reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)}`);
 
       // DEBUG: Also dump entire msg.string buffer (32 bytes) - SHOW HEX!
       const msgStrBuf = [];
@@ -800,8 +800,8 @@ console.log(`[DEBUG JH_HK] AFTER reply(): msg.string[0]=0x${this.emulator.readMe
       }
       const msgStrHex = msgStrBuf.map(b => b.toString(16).padStart(2, '0')).join(' ');
       const msgStrAscii = msgStrBuf.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
-console.log(`[DEBUG JH_HK] msg.string[0-31] HEX: ${msgStrHex}`);
-console.log(`[DEBUG JH_HK] msg.string[0-31] ASCII: "${msgStrAscii}"`);
+debugLog(`[DEBUG JH_HK] msg.string[0-31] HEX: ${msgStrHex}`);
+debugLog(`[DEBUG JH_HK] msg.string[0-31] ASCII: "${msgStrAscii}"`);
 
       // NOTE: reply() already calls replyMsg() for native doors, so we don't need to call it again here.
       // Double-calling replyMsg corrupts door state and prevents input from being saved.
@@ -826,14 +826,29 @@ debugLog(`[XIMIOHandler] JH_HK: Setting timeout ${doorTimeout}s (isScreenCommand
 
     // Set up timeout - when it expires, return msg.data=-1 (timeout/carrier drop)
     // express.e:3440-3441: IF (ch<0) THEN msg.data:=-1
+    //
+    // Guard every emulator access: if the door exits (clean or crash) while
+    // this timer is armed, the emulator has been deinitialized by the time
+    // the timer fires. `writeMemory` / `resume` throw in that state. Drop
+    // the timer silently when we detect it.
     this.hotkeyTimeoutId = setTimeout(() => {
-      if (this.waitingForHotkey && this.hotkeyMessage) {
-debugLog(`[XIMIOHandler] JH_HK: Timeout expired after ${doorTimeout}s, returning -1`);
-        const timeoutMsg = this.hotkeyMessage;
+      if (!this.waitingForHotkey || !this.hotkeyMessage) {
+        return;
+      }
+      if (!this.emulator.isInitialized?.()) {
+        // Door already gone — silently clear waiting state and bail.
         this.waitingForHotkey = false;
         this.hotkeyMessage = null;
         this.hotkeyTimeoutId = null;
+        return;
+      }
+debugLog(`[XIMIOHandler] JH_HK: Timeout expired after ${doorTimeout}s, returning -1`);
+      const timeoutMsg = this.hotkeyMessage;
+      this.waitingForHotkey = false;
+      this.hotkeyMessage = null;
+      this.hotkeyTimeoutId = null;
 
+      try {
         // Write empty string to msg.string (ch=-1 means no character)
         const stringAddr = timeoutMsg.msgAddr + 0x14;  // MESSAGE_STRING_OFFSET
         this.emulator.writeMemory(stringAddr, 0);  // Null byte = no character
@@ -841,6 +856,9 @@ debugLog(`[XIMIOHandler] JH_HK: Timeout expired after ${doorTimeout}s, returning
         // Reply with data=-1 to indicate timeout
         this.reply(timeoutMsg, -1);
         this.emulator.resume();
+      } catch (err) {
+        // Emulator teardown raced this callback — nothing actionable.
+debugLog(`[XIMIOHandler] JH_HK: Timeout callback skipped (emulator gone): ${(err as Error).message}`);
       }
     }, doorTimeout * 1000);
 
@@ -878,7 +896,7 @@ debugLog(`[XIMIOHandler] JH_HK completeHotkey: Skipping ignored key sequence, wa
     // But some doors might expect CR - testing this hypothesis.
     let keyCode = keyData.charCodeAt(0);
     if (keyCode === 13) {
-      console.log(`[DEBUG JH_HK completeHotkey] Sending CR (0x0D) as-is - testing if door expects CR`);
+      debugLog(`[DEBUG JH_HK completeHotkey] Sending CR (0x0D) as-is - testing if door expects CR`);
       // keyCode = 10;  // DISABLED: Don't convert CR to LF
     }
     const keyName = keyCode === 10 ? 'ENTER(LF)' : keyCode === 13 ? 'CR' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
@@ -892,10 +910,10 @@ debugLog(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
 debugLog('========================================');
 
     // DEBUG: Comprehensive message address tracing for completeHotkey
-    console.log(`[DEBUG JH_HK completeHotkey] ===== MESSAGE ADDRESS TRACE =====`);
-    console.log(`[DEBUG JH_HK completeHotkey] msg.msgAddr = 0x${msg.msgAddr.toString(16)}`);
-    console.log(`[DEBUG JH_HK completeHotkey] msg.stringPtr = ${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
-    console.log(`[DEBUG JH_HK completeHotkey] Expected string offset 0x14 = 0x${(msg.msgAddr + 0x14).toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] ===== MESSAGE ADDRESS TRACE =====`);
+    debugLog(`[DEBUG JH_HK completeHotkey] msg.msgAddr = 0x${msg.msgAddr.toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] msg.stringPtr = ${msg.stringPtr ? '0x' + msg.stringPtr.toString(16) : 'NULL'}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] Expected string offset 0x14 = 0x${(msg.msgAddr + 0x14).toString(16)}`);
 
     // Dump current registers for debugging
     const a4 = this.emulator.getRegister(12);  // A4 = register 12
@@ -903,18 +921,18 @@ debugLog('========================================');
     const sp = this.emulator.getRegister(15);  // A7/SP = register 15
     const d4 = this.emulator.getRegister(4);   // D4 = buffer index in input func
     const d5 = this.emulator.getRegister(5);   // D5 = character in input func
-    console.log(`[DEBUG JH_HK completeHotkey] A4 (door data base) = 0x${a4.toString(16)}`);
-    console.log(`[DEBUG JH_HK completeHotkey] A5 = 0x${a5.toString(16)}, D4 = ${d4}, D5 = 0x${d5.toString(16)}`);
-    console.log(`[DEBUG JH_HK completeHotkey] SP (A7) = 0x${sp.toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] A4 (door data base) = 0x${a4.toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] A5 = 0x${a5.toString(16)}, D4 = ${d4}, D5 = 0x${d5.toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] SP (A7) = 0x${sp.toString(16)}`);
 
     // Read what door stored at 0x714(a4) - should be the message address
     if (a4 > 0x1000) {
       const doorMsgAddr = this.emulator.readMemory32(a4 + 0x714);
-      console.log(`[DEBUG JH_HK completeHotkey] Door's msg at 0x714(A4) = 0x${doorMsgAddr.toString(16)}`);
+      debugLog(`[DEBUG JH_HK completeHotkey] Door's msg at 0x714(A4) = 0x${doorMsgAddr.toString(16)}`);
       if (doorMsgAddr !== msg.msgAddr) {
         console.error(`[DEBUG JH_HK completeHotkey] *** MISMATCH! Door's msg addr (0x${doorMsgAddr.toString(16)}) != our msg addr (0x${msg.msgAddr.toString(16)})! ***`);
       } else {
-        console.log(`[DEBUG JH_HK completeHotkey] Message addresses MATCH - writing char '${keyData}' (0x${keyCode.toString(16)}) to 0x${(msg.msgAddr + 0x14).toString(16)}`);
+        debugLog(`[DEBUG JH_HK completeHotkey] Message addresses MATCH - writing char '${keyData}' (0x${keyCode.toString(16)}) to 0x${(msg.msgAddr + 0x14).toString(16)}`);
       }
     }
 
@@ -930,17 +948,17 @@ debugLog('========================================');
     // Some doors (like dRE!WAll) may read characters via strPtr for storage
     // while reading from embedded buffer for echo. Without this, strPtr stays NULL.
     const strPtrUpdated = this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-console.log(`[DEBUG JH_HK completeHotkey] Updated strPtr to 0x${stringAddr.toString(16)}: ${strPtrUpdated ? 'OK' : 'FAILED (msg too small)'}`);
+debugLog(`[DEBUG JH_HK completeHotkey] Updated strPtr to 0x${stringAddr.toString(16)}: ${strPtrUpdated ? 'OK' : 'FAILED (msg too small)'}`);
 
     // DEBUG: Check if door has stringPtr (separate buffer from embedded msg.string)
     const stringPtr = msg.stringPtr || 0;
-console.log(`[DEBUG JH_HK completeHotkey] Original msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
+debugLog(`[DEBUG JH_HK completeHotkey] Original msg.stringPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'} embedded=0x${stringAddr.toString(16)}`);
 
     // If door has stringPtr, write character there too
     if (stringPtr && stringPtr !== stringAddr) {
       this.emulator.writeMemory(stringPtr, keyCode);
       this.emulator.writeMemory(stringPtr + 1, 0);
-console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${stringPtr.toString(16)}`);
+debugLog(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${stringPtr.toString(16)}`);
     }
 
     // Write XIM port to msg.command (express.e line 3447)
@@ -951,7 +969,7 @@ console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x
 
     // DEBUG: Verify character is still there after reply
     const verifyChar = this.emulator.readMemory(stringAddr);
-    console.log(`[DEBUG JH_HK completeHotkey] AFTER reply: msg.string[0] = 0x${verifyChar.toString(16)} (expected 0x${keyCode.toString(16)})`);
+    debugLog(`[DEBUG JH_HK completeHotkey] AFTER reply: msg.string[0] = 0x${verifyChar.toString(16)} (expected 0x${keyCode.toString(16)})`);
     if (verifyChar !== keyCode) {
       console.error(`[DEBUG JH_HK completeHotkey] *** CORRUPTION! Character was overwritten during reply! ***`);
     }
@@ -963,8 +981,8 @@ console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x
     }
     const strHex = strBuf.map(b => b.toString(16).padStart(2, '0')).join(' ');
     const strAscii = strBuf.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
-    console.log(`[DEBUG JH_HK completeHotkey] msg.string[0-15] HEX: ${strHex}`);
-    console.log(`[DEBUG JH_HK completeHotkey] msg.string[0-15] ASCII: "${strAscii}"`);
+    debugLog(`[DEBUG JH_HK completeHotkey] msg.string[0-15] HEX: ${strHex}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] msg.string[0-15] ASCII: "${strAscii}"`);
 
     // NOTE: reply() already calls replyMsg() for native doors, so we don't need to call it again here.
     // Double-calling replyMsg corrupts door state and prevents input from being saved.
@@ -973,7 +991,7 @@ console.log(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x
     this.hotkeyMessage = null;
 
     // Resume emulator execution now that we have input
-    console.log(`[DEBUG JH_HK completeHotkey] About to resume emulator, char=${keyData} (0x${keyCode.toString(16)}) at msg.string[0]=0x${stringAddr.toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] About to resume emulator, char=${keyData} (0x${keyCode.toString(16)}) at msg.string[0]=0x${stringAddr.toString(16)}`);
     this.emulator.resume();
   }
 
@@ -1026,7 +1044,7 @@ debugLog('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal (BLOCKS)');
     this.state.lineCount = 0;
 
     // Mark that this door uses XIM input commands - prevents native input injection
-    console.log(`[XIMIOHandler] JH_ExtHK (Extended Hotkey) received - setting usedXimInput=true`);
+    debugLog(`[XIMIOHandler] JH_ExtHK (Extended Hotkey) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     if (this.state.carrierDropped) {
@@ -1586,7 +1604,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
     // Handle @READUSERKEYS - trigger a pause after outputting all text
     if (this.readUserKeysPending && pendingMsg) {
       this.readUserKeysPending = false;
-      console.log('[XIMIOHandler] @READUSERKEYS triggered pause - setting waitingForPause=true');
+      debugLog('[XIMIOHandler] @READUSERKEYS triggered pause - setting waitingForPause=true');
       debugLog('[XIMIOHandler] @READUSERKEYS triggered pause');
       this.waitingForPause = true;
       this.pauseReply = { msg: pendingMsg, data: 1 };
@@ -1783,10 +1801,10 @@ debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
    * Complete a pending pause when user acknowledges it.
    */
   private completePauseInput(): void {
-    console.log(`[XIMIOHandler] completePauseInput called - waitingForPause=${this.waitingForPause} hasPauseReply=${!!this.pauseReply}`);
+    debugLog(`[XIMIOHandler] completePauseInput called - waitingForPause=${this.waitingForPause} hasPauseReply=${!!this.pauseReply}`);
     if (!this.waitingForPause || !this.pauseReply) return;
 
-    console.log('[XIMIOHandler] completePauseInput - sending reply and resuming emulator');
+    debugLog('[XIMIOHandler] completePauseInput - sending reply and resuming emulator');
 debugLog('[XIMIOHandler] Pause acknowledged, resuming');
     
     const { msg, data } = this.pauseReply;
@@ -1890,6 +1908,13 @@ debugLog(`  Data: ${data}`);
       this.reply(this.hotkeyMessage, -1, '');
       this.waitingForHotkey = false;
       this.hotkeyMessage = null;
+    }
+    // Clear the timeout armed by handleHotkey so its callback (which
+    // writes emulator memory + calls resume) can't fire against a
+    // deinitialized emulator after teardown. See io.ts:829 timeout arm.
+    if (this.hotkeyTimeoutId) {
+      clearTimeout(this.hotkeyTimeoutId);
+      this.hotkeyTimeoutId = null;
     }
 
     if (this.waitingForExtHotkey && this.extHotkeyMessage) {

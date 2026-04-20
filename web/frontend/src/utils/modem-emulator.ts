@@ -39,9 +39,31 @@ export class ModemEmulator {
   private enabled: boolean = false;
   private startTime: number = 0;
   private bytesSent: number = 0;
+  // When a door is running, skip throttling entirely regardless of bps.
+  // 68K doors drive interactive UIs (games, menus, dRE!WAll prompt echo)
+  // and their screen updates should feel instant. Paced modem speed only
+  // applies to BBS navigation so transient prompts stay readable.
+  private doorActive: boolean = false;
 
   constructor(terminal: Terminal) {
     this.terminal = terminal;
+  }
+
+  /**
+   * Toggle the "a door is running" bypass. While true, write() hands bytes
+   * to xterm immediately — no soft-cap, no queueing. Toggled by BBSTerminal
+   * in the `door-active` socket handler.
+   */
+  setDoorActive(active: boolean): void {
+    this.doorActive = active;
+    if (active) {
+      // Drain any pending BBS-phase content so door output isn't behind it.
+      this.flushImmediate();
+    } else {
+      // Reset throttle budget so BBS resumption doesn't inherit stale timing.
+      this.startTime = performance.now();
+      this.bytesSent = 0;
+    }
   }
 
   /**
@@ -97,8 +119,10 @@ export class ModemEmulator {
    * Queue data for throttled output
    */
   write(data: string): void {
-    if (!this.enabled) {
-      // No throttling - write immediately
+    if (!this.enabled || this.doorActive) {
+      // No throttling — write immediately. Either the emulator is disabled
+      // outright, or a 68K door is running and its output should feel
+      // instant. The soft-cap exists for BBS navigation only.
       this.terminal.write(data);
       return;
     }

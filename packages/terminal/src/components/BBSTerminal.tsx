@@ -1671,7 +1671,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('door-active', (active: boolean) => {
       console.log('[BBSTerminal] door-active received:', active);
       doorActive.current = active;
-      console.log('[BBSTerminal] doorActive.current set to:', doorActive.current);
+      // Skip the modem soft-cap while a door is running — door output
+      // should feel instant. The pacing is for BBS navigation only.
+      modemEmulatorRef.current?.setDoorActive(active);
     });
 
     // Game mode: bypass OS key repeat for real-time game controls
