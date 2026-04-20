@@ -17,6 +17,7 @@ import { TIMDoorMessageHandler } from "./TIMDoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
 import { DebugMonitor } from "./lifecycle/DebugMonitor.js";
+import { DoorExecutionLogger } from "./lifecycle/DoorExecutionLogger.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -108,13 +109,10 @@ export class DoorLifecycleManager {
 
   // Debug tracking
   private executionPath: string[] = [];
-  private writeCallLog: Array<{ pc: number; iteration: number; args: any }> =
-    [];
-  private aedoorCallLog: Array<{
-    pc: number;
-    iteration: number;
-    function: string;
-  }> = [];
+  // writeCallLog + aedoorCallLog now live on this.executionLogger (extracted
+  // to lifecycle/DoorExecutionLogger to keep this file under the 2000-line
+  // size budget). Getters below preserve the legacy property access path.
+  private executionLogger!: DoorExecutionLogger;
   private lastPCs: number[] = [];
   private traceRegs: boolean = false;
   private traceInterval: number = 500;
@@ -189,6 +187,13 @@ debugLog(
     );
 
     this.executionState = this.initializeExecutionState();
+
+    // Call-trace + progress logger extracted to lifecycle/DoorExecutionLogger.
+    this.executionLogger = new DoorExecutionLogger(
+      this.emulator,
+      this.executionState,
+      this.lifecycleConfig,
+    );
 
     this.traceRegs = process.env.DOOR_TRACE_REGS === "1";
     this.traceInterval = Number(process.env.DOOR_TRACE_INTERVAL ?? 500);
@@ -691,7 +696,7 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
 
         // === STEP 2: Get current PC and handle door-specific logic ===
         const pc = this.emulator.getRegister(16);
-        this.recordProgressByPc(pc);
+        this.executionLogger.recordProgressByPc(pc);
         // Track recent PCs for crash diagnostics
         const prevPC = this.lastPCs.length > 0 ? this.lastPCs[this.lastPCs.length - 1] : 0;
         this.lastPCs.push(pc);
@@ -1635,13 +1640,13 @@ console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toS
     // Track DOS.Write() calls
     if (offset === -48 || pc === 0xfffffed0) {
       this.executionState.writeCallCount++;
-      this.logWriteCall(pc);
+      this.executionLogger.logWriteCall(pc);
     }
 
     // Track AEDoor.library calls
     if (a6 === 0xff4000 || (a6 >= 0xff4000 && a6 <= 0xff4fff)) {
       this.executionState.aedoorCallCount++;
-      this.logAEDoorCall(pc, offset);
+      this.executionLogger.logAEDoorCall(pc, offset);
     }
 
     this.executionState.iterationCount++;
@@ -2462,7 +2467,7 @@ console.error(`[DoorLifecycleManager] TIM polling error:`, error);
       this.executionState.iterationCount % 5000 === 0 &&
       this.executionState.iterationCount > 0
     ) {
-      await this.logProgress();
+      this.executionLogger.logProgress();
     }
 
     const isWaitingForInput =
@@ -2533,45 +2538,7 @@ debugLog(
     }
   }
 
-  private recordProgressByPc(pc: number): void {
-    // SAmiLog3 busy loop lives around 0x5c90-0x5d10; count it as progress so the guard
-    // doesn't kill a door that is still actively spinning.
-    // For batch doors, don't record PC progress to allow guard to trigger.
-    this.executionState.stuckInLoop = pc >= 0x5c90 && pc <= 0x5d10;
-    if (!this.lifecycleConfig.disableInputWaitExtension && this.executionState.stuckInLoop) {
-      this.executionState.lastProgressIteration = this.executionState.iterationCount;
-      this.executionState.lastProgressTime = Date.now();
-    }
-  }
-
-  private logProgress(): void {
-    const totalSeconds =
-      this.executionState.totalCycles / 7093793; // 7.09 MHz standard Amiga clock
-    const elapsed = Date.now() - this.executionState.startTime!;
-    const pc = this.emulator.getRegister(16);
-
-    // debugLog(
-    //   `[DoorLifecycleManager] 📊 PROGRESS: Iteration ${
-    //     this.executionState.iterationCount
-    //   } (${(this.executionState.totalCycles / 1000000).toFixed(
-    //     1
-    //   )}M cycles, ${totalSeconds.toFixed(2)}s virtual, ${elapsed}ms real)`
-    // );
-    // // debugLog(`[DoorLifecycleManager] 📊 PC: 0x${pc.toString(16)}`);
-    // debugLog(
-    //   `[DoorLifecycleManager] 📊 Write calls: ${this.executionState.writeCallCount}, AEDoor calls: ${this.executionState.aedoorCallCount}`
-    // );
-
-    // // Memory check at progress milestones
-    // try {
-    //   const mem2001 = this.emulator.readMemory32(0x2001);
-    //   debugLog(
-    //     `[DoorLifecycleManager] 📊 memory[0x2001]: 0x${mem2001.toString(16)}`
-    //   );
-    // } catch (e) {
-    //   debugLog(`[DoorLifecycleManager] 📊 memory[0x2001]: ERROR ${e}`);
-    // }
-  }
+  // recordProgressByPc + logProgress extracted to lifecycle/DoorExecutionLogger.
 
   private async handleGuardLimit(): Promise<void> {
     // debugLog(
@@ -2624,69 +2591,8 @@ debugLog(
     }
   }
 
-  private logWriteCall(pc: number): void {
-    const fileHandle = this.emulator.getRegister(8); // A0 = file handle
-    const buffer = this.emulator.getRegister(9); // A1 = buffer
-    const length = this.emulator.getRegister(0); // D0 = length
-
-debugLog(
-      `[DoorLifecycleManager] *** DOS.Write() CALL #${this.executionState.writeCallCount} ***`
-    );
-debugLog(
-      `[DoorLifecycleManager]   PC: 0x${pc.toString(16)}, Iteration: ${
-        this.executionState.iterationCount
-      }`
-    );
-debugLog(
-      `[DoorLifecycleManager]   File handle: 0x${fileHandle.toString(16)}`
-    );
-debugLog(
-      `[DoorLifecycleManager]   Buffer: 0x${buffer.toString(
-        16
-      )}, Length: ${length}`
-    );
-
-    // Log the Write() call details
-    this.writeCallLog.push({
-      pc,
-      iteration: this.executionState.iterationCount,
-      args: { fileHandle, buffer, length },
-    });
-  }
-
-  private logAEDoorCall(pc: number, offset: number): void {
-    const functionName = this.getAEDoorFunctionName(offset);
-debugLog(
-      `[DoorLifecycleManager] *** AEDoor.library CALL #${this.executionState.aedoorCallCount} ***`
-    );
-debugLog(
-      `[DoorLifecycleManager]   Function: ${functionName} (offset ${offset})`
-    );
-debugLog(
-      `[DoorLifecycleManager]   PC: 0x${pc.toString(16)}, Iteration: ${
-        this.executionState.iterationCount
-      }`
-    );
-
-    this.aedoorCallLog.push({
-      pc,
-      iteration: this.executionState.iterationCount,
-      function: functionName,
-    });
-  }
-
-  private getAEDoorFunctionName(offset: number): string {
-    // Simplified version - would reference the full mapping
-    const functionMap: { [key: string]: string } = {
-      "-6": "Open",
-      "-12": "Close",
-      "-48": "Write",
-      "-500": "WriteStr",
-      "-512": "GetUserInput",
-      "-572": "LineInput",
-    };
-    return functionMap[offset.toString()] || `Unknown(offset ${offset})`;
-  }
+  // logWriteCall + logAEDoorCall + getAEDoorFunctionName extracted to
+  // lifecycle/DoorExecutionLogger.
 
   private async handleExecutionError(error: unknown): Promise<void> {
     const pc = this.emulator.getRegister(16);
