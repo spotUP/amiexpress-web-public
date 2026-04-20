@@ -58,14 +58,18 @@ export function initializeENVFiles(envPath: string, config: ENVConfig): void {
     createENVFile(envPath, `JC_PWFAIL.${i}`, '0');
   }
 
-  // Node statistics files (used by doors like MultiTop, Bulls, etc.)
-  // Format from real Amiga: "<username padded to 35 chars> -<status>"
-  // Example logged in:  "sysopuser                          -0 "
-  // Example logged out: "                                   -22"
+  // Node statistics files (used by doors like MultiTop, Bulls, WarOLM, etc.)
+  // Format: 35-char space-padded username + '-' + 2-digit status code (38 bytes)
+  // Seed only when absent — setEnvStat (acs.util.ts) owns live updates after
+  // login. Clobbering here on every DosLibrary init wiped logged-in users back
+  // to status 22 (AWAITCONNECT), so WarOLM saw all nodes as "Awating Connect"
+  // with '=====' placeholders instead of real handles/locations.
   for (let i = 1; i <= totalNodes; i++) {
-    // -22 appears to mean "not logged in" or "waiting for call"
-    const emptyNode = ' '.repeat(35) + '-22';
-    createENVFile(envPath, `STATS@${i}`, emptyNode);
+    const statsPath = path.join(envPath, `STATS@${i}`);
+    if (!fs.existsSync(statsPath)) {
+      const emptyNode = ' '.repeat(35) + '-22';
+      createENVFile(envPath, `STATS@${i}`, emptyNode);
+    }
   }
 
   // Door usage tracking (some doors create these)

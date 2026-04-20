@@ -4314,10 +4314,30 @@ debugLog(`[ExecLibrary]   Invalid parameters, skipping`);
       return;
     }
 
+    // DEBUG: 100-byte CopyMem is the wall door's record-insert. Log src+dst before/after.
+    if (size === 100) {
+      const srcBytes: number[] = [];
+      for (let i = 0; i < Math.min(48, size); i++) srcBytes.push(this.emulator.readMemory(sourceAddr + i));
+      const srcAsc = srcBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+      const dstBefore: number[] = [];
+      for (let i = 0; i < Math.min(48, size); i++) dstBefore.push(this.emulator.readMemory(destAddr + i));
+      const dstBeforeAsc = dstBefore.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`[CopyMem-100] src=0x${sourceAddr.toString(16)} dst=0x${destAddr.toString(16)}`);
+console.log(`[CopyMem-100]   src[0..47]:      "${srcAsc}"`);
+console.log(`[CopyMem-100]   dst[0..47] BEFORE: "${dstBeforeAsc}"`);
+    }
+
     // Perform byte-by-byte copy (could be optimized with Buffer.copy if needed)
     for (let i = 0; i < size; i++) {
       const byte = this.emulator.readMemory(sourceAddr + i);
       this.emulator.writeMemory(destAddr + i, byte);
+    }
+
+    if (size === 100) {
+      const dstAfter: number[] = [];
+      for (let i = 0; i < Math.min(48, size); i++) dstAfter.push(this.emulator.readMemory(destAddr + i));
+      const dstAfterAsc = dstAfter.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+console.log(`[CopyMem-100]   dst[0..47] AFTER:  "${dstAfterAsc}"`);
     }
 
 debugLog(`[ExecLibrary]   Copied ${size} bytes`);
@@ -5256,12 +5276,34 @@ debugLog(
     const isDoorReplyPort = port.name
       ?.toLowerCase()
       .startsWith("doorreplyport");
+    // express.e doors that bypass aedoor.library (e.g. WarOLM's table-render
+    // path) FindPort("AEServer.%d") + PutMsg directly to THIS node's server
+    // port. Without invoking the callback here, the message sits in the port
+    // queue forever and DT_NAME / DT_LOCATION never reach the XIM handler.
+    const isOwnServerPort =
+      this.doorPortAddr !== 0 && originalPortAddr === this.doorPortAddr;
+    // Multi-node pollers (WarOLM, MultiTop) walk FindPort("AEServer.%d")
+    // across every node. For non-current AEServer.<N> we can't answer with
+    // that other node's user data, but the door-side callback must still
+    // run so it can zero-out the string buffer and reply — otherwise the
+    // door's GetMsg returns NULL, clobbers its saved msg-pointer, and the
+    // next iteration sends msg=0 and eventually bails.
+    const isAEServerPort =
+      port.name?.toLowerCase().startsWith("aeserver.") === true;
     if (
       !suppressDoorCallback &&
       this.doorMessageCallback &&
-      (isAEDoorPort || isDoorTaskPort || isDoorReplyPort)
+      (isAEDoorPort ||
+        isDoorTaskPort ||
+        isDoorReplyPort ||
+        isOwnServerPort ||
+        isAEServerPort)
     ) {
-      const label = isAEDoorPort ? port.name ?? "AEDoorPort" : "Door Task Port";
+      const label = isAEDoorPort
+        ? port.name ?? "AEDoorPort"
+        : isOwnServerPort || isAEServerPort
+        ? port.name ?? "AEServer"
+        : "Door Task Port";
 debugLog(
         `[ExecLibrary]   *** Invoking door message callback for port 0x${originalPortAddr.toString(
           16

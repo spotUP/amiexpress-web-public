@@ -19,8 +19,11 @@ import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
 import { TIMDoorMessageHandler } from "./session/TIMDoorMessageHandler.js";
 import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
+import { debugRegistry } from "../debug/DebugRegistry.js";
 import { parseInfoFile } from "../utils/amiga-command-parser.util";
 import { debugLog } from '../utils/debug-log';
+import { setEnvStat } from "../utils/acs.util";
+import { EnvStat } from "../constants/env-codes";
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -65,6 +68,9 @@ export class AmigaDoorSession {
   // Port tracking for cleanup (express.e:4527 - deletePort if we created it)
   private createdDoorPort = false;
   private doorPortName = "";
+
+  // If we registered with DebugRegistry, this holds the nodeId used
+  private registeredWithDebug: number | null = null;
 
   // Shared state between components
   private sharedState = {
@@ -510,6 +516,34 @@ console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger n
       this.lifecycleManager.setLibraryTraps(this.sharedState.libraryTraps);
       this.lifecycleManager.setXIMProtocol(this.sharedState.ximProtocol);
 
+      // Ensure our full teardown (registry unregister, socket handler cleanup,
+      // globals) runs on every exit path — not only user-initiated kills.
+      // Guard in terminate() prevents re-entry when we call lifecycleManager.terminate()
+      // ourselves.
+      this.lifecycleManager.setOnExit(() => this.terminate());
+
+      // Register this live door session with the debug MCP so external tools
+      // (curl, Claude via MCP) can introspect its emulator state. Dev-only.
+      if (process.env.NODE_ENV !== "production" && this.emulator && this.doorLoader && this.lifecycleManager) {
+        const rawNode = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 0;
+        const nodeId = typeof rawNode === "string" ? parseInt(rawNode, 10) || 0 : rawNode;
+        if (nodeId > 0) {
+          debugRegistry.register({
+            nodeId,
+            doorId: this.config.doorId || path.basename(this.config.executablePath),
+            executablePath: this.config.executablePath,
+            startedAtMs: Date.now(),
+            emulator: this.emulator,
+            doorLoader: this.doorLoader,
+            lifecycleManager: this.lifecycleManager,
+            socket: this.socket,
+            ximRing: [],
+            ximRingCapacity: 200,
+          });
+          this.registeredWithDebug = nodeId;
+        }
+      }
+
       // NOTE: AEDoorPort now created EARLY in initializeLibraries() to ensure it exists
       // before any door code or native library initialization can call FindPort().
       // See lines 605-617 for the new early creation location.
@@ -617,6 +651,13 @@ debugLog(
       // Update with current user info (status = ENV_DOORS since we're launching a door)
       multicomManager.updateNode(nodeId, username, location, ENV_DOORS);
       this.logger.log('MULTICOM', `updateNode called`);
+
+      // Mirror the DOORS status into ENV:STATS@<nodeId> so file-based pollers
+      // (WarOLM, MultiTop, Bulls, etc.) see the user as "Using A Door" instead
+      // of "Idle". MulticomManager only touches singlePort memory.
+      if (this.config.bbsSession) {
+        setEnvStat(this.config.bbsSession, EnvStat.DOORS);
+      }
 
       this.logger.log('MULTICOM', `initialized for node ${nodeId}: ${username} @ ${location}`);
     } catch (error) {
@@ -951,11 +992,25 @@ debugLog(
    * Terminate the door session - REFACTORED
    */
   terminate(): void {
+    // Re-entry guard: terminate() can be reached from multiple paths in the
+    // same exit sequence (user 'door:terminate', lifecycleManager's onExit
+    // hook, JH_SHUTDOWN handler, socket disconnect). Running the full
+    // teardown twice causes double-free on the AEDoorPort among other things.
+    // isRunning is set true in start() and false below, so it's the authoritative
+    // "already cleaned up" flag.
+    if (!this.isRunning) return;
+
 debugLog("[AmigaDoorSession] Terminating refactored door session...");
     this.logger.info("Terminating session...");
 
     this.isRunning = false;
     this.removeSocketHandlers();
+
+    // Drop the debug registry entry so MCP callers stop seeing a stale session.
+    if (this.registeredWithDebug !== null) {
+      debugRegistry.unregister(this.registeredWithDebug);
+      this.registeredWithDebug = null;
+    }
 
     // Clear global session pointer if we set it
     try {
@@ -996,6 +1051,12 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
 
     // Clear this node's status (user logged out or door exited)
     multicomManager.clearNode(nodeId);
+
+    // Return ENV:STATS@<nodeId> to IDLE so pollers stop reporting the user
+    // as "Using A Door" after the door exits back to the BBS menu.
+    if (this.config.bbsSession) {
+      setEnvStat(this.config.bbsSession, EnvStat.IDLE);
+    }
 
     // Unregister this session's emulator
     multicomManager.unregisterEmulator(sessionId);

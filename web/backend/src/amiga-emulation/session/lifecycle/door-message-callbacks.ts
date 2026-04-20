@@ -169,10 +169,88 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
     if (!ximProtocol) {
       return;
     }
-    // Only process messages to AEDoorPort (door -> BBS). DoorReplyPort
-    // messages are replies going back TO the door, not commands.
+    // Only process messages to this node's server port (door -> BBS).
+    // Accepted targets:
+    //   1. AEDoorPort{N} — convention for direct-XIM doors (RTW, Bulls,
+    //      JoinCnf) that PutMsg straight to the door's own msgport.
+    //   2. AEServer.{N} for this node — the express.e convention for
+    //      FindPort("AEServer.%d")+PutMsg (e.g. WarOLM's table-render
+    //      DT_NAME/DT_LOCATION queries). Full XIM handling.
+    //   3. AEServer.<other N> — doors that enumerate nodes by sending
+    //      to each per-node port in turn (WarOLM does this for MULTICOM
+    //      status). We can't answer with the OTHER node's user data
+    //      without cross-session IPC, but we MUST still reply — else
+    //      the door's GetMsg returns NULL and its saved msg-pointer
+    //      global gets clobbered to 0, which corrupts every subsequent
+    //      iteration and forces an early FAIL exit. Zero the string
+    //      field (so no stale sysop/location from a prior reply leaks
+    //      into that row) and reply via the standard path.
+    // DoorReplyPort messages are replies going back TO the door, not
+    // commands, and are still filtered out.
     const portName = (execLib.getPortName(portAddr) ?? "").toLowerCase();
-    if (!portName.startsWith("aedoorport")) {
+    const isOwnServerPort =
+      typeof (execLib as any).getDoorPortAddress === "function" &&
+      (execLib as any).getDoorPortAddress() === portAddr;
+    const isOtherAEServer =
+      portName.startsWith("aeserver.") && !isOwnServerPort;
+
+    if (isOtherAEServer) {
+      // Cross-node query (e.g. WarOLM asking AEServer.3 for node 3's
+      // handle/location while running on node 2). The port the door
+      // hit encodes the target nodeId; look up that node's live state
+      // in MulticomManager (shared across sessions) and write the
+      // appropriate field back into the msg's String[200] so the door
+      // sees the other node's user instead of an empty row.
+      if (msgAddr && typeof (execLib as any).replyMsg === "function") {
+        const STRING_OFFSET = 0x14;
+        const STRING_LEN = 200;
+        const COMMAND_OFFSET = 0xe0;
+
+        // Parse target nodeId from "AEServer.<N>"
+        const dot = portName.indexOf(".");
+        const targetNodeId =
+          dot >= 0 ? parseInt(portName.slice(dot + 1), 10) : NaN;
+
+        // Read the query command (DT_NAME=100, DT_LOCATION=102, …)
+        const command = emulator.readMemory32(msgAddr + COMMAND_OFFSET);
+
+        // Pull the other node's info from MulticomManager if available.
+        let reply = "";
+        if (Number.isFinite(targetNodeId) && targetNodeId > 0) {
+          try {
+            const { multicomManager } =
+              require("../../../nodes/MulticomManager.js");
+            const info = multicomManager.getNode?.(targetNodeId);
+            if (info) {
+              if (command === 100 /* DT_NAME */) reply = info.username ?? "";
+              else if (command === 102 /* DT_LOCATION */)
+                reply = info.location ?? "";
+            }
+          } catch {
+            /* MulticomManager not loadable — leave reply empty */
+          }
+        }
+
+        // Zero the full buffer then write the reply (NUL-terminated,
+        // capped to 199 bytes so there's always a terminator).
+        for (let i = 0; i < STRING_LEN; i++) {
+          emulator.writeMemory(msgAddr + STRING_OFFSET + i, 0);
+        }
+        const bytes = Buffer.from(reply, "latin1");
+        const len = Math.min(bytes.length, STRING_LEN - 1);
+        for (let i = 0; i < len; i++) {
+          emulator.writeMemory(msgAddr + STRING_OFFSET + i, bytes[i]);
+        }
+
+        // removeMessageFromPort so the msg doesn't also sit in the
+        // target port's queue after we've "processed" it.
+        execLib.removeMessageFromPort(portAddr, msgAddr);
+        (execLib as any).replyMsg(msgAddr);
+      }
+      return;
+    }
+
+    if (!portName.startsWith("aedoorport") && !isOwnServerPort) {
       return;
     }
     // PERFORMANCE FIX 2026-01-14: Mark that we're using callback-based

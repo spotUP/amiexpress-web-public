@@ -383,10 +383,22 @@ debugLog(`[LibraryManager] Creating ${basePortName} for BBS data access...`);
     // CRITICAL: AEServer ports use DOT notation: "AEServer.1", "AEServer.2", etc.
     const portName = basePortName === "AEServer" ? `${basePortName}.${amigaNodeId}` : `${basePortName}${amigaNodeId}`;
 
-    // CRITICAL FIX 2026-01-20: AEServer ports MUST use sigBit=12 to match door Wait() masks
-    // Many 68K doors (e.g., AquaScan, FR) use Wait(0x21000) which expects bit 12 (0x1000) or bit 17 (0x20000)
-    // Without sigBit=12, doors receive bit 16 (0x10000) which doesn't match → Wait() blocks forever
-    const AESERVER_SIGBIT = 12;
+    // AEServer port sigBit — must NOT collide with SIGBREAKB_CTRL_C (bit 12)
+    // or SIGBREAKB_CTRL_D (bit 13). Bit 17 (0x20000) is the standard dynamic
+    // msg-port bit allocated by CreateMsgPort / AllocSignal.
+    //
+    // Prior value was 12 to "match door Wait() masks like 0x21000
+    // (AquaScan, FR)". That was wrong: 0x21000 = bit 17 | bit 12 means
+    // "wake on message (17) OR CTRL_C (12)". Signalling AEServer on bit 12
+    // made every PutMsg look like CTRL_C; doors (e.g. WarOLM) that call
+    // SetSignal(0, 0x3000) to poll for break then saw a false positive and
+    // exited with FAIL. Bit 17 still wakes Wait(0x21000) callers via the
+    // message-port half of the mask without masquerading as a break signal.
+    //
+    // If AquaScan / FR regress, investigate whether their Wait() mask is
+    // actually bit 12 alone (not 0x21000) — the prior comment may have been
+    // misdiagnosed.
+    const AESERVER_SIGBIT = 17;
     const mainPortAddr = this.execLibrary.createPublicPort(portName, undefined, AESERVER_SIGBIT);
     this.execLibrary.setDoorPortAddress(mainPortAddr);
 debugLog(

@@ -221,6 +221,16 @@ export class MulticomManager {
     return Array.from(this.nodes.values());
   }
 
+  /**
+   * Look up a single node's live state (user handle / location / status)
+   * by nodeId, or null if no session is logged in on that node.
+   * Used by cross-node pollers (e.g. WarOLM table render) to answer
+   * DT_NAME / DT_LOCATION for nodes other than the caller's own.
+   */
+  public getNode(nodeId: number): NodeInfo | null {
+    return this.nodes.get(nodeId) ?? null;
+  }
+
   // ===== Private Helper Methods =====
 
   /**

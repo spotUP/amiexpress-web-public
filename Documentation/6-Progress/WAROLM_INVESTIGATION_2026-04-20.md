@@ -1,8 +1,15 @@
 # WAROLM (`Olm`) Investigation — 2026-04-20
 
-## Current symptom
+## Status: ROOT CAUSE IDENTIFIED + FIX APPLIED
 
-With two users (`sysop` and `spot`) logged in, each running Olm sees:
+The prior session's hypotheses (field offsets, stats[] gating, semaphore
+ownership) all turned out to be wrong. The real bug was much simpler: we
+were clobbering `ENV:STATS@N` on every door launch, wiping out the
+logged-in user's status back to 22 (AWAITCONNECT).
+
+## Original symptom
+
+Two users logged in (`sysop`, `spot`). Each running Olm saw:
 
 ```
 | 00 |                   |                         |                  |
@@ -11,135 +18,130 @@ With two users (`sysop` and `spot`) logged in, each running Olm sees:
 | 03 | ================= | ======================= | Awating Connect  |
 ```
 
-Both users see the same thing: the cursor-highlighted row and the two
-active user rows show `=================` (17 `=`) placeholders for
-handle, `=======================` (23 `=`) for location, and
-`Awating Connect` for action. Neither user sees the other's handle.
+17 `=` in handle, 23 `=` in location, "Awating Connect" action — all nodes.
 
-## What we know works
+## How WAROLM actually reads node state
 
-1. **MulticomManager writes correctly.** Log confirms:
-
-   ```
-   [MulticomManager] VERIFY singlePort[2]: handle="sysop", location="Server Room", status=0
-   [MulticomManager] VERIFY singlePort[3]: handle="spot", location="-[uP rOUGH]-", status=3
-   ```
-
-   Handle at `singlePort + 0x56`, location at `+0x75`, status at `+0x52`
-   — matches `axcommon.e OBJECT singlePort`.
-
-2. **DT_NAME/DT_LOCATION for the current user works.** Olm queries them
-   via XIM and the handlers return the running user's name + location
-   correctly (post `d3dabc62c` DT_NAME race fix).
-
-3. **myNode[i].s pointer linkage is wired.** `linkNodeStructures()`
-   writes `SINGLE_PORTS_BASE + i*512` at `nodeAddr + 0x74` for every
-   slot, matching `nodeInfo.s: PTR TO singlePort` in axcommon.e.
-
-## What we don't know
-
-The door has these literals in its data section:
+WAROLM does **not** read from MULTICOM memory (singlePort handle/location
+fields). It reads the status from a file:
 
 ```
-0x40fa   =================     (17 bytes, '=' × 17)
-0x410c   =================
-0x4124   =================
-0x4136   ================= No Node Present
-0x4168       | %2.2s | %-17.17s | %-23.23s | %-16.16s |
+fopen("ENV:STATS@<nodeid>", "r")
+fread(buf, 1, 0x50, file)
+fclose(file)
 ```
 
-The `%-17.17s` format field matches the placeholder width. So the door
-is either (a) passing the literal `=================` as the handle
-argument when it decides the handle is "not available", or (b) drawing
-the placeholder as part of a separator line and the handle field
-underneath is empty/spaces.
+It then parses **two ASCII digits at buffer offset 0x24 (36 decimal)** as a
+status code — this matches the express.e format `\l\s[35]-\d[2]` (38 bytes:
+35-char padded username + `-` + 2-digit code), with the digits at byte
+positions 36–37.
 
-We haven't confirmed which code path produces it. radare2 can't find
-direct references to the format string address because 68K code uses
-PC-relative addressing for data loads, so naive `/x` search doesn't
-turn them up.
+## The branch that draws `=====`
 
-## Likely root causes (in order of suspicion)
-
-1. **Wrong field offset.** WAROLM may read handle from a different
-   offset than 0x56. axcommon.e is the shared spec, but the WAROLM
-   sources (from `!!!War!!!` group) might have diverged or reference an
-   older / forked axcommon header where offsets differ.
-
-2. **Stats array not populated.** `nodeInfo.stats[32]` (offset 0x30,
-   64 bytes) is zero-filled by `clearMyNodeInEmulator()` and never
-   written by `writeMyNodeToEmulator()`. WAROLM may gate handle display
-   on `stats[i]` being non-zero ("this node has made itself visible").
-
-3. **`ss` semaphore ownership check.** Both myNode and singlePort begin
-   with an `ss` (SignalSemaphore, 46 bytes) that we zero out but never
-   link into a real list. WAROLM might try to `ObtainSemaphore` on that
-   address and the stub returns something that makes the door think the
-   port is locked/invalid.
-
-4. **Multi-session interference.** MulticomManager registers each
-   session's emulator and writes to ALL of them on `updateNode()`. If
-   the second user's session emulator init races with the first user's
-   still-writing updates, singlePort memory could be transiently wrong
-   at the moment WAROLM reads. (Unlikely — writes are synchronous from
-   the Node side — but worth ruling out.)
-
-## Confirmed reads via XIM (not a mystery)
-
-WAROLM issues these XIM queries (log evidence):
-
-- `DT_NAME (100)` → returns current user's name ("spot")
-- `DT_LOCATION (102)` → returns current user's location ("-[uP rOUGH]-")
-- `BB_NODEID (149)` → returns current node id
-- `BB_MAINLINE (131)` → empty string (door tolerates)
-- `ACTIVE_NODES (XIM)` → returns `"XXXXXXXXX_"` (10 bytes, `X` for
-  active nodes, `_` for inactive — derived from per-node user file
-  presence)
-
-So WAROLM has the current user's info via XIM. The cross-node info
-must come from MULTICOM memory, which is where the bug lives.
-
-## Next-session actionable steps
-
-1. **Install a memory-read probe** on the MULTICOM region (addresses
-   0x1E0000–0x1E4000 approx) gated on `DOOR_PROBE_MULTICOM=1`. Log
-   every read of that region with PC + bytes read. Run Olm with the
-   probe on; diff reads vs what we wrote. First offset that diverges is
-   the bug.
-
-2. **Disassemble WAROLM's table-draw routine.** Use the format string
-   at 0x4168 as an anchor — find the function that loads it, walk
-   backward to the loop that reads per-node data, note the offsets it
-   computes from the singlePort pointer.
-
-3. **Test by writing a DISTINCTIVE value** (e.g. `ZZZZZZZZ`) to
-   `singlePort + 0x56` and see if it appears on screen. If yes, the
-   offset is right and some OTHER condition causes the `=====` fallback.
-   If no, the door reads from a different offset.
-
-4. **Check the stats[] field hypothesis.** Write non-zero bytes into
-   `nodeInfo.stats` (offset 0x30-0x6F of each nodeInfo) and see if Olm
-   starts showing handles.
-
-## Data-section literals in WAROLM (for reference)
+Disassembled at WarOLM code offset 0x0704 onward (the per-node loop):
 
 ```
-    | %2.2s | %-17.17s | %-23.23s | %-16.16s |       — row format
-    |----^-------------------^-------------------------^------------------|
-    |%s%s  Use Cursor Keys To Choose, <-' Enter To Select,  Q or ESC To Quit  %s%s|
-Awating Connect                                          — empty-slot action
-No Node Present                                          — no-slot message
-nODE iS aWATING cONNECT oR hAS bEEN sHUT dOWN…           — abort message
-nODE sTATUS: '%s', oLM iS aWAYING fOR uSER tO bECOME iDLE…
-%s%s Sorry, But That User Is Ignoring You Stomp On A Key…
+0x0714: bsr 0x1286           ; read ENV:STATS@<i>, return status in d0
+0x0724: if d0 == 0xFF → "No Node Present" branch (0x7D8)
+0x072C: if d0 == 22 (AWAITCONNECT) → placeholder branch (0x7A6)
+0x0732: if d0 == 24 (SHUTDOWN)    → placeholder branch (0x7A6)
+0x0734: ... normal rendering path (real handle/location) ...
 ```
 
-## Why this didn't get fixed this session
+So status 22 (AWAITCONNECT) or 24 (SHUTDOWN) produces the `=================`
+placeholders for handle + location, with the action string pulled from
+WAROLM's own action table (hunk1+0xCE):
 
-The bug is deep — requires either memory-read instrumentation or 68K
-disassembly of the table-draw routine. Both are multi-hour tasks best
-tackled with the live server up and a specific hypothesis. The prior
-fixes this session (DT_NAME race, MULTICOM offsets matching axcommon.e)
-were necessary preconditions — now that those are correct, the remaining
-bug is in WAROLM's side of the read or in a field we aren't populating
-(stats, semaphore chain, etc.).
+```
+[ 0] Idle            [ 3] Using A Door         [17] Chatting
+[ 1] Download        [ 4] Read/Write Mail      [18] Logging Off
+[ 2] Upload ???      [ 5] Reviewing Stats      [21] Logging On
+[ 8] Viewing Dirs    [10] Viewing A File       [22] Awating Connect
+[23] Scanning Mail   [24] Node Shutdown
+```
+
+## Root cause
+
+`DosLibrary.initializeEnvironment()` (called every time a door launches)
+invokes `initializeENVFiles('/tmp/ram/ENV', {...})`. That function seeded
+STATS@1..STATS@8 with `{35 spaces}-22` **unconditionally**, overwriting
+whatever had been written there by `setEnvStat(session, EnvStat.IDLE)` at
+login.
+
+Backend log trail confirming the race:
+
+```
+648:   [EnvStat] Writing /tmp/ram/ENV/STATS@2 (node 2, stat 0)   ← login
+659:   [EnvStat] Writing /tmp/ram/ENV/STATS@1 (node 1, stat 0)   ← login
+…
+69964: [ENV Initializer] Created ENV:STATS@1 = "{35sp}-22"        ← door init wipes it
+69965: [ENV Initializer] Created ENV:STATS@2 = "{35sp}-22"
+…etc…
+```
+
+After the initializer ran, every STATS@N held `-22`, so WAROLM saw every
+logged-in user as AWAITCONNECT and drew placeholder rows.
+
+## Fix
+
+`web/backend/src/amiga-emulation/utils/env-initializer.ts` —
+`initializeENVFiles` now only creates STATS@N when the file doesn't
+already exist. `setEnvStat` (acs.util.ts) owns runtime updates;
+initializer just seeds the slot on first boot.
+
+```ts
+for (let i = 1; i <= totalNodes; i++) {
+  const statsPath = path.join(envPath, `STATS@${i}`);
+  if (!fs.existsSync(statsPath)) {
+    createENVFile(envPath, `STATS@${i}`, ' '.repeat(35) + '-22');
+  }
+}
+```
+
+Typecheck: clean (`npx tsc --noEmit`).
+
+## How to verify
+
+1. Restart backend so the new code is loaded (door-watcher only watches
+   `Doors/`, not `web/backend/`).
+2. Remove stale STATS files: `rm /tmp/ram/ENV/STATS@*` (server must be off
+   or the files will re-seed to `-22`, which is fine).
+3. Log in as two users, each on a separate node.
+4. Each user runs Olm — both rows should show the real handle (not `=====`)
+   and the other user's status ("Idle" if at menu).
+5. Check the STATS@N files mid-session: `xxd /tmp/ram/ENV/STATS@1` —
+   should show the user's name left-justified, `-`, `00`.
+
+## Follow-up applied — STATS@N reflects door status
+
+`AmigaDoorSession.ts` previously updated only MULTICOM memory on door
+launch/exit, so file-based pollers (WarOLM, MultiTop, Bulls) showed users as
+"Idle" while they were in a door. Now mirrors the transition into
+`ENV:STATS@<nodeId>`:
+
+- After `multicomManager.updateNode(nodeId, username, location, ENV_DOORS)`
+  on launch → `setEnvStat(bbsSession, EnvStat.DOORS)`.
+- After `multicomManager.clearNode(nodeId)` on cleanup →
+  `setEnvStat(bbsSession, EnvStat.IDLE)`.
+
+Guarded on `this.config.bbsSession` being present (door-harness runs without
+a BBS session should no-op).
+
+## Remaining follow-up (not applied)
+
+- `MulticomManager.updateNode()` still writes only to singlePort memory. If
+  a door reads status from MULTICOM memory directly (WAROLM does not), the
+  memory status and the file status would drift. Either align them inside
+  `updateNode`, or leave memory as the stale-OK cache and make the file the
+  source of truth.
+
+## What we ruled out this session
+
+- Wrong field offset in singlePort — WAROLM doesn't read memory at all.
+- `stats[]` gating — same reason.
+- `ss` semaphore ownership — same reason.
+- Multi-session memory interference — same reason.
+- The `=====` literals at hunk1+0x3EA/0x3FC/0x414 being emitted by
+  accident: confirmed they are intentional placeholders, copied from
+  offsets 0x3EA (handle) and 0x3FC (location) by the code at 0x7A6–0x7D6,
+  reached via the status==22/24 compare.
