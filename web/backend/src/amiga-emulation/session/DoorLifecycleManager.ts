@@ -18,6 +18,10 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
 import { DebugMonitor } from "./lifecycle/DebugMonitor.js";
 import { DoorExecutionLogger } from "./lifecycle/DoorExecutionLogger.js";
+import {
+  logInitialState as logInitialStateHelper,
+  sendStartupMessage as sendStartupMessageHelper,
+} from "./lifecycle/DoorStartupHelper.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -472,7 +476,12 @@ debugLog(
     // like AquaScan check pr_MsgPort first for BBS mode detection before sending JH_REGISTER.
     if (this.config.doorType === "XIM" && this.messageHandler && !this.executionState.startupMessageSent) {
 debugLog("[DoorLifecycleManager] Sending INIT/STAT to pr_MsgPort BEFORE door execution starts");
-      await this.sendStartupMessage();
+      await sendStartupMessageHelper(
+        this.executionState,
+        this.messageHandler,
+        this.libraryManager,
+        this.config,
+      );
     }
 
     // Set up timeout
@@ -494,7 +503,12 @@ debugLog("[DoorLifecycleManager] Execution timeout");
   private async runExecutionLoop(): Promise<void> {
     try {
       if (this.lifecycleConfig.debugLevel !== "minimal") {
-        this.logInitialState();
+        logInitialStateHelper(
+          this.executionState,
+          this.socket,
+          this.config,
+          this.lifecycleConfig,
+        );
       }
 
       // ========== CONFIGURABLE OVERCLOCKING SYSTEM ==========
@@ -2695,99 +2709,8 @@ console.error(
     this.terminate();
   }
 
-  private logInitialState(): void {
-debugLog(
-      "[DoorLifecycleManager] ==============================================="
-    );
-debugLog(
-      "[DoorLifecycleManager] 🚀 EXECUTION LOOP STARTING - LIFECYCLE MANAGER"
-    );
-debugLog(
-      "[DoorLifecycleManager] ==============================================="
-    );
-
-    // Verify all critical components
-debugLog("[DoorLifecycleManager] 📋 SYSTEM STATUS:");
-debugLog(`[DoorLifecycleManager]   Emulator: ✅`);
-debugLog(
-      `[DoorLifecycleManager]   Running: ${this.executionState.isRunning} ✅`
-    );
-debugLog(`[DoorLifecycleManager]   Socket: ${this.socket.connected} ✅`);
-debugLog(
-      `[DoorLifecycleManager]   Door Type: ${this.config.doorType || "SIM"}`
-    );
-debugLog(
-      `[DoorLifecycleManager]   Executable: ${this.config.executablePath
-        .split("/")
-        .pop()}`
-    );
-debugLog(
-      `[DoorLifecycleManager]   Debug Level: ${this.lifecycleConfig.debugLevel}`
-    );
-  }
-
-  private async sendStartupMessage(): Promise<void> {
-debugLog(
-      "[DoorLifecycleManager] === SENDING STARTUP MESSAGE TO DOOR ==="
-    );
-    this.executionState.startupMessageSent = true;
-
-    // CRITICAL FIX 2026-01-09: RTW/Bulls/JoinCnf expect WBStartup message format on pr_MsgPort
-    // These doors check offset 0x24 (sm_ArgList) for a valid pointer.
-    // Our jhMessage format has 0 at that offset, causing doors to take wrong code path.
-    // Solution: Send WBStartup message instead of jhMessage to pr_MsgPort.
-    //
-    // express.e shows BBS waits for door to send JH_REGISTER first, but doors like RTW
-    // check pr_MsgPort expecting Workbench-style startup (since pr_CLI == 0).
-
-    // CRITICAL: Also populate DoorInfo/BBSInfo structure for XIM doors that read user data
-    // from memory (like ZooStats) rather than using XIM commands
-    if (this.messageHandler) {
-      this.messageHandler.sendInitAndStatusMessages();
-    }
-
-    if (this.libraryManager?.execLibrary && this.config.doorType === "XIM") {
-      try {
-        const execLib = this.libraryManager.execLibrary;
-        const doorName = this.config.doorId || path.basename(this.config.executablePath) || "XIM";
-        // XIM doors like AquaScan use ReadArgs which may require arguments
-        // When user provides args, use those; otherwise default to "1" (upload directory)
-        const args = Array.isArray(this.config.args) && this.config.args.length > 0
-          ? this.config.args.map(String)
-          : ["1"];
-debugLog(`[DoorLifecycleManager] Sending WBStartup message for XIM door: ${doorName} args=[${args.join(", ")}]`);
-        const msgAddr = execLib.seedWorkbenchStartup(doorName, args);
-        if (msgAddr !== 0) {
-debugLog(`[DoorLifecycleManager] WBStartup message sent at 0x${msgAddr.toString(16)}`);
-        } else {
-console.warn("[DoorLifecycleManager] Failed to send WBStartup message, falling back to jhMessage");
-          // Fallback to old method
-          if (this.messageHandler) {
-            this.messageHandler.sendStartupMessage();
-          }
-        }
-      } catch (err) {
-console.error("[DoorLifecycleManager] Error sending WBStartup message:", err);
-        // Fallback to old method
-        if (this.messageHandler) {
-          this.messageHandler.sendStartupMessage();
-        }
-      }
-    } else if (this.messageHandler) {
-      try {
-        this.messageHandler.sendStartupMessage();
-      } catch (err) {
-console.error(
-          "[DoorLifecycleManager] Error sending startup message:",
-          err
-        );
-      }
-    } else {
-console.warn(
-        "[DoorLifecycleManager] No DoorMessageHandler available for startup message"
-      );
-    }
-  }
+  // logInitialState + sendStartupMessage extracted to
+  // lifecycle/DoorStartupHelper.
 
   /**
    * Terminate the door lifecycle
