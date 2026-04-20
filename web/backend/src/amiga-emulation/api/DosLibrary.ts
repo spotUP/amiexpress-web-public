@@ -1006,6 +1006,39 @@ console.log(`  ${name}[0x${addr.toString(16)}]: ${ascii}`);
       }
       const msgStringAscii = msgString.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
 console.log(`  msg.string[0x${stringAddr.toString(16)}]: "${msgStringAscii}"`);
+
+      // DEBUG: Walk the wall's linked list from 0x704(a4) to dump every node
+      // List head is at A4+0x704, tail at A4+0x708, each node is 100 bytes with next ptr at +0x60
+      const a4 = regs.A4;
+      const listHead = this.emulator.readMemory32(a4 + 0x704);
+      const listTail = this.emulator.readMemory32(a4 + 0x708);
+console.log(`  [WALL-LIST] head=0x${listHead.toString(16)} tail=0x${listTail.toString(16)}`);
+      const hexByte = (b: number) => b.toString(16).padStart(2, '0');
+      let cur = listHead;
+      let idx = 0;
+      while (cur !== 0 && idx < 20) {
+        const firstByte = this.emulator.readMemory(cur);
+        const next = this.emulator.readMemory32(cur + 0x60);
+        const counter = this.emulator.readMemory(cur + 0x5c) * 256 + this.emulator.readMemory(cur + 0x5d);
+        const all: number[] = [];
+        for (let i = 0; i < 100; i++) all.push(this.emulator.readMemory(cur + i));
+        const asc = all.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+        const hex = all.map(hexByte).join(' ');
+console.log(`  [WALL-LIST] node[${idx}] @0x${cur.toString(16)} firstByte=0x${firstByte.toString(16)} counter=0x${counter.toString(16)} next=0x${next.toString(16)}`);
+console.log(`  [WALL-LIST]   ascii: "${asc}"`);
+console.log(`  [WALL-LIST]   hex:   ${hex}`);
+        cur = next;
+        idx++;
+      }
+
+      // Also dump registers' buffer contents: maybe A5 still contains user data
+      const a5Addr = this.emulator.readMemory32(a4 + 0); // just so TS doesn't complain
+      void a5Addr;
+      // Walk A4's data area near 0x704-0x710 to inspect
+      for (const off of [0x700, 0x704, 0x708, 0x70c, 0x770]) {
+        const val = this.emulator.readMemory32(a4 + off);
+console.log(`  [WALL-A4] A4+0x${off.toString(16)} = 0x${val.toString(16)}`);
+      }
     }
 
     if (length <= 0) {
@@ -3388,13 +3421,33 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
     }
 
     // VERSION command - returns version info from a binary
-    // Format: VERSION <filename> - extracts $VER: string from the file
-    if (upperName.startsWith('VERSION ') || upperName.startsWith('C:VERSION ')) {
+    // Format: VERSION [filename] [FULL|FILE ...] - extracts $VER: string
+    // from the file (or synthesises a system-version string when the
+    // command is bare "VERSION" or path-addressed like
+    // "DOORS:EPUTILS/SYSINFO/VERSION FULL" — bundled Version tool from
+    // a door's own directory). SysInfo passes the latter and aborts with
+    // "A File Error has Occured!" if Execute returns failure.
+    const firstWord = upperName.split(/\s+/)[0] || '';
+    const isVersionCommand =
+      firstWord === 'VERSION' ||
+      firstWord === 'C:VERSION' ||
+      firstWord.endsWith(':VERSION') ||
+      firstWord.endsWith('/VERSION');
+    if (isVersionCommand) {
       const parts = name.trim().split(/\s+/);
-      const targetFile = parts.length > 1 ? parts[1] : '';
+      // Second token is the target file unless it's a Version flag
+      // (FULL, FILE, RES, INTERNAL, UNIT=<n>, VERNUM, REVNUM etc.).
+      const flagTokens = new Set(['FULL', 'FILE', 'RES', 'INTERNAL', 'VERNUM', 'REVNUM']);
+      const maybeTarget = parts.length > 1 ? parts[1] : '';
+      const targetFile =
+        maybeTarget &&
+        !flagTokens.has(maybeTarget.toUpperCase()) &&
+        !maybeTarget.toUpperCase().startsWith('UNIT=')
+          ? maybeTarget
+          : '';
 
       // Try to read $VER: string from the target file
-      let verString = 'Unknown 0.0';
+      let verString = '';
       if (targetFile) {
         try {
           const sysPath = this.pathManager?.amiToSysPath(targetFile, process.cwd()) || '';
@@ -3408,6 +3461,13 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         } catch (e) {
           // Ignore errors
         }
+      }
+
+      if (!verString) {
+        // Bare `VERSION` (no target) or target unreadable — synthesise
+        // a plausible Kickstart/Workbench reply so doors that just want
+        // a "system is running" signal (SysInfo etc.) don't abort.
+        verString = 'Kickstart 40.68 Workbench 40.42';
       }
 
       debugLog(`[dos.library] Execute("${name}") -> VERSION command, result: "${verString}"`);
