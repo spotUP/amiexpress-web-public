@@ -22,6 +22,7 @@ import { resolveAssignPath } from '../../utils/path-util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
 import { wrapLine } from './line-wrap.util';
+import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
@@ -1542,10 +1543,12 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
       }
     }
 
+    // DOOR_NEWLINE_STRICT: preserve bytes verbatim (see newline-mode.util).
+    const newlineMode = getNewlineMode();
+
     // Normalize CRLF to LF, but DON'T convert standalone CR to LF!
-    // RTW and other doors use \r (carriage return) to move cursor to column 0
-    // for in-place updates. Converting \r to \n would cause double line breaks.
-    let normalized = converted.replace(/\r\n/g, '\n');
+    // RTW and other doors use \r to move cursor to column 0.
+    let normalized = normalizeNewlines(converted, newlineMode);
 
     // CRITICAL: Only add newline if text doesn't already end with one
     // Some doors send data=1 with a string that already contains a trailing \n
@@ -1554,7 +1557,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
     // NOTE: express.e:3406-3411 does aePuts('\b\n') - backspace+newline.
     // We skip the backspace as it's typically a no-op when at start of line.
     const alreadyHasNewline = normalized.endsWith('\n');
-    if (addNewline && !alreadyHasNewline) {
+    if (!newlineMode.strict && addNewline && !alreadyHasNewline) {
       normalized += '\n';
     }
 
@@ -1584,7 +1587,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
         const segment = segments[s];
         const isLastSegment = s === segments.length - 1;
         const endsInNewline = !isLastSegment || shouldAddLineBreak;
-        const suffix = endsInNewline ? '\r\n' : '';
+        const suffix = endsInNewline ? newlineMode.lineSuffix : '';
         const output = `${segment}${suffix}`;
 
         // Emit output BEFORE checking pause
