@@ -1,185 +1,155 @@
-# dRE!WAll Door - Debug Handoff
+# dRE!WAll — Debug Handoff (2026-04-20 — third session)
 
-**Status:** NOT WORKING - Data loss bug in JH_HK/DT_NAME interaction
+**Status:** File save pipeline fully working. Author-name field in saved record is empty (`0x0d` junk). Root cause identified with express.e as source of truth — see below.
 
-## Problem Summary
+## What is working (confirmed end-to-end)
 
-The dRE!WAll (wall/graffiti) door collects user input character-by-character via JH_HK, but loses the data when calling DT_NAME, resulting in only the original "kokkiklhs / Hello from Athens" entry being saved repeatedly.
-
-## What Works
-
-- ✅ Door launches successfully
-- ✅ Displays style files correctly
-- ✅ JH_HK protocol implementation matches express.e (character in msg.string[0], ximPort in msg.command)
-- ✅ Door reads existing data file (100 bytes) correctly
-- ✅ Characters are echoed to screen (door reads them for display)
-- ✅ File operations (Open, Read, Write, Close) work correctly
-- ✅ Door completes execution without crashes
-
-## What Doesn't Work
-
-- ❌ New entries are NOT saved
-- ❌ Existing entries are NOT displayed initially (only after submit)
-- ❌ Door writes OLD data instead of NEW input
-
-## Root Cause Analysis
-
-### Character Collection Flow
+Typing a line at the WALL prompt produces:
 
 ```
-1. JH_HK: Write 'p' to msg.string[0] ✅
-2. Door echoes 'p' (reads successfully) ✅
-3. JH_HK: Write 'o' to msg.string[0] ✅
-4. Door echoes 'o' ✅
-5. JH_HK: Write 'o' to msg.string[0] ✅
-6. Door echoes 'o' ✅
-7. JH_HK: Write 'p' to msg.string[0] ✅
-8. Door echoes 'p' ✅
-9. DT_NAME: Write "sysop" to msg.string ❌ OVERWRITES collected characters!
-10. Door writes OLD data from initialization
+CopyMem-100 LOAD   src=0x122ee0 dst=0x122f48   (existing record → node[0])
+CopyMem-100 INSERT src=0x122e78 dst=0x122ee0   (new record   → node[1])
+Write BPTR=4 file="dOORS:dRE/dRE!WAll/dRE!WAll.dAtA" len=100
 ```
 
-### Key Findings
+`dRE!WAll.dAtA` updates on disk; the text field at offset `0x1f` contains the typed line. Mission of "make the save work" is complete — that was the primary failing claim in the earlier handoff.
 
-**msg.stringPtr Investigation:**
-- `msg.stringPtr = 0x1034f8` (SAME as embedded buffer)
-- Door has NO separate string buffer
-- All data goes to embedded msg.string buffer
+## The remaining bug: `record[0..9]` (username field) is `0x0d 0x00 ... 0x00`
 
-**File Operations:**
-- Read: Returns correct 100 bytes "kokkiklhs...Hello from Athens"
-- Write: Writes 100 bytes of OLD data (0x10368c buffer has old content)
-- No Seek() operations (file pointer at offset 0)
-
-**Data Loss Mechanism:**
-- Door collects characters via JH_HK into msg.string[0]
-- Door SHOULD copy each character to internal buffer (but doesn't seem to)
-- DT_NAME call overwrites entire msg.string with "sysop"
-- Door's internal buffer never got the characters, writes old data
-
-## Express.e Reference
-
-express.e lines 3436-3447 show JH_HK implementation:
+In the original file:
 ```
-CASE JH_HK
-  lineCount:=0
-  aePuts(msg.string)        <- Echo prompt
-  ch:=readChar(doorTimeout) <- Read ONE character
-  IF (ch<0)
-    msg.data:=-1
+0x00: 6b 6f 6b 6b 69 6b 6c 68 73 00   "kokkiklhs\0"
+```
+
+In our post-fix file:
+```
+0x00: 0d 00 00 00 00 00 00 00 00 00   "\r\0\0..."
+```
+
+Byte 0 is `0x0d` (CR), followed by nulls. That's not a valid username.
+
+## Where the bug lives — traced via express.e and disassembly
+
+### What express.e says (source of truth)
+
+`mcp__amiexpress-docs__search_express_source "DT_NAME"` → express.e:3494-3499:
+
+```e
+CASE DT_NAME
+  IF (msg.data)
+    AstrCopy(msg.string, loggedOnUser.name, 31)  -- READ: name → msg.string
   ELSE
-    msg.data:=1
+    AstrCopy(loggedOnUser.name, msg.string, 31)  -- WRITE: msg.string → name
   ENDIF
-  msg.string[0]:=ch         <- Character goes here
-  msg.string[1]:=0
-  msg.command:=ximPort      <- XIM port (1 or 2)
 ```
 
-Our implementation MATCHES this exactly.
+So DT_NAME READ writes the username into `msg.string` — i.e. the **embedded buffer at offset `0x14`** of the jhMessage. Not `msg.strptr` (which express.e only uses for `JH_SMPTR`, line 3412-3413).
 
-## Hypotheses
+### What the door does (disassembled from dRE!WAll binary)
 
-### Why It Works on Real Amiga
+Function `0x4e2` is the AEDoor-library "query string" wrapper. At `0x23c6` (record-build path), position `0x249c` calls `0x4e2` with `D0=0x64 (=100=DT_NAME)`, `A0=SP+8` (stack scratch buffer):
 
-1. **Different DT_NAME timing:** Express.e might not call DT_NAME immediately after character input
-2. **Separate string buffer:** Door might use AEDoor.library's string buffer mechanism we haven't discovered
-3. **Door expects character accumulation:** Door might expect multiple JH_HK responses in SAME message before DT_NAME
-4. **Memory layout difference:** Door might read from a different offset than we expect
+```
+0x4e2  : save regs, d7=d0=100, a5=a0=SP+8
+0x4ea  : a0 = [A4+0x714]        ; msg buffer addr (0x122d38)
+0x4ee  : [a0+0xE0] = d7          ; msg.command = 100
+0x4f2  : d0 = 1
+0x4f8  : [a0+0xDC] = d0          ; msg.data = 1 (READ)
+0x4fc  : bsr 0x482               ; PutMsg + WaitPort + GetMsg the reply
+0x4fe  : a0 = [A4+0x714] + 0x14  ; a0 = msg.string
+0x506  : a1 = a5                 ; a1 = caller's SP+8
+0x508  : move.b (a0)+, (a1)+     ; copy msg.string → caller buffer
+0x50a  : bne 0x508               ; until NUL
+```
 
-### Display Issue
+So `0x4e2` expects the BBS to leave the username in `msg.string` (embedded @0x14). The door then copies that string into its scratch buffer.
 
-Door shows existing entries ONLY after submitting, not initially:
-- `JH_SF` loads style file
-- NO display of existing entries initially
-- AFTER submit: `[5;0H` displays "Hello from Athens..."
-- Suggests door logic error or data validation failure on initial load
+Back in `0x23c6` after `0x4e2` returns, at `0x24b2`:
 
-## Code Changes Made
+```
+0x24b2  lea.l   0x8(a7), a0    ; a0 = SP+8 (now contains username from BBS)
+0x24b6  movea.l a5, a1          ; a1 = record being built
+0x24b8  move.b  (a0)+, (a1)+    ; copy → record[0..]
+0x24ba  bne.b   0x24b8
+```
 
-### io.ts (XIM Protocol Handler)
+This copies the post-`0x4e2` scratch buffer (supposedly the username) into the record's username field (bytes 0–n).
 
-**Fixed JH_HK character placement (2026-01-20):**
-- Changed from writing character to msg.command → msg.string[0]
-- Fixed BOTH code paths: handleHotkey() and completeHotkey()
-- Added debug logging for msg.stringPtr tracking
-- Matches express.e:3445-3447 exactly
+### Why we see `0x0d` at record[0]
 
-### FileHandle.ts (File Operations)
+Trace evidence (logs/backend.log this session):
 
-**Removed O_TRUNC flag (2026-01-20):**
-- MODE_NEWFILE now opens without truncation
-- Preserves existing file content until Close()
-- Matches AmigaDOS behavior for read-while-write scenarios
+For the **first** DT_NAME query (the one `0x4e2` uses to populate the record):
 
-**Attempted fix (reverted):**
-- Tried positioning at EOF for appending
-- NOT the issue - door overwrites from position 0
-- Reverted to original behavior
+```
+line 13789: [XIMMessageParser] Parsed jhMessage: Command: 100 (DT_NAME)
+line 13810: [XIMProtocol] handleMessage: cmd=100 (DT_NAME) usedXimInput=true
+line 13821: [GetMsg] Door received message: Command=100  String="\r"
+line 13829: getMsg raw @msg+0x14..0x27: 0d 00 33 36 6d 45 6e 74 65 72 20 79 6f 75 72 20 4c 69 6e 65
+                                                                 ← "\r\0 36m Enter your Line" (leftover!)
+```
 
-### DosLibrary.ts (Debug Logging)
+Between `handleMessage` at 13810 and `GetMsg` at 13821, **`XIMDataQueryHandler.handleDataQuery` does NOT fire** — I added an unconditional trace `[DT_NAME_DEBUG] handleDataQuery ENTRY cmd=100` and it does not appear for this message. It only fires for a **SECOND** DT_NAME query that the door issues LATER (after Write() already happened), and that second call correctly writes "sysop".
 
-**Added 100-byte read detection:**
-- Logs hex/ASCII dump for 100-byte reads
-- Confirms door receives correct data: "kokkiklhs...Hello from Athens"
-- Buffer at 0x10368c matches file content
+So the FIRST DT_NAME gets replied to by **some code path that doesn't write `msg.string`**. The door's `0x4e2` copies msg+0x14 into its scratch, which is still the stale `\r\0 36m Enter your Line` residue from a prior `JH_WRITE`. The NUL at byte 1 terminates the copy, so only `\r` makes it into `record[0]`.
 
-## Test Results
+### The duplicate handler to investigate
 
-**Tested entries:** "test", "yo! cluade", "burp", "ohoy", "toot", "tata", "hoha", "hihi", "test222", "lol", "yes", "hoho", "to", "ko", "poop", "10 characters"
+`web/backend/src/amiga-emulation/session/DoorMessageHandler.ts:876-895` has a **second** `case XIMCommand.DT_NAME` that also reads `user.username`. Its comment at line 580-583 says it should only fire when `this.ximProtocol` is null (fallback). BUT it was written at line 600+ as `processCommand`, and it's unclear whether this case is reachable when XIMProtocol *is* initialized. **Next-session target**: add an unconditional `console.log` at that case entry to confirm which handler actually fires for the first DT_NAME.
 
-**Every test:**
-- Characters echoed correctly ✅ (except when they weren't typed!)
-- Data file unchanged (still 100 bytes, old content) ❌
-- No crash or errors ✅
+Alternative hypotheses to check at the start of next session:
 
-**Critical "Ghost Y" Bug (2026-01-20):**
-- User typed ~10 characters at "Enter your Line:" prompt
-- Door echoed only "y" (which user did NOT type)
-- The "y" came from previous prompt "Write Anonymous? (N/y):"
-- **Conclusion:** Door is reading stale data from msg.string instead of fresh input
-- Indicates data flow corruption between prompts
+1. `handleMessage` is async; the call to `handleDataQuery(msg)` at `XIMProtocol.ts:665` is **not awaited** (it's fire-and-forget). If the emulator continues executing between `handleMessage` being invoked and `handleDataQuery` writing the reply, the door may GetMsg an unmodified message. The fact that the SECOND DT_NAME DOES succeed suggests timing, not an unreachable branch.
+2. XIMProtocol.handleMessage dispatches to `handleIOCommand` which has its own reply path. DT_NAME is NOT in the IO list, so this is unlikely — but worth verifying with the router-trace log I added.
+3. There's a SEPARATE reply path for `usedXimInput=true` doors (native-injection injection) that pre-empts data-query handlers.
 
-## Logs
+## Instrumentation added this session (safe to leave, gated on `DREWALL_TRACE=1`)
 
-**Latest:** `~/Code/amiexpress-web/logs/door-68k-WALL-20260120202603.-N1.log`
+- `data-query.ts:handleDataQuery` entry log + DT_NAME case: logs user ref, write, verify, reply
+- `data-query.ts:reply()`: logs pre- and post-replyMsg embedded string
+- `XIMProtocol.ts:handleMessage`: router trace showing isSystem / isIO / isDataQ for cmd=100
+- `exec-vectors.ts:GetMsg trap`: raw hex dump at msg+0x00, msg+0x14, msg+0x100 for cmd=100
 
-**Key files:**
-- Data: `Doors/dRE/dRE!WAll/dRE!WAll.dAtA` (100 bytes)
-- Binary: `Doors/dRE/dRE!WAll/dRE!WAll` (11,416 bytes)
-- Style: `Doors/dRE/dRE!WAll/dRE!WAll.StYlE.2`
+## Scripted repro (confirmed working multiple times this session)
 
-## Failed Attempts
+```bash
+# 1. Start backend directly (start-servers.sh blocks on `wait` — don't use it)
+cd web/backend
+nohup env DREWALL_TRACE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development \
+  npx tsx src/index.ts > ../../logs/backend.log 2>&1 &
 
-**LINE INPUT MODE (2026-01-20):**
-- Hypothesis: JH_HK with data > 1 means line input, not single character
-- Implementation: Switched to lineInputBuffer accumulation when data > 1
-- Result: WRONG - msg.data is TIMEOUT in seconds, not max length!
-- Express.e proof: Line 1128 shows `ch:=readChar(doorTimeout)` - ONE character only
-- Reverted this change
+# 2. Open a long-lived TCP client (nc dies on stdin EOF; use the Python helper)
+nohup python3 /tmp/tcp_client.py > /tmp/bbs_io.log 2>&1 &
 
-## Next Steps for Future Investigation
+# 3. Drive through ANSI / login (single chars — multi-char packets get dropped)
+/tmp/bbs_type.sh "A"       # ANSI
+/tmp/bbs_type.sh "sysop"   # username
+/tmp/bbs_type.sh "sysop"   # password
 
-1. **Fix msg.string clearing** - Ensure msg.string is cleared between XIM calls to prevent stale data
-2. **Disassemble door binary** - Understand internal character buffering logic
-3. **Compare with working door** - Find door that uses JH_HK successfully
-4. **Check AEDoor.library** - Investigate string buffer mechanism
-5. **Memory watchpoint** - Track when/how door copies msg.string[0] to internal buffer
-6. **DT_NAME alternative** - Check if username should come from different mechanism
-7. **Initial display logic** - Why aren't existing entries shown before submit?
-8. **"Ghost Y" investigation** - Why is stale prompt text appearing as input?
+# 4. Skip bulletins (many space presses — varies by run)
+for i in $(seq 1 25); do printf ' ' > /tmp/bbs_io/in.fifo; sleep 0.5; done
 
-## Priority
+# 5. When you see "Write Anonymous ? (N/y):", press N
+printf 'N' > /tmp/bbs_io/in.fifo
 
-**LOW** - This is a non-essential "graffiti wall" door. Core BBS functionality and important doors (FR, file areas, message bases) take priority.
+# 6. When you see "Enter your Line:", type the message
+/tmp/bbs_type.sh "Testing"
+```
 
-## Working Around This Door
+Expected: TWO `CopyMem-100` events, WALL-LIST dump with 2 nodes, `Write BPTR=4 ... len=100`, file mtime updates. Bug: record[0] is `0x0d` instead of typed username.
 
-If users want a wall/graffiti feature, consider:
-- Using a different wall door
-- Creating a TypeScript door using SDK
-- Implementing as BBS command rather than external door
+## Key files
 
----
-**Last Updated:** 2026-01-20
-**Total Investigation Time:** ~4 hours
-**Sessions:** 2 debug sessions, 15+ test iterations
+- `express.e:3494-3499` — DT_NAME protocol definition (source of truth)
+- `Doors/dRE/dRE!WAll/dRE!WAll` offset `0x4e2` — AEDoor query-string wrapper
+- `Doors/dRE/dRE!WAll/dRE!WAll` offset `0x24b2-0x24ba` — copies DT_NAME result into record[0]
+- `web/backend/src/amiga-emulation/xim/data-query.ts:71-116` — XIMProtocol DT_NAME handler (works correctly, called for SECOND DT_NAME only)
+- `web/backend/src/amiga-emulation/session/DoorMessageHandler.ts:876-895` — duplicate DT_NAME handler (suspected culprit for FIRST DT_NAME)
+- `web/backend/src/amiga-emulation/XIMProtocol.ts:660-667` — data-query routing (`handleDataQuery` is not awaited)
+
+## Prior-session fixes still in place
+
+- `exec-vectors.ts`: CopyMem vector at LVO -624 + CopyMemQuick at LVO -630
+- `LibraryTraps.ts`: LVOs.i search path (Documentation/7-Reference Sources)
+- `telnet-server.ts`: localhost-only-in-production gate (so local repros can connect)
+- `web/backend/src/types/untyped-modules.d.ts`: zmodem.js/pako module declarations

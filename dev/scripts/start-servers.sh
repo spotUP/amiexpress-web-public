@@ -18,7 +18,8 @@ Usage: ./dev/scripts/start-servers.sh [options]
 
 Options:
   --debug | -v | --verbose   Enable debug mode (full logs + profiling)
-  --quick | -q               FAST START: Skip all builds, use existing
+  --quick | -q               FAST START: Skip all builds AND cache clearing
+  --clean                    Nuclear cache clear (slow). Default: off
   --full | --all             Open BBS + Admin/Settings + SDK (default)
   --sdk-only                 Open SDK preview only; build SDK only
   --bbs-only                 Open BBS terminal only; build BBS only
@@ -30,7 +31,14 @@ Note: Door file watcher is ENABLED by default. Backend auto-restarts when
       door files change. Use --no-watch to disable for production-like testing.
 
 Quick mode (--quick) skips: npm checks, SDK build, door builds, frontend builds,
-TypeScript check. Use for fast debugging when dependencies haven't changed.
+TypeScript check, and cache clearing. Use for fast debugging when dependencies
+haven't changed.
+
+Clean mode (--clean) clears ALL caches before startup (npm, node_modules/.cache,
+TypeScript build info, every dist/ dir, stale .js files, Vite caches). Only
+needed after a rebase/merge or when things are visibly broken. Runtime ESM
+cache-busting in door.handler.ts already prevents stale door module issues, so
+day-to-day development does not need this.
 
 Debug mode (--debug) enables:
   - DEBUG_68K: Verbose 68K CPU execution tracing
@@ -49,6 +57,7 @@ DEBUG_OUTPUT="false"
 OPEN_MODE="full"  # Default: Open all three tabs (BBS, Admin, SDK)
 WATCH_DOORS=true  # Default: Enable door file watcher (auto-restart on changes)
 QUICK_MODE=false  # Default: Full build (set true with --quick for fast debug startup)
+CLEAN_MODE=false  # Default: Skip nuclear cache clear (set true with --clean)
 TELNET_ONLY=false # Default: Start everything unless telnet-only requested
 
 # Check all arguments
@@ -80,6 +89,9 @@ for arg in "$@"; do
       ;;
     --quick|-q)
       QUICK_MODE=true
+      ;;
+    --clean)
+      CLEAN_MODE=true
       ;;
   esac
 done
@@ -123,6 +135,10 @@ fi
 if [ "$QUICK_MODE" = true ]; then
   printf "%b\n" "${YELLOW}${BOLD}→ QUICK MODE: Skipping all builds (using existing artifacts)${RESET}"
   printf "%b\n" "   ${WHITE}Remove --quick for full build with dependency checks${RESET}"
+fi
+
+if [ "$CLEAN_MODE" = true ]; then
+  printf "%b\n" "${YELLOW}${BOLD}→ CLEAN MODE: Will nuke all caches before startup (slow)${RESET}"
 fi
 
 # Get the repository root directory (portable)
@@ -181,8 +197,11 @@ cleanup_logs_dir() {
 cleanup_logs_dir
 
 # ============================================================================
-# COMPREHENSIVE CACHE CLEARING - PREVENT STALE CODE ISSUES
+# COMPREHENSIVE CACHE CLEARING - opt-in via --clean
+# Runtime ESM cache-busting in door.handler.ts (?t=timestamp query) already
+# prevents stale door module imports, so day-to-day dev does NOT need this.
 # ============================================================================
+if [ "$CLEAN_MODE" = true ]; then
 printf "%b\n" "${CYAN}${BOLD}→ Clearing ALL caches (npm, build artifacts, TypeScript)...${RESET}"
 
 # 1. Clear npm cache (force fresh package resolution)
@@ -242,6 +261,12 @@ printf "%b\n" "   ${GREEN}[OK] ESM loader cache cleared, development mode enable
 
 printf "%b\n" "${GREEN}${BOLD}→ ALL caches cleared! Fresh build guaranteed.${RESET}"
 echo ""
+else
+  # Still force NODE_ENV=development for the runtime cache-busting path
+  export NODE_ENV=development
+  printf "%b\n" "${CYAN}→ Skipping cache clearing (use --clean if needed). Runtime ESM cache-busting is active.${RESET}"
+  echo ""
+fi
 # ============================================================================
 
 # Use fixed log filenames (will be overwritten each time)
@@ -648,10 +673,10 @@ else
     # DEBUG_68K=1 enables verbose 68K logging
     # DEBUG_EXEC/DOS/FILE/TRAP=1 enables library/file/trap debugging (sync file I/O logs)
     # DOOR_PROFILE=1 enables performance profiling output
-    (cd "$REPO_ROOT/web/backend" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+    (cd "$REPO_ROOT/web/backend" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
   else
     # NORMAL MODE: Clean output, no verbose 68K logging (DEBUG_68K not set)
-    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
   fi
   BACKEND_PID=$!
 fi

@@ -37,7 +37,18 @@ You are "Amiga Guru": a specialist in the Commodore Amiga—history, hardware, s
 
 **If unsure, ask the user** instead of guessing before proceeding.
 
-**NEVER start servers without asking.** Always ask the user before running `start-servers.sh`, `kill-servers.sh`, or any command that starts/stops the BBS servers. The user controls when servers run.
+**Server lifecycle — you may start and stop servers, but clean up rigorously.**
+You may run `./dev/scripts/start-servers.sh` and `./dev/scripts/kill-servers.sh`. You must:
+
+**Stuck-door sweep (always do this at the start of a debug-MCP session):**
+Before using the debug MCP, call `GET /debug/api/sessions` and check `activeDoors[]`. Any entry with `ageMs` older than ~60 seconds that you didn't launch in this turn is almost certainly a stuck 68K door. Kill it with `POST /debug/api/sessions/<nodeId>/kill-door`. This is routine — 68K doors get stuck often (waiting on input, blocked in library calls, etc.), and a stale DebugRegistry entry hides real state from subsequent introspection.
+
+
+1. **Always use `kill-servers.sh`** (never `Ctrl+C` a backgrounded job, never leave it running between tasks). Don't `pkill` individual processes — use the script so lockfiles are cleaned up too.
+2. **After any kill**, run the zombie-verification command (see "Zombie Cleanup" below) and confirm the process list is empty before moving on.
+3. **Never run with `run_in_background: true`** — that's what created the zombie backlog. Start foreground, let it run, kill cleanly when done. If you need the server running while you do other work, ask the user to start it instead.
+4. **If you inherit zombie processes** from a previous session, run the cleanup commands first and document them in `handoff.md` under "Zombie cleanup".
+5. **Never skip the `kill-servers.sh`** step before ending a task in which you started a server. A running backend at session boundary = a zombie next session.
 
 **No guessing on behavior.** Match AmiExpress exactly using proof from express.e sources, official docs, or disassembly; every change must be backed by evidence and 1:1 with the originals.
 
@@ -523,10 +534,27 @@ AmiExpress-Web: TypeScript port of Amiga BBS. 68K emulation via MOIRA.
 
 **Door Watcher:** Node.js cannot hot reload ESM modules. `start-servers.sh` uses file watcher by default to auto-restart backend when door files change. See `dev/scripts/DOOR_WATCHER.md`
 
-### Zombie Cleanup (CRITICAL if high context)
+### Zombie Cleanup (run after every server stop)
+
+The primary kill path is:
 ```bash
-ps aux | grep -E "(start-servers|kill-servers|build-wasm)" | grep -v grep
-pkill -f "start-servers.sh" && pkill -f "kill-servers.sh" && pkill -f "build-wasm.sh"
+./dev/scripts/kill-servers.sh
+```
+
+Then **verify no stragglers remain**. Expected: empty output.
+```bash
+ps aux | grep -E "(start-servers|kill-servers|watch-doors|build-wasm|tsx .*src/index.ts)" | grep -v grep
+```
+
+If anything shows up:
+```bash
+pkill -f "start-servers.sh"; pkill -f "watch-doors.ts"; pkill -f "tsx.*src/index.ts"; pkill -f "build-wasm.sh"
+# then re-verify with the ps grep above
+```
+
+Also confirm the lockfile is gone:
+```bash
+ls /tmp/amiexpress-servers.lock 2>/dev/null && echo "STALE LOCKFILE — remove it" || echo "OK"
 ```
 
 ### Backend (`web/backend`)
