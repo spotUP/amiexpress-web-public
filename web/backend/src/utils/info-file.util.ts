@@ -1,220 +1,325 @@
 /**
  * Amiga .info File Parser and Writer
  *
- * Handles Amiga Workbench icon files (.info) while preserving binary data
- * (images, drawer data, etc.). Supports both standard binary icons and
- * text-based representations.
+ * Handles Amiga Workbench icon files (.info). Preserves all binary data
+ * (images, drawer data, secondary icon structures like NewIcons) by
+ * identifying the tooltype array's byte range and writing only length-
+ * prefixed entries back in place.
+ *
+ * File format reference (binary icons):
+ *   [DiskObject struct (78 bytes, starts with magic 0xE310)]
+ *   [Gadget Image 1 data]
+ *   [Gadget Image 2 data (if SelectRender != NULL)]
+ *   [DefaultTool string (4-byte BE length + data, if do_DefaultTool != NULL)]
+ *   [ToolTypes array:
+ *     4-byte BE count = (n + 1) * 4
+ *     n entries of (4-byte BE length + null-terminated string)
+ *   ]
+ *   [DrawerData (if do_DrawerData != NULL)]
+ *   [ToolWindow string (if do_ToolWindow != NULL)]
+ *   [NewIcons extension chunks, etc.]
  */
 
 import * as fs from 'fs';
-import { execSync } from 'child_process';
 
 export interface Tooltype {
   key: string;
   value: string;
   commented: boolean;
-  prefix: string;        // Amiga-style prefix (#, %, +, ', etc.)
+  prefix: string;
   originalLine: string;
 }
 
 export interface InfoFile {
   filePath: string;
   isBinary: boolean;
-  diskObject: Buffer;    // Data before tooltypes (header)
-  iconData: Buffer;      // Data after tooltypes (footer)
+  diskObject: Buffer;   // Everything before the tooltype array's count field
+  iconData: Buffer;     // Everything after the last tooltype entry
   tooltypes: Tooltype[];
-  rawBuffer: Buffer;     // Original file content
+  rawBuffer: Buffer;
+}
+
+const AMIGA_PREFIX_CHARS = new Set(['#', '+', '%', "'"]);
+
+/**
+ * Parse a single tooltype string (as stored in the .info file) into a
+ * Tooltype record. Handles Amiga comment prefixes `(name)`, `!name`, and
+ * the special prefix characters #, +, %, '.
+ */
+// Amiga tooltypes are effectively "KEY=VALUE" with keys drawn from a wide
+// ASCII subset. Real .info files use characters like '/' and '-' in keys
+// (e.g. WHO.info uses "Level_to_see_up/dl"), so we accept any printable
+// non-'=' byte in the key. The uppercase conversion preserves the
+// historical behavior callers expect for lookups.
+const VALID_KEY_RE = /^[!-<>-~]+$/; // printable ASCII except '='
+
+function parseTooltypeString(raw: string): Tooltype | null {
+  let content = raw;
+  let commented = false;
+  let prefix = '';
+
+  if (content.startsWith('!')) {
+    commented = true;
+    content = content.substring(1);
+  } else if (content.startsWith('(') && content.endsWith(')')) {
+    commented = true;
+    content = content.substring(1, content.length - 1);
+  }
+
+  if (content.length > 0 && AMIGA_PREFIX_CHARS.has(content[0])) {
+    prefix = content.substring(0, 1);
+    content = content.substring(1);
+  }
+
+  const eqIdx = content.indexOf('=');
+  if (eqIdx !== -1) {
+    const rawKey = content.substring(0, eqIdx).trim();
+    const key = rawKey.toUpperCase();
+    const value = content.substring(eqIdx + 1).trim();
+    if (!VALID_KEY_RE.test(rawKey)) return null;
+    return { key, value, commented, prefix, originalLine: raw };
+  }
+  const rawKey = content.trim();
+  const key = rawKey.toUpperCase();
+  if (!VALID_KEY_RE.test(rawKey)) return null;
+  return { key, value: '', commented, prefix, originalLine: raw };
 }
 
 /**
- * Extract tooltypes from file without external dependencies.
- * Native binary parser that scans for printable ASCII sequences.
+ * Render a Tooltype back to its on-disk string form (null terminator
+ * added separately by the writer).
  */
-function extractTooltypes(filePath: string): Tooltype[] {
+function renderTooltype(tt: Tooltype): string {
+  const commentMark = tt.commented ? '!' : '';
+  const keyPart = `${commentMark}${tt.prefix || ''}${tt.key}`;
+  return tt.value ? `${keyPart}=${tt.value}` : keyPart;
+}
+
+/**
+ * Validate that a byte buffer slice looks like an Amiga tooltype string
+ * (printable ASCII, optional trailing null).
+ */
+function looksLikeTooltypeBytes(buf: Buffer, start: number, len: number): boolean {
+  if (len < 2 || len > 512) return false;
+  if (start + len > buf.length) return false;
+  // Allow up to one trailing null (the normal terminator)
+  const endByte = buf[start + len - 1];
+  const payloadEnd = endByte === 0 ? start + len - 1 : start + len;
+  // Body must be printable ASCII (plus ESC 0x1b for ANSI in values)
+  for (let i = start; i < payloadEnd; i++) {
+    const c = buf[i];
+    if (c === 0x1b) continue;
+    if (c < 0x20 || c > 0x7e) return false;
+  }
+  // Must contain at least one letter or digit (not all whitespace/punct)
+  let hasAlpha = false;
+  for (let i = start; i < payloadEnd; i++) {
+    const c = buf[i];
+    if ((c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) {
+      hasAlpha = true;
+      break;
+    }
+  }
+  return hasAlpha;
+}
+
+/**
+ * Locate the tooltype array within a binary .info buffer. Returns the
+ * offset of the 4-byte count field (one word before the first entry's
+ * length prefix) and the offset just past the last entry, or null if no
+ * tooltype array is found.
+ *
+ * Strategy: scan forward from byte 78 (after minimum DiskObject header),
+ * looking for a 4-byte value N where N-4 is a valid entry length and
+ * the bytes at position+4 follow the `(len, string+\0)` pattern for at
+ * least one entry.
+ */
+function locateTooltypeArray(buf: Buffer): { countOffset: number; entriesEnd: number; strings: string[] } | null {
+  for (let scan = 40; scan < buf.length - 8; scan++) {
+    // Candidate count field at `scan`. Skip misaligned candidates early.
+    if (buf.readUInt32BE(scan) === 0) continue;
+    const count = buf.readUInt32BE(scan);
+    // Count must be (n+1)*4 with 1 <= n <= 200, so valid values are 8..804
+    if (count < 8 || count > 804 || count % 4 !== 0) continue;
+
+    const numEntries = count / 4 - 1;
+    let pos = scan + 4;
+    const strings: string[] = [];
+    let ok = true;
+
+    for (let i = 0; i < numEntries; i++) {
+      if (pos + 4 > buf.length) { ok = false; break; }
+      const entryLen = buf.readUInt32BE(pos);
+      if (entryLen < 2 || entryLen > 512) { ok = false; break; }
+      pos += 4;
+      if (pos + entryLen > buf.length) { ok = false; break; }
+      if (!looksLikeTooltypeBytes(buf, pos, entryLen)) { ok = false; break; }
+      // Require null terminator in the last byte (standard Amiga format)
+      if (buf[pos + entryLen - 1] !== 0) { ok = false; break; }
+      strings.push(buf.toString('latin1', pos, pos + entryLen - 1));
+      pos += entryLen;
+    }
+
+    if (ok && strings.length > 0) {
+      return { countOffset: scan, entriesEnd: pos, strings };
+    }
+  }
+  return null;
+}
+
+/**
+ * Fallback extraction: scan the whole file for ASCII blobs that look
+ * like tooltypes. Used for non-binary .info files or as a last resort
+ * when the structured parse fails.
+ */
+function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
   const tooltypes: Tooltype[] = [];
-  try {
-    if (!fs.existsSync(filePath)) return [];
-    
-    const buffer = fs.readFileSync(filePath);
-    if (buffer.length < 40) return [];
-
-    // Extract all printable ASCII sequences (2+ chars)
-    const extractedStrings: string[] = [];
-    let currentString = '';
-
-    for (let i = 0; i < buffer.length; i++) {
-      const charCode = buffer[i];
-      if (charCode >= 32 && charCode <= 126) {
-        currentString += String.fromCharCode(charCode);
-      } else {
-        if (currentString.length >= 2) extractedStrings.push(currentString);
-        currentString = '';
-      }
+  const extracted: string[] = [];
+  let current = '';
+  for (let i = 0; i < buffer.length; i++) {
+    const c = buffer[i];
+    if (c >= 0x20 && c <= 0x7e) {
+      current += String.fromCharCode(c);
+    } else {
+      if (current.length >= 2) extracted.push(current);
+      current = '';
     }
-    if (currentString.length >= 2) extractedStrings.push(currentString);
+  }
+  if (current.length >= 2) extracted.push(current);
 
-    for (const content of extractedStrings) {
-      const trimmed = content.trim();
-      if (!trimmed) continue;
-
-      let cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#']+/g, '');
-      let commented = false;
-      let prefix = '';
-
-      // Handle comments
-      if (cleaned.startsWith('!')) {
-        commented = true;
-        cleaned = cleaned.substring(1);
-      } else if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
-        commented = true;
-        cleaned = cleaned.substring(1, cleaned.length - 1);
-      }
-
-      // Handle Amiga prefixes
-      if (cleaned.startsWith('#') || cleaned.startsWith('+') || cleaned.startsWith('%') || cleaned.startsWith("'")) {
-        prefix = cleaned.substring(0, 1);
-        cleaned = cleaned.substring(1);
-      }
-
-      const eqIdx = cleaned.indexOf('=');
-      if (eqIdx !== -1) {
-        const key = cleaned.substring(0, eqIdx).toUpperCase().trim();
-        const value = cleaned.substring(eqIdx + 1).trim();
-        if (key && /^[A-Z0-9_.]+$/.test(key)) {
-          tooltypes.push({
-            key,
-            value,
-            commented,
-            prefix,
-            originalLine: content
-          });
-        }
-      } else {
-        // Flag mode: just the key
-        const key = cleaned.toUpperCase().trim();
-        if (key && /^[A-Z0-9_.]+$/.test(key)) {
-          tooltypes.push({
-            key,
-            value: '',
-            commented,
-            prefix,
-            originalLine: content
-          });
-        }
-      }
+  for (const raw of extracted) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!]+/, '');
+    const tt = parseTooltypeString(cleaned);
+    if (tt) {
+      tt.originalLine = raw;
+      tooltypes.push(tt);
     }
-  } catch (error) {
-    // console.error eliminated to prevent terminal pollution
   }
   return tooltypes;
 }
 
 /**
- * Parse .info file into components
+ * Parse an .info file into an InfoFile record. Supports both binary
+ * Amiga DiskObject icons and plain-text variants.
  */
 export function parseInfoFile(filePath: string): InfoFile {
   const buffer = fs.readFileSync(filePath);
   const isBinary = buffer.length > 2 && buffer[0] === 0xe3 && buffer[1] === 0x10;
-  
-  const tooltypes = extractTooltypes(filePath);
 
   if (!isBinary) {
-    // For text files, just treat tooltypes as the whole content (minus FORM trailer if present)
     const formIdx = buffer.indexOf('FORM');
     const iconData = formIdx !== -1 ? buffer.slice(formIdx) : Buffer.alloc(0);
+    const tooltypes = extractTooltypesFallback(buffer);
     return {
       filePath,
       isBinary: false,
       diskObject: Buffer.alloc(0),
       iconData,
       tooltypes,
-      rawBuffer: buffer
+      rawBuffer: buffer,
     };
   }
 
-  // BINARY MODE: Identify tooltype block boundaries
-  if (tooltypes.length === 0) {
+  const located = locateTooltypeArray(buffer);
+  if (located) {
+    const tooltypes: Tooltype[] = [];
+    for (const s of located.strings) {
+      const tt = parseTooltypeString(s);
+      if (tt) {
+        tooltypes.push(tt);
+      }
+    }
     return {
       filePath,
       isBinary: true,
-      diskObject: buffer.slice(0, 78),
-      iconData: buffer.slice(78),
-      tooltypes: [],
-      rawBuffer: buffer
+      diskObject: buffer.slice(0, located.countOffset),
+      iconData: buffer.slice(located.entriesEnd),
+      tooltypes,
+      rawBuffer: buffer,
     };
   }
 
-  let firstOffset = buffer.length;
-  let lastEndOffset = 0;
-
-  for (const tt of tooltypes) {
-    const idx = buffer.indexOf(tt.originalLine);
-    if (idx !== -1) {
-      if (idx < firstOffset) firstOffset = idx;
-      const end = idx + tt.originalLine.length;
-      if (end > lastEndOffset) lastEndOffset = end;
-    }
-  }
-
-  let end = lastEndOffset;
-  while (end < buffer.length && buffer[end] === 0) {
-    end++;
-  }
-
-  return {
+  // Binary file with no parseable tooltype array: preserve everything
+  // and expose the heuristic extraction for read-only access. Marked
+  // fallback so writeInfoFile knows not to corrupt the original
+  // structure.
+  const fallbackTooltypes = extractTooltypesFallback(buffer);
+  const info: InfoFile = {
     filePath,
     isBinary: true,
-    diskObject: buffer.slice(0, firstOffset),
-    iconData: buffer.slice(end),
-    tooltypes,
-    rawBuffer: buffer
+    diskObject: buffer,
+    iconData: Buffer.alloc(0),
+    tooltypes: fallbackTooltypes,
+    rawBuffer: buffer,
   };
+  (info as InfoFileInternal)._fallback = true;
+  return info;
 }
 
 /**
- * Write updated .info file
+ * Internal marker for files that didn't yield a parseable tooltype
+ * array. The writer treats these as read-only binary and refuses to
+ * re-serialize them (to avoid appending junk to structures it doesn't
+ * understand).
+ */
+interface InfoFileInternal extends InfoFile {
+  _fallback?: boolean;
+}
+
+/**
+ * Write an InfoFile back to disk. For binary files the tooltype array
+ * is serialized as a 4-byte BE count followed by length-prefixed,
+ * null-terminated entries — preserving the surrounding DiskObject
+ * structure, image data, and any trailing NewIcons chunks.
  */
 export function writeInfoFile(info: InfoFile): void {
-  const tooltypeBuffers: Buffer[] = [];
-
-  for (const tt of info.tooltypes) {
-    const prefix = tt.commented ? '!' : '';
-    const amigaPrefix = tt.prefix || '';
-    const line = `${prefix}${amigaPrefix}${tt.key}${tt.value ? '=' + tt.value : ''}`;
-    tooltypeBuffers.push(Buffer.from(line + '\0', 'utf8'));
-  }
-
   if (info.isBinary) {
-    tooltypeBuffers.push(Buffer.from('\0'));
+    if ((info as InfoFileInternal)._fallback) {
+      // We don't understand this file's internal structure; refuse to
+      // re-serialize it. Write the original bytes back unchanged.
+      fs.writeFileSync(info.filePath, info.rawBuffer);
+      return;
+    }
+
+    if (info.tooltypes.length === 0 && info.iconData.length === 0) {
+      // Opaque binary without a recognized tooltype section.
+      fs.writeFileSync(info.filePath, info.rawBuffer);
+      return;
+    }
+
+    const entryBuffers: Buffer[] = [];
+    for (const tt of info.tooltypes) {
+      // Preserve original on-disk bytes for untouched tooltypes
+      // (updateTooltype/removeTooltype re-write originalLine to a fresh
+      // render, so modified entries still round-trip through
+      // renderTooltype).
+      const str = tt.originalLine || renderTooltype(tt);
+      const strBuf = Buffer.from(str + '\0', 'latin1');
+      const lenBuf = Buffer.alloc(4);
+      lenBuf.writeUInt32BE(strBuf.length, 0);
+      entryBuffers.push(lenBuf, strBuf);
+    }
+
+    const countBuf = Buffer.alloc(4);
+    countBuf.writeUInt32BE((info.tooltypes.length + 1) * 4, 0);
+
+    fs.writeFileSync(
+      info.filePath,
+      Buffer.concat([info.diskObject, countBuf, ...entryBuffers, info.iconData])
+    );
+    return;
   }
 
-  const tooltypesBuffer = Buffer.concat(tooltypeBuffers);
-
-  let newBuffer: Buffer;
-  if (info.isBinary) {
-    newBuffer = Buffer.concat([
-      info.diskObject,
-      tooltypesBuffer,
-      info.iconData
-    ]);
-  } else {
-    const textLines = info.tooltypes.map(tt => {
-      const prefix = tt.commented ? '!' : '';
-      const amigaPrefix = tt.prefix || '';
-      return `${prefix}${amigaPrefix}${tt.key}${tt.value ? '=' + tt.value : ''}`;
-    }).join('\n') + '\n';
-    
-    newBuffer = Buffer.concat([
-      Buffer.from(textLines, 'utf8'),
-      info.iconData
-    ]);
-  }
-
-  fs.writeFileSync(info.filePath, newBuffer);
+  // Text mode: emit each tooltype on its own line, then any trailing FORM data.
+  const lines = info.tooltypes.map(renderTooltype).join('\n');
+  const textBuf = Buffer.from(lines + (lines ? '\n' : ''), 'utf8');
+  fs.writeFileSync(info.filePath, Buffer.concat([textBuf, info.iconData]));
 }
 
 /**
- * TooltypeEditor - Batch editor for .info files
+ * Editor class — thin wrapper so callers can chain mutations.
  */
 export class TooltypeEditor {
   private info: InfoFile;
@@ -227,12 +332,12 @@ export class TooltypeEditor {
     return this.info.tooltypes;
   }
 
-  public set(key: string, value: string, commented: boolean = false, prefix: string = ''): this {
+  public set(key: string, value: string, commented = false, prefix = ''): this {
     this.info = updateTooltype(this.info, key, value, commented, prefix);
     return this;
   }
 
-  public add(key: string, value: string, commented: boolean = false, prefix: string = ''): this {
+  public add(key: string, value: string, commented = false, prefix = ''): this {
     return this.set(key, value, commented, prefix);
   }
 
@@ -255,33 +360,27 @@ export class TooltypeEditor {
   }
 }
 
-/**
- * Utility functions for updating tooltypes
- */
 export function updateTooltype(
-  info: InfoFile, 
-  key: string, 
-  value: string, 
-  commented: boolean, 
-  prefix: string = ''
+  info: InfoFile,
+  key: string,
+  value: string,
+  commented: boolean,
+  prefix = ''
 ): InfoFile {
   const upperKey = key.toUpperCase();
   const existingIndex = info.tooltypes.findIndex(tt => tt.key === upperKey);
+  const effectivePrefix = prefix || (existingIndex !== -1 ? info.tooltypes[existingIndex].prefix : '');
 
-  const newTt = {
+  const newTt: Tooltype = {
     key: upperKey,
     value,
     commented,
-    prefix,
-    originalLine: `${commented ? '!' : ''}${prefix}${upperKey}${value ? '=' + value : ''}`
+    prefix: effectivePrefix,
+    originalLine: '',
   };
+  newTt.originalLine = renderTooltype(newTt);
 
   if (existingIndex !== -1) {
-    // Preserve existing prefix if not provided
-    if (!prefix && info.tooltypes[existingIndex].prefix) {
-      newTt.prefix = info.tooltypes[existingIndex].prefix;
-      newTt.originalLine = `${commented ? '!' : ''}${newTt.prefix}${upperKey}${value ? '=' + value : ''}`;
-    }
     info.tooltypes[existingIndex] = newTt;
   } else {
     info.tooltypes.push(newTt);
@@ -290,11 +389,11 @@ export function updateTooltype(
 }
 
 export function addTooltype(
-  info: InfoFile, 
-  key: string, 
-  value: string, 
-  commented: boolean = false, 
-  prefix: string = ''
+  info: InfoFile,
+  key: string,
+  value: string,
+  commented = false,
+  prefix = ''
 ): InfoFile {
   const upperKey = key.toUpperCase();
   if (info.tooltypes.some(tt => tt.key === upperKey)) {
@@ -305,12 +404,10 @@ export function addTooltype(
 
 export function toggleTooltypeComment(info: InfoFile, key: string): InfoFile {
   const upperKey = key.toUpperCase();
-  const tt = info.tooltypes.find(tt => tt.key === upperKey);
+  const tt = info.tooltypes.find(t => t.key === upperKey);
   if (tt) {
     tt.commented = !tt.commented;
-    const prefix = tt.commented ? '!' : '';
-    const amigaPrefix = tt.prefix || '';
-    tt.originalLine = `${prefix}${amigaPrefix}${tt.key}${tt.value ? '=' + tt.value : ''}`;
+    tt.originalLine = renderTooltype(tt);
   }
   return info;
 }
