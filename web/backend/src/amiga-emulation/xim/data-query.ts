@@ -17,6 +17,25 @@ import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
 
+const DATE_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DATE_WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+/**
+ * Format a Date as express.e's formatCDateTime output:
+ * "Wkd DD-Mmm-YYYY HH:MM:SS" — 24 characters, fits WarOLM's `%-24.24s`
+ * field and every other door that embeds the string in a fixed slot.
+ */
+function formatCDateTime(d: Date): string {
+  const wkd = DATE_WEEKDAYS[d.getDay()];
+  const day = d.getDate().toString().padStart(2, '0');
+  const mon = DATE_MONTHS[d.getMonth()];
+  const yr  = d.getFullYear().toString().padStart(4, '0');
+  const hh  = d.getHours().toString().padStart(2, '0');
+  const mm  = d.getMinutes().toString().padStart(2, '0');
+  const ss  = d.getSeconds().toString().padStart(2, '0');
+  return `${wkd} ${day}-${mon}-${yr} ${hh}:${mm}:${ss}`;
+}
+
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
@@ -580,40 +599,25 @@ debugLog(`  [READ] DT_HOSTIP: "${hostip}"`);
 
       case XIMCommand.DT_STAMP_LASTON:
         if (isRead) {
-          // Format as Amiga-style date: "DD-MMM-YY HH:MM:SS"
-          // Based on express.e:3769 formatCDateTime(loggedOnUser.timeLastOn,tempstring)
+          // express.e:3769 formatCDateTime(loggedOnUser.timeLastOn,tempstring)
+          // 24-char field: WarOLM and other doors embed the result in a
+          // %-24.24s slot. Format: "Wkd DD-Mmm-YYYY HH:MM:SS".
           if (user?.lastLogin || user?.timeLastOn) {
-            const lastOn = new Date(user.lastLogin || user.timeLastOn!);
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const day = lastOn.getDate().toString().padStart(2, '0');
-            const month = months[lastOn.getMonth()];
-            const year = lastOn.getFullYear().toString().slice(-2);
-            const hours = lastOn.getHours().toString().padStart(2, '0');
-            const minutes = lastOn.getMinutes().toString().padStart(2, '0');
-            const seconds = lastOn.getSeconds().toString().padStart(2, '0');
-            const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+            const amigaDate = formatCDateTime(new Date(user.lastLogin || user.timeLastOn!));
             this.messageParser.writeString(stringAddr, amigaDate, 200);
 debugLog(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
           } else {
-            this.messageParser.writeString(stringAddr, '01-Jan-70 00:00:00', 200);
-debugLog(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
+            // 1970-01-01 00:00:00 UTC was a Thursday.
+            this.messageParser.writeString(stringAddr, 'Thu 01-Jan-1970 00:00:00', 200);
+debugLog(`  [READ] DT_STAMP_LASTON: "Thu 01-Jan-1970 00:00:00" (never logged in)`);
           }
         }
         break;
 
       case XIMCommand.DT_STAMP_CTIME:
         if (isRead) {
-          // Format as Amiga-style date: "DD-MMM-YY HH:MM:SS"
-          // Based on express.e:3775 formatCDateTime(getSystemTime(),tempstring)
-          const now = getSystemTime();
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const day = now.getDate().toString().padStart(2, '0');
-          const month = months[now.getMonth()];
-          const year = now.getFullYear().toString().slice(-2);
-          const hours = now.getHours().toString().padStart(2, '0');
-          const minutes = now.getMinutes().toString().padStart(2, '0');
-          const seconds = now.getSeconds().toString().padStart(2, '0');
-          const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+          // express.e:3775 formatCDateTime(getSystemTime(),tempstring)
+          const amigaDate = formatCDateTime(getSystemTime());
           this.messageParser.writeString(stringAddr, amigaDate, 200);
 debugLog(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
         }

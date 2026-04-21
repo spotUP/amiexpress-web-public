@@ -3385,7 +3385,14 @@ export async function initializeDoors() {
       internal: cmdDef.internal,
       args: cmdDef.args,
       toolTypes: cmdDef.toolTypes,
-      category: cmdDef.toolTypes?.['CATEGORY'] || undefined
+      // Prefer explicit CATEGORY tooltype; otherwise bucket 68K binaries under
+      // "Amiga 68K" so they aren't hidden in "Misc" next to unclassified TS doors.
+      // Without this fallback, ~60 XIM/AIM/SIM/TIM doors all collapse into Misc
+      // and look absent from category-based menus like doors-menu.
+      category: cmdDef.toolTypes?.['CATEGORY'] ||
+        (['XIM','AIM','SIM','TIM','IIM'].includes((cmdDef.type || '').toUpperCase())
+          ? 'Amiga 68K'
+          : undefined)
     };
 
     bbsCmdDoors.push(door);

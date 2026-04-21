@@ -99,6 +99,19 @@ app.use('/api', doorApiRouter);
 // Deployment API routes
 app.use('/api', deploymentRouter);
 
+// Debug-MCP routes — dev-only, read-only introspection for the MCP sidecar.
+// See mcp-server-debug/ and web/backend/src/debug/debug-mcp.routes.ts.
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const { createDebugMcpRouter } = require('../debug/debug-mcp.routes');
+    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../..');
+    app.use('/debug/api', createDebugMcpRouter(bbsRoot));
+    console.log('[debug-mcp] endpoints mounted at /debug/api (NODE_ENV=' + (process.env.NODE_ENV || 'unset') + ')');
+  } catch (err) {
+    console.warn('[debug-mcp] failed to mount:', err);
+  }
+}
+
 // Error logger + responder (HTTP)
 const errorLogPath = path.join(logsDir, 'error.log');
 app.use(

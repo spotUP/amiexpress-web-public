@@ -523,6 +523,12 @@ const io = new Server(server, {
 // Initialize BBS event emitter for LiveChat integration
 bbsEventEmitter.setIO(io);
 
+// Expose io on global so emulator-side code paths (e.g. cross-node
+// JH_SM routing in door-message-callbacks.ts) can emit into other
+// sessions' sockets without threading io through every constructor.
+// Mirrors the existing globalAny.currentBbsSession pattern.
+(global as any).io = io;
+
 // CRITICAL: Process-level error handlers to prevent crashes
 process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
 console.error("[CRITICAL] Unhandled Promise Rejection:", reason);

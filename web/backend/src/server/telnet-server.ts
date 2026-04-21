@@ -463,13 +463,13 @@ console.log('[Telnet Server] Stopped');
     const remoteAddress = socket.remoteAddress || 'unknown';
 
     // Silently ignore localhost probe connections (Render.com internal health checks/service discovery)
-    // These spam the logs but don't represent real user connections
+    // These spam the logs but don't represent real user connections.
+    // Dev note: only apply in production. Local debugging (scripted repros, curl-driven tests)
+    // legitimately connects from localhost.
     const isLocalhost = remoteAddress === '::1' || remoteAddress === '127.0.0.1' ||
                         remoteAddress === '::ffff:127.0.0.1' || remoteAddress === 'localhost';
 
-    // Localhost probes: just close immediately without creating a session
-    // This prevents resource waste from Render.com health probes hitting the telnet port
-    if (isLocalhost) {
+    if (isLocalhost && process.env.NODE_ENV === 'production') {
       socket.end();
       return;
     }

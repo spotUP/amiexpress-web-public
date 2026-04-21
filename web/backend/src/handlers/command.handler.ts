@@ -987,6 +987,28 @@ console.log('[handleCommand] ANSI prompt input ignored until screen command comp
       }
       // Telnet often sends CR followed by NUL; strip NULs for control handling.
       const cleanData = data.replace(/\0/g, '');
+
+      // Multi-char input path (debug-mcp, paste, or telnet line-buffered
+      // delivery of "answer\r" in one chunk): accumulate printable chars
+      // into the buffer and re-dispatch a bare CR to this same handler
+      // so the Enter-path below runs exactly once. Recursing preserves
+      // the single-char fast path everyone else still uses.
+      if (cleanData.length > 1) {
+        const crIdx = cleanData.search(/[\r\n]/);
+        const head = crIdx === -1 ? cleanData : cleanData.slice(0, crIdx);
+        for (const ch of head) {
+          if (ch >= ' ' && ch <= '~') {
+            session.tempData = session.tempData || {};
+            session.tempData.inputBuffer = (session.tempData.inputBuffer || '') + ch;
+            emitText(socket, ch);
+          }
+        }
+        if (crIdx !== -1) {
+          return handleCommand(socket, session, '\r');
+        }
+        return;
+      }
+
       // express.e:29530-29546 - Line input for ANSI prompt (not single keypress!)
       // Buffer input until Enter is pressed
       if (cleanData === '\r' || cleanData === '\n' || cleanData === '\r\n') {

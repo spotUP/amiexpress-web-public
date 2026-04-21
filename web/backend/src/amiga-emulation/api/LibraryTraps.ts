@@ -1952,6 +1952,13 @@ console.log(
    */
   private loadLvoOffsetsFromFile(): void {
     const candidates = [
+      // Primary location: Documentation tree (where the file actually lives)
+      path.resolve(process.cwd(), "Documentation/7-Reference Sources/LVOs.i"),
+      path.resolve(process.cwd(), "../Documentation/7-Reference Sources/LVOs.i"),
+      path.resolve(process.cwd(), "../../Documentation/7-Reference Sources/LVOs.i"),
+      path.resolve(__dirname, "../../../../Documentation/7-Reference Sources/LVOs.i"),
+      path.resolve(__dirname, "../../../../../Documentation/7-Reference Sources/LVOs.i"),
+      // Legacy/optional location
       path.resolve(process.cwd(), "dev/docs/LVOs.i"),
       path.resolve(process.cwd(), "../dev/docs/LVOs.i"),
       path.resolve(process.cwd(), "../../dev/docs/LVOs.i"),

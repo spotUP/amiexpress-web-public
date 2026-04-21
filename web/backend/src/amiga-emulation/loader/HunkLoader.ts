@@ -95,10 +95,29 @@ export interface Relocation {
   isPcRelative?: boolean; // For HUNK_RELRELOC32
 }
 
+export interface HunkSymbol {
+  name: string;
+  // Absolute address: segments[segmentIndex].address + offset (filled in after parse)
+  address: number;
+  // Offset within the owning segment
+  offset: number;
+}
+
+export interface HunkDebugLine {
+  filename: string;
+  // Base offset within the owning segment (from HUNK_DEBUG header)
+  baseOffset: number;
+  entries: { line: number; offset: number }[];
+}
+
 export interface HunkFile {
   segments: HunkSegment[];
   relocations: Map<number, Relocation[]>;
   entryPoint: number;
+  // Per-segment symbol tables (empty array for segments without HUNK_SYMBOL)
+  symbols: HunkSymbol[][];
+  // Per-segment debug line tables (best-effort HCLN/LINE parser; unknown formats skipped)
+  debugLines: HunkDebugLine[][];
 }
 
 export class HunkLoaderError extends Error {
@@ -130,6 +149,14 @@ export class HunkLoader {
     const segmentAddresses = this.allocateSegmentAddresses(header.segmentSizes, header.memFlags);
     const segments: HunkSegment[] = [];
     const relocations = new Map<number, Relocation[]>();
+    const symbols: HunkSymbol[][] = Array.from(
+      { length: header.segmentSizes.length },
+      () => [] as HunkSymbol[]
+    );
+    const debugLines: HunkDebugLine[][] = Array.from(
+      { length: header.segmentSizes.length },
+      () => [] as HunkDebugLine[]
+    );
     let activeSegmentIndex = -1;
 
     while (this.position < this.buffer.length) {
@@ -262,14 +289,22 @@ console.warn("[HunkLoader] HUNK_ABSRELOC16 found - using standard relocation sem
         }
 
         case HunkType.HUNK_SYMBOL: {
-          // Symbol table: string + offset pairs until empty string
-          this.skipSymbolBlock();
+          // Symbol table: string + offset pairs until empty string.
+          // Attach to whichever segment is currently active — if somehow none is,
+          // the symbols still consume the bytes but are dropped.
+          const parsed = this.parseSymbolBlock();
+          if (activeSegmentIndex >= 0 && activeSegmentIndex < symbols.length) {
+            symbols[activeSegmentIndex].push(...parsed);
+          }
           break;
         }
 
         case HunkType.HUNK_DEBUG: {
-          // Debug info: longword count + data
-          this.skipDebugBlock();
+          // Debug info: best-effort LINE/HCLN parse; unknown formats consumed silently.
+          const parsed = this.parseDebugBlock();
+          if (parsed && activeSegmentIndex >= 0 && activeSegmentIndex < debugLines.length) {
+            debugLines[activeSegmentIndex].push(parsed);
+          }
           break;
         }
 
@@ -312,7 +347,7 @@ console.warn(`[HunkLoader] Skipping HUNK_${hunkType === HunkType.HUNK_OVERLAY ? 
           // Per AmigaDOS v31+: unknown hunks > HUNK_ABSRELOC16 treated as debug
           if (hunkType > HunkType.HUNK_ABSRELOC16) {
 console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as debug block`);
-            this.skipDebugBlock();
+            this.parseDebugBlock();
           } else {
             throw new HunkLoaderError(`Unknown hunk type 0x${hunkType.toString(16)}`);
           }
@@ -326,7 +361,25 @@ console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as de
       segmentAddresses[0]?.dataAddress ||
       0x1000;
 
-    return { segments, relocations, entryPoint };
+    // Resolve symbol absolute addresses using allocated segment base addresses
+    for (let i = 0; i < segments.length; i++) {
+      const base = segments[i].address;
+      for (const sym of symbols[i]) {
+        sym.address = (base + sym.offset) >>> 0;
+      }
+    }
+
+    // Trim symbol/debug arrays to match actually-created segments (in case of BSS etc.)
+    const segSymbols = symbols.slice(0, segments.length);
+    const segDebug = debugLines.slice(0, segments.length);
+
+    return {
+      segments,
+      relocations,
+      entryPoint,
+      symbols: segSymbols,
+      debugLines: segDebug,
+    };
   }
 
   /**
@@ -391,6 +444,12 @@ console.log(
         const verify = emulator.readMemory32(patchAddress);
 console.log(`[HunkLoader] ✓ Patch verified: 0x${verify.toString(16)}`);
       }
+
+      // Broad scan for unrelocated 0x200xxx pointers was too aggressive
+      // (false positives on instruction bytes), reverted. Per-instruction
+      // disassembly would be required to safely patch more. See
+      // JOINCNF_MISSING_RELOCATIONS_2026-01-07.md for the ~37 candidate
+      // offsets; a disassembler-based patcher remains a follow-up.
     }
 
     let totalRelocs = 0;
@@ -560,23 +619,89 @@ console.log(
   }
 
   /**
-   * Skip HUNK_SYMBOL block.
+   * Parse HUNK_SYMBOL block.
+   * Format: repeated (name_length_longs, name_longs, offset) until length=0.
+   * The high 8 bits of the length word are a symbol type (unused here, masked off).
+   * Names are space-padded to longword boundary; we trim trailing nulls and spaces.
    */
-  private skipSymbolBlock(): void {
+  private parseSymbolBlock(): HunkSymbol[] {
+    const symbols: HunkSymbol[] = [];
     while (true) {
-      const nameLength = this.readLong();
-      if (nameLength === 0) break;
-      // Skip name (nameLength longwords) + offset (1 longword)
-      this.position += (nameLength & 0xffffff) * 4 + 4;
+      const lengthWord = this.readLong();
+      if (lengthWord === 0) break;
+      const nameLongs = lengthWord & 0x00ffffff;
+      const nameBytes = this.readBytes(nameLongs * 4);
+      const offset = this.readLong() | 0; // Treat as signed for safety
+      // Strip trailing NULs / padding spaces
+      let end = nameBytes.length;
+      while (end > 0 && (nameBytes[end - 1] === 0 || nameBytes[end - 1] === 0x20)) end--;
+      const name = nameBytes.toString("latin1", 0, end);
+      symbols.push({ name, address: 0, offset });
     }
+    return symbols;
   }
 
   /**
-   * Skip HUNK_DEBUG block.
+   * Parse HUNK_DEBUG block (best-effort).
+   * Format (per docs):
+   *   Longword: numLongs (size of the debug payload in longs, NOT including this length)
+   *   Payload: numLongs * 4 bytes. Structure is compiler-specific.
+   *
+   * We try to recognise the common "LINE"/"HCLN" tagged format used by SAS/C & E:
+   *   baseOffset (long), tag ('LINE'/'HCLN'), nameLongs, name..., (line,offset) pairs
+   *
+   * Anything we don't recognise is skipped cleanly (bytes consumed, no entry emitted).
    */
-  private skipDebugBlock(): void {
+  private parseDebugBlock(): HunkDebugLine | null {
     const numLongs = this.readLong();
-    this.position += numLongs * 4;
+    const payloadBytes = numLongs * 4;
+    const start = this.position;
+    const end = start + payloadBytes;
+    if (end > this.buffer.length) {
+      // Truncated; advance to EOF to avoid infinite loops upstream
+      this.position = this.buffer.length;
+      return null;
+    }
+
+    let result: HunkDebugLine | null = null;
+    try {
+      if (numLongs >= 3) {
+        const baseOffset = this.buffer.readUInt32BE(start);
+        const tag = this.buffer.readUInt32BE(start + 4);
+        const LINE = 0x4c494e45; // 'LINE'
+        const HCLN = 0x48434c4e; // 'HCLN' (HSOFTLINE)
+        if (tag === LINE || tag === HCLN) {
+          let p = start + 8;
+          const nameLongs = this.buffer.readUInt32BE(p);
+          p += 4;
+          const nameBytesLen = nameLongs * 4;
+          if (p + nameBytesLen <= end) {
+            const nameBuf = this.buffer.slice(p, p + nameBytesLen);
+            p += nameBytesLen;
+            let nameEnd = nameBuf.length;
+            while (nameEnd > 0 && (nameBuf[nameEnd - 1] === 0 || nameBuf[nameEnd - 1] === 0x20)) {
+              nameEnd--;
+            }
+            const filename = nameBuf.toString("latin1", 0, nameEnd);
+            const entries: { line: number; offset: number }[] = [];
+            while (p + 8 <= end) {
+              const line = this.buffer.readUInt32BE(p);
+              const offset = this.buffer.readUInt32BE(p + 4);
+              p += 8;
+              entries.push({ line, offset });
+            }
+            result = { filename, baseOffset, entries };
+          }
+        }
+      }
+    } catch {
+      // Malformed debug block — skip it
+      result = null;
+    }
+
+    // Always advance by the declared payload length, whatever we parsed
+    this.position = end;
+    return result;
   }
 
   /**

@@ -227,9 +227,20 @@ console.log(`  Raw16 data=${data16} cmd=${cmd16} node=${node16} line=${line16}`)
   /**
    * Write to the embedded message string (msg->String)
    * Also updates strPtr to point to the embedded buffer in case door reads via pointer
+   *
+   * CLEARS the full 200-byte buffer first. Without this, short replies
+   * (e.g. DT_SECSTATUS writes "255\0" = 4 bytes) leave tail bytes from
+   * the previous message intact. Doors that read the buffer by length
+   * rather than null-termination — or that accidentally do so via a
+   * printf-style format — then render the stale bytes. Observed with
+   * dRE!WAll, where a DT_SECSTATUS reply of "255" leaked the prior
+   * JH_WRITE's clear-line escape onto the display as `Write Anonymous ? (N/y) :255`.
    */
   writeMessageString(msgAddr: number, value: string): void {
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+
+    // Zero the full buffer before the new value so nothing leaks past \0
+    this.clearString(stringAddr);
 
     // Write the string to embedded buffer
     this.writeString(stringAddr, value, DoorConstants.MESSAGE_STRING_CAPACITY);

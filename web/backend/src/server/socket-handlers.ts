@@ -145,6 +145,30 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   const clientIp = socket.handshake.address;
 console.log(`Client connected from ${clientIp}`);
 
+  // Debug MCP: tee every 'ansi-output' emit into a per-node ring buffer.
+  // Dev-only. Transparent to the socket (we still call the original emit).
+  // Applied exactly once per socket via a marker flag.
+  if (process.env.NODE_ENV !== 'production' && !(socket as any).__ansiTapInstalled) {
+    (socket as any).__ansiTapInstalled = true;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { outputTap } = require('../debug/OutputTap');
+      const origEmit = socket.emit.bind(socket);
+      (socket as any).emit = function (event: string, ...args: any[]): boolean {
+        if (event === 'ansi-output' && typeof args[0] === 'string') {
+          const sess = getSession(socket.id);
+          const nodeId = sess?.nodeId;
+          if (typeof nodeId === 'number' && nodeId > 0) {
+            outputTap.push(nodeId, args[0] as string);
+          }
+        }
+        return origEmit(event, ...args);
+      };
+    } catch (err) {
+console.warn('[debug-mcp] failed to install ansi-output tap:', err);
+    }
+  }
+
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
 console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);

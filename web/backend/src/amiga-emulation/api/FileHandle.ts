@@ -131,17 +131,14 @@ console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" f
       if (mode === 'r') {
         flags = fs.constants.O_RDONLY;
       } else if (mode === 'w') {
-        // CRITICAL FIX: MODE_NEWFILE without O_TRUNC
-        // On AmigaOS, MODE_NEWFILE creates/opens for writing but may NOT truncate
-        // if the file is already open for reading. The truncation happens on Close().
-        // This matches dRE!WAll behavior where it:
-        // 1. Opens for read (gets old data)
-        // 2. Opens for write (file NOT truncated yet)
-        // 3. Assembles new record in memory
-        // 4. Writes new record
-        // 5. Closes write handle (NOW file is replaced)
-        flags = fs.constants.O_WRONLY | fs.constants.O_CREAT;
-console.log(`[FileHandle] Opening "${this.amiPath}" for WRITE WITHOUT O_TRUNC - preserving existing content`);
+        // AmigaDOS MODE_NEWFILE: create or TRUNCATE existing file, exclusive write.
+        // Previously this omitted O_TRUNC as a dRE!WAll-specific workaround, but
+        // that corrupted fixed-record files written by other doors (bytekiller's
+        // Fakelist.N — a 486-byte fixed layout — got partially overwritten with
+        // a short new record, leaving stale bytes in the tail). dRE!WAll is
+        // still broken for unrelated reasons (see dRE_WALL_HANDOFF.md) so the
+        // workaround was net-negative. Back to correct AmigaDOS semantics.
+        flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC;
       } else { // 'rw'
         flags = fs.constants.O_RDWR | fs.constants.O_CREAT;
       }

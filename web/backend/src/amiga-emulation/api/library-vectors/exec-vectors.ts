@@ -247,10 +247,21 @@ console.log(
           str += String.fromCharCode(ch);
         }
 console.log(`[ExecLibrary][GetMsg] Door received message:`);
-console.log(`  ln_Type=${msgType} (6=NT_REPLYMSG)`);
+console.log(`  msgAddr=0x${result.toString(16)} ln_Type=${msgType} (6=NT_REPLYMSG)`);
 console.log(`  Command=${command} (at 0xE0)`);
 console.log(`  Data=${data} (at 0xDC)`);
 console.log(`  String="${str}" (at 0x14)`);
+        // DEBUG dRE!WAll: dump raw bytes at offsets 0x00, 0x14, 0x100 to rule out field confusion
+        if (process.env.DREWALL_TRACE === '1' && command === 100) {
+          const dump = (off: number, len: number) => {
+            const bs: number[] = [];
+            for (let i = 0; i < len; i++) bs.push(emu.readMemory(result + off + i));
+            return bs.map(b => b.toString(16).padStart(2, '0')).join(' ');
+          };
+          console.log(`  [DT_NAME_DEBUG] getMsg raw @msg+0x00..0x13: ${dump(0, 20)}`);
+          console.log(`  [DT_NAME_DEBUG] getMsg raw @msg+0x14..0x27: ${dump(0x14, 20)}`);
+          console.log(`  [DT_NAME_DEBUG] getMsg raw @msg+0x100..0x107: ${dump(0x100, 8)} (strPtr)`);
+        }
       }
 
       return result;
@@ -515,6 +526,32 @@ console.log(
           )} back to pool 0x${pool.toString(16)}`
         );
       }
+      return 0;
+    },
+  },
+  {
+    // _LVOCopyMem — critical for any V36+ binary doing struct copies (memcpy semantics).
+    // Previously missing from the vector list AND missing from LVOs.i stub fallback (wrong path).
+    // Symptom: doors call `jsr -0x270(a6)` and the copy silently no-ops, leaving allocated
+    // buffers zero-filled where they should contain the source data.
+    offset: -624,
+    name: "CopyMem",
+    handler: (emu, lib: ExecLibrary) => {
+      const src = emu.getRegister(8);  // A0 = source
+      const dst = emu.getRegister(9);  // A1 = destination
+      const size = emu.getRegister(0); // D0 = size in bytes
+      lib.copyMem(src, dst, size);
+      return 0; // CopyMem returns void
+    },
+  },
+  {
+    offset: -630,
+    name: "CopyMemQuick",
+    handler: (emu, lib: ExecLibrary) => {
+      const src = emu.getRegister(8);
+      const dst = emu.getRegister(9);
+      const size = emu.getRegister(0);
+      lib.copyMemQuick(src, dst, size);
       return 0;
     },
   },
