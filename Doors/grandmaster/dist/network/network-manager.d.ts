@@ -66,6 +66,7 @@ export declare class GrandmasterNetworkManager {
     private network;
     private matchState;
     private localPlayerId;
+    private localPlayerName;
     private opponentStates;
     private updateCallbacks;
     private attackCallbacks;

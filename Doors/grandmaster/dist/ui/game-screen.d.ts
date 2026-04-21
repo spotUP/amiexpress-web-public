@@ -13,6 +13,8 @@ export declare class GameScreen {
     private sounds;
     private state;
     private running;
+    private stoppedEarly;
+    private cleanedUp;
     private boardBox;
     private nextBox;
     private holdBox;
@@ -185,5 +187,9 @@ export declare class GameScreen {
     private showGameOver;
     private waitForKey;
     private cleanup;
+    /**
+     * Stop the game loop early without showing game over (for attract mode exit)
+     */
+    stop(): void;
 }
 //# sourceMappingURL=game-screen.d.ts.map

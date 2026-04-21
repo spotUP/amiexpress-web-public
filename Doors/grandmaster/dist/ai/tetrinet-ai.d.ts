@@ -1,0 +1,74 @@
+/**
+ * TetriNET AI Player Controller
+ *
+ * AI logic for TetriNET local multiplayer mode.
+ * Supports difficulty levels 1-10 with different behaviors.
+ */
+import { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
+/**
+ * AI difficulty levels
+ */
+export type AIDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+/**
+ * AI opponent data
+ */
+export interface AIOpponent {
+    id: string;
+    name: string;
+    engine: TetriNetEngine;
+    difficulty: AIDifficulty;
+    thinkTime: number;
+    nextMoveTime: number;
+    alive: boolean;
+}
+/**
+ * Get random AI name for difficulty
+ */
+export declare function getAIName(difficulty: AIDifficulty): string;
+/**
+ * TetriNET AI Controller
+ */
+export declare class TetriNetAI {
+    private opponents;
+    /**
+     * Create AI opponents
+     */
+    createOpponents(count: number, difficulty: AIDifficulty, settings: any, gameOptions: any): AIOpponent[];
+    /**
+     * Get all opponents
+     */
+    getOpponents(): AIOpponent[];
+    /**
+     * Update AI opponents (call each game tick)
+     */
+    update(deltaTime: number): void;
+    /**
+     * Make a move for AI opponent
+     */
+    private makeMove;
+    /**
+     * Decide next action based on difficulty
+     */
+    private decideAction;
+    /**
+     * Find best move (for high difficulty AI)
+     */
+    private findBestMove;
+    /**
+     * Use a special block
+     */
+    private useSpecial;
+    /**
+     * Pick attack target
+     */
+    private pickTarget;
+    /**
+     * Check if all AI opponents are dead
+     */
+    allDead(): boolean;
+    /**
+     * Cleanup AI opponents
+     */
+    destroy(): void;
+}
+//# sourceMappingURL=tetrinet-ai.d.ts.map

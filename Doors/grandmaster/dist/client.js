@@ -47,6 +47,7 @@ class GrandmasterAudioClient {
         this.sfxVolume = 1;
         this.musicVolume = 0.8;
         this.currentMusic = null;
+        this.currentToneMusicFile = null; // Track which Tone player is playing music
         this.toneReady = false;
         this.tonePlayers = new Map();
         this.toneLoads = new Map();
@@ -127,11 +128,25 @@ class GrandmasterAudioClient {
         });
     }
     stopMusic() {
-        if (!this.currentMusic)
-            return;
-        this.currentMusic.pause();
-        this.currentMusic.currentTime = 0;
-        this.currentMusic = null;
+        // Stop HTMLAudioElement music
+        if (this.currentMusic) {
+            this.currentMusic.pause();
+            this.currentMusic.currentTime = 0;
+            this.currentMusic = null;
+        }
+        // Stop Tone.js music player
+        if (this.currentToneMusicFile) {
+            const player = this.tonePlayers.get(this.currentToneMusicFile);
+            if (player) {
+                try {
+                    player.stop();
+                }
+                catch {
+                    // Player may already be stopped
+                }
+            }
+            this.currentToneMusicFile = null;
+        }
     }
     async playFile(file, volume) {
         if (this.toneReady) {
@@ -205,6 +220,7 @@ class GrandmasterAudioClient {
             player.loop = loop;
             player.volume.value = volume <= 0 ? -Infinity : Tone.gainToDb(volume);
             player.start();
+            this.currentToneMusicFile = file; // Track for stopMusic()
         }
         catch {
             const audio = new Audio(file);

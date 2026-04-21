@@ -8,7 +8,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AttractScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 const game_1 = require("../core/game");
 const bot_player_1 = require("../ai/bot-player");
 const game_screen_1 = require("./game-screen");
@@ -110,7 +109,7 @@ class AttractScreen {
         });
         this.demoBox.hide(); // Hidden during boot
         // Info panel (right side) - hidden initially
-        this.infoBox = (0, dockable_1.createDockable)({
+        this.infoBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 2,
             left: 30,
@@ -120,7 +119,7 @@ class AttractScreen {
             style: { bg: 'black', border: { fg: 'yellow' } },
             align: 'center',
             content: '',
-            persistenceKey: 'grandmaster.attract.info',
+            fixed: true,
         });
         this.infoBox.hide(); // Hidden during boot
         // Effects overlay
@@ -934,6 +933,11 @@ class AttractScreen {
             return;
         this.running = false;
         this.demoRunning = false;
+        // Stop the demo game screen if running (prevents game_over showing after attract exit)
+        if (this.gameScreen) {
+            this.gameScreen.stop();
+            this.gameScreen = null;
+        }
         if (this.updateInterval) {
             clearInterval(this.updateInterval);
             this.updateInterval = null;
@@ -962,6 +966,11 @@ class AttractScreen {
     cleanup() {
         this.running = false;
         this.demoRunning = false;
+        // Stop the demo game screen if running (prevents game_over showing after attract exit)
+        if (this.gameScreen) {
+            this.gameScreen.stop();
+            this.gameScreen = null;
+        }
         if (this.updateInterval) {
             clearInterval(this.updateInterval);
             this.updateInterval = null;

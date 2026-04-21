@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 const pieces_1 = require("../core/pieces");
 const board_1 = require("../core/board");
 const screen_shake_1 = require("../effects/screen-shake");
@@ -24,6 +23,8 @@ class GameScreen {
         this.sounds = sounds;
         this.state = state;
         this.running = false;
+        this.stoppedEarly = false; // True if stopped externally (not gameover)
+        this.cleanedUp = false; // Prevent double cleanup
         this.lastRender = 0;
         this.RENDER_FPS = 20; // Reduced for BBS efficiency
         this.RENDER_INTERVAL = 1000 / this.RENDER_FPS;
@@ -88,10 +89,17 @@ class GameScreen {
             const gameLoop = setInterval(() => {
                 if (!this.running) {
                     clearInterval(gameLoop);
-                    this.showGameOver().then(() => {
+                    // Only show game over if not stopped early (e.g., attract mode exit)
+                    if (this.stoppedEarly) {
                         this.cleanup();
                         resolve();
-                    });
+                    }
+                    else {
+                        this.showGameOver().then(() => {
+                            this.cleanup();
+                            resolve();
+                        });
+                    }
                     return;
                 }
                 const now = Date.now();
@@ -358,7 +366,7 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'white' } },
             fixed: true,
         });
-        this.nextBox = (0, dockable_1.createDockable)({
+        this.nextBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
             left: 25,
@@ -367,9 +375,9 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'cyan' } },
             label: ' NEXT ',
-            persistenceKey: 'grandmaster.game.next',
+            fixed: true,
         });
-        this.holdBox = (0, dockable_1.createDockable)({
+        this.holdBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 14,
             left: 25,
@@ -378,9 +386,9 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'magenta' } },
             label: ' HOLD ',
-            persistenceKey: 'grandmaster.game.hold',
+            fixed: true,
         });
-        this.gradeBox = (0, dockable_1.createDockable)({
+        this.gradeBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
             left: 38,
@@ -389,9 +397,9 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'yellow' } },
             label: ' GRADE ',
-            persistenceKey: 'grandmaster.game.grade',
+            fixed: true,
         });
-        this.statsBox = (0, dockable_1.createDockable)({
+        this.statsBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 9,
             left: 38,
@@ -400,9 +408,9 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'green' } },
             label: ' STATS ',
-            persistenceKey: 'grandmaster.game.stats',
+            fixed: true,
         });
-        this.sectionBox = (0, dockable_1.createDockable)({
+        this.sectionBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 17,
             left: 38,
@@ -411,7 +419,7 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'cyan' } },
             label: ' SECTION ',
-            persistenceKey: 'grandmaster.game.section',
+            fixed: true,
         });
         (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -1223,7 +1231,7 @@ class GameScreen {
      * Show pause menu
      */
     showPauseMenu() {
-        const pauseBox = (0, dockable_1.createDockable)({
+        const pauseBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
@@ -1233,7 +1241,7 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'yellow' } },
             align: 'center',
             content: '\n{bold}PAUSED{/bold}\n\nPress ESC to resume\nPress Q to quit',
-            persistenceKey: 'grandmaster.game.pause',
+            fixed: true,
         });
         this.screen.render();
         const resumeHandler = () => {
@@ -1266,7 +1274,7 @@ class GameScreen {
             gameOverColor = 'yellow';
             this.sounds.playVoice('bravo');
         }
-        const gameOverBox = (0, dockable_1.createDockable)({
+        const gameOverBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
@@ -1282,7 +1290,7 @@ class GameScreen {
                 `Score:  ${result.score.toLocaleString()}\n` +
                 `Combo:  ${result.combo}x\n\n` +
                 '{gray-fg}Press any key to continue{/gray-fg}',
-            persistenceKey: 'grandmaster.game.over',
+            fixed: true,
         });
         this.screen.render();
         this.sounds.playSfx('game_over');
@@ -1301,6 +1309,9 @@ class GameScreen {
         });
     }
     cleanup() {
+        if (this.cleanedUp)
+            return; // Prevent double cleanup
+        this.cleanedUp = true;
         if (this.input) {
             this.input.reset();
         }
@@ -1312,6 +1323,18 @@ class GameScreen {
         this.gradeBox?.destroy();
         this.sectionBox?.destroy();
         this.effectsBox?.destroy();
+    }
+    /**
+     * Stop the game loop early without showing game over (for attract mode exit)
+     */
+    stop() {
+        if (!this.running)
+            return;
+        this.stoppedEarly = true; // Prevent showGameOver from being called
+        this.running = false;
+        // Game loop will detect running=false and call cleanup() on next tick
+        // Call cleanup immediately for faster resource release
+        this.cleanup();
     }
 }
 exports.GameScreen = GameScreen;

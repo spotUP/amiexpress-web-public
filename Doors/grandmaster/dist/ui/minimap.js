@@ -8,7 +8,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpponentTracker = exports.MinimapRenderer = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 /**
  * Minimap Renderer
  *
@@ -118,7 +117,7 @@ class MinimapRenderer {
      * Render Battle Royale HUD with rank and alive count
      */
     renderBattleRoyaleHUD(screen, rank, aliveCount, totalPlayers) {
-        const hudBox = (0, dockable_1.createDockable)({
+        const hudBox = (0, blessed_helpers_1.createBox)({
             parent: screen,
             top: 0,
             right: 0,
@@ -131,7 +130,7 @@ class MinimapRenderer {
             content: `{bold}BATTLE ROYALE{/bold}\n\n` +
                 `  Rank:  {yellow-fg}#${rank}{/yellow-fg}\n` +
                 `  Alive: {green-fg}${aliveCount}{/green-fg}/{gray-fg}${totalPlayers}{/gray-fg}`,
-            persistenceKey: 'grandmaster.versus.battle-hud',
+            fixed: true,
         });
         hudBox.isBattleRoyaleHUD = true;
     }

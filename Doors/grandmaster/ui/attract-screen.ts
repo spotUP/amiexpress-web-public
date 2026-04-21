@@ -7,7 +7,6 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from './dockable';
 import { GameEngine } from '../core/game';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, PieceType } from '../core/types';
@@ -166,7 +165,7 @@ export class AttractScreen {
     this.demoBox.hide();  // Hidden during boot
 
     // Info panel (right side) - hidden initially
-    this.infoBox = createDockable({
+    this.infoBox = createBox({
       parent: this.screen,
       top: 2,
       left: 30,
@@ -176,7 +175,7 @@ export class AttractScreen {
       style: { bg: 'black', border: { fg: 'yellow' } },
       align: 'center',
       content: '',
-      persistenceKey: 'grandmaster.attract.info',
+      fixed: true,
     });
     this.infoBox.hide();  // Hidden during boot
 

@@ -7,7 +7,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LeaderboardScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 /**
  * Leaderboard screen
  */
@@ -100,7 +99,7 @@ class LeaderboardScreen {
         // Top scores
         const topScores = this.highScores.getTopScores(this.currentMode, 10);
         const scoresContent = this.renderScoresTable(topScores);
-        const scoresBox = (0, dockable_1.createDockable)({
+        const scoresBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 6,
             left: 2,
@@ -110,12 +109,12 @@ class LeaderboardScreen {
             style: { border: { fg: 'cyan' } },
             label: ` Top 10 - ${this.getModeName(this.currentMode)} `,
             content: scoresContent,
-            persistenceKey: 'grandmaster.leaderboard.scores',
+            fixed: true,
         });
         // Personal best
         const personalBest = this.highScores.getPersonalBest(this.playerName, this.currentMode);
         const personalContent = this.renderPersonalBest(personalBest);
-        const personalBox = (0, dockable_1.createDockable)({
+        const personalBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 20,
             left: 2,
@@ -125,7 +124,7 @@ class LeaderboardScreen {
             style: { border: { fg: 'magenta' } },
             label: ' Your Best ',
             content: personalContent,
-            persistenceKey: 'grandmaster.leaderboard.personal',
+            fixed: true,
         });
         // Instructions
         const instructions = (0, blessed_helpers_1.createBox)({

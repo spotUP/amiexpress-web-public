@@ -49,6 +49,9 @@ export class InputHandler {
   private lastActionTime: Map<GameAction, number> = new Map();
   private readonly ACTION_DEBOUNCE = 100; // ms
 
+  // Store handler reference for proper cleanup
+  private keypressHandler: ((ch: string | undefined, key: any) => void) | null = null;
+
   constructor(
     private screen: Screen,
     private session: DoorSession,
@@ -70,7 +73,7 @@ export class InputHandler {
    */
   private setupEventHandlers(): void {
     console.log('[InputHandler] Setting up keypress handler on screen');
-    this.screen.on('keypress', (ch: string | undefined, key: any) => {
+    this.keypressHandler = (ch: string | undefined, key: any) => {
       if (!this.enabled) return;
       console.log('[InputHandler] keypress event:', { ch, key });
       if (!key) return;
@@ -114,17 +117,33 @@ export class InputHandler {
           }
         }
       }
-    });
+    };
+
+    this.screen.on('keypress', this.keypressHandler);
 
     // Note: blessed doesn't emit keyrelease, so we need to track this differently
     // For now, we'll assume keys are released after a short time
   }
 
   /**
-   * Enable or disable input handling (keeps screen input active).
+   * Enable or disable input handling.
+   * When disabled, the keypress handler is removed to prevent interference with widgets.
    */
   setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;  // No change
+
     this.enabled = enabled;
+
+    // Remove or re-add the keypress handler based on enabled state
+    if (enabled && this.keypressHandler) {
+      // Re-add handler
+      console.log('[InputHandler] Re-enabling keypress handler');
+      this.screen.on('keypress', this.keypressHandler);
+    } else if (!enabled && this.keypressHandler) {
+      // Remove handler to prevent interference with blessed widgets
+      console.log('[InputHandler] Removing keypress handler');
+      this.screen.removeListener('keypress', this.keypressHandler);
+    }
   }
 
   /**
@@ -275,7 +294,11 @@ export class InputHandler {
    * Destroy input handler
    */
   destroy(): void {
-    this.screen.removeAllListeners('keypress');
+    // Only remove our specific handler, not ALL keypress handlers
+    if (this.keypressHandler) {
+      this.screen.removeListener('keypress', this.keypressHandler);
+      this.keypressHandler = null;
+    }
     this.actionHandlers.clear();
     this.reset();
   }

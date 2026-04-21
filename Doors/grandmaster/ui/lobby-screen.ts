@@ -76,6 +76,7 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
 
   getState(): LobbyState | null {
     const matchState = this.network.getMatchState();
+    console.log(`[GrandmasterLobbyAdapter] getState called, matchState=`, matchState ? { matchId: matchState.matchId, playerCount: matchState.players.length, status: matchState.status } : null);
     if (!matchState) return null;
 
     return {
@@ -88,11 +89,18 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
   }
 
   async joinQueue(mode: string): Promise<void> {
+    console.log(`[GrandmasterLobbyAdapter] joinQueue called, mode=${mode}`);
     await this.network.joinQueue(mode as MultiplayerMode);
+    console.log(`[GrandmasterLobbyAdapter] joinQueue complete, emitting state:updated`);
+    this.emit('state:updated');
   }
 
   async createLobby(mode: string, isPrivate?: boolean): Promise<string> {
-    return await this.network.createLobby(mode as MultiplayerMode, isPrivate);
+    console.log(`[GrandmasterLobbyAdapter] createLobby called, mode=${mode}`);
+    const lobbyId = await this.network.createLobby(mode as MultiplayerMode, isPrivate);
+    console.log(`[GrandmasterLobbyAdapter] createLobby complete, lobbyId=${lobbyId}, emitting state:updated`);
+    this.emit('state:updated');
+    return lobbyId;
   }
 
   async joinLobby(lobbyId: string): Promise<void> {
@@ -130,12 +138,26 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
     }, 500);
   }
 
-  fillWithBots(count: number, difficulty?: number): void {
+  /**
+   * Fill lobby with bots to meet minimum player count
+   * @param difficulty Bot difficulty level (1-10)
+   */
+  async fillWithBots(difficulty?: number): Promise<void> {
     const matchState = this.network.getMatchState();
     if (!matchState) return;
 
+    // Get min players for current mode
+    const modeMinPlayers: Record<string, number> = {
+      versus_1v1: 2,
+      team_2v2: 4,
+      battle_royale: 2,
+    };
+    const minPlayers = modeMinPlayers[matchState.mode] || 2;
+
     const diff = (difficulty ?? this.botDifficulty) as BotDifficulty;
-    matchState.players = fillLobbyWithBots(matchState.players, count, diff);
+    matchState.players = fillLobbyWithBots(matchState.players, minPlayers, diff);
+
+    console.log(`[GrandmasterLobbyAdapter] fillWithBots: mode=${matchState.mode}, minPlayers=${minPlayers}, now have ${matchState.players.length} players`);
     this.emit('state:updated');
   }
 
@@ -145,6 +167,13 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
 
     matchState.players = removeBots(matchState.players);
     this.emit('state:updated');
+  }
+
+  sendChat(message: string, _isAction?: boolean): void {
+    // For local lobbies, just add the message to chat log
+    // In a real networked game, this would broadcast to other players
+    console.log(`[GrandmasterLobbyAdapter] sendChat: ${message}`);
+    // Chat messages are handled by the SDK widget locally for now
   }
 }
 
@@ -194,6 +223,8 @@ export class LobbyScreen {
       features: {
         bots: true,
         settingsEditor: true,
+        chat: true,
+        leaderboard: true,
       },
       gameSettings: [
         {

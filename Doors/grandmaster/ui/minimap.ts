@@ -7,7 +7,6 @@
 
 import type { Board, PieceType } from '../core/types';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from './dockable';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/widgets/box';
 
@@ -165,7 +164,7 @@ export class MinimapRenderer {
     aliveCount: number,
     totalPlayers: number
   ): void {
-    const hudBox = createDockable({
+    const hudBox = createBox({
       parent: screen,
       top: 0,
       right: 0,
@@ -179,7 +178,7 @@ export class MinimapRenderer {
         `{bold}BATTLE ROYALE{/bold}\n\n` +
         `  Rank:  {yellow-fg}#${rank}{/yellow-fg}\n` +
         `  Alive: {green-fg}${aliveCount}{/green-fg}/{gray-fg}${totalPlayers}{/gray-fg}`,
-      persistenceKey: 'grandmaster.versus.battle-hud',
+      fixed: true,
     });
 
     (hudBox as any).isBattleRoyaleHUD = true;

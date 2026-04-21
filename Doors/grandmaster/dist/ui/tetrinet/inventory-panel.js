@@ -9,7 +9,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryPanel = void 0;
-const dockable_1 = require("../dockable");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const specials_1 = require("../../core/tetrinet/specials");
 /**
  * Inventory Panel component
@@ -19,7 +19,7 @@ class InventoryPanel {
         this.maxSlots = options.maxSlots || 15;
         // Calculate width: each slot is 2 chars + 1 space, plus borders
         const width = options.width || (this.maxSlots * 3 + 4);
-        this.box = (0, dockable_1.createDockable)({
+        this.box = (0, blessed_helpers_1.createBox)({
             parent: options.parent,
             top: options.top,
             left: options.left,
@@ -29,7 +29,7 @@ class InventoryPanel {
             style: { border: { fg: 'cyan' } },
             label: ' Inventory ',
             content: this.renderEmpty(),
-            persistenceKey: 'grandmaster.tnet.inventory',
+            fixed: true, // Fixed during gameplay, not dockable
         });
     }
     /**

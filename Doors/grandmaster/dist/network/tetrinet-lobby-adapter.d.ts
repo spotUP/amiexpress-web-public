@@ -18,6 +18,7 @@ export declare class TetriNetLobbyAdapter extends EventEmitter implements LobbyN
     private network;
     private state;
     private messageIdCounter;
+    private pendingLocalPlayer;
     constructor(network: GrandmasterNetworkManager);
     /**
      * Setup network event forwarding
@@ -27,6 +28,11 @@ export declare class TetriNetLobbyAdapter extends EventEmitter implements LobbyN
      * Convert TetriNET player to lobby player info
      */
     private convertPlayer;
+    /**
+     * Fill empty slots with bots up to minimum player count
+     * @param difficulty Bot difficulty level (0-3)
+     */
+    fillWithBots(difficulty?: number): Promise<void>;
     /**
      * Get current lobby state
      */

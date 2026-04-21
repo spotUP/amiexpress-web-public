@@ -7,7 +7,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SettingsScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 /**
  * Friendly names for key bindings
  */
@@ -67,7 +66,7 @@ class SettingsScreen {
                 style: { fg: 'white', bg: 'black' },
             });
             // Settings menu
-            const menuPanel = (0, dockable_1.createDockable)({
+            const menuPanel = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 3,
                 left: 10,
@@ -78,7 +77,7 @@ class SettingsScreen {
                     border: { fg: 'cyan' },
                 },
                 label: ' Settings ',
-                persistenceKey: 'grandmaster.settings.menu',
+                fixed: true,
             });
             const menu = (0, blessed_helpers_1.createList)({
                 parent: menuPanel,
@@ -96,7 +95,7 @@ class SettingsScreen {
                 items: this.getMenuItems(),
             });
             // Description box
-            const descBox = (0, dockable_1.createDockable)({
+            const descBox = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 18,
                 left: 10,
@@ -105,8 +104,17 @@ class SettingsScreen {
                 border: { type: 'line' },
                 style: { border: { fg: 'gray' }, fg: 'gray' },
                 content: this.getDescription(0),
-                persistenceKey: 'grandmaster.settings.description',
+                fixed: true,
             });
+            // Cleanup function for exiting settings
+            const exitSettings = () => {
+                title.destroy();
+                menuPanel.destroy();
+                menu.destroy();
+                descBox.destroy();
+                this.screen.render();
+                resolve();
+            };
             // Update description on selection change
             menu.on('select item', (_item, index) => {
                 // Play navigation sound when scrolling through settings
@@ -116,6 +124,12 @@ class SettingsScreen {
             });
             // Handle item selection - wrap async handler for blessed's sync event requirement
             menu.on('select', (_item, index) => {
+                // Check for Save & Exit (last item, index 31)
+                if (index === 31) {
+                    this.sounds.playSfx('menu_ok');
+                    exitSettings();
+                    return;
+                }
                 // Play selection sound when opening a setting
                 this.sounds.playSfx('menu_ok');
                 this.handleSelection(index, menu).then(() => {
@@ -124,11 +138,7 @@ class SettingsScreen {
             });
             // Handle quit key
             menu.key(['q', 'Q', 'escape'], () => {
-                title.destroy();
-                menu.destroy();
-                descBox.destroy();
-                this.screen.render();
-                resolve();
+                exitSettings();
             });
             // Focus and render
             menu.focus();
@@ -302,9 +312,7 @@ class SettingsScreen {
             case 29: // Pause
                 await this.editKeyBinding('pause', 'Pause');
                 break;
-            case 31: // Save & Exit
-                menu.emit('keypress', null, { name: 'escape' });
-                return;
+            // Note: Save & Exit (case 31) is handled directly in menu.on('select')
         }
         // Update menu items
         menu.setItems(this.getMenuItems());
@@ -324,7 +332,7 @@ class SettingsScreen {
     async adjustValue(key, value, min, max, step) {
         const current = this.state.settings[key];
         // Show input dialog
-        const inputBox = (0, dockable_1.createDockable)({
+        const inputBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
@@ -337,41 +345,42 @@ class SettingsScreen {
                 `Range: ${min} - ${max}\n\n` +
                 `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
                 `{gray-fg}Press Enter to confirm{/gray-fg}`,
-            persistenceKey: `grandmaster.settings.adjust.${key}`,
+            fixed: true,
         });
         let newValue = current;
         return new Promise((resolve) => {
-            const keyHandler = (_ch, key) => {
-                if (key.name === 'left') {
+            const settingKey = key; // Capture the setting key before it gets shadowed
+            const keyHandler = (_ch, keyEvent) => {
+                if (keyEvent.name === 'left') {
                     newValue = Math.max(min, newValue - step);
-                    this.sounds.playSfx('menu_select'); // Sound for value adjustment
-                    inputBox.setContent(`{bold}${key.toUpperCase()}{/bold}\n\n` +
+                    this.sounds.playSfx('menu_select');
+                    inputBox.setContent(`{bold}${settingKey.toUpperCase()}{/bold}\n\n` +
                         `Current: {yellow-fg}${newValue}{/yellow-fg}\n` +
                         `Range: ${min} - ${max}\n\n` +
                         `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
                         `{gray-fg}Press Enter to confirm{/gray-fg}`);
                     this.screen.render();
                 }
-                else if (key.name === 'right') {
+                else if (keyEvent.name === 'right') {
                     newValue = Math.min(max, newValue + step);
-                    this.sounds.playSfx('menu_select'); // Sound for value adjustment
-                    inputBox.setContent(`{bold}${key.toUpperCase()}{/bold}\n\n` +
+                    this.sounds.playSfx('menu_select');
+                    inputBox.setContent(`{bold}${settingKey.toUpperCase()}{/bold}\n\n` +
                         `Current: {yellow-fg}${newValue}{/yellow-fg}\n` +
                         `Range: ${min} - ${max}\n\n` +
                         `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
                         `{gray-fg}Press Enter to confirm{/gray-fg}`);
                     this.screen.render();
                 }
-                else if (key.name === 'return' || key.name === 'enter') {
-                    this.state.settings[key] = newValue;
-                    this.sounds.playSfx('menu_ok'); // Sound for confirmation
+                else if (keyEvent.name === 'return' || keyEvent.name === 'enter') {
+                    this.state.settings[settingKey] = newValue; // Use settingKey, not keyEvent
+                    this.sounds.playSfx('menu_ok');
                     this.screen.removeListener('keypress', keyHandler);
                     inputBox.destroy();
                     this.screen.render();
                     resolve();
                 }
-                else if (key.name === 'escape') {
-                    this.sounds.playSfx('menu_select'); // Sound for cancel
+                else if (keyEvent.name === 'escape') {
+                    this.sounds.playSfx('menu_select');
                     this.screen.removeListener('keypress', keyHandler);
                     inputBox.destroy();
                     this.screen.render();
@@ -388,7 +397,7 @@ class SettingsScreen {
     async adjustVolume(settingKey) {
         const current = Math.floor(this.state.settings[settingKey] * 100);
         // Show volume bar
-        const volumeBox = (0, dockable_1.createDockable)({
+        const volumeBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
@@ -397,7 +406,7 @@ class SettingsScreen {
             border: { type: 'line' },
             style: { border: { fg: 'yellow' } },
             content: '',
-            persistenceKey: `grandmaster.settings.volume.${settingKey}`,
+            fixed: true,
         });
         let volume = current;
         const updateDisplay = () => {
@@ -408,29 +417,29 @@ class SettingsScreen {
         };
         updateDisplay();
         return new Promise((resolve) => {
-            const keyHandler = (_ch, key) => {
-                if (key.name === 'left') {
+            const keyHandler = (_ch, keyEvent) => {
+                if (keyEvent.name === 'left') {
                     volume = Math.max(0, volume - 5);
-                    this.sounds.playSfx('menu_select'); // Sound for volume adjustment
+                    this.sounds.playSfx('menu_select');
                     updateDisplay();
                     this.screen.render();
                 }
-                else if (key.name === 'right') {
+                else if (keyEvent.name === 'right') {
                     volume = Math.min(100, volume + 5);
-                    this.sounds.playSfx('menu_select'); // Sound for volume adjustment
+                    this.sounds.playSfx('menu_select');
                     updateDisplay();
                     this.screen.render();
                 }
-                else if (key.name === 'return' || key.name === 'enter') {
+                else if (keyEvent.name === 'return' || keyEvent.name === 'enter') {
                     this.state.settings[settingKey] = volume / 100;
-                    this.sounds.playSfx('menu_ok'); // Sound for confirmation
+                    this.sounds.playSfx('menu_ok');
                     this.screen.removeListener('keypress', keyHandler);
                     volumeBox.destroy();
                     this.screen.render();
                     resolve();
                 }
-                else if (key.name === 'escape') {
-                    this.sounds.playSfx('menu_select'); // Sound for cancel
+                else if (keyEvent.name === 'escape') {
+                    this.sounds.playSfx('menu_select');
                     this.screen.removeListener('keypress', keyHandler);
                     volumeBox.destroy();
                     this.screen.render();
@@ -448,7 +457,7 @@ class SettingsScreen {
         const kb = this.state.settings.keyBindings;
         const currentKeys = kb[bindingKey];
         // Show key binding dialog
-        const bindingBox = (0, dockable_1.createDockable)({
+        const bindingBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
@@ -457,7 +466,7 @@ class SettingsScreen {
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
             content: '',
-            persistenceKey: `grandmaster.settings.binding.${bindingKey}`,
+            fixed: true,
         });
         const keys = [...currentKeys];
         const updateDisplay = () => {

@@ -11,20 +11,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpponentBoards = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("../dockable");
 /**
  * Opponent Boards component
  */
 class OpponentBoards {
     constructor(options) {
         this.miniBoards = new Map();
-        this.boardWidth = 14; // 12 cols * 1 char + 2 borders
+        this.boardWidth = 8; // 6 cols * 1 char + 2 borders (compact for 80-column terminals)
         this.boardHeight = 12; // 10 visible rows + name + status
         this.maxOpponents = options.maxOpponents || 5;
         // Calculate container size
         const width = options.width || (this.boardWidth * 3 + 4); // 3 boards per row
         const height = options.height || (this.boardHeight * 2 + 2); // 2 rows
-        this.container = (0, dockable_1.createDockable)({
+        this.container = (0, blessed_helpers_1.createBox)({
             parent: options.parent,
             top: options.top,
             left: options.left,
@@ -34,7 +33,7 @@ class OpponentBoards {
             style: { border: { fg: 'cyan' } },
             label: ' Opponents ',
             content: '',
-            persistenceKey: 'grandmaster.tnet.opponents',
+            fixed: true, // Fixed during gameplay, not dockable
         });
     }
     /**

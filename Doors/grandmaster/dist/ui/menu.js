@@ -7,7 +7,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MenuScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 /**
  * Main menu screen
  */
@@ -47,41 +46,46 @@ class MenuScreen {
                 },
             });
             // Title box - centered, wide enough for ASCII art
+            // Width matches the three panels below (26 + 30 + 20 = 76)
             const title = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
-                top: 1,
-                left: 'center',
-                width: 70,
-                height: 7,
+                top: 0,
+                left: 2,
+                width: 76,
+                height: 6,
                 content: this.getTitleArt(),
                 style: {
                     fg: 'yellow',
                     bg: 'black',
                 },
             });
-            // Calculate centered layout for 80 columns
-            // Total width: 24 + 1 + 28 + 1 + 18 = 72, margin = (80-72)/2 = 4
-            const leftMargin = 4;
+            // Layout: 2 char margin on each side, panels fill 76 chars
+            // menuPanel: 26, descBox: 30, info: 20 = 76 total
+            const leftMargin = 2;
             // Mode selection list - left panel
-            const menuPanel = (0, dockable_1.createDockable)({
+            const menuPanel = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
-                top: 9,
+                top: 6,
                 left: leftMargin,
-                width: 24,
-                height: 12,
+                width: 26,
+                height: 15,
                 border: { type: 'line' },
                 label: ' SELECT MODE ',
                 style: {
                     border: { fg: 'cyan' },
                 },
-                persistenceKey: 'grandmaster.menu.modes',
             });
             const menu = (0, blessed_helpers_1.createList)({
                 parent: menuPanel,
-                top: 1,
+                top: 0,
                 left: 1,
                 width: 22,
-                height: 10,
+                height: 11, // Leave room for panel border (15 - 2 borders - 2 padding = 11)
+                scrollable: true,
+                scrollbar: {
+                    ch: ' ',
+                    style: { bg: 'cyan' },
+                },
                 style: {
                     border: { fg: 'cyan' },
                     selected: { bg: 'cyan', fg: 'black' },
@@ -107,17 +111,17 @@ class MenuScreen {
                 ],
             });
             // Mode description box - middle panel
-            const descBox = (0, dockable_1.createDockable)({
+            const descBox = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
-                top: 9,
-                left: leftMargin + 25, // After menu + 1 gap
-                width: 28,
-                height: 12,
+                top: 6,
+                left: leftMargin + 26, // After menuPanel (no gap, borders touch)
+                width: 30,
+                height: 15,
                 border: { type: 'line' },
                 label: ' DESCRIPTION ',
                 style: { border: { fg: 'gray' } },
                 content: this.getModeDescription(0),
-                persistenceKey: 'grandmaster.menu.description',
+                fixed: true,
             });
             // Update description when selection changes
             menu.on('select item', (_item, index) => {
@@ -127,17 +131,16 @@ class MenuScreen {
                 this.screen.render();
             });
             // Info box - right panel
-            const info = (0, dockable_1.createDockable)({
+            const info = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
-                top: 9,
-                left: leftMargin + 54, // After menu + descBox + gaps
-                width: 18,
-                height: 12,
+                top: 6,
+                left: leftMargin + 26 + 30, // After menuPanel + descBox
+                width: 20,
+                height: 15,
                 border: { type: 'line' },
                 label: ' PLAYER ',
                 style: { border: { fg: 'gray' } },
                 content: this.getPlayerInfo(),
-                persistenceKey: 'grandmaster.menu.player',
             });
             // Instructions
             const instructions = (0, blessed_helpers_1.createBox)({
@@ -175,7 +178,7 @@ class MenuScreen {
                 // Clean up
                 background.destroy();
                 title.destroy();
-                menu.destroy();
+                menuPanel.destroy(); // Also destroys menu as a child
                 descBox.destroy();
                 info.destroy();
                 instructions.destroy();
@@ -203,13 +206,12 @@ class MenuScreen {
      * Get title ASCII art
      */
     getTitleArt() {
-        return `{bold}{yellow-fg}
- _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____
+        return `{bold}{yellow-fg} _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____
 |   __|  _  |  _  |   | |    \\|     |  _  |   __|_   _|   __| __  |
 |  |  |     |     |\\    |  |  | | | |     |__   | | | |   __|    -|
 |_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
 
-{/yellow-fg}{gray-fg}TGM3-Inspired Multiplayer Tetris{/gray-fg}{/bold}`;
+{/yellow-fg}{gray-fg}        TGM3-Inspired Multiplayer Tetris{/gray-fg}{/bold}`;
     }
     /**
      * Get mode description for selected index

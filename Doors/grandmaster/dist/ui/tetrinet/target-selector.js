@@ -10,7 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TargetSelector = void 0;
-const dockable_1 = require("../dockable");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 /**
  * Target Selector component
  */
@@ -19,7 +19,7 @@ class TargetSelector {
         this.opponents = [];
         this.selectedIndex = 0;
         this.onTargetChangeCallbacks = [];
-        this.box = (0, dockable_1.createDockable)({
+        this.box = (0, blessed_helpers_1.createBox)({
             parent: options.parent,
             top: options.top,
             left: options.left,
@@ -29,7 +29,7 @@ class TargetSelector {
             style: { border: { fg: 'yellow' } },
             label: ' Target ',
             content: '{gray-fg}No opponents{/gray-fg}',
-            persistenceKey: 'grandmaster.tnet.target',
+            fixed: true, // Fixed during gameplay, not dockable
         });
     }
     /**

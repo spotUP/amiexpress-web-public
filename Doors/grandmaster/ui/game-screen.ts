@@ -1,6 +1,5 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from './dockable';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
@@ -427,7 +426,7 @@ export class GameScreen {
       fixed: true,
     });
 
-    this.nextBox = createDockable({
+    this.nextBox = createBox({
       parent: this.screen,
       top: 1,
       left: 25,
@@ -436,10 +435,10 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
       label: ' NEXT ',
-      persistenceKey: 'grandmaster.game.next',
+      fixed: true,
     });
 
-    this.holdBox = createDockable({
+    this.holdBox = createBox({
       parent: this.screen,
       top: 14,
       left: 25,
@@ -448,10 +447,10 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'magenta' } },
       label: ' HOLD ',
-      persistenceKey: 'grandmaster.game.hold',
+      fixed: true,
     });
 
-    this.gradeBox = createDockable({
+    this.gradeBox = createBox({
       parent: this.screen,
       top: 1,
       left: 38,
@@ -460,10 +459,10 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'yellow' } },
       label: ' GRADE ',
-      persistenceKey: 'grandmaster.game.grade',
+      fixed: true,
     });
 
-    this.statsBox = createDockable({
+    this.statsBox = createBox({
       parent: this.screen,
       top: 9,
       left: 38,
@@ -472,10 +471,10 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'green' } },
       label: ' STATS ',
-      persistenceKey: 'grandmaster.game.stats',
+      fixed: true,
     });
 
-    this.sectionBox = createDockable({
+    this.sectionBox = createBox({
       parent: this.screen,
       top: 17,
       left: 38,
@@ -484,7 +483,7 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
       label: ' SECTION ',
-      persistenceKey: 'grandmaster.game.section',
+      fixed: true,
     });
 
     createBox({
@@ -1373,7 +1372,7 @@ export class GameScreen {
    * Show pause menu
    */
   private showPauseMenu(): void {
-    const pauseBox = createDockable({
+    const pauseBox = createBox({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -1383,7 +1382,7 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'yellow' } },
       align: 'center',
       content: '\n{bold}PAUSED{/bold}\n\nPress ESC to resume\nPress Q to quit',
-      persistenceKey: 'grandmaster.game.pause',
+      fixed: true,
     });
 
     this.screen.render();
@@ -1421,7 +1420,7 @@ export class GameScreen {
       this.sounds.playVoice('bravo');
     }
 
-    const gameOverBox = createDockable({
+    const gameOverBox = createBox({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -1437,7 +1436,7 @@ export class GameScreen {
         `Score:  ${result.score.toLocaleString()}\n` +
         `Combo:  ${result.combo}x\n\n` +
         '{gray-fg}Press any key to continue{/gray-fg}',
-      persistenceKey: 'grandmaster.game.over',
+      fixed: true,
     });
 
     this.screen.render();

@@ -10,7 +10,6 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from '../dockable';
 import type { TetriNetBoard } from '../../core/tetrinet/tetrinet-board';
 
 /**
@@ -53,7 +52,7 @@ export class OpponentBoards {
   private container: any;
   private miniBoards: Map<string, MiniBoardWidget> = new Map();
   private maxOpponents: number;
-  private boardWidth: number = 14;  // 12 cols * 1 char + 2 borders
+  private boardWidth: number = 8;  // 6 cols * 1 char + 2 borders (compact for 80-column terminals)
   private boardHeight: number = 12; // 10 visible rows + name + status
 
   constructor(options: OpponentBoardsOptions) {
@@ -63,7 +62,7 @@ export class OpponentBoards {
     const width = options.width || (this.boardWidth * 3 + 4);  // 3 boards per row
     const height = options.height || (this.boardHeight * 2 + 2); // 2 rows
 
-    this.container = createDockable({
+    this.container = createBox({
       parent: options.parent,
       top: options.top,
       left: options.left,
@@ -73,7 +72,7 @@ export class OpponentBoards {
       style: { border: { fg: 'cyan' } },
       label: ' Opponents ',
       content: '',
-      persistenceKey: 'grandmaster.tnet.opponents',
+      fixed: true,  // Fixed during gameplay, not dockable
     });
   }
 

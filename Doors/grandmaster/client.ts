@@ -27,6 +27,7 @@ class GrandmasterAudioClient {
   private sfxVolume = 1;
   private musicVolume = 0.8;
   private currentMusic: HTMLAudioElement | null = null;
+  private currentToneMusicFile: string | null = null;  // Track which Tone player is playing music
   private toneReady = false;
   private tonePlayers = new Map<string, Tone.Player>();
   private toneLoads = new Map<string, Promise<Tone.Player>>();
@@ -114,10 +115,25 @@ class GrandmasterAudioClient {
   }
 
   private stopMusic(): void {
-    if (!this.currentMusic) return;
-    this.currentMusic.pause();
-    this.currentMusic.currentTime = 0;
-    this.currentMusic = null;
+    // Stop HTMLAudioElement music
+    if (this.currentMusic) {
+      this.currentMusic.pause();
+      this.currentMusic.currentTime = 0;
+      this.currentMusic = null;
+    }
+
+    // Stop Tone.js music player
+    if (this.currentToneMusicFile) {
+      const player = this.tonePlayers.get(this.currentToneMusicFile);
+      if (player) {
+        try {
+          player.stop();
+        } catch {
+          // Player may already be stopped
+        }
+      }
+      this.currentToneMusicFile = null;
+    }
   }
 
   private async playFile(file: string, volume: number): Promise<void> {
@@ -195,6 +211,7 @@ class GrandmasterAudioClient {
       player.loop = loop;
       player.volume.value = volume <= 0 ? -Infinity : Tone.gainToDb(volume);
       player.start();
+      this.currentToneMusicFile = file;  // Track for stopMusic()
     } catch {
       const audio = new Audio(file);
       audio.loop = loop;

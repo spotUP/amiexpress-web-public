@@ -28,6 +28,7 @@ export interface TetriNetScreenOptions {
     state: AppState;
     network?: GrandmasterNetworkManager;
     playerName: string;
+    aiController?: any;
 }
 /**
  * TetriNET Game Screen
@@ -40,6 +41,7 @@ export declare class TetriNetScreen {
     private state;
     private network;
     private playerName;
+    private aiController;
     private boardBox;
     private previewBox;
     private statsBox;

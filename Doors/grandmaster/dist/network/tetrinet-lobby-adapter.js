@@ -16,6 +16,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
         super();
         this.state = null;
         this.messageIdCounter = 0;
+        this.pendingLocalPlayer = null;
         this.network = network;
         this.setupEventListeners();
     }
@@ -136,8 +137,44 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             slot: player.slot,
             team: player.team || undefined,
             ready: player.ready,
-            isBot: false,
+            isBot: player.isBot || false,
         };
+    }
+    /**
+     * Fill empty slots with bots up to minimum player count
+     * @param difficulty Bot difficulty level (0-3)
+     */
+    async fillWithBots(difficulty = 1) {
+        if (!this.state)
+            return;
+        const minPlayers = 2; // TetriNET needs at least 2 players
+        const maxSlots = 6;
+        const botNames = ['TetriBot', 'BlockMaster', 'LineKiller', 'StackAttack', 'GridGuru'];
+        const difficultyNames = ['Easy', 'Normal', 'Hard', 'Expert'];
+        const diffName = difficultyNames[Math.min(difficulty, 3)] || 'Normal';
+        // Find occupied slots
+        const occupiedSlots = new Set(this.state.players.map(p => p.slot));
+        // Add bots until we have minimum players
+        let botIndex = 0;
+        for (let slot = 1; slot <= maxSlots && this.state.players.length < minPlayers; slot++) {
+            if (!occupiedSlots.has(slot)) {
+                const botName = `${botNames[botIndex % botNames.length]} (${diffName})`;
+                const botPlayer = {
+                    slot: slot,
+                    name: botName,
+                    team: '',
+                    ready: true, // Bots are always ready
+                    isBot: true,
+                };
+                this.state.players.push(botPlayer);
+                this.state.players.sort((a, b) => a.slot - b.slot);
+                console.log(`[TetriNetLobbyAdapter] Added bot: ${botName} in slot ${slot}`);
+                this.emit('player:joined', this.convertPlayer(botPlayer));
+                botIndex++;
+            }
+        }
+        this.emit('state:updated');
+        console.log(`[TetriNetLobbyAdapter] After fillWithBots: ${this.state.players.length} players`);
     }
     /**
      * Get current lobby state
@@ -168,6 +205,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
      */
     async createLobby(mode, _isPrivate) {
         const lobbyId = `tnet-${Date.now().toString(36)}`;
+        console.log(`[TetriNetLobbyAdapter] createLobby called, mode=${mode}, pendingLocalPlayer=`, this.pendingLocalPlayer);
         // Initialize state
         this.state = {
             lobbyId,
@@ -179,9 +217,26 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             winlist: [],
             chatMessages: [],
         };
-        // Add self as first player
-        // Note: In real implementation, this would come from the network
+        // Add pending local player if set before createLobby was called
+        if (this.pendingLocalPlayer) {
+            const { name, slot } = this.pendingLocalPlayer;
+            this.pendingLocalPlayer = null;
+            this.state.localSlot = slot;
+            const player = {
+                slot,
+                name,
+                team: '',
+                ready: true, // Host is always ready
+            };
+            this.state.players.push(player);
+            console.log(`[TetriNetLobbyAdapter] Added local player:`, player);
+            this.emit('player:joined', this.convertPlayer(player));
+        }
+        else {
+            console.log(`[TetriNetLobbyAdapter] No pending local player to add!`);
+        }
         this.emit('state:updated');
+        console.log(`[TetriNetLobbyAdapter] state after createLobby:`, this.state);
         return lobbyId;
     }
     /**
@@ -330,8 +385,13 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
      * Add local player to lobby (called after connection established)
      */
     addLocalPlayer(name, slot) {
-        if (!this.state)
+        console.log(`[TetriNetLobbyAdapter] addLocalPlayer called: name=${name}, slot=${slot}, stateExists=${!!this.state}`);
+        // If state doesn't exist yet, store for later (will be added in createLobby)
+        if (!this.state) {
+            this.pendingLocalPlayer = { name, slot };
+            console.log(`[TetriNetLobbyAdapter] Stored pending player for later`);
             return;
+        }
         this.state.localSlot = slot;
         const player = {
             slot,

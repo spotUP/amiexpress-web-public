@@ -7,7 +7,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VersusScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
-const dockable_1 = require("./dockable");
 const minimap_1 = require("./minimap");
 const bot_player_1 = require("../ai/bot-player");
 const board_1 = require("../core/board");
@@ -17,8 +16,10 @@ const board_1 = require("../core/board");
  * Extends game screen with multiplayer features (online or CPU battle)
  */
 class VersusScreen {
-    constructor(screen, engine, inputHandler, sounds, state, network, attackManager, botDifficulty) {
+    constructor(screen, engine, inputHandler, sounds, state, network, attackManager, botOrAI // number = old botDifficulty, object = VersusAI controller
+    ) {
         this.botPlayer = null;
+        this.versusAI = null; // VersusAI controller for CPU Battle mode
         this.running = false;
         this.unsubscribers = [];
         this.screen = screen;
@@ -30,9 +31,13 @@ class VersusScreen {
         this.attackManager = attackManager;
         this.minimapRenderer = new minimap_1.MinimapRenderer({ height: 10, compact: true });
         this.opponentTracker = new minimap_1.OpponentTracker();
-        // Initialize bot player if difficulty provided (CPU Battle mode)
-        if (botDifficulty !== undefined) {
-            this.botPlayer = new bot_player_1.BotPlayer(botDifficulty);
+        // Check if AI controller was passed (new implementation)
+        if (botOrAI && typeof botOrAI === 'object') {
+            this.versusAI = botOrAI;
+        }
+        // Legacy: Initialize bot player if difficulty provided (old single-bot mode)
+        else if (typeof botOrAI === 'number') {
+            this.botPlayer = new bot_player_1.BotPlayer(botOrAI);
         }
         this.setupUI();
         if (this.network) {
@@ -68,7 +73,7 @@ class VersusScreen {
             content: '',
         });
         // Garbage queue indicator (right of board)
-        this.garbageIndicator = (0, dockable_1.createDockable)({
+        this.garbageIndicator = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
             left: 22, // Right edge of board
@@ -77,10 +82,10 @@ class VersusScreen {
             border: { type: 'line' },
             style: { border: { fg: 'red' } },
             content: '{red-fg}GARBAGE{/red-fg}',
-            persistenceKey: 'grandmaster.versus.garbage',
+            fixed: true,
         });
         // Attack indicator
-        this.attackIndicator = (0, dockable_1.createDockable)({
+        this.attackIndicator = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 23,
             left: 22,
@@ -89,25 +94,26 @@ class VersusScreen {
             border: { type: 'line' },
             style: { border: { fg: 'yellow' } },
             content: '',
-            persistenceKey: 'grandmaster.versus.attack',
+            fixed: true,
         });
         // Minimap container (right side)
-        const minimapPanel = (0, dockable_1.createDockable)({
+        // Screen width: 80, Board: 22, Garbage: 6, Remaining: 52 for minimap (includes borders)
+        const minimapPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
             left: 28, // Right of garbage indicator (22 + 6 = 28)
-            width: 50,
+            width: 52, // Fits within 80 columns (28 + 52 = 80)
             height: 25,
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
             label: ' Opponents ',
-            persistenceKey: 'grandmaster.versus.minimap',
+            fixed: true,
         });
         this.minimapContainer = (0, blessed_helpers_1.createBox)({
             parent: minimapPanel,
             top: 1,
             left: 1,
-            width: 48,
+            width: 50, // Panel width (52) - 2 for borders = 50
             height: 23,
             content: '',
         });
@@ -177,8 +183,25 @@ class VersusScreen {
                 // Update player's game
                 this.engine.update(deltaTime);
                 this.inputHandler.update(deltaTime);
-                // Update bot AI if in CPU Battle mode
-                if (this.botPlayer) {
+                // Update AI opponents (new CPU Battle mode with multiple bots)
+                if (this.versusAI) {
+                    this.versusAI.update(deltaTime);
+                    // Update opponent minimaps every 100ms
+                    if (now % 100 < deltaTime) {
+                        const opponentBoards = this.versusAI.getOpponentBoards();
+                        for (const opponent of opponentBoards) {
+                            this.opponentTracker.updateOpponent(opponent.id, {
+                                name: opponent.name,
+                                board: opponent.board,
+                                level: 0,
+                                grade: '5',
+                                alive: opponent.alive,
+                            });
+                        }
+                    }
+                }
+                // Legacy: Update bot AI if in old single-bot CPU Battle mode
+                else if (this.botPlayer) {
                     this.botPlayer.update(deltaTime, this.engine);
                 }
                 // Send state to opponents (online multiplayer only)

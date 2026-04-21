@@ -18,6 +18,7 @@ class GrandmasterNetworkManager {
     constructor(bbsSession) {
         this.matchState = null;
         this.localPlayerId = null;
+        this.localPlayerName = 'Player';
         this.opponentStates = new Map();
         this.updateCallbacks = new Set();
         this.attackCallbacks = new Set();
@@ -28,6 +29,9 @@ class GrandmasterNetworkManager {
         this.interpolator = null;
         this.gameEngine = null;
         this.network = new network_engine_1.NetworkEngine(bbsSession.socket);
+        // Get player info from session
+        this.localPlayerId = bbsSession.user?.id || `player-${Date.now()}`;
+        this.localPlayerName = bbsSession.user?.username || 'Player';
         this.setupEventListeners();
     }
     /**
@@ -82,6 +86,25 @@ class GrandmasterNetworkManager {
      * Join matchmaking queue
      */
     async joinQueue(mode) {
+        console.log(`[GrandmasterNetworkManager] joinQueue called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
+        // Initialize match state for local/single-player fallback
+        // Host is always ready, non-host starts as not ready
+        this.matchState = {
+            mode,
+            matchId: `match-${Date.now().toString(36)}`,
+            players: [{
+                    id: this.localPlayerId,
+                    name: this.localPlayerName,
+                    rank: 1,
+                    rating: 1000,
+                    ready: true, // Host is always ready
+                    isBot: false,
+                }],
+            status: 'waiting',
+            startTime: null,
+            winner: null,
+        };
+        console.log(`[GrandmasterNetworkManager] matchState initialized:`, this.matchState);
         await this.network.joinQueue({
             gameMode: mode,
         });
@@ -96,12 +119,50 @@ class GrandmasterNetworkManager {
      * Create custom lobby
      */
     async createLobby(mode, isPrivate = false) {
-        const lobby = await this.network.createLobby({
-            name: 'GRANDMASTER Match',
-            maxPlayers: mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2,
-            isPrivate,
+        console.log(`[GrandmasterNetworkManager] createLobby called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
+        const matchId = `match-${Date.now().toString(36)}`;
+        // Initialize match state for local/single-player fallback
+        this.matchState = {
+            mode,
+            matchId,
+            players: [{
+                    id: this.localPlayerId,
+                    name: this.localPlayerName,
+                    rank: 1,
+                    rating: 1000,
+                    ready: true,
+                }],
+            status: 'waiting',
+            startTime: null,
+            winner: null,
+        };
+        console.log(`[GrandmasterNetworkManager] matchState initialized:`, this.matchState);
+        // Also update opponent states for the local player
+        this.opponentStates.set(this.localPlayerId, {
+            id: this.localPlayerId,
+            name: this.localPlayerName,
+            board: {
+                width: 10,
+                height: 20,
+                grid: Array(20).fill(null).map(() => Array(10).fill(0)),
+            },
+            level: 1,
+            grade: '9',
+            alive: true,
         });
-        return lobby.id;
+        try {
+            const lobby = await this.network.createLobby({
+                name: 'GRANDMASTER Match',
+                maxPlayers: mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2,
+                isPrivate,
+            });
+            return lobby.id;
+        }
+        catch (err) {
+            // Network might not be connected, use local fallback
+            console.log(`[GrandmasterNetworkManager] Network createLobby failed, using local fallback:`, err);
+            return matchId;
+        }
     }
     /**
      * Join lobby by ID
@@ -113,6 +174,14 @@ class GrandmasterNetworkManager {
      * Set ready status in lobby
      */
     async setReady(ready) {
+        // Update local state
+        if (this.matchState && this.localPlayerId) {
+            const localPlayer = this.matchState.players.find(p => p.id === this.localPlayerId);
+            if (localPlayer) {
+                localPlayer.ready = ready;
+                console.log(`[GrandmasterNetworkManager] setReady: ${ready} for ${this.localPlayerId}`);
+            }
+        }
         this.network.setReady(ready);
     }
     /**
@@ -120,8 +189,14 @@ class GrandmasterNetworkManager {
      * Note: In a full implementation, this would be handled server-side
      */
     async startMatch() {
+        console.log(`[GrandmasterNetworkManager] startMatch called, matchState=`, this.matchState);
         // Emit a custom event that the server would handle
         this.network.emit('match:start', {});
+        // Local fallback: update match state directly
+        if (this.matchState) {
+            this.matchState.status = 'countdown';
+            console.log(`[GrandmasterNetworkManager] Set matchState.status to countdown`);
+        }
     }
     /**
      * Send game state update

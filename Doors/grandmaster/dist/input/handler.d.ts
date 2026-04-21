@@ -39,13 +39,15 @@ export declare class InputHandler {
     private actionHandlers;
     private lastActionTime;
     private readonly ACTION_DEBOUNCE;
+    private keypressHandler;
     constructor(screen: Screen, session: DoorSession, config?: KeyConfig);
     /**
      * Setup keyboard event handlers
      */
     private setupEventHandlers;
     /**
-     * Enable or disable input handling (keeps screen input active).
+     * Enable or disable input handling.
+     * When disabled, the keypress handler is removed to prevent interference with widgets.
      */
     setEnabled(enabled: boolean): void;
     /**

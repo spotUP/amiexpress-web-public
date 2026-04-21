@@ -77,7 +77,7 @@ export declare class GrandmasterApp {
      */
     private showTetriNetLobby;
     /**
-     * Start a TetriNET game
+     * Start a TetriNET game (local, single-player with TetriNET rules)
      */
     private startTetriNetGame;
     /**

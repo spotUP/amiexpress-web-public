@@ -6,7 +6,6 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { createDockable } from './dockable';
 import type { HighScoreManager, HighScoreEntry } from '../core/high-scores';
 import type { SoundEngine } from '../audio/sounds';
 import type { GameMode } from '../core/types';
@@ -117,7 +116,7 @@ export class LeaderboardScreen {
     // Top scores
     const topScores = this.highScores.getTopScores(this.currentMode, 10);
     const scoresContent = this.renderScoresTable(topScores);
-    const scoresBox = createDockable({
+    const scoresBox = createBox({
       parent: this.screen,
       top: 6,
       left: 2,
@@ -127,13 +126,13 @@ export class LeaderboardScreen {
       style: { border: { fg: 'cyan' } },
       label: ` Top 10 - ${this.getModeName(this.currentMode)} `,
       content: scoresContent,
-      persistenceKey: 'grandmaster.leaderboard.scores',
+      fixed: true,
     });
 
     // Personal best
     const personalBest = this.highScores.getPersonalBest(this.playerName, this.currentMode);
     const personalContent = this.renderPersonalBest(personalBest);
-    const personalBox = createDockable({
+    const personalBox = createBox({
       parent: this.screen,
       top: 20,
       left: 2,
@@ -143,7 +142,7 @@ export class LeaderboardScreen {
       style: { border: { fg: 'magenta' } },
       label: ' Your Best ',
       content: personalContent,
-      persistenceKey: 'grandmaster.leaderboard.personal',
+      fixed: true,
     });
 
     // Instructions

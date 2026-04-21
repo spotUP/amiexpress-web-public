@@ -26,6 +26,7 @@ export declare class VersusScreen {
     private minimapRenderer;
     private opponentTracker;
     private botPlayer;
+    private versusAI;
     private boardBox;
     private minimapContainer;
     private garbageIndicator;
@@ -33,7 +34,7 @@ export declare class VersusScreen {
     private statsBox;
     private running;
     private unsubscribers;
-    constructor(screen: Screen, engine: GameEngine, inputHandler: InputHandler, sounds: SoundEngine, state: AppState, network: GrandmasterNetworkManager | null, attackManager: AttackManager, botDifficulty?: number);
+    constructor(screen: Screen, engine: GameEngine, inputHandler: InputHandler, sounds: SoundEngine, state: AppState, network: GrandmasterNetworkManager | null, attackManager: AttackManager, botOrAI?: number | any);
     /**
      * Setup UI layout
      */

@@ -9,7 +9,7 @@
  */
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createDockable } from '../dockable';
+import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 /**
  * Opponent info for targeting
@@ -43,7 +43,7 @@ export class TargetSelector {
   private onTargetChangeCallbacks: Array<(target: TargetInfo | null) => void> = [];
 
   constructor(options: TargetSelectorOptions) {
-    this.box = createDockable({
+    this.box = createBox({
       parent: options.parent,
       top: options.top,
       left: options.left,
@@ -53,7 +53,7 @@ export class TargetSelector {
       style: { border: { fg: 'yellow' } },
       label: ' Target ',
       content: '{gray-fg}No opponents{/gray-fg}',
-      persistenceKey: 'grandmaster.tnet.target',
+      fixed: true,  // Fixed during gameplay, not dockable
     });
   }
 
