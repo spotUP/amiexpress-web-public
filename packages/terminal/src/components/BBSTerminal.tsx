@@ -964,12 +964,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
       keyRepeatTimers.current = {};
 
-      // Try session restoration first (if we have a saved session)
+      // Try session restoration first (if we have a saved session).
+      // Do NOT flip loginState to 'logging-in' here — if the server decides
+      // the restore can't happen (e.g. after a backend restart), it will
+      // emit `session-restore-failed` AFTER already starting its fresh
+      // welcome/ANSI-prompt sequence. Any keypress during that window
+      // would be dropped by onData's logging-in guard. Stay in 'waiting'
+      // until we've actually submitted credentials; session-restored will
+      // jump us straight to 'loggedin' on success.
       const savedSession = getStoredSessionState();
       if (savedSession && reconnectPending.current) {
         console.log('[Session Persistence] Attempting session restoration for user:', savedSession.username);
         socket.emit('restore-session', savedSession);
-        loginState.current = 'logging-in';
       } else if (reconnectPending.current) {
         reconnectPending.current = false;
         attemptTokenLogin();

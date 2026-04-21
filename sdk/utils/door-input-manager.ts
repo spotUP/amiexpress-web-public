@@ -10,6 +10,13 @@
  * - Order matters - must disable in reverse of enable
  * - Missing cleanup breaks BBS input after door exit
  *
+ * Auto-Suspend Feature (NEW):
+ * - Automatically detects when blessed widgets (List, Textbox, etc.) gain focus
+ * - Suspends game mode so widgets can receive keyboard input
+ * - Resumes game mode when widgets lose focus
+ * - Prevents the common bug where blessed widgets can't be navigated
+ * - Enabled by default (enableAutoSuspend: true)
+ *
  * Usage:
  * ```typescript
  * // In door constructor
@@ -17,6 +24,7 @@
  *   enableGameMode: true,
  *   enableGrabKeys: true,
  *   enableMouse: true,
+ *   enableAutoSuspend: true,  // Auto-suspend when blessed widgets gain focus (default: true)
  *   debug: false
  * });
  *
@@ -25,6 +33,10 @@
  *
  * // When door exits (automatic cleanup)
  * this.inputManager.disable();
+ *
+ * // Manual suspend/resume still available if needed
+ * this.inputManager.suspend();  // Before showing blessed widgets
+ * this.inputManager.resume();   // After blessed widgets lose focus
  * ```
  */
 
@@ -52,6 +64,15 @@ export interface DoorInputOptions {
   enableMouse?: boolean;
 
   /**
+   * Enable automatic input suspension when blessed widgets gain focus
+   * When true, game mode is automatically suspended when List/Textbox widgets receive focus
+   * and resumed when they lose focus. This prevents the common bug where blessed widgets
+   * can't receive keyboard input because game mode is still active.
+   * Default: true (recommended for all doors with blessed widgets)
+   */
+  enableAutoSuspend?: boolean;
+
+  /**
    * Enable debug logging
    */
   debug?: boolean;
@@ -67,6 +88,9 @@ export class DoorInputManager {
   private screen: Screen;
   private options: Required<DoorInputOptions>;
   private enabled: boolean = false;
+  private suspended: boolean = false;
+  private autoSuspended: boolean = false;  // Track auto-suspend separately from manual suspend
+  private autoSuspendEnabled: boolean = false;
 
   constructor(session: any, screen: Screen, options: DoorInputOptions = {}) {
     this.session = session;
@@ -75,9 +99,11 @@ export class DoorInputManager {
       enableGameMode: options.enableGameMode ?? false,  // Default OFF - only enable for raw game input (ncurses)
       enableGrabKeys: options.enableGrabKeys ?? false,  // Default OFF - only enable for games needing all keys
       enableMouse: options.enableMouse ?? true,
+      enableAutoSuspend: options.enableAutoSuspend ?? true,  // Default ON - auto-suspend when blessed widgets gain focus
       debug: options.debug ?? false,
       debugName: options.debugName ?? 'DoorInputManager'
     };
+    this.autoSuspendEnabled = this.options.enableAutoSuspend;
   }
 
   /**
@@ -139,6 +165,9 @@ export class DoorInputManager {
       this.log('✓ Input handler connected');
     }
 
+    // 6. Setup automatic input suspension for blessed widgets
+    this.setupAutoSuspend();
+
     this.enabled = true;
     this.log('Door input enabled');
   }
@@ -196,6 +225,7 @@ export class DoorInputManager {
     }
 
     this.enabled = false;
+    this.suspended = false;
     this.log('Door input disabled');
   }
 
@@ -207,19 +237,32 @@ export class DoorInputManager {
   }
 
   /**
-   * Temporarily disable input (e.g., for modal dialogs)
-   * Use enable() to re-enable
+   * Temporarily suspend input (for blessed widgets like List, Textbox)
+   * Use resume() to re-enable
+   * CRITICAL: Must suspend game mode or blessed widgets can't receive keyboard input
    */
   suspend(): void {
     if (!this.enabled) return;
+    if (this.suspended) return;  // Already suspended
 
     this.log('Suspending input...');
 
-    // Only suspend keyboard capture, keep game mode active
+    // Clear auto-suspend flag when manually suspending
+    this.autoSuspended = false;
+
+    // Suspend game mode so blessed widgets can receive keyboard input
+    if (this.options.enableGameMode && this.session.bbs?.disableGameMode) {
+      this.session.bbs.disableGameMode();
+      this.log('✓ Game mode suspended');
+    }
+
+    // Suspend keyboard capture
     if (this.options.enableGrabKeys && this.screen?.program) {
       (this.screen.program as any).grabKeys = false;
       this.log('✓ grabKeys suspended');
     }
+
+    this.suspended = true;
   }
 
   /**
@@ -230,10 +273,131 @@ export class DoorInputManager {
 
     this.log('Resuming input...');
 
+    // Clear auto-suspend flag when manually resuming
+    this.autoSuspended = false;
+
+    // Resume game mode
+    if (this.options.enableGameMode && this.session.bbs?.enableGameMode) {
+      this.session.bbs.enableGameMode();
+      this.log('✓ Game mode resumed');
+    }
+
+    // Resume keyboard capture
     if (this.options.enableGrabKeys && this.screen?.program) {
       (this.screen.program as any).grabKeys = true;
       this.log('✓ grabKeys resumed');
     }
+
+    this.suspended = false;
+  }
+
+  /**
+   * Setup automatic input suspension when blessed widgets gain focus
+   * This prevents the common bug where blessed widgets can't receive keyboard input
+   * because game mode is still active
+   */
+  private setupAutoSuspend(): void {
+    if (!this.autoSuspendEnabled) return;
+    if (!this.options.enableGameMode && !this.options.enableGrabKeys) {
+      // No need for auto-suspend if neither game mode nor grabKeys is enabled
+      return;
+    }
+
+    this.log('Setting up auto-suspend for blessed widgets...');
+
+    // Hook into screen's element focus events
+    // When a blessed widget (List, Textbox, Button, etc.) gains focus, suspend game mode
+    this.screen.on('element focus', (el: any) => {
+      // Check if the focused element is a blessed widget that needs keyboard input
+      const needsKeyboard = el && (
+        el.type === 'list' ||
+        el.type === 'listbar' ||
+        el.type === 'textbox' ||
+        el.type === 'textarea' ||
+        el.type === 'input' ||
+        el.type === 'button' ||
+        el.type === 'checkbox' ||
+        el.type === 'radioset' ||
+        el.type === 'form'
+      );
+
+      if (needsKeyboard && !this.autoSuspended && !this.suspended) {
+        this.log(`Auto-suspend triggered by ${el.type} widget`);
+        this.autoSuspended = true;
+
+        // Only suspend if not already manually suspended
+        if (!this.suspended) {
+          // Suspend game mode so blessed widgets can receive keyboard input
+          if (this.options.enableGameMode && this.session.bbs?.disableGameMode) {
+            this.session.bbs.disableGameMode();
+            this.log('✓ Game mode auto-suspended');
+          }
+
+          // Suspend keyboard capture
+          if (this.options.enableGrabKeys && this.screen?.program) {
+            (this.screen.program as any).grabKeys = false;
+            this.log('✓ grabKeys auto-suspended');
+          }
+        }
+      }
+    });
+
+    // When focus is lost or moves to non-widget elements, resume game mode
+    this.screen.on('element blur', (el: any) => {
+      const wasWidget = el && (
+        el.type === 'list' ||
+        el.type === 'listbar' ||
+        el.type === 'textbox' ||
+        el.type === 'textarea' ||
+        el.type === 'input' ||
+        el.type === 'button' ||
+        el.type === 'checkbox' ||
+        el.type === 'radioset' ||
+        el.type === 'form'
+      );
+
+      // Resume if we were auto-suspended and the element losing focus was a widget
+      if (wasWidget && this.autoSuspended) {
+        // Small delay to allow new focus to be set before deciding to resume
+        setTimeout(() => {
+          // Only resume if no other widget has focus
+          const focused = this.screen.focused;
+          const newFocusIsWidget = focused && typeof focused === 'object' && (
+            (focused as any).type === 'list' ||
+            (focused as any).type === 'listbar' ||
+            (focused as any).type === 'textbox' ||
+            (focused as any).type === 'textarea' ||
+            (focused as any).type === 'input' ||
+            (focused as any).type === 'button' ||
+            (focused as any).type === 'checkbox' ||
+            (focused as any).type === 'radioset' ||
+            (focused as any).type === 'form'
+          );
+
+          if (!newFocusIsWidget) {
+            this.log('Auto-resume triggered (no widget has focus)');
+            this.autoSuspended = false;
+
+            // Only resume if not manually suspended
+            if (!this.suspended) {
+              // Resume game mode
+              if (this.options.enableGameMode && this.session.bbs?.enableGameMode) {
+                this.session.bbs.enableGameMode();
+                this.log('✓ Game mode auto-resumed');
+              }
+
+              // Resume keyboard capture
+              if (this.options.enableGrabKeys && this.screen?.program) {
+                (this.screen.program as any).grabKeys = true;
+                this.log('✓ grabKeys auto-resumed');
+              }
+            }
+          }
+        }, 10);
+      }
+    });
+
+    this.log('✓ Auto-suspend hooks installed');
   }
 
   /**

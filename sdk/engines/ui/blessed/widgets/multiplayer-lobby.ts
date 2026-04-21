@@ -397,6 +397,12 @@ export class MultiplayerLobby extends EventEmitter {
   /**
    * Setup UI layout - adapts based on features
    */
+  // Tab state
+  private currentTab: number = 0;
+  private tabButtons: Button[] = [];
+  private tab1Container: Box | null = null;
+  private tab2Container: Box | null = null;
+
   private setupUI(): void {
     // Clear screen
     this.parent.children.forEach((child: { destroy: () => void }) => child.destroy());
@@ -409,77 +415,116 @@ export class MultiplayerLobby extends EventEmitter {
       width: '100%',
       height: '100%',
       tags: true,
-      z: 1,  // Low z-index so dialogs/overlays appear on top
+      z: 1,
     } as any);
 
-    console.log('[MultiplayerLobby] Container created with z-index:', (this.container as any).z);
-    console.log('[MultiplayerLobby] Parent (screen) z-index:', (this.parent as any).z);
-
-    // Title
-    this.titleBox = new Box({
-      parent: this.container,
-      top: 0,
-      left: 'center',
-      width: 60,
-      height: 1,
-      content: `{bold}{yellow-fg}${this.options.title || 'MULTIPLAYER LOBBY'}{/yellow-fg}{/bold}`,
-      tags: true,
-    });
-
-    // Calculate layout based on features
+    // Calculate layout
     const hasChat = this.features.chat;
     const hasLeaderboard = this.features.leaderboard;
     const hasSettingsEditor = this.features.settingsEditor && this.gameSettings.length > 0;
     const hasTeams = this.features.teams;
+    const hasSocialTab = hasChat || hasLeaderboard;
 
-    // Determine column widths
-    const playerListWidth = this.features.slotBased ? 30 : 30;
-    const rightPanelWidth = 40;
-
-    // Calculate heights dynamically based on available screen height
+    const screenWidth = typeof this.parent.width === 'number' ? this.parent.width : 80;
     const screenHeight = typeof this.parent.height === 'number' ? this.parent.height : 24;
-    const startRow = 1; // Start panels immediately below title
-    const buttonRow = 1; // Reserve 1 row for buttons at bottom
-    const availableHeight = screenHeight - startRow - buttonRow - 1; // -1 for margin
 
-    // Count left-column panels
-    const leftPanelCount = 1 + (hasTeams ? 1 : 0) + 1 + (hasSettingsEditor ? 1 : 0); // player + team? + roomSettings + gameOptions?
+    // Row 0: Title (centered) + Tab buttons (right side)
+    const titleText = this.options.title || 'MULTIPLAYER LOBBY';
+    this.titleBox = new Box({
+      parent: this.container,
+      top: 0,
+      left: 'center',
+      width: titleText.length + 6,
+      height: 1,
+      content: `{bold}{cyan-fg}[ ${titleText} ]{/cyan-fg}{/bold}`,
+      tags: true,
+    });
 
-    // Distribute height among left panels (leave room for right panel content)
-    const baseLeftPanelHeight = Math.floor(availableHeight / leftPanelCount);
+    // Tab buttons on same row as title (if social features exist)
+    if (hasSocialTab) {
+      const tab1Btn = new Button({
+        parent: this.container,
+        top: 0,
+        left: screenWidth - 24,
+        width: 10,
+        height: 1,
+        content: '[1] Game',
+        style: { bg: 'blue', fg: 'white', focus: { bg: 'cyan' } },
+        border: 'none',
+        mouse: true,
+        tags: true,
+      } as any);
+      const tab2Btn = new Button({
+        parent: this.container,
+        top: 0,
+        left: screenWidth - 13,
+        width: 12,
+        height: 1,
+        content: '[2] Social',
+        style: { bg: 'black', fg: 'gray', focus: { bg: 'cyan' } },
+        border: 'none',
+        mouse: true,
+        tags: true,
+      } as any);
+      this.tabButtons = [tab1Btn, tab2Btn];
 
-    // Set heights with minimums
-    const playerListHeight = Math.max(5, Math.min(baseLeftPanelHeight, this.features.slotBased ? 6 : 8));
-    const teamSelectorHeight = hasTeams ? Math.max(4, Math.min(baseLeftPanelHeight, 5)) : 0;
-    let roomSettingsHeight = Math.max(4, Math.min(5, baseLeftPanelHeight));
-    let settingsEditorHeight = hasSettingsEditor ? Math.max(4, Math.min(this.gameSettings.length + 2, 5)) : 0;
-    let chatHeight = hasChat ? 6 : 0;
-    let leaderboardHeight = hasLeaderboard ? 4 : 0;
+      tab1Btn.on('press', () => this.switchTab(0));
+      tab2Btn.on('press', () => this.switchTab(1));
+
+      // Tab keyboard shortcuts (only if no input widget has focus)
+      this.parent.key(['1'], () => {
+        if (!this.widgetHasFocus()) this.switchTab(0);
+      });
+      this.parent.key(['2'], () => {
+        if (!this.widgetHasFocus()) this.switchTab(1);
+      });
+    }
+
+    // Layout constants - content starts at row 1 (right after title)
+    const contentTop = 1;
+    const buttonRowHeight = 3;  // Row for buttons + 1 row margin
+    const availableHeight = screenHeight - contentTop - buttonRowHeight;
     const panelContentTop = 1;
-    const panelContentWidth = (panelWidth: number) => Math.max(1, panelWidth - 2);
+    const panelContentWidth = (panelWidth: number) => Math.max(1, panelWidth - 4);  // Extra space to prevent scrollbar bleed
     const panelContentHeight = (panelHeight: number) => Math.max(1, panelHeight - 3);
 
-    // Player list (left side) - reasonable height for typical lobbies
-    const playerPanel = new DockablePanel({
+    // ============ TAB 1: GAME (Players, Team, Settings, Options) ============
+    this.tab1Container = new Box({
       parent: this.container,
-      top: startRow,
-      left: 2,
-      width: playerListWidth,
+      top: contentTop,
+      left: 0,
+      width: '100%',
+      height: availableHeight,
+      tags: true,
+    });
+
+    // Two-column layout for Tab 1
+    const leftColWidth = Math.floor((screenWidth - 6) / 2);
+    const rightColWidth = screenWidth - leftColWidth - 6;
+    const leftColLeft = 2;
+    const rightColLeft = leftColWidth + 4;
+
+    // Player list (left column, full height)
+    const playerListHeight = availableHeight;
+    const playerPanel = new DockablePanel({
+      parent: this.tab1Container,
+      top: 0,
+      left: leftColLeft,
+      width: leftColWidth,
       height: playerListHeight,
       label: this.features.slotBased ? 'Players (Slots)' : 'Players',
       style: { border: { fg: 'cyan' }, bg: 'black' },
       fitContent: false,
-      allowAutoDock: true,
-      resizable: true,
-      draggable: true,
-      dockPosition: 'float',
-      persistenceKey: 'multiplayer-lobby.players',
+      allowAutoDock: false,
+      resizable: false,
+      draggable: false,
+      showMinimizeButton: false,
     });
     this.playerList = new List({
       parent: playerPanel,
       top: panelContentTop,
       left: 0,
-      width: panelContentWidth(playerListWidth),
+      width: panelContentWidth(leftColWidth),
       height: panelContentHeight(playerListHeight),
       items: [],
       mouse: true,
@@ -492,32 +537,60 @@ export class MultiplayerLobby extends EventEmitter {
       },
     });
 
-    // Team selector (below player list, if teams enabled)
+    console.log('[MultiplayerLobby] playerList created, keys:', (this.playerList as any).options?.keys, 'mouse:', (this.playerList as any).options?.mouse);
+
+    this.playerList.on('focus', () => {
+      console.log('[MultiplayerLobby] playerList FOCUSED');
+    });
+
+    this.playerList.on('blur', () => {
+      console.log('[MultiplayerLobby] playerList BLURRED');
+    });
+
+    this.playerList.on('click', () => {
+      console.log('[MultiplayerLobby] playerList CLICKED');
+    });
+
+    this.playerList.on('keypress', (ch: any, key: any) => {
+      console.log('[MultiplayerLobby] playerList keypress:', { ch, keyName: key?.name, keyFull: key?.full });
+    });
+
+    this.playerList.on('select item', (_item: any, index: number) => {
+      console.log('[MultiplayerLobby] playerList select item:', index);
+    });
+
+    // Right column panels (stacked: Team, Room Settings, Game Options)
+    let rightTop = 0;
+    const rightPanelCount = (hasTeams ? 1 : 0) + 1 + (hasSettingsEditor ? 1 : 0);
+    const basePanelHeight = Math.floor(availableHeight / rightPanelCount);
+
+    // Team selector (if enabled)
     if (hasTeams) {
+      const teamSelectorHeight = Math.max(4, Math.min(basePanelHeight, 6));
       const teamPanel = new DockablePanel({
-        parent: this.container,
-        top: startRow + playerListHeight,
-        left: 2,
-        width: playerListWidth,
+        parent: this.tab1Container,
+        top: rightTop,
+        left: rightColLeft,
+        width: rightColWidth,
         height: teamSelectorHeight,
         label: 'Select Team',
         style: { border: { fg: 'magenta' }, bg: 'black' },
         fitContent: false,
-        allowAutoDock: true,
-        resizable: true,
-        draggable: true,
-        dockPosition: 'float',
-        persistenceKey: 'multiplayer-lobby.teams',
+        allowAutoDock: false,
+        resizable: false,
+        draggable: false,
+        showMinimizeButton: false,
       });
       this.teamSelector = new List({
         parent: teamPanel,
         top: panelContentTop,
         left: 0,
-        width: panelContentWidth(playerListWidth),
+        width: panelContentWidth(rightColWidth),
         height: panelContentHeight(teamSelectorHeight),
         items: ['No Team'],
         mouse: true,
         keys: true,
+        vi: true,
         tags: true,
         style: {
           fg: 'white',
@@ -528,70 +601,65 @@ export class MultiplayerLobby extends EventEmitter {
       this.teamSelector.on('select', (_item: unknown, index: number) => {
         void this.selectTeam(index);
       });
+      rightTop += teamSelectorHeight;
     }
 
-    // Left column stack offset for panels below player list
-    let leftTop = startRow + playerListHeight + teamSelectorHeight;
-
-    // Right side panels - stack vertically (aligned with player list)
-    let rightTop = startRow;
-    const rightLeft = playerListWidth + 4;
-
-    // Room settings panel (always visible) - move to left column
+    // Room settings panel
+    const roomSettingsHeight = Math.max(4, Math.min(basePanelHeight, 6));
     const settingsPanel = new DockablePanel({
-      parent: this.container,
-      top: leftTop,
-      left: 2,
-      width: playerListWidth,
+      parent: this.tab1Container,
+      top: rightTop,
+      left: rightColLeft,
+      width: rightColWidth,
       height: roomSettingsHeight,
       label: 'Room Settings',
       style: { border: { fg: 'green' }, bg: 'black' },
       fitContent: false,
-      allowAutoDock: true,
-      resizable: true,
-      draggable: true,
-      dockPosition: 'float',
-      persistenceKey: 'multiplayer-lobby.room-settings',
+      allowAutoDock: false,
+      resizable: false,
+      draggable: false,
+      showMinimizeButton: false,
     });
     this.settingsBox = new Box({
       parent: settingsPanel,
       top: panelContentTop,
       left: 0,
-      width: panelContentWidth(playerListWidth),
+      width: panelContentWidth(rightColWidth),
       height: panelContentHeight(roomSettingsHeight),
       content: '',
       tags: true,
     });
-    leftTop += roomSettingsHeight;
+    rightTop += roomSettingsHeight;
 
-    // Settings editor (if enabled) - uses a List for keyboard navigation
+    // Settings editor (if enabled)
     if (hasSettingsEditor) {
+      const remainingHeight = availableHeight - rightTop;
+      const settingsEditorHeight = Math.max(4, remainingHeight);
       this.settingsEditorBox = new DockablePanel({
-        parent: this.container,
-        top: leftTop,
-        left: 2,
-        width: playerListWidth,
+        parent: this.tab1Container,
+        top: rightTop,
+        left: rightColLeft,
+        width: rightColWidth,
         height: settingsEditorHeight,
         label: 'Game Options (O)',
         style: { border: { fg: 'yellow' }, bg: 'black' },
         fitContent: false,
-        allowAutoDock: true,
-        resizable: true,
-        draggable: true,
-        dockPosition: 'float',
-        persistenceKey: 'multiplayer-lobby.game-options',
+        allowAutoDock: false,
+        resizable: false,
+        draggable: false,
+        showMinimizeButton: false,
       });
 
-      // Create list for settings navigation
       this.settingsEditorList = new List({
         parent: this.settingsEditorBox,
         top: panelContentTop,
         left: 0,
-        width: panelContentWidth(playerListWidth),
+        width: panelContentWidth(rightColWidth),
         height: panelContentHeight(settingsEditorHeight),
         items: [],
         mouse: true,
         keys: true,
+        vi: true,
         style: {
           fg: 'white',
           selected: { bg: 'blue', fg: 'white' },
@@ -599,145 +667,172 @@ export class MultiplayerLobby extends EventEmitter {
         tags: true,
       });
 
-      // Left/Right arrows to change values
-      this.settingsEditorList.key(['left', 'h'], () => this.changeSettingValue(-1));
-      this.settingsEditorList.key(['right', 'l'], () => this.changeSettingValue(1));
-      this.settingsEditorList.key(['enter', 'space'], () => this.changeSettingValue(1));
+      console.log('[MultiplayerLobby] settingsEditorList created, keys:', (this.settingsEditorList as any).options?.keys, 'mouse:', (this.settingsEditorList as any).options?.mouse);
 
-      // Track selected index
+      this.settingsEditorList.key(['left', 'h'], () => {
+        console.log('[MultiplayerLobby] settingsEditorList LEFT key pressed');
+        this.changeSettingValue(-1);
+      });
+      this.settingsEditorList.key(['right', 'l'], () => {
+        console.log('[MultiplayerLobby] settingsEditorList RIGHT key pressed');
+        this.changeSettingValue(1);
+      });
+      this.settingsEditorList.key(['enter', 'space'], () => {
+        console.log('[MultiplayerLobby] settingsEditorList ENTER/SPACE key pressed');
+        this.changeSettingValue(1);
+      });
+
       this.settingsEditorList.on('select item', (_item: unknown, index: number) => {
+        console.log('[MultiplayerLobby] settingsEditorList select item:', index);
         this.selectedSettingIndex = index;
       });
 
-      leftTop += settingsEditorHeight;
+      this.settingsEditorList.on('focus', () => {
+        console.log('[MultiplayerLobby] settingsEditorList FOCUSED');
+      });
+
+      this.settingsEditorList.on('blur', () => {
+        console.log('[MultiplayerLobby] settingsEditorList BLURRED');
+      });
+
+      this.settingsEditorList.on('click', () => {
+        console.log('[MultiplayerLobby] settingsEditorList CLICKED');
+      });
+
+      this.settingsEditorList.on('keypress', (ch: any, key: any) => {
+        console.log('[MultiplayerLobby] settingsEditorList keypress:', { ch, keyName: key?.name, keyFull: key?.full });
+      });
+
       this.updateSettingsEditor();
     }
 
-    // Reuse screenHeight from above
-    const rightAvailableHeight = screenHeight - 2 - startRow;
-
-    // Leaderboard panel (if enabled) - standalone panel above chat
-    if (hasLeaderboard) {
-      const preferredLeaderboardHeight = Math.min(8, Math.max(4, Math.floor(rightAvailableHeight * 0.35)));
-      leaderboardHeight = preferredLeaderboardHeight;
-      const leaderboardPanel = new DockablePanel({
+    // ============ TAB 2: SOCIAL (Leaderboard + Chat) ============
+    if (hasSocialTab) {
+      this.tab2Container = new Box({
         parent: this.container,
-        top: rightTop,
-        left: rightLeft,
-        width: rightPanelWidth,
-        height: leaderboardHeight,
-        label: 'Leaderboard',
-        style: { border: { fg: 'cyan' }, bg: 'black' },
-        fitContent: false,
-        allowAutoDock: true,
-        resizable: true,
-        draggable: true,
-        dockPosition: 'float',
-        persistenceKey: 'multiplayer-lobby.leaderboard',
-      });
-      this.leaderboardBox = new Box({
-        parent: leaderboardPanel,
-        top: panelContentTop,
+        top: contentTop,
         left: 0,
-        width: panelContentWidth(rightPanelWidth),
-        height: panelContentHeight(leaderboardHeight),
-        content: '{gray-fg}No data{/gray-fg}',
+        width: '100%',
+        height: availableHeight,
         tags: true,
+        hidden: true,  // Start hidden
       });
-      rightTop += leaderboardHeight;
+
+      // Two columns for social tab
+      const socialLeftWidth = Math.floor((screenWidth - 6) / 2);
+      const socialRightWidth = screenWidth - socialLeftWidth - 6;
+
+      // Leaderboard (left column, full height)
+      if (hasLeaderboard) {
+        const leaderboardPanel = new DockablePanel({
+          parent: this.tab2Container,
+          top: 0,
+          left: 2,
+          width: socialLeftWidth,
+          height: availableHeight,
+          label: 'Leaderboard / Winlist',
+          style: { border: { fg: 'cyan' }, bg: 'black' },
+          fitContent: false,
+          allowAutoDock: false,
+          resizable: false,
+          draggable: false,
+          showMinimizeButton: false,
+        });
+        this.leaderboardBox = new Box({
+          parent: leaderboardPanel,
+          top: panelContentTop,
+          left: 0,
+          width: panelContentWidth(socialLeftWidth),
+          height: panelContentHeight(availableHeight),
+          content: '{gray-fg}No leaderboard data{/gray-fg}',
+          tags: true,
+          scrollable: true,
+        });
+      }
+
+      // Chat (right column, full height)
+      if (hasChat) {
+        const chatLeft = hasLeaderboard ? socialLeftWidth + 4 : 2;
+        const chatWidth = hasLeaderboard ? socialRightWidth : screenWidth - 4;
+
+        this.chatBox = new DockablePanel({
+          parent: this.tab2Container,
+          top: 0,
+          left: chatLeft,
+          width: chatWidth,
+          height: availableHeight,
+          label: 'Chat (T to type)',
+          style: { border: { fg: 'white' }, bg: 'black' },
+          fitContent: false,
+          allowAutoDock: false,
+          resizable: false,
+          draggable: false,
+          showMinimizeButton: false,
+        });
+
+        const chatContentHeight = panelContentHeight(availableHeight);
+        const chatLogHeight = Math.max(1, chatContentHeight - 2);
+        this.chatLog = new List({
+          parent: this.chatBox,
+          top: panelContentTop,
+          left: 0,
+          width: panelContentWidth(chatWidth),
+          height: chatLogHeight,
+          items: [],
+          mouse: true,
+          scrollable: true,
+          tags: true,
+        });
+
+        this.chatInput = new Textbox({
+          parent: this.chatBox,
+          bottom: 0,
+          left: 0,
+          width: panelContentWidth(chatWidth),
+          height: 1,
+          style: {
+            fg: 'white',
+            bg: 'black',
+            focus: { bg: 'blue' },
+          },
+          inputOnFocus: true,
+          tags: true,
+        });
+
+        this.chatInput.on('submit', (text: string) => {
+          if (text.trim()) {
+            this.sendChatMessage(text.trim());
+          }
+          this.chatInput?.clearValue();
+          this.chatInput?.focus();
+        });
+      }
     }
 
-    // Chat panel (if enabled)
-    if (hasChat) {
-      // Fill remaining space in right column
-      const remainingHeight = rightAvailableHeight - (rightTop - startRow);
-      chatHeight = Math.max(6, remainingHeight);
-
-      this.chatBox = new DockablePanel({
-        parent: this.container,
-        top: rightTop,
-        left: rightLeft,
-        width: rightPanelWidth,
-        height: chatHeight,
-        label: 'Chat',
-        style: { border: { fg: 'white' }, bg: 'black' },
-        fitContent: false,
-        allowAutoDock: true,
-        resizable: true,
-        draggable: true,
-        dockPosition: 'float',
-        persistenceKey: 'multiplayer-lobby.chat',
-      });
-
-      // Chat message log
-      const chatContentHeight = panelContentHeight(chatHeight);
-      const chatLogTop = panelContentTop;
-      const chatLogHeight = Math.max(1, chatContentHeight - 1);
-      this.chatLog = new List({
-        parent: this.chatBox,
-        top: chatLogTop,
-        left: 0,
-        width: panelContentWidth(rightPanelWidth),
-        height: chatLogHeight,
-        items: [],
-        mouse: true,
-        scrollable: true,
-        tags: true,
-      });
-
-      // Chat input at bottom
-      this.chatInput = new Textbox({
-        parent: this.chatBox,
-        bottom: 0,
-        left: 0,
-        width: panelContentWidth(rightPanelWidth),
-        height: 1,
-        style: {
-          fg: 'white',
-          bg: 'black',
-          focus: { bg: 'blue' },
-        },
-        inputOnFocus: true,
-        tags: true,
-      });
-
-      this.chatInput.on('submit', (text: string) => {
-        if (text.trim()) {
-          this.sendChatMessage(text.trim());
-        }
-        this.chatInput?.clearValue();
-        this.chatInput?.focus();
-      });
-
-      rightTop += chatHeight;
-    }
-
-    // Status box - hidden when chat is enabled (use chat for status messages)
+    // Status box (completely hidden when chat or social tab exists)
+    // Status messages go to chat instead
     this.statusBox = new Box({
       parent: this.container,
-      top: hasChat ? 0 : rightTop,
-      left: hasChat ? 0 : rightLeft,
-      width: hasChat ? 1 : rightPanelWidth,
-      height: hasChat ? 1 : 4,
-      border: hasChat ? undefined : { type: 'line' },
-      label: hasChat ? undefined : ' Status ',
-      style: { border: { fg: 'gray' } },
+      top: 0,
+      left: 0,
+      width: 1,
+      height: 1,
       content: '',
       tags: true,
-      hidden: hasChat,
+      hidden: true,  // Always hidden - we use chat for status now
     });
 
-    // Buttons row - position below the tallest panel
-    const leftPanelBottom = leftTop;
-    const buttonTop = Math.max(leftPanelBottom, rightTop);
+    // ============ BUTTONS ROW ============
+    const buttonTop = screenHeight - 3;
     let buttonLeft = 2;
+    console.log('[MultiplayerLobby] Creating buttons at row', buttonTop, 'screenHeight=', screenHeight);
 
     // Ready button
     this.readyButton = new Button({
       parent: this.container,
       top: buttonTop,
       left: buttonLeft,
-      width: 14,
+      width: 10,
       height: 1,
       content: ' Ready ',
       style: {
@@ -745,17 +840,18 @@ export class MultiplayerLobby extends EventEmitter {
         fg: 'white',
         focus: { bg: 'blue' },
       },
+      border: 'none',
       mouse: true,
       tags: true,
-    });
-    buttonLeft += 16;
+    } as any);
+    buttonLeft += 12;
 
-    // Start button (host only)
+    // Start button (host only) - starts visible, hidden by setAsHost(false) if not host
     this.startButton = new Button({
       parent: this.container,
       top: buttonTop,
       left: buttonLeft,
-      width: 14,
+      width: 10,
       height: 1,
       content: ' Start ',
       style: {
@@ -763,18 +859,19 @@ export class MultiplayerLobby extends EventEmitter {
         fg: 'black',
         focus: { bg: 'blue' },
       },
+      border: 'none',
       mouse: true,
-      hidden: true,
+      hidden: false,  // Start visible - setAsHost handles hiding for non-hosts
       tags: true,
-    });
-    buttonLeft += 16;
+    } as any);
+    buttonLeft += 12;
 
     // Leave button
     this.leaveButton = new Button({
       parent: this.container,
       top: buttonTop,
       left: buttonLeft,
-      width: 14,
+      width: 10,
       height: 1,
       content: ' Leave ',
       style: {
@@ -782,10 +879,11 @@ export class MultiplayerLobby extends EventEmitter {
         fg: 'white',
         focus: { bg: 'blue' },
       },
+      border: 'none',
       mouse: true,
       tags: true,
-    });
-    buttonLeft += 16;
+    } as any);
+    buttonLeft += 12;
 
     // Fill Bots button (optional, host only)
     if (this.features.bots !== false && this.adapter.fillWithBots) {
@@ -793,18 +891,19 @@ export class MultiplayerLobby extends EventEmitter {
         parent: this.container,
         top: buttonTop,
         left: buttonLeft,
-        width: 14,
+        width: 10,
         height: 1,
-        content: ' Add Bots ',
+        content: ' Bots ',
         style: {
           bg: 'cyan',
           fg: 'black',
           focus: { bg: 'blue' },
         },
+        border: 'none',
         mouse: true,
         hidden: true,
         tags: true,
-      });
+      } as any);
 
       this.fillBotsButton.on('press', () => this.toggleBots());
     }
@@ -814,18 +913,120 @@ export class MultiplayerLobby extends EventEmitter {
     this.startButton.on('press', () => void this.startMatch());
     this.leaveButton.on('press', () => void this.leaveLobby());
 
-    // Keyboard shortcuts
-    this.parent.key(['r'], () => void this.toggleReady());
-    this.parent.key(['s'], () => void this.startMatch());
-    this.parent.key(['escape', 'q'], () => void this.leaveLobby());
+    // Log ALL screen-level keypresses for debugging
+    this.parent.on('keypress', (ch: any, key: any) => {
+      console.log('[MultiplayerLobby] SCREEN keypress:', {
+        ch,
+        keyName: key?.name,
+        keyFull: key?.full,
+        focused: this.parent.focused ? {
+          type: (this.parent.focused as any).type,
+          name: (this.parent.focused as any).name
+        } : null
+      });
+    });
+
+    // Keyboard shortcuts (only trigger if no input widget has focus)
+    this.parent.key(['r'], () => {
+      console.log('[MultiplayerLobby] R key handler triggered');
+      if (!this.widgetHasFocus()) void this.toggleReady();
+    });
+    this.parent.key(['s'], () => {
+      console.log('[MultiplayerLobby] S key handler triggered');
+      if (!this.widgetHasFocus()) void this.startMatch();
+    });
+    this.parent.key(['escape', 'q'], () => {
+      console.log('[MultiplayerLobby] ESC/Q key handler triggered');
+      void this.leaveLobby();
+    });
     if (hasChat) {
-      this.parent.key(['t'], () => this.chatInput?.focus());
+      this.parent.key(['t'], () => {
+        if (!this.widgetHasFocus()) {
+          if (this.currentTab !== 1) this.switchTab(1);
+          this.chatInput?.focus();
+        }
+      });
     }
     if (hasSettingsEditor) {
-      this.parent.key(['o'], () => this.settingsEditorList?.focus());
+      this.parent.key(['o'], () => {
+        if (!this.widgetHasFocus()) {
+          if (this.currentTab !== 0) this.switchTab(0);
+          this.settingsEditorList?.focus();
+        }
+      });
     }
 
-    this.readyButton.focus();
+    // Tab key cycles focus between panels and buttons
+    const focusTargets = [
+      this.playerList,
+      this.teamSelector,
+      this.settingsEditorList,
+      this.readyButton,
+      this.startButton,
+      this.leaveButton,
+    ].filter(Boolean) as any[];
+
+    let focusIndex = 0;
+    this.parent.key(['tab'], () => {
+      console.log('[MultiplayerLobby] Tab pressed, current focusIndex:', focusIndex, 'targets:', focusTargets.length);
+      focusIndex = (focusIndex + 1) % focusTargets.length;
+      console.log('[MultiplayerLobby] Focusing target', focusIndex, ':', focusTargets[focusIndex] ? {
+        type: (focusTargets[focusIndex] as any).type,
+        constructor: (focusTargets[focusIndex] as any).constructor?.name
+      } : null);
+      focusTargets[focusIndex]?.focus();
+      this.parent.render();
+    });
+    this.parent.key(['S-tab'], () => {
+      focusIndex = (focusIndex - 1 + focusTargets.length) % focusTargets.length;
+      focusTargets[focusIndex]?.focus();
+      this.parent.render();
+    });
+
+    // P key to focus player list
+    this.parent.key(['p'], () => {
+      if (!this.widgetHasFocus()) {
+        if (this.currentTab !== 0) this.switchTab(0);
+        this.playerList?.focus();
+      }
+    });
+
+    // Start with player list focused so user can navigate immediately
+    console.log('[MultiplayerLobby] Focusing player list, exists:', !!this.playerList, 'keys:', (this.playerList as any)?.options?.keys, 'mouse:', (this.playerList as any)?.options?.mouse);
+    this.playerList?.focus();
+    console.log('[MultiplayerLobby] After focus, screen.focused:', this.parent.focused ? {
+      type: (this.parent.focused as any).type,
+      name: (this.parent.focused as any).name
+    } : null);
+  }
+
+  /**
+   * Switch between tabs
+   */
+  private switchTab(tabIndex: number): void {
+    if (tabIndex === this.currentTab) return;
+    this.currentTab = tabIndex;
+
+    // Update tab button styles
+    this.tabButtons.forEach((btn, idx) => {
+      if (idx === tabIndex) {
+        btn.style.bg = 'blue';
+        btn.style.fg = 'white';
+      } else {
+        btn.style.bg = 'black';
+        btn.style.fg = 'gray';
+      }
+    });
+
+    // Show/hide tab containers
+    if (this.tab1Container) {
+      this.tab1Container.hidden = tabIndex !== 0;
+    }
+    if (this.tab2Container) {
+      this.tab2Container.hidden = tabIndex !== 1;
+    }
+
+    this.parent.render();
   }
 
   /**
@@ -950,6 +1151,7 @@ export class MultiplayerLobby extends EventEmitter {
       draggable: true,
       dockPosition: 'float',
       persistenceKey: 'multiplayer-lobby.browser',
+      showMinimizeButton: false,
     });
 
     // Table list widget using ListTable
@@ -1435,8 +1637,10 @@ export class MultiplayerLobby extends EventEmitter {
    * Setup network event listeners
    */
   private setupEventListeners(): void {
+    console.log('[MultiplayerLobby] Setting up event listeners');
     // Player joined
     this.adapter.on('player:joined', (player: LobbyPlayerInfo) => {
+      console.log('[MultiplayerLobby] player:joined event received:', player);
       this.playSound('join');
       this.updatePlayerList();
       this.updateStatus(`${player.name} joined the lobby`);
@@ -1498,8 +1702,10 @@ export class MultiplayerLobby extends EventEmitter {
 
     // State updated (generic)
     this.adapter.on('state:updated', () => {
-      this.updatePlayerList();
+      console.log('[MultiplayerLobby] state:updated event received');
       const state = this.adapter.getState();
+      console.log('[MultiplayerLobby] Current state from adapter:', state);
+      this.updatePlayerList();
       if (state) {
         this.updateSettings(state.mode, state.lobbyId);
         if (state.leaderboard) {
@@ -1555,6 +1761,12 @@ export class MultiplayerLobby extends EventEmitter {
 
     try {
       await this.adapter.joinQueue(mode);
+      // In local mode without server, first player is the host
+      const state = this.adapter.getState();
+      if (state && state.players.length === 1 && state.players[0]?.id === this.localPlayerId) {
+        this.setAsHost(true);
+        console.log('[MultiplayerLobby] joinMatchmaking: set as host (first player in local mode)');
+      }
       this.updateStatus('Searching for opponents...');
     } catch (err) {
       this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -1566,13 +1778,17 @@ export class MultiplayerLobby extends EventEmitter {
    */
   private async createCustomLobby(mode: string, isPrivate: boolean = false): Promise<void> {
     this.updateStatus('Creating lobby...');
+    console.log('[MultiplayerLobby] createCustomLobby called, mode=', mode);
 
     try {
       const lobbyId = await this.adapter.createLobby(mode, isPrivate);
+      console.log('[MultiplayerLobby] createLobby returned:', lobbyId);
       this.setAsHost(true);
+      console.log('[MultiplayerLobby] setAsHost(true) called, isHost=', this.isHost);
       this.updateStatus(`Lobby created. Code: ${lobbyId}`);
       this.updateSettings(mode, lobbyId);
     } catch (err) {
+      console.log('[MultiplayerLobby] createCustomLobby error:', err);
       this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
@@ -1585,6 +1801,7 @@ export class MultiplayerLobby extends EventEmitter {
 
     try {
       await this.adapter.joinLobby(lobbyId);
+      this.setAsHost(false);  // Joiner is not host
       const state = this.adapter.getState();
       if (state) {
         this.updateSettings(state.mode, lobbyId);
@@ -1599,8 +1816,10 @@ export class MultiplayerLobby extends EventEmitter {
    * Set host status
    */
   private setAsHost(isHost: boolean): void {
+    console.log('[MultiplayerLobby] setAsHost called with:', isHost);
     this.isHost = isHost;
     this.startButton.hidden = !isHost;
+    console.log('[MultiplayerLobby] startButton.hidden set to:', this.startButton.hidden);
     if (this.fillBotsButton) {
       this.fillBotsButton.hidden = !isHost;
     }
@@ -1641,12 +1860,15 @@ export class MultiplayerLobby extends EventEmitter {
    * Start match (host only)
    */
   private async startMatch(): Promise<void> {
+    console.log('[MultiplayerLobby] startMatch called, isHost=', this.isHost);
     if (!this.isHost) {
       this.updateStatus('Only the host can start the match');
+      console.log('[MultiplayerLobby] Not host, returning');
       return;
     }
 
     const state = this.adapter.getState();
+    console.log('[MultiplayerLobby] startMatch state=', state ? { playerCount: state.players.length, players: state.players.map(p => ({ id: p.id, ready: p.ready })) } : null);
     if (!state) {
       this.updateStatus('No active lobby');
       return;
@@ -1654,6 +1876,7 @@ export class MultiplayerLobby extends EventEmitter {
 
     // Check if all players are ready
     const allReady = state.players.every(p => p.ready || p.id === this.localPlayerId);
+    console.log('[MultiplayerLobby] allReady=', allReady, 'localPlayerId=', this.localPlayerId);
     if (!allReady) {
       this.updateStatus('Not all players are ready');
       this.playSound('error');
@@ -1664,9 +1887,25 @@ export class MultiplayerLobby extends EventEmitter {
     const modeConfig = this.modes[state.mode];
     const minPlayers = modeConfig?.minPlayers ?? 2;
     if (state.players.length < minPlayers) {
-      this.updateStatus(`Need at least ${minPlayers} players`);
-      this.playSound('error');
-      return;
+      // Auto-fill with bots if available and not enough players
+      if (this.features.bots !== false && this.adapter.fillWithBots) {
+        this.updateStatus(`Adding bots to fill ${minPlayers - state.players.length} slot(s)...`);
+        await this.adapter.fillWithBots(this.botDifficulty);
+        this.hasBots = true;
+        this.updatePlayerList();
+        this.parent.render();
+        // Re-check after adding bots
+        const newState = this.adapter.getState();
+        if (!newState || newState.players.length < minPlayers) {
+          this.updateStatus(`Still need ${minPlayers - (newState?.players.length || 0)} players`);
+          this.playSound('error');
+          return;
+        }
+      } else {
+        this.updateStatus(`Need at least ${minPlayers} players`);
+        this.playSound('error');
+        return;
+      }
     }
 
     this.updateStatus('Starting match...');
@@ -1809,12 +2048,16 @@ export class MultiplayerLobby extends EventEmitter {
    * Update player list display
    */
   private updatePlayerList(): void {
+    console.log('[MultiplayerLobby] updatePlayerList called');
     const state = this.adapter.getState();
+    console.log('[MultiplayerLobby] state for updatePlayerList:', state);
     if (!state) {
+      console.log('[MultiplayerLobby] No state, clearing player list');
       this.playerList.setItems([]);
       this.parent.render();
       return;
     }
+    console.log('[MultiplayerLobby] players in state:', state.players);
 
     const modeConfig = this.modes[state.mode];
 
@@ -2059,7 +2302,23 @@ export class MultiplayerLobby extends EventEmitter {
    */
   private updateStatus(message: string): void {
     const timestamp = new Date().toLocaleTimeString();
-    this.statusBox.setContent(`  {gray-fg}[${timestamp}]{/gray-fg}\n  ${message}`);
+
+    // If we have chat, add status as a system message
+    if (this.chatLog && this.features.chat) {
+      const statusLine = `{gray-fg}[${timestamp}] ${message}{/gray-fg}`;
+      this.chatMessages.push({
+        id: `status-${Date.now()}`,
+        playerId: 'system',
+        playerName: 'System',
+        text: message,
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+      this.updateChatLog();
+    } else {
+      // Fall back to status box
+      this.statusBox.setContent(`  {gray-fg}[${timestamp}]{/gray-fg}\n  ${message}`);
+    }
     this.parent.render();
   }
 
@@ -2096,6 +2355,25 @@ export class MultiplayerLobby extends EventEmitter {
   /**
    * Cleanup
    */
+  /**
+   * Check if a widget that needs keyboard input (List, Textbox, etc.) has focus
+   * Used to prevent shortcut keys from interfering with widget navigation
+   */
+  private widgetHasFocus(): boolean {
+    const focused = this.parent.focused;
+    console.log('[MultiplayerLobby] widgetHasFocus check - focused:', focused ? {
+      type: (focused as any).type,
+      name: (focused as any).name,
+      constructor: (focused as any).constructor?.name
+    } : null);
+    if (!focused || typeof focused !== 'object') return false;
+    const type = (focused as any).type;
+    const hasWidgetFocus = type === 'list' || type === 'listbar' || type === 'textbox' ||
+           type === 'textarea' || type === 'input';
+    console.log('[MultiplayerLobby] widgetHasFocus result:', hasWidgetFocus, 'type:', type);
+    return hasWidgetFocus;
+  }
+
   private cleanup(): void {
     // Clear auto-refresh timer
     if (this.browserAutoRefreshTimer) {
