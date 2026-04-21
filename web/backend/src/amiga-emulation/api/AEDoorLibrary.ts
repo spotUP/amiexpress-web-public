@@ -1,4 +1,5 @@
 import { Socket } from "socket.io";
+import * as deasync from "deasync";
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { ExecLibrary } from "./ExecLibrary";
 import { XIMCommand } from "../xim/types";
@@ -1783,23 +1784,61 @@ console.warn(
 
   private waitForReply(state: DoorInterfaceState, command: number): boolean {
     this.inWaitForReply = true;
+    const asyncWait = process.env.DOOR_ASYNC_WAIT === '1';
+    const profile = process.env.DOOR_PROFILE === '1';
+    const started = profile ? Date.now() : 0;
+    let iterations = 0;
+    let replied = false;
     try {
-      for (let i = 0; i < 10000; i++) {
-        // CRITICAL FIX 2026-01-08: Process XIM messages synchronously!
-        // We're inside a trap handler, so the async polling loop can't run.
-        // The door sent a message to the BBS, we need to process it and send
-        // the reply before the door's getMsg finds it.
-        if (this.processXIMMessageCallback && state.bbsPortAddr) {
-          this.processXIMMessageCallback(state.bbsPortAddr);
-        }
-
-        const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
-        if (msgAddr !== 0) {
-          return true;
+      if (asyncWait) {
+        // Pump the Node event loop via deasync (same pattern BsdSocketLibrary
+        // uses for sync-looking socket connect) so Socket.IO events, timers,
+        // and async then() callbacks can run between reply-poll iterations.
+        // 5 s wall-clock deadline mirrors the old 10000-iteration budget in
+        // practical terms — neither is a correctness timeout, just a safety
+        // stop.
+        const deadline = Date.now() + 5000;
+        deasync.loopWhile(() => {
+          iterations++;
+          if (this.processXIMMessageCallback && state.bbsPortAddr) {
+            this.processXIMMessageCallback(state.bbsPortAddr);
+          }
+          const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
+          if (msgAddr !== 0) {
+            replied = true;
+            return false;
+          }
+          return Date.now() < deadline;
+        });
+      } else {
+        // Default sync loop — holds the JS event loop. See
+        // thoughts/shared/plans/2026-04-21-aedoor-waitforreply-event-loop.md
+        for (let i = 0; i < 10000; i++) {
+          iterations++;
+          if (this.processXIMMessageCallback && state.bbsPortAddr) {
+            this.processXIMMessageCallback(state.bbsPortAddr);
+          }
+          const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
+          if (msgAddr !== 0) {
+            replied = true;
+            break;
+          }
         }
       }
-      console.warn(`[AEDoorLibrary] No reply for command ${command} after 10000 iterations`);
-      return false;
+      if (!replied) {
+        console.warn(
+          `[AEDoorLibrary] No reply for command ${command} after ${iterations} iterations ` +
+          `(${asyncWait ? 'async' : 'sync'} wait)`
+        );
+      }
+      if (profile) {
+        const elapsed = Date.now() - started;
+        console.log(
+          `[AEDoor][PROFILE] waitForReply cmd=${command} mode=${asyncWait ? 'async' : 'sync'} ` +
+          `iters=${iterations} elapsed=${elapsed}ms replied=${replied}`
+        );
+      }
+      return replied;
     } finally {
       this.inWaitForReply = false;
     }
