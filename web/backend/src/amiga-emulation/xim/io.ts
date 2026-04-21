@@ -1556,8 +1556,16 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
     //
     // NOTE: express.e:3406-3411 does aePuts('\b\n') - backspace+newline.
     // We skip the backspace as it's typically a no-op when at start of line.
+    //
+    // TARGETED FIX (task #8): if the message ends with a cursor-positioning
+    // escape (CUU/CUD/CUF/CUB/CUP/HVP), skip the auto-newline — the door
+    // just moved the cursor deliberately and an injected \r\n would consume
+    // the next column the door expects. Matches WarOLM's ESC[11A line-editor
+    // redraw. Other doors that don't end in a cursor move keep the old
+    // auto-newline behavior.
     const alreadyHasNewline = normalized.endsWith('\n');
-    if (!newlineMode.strict && addNewline && !alreadyHasNewline) {
+    const endsWithCursorMove = /\x1b\[[0-9;]*[ABCDHf]$/.test(normalized);
+    if (!newlineMode.strict && addNewline && !alreadyHasNewline && !endsWithCursorMove) {
       normalized += '\n';
     }
 
