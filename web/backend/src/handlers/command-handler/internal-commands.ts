@@ -124,7 +124,6 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   // If a command exists in the BBSCMD cache, it's a door and should always run.
   // Access commandCache via require() to avoid tsx ESM/CJS dual-instance issue.
   const { commandCache } = require('../command-execution.handler');
-console.log(`[InternalRouter] Checking bbscmd cache for '${command}': has=${commandCache.bbscmd.has(command)}, cacheSize=${commandCache.bbscmd.size}, keys=${[...commandCache.bbscmd.keys()].slice(0,5).join(',')}`);
   if (commandCache.bbscmd.has(command)) {
 console.log(`[InternalRouter] Overriding internal command '${command}' with external BBSCMD door.`);
     const { runBbsCommand } = require('../command-execution.handler');
