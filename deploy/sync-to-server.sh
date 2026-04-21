@@ -122,17 +122,36 @@ sync_dir_files() {
 # ============================================================
 # 1. Root-level config files
 # ============================================================
-echo "[1/5] Root-level configuration files..."
+echo "[1/7] Root-level configuration files..."
 sync_file "bbsConfig.info" "${BBS_DATA}/bbsConfig.info"
 sync_file "Doors.info" "${BBS_DATA}/Doors.info"
 sync_file "NamesNotAllowed.info" "${BBS_DATA}/NamesNotAllowed.info"
 sync_file "ConfConfig.info" "${BBS_DATA}/ConfConfig.info"
 sync_file "Conf.DB" "${BBS_DATA}/Conf.DB"
+sync_file "Access.info" "${BBS_DATA}/Access.info"
+sync_file "Commands.info" "${BBS_DATA}/Commands.info"
+sync_file "ComputerList.info" "${BBS_DATA}/ComputerList.info"
+sync_file "Drives.info" "${BBS_DATA}/Drives.info"
+sync_file "ScreenTypes.info" "${BBS_DATA}/ScreenTypes.info"
+sync_file "Protocols.info" "${BBS_DATA}/Protocols.info"
+sync_file "Storage.info" "${BBS_DATA}/Storage.info"
+sync_file "SysopStats.info" "${BBS_DATA}/SysopStats.info"
+sync_file "Private.info" "${BBS_DATA}/Private.info"
+sync_file "HELP.info" "${BBS_DATA}/HELP.info"
+sync_file "Languages.info" "${BBS_DATA}/Languages.info"
+sync_file "Utils.info" "${BBS_DATA}/Utils.info"
+sync_file "FCheck.info" "${BBS_DATA}/FCheck.info"
+sync_file "Zoom.info" "${BBS_DATA}/Zoom.info"
+sync_file "Areas.info" "${BBS_DATA}/Areas.info"
+for b in 0 1 2 3 4 5 6; do
+  sync_file "batch${b}.info" "${BBS_DATA}/batch${b}.info"
+done
+sync_file "batch000.info" "${BBS_DATA}/batch000.info"
 
 # ============================================================
 # 2. Node .info files (root level: Node0.info .. Node6.info)
 # ============================================================
-echo "[2/5] Node .info files..."
+echo "[2/7] Node .info files..."
 for n in $(seq 0 6); do
   sync_file "Node${n}.info" "${BBS_DATA}/Node${n}.info"
 done
@@ -142,7 +161,7 @@ done
 #    (Modem.info, Serial.info, etc. - use Node0 as template
 #    for any node missing them)
 # ============================================================
-echo "[3/5] Per-node config files (Node0-40)..."
+echo "[3/7] Per-node config files (Node0-40)..."
 TEMPLATE_NODE="Node0"
 for n in $(seq 0 40); do
   nodeDir="Node${n}"
@@ -171,7 +190,7 @@ done
 # ============================================================
 # 4. Conf .info files (already in Dockerfile but verify)
 # ============================================================
-echo "[4/5] Conference .info files..."
+echo "[4/7] Conference .info files..."
 for n in $(seq 1 14); do
   sync_file "Conf${n}.info" "${BBS_DATA}/Conf${n}.info"
 done
@@ -179,7 +198,7 @@ done
 # ============================================================
 # 5. Upload files (LHA archives in Conf*/Upload/)
 # ============================================================
-echo "[5/5] Conference upload files..."
+echo "[5/7] Conference upload files..."
 for n in $(seq 1 14); do
   if [ -d "Conf${n}/Upload" ]; then
     sync_dir_files "Conf${n}/Upload" "${BBS_DATA}/Conf${n}/Upload" "*.LHA"
@@ -188,7 +207,22 @@ for n in $(seq 1 14); do
   fi
 done
 
-echo ""
+# ============================================================
+# 6. BBS config directories (Access, Languages, Protocols, etc.)
+# ============================================================
+echo "[6/7] BBS config directories..."
+for dir in Access Languages Protocols FCheck Storage SysopStats Zoom HELP Utils; do
+  sync_dir_files "$dir" "${BBS_DATA}/${dir}" "*"
+done
+
+# ============================================================
+# 7. Batch files (AmigaDOS maintenance scripts)
+# ============================================================
+echo "[7/7] Batch files..."
+for b in 0 1 2 3 4 5 6; do
+  sync_file "batch${b}" "${BBS_DATA}/batch${b}"
+done
+sync_file "batch000" "${BBS_DATA}/batch000"
 echo "=============================================="
 echo "Sync complete!"
 echo "  Copied:  ${COPIED}"

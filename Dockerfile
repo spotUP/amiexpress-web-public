@@ -262,6 +262,24 @@ COPY Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.inf
 COPY Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info /app/default-data/
 COPY Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info /app/default-data/
 
+# Copy BBS config directories (access levels, protocols, file checkers, etc.)
+COPY Access /app/default-data/Access
+COPY Languages /app/default-data/Languages
+COPY Protocols /app/default-data/Protocols
+COPY FCheck /app/default-data/FCheck
+COPY Storage /app/default-data/Storage
+COPY SysopStats /app/default-data/SysopStats
+COPY Zoom /app/default-data/Zoom
+COPY HELP /app/default-data/HELP
+COPY Utils /app/default-data/Utils
+
+# Copy remaining root-level .info files (batch configs, system configs)
+COPY Access.info Commands.info ComputerList.info Drives.info /app/default-data/
+COPY ScreenTypes.info Protocols.info Storage.info SysopStats.info /app/default-data/
+COPY Private.info HELP.info Languages.info Utils.info FCheck.info /app/default-data/
+COPY Zoom.info Areas.info /app/default-data/
+COPY batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info /app/default-data/
+
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
