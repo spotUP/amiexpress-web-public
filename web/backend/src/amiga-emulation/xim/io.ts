@@ -121,6 +121,12 @@ export class XIMIOHandler {
    * Clear any queued input from before the door started.
    * Called when a new door session begins to prevent leftover keystrokes
    * (e.g., Enter presses during login) from auto-responding to door prompts.
+   *
+   * After clearing, seeds the queue with a single CR — matches real /X behavior
+   * where the Enter that completes the user's command invocation is still
+   * pending in the serial buffer when the door starts. Doors like JoinCnf
+   * rely on this to dismiss an opening "press <RETURN>" prompt invisibly
+   * (they print the prompt, readChar returns immediately, then they BS/erase it).
    */
   clearQueuedInput(): void {
     const queueSize = this.inputQueue.length;
@@ -128,6 +134,8 @@ export class XIMIOHandler {
       debugLog(`[XIMIOHandler] Clearing ${queueSize} queued inputs from before door started`);
       this.inputQueue.length = 0;
     }
+    this.inputQueue.push('\r');
+debugLog('[XIMIOHandler] Seeded input queue with CR to match real /X command-entry buffering');
   }
 
   /**
