@@ -273,12 +273,28 @@ COPY Zoom /app/default-data/Zoom
 COPY HELP /app/default-data/HELP
 COPY Utils /app/default-data/Utils
 
+# Copy AmigaOS system directories (C commands, Devs, L handlers, S startup, Scripts)
+COPY C /app/default-data/C
+COPY Devs /app/default-data/Devs
+COPY L /app/default-data/L
+COPY S /app/default-data/S
+COPY Scripts /app/default-data/Scripts
+COPY System /app/default-data/System
+COPY AmiXnet /app/default-data/AmiXnet
+COPY RIPgraphics /app/default-data/RIPgraphics
+COPY Partdownload /app/default-data/Partdownload
+
 # Copy remaining root-level .info files (batch configs, system configs)
 COPY Access.info Commands.info ComputerList.info Drives.info /app/default-data/
 COPY ScreenTypes.info Protocols.info Storage.info SysopStats.info /app/default-data/
 COPY Private.info HELP.info Languages.info Utils.info FCheck.info /app/default-data/
-COPY Zoom.info Areas.info /app/default-data/
+COPY Zoom.info Areas.info AmiXnet.info UUCP.info /app/default-data/
 COPY batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info /app/default-data/
+
+# Copy batch files (AmigaDOS maintenance scripts) and other root data files
+COPY batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 /app/default-data/
+COPY acp.dat acpConnections.dat BBSHelp.txt SystemStats cplistan1000.dat /app/default-data/
+COPY express /app/default-data/express
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
