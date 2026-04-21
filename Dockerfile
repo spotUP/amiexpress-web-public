@@ -256,10 +256,11 @@ COPY data/amiga-roms/aros-ext.bin /app/default-data/amiga-roms/aros-ext.bin
 # These are binary Amiga icon files containing tooltypes (key=value pairs)
 # ConfConfig.info: NCONFS, NAME.n, LOCATION.n (conference list)
 # Conf*.info: Per-conference settings (NDIRS, DLPATH, ULPATH for file areas)
-# Note: bbsConfig.info is gitignored (user-specific) - backend uses defaults
-COPY ConfConfig.info /app/default-data/ConfConfig.info
+# Note: bbsConfig.info is gitignored (user-specific) - synced via deploy/sync-to-server.sh
+COPY ConfConfig.info Conf.DB Doors.info NamesNotAllowed.info /app/default-data/
 COPY Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info /app/default-data/
 COPY Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info /app/default-data/
+COPY Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info /app/default-data/
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

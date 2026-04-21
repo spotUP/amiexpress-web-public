@@ -90,7 +90,7 @@ fi
 # Copy root-level .info configuration files (critical for conferences and file areas)
 # These are binary Amiga icon files containing tooltypes (key=value pairs)
 # Note: bbsConfig.info is gitignored (user-specific) - backend uses defaults
-INFO_FILES="ConfConfig.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info"
+INFO_FILES="ConfConfig.info Conf.DB Doors.info NamesNotAllowed.info Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info"
 
 echo "[Entrypoint] Checking root .info configuration files..."
 
@@ -187,6 +187,25 @@ else
             fi
         done
         echo "[Entrypoint] All Screens directories re-initialized"
+    fi
+
+    # Always repair Node Screens: if a Node dir exists but has no/empty Screens,
+    # copy screen files from Node0 as template (handles dynamically-created nodes)
+    NODE0_SCREENS="$BBS_DATA_DIR/Node0/Screens"
+    if [ -d "$NODE0_SCREENS" ]; then
+        SCREEN_COUNT=$(ls "$NODE0_SCREENS" 2>/dev/null | wc -l)
+        if [ "$SCREEN_COUNT" -gt 0 ]; then
+            for n in $(seq 1 40); do
+                NODE_SCREENS="$BBS_DATA_DIR/Node${n}/Screens"
+                if [ -d "$BBS_DATA_DIR/Node${n}" ]; then
+                    if [ ! -d "$NODE_SCREENS" ] || [ "$(ls "$NODE_SCREENS" 2>/dev/null | wc -l)" -eq 0 ]; then
+                        mkdir -p "$NODE_SCREENS"
+                        cp "$NODE0_SCREENS"/* "$NODE_SCREENS/" 2>/dev/null
+                        echo "[Entrypoint]   REPAIR: Copied screen files to Node${n}/Screens/"
+                    fi
+                fi
+            done
+        fi
     fi
 
     # Force re-initialize Doors if requested (updates TypeScript doors to latest versions)
