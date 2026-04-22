@@ -273,7 +273,6 @@ class GameScreen {
             this.triggerLockFlash();
         }
         this.lastPieceExists = gameState.currentPiece !== null;
-        this.lastHold = gameState.holdPiece;
     }
     /**
      * Trigger medal award animation

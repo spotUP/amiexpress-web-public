@@ -66,31 +66,21 @@ class SettingsScreen {
                 style: { fg: 'white', bg: 'black' },
             });
             // Settings menu
-            const menuPanel = (0, blessed_helpers_1.createBox)({
+            const menu = (0, blessed_helpers_1.createList)({
                 parent: this.screen,
                 top: 3,
                 left: 10,
                 width: 60,
                 height: 15,
                 border: { type: 'line' },
-                style: {
-                    border: { fg: 'cyan' },
-                },
                 label: ' Settings ',
-                fixed: true,
-            });
-            const menu = (0, blessed_helpers_1.createList)({
-                parent: menuPanel,
-                top: 1,
-                left: 1,
-                width: 58,
-                height: 13,
                 scrollable: true,
                 scrollbar: {
                     ch: ' ',
                     style: { bg: 'cyan' },
                 },
                 style: {
+                    border: { fg: 'cyan' },
                     selected: { bg: 'cyan', fg: 'black' },
                     item: { fg: 'white' },
                 },
@@ -114,7 +104,6 @@ class SettingsScreen {
             // Cleanup function for exiting settings
             const exitSettings = () => {
                 title.destroy();
-                menuPanel.destroy();
                 menu.destroy();
                 descBox.destroy();
                 this.screen.render();

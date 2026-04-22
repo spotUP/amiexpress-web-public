@@ -74,32 +74,21 @@ export class SettingsScreen {
       });
 
       // Settings menu
-      const menuPanel = createBox({
+      const menu = createList({
         parent: this.screen,
         top: 3,
         left: 10,
         width: 60,
         height: 15,
         border: { type: 'line' },
-        style: {
-          border: { fg: 'cyan' },
-        },
         label: ' Settings ',
-        fixed: true,
-      });
-
-      const menu = createList({
-        parent: menuPanel,
-        top: 1,
-        left: 1,
-        width: 58,
-        height: 13,
         scrollable: true,
         scrollbar: {
           ch: ' ',
           style: { bg: 'cyan' },
         },
         style: {
+          border: { fg: 'cyan' },
           selected: { bg: 'cyan', fg: 'black' },
           item: { fg: 'white' },
         },
@@ -125,7 +114,6 @@ export class SettingsScreen {
       // Cleanup function for exiting settings
       const exitSettings = () => {
         title.destroy();
-        menuPanel.destroy();
         menu.destroy();
         descBox.destroy();
         this.screen.render();
