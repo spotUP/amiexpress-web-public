@@ -237,7 +237,7 @@ else
             # Use cp with --update to only overwrite older files, and --no-clobber
             # for safety. But for code we WANT to overwrite, so use rsync-like approach:
             # Copy all files from image, but don't delete user-created files on disk.
-            cp -r "$DEFAULT_DATA_DIR/$sync_dir/." "$BBS_DATA_DIR/$sync_dir/" 2>/dev/null
+            cp -r "$DEFAULT_DATA_DIR/$sync_dir/." "$BBS_DATA_DIR/$sync_dir/" 2>/dev/null || true
             echo "[Entrypoint]   Synced $sync_dir from image"
         fi
     done

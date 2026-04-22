@@ -475,7 +475,7 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
         }
 
         // Convert Amiga paths to Unix paths
-        location = location.replace(/^DOORS:/i, 'doors/').replace(/:/g, '/');
+        location = location.replace(/^DOORS:/i, 'Doors/').replace(/:/g, '/');
 
         return {
           name,
@@ -540,7 +540,7 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   // - BBS:Doors/xxx -> Doors/xxx
   const normalizedLocation = locationKey
     .replace(/^BBS:/i, '')           // Strip BBS: prefix (it's the BBS root)
-    .replace(/^doors:/i, 'doors/')   // Convert doors: to doors/
+    .replace(/^doors:/i, 'Doors/')   // Convert doors: to Doors/ (preserve case for Linux)
     .replace(/:/g, '/');
 
   const cmd: CommandDefinition = {
