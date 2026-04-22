@@ -1028,6 +1028,43 @@ Tab key handlers on elements never fire because Screen intercepts Tab first. Put
 
 Use `createTextbox()` for single-line inputs (Enter submits). Use `createTextarea()` for multi-line (Enter inserts newline).
 
+### 12. Display-Only Boxes Stealing Focus
+
+`createBox()` creates a `DockablePanel` -> `Panel` which defaults to `focusable: true`.
+Every display-only box (stats, labels, headers, previews, indicators) will steal keyboard
+focus from interactive elements like game boards, menus, and input fields.
+
+```typescript
+// WRONG - this stats panel will steal focus
+const statsBox = createBox({ parent: screen, content: 'Score: 0' });
+
+// CORRECT - display-only element cannot steal focus
+const statsBox = createBox({
+  parent: screen,
+  content: 'Score: 0',
+  focusable: false,
+  mouse: false,
+  clickable: false,
+});
+```
+
+**Symptoms:** Arrow keys stop working in games, Tab cycling includes non-interactive
+elements, clicking a label steals focus from the input field.
+
+### 13. Default Borders on Height-1 Elements
+
+`Panel` adds `border: { type: 'line', fg: 'blue' }` by default. A `height: 1` element
+with a border becomes 3 rows tall (1 top border + 1 content + 1 bottom border), causing
+overlapping layouts.
+
+```typescript
+// WRONG - gets default border, renders as 3 rows
+const header = createBox({ parent: screen, height: 1 });
+
+// CORRECT - no border, renders as 1 row
+const header = createBox({ parent: screen, height: 1, border: undefined });
+```
+
 ### 12. Using emit('data') Instead of _handleData()
 
 Use `screen.program._handleData(data)` to parse input and emit keypress events. `emit('data', data)` just emits raw data without parsing.
@@ -1098,6 +1135,8 @@ Use this checklist when reviewing or migrating a neo-blessed door:
 - [ ] Uses `createTextbox()` for single-line inputs
 - [ ] Uses `createTextarea()` for multi-line inputs
 - [ ] Focus/hover styles defined in widget options
+- [ ] Display-only boxes have `focusable: false, mouse: false, clickable: false`
+- [ ] Height-1 elements without borders have `border: undefined`
 
 ### Mouse, Hover & Styling
 - [ ] Program uses mouse mode `1003h` for hover without button press

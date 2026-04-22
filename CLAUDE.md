@@ -152,6 +152,35 @@ const box = blessed.box({
 
 See: `Documentation/4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md`
 
+### 6b. CREATEBOX FOCUS AND BORDER DEFAULTS
+
+`createBox()` creates a `DockablePanel` -> `Panel` which defaults to `focusable: true`, `mouse: true`, and `border: { type: 'line' }`. **Display-only elements MUST override these defaults** or they steal keyboard focus and add unwanted borders.
+
+**Display-only elements (stats, labels, headers, previews, indicators):**
+```typescript
+const statsBox = createBox({
+  parent: screen,
+  content: 'Score: 0',
+  focusable: false,   // REQUIRED - prevents focus stealing
+  mouse: false,       // REQUIRED - no mouse interaction
+  clickable: false,   // REQUIRED - no click handling
+});
+```
+
+**Borderless elements (height: 1 headers/status bars):**
+```typescript
+const header = createBox({
+  parent: screen,
+  height: 1,
+  border: undefined,  // REQUIRED - default border makes height:1 into 3 rows
+  focusable: false,
+  mouse: false,
+  clickable: false,
+});
+```
+
+**Symptoms of missing these:** Arrow keys stop working in games, Tab includes non-interactive elements, height:1 bars show as 3 rows with borders overlapping content.
+
 ### 7. MODERN DOOR UX
 
 Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu bars, mouse support, focus management. Reserve footer 3+ rows. Avoid 90's text menus unless requested.

@@ -6,6 +6,53 @@
 
 The SDK blessed-helpers module provides wrapper functions for neo-blessed widgets that automatically add `tags: true` to prevent tag rendering bugs. `createBox()` now returns a `DockablePanel` (border label, no title bar) to make layouts dockable by default.
 
+## CRITICAL: createBox Default Focus Behavior
+
+`createBox()` creates a `DockablePanel` which extends `Panel`. Panel defaults to:
+- `focusable: true`
+- `keys: true`
+- `mouse: true`
+- `border: { type: 'line', fg: 'blue' }`
+
+This means **every createBox element can steal keyboard focus** from interactive
+elements (game boards, input fields, menus). Display-only elements MUST disable this.
+
+**Rule: All display-only boxes must set `focusable: false, mouse: false, clickable: false`.**
+
+Display-only elements include: stats panels, labels, titles, headers, footers,
+status bars, score displays, previews, indicators, decorative elements, overlays.
+
+```typescript
+// WRONG - stats panel steals focus from game board
+const statsBox = createBox({
+  parent: screen,
+  content: 'Score: 0',
+});
+
+// CORRECT - display-only, cannot steal focus
+const statsBox = createBox({
+  parent: screen,
+  content: 'Score: 0',
+  focusable: false,
+  mouse: false,
+  clickable: false,
+});
+```
+
+**Borderless elements** (headers, status bars with height: 1) must also set
+`border: undefined` to override Panel's default line border:
+
+```typescript
+const header = createBox({
+  parent: screen,
+  height: 1,
+  border: undefined,        // Override default line border
+  focusable: false,
+  mouse: false,
+  clickable: false,
+});
+```
+
 ## The Problem
 
 Without `tags: true`, blessed renders color tags as literal text:

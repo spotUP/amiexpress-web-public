@@ -104,6 +104,45 @@ export async function createApp(session: DoorSession) {
 
 ## Critical Lessons Learned
 
+### 0. Display-Only Boxes Must Disable Focus
+
+`createBox()` creates a `DockablePanel` -> `Panel` which defaults to `focusable: true`,
+`mouse: true`, and `border: { type: 'line' }`. Display-only elements MUST override these
+or they will steal keyboard focus from interactive elements during gameplay.
+
+```typescript
+// WRONG - this label steals focus from game board / input fields
+const statsBox = createBox({
+  parent: screen,
+  content: 'Score: 0',
+});
+
+// CORRECT - display-only, cannot steal focus
+const statsBox = createBox({
+  parent: screen,
+  content: 'Score: 0',
+  focusable: false,
+  mouse: false,
+  clickable: false,
+});
+
+// CORRECT - borderless header (height: 1 with default border = 3 rows!)
+const header = createBox({
+  parent: screen,
+  height: 1,
+  border: undefined,
+  focusable: false,
+  mouse: false,
+  clickable: false,
+});
+```
+
+**When to use:** Stats, labels, titles, headers, footers, status bars, previews,
+indicators, decorative elements, overlays, opponent boards, score panels.
+
+**When NOT to use:** Menus, lists, input fields, buttons, chat inputs, game boards -
+anything the user interacts with.
+
 ### 1. Dialog Widgets (Message, Question, Prompt)
 
 **NEVER use `height: 'shrink'`** - it breaks nested element rendering.
