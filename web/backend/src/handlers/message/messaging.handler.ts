@@ -797,18 +797,55 @@ export function handleEnterMessageFullCommand(
 
 console.log('[ENV] Mail');
 
-  // express.e:24860-24872 internalCommandE - no header, goes to mail entry
-  // enterMSG function prompts directly
+  // Prompt for editor type (text or ANSI)
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.colorize('Text or Ansi (T/a): ', 'cyan'));
+
+  session.inputBuffer = '';
+  session.tempData = { isPrivate: true, messageEntry: {} };
+  session.subState = LoggedOnSubState.POST_MESSAGE_TYPE;
+}
+
+/**
+ * Handle POST_MESSAGE_TYPE input - Text or ANSI editor choice
+ */
+export async function handlePostMessageTypeInput(
+  socket: any,
+  session: BBSSession,
+  input: string
+): Promise<void> {
+  const choice = input.trim().toUpperCase();
+
+  if (choice === 'A') {
+    // Launch ANSI mail-composer door
+    const { getDoors, executeDoor } = await import('../door.handler');
+    const doors = getDoors();
+    const mailComposer = doors.find(
+      (d) => d.name.toLowerCase() === 'mail-composer'
+    );
+
+    if (mailComposer) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      await executeDoor(socket, session, mailComposer);
+    } else {
+      emitText(socket, '\r\n' + AnsiUtil.colorize('ANSI editor not available.', 'red') + '\r\n');
+      // Fall through to text editor
+      showTextEditorRecipientPrompt(socket, session);
+    }
+  } else {
+    // Default: Text editor (T or Enter)
+    showTextEditorRecipientPrompt(socket, session);
+  }
+}
+
+function showTextEditorRecipientPrompt(socket: any, session: BBSSession): void {
   emitText(socket, '\r\n');
   emitText(socket, `Conference: ${session.currentConfName}\r\n`);
   emitText(socket, '\r\n');
   emitText(socket, 'Enter recipient username (or press Enter to abort):\r\n');
   emitText(socket, AnsiUtil.colorize('To: ', 'green'));
 
-  // Clear input buffer and set up for line-based input
   session.inputBuffer = '';
-  session.tempData = { isPrivate: true, messageEntry: {} };
-  // IMPORTANT: Set state to POST_MESSAGE_TO (recipient input), NOT POST_MESSAGE_SUBJECT
   session.subState = LoggedOnSubState.POST_MESSAGE_TO;
 }
 

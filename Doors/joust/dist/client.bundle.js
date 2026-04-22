@@ -4796,12 +4796,11 @@ var init_panel = __esm({
       constructor(options = {}) {
         super({
           ...options,
-          border: options.border || { type: "line", fg: "blue" },
-          focusable: true,
-          keys: true,
-          mouse: true,
-          clickable: true,
-          // Enable click events for panel activation
+          border: "border" in options ? options.border || void 0 : { type: "line", fg: "blue" },
+          focusable: options.focusable ?? false,
+          keys: options.keys ?? false,
+          mouse: options.mouse ?? false,
+          clickable: options.clickable ?? false,
           style: {
             fg: "white",
             bg: "black",
@@ -5167,12 +5166,10 @@ var init_dockable_panel = __esm({
           ...normalizedOptions,
           style: mergedStyle,
           draggable: normalizedOptions.draggable !== false,
-          mouse: true,
-          keys: true,
-          focusable: normalizedOptions.focusable !== false,
-          // Respect user's focusable setting, default to true
-          clickable: true
-          // Enable click events for panel activation
+          mouse: normalizedOptions.mouse ?? true,
+          keys: normalizedOptions.keys ?? true,
+          focusable: normalizedOptions.focusable ?? true,
+          clickable: normalizedOptions.clickable ?? true
         });
         this.isDragging = false;
         this.isResizing = false;
@@ -8499,7 +8496,7 @@ var init_blessed = __esm({
     init_carousel();
     init_utils();
     init_screen();
-    init_dockable_panel();
+    init_panel();
     init_text();
     init_list();
     init_form();

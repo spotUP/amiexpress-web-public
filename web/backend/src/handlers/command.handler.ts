@@ -293,6 +293,22 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
 
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
+    case LoggedOnSubState.POST_MESSAGE_TYPE:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        const { handlePostMessageTypeInput } = await import('./message/messaging.handler');
+        await handlePostMessageTypeInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          emitText(socket, '\b \b');
+        }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+        emitText(socket, data);
+      }
+      return;
     case LoggedOnSubState.POST_MESSAGE_TO:
       if (data === '\r' || data === '\n') {
         const input = (session.inputBuffer || '').trim();
@@ -811,6 +827,7 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
 
   // Highest priority: message entry states must never fall through to menu/command handling
   const messageSubStates = new Set<string>([
+    LoggedOnSubState.POST_MESSAGE_TYPE,
     LoggedOnSubState.POST_MESSAGE_TO,
     LoggedOnSubState.POST_MESSAGE_SUBJECT,
     LoggedOnSubState.POST_MESSAGE_PRIVATE,

@@ -83,6 +83,7 @@ export enum LoggedOnSubState {
   MSG_READER_NAV = 'msg_reader_nav',                    // Message reader navigation
   POST_MESSAGE = 'post_message',
   BULLETIN_INPUT = 'bulletin_input',                    // Bulletin reading input
+  POST_MESSAGE_TYPE = 'post_message_type',              // Text or ANSI editor choice
   POST_MESSAGE_TO = 'post_message_to',
   POST_MESSAGE_SUBJECT = 'post_message_subject',
   POST_MESSAGE_PRIVATE = 'post_message_private',

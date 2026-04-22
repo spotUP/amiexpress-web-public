@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "amiexpress-docs": {
+      "command": "node",
+      "args": ["~/Code/amiexpress-web/mcp-server/index.js"]
+    },
+    "amiexpress-debug": {
+      "command": "node",
+      "args": ["~/Code/amiexpress-web/mcp-server-debug/index.js"]
+    }
+  }
+}
