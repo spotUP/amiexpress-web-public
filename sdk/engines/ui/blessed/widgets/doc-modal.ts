@@ -94,7 +94,7 @@ export class DocModal extends Box {
       zIndex: options.zIndex || 9999,
       style: {
         fg: 'white',
-        bg: 'blue',
+        bg: options.contentStyle?.bg || 'blue',
         border: { fg: 'cyan' },
         ...options.style,
       },
@@ -155,8 +155,8 @@ export class DocModal extends Box {
     this._contentArea = new ScrollableText({
       parent: this,
       top: this._contentTopDesktop,
-      left: 1,
-      width: '100%-4',
+      left: 0,
+      width: '100%-2',
       height: `100%-${this._contentTopDesktop + 3}`, // Account for border, footer
       tags: true,
       mouse: true,
