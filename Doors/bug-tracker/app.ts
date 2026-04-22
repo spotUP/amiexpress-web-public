@@ -492,6 +492,8 @@ export class BugTrackerApp {
       content: '{center}{bold}BUG TRACKER{/bold} - AmiExpress BBS Issue Management{/center}',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Main container - not focusable (children are)
@@ -506,6 +508,8 @@ export class BugTrackerApp {
         bg: 'black',
       },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Footer - not focusable
@@ -522,6 +526,8 @@ export class BugTrackerApp {
       content: '{center}Q=Quit | ESC=Back | Arrow Keys=Navigate | Enter=Select{/center}',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
   }
 
@@ -564,6 +570,8 @@ export class BugTrackerApp {
       content: ` Welcome, ${this.username}! | ${stats.total} total bugs | ${openBugs} open`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Menu items with actions
@@ -681,6 +689,8 @@ export class BugTrackerApp {
       mouse: true,
       padding: { left: 1, right: 1 },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Footer
@@ -699,6 +709,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Enter]{/} Select   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[Q]{/} Quit',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     this.screen.render();
@@ -767,6 +779,8 @@ export class BugTrackerApp {
       content: ` Showing ${bugs.length} bug(s) | Filter: ${filterLabels[this.currentFilter]} | Press F to cycle filters`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Format bug list items
@@ -831,6 +845,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Enter]{/} View Bug   {cyan-fg}[N]{/} New Bug   {cyan-fg}[F]{/} Filter   {red-fg}[ESC]{/} Back',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     bugList.focus();
@@ -903,6 +919,8 @@ export class BugTrackerApp {
       content: ` {bold}${bug.title}{/} | {${statusInfo?.color}-fg}${statusInfo?.label}{/} | {${priorityInfo?.color}-fg}${priorityInfo?.label}{/}`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Main detail box
@@ -1056,6 +1074,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Enter]{/} Select Action   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[ESC]{/} Back',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Key handlers
@@ -1146,6 +1166,8 @@ export class BugTrackerApp {
       content: ' Use arrows/mouse to select field. Enter to edit. F10 to submit. ESC to cancel.',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Generate list items from fields
@@ -1208,6 +1230,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Enter]{/} Edit Field   {cyan-fg}[F10]{/} Submit   {red-fg}[ESC]{/} Cancel',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const editField = (fieldIdx: number) => {
@@ -1328,6 +1352,8 @@ export class BugTrackerApp {
       content: ` Total: ${stats.total} bugs | Open: ${openBugs} (${openPct}%) | Closed: ${closedBugs}`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Create bar chart for priorities
@@ -1411,6 +1437,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Up/Down]{/} Scroll   {red-fg}[ESC]{/} Back to Menu',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     analyticsBox.focus();
@@ -1454,6 +1482,8 @@ export class BugTrackerApp {
       content: ` ${webhooks.length} webhook(s) configured | Notifications for bug events`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const listItems = webhooks.map((w, idx) => {
@@ -1504,6 +1534,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[A]{/} Add   {cyan-fg}[D]{/} Delete   {cyan-fg}[T]{/} Toggle   {red-fg}[ESC]{/} Back',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     webhookList.focus();
@@ -1596,6 +1628,8 @@ export class BugTrackerApp {
       content: ` Open: ${openBugs} | Fixed (pending close): ${fixedBugs} | Closed: ${closedBugs}`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const toolLabels = [
@@ -1655,6 +1689,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Enter]{/} Select Tool   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[ESC]{/} Back',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     toolList.focus();
@@ -1895,6 +1931,8 @@ export class BugTrackerApp {
       content: ` Tracking ${userCount} user(s) across ${bugs.length} bug(s)`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Generate report lines
@@ -1953,6 +1991,8 @@ export class BugTrackerApp {
       content: ' {cyan-fg}[Up/Down]{/} Scroll   {red-fg}[ESC]{/} Back to Sysop Tools',
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     reportBox.focus();
@@ -2216,6 +2256,8 @@ export class BugTrackerApp {
         },
         tags: true,
         focusable: false,
+        mouse: false,
+        clickable: false,
       });
 
       const textbox = createTextbox({
@@ -2247,6 +2289,8 @@ export class BugTrackerApp {
         tags: true,
         style: { fg: 'gray', bg: 'black' },
         focusable: false,
+        mouse: false,
+        clickable: false,
       });
 
       const cleanup = () => {
