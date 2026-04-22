@@ -854,7 +854,13 @@ export class GameScreen {
     }
 
     if (this.effectsBox) {
-      this.effectsBox.setContent(effectsContent);
+      if (effectsContent) {
+        this.effectsBox.setContent(effectsContent);
+        this.effectsBox.show();
+      } else {
+        this.effectsBox.setContent('');
+        this.effectsBox.hide();
+      }
     }
   }
 
@@ -1215,7 +1221,7 @@ export class GameScreen {
     
     // TGM3 Shirase: Bone blocks at level 1000+
     if (gameState.mode === 'death' && gameState.level >= 1000) {
-      return `{white-fg}[ ]{/white-fg}`;
+      return '{white-fg}[]{/white-fg}';
     }
     
     return `{${color}-fg}██{/${color}-fg}`;

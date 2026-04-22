@@ -944,6 +944,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Background music handlers (for doors like GRANDMASTER)
     socket.on('audio:music', (data: { track: string; loop: boolean; volume: number; file: string }) => {
+      // Skip if a client door bundle is loaded - the door handles its own audio
+      if (doorActive.current) return;
+
       // Stop any existing music
       if (musicPlayerRef.current) {
         musicPlayerRef.current.pause();
@@ -964,6 +967,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('audio:music:stop', () => {
+      // Skip if a client door bundle is loaded - the door handles its own audio
+      if (doorActive.current) return;
+
       if (musicPlayerRef.current) {
         musicPlayerRef.current.pause();
         musicPlayerRef.current.src = '';

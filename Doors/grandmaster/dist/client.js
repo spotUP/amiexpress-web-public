@@ -42,8 +42,6 @@ const client_1 = require("@amiexpress/bbs-door-sdk/client");
 const Tone = __importStar(require("tone"));
 class GrandmasterAudioClient {
     constructor() {
-        this.unlocked = false;
-        this.pending = [];
         this.sfxVolume = 1;
         this.musicVolume = 0.8;
         this.currentMusic = null;
@@ -60,23 +58,10 @@ class GrandmasterAudioClient {
             runtime: 'hybrid',
             hybrid: true,
         });
-        this.setupUnlockHandler();
+        // User has already interacted with the page (login), so autoplay is allowed.
+        // Initialize Tone.js immediately.
+        void this.initTone();
         this.bindSocketEvents();
-    }
-    setupUnlockHandler() {
-        const unlock = () => {
-            if (this.unlocked)
-                return;
-            this.unlocked = true;
-            void this.initTone();
-            this.flushPending();
-            document.removeEventListener('keydown', unlock);
-            document.removeEventListener('click', unlock);
-            document.removeEventListener('touchstart', unlock);
-        };
-        document.addEventListener('keydown', unlock);
-        document.addEventListener('click', unlock);
-        document.addEventListener('touchstart', unlock);
     }
     bindSocketEvents() {
         const socket = globalThis?.__BBS__?.socket;
@@ -100,10 +85,14 @@ class GrandmasterAudioClient {
                 }
             }
         });
-        // Clean up listeners when door is unloaded
-        socket.on('door:unload-client', () => {
-            this.cleanup();
-        });
+        // Clean up listeners when door becomes inactive
+        const doorActiveHandler = (active) => {
+            if (!active) {
+                this.cleanup();
+                socket.off('door-active', doorActiveHandler);
+            }
+        };
+        on('door-active', doorActiveHandler);
     }
     cleanup() {
         this.stopMusic();
@@ -128,31 +117,29 @@ class GrandmasterAudioClient {
         if (!data?.file)
             return;
         const volume = this.clampVolume(typeof data.volume === 'number' ? data.volume : this.sfxVolume);
-        this.queuePlayback(() => this.playFile(data.file, volume));
+        void this.playFile(data.file, volume);
     }
     playVoice(data) {
         if (!data?.file)
             return;
         const volume = this.clampVolume(typeof data.volume === 'number' ? data.volume : this.sfxVolume);
-        this.queuePlayback(() => this.playFile(data.file, volume));
+        void this.playFile(data.file, volume);
     }
     playMusic(data) {
         if (!data?.file)
             return;
         const volume = this.clampVolume(typeof data.volume === 'number' ? data.volume : this.musicVolume);
-        this.queuePlayback(() => {
-            this.stopMusic();
-            if (this.toneReady) {
-                void this.playToneMusic(data.file, volume, Boolean(data.loop));
-                return;
-            }
-            const audio = new Audio(data.file);
-            audio.loop = Boolean(data.loop);
-            audio.volume = volume;
-            this.currentMusic = audio;
-            audio.play().catch(() => {
-                /* ignore autoplay failures */
-            });
+        this.stopMusic();
+        if (this.toneReady) {
+            void this.playToneMusic(data.file, volume, Boolean(data.loop));
+            return;
+        }
+        const audio = new Audio(data.file);
+        audio.loop = Boolean(data.loop);
+        audio.volume = volume;
+        this.currentMusic = audio;
+        audio.play().catch(() => {
+            /* ignore autoplay failures */
         });
     }
     stopMusic() {
@@ -186,19 +173,6 @@ class GrandmasterAudioClient {
         audio.play().catch(() => {
             /* ignore autoplay failures */
         });
-    }
-    queuePlayback(action) {
-        if (this.unlocked) {
-            void action();
-        }
-        else {
-            this.pending.push(action);
-        }
-    }
-    flushPending() {
-        const pending = [...this.pending];
-        this.pending = [];
-        pending.forEach((action) => { void action(); });
     }
     async initTone() {
         if (this.toneReady)
@@ -266,5 +240,11 @@ class GrandmasterAudioClient {
         return Math.max(0, Math.min(1, value));
     }
 }
-new GrandmasterAudioClient();
+// Destroy any previous instance (handles door re-entry without page reload)
+const prev = globalThis.__grandmasterAudio;
+if (prev && typeof prev.cleanup === 'function') {
+    prev.cleanup();
+}
+const instance = new GrandmasterAudioClient();
+globalThis.__grandmasterAudio = instance;
 //# sourceMappingURL=client.js.map

@@ -645,7 +645,11 @@ class AttractScreen {
             if (shape) {
                 pieceShape = shape;
                 if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
-                    ghostY = (0, board_1.getGhostY)(board, shape, currentPiece.x, currentPiece.y);
+                    const calculatedGhostY = (0, board_1.getGhostY)(board, shape, currentPiece.x, currentPiece.y);
+                    const ghostBottom = calculatedGhostY + shape.length - 1;
+                    if (ghostBottom >= 4 && calculatedGhostY !== currentPiece.y) {
+                        ghostY = calculatedGhostY;
+                    }
                 }
             }
         }
@@ -671,7 +675,9 @@ class AttractScreen {
                 if (ghostY !== null && currentPiece && pieceShape && char === '  ' && !isMasterRoll) {
                     const px = x - currentPiece.x;
                     const py = y - ghostY;
-                    if (py >= 0 && py < pieceShape.length && px >= 0 && px < pieceShape[py].length && pieceShape[py][px]) {
+                    const ghostBlockY = ghostY + py;
+                    if (py >= 0 && py < pieceShape.length && px >= 0 && px < pieceShape[py].length && pieceShape[py][px] &&
+                        ghostBlockY >= 4 && ghostBlockY < 24) {
                         char = '{gray-fg}░░{/gray-fg}';
                     }
                 }
