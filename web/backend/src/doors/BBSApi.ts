@@ -1275,20 +1275,46 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
   }>> {
     const { getDoors } = await import('../handlers/door.handler');
     const allDoors = getDoors();
+    const bbsRoot = (this.session as any)?.dataDir || process.env.BBS_DATA_DIR || process.cwd();
 
-    return allDoors.map((door: any) => ({
-      id: door.id || door.command,
-      command: door.command || door.id,
-      name: door.name || door.command || door.id,
-      description: door.description || '',
-      type: door.type || 'AMI',
-      doorType: door.type,
-      size: door.size || 0,
-      accessLevel: door.accessLevel || 0,
-      enabled: door.enabled !== false, // Default to enabled if not specified
-      category: door.category || undefined,
-      location: door.path || ''
-    }));
+    return allDoors.map((door: any) => {
+      let doorSize = door.size || 0;
+      if (doorSize === 0) {
+        const doorPath = door.path || door.location || '';
+        if (doorPath) {
+          try {
+            const amigafs = require('../utils/amigafs');
+            const pathMod = require('path');
+            // Try the direct path first, then common variations
+            const candidates = [
+              pathMod.join(bbsRoot, doorPath),
+              pathMod.join(bbsRoot, 'Doors', door.id || door.command),
+              pathMod.join(bbsRoot, 'Doors', (door.command || door.id || '').toLowerCase()),
+            ];
+            for (const testPath of candidates) {
+              if (amigafs.existsSync(testPath)) {
+                const stats = amigafs.statSync(testPath);
+                doorSize = stats.isDirectory() ? stats.size : stats.size;
+                break;
+              }
+            }
+          } catch (_) { /* ignore */ }
+        }
+      }
+      return {
+        id: door.id || door.command,
+        command: door.command || door.id,
+        name: door.name || door.command || door.id,
+        description: door.description || '',
+        type: door.type || 'AMI',
+        doorType: door.type,
+        size: doorSize,
+        accessLevel: door.accessLevel || 0,
+        enabled: door.enabled !== false,
+        category: door.category || undefined,
+        location: door.path || ''
+      };
+    });
   }
 
   /**

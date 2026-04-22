@@ -310,8 +310,8 @@ export class ANSIEditor extends Box {
     this.setupKeyHandlers();
     this.setupMouseHandlers();
 
-    // Sync canvas to display if we have initial content
-    if (options.initialContent && this.mode === 'draw') {
+    // Sync canvas to display (always in draw mode - ensures clean state)
+    if (this.mode === 'draw') {
       this.syncCoreCanvasToDisplay();
     }
 
@@ -367,6 +367,7 @@ export class ANSIEditor extends Box {
       focusable: true,
       clickable: true,
       input: true,
+      wrap: false, // ANSI content is fixed width - never wrap
     });
 
     // 5. Canvas (for draw mode)
@@ -382,6 +383,7 @@ export class ANSIEditor extends Box {
       focusable: true,
       clickable: true,
       input: true,
+      wrap: false, // ANSI canvas is fixed 80 cols - never wrap
       fillChar: this.currentChar,
       clearChar: ' ',
     });
@@ -407,11 +409,13 @@ export class ANSIEditor extends Box {
       width: 1,
       height: 1,
       content: '█',
-      style: { bg: 'white', fg: 'black' },
+      style: { bg: 'red', fg: 'red' },
       tags: true,
       clickable: false,
       mouse: false,
     });
+    // Ensure cursor renders above canvas
+    this.drawCursor.setFront();
 
     // Set initial visibility based on mode
     if (this.mode === 'draw') {
@@ -3476,6 +3480,10 @@ BBS Door SDK v2.0{/gray-fg}
     }
 
     this.drawCanvas.setContent(content);
+    // Ensure cursor stays above canvas content
+    if (this.drawCursor) {
+      this.drawCursor.setFront();
+    }
   }
 
   private updateDisplay(): void {

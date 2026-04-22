@@ -1475,12 +1475,13 @@ function App() {
                   </div>
 
                   {/* Terminal with optional CRT effect */}
-                  <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden" data-tour="terminal">
+                  <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden flex items-start justify-center" data-tour="terminal">
                     <CRTEffect enabled={enableCRT} intensity="medium">
                       {activeTerminalTab === 'bbs' ? (
                         <BBSTerminal
                           ref={bbsTerminalRef}
                           fontSize={settings.terminalFontSize}
+                          className="!min-h-0 !h-full !items-start"
                           onAnsiOutput={(data) => {
                             // Filter out screen clear sequences for the scrollback log
                             const filtered = data.replace(/\x1b\[2J/g, '').replace(/\x1b\[H/g, '');
