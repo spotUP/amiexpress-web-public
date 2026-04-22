@@ -62,6 +62,8 @@ class GrandmasterAudioClient {
     document.addEventListener('touchstart', unlock);
   }
 
+  private socketHandlers: Array<[string, (...args: any[]) => void]> = [];
+
   private bindSocketEvents(): void {
     const socket = (globalThis as any)?.__BBS__?.socket;
     if (!socket || typeof socket.on !== 'function') {
@@ -69,11 +71,16 @@ class GrandmasterAudioClient {
       return;
     }
 
-    socket.on('audio:sfx', (data: SfxPayload) => this.playSfx(data));
-    socket.on('audio:voice', (data: SfxPayload) => this.playVoice(data));
-    socket.on('audio:music', (data: MusicPayload) => this.playMusic(data));
-    socket.on('audio:music:stop', () => this.stopMusic());
-    socket.on('audio:music:volume', (data: { volume?: number }) => {
+    const on = (event: string, handler: (...args: any[]) => void) => {
+      socket.on(event, handler);
+      this.socketHandlers.push([event, handler]);
+    };
+
+    on('audio:sfx', (data: SfxPayload) => this.playSfx(data));
+    on('audio:voice', (data: SfxPayload) => this.playVoice(data));
+    on('audio:music', (data: MusicPayload) => this.playMusic(data));
+    on('audio:music:stop', () => this.stopMusic());
+    on('audio:music:volume', (data: { volume?: number }) => {
       if (typeof data?.volume === 'number') {
         this.musicVolume = this.clampVolume(data.volume);
         if (this.currentMusic) {
@@ -81,6 +88,28 @@ class GrandmasterAudioClient {
         }
       }
     });
+
+    // Clean up listeners when door is unloaded
+    socket.on('door:unload-client', () => {
+      this.cleanup();
+    });
+  }
+
+  private cleanup(): void {
+    this.stopMusic();
+    const socket = (globalThis as any)?.__BBS__?.socket;
+    if (socket) {
+      for (const [event, handler] of this.socketHandlers) {
+        socket.off(event, handler);
+      }
+    }
+    this.socketHandlers = [];
+    // Dispose Tone.js players
+    for (const player of this.tonePlayers.values()) {
+      try { player.dispose(); } catch { /* ignore */ }
+    }
+    this.tonePlayers.clear();
+    this.toneLoads.clear();
   }
 
   private playSfx(data: SfxPayload): void {
