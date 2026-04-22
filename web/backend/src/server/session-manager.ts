@@ -304,7 +304,6 @@ export function getActivityFromSubState(subState?: string): string {
     case LoggedOnSubState.READ_MESSAGES:
       return 'READING MAIL';
     case LoggedOnSubState.POST_MESSAGE:
-    case LoggedOnSubState.POST_MESSAGE_TYPE:
     case LoggedOnSubState.POST_MESSAGE_SUBJECT:
     case LoggedOnSubState.POST_MESSAGE_TO:
     case LoggedOnSubState.POST_MESSAGE_BODY:

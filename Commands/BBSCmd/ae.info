@@ -1,7 +1,7 @@
-BBSCMD=E
+BBSCMD=AE
 TYPE=TS
 LOCATION=Doors/mail-composer
-DESCRIPTION=New advanced message editor with autocomplete and formatting
+DESCRIPTION=ANSI art message editor with color support
 ACCESS=10
 MULTINODE=YES
 PRIORITY=SAME
