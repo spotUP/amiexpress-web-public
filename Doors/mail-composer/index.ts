@@ -252,6 +252,16 @@ async function showHeaderEditor(
     });
 
     toInput.on('select', () => {
+      // After selecting from autocomplete dropdown, advance to subject
+      subjectInput.focus();
+      currentIndex = 1;
+      screen.render();
+    });
+
+    toInput.on('submit', () => {
+      // Enter on To field (no popup) -> advance to subject
+      subjectInput.focus();
+      currentIndex = 1;
       screen.render();
     });
 

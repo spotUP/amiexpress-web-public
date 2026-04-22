@@ -195,7 +195,16 @@ export class AutocompleteTextbox extends Element {
           return true;
 
         case 'enter':
+          this.acceptSuggestion();
+          return true;
+
         case 'tab':
+          if (key.shift) {
+            // Shift+Tab: close popup, let focus navigate backward
+            this.hidePopup();
+            return false;
+          }
+          // Tab: accept suggestion and stay in field
           this.acceptSuggestion();
           return true;
 
@@ -244,9 +253,9 @@ export class AutocompleteTextbox extends Element {
         return true;
 
       case 'escape':
-        this.blur();
+        // Don't blur here -- let the event bubble to parent (e.g., dialog container)
         this.emit('cancel');
-        return true;
+        return false;
 
       case 'enter':
         this.emit('submit', this.value);

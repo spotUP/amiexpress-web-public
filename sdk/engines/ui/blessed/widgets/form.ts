@@ -24,8 +24,8 @@ export class Form extends Element {
     }
   }
 
-  private _onKeypress(ch: any, key: KeyEvent): void {
-    if (!this.focused) return;
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    if (!this.focused) return false;
 
     if (key.name === 'tab') {
       if (key.shift) {
@@ -33,18 +33,19 @@ export class Form extends Element {
       } else {
         this.focusNext();
       }
-      return;
+      return true;
     }
 
     if (key.name === 'enter') {
       this.submit();
-      return;
+      return true;
     }
 
     if (key.name === 'escape') {
       this.cancel();
-      return;
+      return true;
     }
+    return false;
   }
 
   append(element: Element): void {

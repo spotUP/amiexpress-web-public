@@ -1372,7 +1372,7 @@ function App() {
           <Panel defaultSize={viewMode === 'terminal-only' ? 100 : viewMode === 'code-only' ? 0 : 50} minSize={viewMode === 'code-only' ? 0 : 30}>
             <PanelGroup direction="vertical">
               {/* Terminal Section */}
-              <Panel defaultSize={80} minSize={60}>
+              <Panel defaultSize={55} minSize={30}>
                 <div className="flex flex-col h-full">
                   {/* Terminal Tabs - Fixed tabs for BBS and Logs */}
                   <TerminalTabs
@@ -1475,7 +1475,7 @@ function App() {
                   </div>
 
                   {/* Terminal with optional CRT effect */}
-                  <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden flex items-start justify-center" data-tour="terminal">
+                  <div ref={terminalRef} className="min-h-0 overflow-hidden flex items-start justify-center" data-tour="terminal">
                     <CRTEffect enabled={enableCRT} intensity="medium">
                       {activeTerminalTab === 'bbs' ? (
                         <BBSTerminal
@@ -1583,7 +1583,7 @@ function App() {
               <PanelResizeHandle className="h-1 bg-gray-700 hover:bg-purple-600 transition-all duration-300 hover:h-2 cursor-row-resize" />
 
               {/* AI Prompt Panel */}
-              <Panel defaultSize={20} minSize={15} maxSize={40}>
+              <Panel defaultSize={45} minSize={15} maxSize={60}>
                 <Suspense fallback={<div className="p-4 text-gray-400">Loading AI tools...</div>}>
                   <AIPromptPanel
                     settings={settings}

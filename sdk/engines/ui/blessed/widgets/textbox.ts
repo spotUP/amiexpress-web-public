@@ -217,9 +217,8 @@ export class Textbox extends Element {
 
       case 'escape':
         this.clearSelection();
-        this.blur();
         this.cancel();
-        return true;
+        return false;
 
       case 'enter':
       case 'return':
@@ -1066,7 +1065,7 @@ export class Textarea extends Element {
     // Otherwise, allow tab to pass through for screen focus navigation
     if (key.name === 'tab') {
       if (this.suppressNavigationKeys) return true;  // Trap tab
-      if (!key.shift) return false;  // Allow normal tab navigation
+      return false;  // Allow tab/shift-tab navigation
     }
 
     // Ctrl+A to select all
@@ -1160,9 +1159,8 @@ export class Textarea extends Element {
 
       case 'escape':
         this.clearSelection();
-        this.blur();
         this.cancel();
-        return true;
+        return false;
 
       case 'tab':
         // Shift+Tab submits, Tab inserts spaces
