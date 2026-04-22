@@ -1028,34 +1028,36 @@ Tab key handlers on elements never fire because Screen intercepts Tab first. Put
 
 Use `createTextbox()` for single-line inputs (Enter submits). Use `createTextarea()` for multi-line (Enter inserts newline).
 
-### 12. Display-Only Boxes Stealing Focus (createBox/box)
+### 12. Interactive Elements Need Explicit Flags (createBox/box)
 
-`createBox()` returns a `DockablePanel` which defaults to `focusable: true, keys: true,
-mouse: true, clickable: true`. Display-only boxes created with `createBox()` will steal
-focus unless you disable interactivity. Alternatively, use `new Panel()` directly for
-display-only elements -- `Panel` defaults to non-interactive.
+`createBox()` / `box()` now returns a `Panel` which defaults to `focusable: false, keys: false,
+mouse: false, clickable: false`. This is the right default for 95% of doors -- containers,
+labels, game boards, and status displays should NOT be interactive.
+
+For elements that need interactivity, enable it explicitly:
 
 ```typescript
-// createBox() is interactive by default -- fine for buttons/menus/inputs
-const menu = createBox({ parent: screen, content: 'Menu' });
+// createBox() is non-interactive by default -- perfect for display elements
+const statsBox = createBox({ parent: screen, content: 'Score: 0' });
+const label = createBox({ parent: screen, content: 'Status' });
 
-// For display-only createBox elements, disable interactivity
-const statsBox = createBox({
+// For interactive elements, enable interactivity explicitly
+const menu = createBox({
   parent: screen,
-  content: 'Score: 0',
-  focusable: false,
-  mouse: false,
-  clickable: false,
+  content: 'Menu',
+  focusable: true,
+  keys: true,
+  mouse: true,
 });
 
-// Or use Panel directly -- non-interactive by default, no overrides needed
-const label = new Panel({ parent: screen, content: 'Status' });
+// For dockable/draggable panels, use DockablePanel explicitly
+const chatPanel = new DockablePanel({ parent: screen, title: ' Chat ' });
 ```
 
 **Widget default summary:**
-- `new Panel()` = display-only (focusable: false, keys: false, mouse: false, clickable: false)
-- `new DockablePanel()` / `createBox()` / `box()` = interactive (focusable: true, keys: true, mouse: true, clickable: true)
-- DockablePanel respects explicit overrides (e.g., `mouse: false` is honored)
+- `new Panel()` / `createBox()` / `box()` = non-interactive (focusable: false, keys: false, mouse: false, clickable: false)
+- `new DockablePanel()` / `createDockablePanel()` = interactive, draggable, resizable, dockable (focusable: true, keys: true, mouse: true, clickable: true)
+- Most BBS doors should NEVER use DockablePanel -- only livechat-style apps need it
 
 **Symptoms of wrong defaults:** Arrow keys stop working in games, Tab cycling includes
 non-interactive elements, clicking a label steals focus from the input field.
@@ -1145,7 +1147,8 @@ Use this checklist when reviewing or migrating a neo-blessed door:
 - [ ] Uses `createTextbox()` for single-line inputs
 - [ ] Uses `createTextarea()` for multi-line inputs
 - [ ] Focus/hover styles defined in widget options
-- [ ] Display-only `createBox()` elements have `focusable: false, mouse: false, clickable: false` (or use `new Panel()` which is non-interactive by default)
+- [ ] Interactive `createBox()` elements have `focusable: true, keys: true, mouse: true` (createBox is non-interactive by default)
+- [ ] Dockable panels use `new DockablePanel()` explicitly, NOT `createBox()`
 - [ ] Height-1 elements without borders have `border: undefined`
 
 ### Mouse, Hover & Styling
@@ -1306,7 +1309,7 @@ const doorList = createList({
 
 **GOOD (Border Label Only):**
 ```typescript
-// createBox() uses DockablePanel with useTitleBar=false by default
+// createBox() returns a Panel (non-interactive, non-dockable by default)
 const doorPanel = createBox({
   parent: screen,
   label: ' Installed Doors ',

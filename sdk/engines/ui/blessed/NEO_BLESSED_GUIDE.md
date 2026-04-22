@@ -104,48 +104,45 @@ export async function createApp(session: DoorSession) {
 
 ## Critical Lessons Learned
 
-### 0. Panel vs DockablePanel/createBox() Defaults
+### 0. Panel vs DockablePanel -- Widget Hierarchy
 
-The widget hierarchy has different interactivity defaults:
+`box()` / `createBox()` now create a `Panel` (non-interactive, non-dockable by default).
+This is the right default for 95% of doors.
 
-- **`new Panel()`** = display-only by default (focusable: false, keys: false, mouse: false, clickable: false)
-- **`new DockablePanel()` / `createBox()` / `box()`** = interactive by default (focusable: true, keys: true, mouse: true, clickable: true)
+- **`new Panel()` / `createBox()` / `box()`** = non-interactive by default (focusable: false, keys: false, mouse: false, clickable: false)
+- **`new DockablePanel()` / `createDockablePanel()`** = interactive, draggable, resizable, dockable (focusable: true, keys: true, mouse: true, clickable: true)
 - Both default to `border: { type: 'line', fg: 'blue' }`
-- DockablePanel respects caller overrides (e.g., `mouse: false` is honored, not ignored)
 
-For display-only elements created with `createBox()`, disable interactivity:
 ```typescript
-// createBox() is interactive by default -- no overrides needed for interactive elements
-const menu = createBox({ parent: screen, content: 'Options' });
+// createBox() is non-interactive by default -- perfect for display elements
+const statsBox = createBox({ parent: screen, content: 'Score: 0' });
+const label = createBox({ parent: screen, content: 'Status' });
 
-// For display-only createBox elements, disable interactivity
-const statsBox = createBox({
+// For interactive elements, enable interactivity explicitly
+const menu = createBox({
   parent: screen,
-  content: 'Score: 0',
-  focusable: false,
-  mouse: false,
-  clickable: false,
+  content: 'Options',
+  focusable: true,
+  keys: true,
+  mouse: true,
 });
 
-// Or use Panel directly -- non-interactive by default
-const label = new Panel({ parent: screen, content: 'Status' });
+// For dockable/draggable panels, use DockablePanel explicitly
+const chatPanel = new DockablePanel({ parent: screen, title: ' Chat ' });
 
 // Borderless header -- border: undefined works correctly ('border' in options check)
 const header = createBox({
   parent: screen,
   height: 1,
   border: undefined,
-  focusable: false,
-  mouse: false,
-  clickable: false,
 });
 ```
 
-**Use `createBox()`/`box()` for:** Menus, lists, input fields, buttons, chat inputs,
-game boards -- anything the user interacts with (interactive by default).
+**Use `createBox()`/`box()` for:** Containers, display boxes, labels, game boards,
+status displays, headers, footers -- most UI elements (non-interactive by default).
 
-**Use `new Panel()` for:** Stats, labels, titles, headers, footers, status bars, previews,
-indicators, decorative elements, overlays -- display-only (non-interactive by default).
+**Use `new DockablePanel()` for:** ONLY panels users should drag/resize/dock
+(e.g., chat windows, floating tool panels). Most BBS doors should NEVER use DockablePanel.
 
 ### 1. Dialog Widgets (Message, Question, Prompt)
 

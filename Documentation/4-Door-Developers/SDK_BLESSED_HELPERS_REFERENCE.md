@@ -4,39 +4,42 @@
 
 ## Purpose
 
-The SDK blessed-helpers module provides wrapper functions for neo-blessed widgets that automatically add `tags: true` to prevent tag rendering bugs. `createBox()` now returns a `DockablePanel` (border label, no title bar) to make layouts dockable by default.
+The SDK blessed-helpers module provides wrapper functions for neo-blessed widgets that automatically add `tags: true` to prevent tag rendering bugs. `createBox()` returns a `Panel` (non-interactive, non-dockable) -- the right default for 95% of doors.
 
 ## Widget Hierarchy and Default Behavior
 
-`createBox()` returns a `DockablePanel` which extends `Panel`. These have **different defaults**:
+`createBox()` / `box()` returns a `Panel`. Use `DockablePanel` only when you need drag/resize/dock.
 
 | Constructor | focusable | keys | mouse | clickable | border |
 |---|---|---|---|---|---|
-| `new Panel()` | false | false | false | false | line |
-| `new DockablePanel()` / `createBox()` / `box()` | true | true | true | true | line |
+| `new Panel()` / `createBox()` / `box()` | false | false | false | false | line |
+| `new DockablePanel()` / `createDockablePanel()` | true | true | true | true | line |
 | `new Box()` (raw blessed) | blessed default | blessed default | blessed default | blessed default | none |
 
-**`createBox()` elements are interactive by default** -- correct for buttons, inputs, menus.
-Display-only elements created with `createBox()` should disable interactivity:
+**`createBox()` elements are non-interactive by default** -- correct for containers, labels, game boards, status displays. The old behavior where every box was secretly a DockablePanel caused performance issues and unwanted drag behavior.
+
+**When to use what:**
+- `box()` / `createBox()` -- Most UI elements (containers, display boxes, labels, game boards, status displays)
+- `new DockablePanel()` / `createDockablePanel()` -- ONLY for panels users should drag/resize/dock (e.g., chat windows, floating tool panels). Most BBS doors should NEVER use DockablePanel.
 
 ```typescript
-// createBox() is interactive by default -- fine for interactive elements
-const menu = createBox({ parent: screen, content: 'Menu' });
+// createBox() is non-interactive by default -- perfect for display elements
+const statsBox = createBox({ parent: screen, content: 'Score: 0' });
 
-// For display-only elements, disable interactivity
-const statsBox = createBox({
+// For interactive elements, enable interactivity explicitly
+const menu = createBox({
   parent: screen,
-  content: 'Score: 0',
-  focusable: false,
-  mouse: false,
-  clickable: false,
+  content: 'Menu',
+  focusable: true,
+  keys: true,
+  mouse: true,
 });
 ```
 
-**Alternatively**, use `new Panel()` directly for display-only elements (non-interactive by default):
+**For dockable/draggable panels**, use `DockablePanel` explicitly:
 ```typescript
-const label = new Panel({ parent: screen, content: 'Status' });
-// Already non-interactive -- no overrides needed
+const chatPanel = new DockablePanel({ parent: screen, title: ' Chat ' });
+// Interactive by default -- draggable, resizable, dockable
 ```
 
 **Borderless elements** (headers, status bars with height: 1) -- pass `border: undefined`.
@@ -47,9 +50,6 @@ const header = createBox({
   parent: screen,
   height: 1,
   border: undefined,        // Correctly removes default border
-  focusable: false,
-  mouse: false,
-  clickable: false,
 });
 ```
 
@@ -91,8 +91,8 @@ Import from `@amiexpress/bbs-door-sdk/utils/blessed-helpers`:
 
 ```typescript
 import {
-  createBox,       // Dockable panel (no title bar; border label)
-  createDockablePanel, // Dockable panel with full options
+  createBox,       // Panel (non-interactive, non-dockable by default)
+  createDockablePanel, // Dockable panel (interactive, draggable, resizable)
   createList,      // List widget (selectable items)
   createText,      // Text widget (labels, headers)
   createTextarea,  // Textarea widget (multi-line input)
@@ -206,10 +206,10 @@ const box = createBox({
 });
 ```
 
-### 4. Dockable Defaults and Fixed Panels
+### 4. Panel vs DockablePanel
 
 ```typescript
-// createBox returns a DockablePanel with useTitleBar=false (border label only)
+// createBox returns a Panel (non-interactive, non-dockable by default)
 const panel = createBox({
   parent: screen,
   label: ' Info ',
@@ -217,14 +217,12 @@ const panel = createBox({
   height: '100%-3'
 });
 
-// Use fixed: true for gameplay fields or other non-dockable areas
-const playfield = createBox({
+// For dockable/draggable panels, use DockablePanel explicitly
+const chatPanel = new DockablePanel({
   parent: screen,
-  top: 1,
-  left: 0,
-  width: 22,
-  height: 22,
-  fixed: true
+  title: ' Chat ',
+  width: '40%',
+  height: '50%'
 });
 ```
 

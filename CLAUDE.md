@@ -154,24 +154,28 @@ See: `Documentation/4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md`
 
 ### 6b. PANEL / DOCKABLEPANEL / BOX() DEFAULT HIERARCHY
 
-The widget hierarchy has **different defaults** depending on how you create elements:
+The widget hierarchy:
 
-- **`new Panel()`** = display-only by default (`focusable: false, keys: false, mouse: false, clickable: false, border: line`)
-- **`new DockablePanel()` / `createBox()` / `box()`** = interactive by default (`focusable: true, keys: true, mouse: true, clickable: true, border: line`)
+- **`Panel`** = non-interactive, non-dockable, display-only (`focusable: false, keys: false, mouse: false, clickable: false, border: line`)
+- **`box()` / `createBox()`** = creates `Panel` = non-dockable, non-interactive by default
+- **`DockablePanel`** = interactive, draggable, resizable, dockable (`focusable: true, keys: true, mouse: true, clickable: true, border: line`)
+- **`createDockablePanel()` / `new DockablePanel()`** = for panels that need docking/dragging
 - **`new Box()`** (raw blessed) = no Panel defaults, plain blessed element
 
-**`createBox()` / `box()` elements are interactive by default** -- good for buttons, inputs, interactive panels. No overrides needed for interactive elements.
+**`createBox()` / `box()` elements are non-interactive by default** -- correct for 95% of doors: containers, display boxes, labels, game boards, status displays. The old behavior where every box was secretly a DockablePanel caused performance issues and unwanted drag behavior.
 
-**Display-only elements using `new Panel()` directly are non-interactive** -- good for containers, labels, decorative elements. No overrides needed.
+**When to use what:**
+- `box()` / `createBox()` -- Most UI elements (containers, labels, game boards, status displays)
+- `new DockablePanel()` / `createDockablePanel()` -- ONLY for panels users should drag/resize/dock (e.g., chat windows, floating tool panels). Most BBS doors should NEVER use DockablePanel.
 
-**To make a `createBox()` element display-only**, disable interactivity:
+**To make a `createBox()` element interactive**, enable interactivity:
 ```typescript
-const statsBox = createBox({
+const menu = createBox({
   parent: screen,
-  content: 'Score: 0',
-  focusable: false,   // Override DockablePanel interactive default
-  mouse: false,
-  clickable: false,
+  content: 'Menu',
+  focusable: true,
+  keys: true,
+  mouse: true,
 });
 ```
 
@@ -181,9 +185,6 @@ const header = createBox({
   parent: screen,
   height: 1,
   border: undefined,  // Works correctly -- 'border' in options check detects this
-  focusable: false,
-  mouse: false,
-  clickable: false,
 });
 ```
 
