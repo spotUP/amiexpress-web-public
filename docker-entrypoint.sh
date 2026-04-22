@@ -241,6 +241,9 @@ else
             echo "[Entrypoint]   Synced $sync_dir from image"
         fi
     done
+    # Remove .ts source files from Doors - production uses compiled dist/
+    find "$BBS_DATA_DIR/Doors" -maxdepth 2 -name "*.ts" -not -path "*/node_modules/*" -not -path "*/dist/*" -delete 2>/dev/null || true
+    echo "[Entrypoint]   Cleaned .ts source files from Doors"
 fi
 
 # Show what data exists

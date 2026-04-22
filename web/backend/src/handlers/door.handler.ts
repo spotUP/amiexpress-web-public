@@ -1523,15 +1523,16 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
       
       const doorDir = path.join(projectRoot, doorPath);
       
-      // 🎯 FIX: Always prefer .ts source if it exists at the root of the door directory
-      // This prevents running stale compiled .js files when source has changed.
+      // In production (NODE_ENV=production), always use compiled dist/ output.
+      // In development, prefer .ts source if it exists (prevents stale .js).
+      const isProduction = process.env.NODE_ENV === 'production';
       const rootIndexTs = path.join(doorDir, 'index.ts');
       const rootServerTs = path.join(doorDir, 'server.ts');
       
-      if (amigafs.existsSync(rootIndexTs)) {
+      if (!isProduction && amigafs.existsSync(rootIndexTs)) {
         doorPath = path.join(doorPath, 'index.ts');
 console.log(`[executeTypeScriptDoor] Found root index.ts, using source instead of package.json main`);
-      } else if (amigafs.existsSync(rootServerTs)) {
+      } else if (!isProduction && amigafs.existsSync(rootServerTs)) {
         doorPath = path.join(doorPath, 'server.ts');
 console.log(`[executeTypeScriptDoor] Found root server.ts, using source instead of package.json main`);
       } else {
