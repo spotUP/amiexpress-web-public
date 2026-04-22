@@ -776,6 +776,30 @@ DB: `./data/amiexpress.db` (auto-created)
 
 ---
 
+## Live Site (Hetzner VPS)
+
+**SSH:** `ssh root@203.0.113.10`
+**Web:** http://203.0.113.10:3001
+**Telnet:** `telnet 203.0.113.10 2323`
+**Admin:** http://203.0.113.10:3001/admin
+
+**Deployment:** Auto via GitHub Actions on push to `main`. See `Documentation/2-Sysops/DEPLOYMENT.md`.
+
+**Common commands:**
+```bash
+ssh root@203.0.113.10
+cd /app/amiexpress
+docker compose logs -f              # View logs
+docker compose logs --tail=200      # Recent logs
+docker compose restart              # Restart BBS
+docker compose up -d --build        # Full rebuild
+docker compose ps                   # Status
+```
+
+**Data:** Docker volume `amiexpress-bbs-data` at `/app/data/`
+
+---
+
 ## Architecture
 
 **Backend** (`web/backend/src/`): amiga-emulation/, database/, handlers/, services/, utils/ (39+ - REUSE, DON'T DUPLICATE)

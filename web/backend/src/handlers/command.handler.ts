@@ -2348,7 +2348,7 @@ console.log(' In file upload state - canceling upload');
 
   // Handle file list directory input (F command continuation)
   if (session.subState === LoggedOnSubState.FILE_LIST_DIR_INPUT) {
-    const { FileListingHandler } = require('./file-listing.handler');
+    const { FileListingHandler } = require('./file/file-listing.handler');
     await FileListingHandler.handleFileListDirInput(socket, session, data.trim());
     return;
   }
