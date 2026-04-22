@@ -3,7 +3,8 @@
  * Shows available editor actions
  */
 
-import { box, type Screen, type Box } from '../../blessed';
+import { type Screen } from '../../blessed';
+import { Box, type BoxOptions } from '../../blessed/widgets/box';
 
 export interface ToolbarOptions {
   parent: Screen;
@@ -51,13 +52,12 @@ export class Toolbar {
     this.options = options;
 
     // Create toolbar box
-    this.box = box({
+    this.box = new Box({
       parent: options.parent,
       top: 0,
       left: 0,
       right: 0,
       height: 1,
-      border: undefined,
       style: {
         fg: 'black',
         bg: 'cyan',

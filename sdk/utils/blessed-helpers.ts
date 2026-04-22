@@ -45,6 +45,8 @@ import type { Screen } from '../engines/ui/blessed/core/screen';
 import type { Box } from '../engines/ui/blessed/widgets/box';
 import { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
 import type { DockablePanelOptions } from '../engines/ui/blessed/widgets/dockable-panel';
+import { Panel } from '../engines/ui/blessed/widgets/panel';
+import type { PanelOptions } from '../engines/ui/blessed/widgets/panel';
 import type { List } from '../engines/ui/blessed/widgets/list';
 import type { Text } from '../engines/ui/blessed/widgets/text';
 import type { Textbox, Textarea } from '../engines/ui/blessed/widgets/textbox';
@@ -300,11 +302,15 @@ export function ansiToTags(text: string): string {
  * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
  * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createBox(options?: DockablePanelOptions): DockablePanel {
-  return createDockablePanel({
-    useTitleBar: false,
+export function createBox(options?: PanelOptions): Panel {
+  const processedOptions = processElementOptions({
     ...options,
-  });
+  } as ElementOptions, 'createBox');
+
+  return new Panel({
+    ...processedOptions,
+    tags: true,
+  } as PanelOptions);
 }
 
 /**

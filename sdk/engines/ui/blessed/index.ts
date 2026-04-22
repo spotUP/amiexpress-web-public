@@ -172,6 +172,8 @@ import { Program } from './core/program';
 import { Box } from './widgets/box';
 import { DockablePanel } from './widgets/dockable-panel';
 import type { DockablePanelOptions } from './widgets/dockable-panel';
+import { Panel } from './widgets/panel';
+import type { PanelOptions } from './widgets/panel';
 import { Text } from './widgets/text';
 import { List } from './widgets/list';
 import { Form } from './widgets/form';
@@ -249,10 +251,10 @@ export function screen(options?: ScreenOptions & { output?: (data: string) => vo
 
 /**
  * Create a box widget (tags: true by default, cannot be overridden)
+ * Non-dockable by default. Use `new DockablePanel()` for dockable panels.
  */
-export function box(options?: DockablePanelOptions): DockablePanel {
-  const fixedDefault = options?.fixed ?? (options?.parent instanceof DockablePanel);
-  return new DockablePanel({ ...options, fixed: fixedDefault, useTitleBar: false, tags: true });
+export function box(options?: PanelOptions): Panel {
+  return new Panel({ ...options, tags: true });
 }
 
 /**

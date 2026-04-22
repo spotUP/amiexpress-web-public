@@ -3,7 +3,8 @@
  * Displays cursor position, mode, modified flag, and other status info
  */
 
-import { box, type Screen, type Box } from '../../blessed';
+import { type Screen } from '../../blessed';
+import { Box } from '../../blessed/widgets/box';
 import type { EditorState } from '../core/editor-state';
 import { ANSIUtils } from '../core/ansi-utils';
 
@@ -24,13 +25,12 @@ export class StatusBar {
   constructor(state: EditorState, options: StatusBarOptions) {
     this.state = state;
 
-    this.box = box({
+    this.box = new Box({
       parent: options.parent,
       bottom: options.bottom ?? 0,
       left: 0,
       right: 0,
       height: 1,
-      border: undefined,
       style: {
         fg: 'black',
         bg: 'cyan',

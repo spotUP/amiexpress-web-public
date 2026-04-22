@@ -146,10 +146,10 @@ export class DockablePanel extends Panel {
       ...normalizedOptions,
       style: mergedStyle,
       draggable: normalizedOptions.draggable !== false,
-      mouse: true,
-      keys: true,
-      focusable: normalizedOptions.focusable !== false,  // Respect user's focusable setting, default to true
-      clickable: true,  // Enable click events for panel activation
+      mouse: normalizedOptions.mouse ?? true,
+      keys: normalizedOptions.keys ?? true,
+      focusable: normalizedOptions.focusable ?? true,
+      clickable: normalizedOptions.clickable ?? true,
     });
 
     this.dockPosition = normalizedOptions.dockPosition || 'float';

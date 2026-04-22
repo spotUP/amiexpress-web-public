@@ -72,8 +72,6 @@ export class Viewport {
           fg: 'blue',
         },
       },
-      keys: true,
-      mouse: true,
       tags: true,
     });
 

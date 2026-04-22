@@ -1,38 +1,39 @@
 #!/bin/bash
 
-echo "-> Killing all servers..."
+# Resolve project root (two levels up from this script)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+echo "-> Killing AmiExpress servers (project: $PROJECT_ROOT)..."
 
 # Remove stale lockfile
 rm -f /tmp/amiexpress-servers.lock
 
-# Kill zombie jest workers (these can pile up from interrupted tests)
-JEST_COUNT=$(pgrep -f "jest-worker" | wc -l | tr -d ' ')
-if [ "$JEST_COUNT" -gt 0 ]; then
-  echo "-> Found $JEST_COUNT stuck jest workers, killing..."
-  pkill -9 -f "jest-worker" 2>/dev/null
-fi
+# Helper: kill processes matching a pattern, but ONLY if their command line
+# contains our project root. This prevents killing processes from other
+# projects (e.g., DEViLBOX) that match the same generic patterns.
+kill_project_procs() {
+  local pattern="$1"
+  local label="$2"
+  local pids
+  pids=$(pgrep -f "$pattern" 2>/dev/null | while read pid; do
+    # Check if this process belongs to our project
+    if ps -p "$pid" -o args= 2>/dev/null | grep -q "$PROJECT_ROOT"; then
+      echo "$pid"
+    fi
+  done)
+  if [ -n "$pids" ]; then
+    local count=$(echo "$pids" | wc -l | tr -d ' ')
+    echo "-> Found $count $label, cleaning..."
+    echo "$pids" | xargs kill -9 2>/dev/null
+  fi
+}
 
-# Kill ALL start-servers.sh instances (including nested/forked ones)
-# Use pkill to kill by name pattern, which catches all instances
-OLD_SCRIPTS=$(pgrep -f "start-servers.sh" | wc -l | tr -d ' ')
-if [ "$OLD_SCRIPTS" -gt 0 ]; then
-  echo "-> Found $OLD_SCRIPTS old start-servers instances, cleaning..."
-  pkill -9 -f "start-servers.sh" 2>/dev/null
-fi
-
-# Kill watch-doors processes (can leak if start-servers is interrupted)
-WATCH_DOORS=$(pgrep -f "watch-doors.ts" | wc -l | tr -d ' ')
-if [ "$WATCH_DOORS" -gt 0 ]; then
-  echo "-> Found $WATCH_DOORS watch-doors processes, cleaning..."
-  pkill -9 -f "watch-doors.ts" 2>/dev/null
-fi
-
-# Kill any remaining tsx/node processes running backend
-TSX_BACKEND=$(pgrep -f "tsx.*src/index.ts" | wc -l | tr -d ' ')
-if [ "$TSX_BACKEND" -gt 0 ]; then
-  echo "-> Found $TSX_BACKEND backend tsx processes, cleaning..."
-  pkill -9 -f "tsx.*src/index.ts" 2>/dev/null
-fi
+# Kill only OUR project's processes
+kill_project_procs "jest-worker" "stuck jest workers"
+kill_project_procs "start-servers.sh" "old start-servers instances"
+kill_project_procs "watch-doors.ts" "watch-doors processes"
+kill_project_procs "tsx.*src/index.ts" "backend tsx processes"
 
 # Kill by port — only ports actually owned by AmiExpress-Web.
 # Under the unified-deploy flow the frontends are built once and served by
