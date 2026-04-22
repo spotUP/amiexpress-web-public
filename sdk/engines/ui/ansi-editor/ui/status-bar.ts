@@ -30,6 +30,7 @@ export class StatusBar {
       left: 0,
       right: 0,
       height: 1,
+      border: undefined,
       style: {
         fg: 'black',
         bg: 'cyan',
