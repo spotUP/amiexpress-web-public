@@ -209,12 +209,13 @@ class MenuScreen {
      * Get title ASCII art
      */
     getTitleArt() {
-        return `{bold}{yellow-fg} _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____
-|   __|  _  |  _  |   | |    \\|     |  _  |   __|_   _|   __| __  |
-|  |  |     |     |\\    |  |  | | | |     |__   | | | |   __|    -|
-|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
+        const p = '    '; // 4-char pad to center 68-char art in 76-char box
+        return `{bold}{yellow-fg}${p} _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____
+${p}|   __|  _  |  _  |   | |    \\|     |  _  |   __|_   _|   __| __  |
+${p}|  |  |     |     |\\    |  |  | | | |     |__   | | | |   __|    -|
+${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
 
-{/yellow-fg}{gray-fg}        TGM3-Inspired Multiplayer Tetris{/gray-fg}{/bold}`;
+{/yellow-fg}{gray-fg}${p}            TGM3-Inspired Multiplayer Tetris{/gray-fg}{/bold}`;
     }
     /**
      * Get mode description for selected index
