@@ -104,20 +104,21 @@ export async function createApp(session: DoorSession) {
 
 ## Critical Lessons Learned
 
-### 0. Display-Only Boxes Must Disable Focus
+### 0. Panel vs DockablePanel/createBox() Defaults
 
-`createBox()` creates a `DockablePanel` -> `Panel` which defaults to `focusable: true`,
-`mouse: true`, and `border: { type: 'line' }`. Display-only elements MUST override these
-or they will steal keyboard focus from interactive elements during gameplay.
+The widget hierarchy has different interactivity defaults:
 
+- **`new Panel()`** = display-only by default (focusable: false, keys: false, mouse: false, clickable: false)
+- **`new DockablePanel()` / `createBox()` / `box()`** = interactive by default (focusable: true, keys: true, mouse: true, clickable: true)
+- Both default to `border: { type: 'line', fg: 'blue' }`
+- DockablePanel respects caller overrides (e.g., `mouse: false` is honored, not ignored)
+
+For display-only elements created with `createBox()`, disable interactivity:
 ```typescript
-// WRONG - this label steals focus from game board / input fields
-const statsBox = createBox({
-  parent: screen,
-  content: 'Score: 0',
-});
+// createBox() is interactive by default -- no overrides needed for interactive elements
+const menu = createBox({ parent: screen, content: 'Options' });
 
-// CORRECT - display-only, cannot steal focus
+// For display-only createBox elements, disable interactivity
 const statsBox = createBox({
   parent: screen,
   content: 'Score: 0',
@@ -126,7 +127,10 @@ const statsBox = createBox({
   clickable: false,
 });
 
-// CORRECT - borderless header (height: 1 with default border = 3 rows!)
+// Or use Panel directly -- non-interactive by default
+const label = new Panel({ parent: screen, content: 'Status' });
+
+// Borderless header -- border: undefined works correctly ('border' in options check)
 const header = createBox({
   parent: screen,
   height: 1,
@@ -137,11 +141,11 @@ const header = createBox({
 });
 ```
 
-**When to use:** Stats, labels, titles, headers, footers, status bars, previews,
-indicators, decorative elements, overlays, opponent boards, score panels.
+**Use `createBox()`/`box()` for:** Menus, lists, input fields, buttons, chat inputs,
+game boards -- anything the user interacts with (interactive by default).
 
-**When NOT to use:** Menus, lists, input fields, buttons, chat inputs, game boards -
-anything the user interacts with.
+**Use `new Panel()` for:** Stats, labels, titles, headers, footers, status bars, previews,
+indicators, decorative elements, overlays -- display-only (non-interactive by default).
 
 ### 1. Dialog Widgets (Message, Question, Prompt)
 

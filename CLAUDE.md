@@ -152,18 +152,26 @@ const box = blessed.box({
 
 See: `Documentation/4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md`
 
-### 6b. CREATEBOX FOCUS AND BORDER DEFAULTS
+### 6b. PANEL / DOCKABLEPANEL / BOX() DEFAULT HIERARCHY
 
-`createBox()` creates a `DockablePanel` -> `Panel` which defaults to `focusable: true`, `mouse: true`, and `border: { type: 'line' }`. **Display-only elements MUST override these defaults** or they steal keyboard focus and add unwanted borders.
+The widget hierarchy has **different defaults** depending on how you create elements:
 
-**Display-only elements (stats, labels, headers, previews, indicators):**
+- **`new Panel()`** = display-only by default (`focusable: false, keys: false, mouse: false, clickable: false, border: line`)
+- **`new DockablePanel()` / `createBox()` / `box()`** = interactive by default (`focusable: true, keys: true, mouse: true, clickable: true, border: line`)
+- **`new Box()`** (raw blessed) = no Panel defaults, plain blessed element
+
+**`createBox()` / `box()` elements are interactive by default** -- good for buttons, inputs, interactive panels. No overrides needed for interactive elements.
+
+**Display-only elements using `new Panel()` directly are non-interactive** -- good for containers, labels, decorative elements. No overrides needed.
+
+**To make a `createBox()` element display-only**, disable interactivity:
 ```typescript
 const statsBox = createBox({
   parent: screen,
   content: 'Score: 0',
-  focusable: false,   // REQUIRED - prevents focus stealing
-  mouse: false,       // REQUIRED - no mouse interaction
-  clickable: false,   // REQUIRED - no click handling
+  focusable: false,   // Override DockablePanel interactive default
+  mouse: false,
+  clickable: false,
 });
 ```
 
@@ -172,14 +180,14 @@ const statsBox = createBox({
 const header = createBox({
   parent: screen,
   height: 1,
-  border: undefined,  // REQUIRED - default border makes height:1 into 3 rows
+  border: undefined,  // Works correctly -- 'border' in options check detects this
   focusable: false,
   mouse: false,
   clickable: false,
 });
 ```
 
-**Symptoms of missing these:** Arrow keys stop working in games, Tab includes non-interactive elements, height:1 bars show as 3 rows with borders overlapping content.
+**Border removal:** `border: undefined` now works correctly. Panel uses `'border' in options` (not `options.border !== undefined`) so explicitly passing `border: undefined` properly removes the default border.
 
 ### 7. MODERN DOOR UX
 

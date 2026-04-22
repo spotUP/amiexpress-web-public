@@ -6,30 +6,24 @@
 
 The SDK blessed-helpers module provides wrapper functions for neo-blessed widgets that automatically add `tags: true` to prevent tag rendering bugs. `createBox()` now returns a `DockablePanel` (border label, no title bar) to make layouts dockable by default.
 
-## CRITICAL: createBox Default Focus Behavior
+## Widget Hierarchy and Default Behavior
 
-`createBox()` creates a `DockablePanel` which extends `Panel`. Panel defaults to:
-- `focusable: true`
-- `keys: true`
-- `mouse: true`
-- `border: { type: 'line', fg: 'blue' }`
+`createBox()` returns a `DockablePanel` which extends `Panel`. These have **different defaults**:
 
-This means **every createBox element can steal keyboard focus** from interactive
-elements (game boards, input fields, menus). Display-only elements MUST disable this.
+| Constructor | focusable | keys | mouse | clickable | border |
+|---|---|---|---|---|---|
+| `new Panel()` | false | false | false | false | line |
+| `new DockablePanel()` / `createBox()` / `box()` | true | true | true | true | line |
+| `new Box()` (raw blessed) | blessed default | blessed default | blessed default | blessed default | none |
 
-**Rule: All display-only boxes must set `focusable: false, mouse: false, clickable: false`.**
-
-Display-only elements include: stats panels, labels, titles, headers, footers,
-status bars, score displays, previews, indicators, decorative elements, overlays.
+**`createBox()` elements are interactive by default** -- correct for buttons, inputs, menus.
+Display-only elements created with `createBox()` should disable interactivity:
 
 ```typescript
-// WRONG - stats panel steals focus from game board
-const statsBox = createBox({
-  parent: screen,
-  content: 'Score: 0',
-});
+// createBox() is interactive by default -- fine for interactive elements
+const menu = createBox({ parent: screen, content: 'Menu' });
 
-// CORRECT - display-only, cannot steal focus
+// For display-only elements, disable interactivity
 const statsBox = createBox({
   parent: screen,
   content: 'Score: 0',
@@ -39,14 +33,20 @@ const statsBox = createBox({
 });
 ```
 
-**Borderless elements** (headers, status bars with height: 1) must also set
-`border: undefined` to override Panel's default line border:
+**Alternatively**, use `new Panel()` directly for display-only elements (non-interactive by default):
+```typescript
+const label = new Panel({ parent: screen, content: 'Status' });
+// Already non-interactive -- no overrides needed
+```
+
+**Borderless elements** (headers, status bars with height: 1) -- pass `border: undefined`.
+Panel uses `'border' in options` to detect this correctly:
 
 ```typescript
 const header = createBox({
   parent: screen,
   height: 1,
-  border: undefined,        // Override default line border
+  border: undefined,        // Correctly removes default border
   focusable: false,
   mouse: false,
   clickable: false,

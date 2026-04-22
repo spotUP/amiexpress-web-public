@@ -1028,17 +1028,18 @@ Tab key handlers on elements never fire because Screen intercepts Tab first. Put
 
 Use `createTextbox()` for single-line inputs (Enter submits). Use `createTextarea()` for multi-line (Enter inserts newline).
 
-### 12. Display-Only Boxes Stealing Focus
+### 12. Display-Only Boxes Stealing Focus (createBox/box)
 
-`createBox()` creates a `DockablePanel` -> `Panel` which defaults to `focusable: true`.
-Every display-only box (stats, labels, headers, previews, indicators) will steal keyboard
-focus from interactive elements like game boards, menus, and input fields.
+`createBox()` returns a `DockablePanel` which defaults to `focusable: true, keys: true,
+mouse: true, clickable: true`. Display-only boxes created with `createBox()` will steal
+focus unless you disable interactivity. Alternatively, use `new Panel()` directly for
+display-only elements -- `Panel` defaults to non-interactive.
 
 ```typescript
-// WRONG - this stats panel will steal focus
-const statsBox = createBox({ parent: screen, content: 'Score: 0' });
+// createBox() is interactive by default -- fine for buttons/menus/inputs
+const menu = createBox({ parent: screen, content: 'Menu' });
 
-// CORRECT - display-only element cannot steal focus
+// For display-only createBox elements, disable interactivity
 const statsBox = createBox({
   parent: screen,
   content: 'Score: 0',
@@ -1046,16 +1047,25 @@ const statsBox = createBox({
   mouse: false,
   clickable: false,
 });
+
+// Or use Panel directly -- non-interactive by default, no overrides needed
+const label = new Panel({ parent: screen, content: 'Status' });
 ```
 
-**Symptoms:** Arrow keys stop working in games, Tab cycling includes non-interactive
-elements, clicking a label steals focus from the input field.
+**Widget default summary:**
+- `new Panel()` = display-only (focusable: false, keys: false, mouse: false, clickable: false)
+- `new DockablePanel()` / `createBox()` / `box()` = interactive (focusable: true, keys: true, mouse: true, clickable: true)
+- DockablePanel respects explicit overrides (e.g., `mouse: false` is honored)
+
+**Symptoms of wrong defaults:** Arrow keys stop working in games, Tab cycling includes
+non-interactive elements, clicking a label steals focus from the input field.
 
 ### 13. Default Borders on Height-1 Elements
 
-`Panel` adds `border: { type: 'line', fg: 'blue' }` by default. A `height: 1` element
-with a border becomes 3 rows tall (1 top border + 1 content + 1 bottom border), causing
-overlapping layouts.
+Both `Panel` and `DockablePanel` add `border: { type: 'line', fg: 'blue' }` by default.
+A `height: 1` element with a border becomes 3 rows tall (1 top border + 1 content + 1
+bottom border), causing overlapping layouts. Pass `border: undefined` to remove it --
+Panel uses `'border' in options` so this is correctly detected.
 
 ```typescript
 // WRONG - gets default border, renders as 3 rows
@@ -1135,7 +1145,7 @@ Use this checklist when reviewing or migrating a neo-blessed door:
 - [ ] Uses `createTextbox()` for single-line inputs
 - [ ] Uses `createTextarea()` for multi-line inputs
 - [ ] Focus/hover styles defined in widget options
-- [ ] Display-only boxes have `focusable: false, mouse: false, clickable: false`
+- [ ] Display-only `createBox()` elements have `focusable: false, mouse: false, clickable: false` (or use `new Panel()` which is non-interactive by default)
 - [ ] Height-1 elements without borders have `border: undefined`
 
 ### Mouse, Hover & Styling
