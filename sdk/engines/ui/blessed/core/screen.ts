@@ -744,16 +744,11 @@ export class Screen extends Element {
         if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
 
         if (isTransparentBg) {
-          // For transparent background with space character, skip entirely
-          // This preserves both the existing character AND background (true transparency)
-          if (ch === ' ' || ch === '') {
-            // Don't modify buffer at all - leave existing content visible
-            continue;
-          }
-          // For transparent bg with actual content, preserve bg but update character
+          // For transparent background: preserve existing bg color but update the character.
+          // This ensures old content gets cleared (spaces overwrite stale chars) while
+          // maintaining visual transparency of the background color.
           const existingAttr = this.buffer[y][x][0];
           const existingBg = existingAttr & 0x1ff;
-          // Combine new fg/flags with existing bg
           const newAttr = (attr & ~0x1ff) | existingBg;
           this.buffer[y][x] = [newAttr, ch];
         } else {
@@ -1153,8 +1148,20 @@ export class Screen extends Element {
           this.buffer[y][x] = [baseAttr, fillChar];
         }
       }
+    } else {
+      // Transparent bg: clear characters but preserve each cell's existing bg color.
+      // Without this, old content persists as ghost artifacts when content shrinks.
+      for (let y = startY; y < bbsMaxY; y++) {
+        if (y < 0 || y >= this.height || !this.buffer[y]) continue;
+        for (let x = startX; x < bbsMaxX; x++) {
+          if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
+          const existingAttr = this.buffer[y][x][0];
+          const existingBg = existingAttr & 0x1ff;
+          const newAttr = (baseAttr & ~0x1ff) | existingBg;
+          this.buffer[y][x] = [newAttr, fillChar];
+        }
+      }
     }
-    // If transparent bg (not blend), skip fill entirely - preserve existing buffer content
 
     // Render lines (using clamped bounds to prevent content leaking outside parent)
     for (let i = 0; i < lines.length; i++) {
