@@ -1273,7 +1273,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     enabled: boolean;
     category?: string;
   }>> {
-    const { getDoors } = await import('../handlers/door.handler');
+    const { getDoors } = require('../handlers/door.handler');
     const allDoors = getDoors();
     const bbsRoot = (this.session as any)?.dataDir || process.env.BBS_DATA_DIR || process.cwd();
 

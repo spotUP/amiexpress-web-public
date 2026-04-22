@@ -111,7 +111,7 @@ export async function reloadDoorCommands(
     loadCommands(baseDir, conferenceId, nodeId);
 
     // Reinitialize doors from updated command cache
-    const { initializeDoors } = await import('./door.handler');
+    const { initializeDoors } = require('./door.handler');
     await initializeDoors();
 
     const afterCount = commandCache.bbscmd.size;

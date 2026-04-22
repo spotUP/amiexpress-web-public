@@ -369,14 +369,14 @@ console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError)
     try {
       // DISK-BASED CONFIG: Load doors from .info files, not database
       // This ensures we get the actual doors available on the system
-      const { getDoors } = await import('../handlers/door.handler');
+      const { getDoors } = require('../handlers/door.handler');
       const backendDoors = getDoors();
 console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
 
       // Transform backend Door format to frontend Door format
       // Backend uses: id, name, command, type, path, accessLevel, etc.
       // Frontend expects: id (number), door_name, door_command, door_type, door_path, etc.
-      const frontendDoors = backendDoors.map((door, index) => ({
+      const frontendDoors = backendDoors.map((door: any, index: number) => ({
         id: index + 1,  // Frontend expects numeric ID
         door_name: door.name,
         door_command: door.command,
@@ -505,7 +505,7 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         return handleError(res, new Error(result.message));
       }
 
-      const { reloadDoors } = await import('../handlers/door.handler');
+      const { reloadDoors } = require('../handlers/door.handler');
       await reloadDoors();
 
       sendResponse(res, result, 'Door archive installed');
@@ -1824,7 +1824,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
    */
   router.post('/doors/reload', async (req: Request, res: Response) => {
     try {
-      const { reloadDoors } = await import('../handlers/door.handler');
+      const { reloadDoors } = require('../handlers/door.handler');
       const doors = await reloadDoors();
 
       sendResponse(
