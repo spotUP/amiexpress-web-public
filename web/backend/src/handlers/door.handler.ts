@@ -3310,9 +3310,11 @@ console.log(`[reloadDoors] Doors cache reloaded: ${doors.length} doors`);
 }
 
 export async function initializeDoors() {
-  // Import commandCache to access loaded BBSCMD commands
-  const { commandCache } = await import('./command-execution.handler');
+  // Use require to get the SAME module instance as loadCommands (dynamic import may get a separate ESM instance)
+  const { commandCache } = require('./command-execution.handler');
   const bbsBaseDir = require('../config').config.get('dataDir');
+
+  console.log(`[initializeDoors] commandCache.bbscmd.size=${commandCache.bbscmd.size}, syscmd.size=${commandCache.syscmd.size}`);
 
   // Helper to calculate directory size (skips node_modules/.git)
   const calculateDirSize = (dirPath: string): number => {
