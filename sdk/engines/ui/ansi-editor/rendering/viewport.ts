@@ -82,7 +82,7 @@ export class Viewport {
       this.rulerBox = new Box({
         parent: this.containerPanel,
         top: 0,
-        left: this.showLineNumbers ? this.lineNumberWidth + 1 : 0,
+        left: this.showLineNumbers ? this.lineNumberWidth + 2 : 0,
         right: this.showScrollbar ? 2 : 0,
         height: 1,
         style: {
@@ -100,7 +100,7 @@ export class Viewport {
         top: this.showRuler ? 1 : 0,
         bottom: 0,
         left: 0,
-        width: this.lineNumberWidth + 1,  // Width for numbers + separator
+        width: this.lineNumberWidth + 2,  // Width for numbers + space + separator
         style: {
           fg: 'blue',
           bg: 'black',
@@ -130,7 +130,7 @@ export class Viewport {
       parent: this.containerPanel,
       top: this.showRuler ? 1 : 0,
       bottom: 0,
-      left: this.showLineNumbers ? this.lineNumberWidth + 1 : 0,
+      left: this.showLineNumbers ? this.lineNumberWidth + 2 : 0,
       right: this.showScrollbar ? 2 : 0,
       style: {
         fg: 'white',

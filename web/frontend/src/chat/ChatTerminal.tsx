@@ -64,11 +64,28 @@ export default function ChatTerminal() {
     terminalInstance.current = term;
     console.log('[ChatTerminal] Terminal opened and instance stored');
 
-    // Custom keyboard handler for Shift+Arrow keys (for text selection in livechat)
-    // xterm.js doesn't send proper escape sequences for Shift+Arrow by default
+    // Track mouse tracking state for Ctrl+M toggle
+    let mouseTrackingDisabled = false;
+
+    // Custom keyboard handler
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      // Only handle Shift+Arrow keys
-      if (!event.shiftKey) return true; // Let xterm handle it
+      // Ctrl+Shift+M: toggle mouse tracking on/off
+      if (event.ctrlKey && event.shiftKey && (event.key === 'M' || event.key === 'm') && event.type === 'keydown') {
+        mouseTrackingDisabled = !mouseTrackingDisabled;
+        if (mouseTrackingDisabled) {
+          // Disable all mouse tracking modes
+          term.write('\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l');
+          console.log('[ChatTerminal] Mouse tracking DISABLED (Ctrl+M)');
+        } else {
+          // Re-enable mouse tracking (SGR extended mode + any-event)
+          term.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
+          console.log('[ChatTerminal] Mouse tracking ENABLED (Ctrl+M)');
+        }
+        return false;
+      }
+
+      // Shift+Arrow keys for text selection in livechat
+      if (!event.shiftKey) return true;
 
       const keyMap: Record<string, string> = {
         'ArrowUp': '\x1B[1;2A',      // Shift+Up
@@ -79,13 +96,10 @@ export default function ChatTerminal() {
 
       const sequence = keyMap[event.key];
       if (sequence) {
-        // Send the proper escape sequence with Shift modifier
         socket.emit('command', sequence);
-        // Prevent xterm from processing this key
         return false;
       }
 
-      // Let xterm handle all other keys
       return true;
     });
 

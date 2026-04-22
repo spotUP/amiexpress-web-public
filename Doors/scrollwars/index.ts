@@ -276,6 +276,7 @@ door.onStart(async (ctx: DoorContext) => {
     parent: userPanelDock,
     top: 1, left: 1, width: '100%-2', height: '100%-2',
     tags: true,
+    focusable: false, mouse: false, clickable: false,
   });
 
   const chatPanelDock = new DockablePanel({
@@ -291,6 +292,7 @@ door.onStart(async (ctx: DoorContext) => {
     parent: chatPanelDock,
     top: 1, left: 1, width: '100%-2', height: '100%-2',
     tags: true,
+    focusable: false, mouse: false, clickable: false,
   });
 
   const statusBar = createBox({
@@ -300,6 +302,7 @@ door.onStart(async (ctx: DoorContext) => {
     height: 1,
     tags: true,
     style: { fg: 'cyan', bg: 'blue' },
+    focusable: false, mouse: false, clickable: false,
   });
 
   const participant: Participant = {

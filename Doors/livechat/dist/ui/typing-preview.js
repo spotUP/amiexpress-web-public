@@ -20,7 +20,10 @@ function createTypingPreview(screen) {
         border: { type: 'line' },
         style: { fg: 'gray', border: { fg: 'gray' } },
         tags: true,
-        content: ''
+        content: '',
+        focusable: false,
+        mouse: false,
+        clickable: false
     });
 }
 /** Render typing preview content - shows other users typing in real-time */

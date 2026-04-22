@@ -52,6 +52,8 @@ export async function showMyTasks(
       style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Task list
@@ -69,6 +71,8 @@ export async function showMyTasks(
         bg: 'black'
       },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const formatTaskItem = (task: Task): string => {
@@ -125,6 +129,8 @@ export async function showMyTasks(
       style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     list.focus();

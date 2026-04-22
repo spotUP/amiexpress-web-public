@@ -34,6 +34,9 @@ class OpponentBoards {
             label: ' Opponents ',
             content: '',
             fixed: true, // Fixed during gameplay, not dockable
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
     }
     /**
@@ -84,6 +87,9 @@ class OpponentBoards {
             height: this.boardHeight,
             border: { type: 'line' },
             style: { border: { fg: 'white' } },
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         const nameLabel = (0, blessed_helpers_1.createBox)({
             parent: container,
@@ -92,6 +98,9 @@ class OpponentBoards {
             width: this.boardWidth - 2,
             height: 1,
             content: '',
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         const boardBox = (0, blessed_helpers_1.createBox)({
             parent: container,
@@ -100,6 +109,9 @@ class OpponentBoards {
             width: this.boardWidth - 2,
             height: this.boardHeight - 3,
             content: '',
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         return { container, boardBox, nameLabel };
     }

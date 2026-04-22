@@ -44,6 +44,8 @@ export async function showProjectList(
       style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Project list container - NOT focusable (list inside is)
@@ -61,6 +63,8 @@ export async function showProjectList(
         bg: 'black'
       },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const list = createList({
@@ -96,6 +100,8 @@ export async function showProjectList(
       style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const cleanup = () => {
@@ -227,6 +233,8 @@ async function showProjectEditor(
       },
       label: isNew ? ' New Project ' : ' Edit Project ',
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Name field - label NOT focusable
@@ -240,6 +248,8 @@ async function showProjectEditor(
       content: 'Project Name:',
       style: { fg: 'white', bg: 'black' },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const nameInput = createTextbox({
@@ -270,6 +280,8 @@ async function showProjectEditor(
       content: 'Type:',
       style: { fg: 'white', bg: 'black' },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Type list
@@ -304,6 +316,8 @@ async function showProjectEditor(
       content: 'Status:',
       style: { fg: 'white', bg: 'black' },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Status list
@@ -339,6 +353,8 @@ async function showProjectEditor(
       content: 'Description (optional):',
       style: { fg: 'white', bg: 'black' },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const descInput = createTextbox({

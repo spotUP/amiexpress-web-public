@@ -336,7 +336,9 @@ var BugTrackerApp = class {
       },
       content: "{center}{bold}BUG TRACKER{/bold} - AmiExpress BBS Issue Management{/center}",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     this.mainContainer = createBox({
       parent: this.screen,
@@ -348,7 +350,9 @@ var BugTrackerApp = class {
         fg: "white",
         bg: "black"
       },
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     this.footerBox = createBox({
       parent: this.screen,
@@ -362,7 +366,9 @@ var BugTrackerApp = class {
       },
       content: "{center}Q=Quit | ESC=Back | Arrow Keys=Navigate | Enter=Select{/center}",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
   }
   clearMain() {
@@ -395,7 +401,9 @@ var BugTrackerApp = class {
       },
       content: ` Welcome, ${this.username}! | ${stats.total} total bugs | ${openBugs} open`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const menuActions = [
       () => this.showCreateBug(),
@@ -518,7 +526,9 @@ var BugTrackerApp = class {
       scrollable: true,
       mouse: true,
       padding: { left: 1, right: 1 },
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     createBox({
       parent: this.mainContainer,
@@ -534,7 +544,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Enter]{/} Select   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[Q]{/} Quit",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     this.screen.render();
   }
@@ -592,7 +604,9 @@ var BugTrackerApp = class {
       },
       content: ` Showing ${bugs.length} bug(s) | Filter: ${filterLabels[this.currentFilter]} | Press F to cycle filters`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const listItems = bugs.map((bug) => {
       const priorityColor = PRIORITIES.find((p) => p.value === bug.priority)?.color || "white";
@@ -649,7 +663,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Enter]{/} View Bug   {cyan-fg}[N]{/} New Bug   {cyan-fg}[F]{/} Filter   {red-fg}[ESC]{/} Back",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     bugList.focus();
     bugList.on("select", (item, index) => {
@@ -707,7 +723,9 @@ var BugTrackerApp = class {
       },
       content: ` {bold}${bug.title}{/} | {${statusInfo?.color}-fg}${statusInfo?.label}{/} | {${priorityInfo?.color}-fg}${priorityInfo?.label}{/}`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const detailContent = [
       `{cyan-fg}Category:{/} ${categoryInfo?.label || bug.category}`,
@@ -844,7 +862,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Enter]{/} Select Action   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[ESC]{/} Back",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     this.registerKey(["v", "V"], () => {
       if (this.currentView === "detail") {
@@ -918,7 +938,9 @@ var BugTrackerApp = class {
       },
       content: " Use arrows/mouse to select field. Enter to edit. F10 to submit. ESC to cancel.",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const generateItems = () => {
       return fields.map((field) => {
@@ -972,7 +994,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Enter]{/} Edit Field   {cyan-fg}[F10]{/} Submit   {red-fg}[ESC]{/} Cancel",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const editField = (fieldIdx) => {
       const field = fields[fieldIdx];
@@ -1072,7 +1096,9 @@ var BugTrackerApp = class {
       },
       content: ` Total: ${stats.total} bugs | Open: ${openBugs} (${openPct}%) | Closed: ${closedBugs}`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const priorityBars = [];
     const maxPriority = Math.max(...Object.values(stats.byPriority), 1);
@@ -1144,7 +1170,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Up/Down]{/} Scroll   {red-fg}[ESC]{/} Back to Menu",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     analyticsBox.focus();
     this.registerKey(["escape"], () => {
@@ -1178,7 +1206,9 @@ var BugTrackerApp = class {
       },
       content: ` ${webhooks.length} webhook(s) configured | Notifications for bug events`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const listItems = webhooks.map((w, idx) => {
       const status = w.enabled ? "{green-fg}[ON]{/}" : "{red-fg}[OFF]{/}";
@@ -1223,7 +1253,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[A]{/} Add   {cyan-fg}[D]{/} Delete   {cyan-fg}[T]{/} Toggle   {red-fg}[ESC]{/} Back",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     webhookList.focus();
     this.registerKey(["a", "A"], () => {
@@ -1300,7 +1332,9 @@ var BugTrackerApp = class {
       },
       content: ` Open: ${openBugs} | Fixed (pending close): ${fixedBugs} | Closed: ${closedBugs}`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const toolLabels = [
       "[B] Bulk Status Change",
@@ -1354,7 +1388,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Enter]{/} Select Tool   {cyan-fg}[Hotkey]{/} Quick Action   {red-fg}[ESC]{/} Back",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     toolList.focus();
     toolList.on("select", (_item, index) => {
@@ -1564,7 +1600,9 @@ var BugTrackerApp = class {
       },
       content: ` Tracking ${userCount} user(s) across ${bugs.length} bug(s)`,
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     const lines = [
       "{bold}User                 Reported  Assigned  Comments{/}",
@@ -1612,7 +1650,9 @@ var BugTrackerApp = class {
       },
       content: " {cyan-fg}[Up/Down]{/} Scroll   {red-fg}[ESC]{/} Back to Sysop Tools",
       tags: true,
-      focusable: false
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
     reportBox.focus();
     this.registerKey(["escape"], () => {
@@ -1840,7 +1880,9 @@ var BugTrackerApp = class {
           border: { fg: "yellow" }
         },
         tags: true,
-        focusable: false
+        focusable: false,
+        mouse: false,
+        clickable: false
       });
       const textbox = createTextbox({
         parent: inputBox,
@@ -1869,7 +1911,9 @@ var BugTrackerApp = class {
         content: "{gray-fg}Enter=Submit | ESC=Cancel{/}",
         tags: true,
         style: { fg: "gray", bg: "black" },
-        focusable: false
+        focusable: false,
+        mouse: false,
+        clickable: false
       });
       const cleanup = () => {
         backdrop.detach();

@@ -47,6 +47,8 @@ export async function showPartyTimeline(
         style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
         tags: true,
         focusable: false,
+        mouse: false,
+        clickable: false,
       });
 
       // Party list container - focusable (scrollable)
@@ -147,6 +149,8 @@ export async function showPartyTimeline(
         style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
         tags: true,
         focusable: false,
+        mouse: false,
+        clickable: false,
       });
 
       screen.render();

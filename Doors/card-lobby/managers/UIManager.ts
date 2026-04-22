@@ -81,6 +81,9 @@ export class UIManager {
       height: 1,
       fixed: true,
       hidden: false,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { fg: 'white', bg: 'blue' },
       content: '',
     });
@@ -93,6 +96,9 @@ export class UIManager {
       height: 1,
       tags: true,
       hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { fg: 'white', bg: 'blue' },
       content: ' Card Lobby v2.0.2-SDK ',
     });
@@ -176,6 +182,9 @@ export class UIManager {
       width: '100%',
       height: 1,
       tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: UI_THEME.statusBar,
       content: ' Loading Card Lobby... ',
     });
@@ -224,6 +233,9 @@ export class UIManager {
       height: mainHeight,
       label: ' Lobby ',
       border: { type: 'line' },
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
     });
 
@@ -236,6 +248,9 @@ export class UIManager {
       height: mainHeight,
       border: { type: 'line' },
       label: ' Table ',
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
     });
 
@@ -248,6 +263,9 @@ export class UIManager {
       left: 0,
       width: '100%',
       height: 1,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { fg: 'yellow', bg: 'blue' },
       content: ' J:Join  O:Observe  C:Create ',
     });
@@ -288,6 +306,9 @@ export class UIManager {
       left: 0,
       width: '100%',
       height: 1,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { fg: 'black', bg: 'cyan' },
       content: ' F:Filter R:Refresh Q:Quit ',
     }) as any;
@@ -302,7 +323,9 @@ export class UIManager {
       scrollable: true,
       alwaysScroll: true,
       keys: true,
-      mouse: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { fg: 'white' },
       content: 'Select a table to view details.',
     }) as any;
@@ -313,6 +336,9 @@ export class UIManager {
       left: 1,
       right: 1,
       height: 1,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: { fg: 'white', bg: 'black' },
       hidden: true,
     });
@@ -412,6 +438,9 @@ export class UIManager {
       label: ' FLOP ',
       tags: true,
       hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       border: { type: 'line', labelStyle: { fg: 'yellow' } },
       style: panelStyle,
     });
@@ -423,6 +452,9 @@ export class UIManager {
       right: 1,
       bottom: 1,
       tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: contentStyle,
       content: '',
     });
@@ -436,6 +468,9 @@ export class UIManager {
       label: ' PLAYERS ',
       tags: true,
       hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       border: { type: 'line', labelStyle: { fg: 'yellow' } },
       style: panelStyle,
     });
@@ -469,6 +504,9 @@ export class UIManager {
       label: ' YOUR HAND ',
       tags: true,
       hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       border: { type: 'line', labelStyle: { fg: 'yellow' } },
       style: panelStyle,
     });
@@ -480,6 +518,9 @@ export class UIManager {
       right: 1,
       bottom: 1,
       tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       style: contentStyle,
       content: '',
     });
@@ -493,6 +534,9 @@ export class UIManager {
       label: ' ACTIVITY ',
       tags: true,
       hidden: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
       border: { type: 'line', labelStyle: { fg: 'yellow' } },
       style: panelStyle,
     });

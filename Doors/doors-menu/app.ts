@@ -222,6 +222,7 @@ export async function createApp(session: DoorSession) {
     width: '100%',
     height: 1,
     fixed: true,
+    focusable: false,
     clickable: false,
     mouse: false,
     border: undefined,
@@ -240,6 +241,7 @@ export async function createApp(session: DoorSession) {
     width: '70%',
     height: 1,
     fixed: true,
+    focusable: false,
     clickable: false,
     mouse: false,
     border: undefined,
@@ -258,6 +260,7 @@ export async function createApp(session: DoorSession) {
     width: '30%',
     height: 1,
     fixed: true,
+    focusable: false,
     clickable: false,
     mouse: false,
     border: undefined,
@@ -322,6 +325,7 @@ export async function createApp(session: DoorSession) {
     width: '100%',
     height: 3,
     fixed: true,           // Static footer
+    focusable: false,
     clickable: false,      // Don't capture mouse events
     mouse: false,          // Don't listen for mouse events
     border: {

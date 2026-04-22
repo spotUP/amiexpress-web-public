@@ -167,7 +167,10 @@ class FireEmblemGame {
             border: { type: 'line' },
             style: {
                 border: { fg: 'cyan' }
-            }
+            },
+            focusable: false,
+            mouse: false,
+            clickable: false
         });
         // Handle intro key press
         const introHandler = (_ch, key) => {
@@ -251,6 +254,9 @@ class FireEmblemGame {
             width: '100%-2',
             height: '100%-2',
             tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false
         });
         // Status display panel
         this.statusPanel = new blessed_1.DockablePanel({
@@ -276,6 +282,9 @@ class FireEmblemGame {
             width: '100%-2',
             height: '100%-2',
             tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false
         });
         // Register responsive constraints
         this.screen.responsiveLayout.registerElement(this.mapPanel, {

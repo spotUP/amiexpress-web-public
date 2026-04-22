@@ -51,6 +51,8 @@ export async function showMainMenu(
                `{center}Handle: {bold}${user.handle}{/bold}  |  Level: {${levelColor}-fg}${user.level.toUpperCase()}{/${levelColor}-fg} (${levelStars})  |  Points: {bold}${formatPoints(user.points)}{/bold}  |  Rank: {bold}#${user.rank}{/bold}{/center}`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // ========================================================================
@@ -67,6 +69,8 @@ export async function showMainMenu(
         bg: 'black',
       },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Menu items
@@ -96,6 +100,8 @@ export async function showMainMenu(
         bg: 'black'
       },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Menu list (focusable) - use blessed.list directly to avoid SDK's forced scrollable
@@ -153,6 +159,8 @@ export async function showMainMenu(
       },
       padding: { left: 1, top: 1 },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Getting started hint if no projects
@@ -176,6 +184,8 @@ export async function showMainMenu(
         },
         tags: true,
         focusable: false,
+        mouse: false,
+        clickable: false,
       });
     }
 
@@ -198,6 +208,8 @@ export async function showMainMenu(
                ` {gray-fg}Arrow Keys to navigate | Mouse click supported{/gray-fg}`,
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Focus the list

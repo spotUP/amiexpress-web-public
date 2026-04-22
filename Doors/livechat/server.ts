@@ -333,6 +333,9 @@ export async function createApp(session: DoorSession) {
     left: 10,
     width: 70,
     height: 1,
+    focusable: false,
+    mouse: false,
+    clickable: false,
     tags: true,
     content: '',
     style: {
@@ -876,6 +879,9 @@ export async function createApp(session: DoorSession) {
     right: 0,
     height: TYPING_HEIGHT,
     tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false,
     style: {
       fg: 'cyan',
       bg: 'black',

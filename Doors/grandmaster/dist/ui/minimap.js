@@ -107,6 +107,9 @@ class MinimapRenderer {
                     },
                 },
                 content: this.renderMinimap(opponent),
+                focusable: false,
+                mouse: false,
+                clickable: false,
             });
             // Mark as minimap for cleanup
             minimapBox.minimapId = opponent.id;

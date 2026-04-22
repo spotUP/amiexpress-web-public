@@ -2579,6 +2579,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           pageSize: 1,
           eventName,
           commands,
+          kind: 'bbs',
         };
         if (commands.length > 0) {
           session.queuedScreenCommands = commands;
@@ -2604,6 +2605,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
       pageSize,
       eventName,
       commands,
+      kind: 'bbs',
     };
     if (commands.length > 0) {
       session.queuedScreenCommands = commands;
@@ -2701,6 +2703,7 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         pageSize: 1,
         eventName,
         commands,
+        kind: 'bbs',
       };
       // Queue commands for execution after pause is dismissed
       if (commands.length > 0) {
@@ -2857,6 +2860,7 @@ export function startPagination(
     eventName,
     commands,
     onComplete,
+    kind: 'bbs',
   };
   const chunk = lines.slice(0, pageSize).join('\r\n');
   socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)?');
@@ -3005,6 +3009,7 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
       pageSize: 1,
       eventName: segState.eventName,
       commands: [],
+      kind: 'bbs',
     };
     session.lastScreenHadPause = true;
     emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
@@ -3110,6 +3115,7 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
     eventName: 'ansi-output',
     commands: [],
     onComplete,
+    kind: 'bbs',
   };
   session.lastScreenHadPause = true;
 }

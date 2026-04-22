@@ -54,6 +54,8 @@ export async function showAchievements(
       style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Stats moved to header - remove this separate stats box
@@ -123,6 +125,8 @@ export async function showAchievements(
       style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     screen.render();

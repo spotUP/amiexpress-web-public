@@ -220,7 +220,10 @@ class FireEmblemGame {
       border: { type: 'line' },
       style: {
         border: { fg: 'cyan' }
-      }
+      },
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
 
     // Handle intro key press
@@ -312,6 +315,9 @@ class FireEmblemGame {
       width: '100%-2',
       height: '100%-2',
       tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
 
     // Status display panel
@@ -339,6 +345,9 @@ class FireEmblemGame {
       width: '100%-2',
       height: '100%-2',
       tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false
     });
 
     // Register responsive constraints

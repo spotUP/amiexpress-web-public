@@ -75,6 +75,8 @@ export async function showKanbanBoard(
       style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Column containers - calculate width based on screen width
@@ -103,6 +105,8 @@ export async function showKanbanBoard(
           bg: 'black'
         },
         focusable: false,
+        mouse: false,
+        clickable: false,
       });
 
       const list = createList({
@@ -143,6 +147,8 @@ export async function showKanbanBoard(
       style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Debounce timer for navigation updates
@@ -238,6 +244,9 @@ export async function showKanbanBoard(
         fromColumn: colIndex,
         fromIndex: itemIndex,
         ghost: createBox({
+          focusable: false,
+          mouse: false,
+          clickable: false,
           parent: screen,
           top: y - 1,
           left: x - 8,
@@ -483,6 +492,8 @@ async function selectMoveDestination(screen: Screen): Promise<TaskStatus | null>
         bg: 'black'
       },
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     const list = createList({

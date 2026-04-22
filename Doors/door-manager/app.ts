@@ -162,6 +162,9 @@ export async function createApp(session: DoorSession) {
       bg: 'blue'
     },
     tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false,
   });
 
   // Create dockable panel for door list
@@ -306,6 +309,9 @@ export async function createApp(session: DoorSession) {
       fg: 'white'
     },
     tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false,
   });
 
   // Update info panel when selection changes
@@ -533,7 +539,9 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
       // View detailed info
       showDoorDetails(screen, door, bbs);
     } else if (index === 1) {
-      // Test door
+      // Test door - clear screen and destroy UI before launching
+      screen.destroy();
+      bbs.write('\x1b[2J\x1b[H');
       if (bbs.executeCommand) {
         bbs.executeCommand(door.command);
       }
@@ -730,7 +738,10 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
     height: '100%',
     style: {
       bg: 'black'
-    }
+    },
+    focusable: false,
+    mouse: false,
+    clickable: false,
   });
 
   // Header
@@ -745,7 +756,10 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
       fg: 'white',
       bg: 'blue'
     },
-    tags: true
+    tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false,
   });
 
   // File selector (door's .info vs Commands .info)
@@ -780,7 +794,10 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
     style: {
       border: { fg: 'green' }
     },
-    tags: true
+    tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false,
   });
 
   // Entry list inside editor panel
@@ -820,7 +837,10 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
     height: 3,
     content: '{yellow-fg}Tab:{/yellow-fg} Switch  {yellow-fg}Enter:{/yellow-fg} Edit Value  {yellow-fg}K:{/yellow-fg} Edit Key  {yellow-fg}A:{/yellow-fg} Add  {yellow-fg}D:{/yellow-fg} Delete  {yellow-fg}S:{/yellow-fg} Save  {yellow-fg}Q:{/yellow-fg} Quit',
     style: { fg: 'white' },
-    tags: true
+    tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false,
   });
 
   // State
@@ -1090,7 +1110,10 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
         border: { type: 'line' },
         style: { bg: 'black', border: { fg: 'yellow' } },
         content: '\n  {yellow-fg}You have unsaved changes!{/yellow-fg}\n\n  {yellow-fg}[Y]{/yellow-fg} Discard  {green-fg}[N]{/green-fg} Cancel',
-        tags: true
+        tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
       });
       screen.render();
 

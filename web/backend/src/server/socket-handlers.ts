@@ -692,13 +692,27 @@ console.log('🎯 F1 pressed during chat - exiting chat');
       return;
     }
 
-    // If a door is active, call the door's input handler
-console.log(`[socket-handlers] About to check door - data="${data}" (len=${data.length}), inDoor=${session.inDoorManager}, subState=${session.subState}`);
-    logDoorDebug(
-      `CMD data=${JSON.stringify(data)} node=${session.nodeId} inDoor=${session.inDoorManager} subState=${session.subState} handler=${!!session.doorInputHandler}`
-    );
-
-    if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
+    // BBS-owned pause takes priority over door input routing.
+    // When a display flow pause (doPause) is active while a ~CC_ door is finishing,
+    // Enter/Space should dismiss the pause, not go to the door.
+    if (session.paginatedScreen?.kind === 'bbs' && (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING)) {
+      const ch = data.charCodeAt(0);
+      const isPauseKey = data === ' ' || data === '\r' || data === '\n' || ch === 13 || ch === 10;
+      if (isPauseKey) {
+console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command handler instead of door`);
+        // Fall through to command handler below which will handle pagination
+      } else {
+        // Non-pause keys still go to the door
+        if (session.doorInputHandler) {
+          if (markDoorInput(session, data)) {
+            return;
+          }
+          session.doorInputHandler(data);
+          return;
+        }
+      }
+    } else if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
+      // Normal door input routing (no BBS pause active)
       if (session.doorInputHandler) {
         if (markDoorInput(session, data)) {
           return;
@@ -708,7 +722,7 @@ console.log(`[socket-handlers] ABOUT TO CALL doorInputHandler with: "${data}" (l
         session.doorInputHandler(data);
         return;
       } else {
-console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; sending raw to door:input anyway');
+console.log('[socket-handlers] inDoorManager/DOOR_RUNNING but no doorInputHandler; sending raw to door:input anyway');
         logDoorDebug(`WARN missing handler while door active; emitting door:input fallback`);
         socket.emit('door:input', data);
         return;

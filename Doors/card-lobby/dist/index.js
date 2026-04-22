@@ -396,6 +396,9 @@ class CardLobbyApp {
             width: '100%',
             height: '100%',
             ch: ' ',
+            focusable: false,
+            mouse: false,
+            clickable: false,
             style: {
                 bg: 'black',
             },
@@ -636,6 +639,9 @@ class CardLobbyApp {
             width: '100%',
             height: '100%',
             ch: ' ',
+            focusable: false,
+            mouse: false,
+            clickable: false,
             style: {
                 bg: 'black',
             },

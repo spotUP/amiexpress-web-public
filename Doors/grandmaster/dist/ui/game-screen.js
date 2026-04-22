@@ -376,6 +376,9 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'cyan' } },
             label: ' NEXT ',
             fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         this.holdBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -387,6 +390,9 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'magenta' } },
             label: ' HOLD ',
             fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         this.gradeBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -398,6 +404,9 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'yellow' } },
             label: ' GRADE ',
             fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         this.statsBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -409,6 +418,9 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'green' } },
             label: ' STATS ',
             fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         this.sectionBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -420,6 +432,9 @@ class GameScreen {
             style: { bg: 'black', border: { fg: 'cyan' } },
             label: ' SECTION ',
             fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -430,6 +445,9 @@ class GameScreen {
             align: 'center',
             style: { bg: 'black', fg: 'gray' },
             content: '←→ Move | Z/X Rotate | ↓ Soft | Enter Hard | C Hold | ESC Pause',
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
         // Create effectsBox LAST so it renders on top of all other elements
         this.effectsBox = (0, blessed_helpers_1.createBox)({
@@ -441,6 +459,7 @@ class GameScreen {
             style: { fg: 'white', bg: 'transparent' },
             clickable: false,
             mouse: false,
+            focusable: false,
             tags: true,
         });
     }

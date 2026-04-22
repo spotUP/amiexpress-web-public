@@ -173,8 +173,10 @@ async function createApp(session) {
         width: '100%',
         height: 1,
         fixed: true,
-        clickable: false, // Don't capture mouse events
-        mouse: false, // Don't listen for mouse events
+        focusable: false,
+        clickable: false,
+        mouse: false,
+        border: undefined,
         content: ' DOOR GAMES & UTILITIES ',
         style: {
             fg: 'white',
@@ -189,8 +191,10 @@ async function createApp(session) {
         width: '70%',
         height: 1,
         fixed: true,
-        clickable: false, // Don't capture mouse events
-        mouse: false, // Don't listen for mouse events
+        focusable: false,
+        clickable: false,
+        mouse: false,
+        border: undefined,
         content: '{cyan-fg}Location:{/cyan-fg} All Doors',
         style: {
             fg: 'cyan',
@@ -205,8 +209,10 @@ async function createApp(session) {
         width: '30%',
         height: 1,
         fixed: true,
-        clickable: false, // Don't capture mouse events
-        mouse: false, // Don't listen for mouse events
+        focusable: false,
+        clickable: false,
+        mouse: false,
+        border: undefined,
         content: '{yellow-fg}Filter:{/yellow-fg} ALL',
         style: {
             fg: 'yellow',
@@ -263,6 +269,7 @@ async function createApp(session) {
         width: '100%',
         height: 3,
         fixed: true, // Static footer
+        focusable: false,
         clickable: false, // Don't capture mouse events
         mouse: false, // Don't listen for mouse events
         border: {
@@ -437,6 +444,7 @@ async function createApp(session) {
         const selectedDoor = sortedDoors[index - 1];
         if (selectedDoor) {
             screen.destroy();
+            bbs.write('\x1b[2J\x1b[H');
             if (bbs.executeCommand) {
                 await bbs.executeCommand(selectedDoor.command);
             }

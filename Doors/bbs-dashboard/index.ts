@@ -102,6 +102,7 @@ class BBSDashboard {
       width: '50%',
       height: '50%',
       fixed: true,  // Static panel for BBS environment
+      focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
       mouse: false,      // Don't listen for mouse events
       border: { type: 'line' },
@@ -127,6 +128,7 @@ class BBSDashboard {
       width: '50%',
       height: '50%',
       fixed: true,  // Static panel for BBS environment
+      focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
       mouse: false,      // Don't listen for mouse events
       border: { type: 'line' },
@@ -152,6 +154,7 @@ class BBSDashboard {
       width: '100%',
       bottom: 1,  // Reserve 1 line for status bar
       fixed: true,  // Static panel for BBS environment
+      focusable: false,  // Display-only panel
       clickable: false,  // Don't capture mouse events
       mouse: false,      // Don't listen for mouse events
       border: { type: 'line' },

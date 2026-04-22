@@ -27,7 +27,10 @@ export function createTypingPreview(screen: Screen): Box {
     border: { type: 'line' },
     style: { fg: 'gray', border: { fg: 'gray' } },
     tags: true,
-    content: ''
+    content: '',
+    focusable: false,
+    mouse: false,
+    clickable: false
   });
 }
 

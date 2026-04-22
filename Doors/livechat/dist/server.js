@@ -280,6 +280,9 @@ async function createApp(session) {
         left: 10,
         width: 70,
         height: 1,
+        focusable: false,
+        mouse: false,
+        clickable: false,
         tags: true,
         content: '',
         style: {
@@ -762,6 +765,9 @@ async function createApp(session) {
         right: 0,
         height: chat_log_1.TYPING_HEIGHT,
         tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
         style: {
             fg: 'cyan',
             bg: 'black',

@@ -32,6 +32,8 @@ export async function showLeaderboard(
       style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Table header - NOT focusable
@@ -48,6 +50,8 @@ export async function showLeaderboard(
       style: { fg: 'cyan', bg: 'black' },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Leaderboard table - focusable (scrollable content)
@@ -117,6 +121,8 @@ export async function showLeaderboard(
       style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
       tags: true,
       focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     screen.render();

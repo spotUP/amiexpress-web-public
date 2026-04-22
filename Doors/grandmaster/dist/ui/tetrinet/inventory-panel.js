@@ -30,6 +30,9 @@ class InventoryPanel {
             label: ' Inventory ',
             content: this.renderEmpty(),
             fixed: true, // Fixed during gameplay, not dockable
+            focusable: false,
+            mouse: false,
+            clickable: false,
         });
     }
     /**

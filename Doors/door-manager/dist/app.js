@@ -119,6 +119,9 @@ async function createApp(session) {
             bg: 'blue'
         },
         tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
     });
     // Create dockable panel for door list
     // Layout: header(3) + doorPanel + infoPanel(7) + footer(3) = 100%
@@ -250,6 +253,9 @@ async function createApp(session) {
             fg: 'white'
         },
         tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
     });
     // Update info panel when selection changes
     function updateInfoPanel() {
@@ -452,7 +458,9 @@ function showDoorMenu(screen, door, bbs, onRefresh) {
             showDoorDetails(screen, door, bbs);
         }
         else if (index === 1) {
-            // Test door
+            // Test door - clear screen and destroy UI before launching
+            screen.destroy();
+            bbs.write('\x1b[2J\x1b[H');
             if (bbs.executeCommand) {
                 bbs.executeCommand(door.command);
             }
@@ -612,7 +620,10 @@ function showInfoEditor(screen, door, bbs) {
         height: '100%',
         style: {
             bg: 'black'
-        }
+        },
+        focusable: false,
+        mouse: false,
+        clickable: false,
     });
     // Header
     const header = (0, blessed_helpers_1.createBox)({
@@ -626,7 +637,10 @@ function showInfoEditor(screen, door, bbs) {
             fg: 'white',
             bg: 'blue'
         },
-        tags: true
+        tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
     });
     // File selector (door's .info vs Commands .info)
     const fileList = (0, blessed_helpers_1.createList)({
@@ -659,7 +673,10 @@ function showInfoEditor(screen, door, bbs) {
         style: {
             border: { fg: 'green' }
         },
-        tags: true
+        tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
     });
     // Entry list inside editor panel
     const entryList = (0, blessed_helpers_1.createList)({
@@ -696,7 +713,10 @@ function showInfoEditor(screen, door, bbs) {
         height: 3,
         content: '{yellow-fg}Tab:{/yellow-fg} Switch  {yellow-fg}Enter:{/yellow-fg} Edit Value  {yellow-fg}K:{/yellow-fg} Edit Key  {yellow-fg}A:{/yellow-fg} Add  {yellow-fg}D:{/yellow-fg} Delete  {yellow-fg}S:{/yellow-fg} Save  {yellow-fg}Q:{/yellow-fg} Quit',
         style: { fg: 'white' },
-        tags: true
+        tags: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
     });
     // State
     let state = {
@@ -953,7 +973,10 @@ function showInfoEditor(screen, door, bbs) {
                 border: { type: 'line' },
                 style: { bg: 'black', border: { fg: 'yellow' } },
                 content: '\n  {yellow-fg}You have unsaved changes!{/yellow-fg}\n\n  {yellow-fg}[Y]{/yellow-fg} Discard  {green-fg}[N]{/green-fg} Cancel',
-                tags: true
+                tags: true,
+                focusable: false,
+                mouse: false,
+                clickable: false,
             });
             screen.render();
             screen.once('keypress', (ch, key) => {
