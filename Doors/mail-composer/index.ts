@@ -243,7 +243,6 @@ async function showHeaderEditor(
       style: {
         fg: 'white',
         bg: 'blue',
-        focus: { fg: 'white', bg: 'cyan' },
       },
       suggestions: usernames,
       minLength: 1,
@@ -276,7 +275,6 @@ async function showHeaderEditor(
       style: {
         fg: 'white',
         bg: 'blue',
-        focus: { fg: 'white', bg: 'cyan' },
       },
     });
 

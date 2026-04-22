@@ -71,7 +71,6 @@ export class Question extends Box {
       style: {
         ...options.style,
         bg: options.style?.bg || 'blue',
-        transparent: true,  // Transparent background like blessed shadow demo
         border: {
           fg: 'white',
           bg: 'blue',

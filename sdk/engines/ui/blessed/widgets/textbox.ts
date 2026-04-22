@@ -34,6 +34,16 @@ export class Textbox extends Element {
       keys: true,
       ...options,
       tags: true,  // Enable tag parsing for cursor display (forced, cannot be overridden)
+      style: {
+        fg: 'white',
+        bg: 'black',
+        ...options.style,
+        focus: {
+          fg: 'white',
+          bg: 'lightblue',
+          ...options.style?.focus,
+        },
+      },
     });
 
     this.value = options.value || '';
@@ -943,6 +953,16 @@ export class Textarea extends Element {
       alwaysScroll: true,
       mouse: true,
       ...options,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        ...options.style,
+        focus: {
+          fg: 'white',
+          bg: 'lightblue',
+          ...options.style?.focus,
+        },
+      },
       // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
       scrollbar: options.scrollbar === undefined || options.scrollbar ? {
         ch: ' ',

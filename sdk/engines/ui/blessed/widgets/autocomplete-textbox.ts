@@ -111,6 +111,16 @@ export class AutocompleteTextbox extends Element {
       keys: true,
       ...options,
       tags: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        ...options.style,
+        focus: {
+          fg: 'white',
+          bg: 'lightblue',
+          ...options.style?.focus,
+        },
+      },
     });
 
     this.value = options.value || '';

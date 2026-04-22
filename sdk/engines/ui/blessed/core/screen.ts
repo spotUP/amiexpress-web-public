@@ -2130,6 +2130,22 @@ export class Screen extends Element {
       if (!handled) {
         if (this._focused.emit('keypress', ch, key) === true) handled = true;
       }
+
+      // Bubble unhandled key events up to parent elements
+      if (!handled) {
+        let parent = this._focused.parent;
+        while (parent && parent !== this) {
+          if (keyName && parent.emit(`keypress ${keyName}`, ch, key) === true) {
+            handled = true;
+            break;
+          }
+          if (!handled && parent.emit('keypress', ch, key) === true) {
+            handled = true;
+            break;
+          }
+          parent = parent.parent;
+        }
+      }
     }
 
     // Default Tab/Shift-Tab and Arrow keys for focus navigation (only if not handled by widget)
