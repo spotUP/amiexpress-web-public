@@ -1554,21 +1554,23 @@ console.log(`[executeTypeScriptDoor] Hybrid door detected, using server entry: $
                 doorPath = mainEntry;
 console.log(`[executeTypeScriptDoor] Using main entry from package.json: ${packageJson.main}`);
               } else {
-                doorPath = path.join(doorPath, 'index.ts');
-console.warn(`[executeTypeScriptDoor] Main entry not found (${packageJson.main}); using index.ts`);
+                // Main entry not found - try index.js (compiled) then index.ts (dev)
+                const fallback = isProduction ? 'index.js' : 'index.ts';
+                doorPath = path.join(doorPath, fallback);
+console.warn(`[executeTypeScriptDoor] Main entry not found (${packageJson.main}); using ${fallback}`);
               }
             } else {
-              // Default to index.ts
-              doorPath = path.join(doorPath, 'index.ts');
+              const fallback = isProduction ? 'index.js' : 'index.ts';
+              doorPath = path.join(doorPath, fallback);
             }
           } catch (error) {
-            // If package.json parse fails, fall back to index.ts
-console.log(`[executeTypeScriptDoor] Failed to parse package.json, using default index.ts`);
-            doorPath = path.join(doorPath, 'index.ts');
+            const fallback = isProduction ? 'index.js' : 'index.ts';
+console.log(`[executeTypeScriptDoor] Failed to parse package.json, using default ${fallback}`);
+            doorPath = path.join(doorPath, fallback);
           }
         } else {
-          // No package.json, default to index.ts
-          doorPath = path.join(doorPath, 'index.ts');
+          const fallback = isProduction ? 'index.js' : 'index.ts';
+          doorPath = path.join(doorPath, fallback);
         }
       }
     }
