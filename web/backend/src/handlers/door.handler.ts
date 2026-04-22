@@ -676,6 +676,15 @@ console.log(`[launchAmigaDoor] PAGINATION=${doorInfo.pagination}: autoPause=${au
     } as any);
 console.log(`[launchAmigaDoor] bbsSession.currentConference=${(session as any).currentConference || 1}`);
 
+    // Clear screen before launching 68K door.
+    // Amiga doors (RTW, dRE!WAll, etc.) assume a clean 25-row display starting
+    // at row 0. Without this, the cursor inherits the BBS menu position and
+    // scroll drift causes redraw misalignment (e.g., RTW node 01 shifting down
+    // every refresh cycle). Matches real AmiExpress behavior where the door
+    // gets a fresh terminal canvas.
+    // ESC[r resets scroll region, ESC[2J clears, ESC[H homes cursor.
+    emitText(socket, '\x1b[r\x1b[2J\x1b[H');
+
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
