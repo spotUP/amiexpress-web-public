@@ -166,17 +166,15 @@ console.warn(`[Static] Run 'cd ${path.relative(projectRoot, path.dirname(distPat
 
 console.log(`[Static] Serving ${name} at ${prefix} from ${distPath}`);
 
-    // Serve static assets with caching
-    const staticOptions = process.env.NODE_ENV === 'production'
-      ? {
-          maxAge: '1y', // Cache static assets for 1 year in production
-          immutable: true
-        }
-      : {
-          maxAge: 0 // No caching in development
-        };
-
-    app.use(prefix, express.static(distPath, staticOptions));
+    // Serve hashed assets with long-term caching, index.html with no cache
+    const spaAssetsPath = join(distPath, 'assets');
+    if (fs.existsSync(spaAssetsPath)) {
+      app.use(`${prefix}/assets`, express.static(spaAssetsPath, {
+        maxAge: '1y',
+        immutable: true,
+      }));
+    }
+    app.use(prefix, express.static(distPath, { maxAge: 0 }));
 
     // SPA fallback: serve index.html for non-asset requests
     app.use(prefix, (req: Request, res: Response, next: NextFunction) => {
@@ -229,16 +227,26 @@ console.warn(`[Static] Run 'cd web/frontend && npm run build'`);
   } else {
 console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
 
-    const bbsStaticOptions = process.env.NODE_ENV === 'production'
-      ? {
-          maxAge: '1y',
-          immutable: true
-        }
-      : {
-          maxAge: 0
-        };
+    // Serve hashed assets with long-term caching
+    const assetsDir = join(bbsFrontendPath, 'assets');
+    if (fs.existsSync(assetsDir)) {
+      app.use('/assets', express.static(assetsDir, {
+        maxAge: '1y',
+        immutable: true,
+      }));
+    }
 
-    app.use(express.static(bbsFrontendPath, bbsStaticOptions));
+    // Serve fonts with long-term caching
+    const fontsDir = join(bbsFrontendPath, 'fonts');
+    if (fs.existsSync(fontsDir)) {
+      app.use('/fonts', express.static(fontsDir, {
+        maxAge: '1y',
+        immutable: true,
+      }));
+    }
+
+    // Serve remaining files (index.html etc) with no caching
+    app.use(express.static(bbsFrontendPath, { maxAge: 0 }));
 
     app.use((req: Request, res: Response, next: NextFunction) => {
       // Skip API routes
