@@ -141,22 +141,28 @@ export class VersusScreen {
     const minimapPanel = createBox({
       parent: this.screen,
       top: 1,
-      left: 28,  // Right of garbage indicator (22 + 6 = 28)
-      width: 52,  // Fits within 80 columns (28 + 52 = 80)
+      left: 28,
+      width: 52,
       height: 25,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
       label: ' Opponents ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     this.minimapContainer = createBox({
       parent: minimapPanel,
       top: 1,
       left: 1,
-      width: 50,  // Panel width (52) - 2 for borders = 50
+      width: 50,
       height: 23,
       content: '',
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
   }
 
