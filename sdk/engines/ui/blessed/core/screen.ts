@@ -567,6 +567,11 @@ export class Screen extends Element {
     // Mark entire screen as dirty so _diff() processes all cells
     this._markDirty(0, 0, this.width - 1, this.height - 1);
 
+    // Flag that next render must do a full redraw, even in slow connection mode.
+    // This ensures lastBuffer is invalidated during _doRender(), which prevents
+    // stale content (borders, text) from persisting after element destroy.
+    this._fullRedrawNeeded = true;
+
     // Set lastBuffer to an impossible state (attr=-1) so _diff will output all cells
     // Use buffer dimensions to handle any buffer/screen dimension mismatch
     const bufHeight = this.buffer.length;
@@ -929,14 +934,14 @@ export class Screen extends Element {
 
     // Clear the buffer to prepare for rendering
     // In slow connection mode: Use TRUE differential rendering (don't touch lastBuffer)
-    // In normal mode: Invalidate lastBuffer to force full redraw (prevents corruption)
+    // EXCEPT when a full redraw is needed (e.g., after element destroy) - then we must
+    // invalidate lastBuffer to ensure stale content (borders, text) is properly cleared.
+    // In normal mode: Always invalidate lastBuffer to force full redraw (prevents corruption)
+    const forceInvalidate = this._fullRedrawNeeded;
     for (let y = 0; y < bufHeight; y++) {
       for (let x = 0; x < bufWidth; x++) {
         this.buffer[y][x] = [dattr, ' '];
-        // Only invalidate lastBuffer in normal mode (full redraws)
-        // In slow connection mode, keep lastBuffer intact for differential rendering
-        // This reduces output from ~1920 chars to ~50-200 chars per render
-        if (!this._slowConnectionMode && this.lastBuffer[y] && this.lastBuffer[y][x]) {
+        if ((!this._slowConnectionMode || forceInvalidate) && this.lastBuffer[y] && this.lastBuffer[y][x]) {
           this.lastBuffer[y][x] = [-1, '\x00'];
         }
       }

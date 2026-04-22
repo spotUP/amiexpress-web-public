@@ -27,6 +27,7 @@ export class GameScreen {
   private statsBox: any;
   private gradeBox: any;
   private sectionBox: any;
+  private footerBox: any;
   // Board overlay compositor: effects rendered inline in board content
   // Each cell is a blessed-tagged 2-char string or null (no overlay)
   private boardOverlay: (string | null)[][] = [];
@@ -503,7 +504,7 @@ export class GameScreen {
       clickable: false,
     });
 
-    createBox({
+    this.footerBox = createBox({
       parent: this.screen,
       bottom: 0,
       left: 0,
@@ -511,7 +512,7 @@ export class GameScreen {
       height: 1,
       align: 'center',
       style: { bg: 'black', fg: 'gray' },
-      content: '←→ Move | Z/X Rotate | ↓ Soft | Enter Hard | C Hold | ESC Pause',
+      content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | ESC Pause',
       focusable: false,
       mouse: false,
       clickable: false,
@@ -1543,6 +1544,7 @@ export class GameScreen {
     this.statsBox?.destroy();
     this.gradeBox?.destroy();
     this.sectionBox?.destroy();
+    this.footerBox?.destroy();
   }
 
   /**
