@@ -25,6 +25,9 @@ class GameScreen {
         this.running = false;
         this.stoppedEarly = false; // True if stopped externally (not gameover)
         this.cleanedUp = false; // Prevent double cleanup
+        // Board overlay compositor: effects rendered inline in board content
+        // Each cell is a blessed-tagged 2-char string or null (no overlay)
+        this.boardOverlay = [];
         this.lastRender = 0;
         this.RENDER_FPS = 20; // Reduced for BBS efficiency
         this.RENDER_INTERVAL = 1000 / this.RENDER_FPS;
@@ -170,7 +173,7 @@ class GameScreen {
         // Check for grade change
         if (gameState.grade !== this.lastGrade) {
             this.animations.gradeUp(this.lastGrade, gameState.grade, 40, 5);
-            this.particles.spawn('gradeUp', 40, 5);
+            this.particles.spawn('gradeUp', 5, 7); // Board center, upper area
             this.shaker.shake('lineClear');
             this.sounds.playSfx('grade_up');
             this.lastGrade = gameState.grade;
@@ -181,7 +184,7 @@ class GameScreen {
             // Check for T-Spin
             if (gameState.lastTSpin === 'full') {
                 // T-Spin!
-                this.particles.spawn('tetris', 12, 12);
+                this.particles.spawn('tetris', 5, 14);
                 this.shaker.shake('tetris');
                 this.animations.tSpin(12, 12);
                 this.sounds.playSfx('tetris');
@@ -189,13 +192,13 @@ class GameScreen {
             }
             else if (gameState.lastTSpin === 'mini') {
                 // T-Spin Mini
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.animations.tSpin(12, 12);
                 this.sounds.playSfx('rotate');
             }
             else if (linesCleared === 4) {
                 // Tetris!
-                this.particles.spawn('tetris', 12, 12);
+                this.particles.spawn('tetris', 5, 14);
                 this.shaker.shake('tetris');
                 this.animations.lineClearFlash([], 4);
                 this.sounds.playSfx('tetris');
@@ -203,7 +206,7 @@ class GameScreen {
             }
             else if (linesCleared === 3) {
                 // Triple
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.shaker.shake('lineClear');
                 this.animations.lineClearFlash([], linesCleared);
                 this.sounds.playSfx('line_clear');
@@ -211,7 +214,7 @@ class GameScreen {
             }
             else if (linesCleared === 2) {
                 // Double
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.shaker.shake('lineClear');
                 this.animations.lineClearFlash([], linesCleared);
                 this.sounds.playSfx('line_clear');
@@ -219,7 +222,7 @@ class GameScreen {
             }
             else if (linesCleared >= 1) {
                 // Single line clear (no voice)
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.shaker.shake('lineClear');
                 this.animations.lineClearFlash([], linesCleared);
                 this.sounds.playSfx('line_clear');
@@ -317,7 +320,7 @@ class GameScreen {
      */
     triggerComboAnimation(combo, milestone) {
         if (milestone >= 10)
-            this.particles.spawn('combo', 40, 12);
+            this.particles.spawn('combo', 5, 14); // Board center
         this.animations.comboCounter(combo, milestone);
         // Voice callouts for combo milestones
         if (milestone >= 15) {
@@ -342,7 +345,7 @@ class GameScreen {
             this.sounds.playSfx('section_cool');
             this.sounds.playVoice('cool'); // Voice callout
             // Optional: spawn particles for COOL achievement
-            this.particles.spawn('cool', 40, 12);
+            this.particles.spawn('cool', 5, 14); // Board center
         }
         else if (result === 'REGRET') {
             this.animations.regret(section);
@@ -449,19 +452,8 @@ class GameScreen {
             mouse: false,
             clickable: false,
         });
-        // Create effectsBox LAST so it renders on top of all other elements
-        this.effectsBox = (0, blessed_helpers_1.createBox)({
-            parent: this.screen,
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            style: { fg: 'white', bg: 'transparent' },
-            clickable: false,
-            mouse: false,
-            focusable: false,
-            tags: true,
-        });
+        // Effects are now rendered inline in board content via boardOverlay compositor
+        // No effectsBox needed - eliminates ghost artifacts from transparent overlays
     }
     /**
      * Setup input handlers
@@ -584,10 +576,14 @@ class GameScreen {
             this.lastSection = state.section;
             needsRender = true;
         }
-        // Render effects overlay if any effects active
-        if (this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0) {
-            this.renderEffects();
+        // Build board overlay for inline effects rendering (replaces effectsBox)
+        if (this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || this.animations.getFloatingTexts().length > 0) {
+            this.buildBoardOverlay();
             needsRender = true;
+        }
+        else {
+            // Clear overlay when no effects active
+            this.boardOverlay = [];
         }
         // Only render to screen if content changed
         if (needsRender) {
@@ -635,137 +631,171 @@ class GameScreen {
         this.statsBox.setContent(statsContent);
     }
     /**
-     * Render visual effects overlay
+     * Build board overlay grid from all active effects
+     *
+     * Z-order (highest priority first):
+     * 1. Text announcements (gradeUp, cool/regret, combo, tSpin)
+     * 2. Floating text (score popups)
+     * 3. Particles (converted to board coords)
+     * 4. Lock glow (piece lock flash)
+     *
+     * Board coordinates: x=0..9, y=4..23 (visible area)
+     * Each overlay cell is a 2-char blessed-tagged string or null
      */
-    renderEffects() {
-        let effectsContent = '';
-        const screenWidth = this.screen.width;
-        const screenHeight = this.screen.height;
-        // Render particles
-        const particles = this.particles.getRenderableParticles();
-        for (const particle of particles) {
-            const x = Math.floor(particle.x);
-            const y = Math.floor(particle.y);
-            // Only render if on screen
-            if (x >= 0 && x < screenWidth && y >= 0 && y < screenHeight) {
-                const alpha = particle.alpha;
-                const color = particle.color;
-                const char = particle.char;
-                // Fade particle based on alpha
-                if (alpha > 0.7) {
-                    effectsContent += `\x1b[${y};${x}H{${color}-fg}${char}{/${color}-fg}`;
-                }
-                else if (alpha > 0.3) {
-                    effectsContent += `\x1b[${y};${x}H{gray-fg}${char}{/gray-fg}`;
-                }
-            }
+    buildBoardOverlay() {
+        // Reset overlay grid: 20 visible rows (y=4..23) x 10 cols
+        this.boardOverlay = [];
+        for (let r = 0; r < 20; r++) {
+            this.boardOverlay[r] = new Array(10).fill(null);
         }
-        // Render active animations
-        const animations = this.animations.getAnimations();
-        for (const anim of animations) {
-            if (anim.type === 'gradeUp') {
-                const rendered = animations_1.AnimationRenderer.renderGradeUp(anim);
-                // Center grade up animation on screen
-                // "GRADE UP!" is ~9 chars, center at screenWidth/2
-                const centerX = Math.floor(screenWidth / 2) - 5;
-                effectsContent += `\x1b[${5};${centerX}H${rendered}`;
+        // Helper to set overlay cell (lowest-priority callers go first, higher overwrite)
+        const setCell = (boardX, boardY, content) => {
+            const row = boardY - 4;
+            if (row >= 0 && row < 20 && boardX >= 0 && boardX < 10) {
+                this.boardOverlay[row][boardX] = content;
             }
-            else if (anim.type === 'cool' || anim.type === 'regret') {
-                const rendered = animations_1.AnimationRenderer.renderSectionResult(anim);
-                // Center section result on screen
-                const text = anim.type === 'cool' ? 'COOL!' : 'REGRET';
-                const centerX = Math.floor(screenWidth / 2) - Math.floor(text.length / 2);
-                effectsContent += `\x1b[${3};${centerX}H${rendered}`;
-            }
-            else if (anim.type === 'comboCounter') {
-                // Render combo counter animation
+        };
+        // --- Layer 4 (lowest): Lock glow ---
+        const lockGlowAnims = this.animations.getAnimationsByType('lockGlow');
+        for (const anim of lockGlowAnims) {
+            const intensity = animations_1.AnimationRenderer.getLockGlowIntensity(anim);
+            if (intensity > 0.3) {
                 const data = anim.data;
-                const combo = data.combo;
-                const milestone = data.milestone;
-                const progress = anim.elapsed / anim.duration;
-                // Flash and fade effect
-                if (progress < 0.8) {
-                    const color = combo >= 15 ? 'red' : combo >= 10 ? 'yellow' : 'cyan';
-                    const scale = progress < 0.2 ? 'bold' : '';
-                    const comboText = `${combo} COMBO!`;
-                    const centerX = Math.floor(screenWidth / 2) - Math.floor(comboText.length / 2);
-                    effectsContent += `\x1b[${8};${centerX}H{${color}-fg}${scale ? '{bold}' : ''}${comboText}${scale ? '{/bold}' : ''}{/${color}-fg}`;
-                }
-            }
-            else if (anim.type === 'tSpin') {
-                // Render T-Spin flash
-                const data = anim.data;
-                const progress = anim.elapsed / anim.duration;
-                if (progress < 0.6) {
-                    const tspinText = 'T-SPIN!';
-                    const centerX = Math.floor(screenWidth / 2) - Math.floor(tspinText.length / 2);
-                    effectsContent += `\x1b[${10};${centerX}H{magenta-fg}{bold}${tspinText}{/bold}{/magenta-fg}`;
-                }
-            }
-            else if (anim.type === 'lockGlow') {
-                const intensity = animations_1.AnimationRenderer.getLockGlowIntensity(anim);
-                if (intensity > 0.3) {
-                    const data = anim.data;
-                    for (const cell of data.cells) {
-                        if (cell.y < 4)
-                            continue;
-                        const x = 4 + cell.x * 2;
-                        const y = cell.y + 1;
-                        if (intensity > 0.7) {
-                            effectsContent += `\x1b[${y};${x}H{white-fg}{bold}██{/bold}{/white-fg}`;
-                        }
-                        else {
-                            effectsContent += `\x1b[${y};${x}H{white-fg}░░{/white-fg}`;
-                        }
+                for (const cell of data.cells) {
+                    if (intensity > 0.7) {
+                        setCell(cell.x, cell.y, '{white-fg}{bold}██{/bold}{/white-fg}');
+                    }
+                    else {
+                        setCell(cell.x, cell.y, '{white-fg}░░{/white-fg}');
                     }
                 }
             }
         }
-        // Render floating texts
-        const floatingTexts = this.animations.getFloatingTexts();
-        if (floatingTexts.length > 0) {
-            console.log(`[EFFECTS] Rendering ${floatingTexts.length} floating texts:`, floatingTexts.map(t => ({ text: t.text, x: t.x, y: t.y, mode: t.mode })));
+        // --- Layer 3: Particles (now spawned in board coordinates) ---
+        const particles = this.particles.getRenderableParticles();
+        for (const particle of particles) {
+            const boardX = Math.floor(particle.x);
+            const boardY = Math.floor(particle.y);
+            if (boardX >= 0 && boardX < 10 && boardY >= 4 && boardY < 24) {
+                const alpha = particle.alpha;
+                if (alpha > 0.7) {
+                    setCell(boardX, boardY, `{${particle.color}-fg}${particle.char}${particle.char}{/${particle.color}-fg}`);
+                }
+                else if (alpha > 0.3) {
+                    setCell(boardX, boardY, `{gray-fg}${particle.char}${particle.char}{/gray-fg}`);
+                }
+            }
         }
+        // --- Layer 2: Floating text (score popups) ---
+        const floatingTexts = this.animations.getFloatingTexts();
         for (const text of floatingTexts) {
-            const progress = text.timer / text.maxTimer;
+            // Filter by mode
+            if (text.mode === 'offboard' && text.x >= 0 && text.x < 10) {
+                continue; // Don't render on playfield in offboard mode
+            }
             // Calculate alpha (fade out frames 80-100)
             let alpha = 1.0;
             if (text.timer > 80) {
                 alpha = 1.0 - ((text.timer - 80) / 20);
             }
-            // Filter by mode
-            if (text.mode === 'offboard' && text.x >= 0 && text.x < 10) {
-                continue; // Don't render if on playfield in offboard mode
-            }
-            // Calculate screen position (convert board coords to screen coords)
-            // Board box is at blessed position (left:2, top:1) = ANSI (column 3, row 2) in 1-indexed coords
-            // Board content inside border starts at blessed (3, 2) = ANSI (column 4, row 3) in 1-indexed coords
-            // Each board cell is 2 chars wide
-            // Board Y coordinates: 4-23 visible (0-3 are vanish zone)
-            // ANSI uses 1-indexed coordinates, so add 1 to blessed positions
-            const boardContentLeft = 4; // ANSI 1-indexed: left(3) + border(1)
-            const boardContentTop = 3; // ANSI 1-indexed: top(2) + border(1)
-            const screenX = boardContentLeft + Math.floor(text.x * 2);
-            const screenY = boardContentTop + Math.floor(text.y - 4); // y=4 is first visible row, maps to ANSI row 3
-            // Apply alpha via color (blessed limitation - can't do true alpha)
             const color = alpha > 0.5 ? text.color : 'gray';
-            // Render multi-line text
-            for (let i = 0; i < text.text.length; i++) {
-                const line = text.text[i];
-                const y = screenY + i;
-                if (y >= 0 && y < screenHeight) {
-                    effectsContent += `\x1b[${y};${screenX}H{${color}-fg}${line}{/${color}-fg}`;
+            // text.x is board X, text.y is board Y (floating upward from originY)
+            const boardY = Math.floor(text.y);
+            const boardX = Math.floor(text.x);
+            // Render each line of text into board cells
+            for (let lineIdx = 0; lineIdx < text.text.length; lineIdx++) {
+                const line = text.text[lineIdx];
+                const textBoardY = boardY + lineIdx;
+                // Each board cell is 2 chars. Spread text across cells starting at boardX.
+                for (let ci = 0; ci < line.length; ci++) {
+                    const cellX = boardX + Math.floor(ci / 2);
+                    // Build 2-char cell content for this position
+                    const charIdx = ci % 2;
+                    if (charIdx === 0) {
+                        // Get both chars for this cell
+                        const c1 = line[ci] || ' ';
+                        const c2 = (ci + 1 < line.length) ? line[ci + 1] : ' ';
+                        setCell(cellX, textBoardY, `{${color}-fg}${c1}${c2}{/${color}-fg}`);
+                    }
                 }
             }
         }
-        if (this.effectsBox) {
-            if (effectsContent) {
-                this.effectsBox.setContent(effectsContent);
-                this.effectsBox.show();
+        // --- Layer 1 (highest): Text announcements ---
+        const animations = this.animations.getAnimations();
+        for (const anim of animations) {
+            if (anim.type === 'gradeUp') {
+                const rendered = animations_1.AnimationRenderer.renderGradeUp(anim);
+                // Center "GRADE UP!" (9 chars) on board (10 cells = 20 chars)
+                // Then second line with grade transition
+                this.overlayTextOnBoard(rendered, 3, setCell); // Board row 7 (visible row 3)
             }
-            else {
-                this.effectsBox.setContent('');
-                this.effectsBox.hide();
+            else if (anim.type === 'cool' || anim.type === 'regret') {
+                const rendered = animations_1.AnimationRenderer.renderSectionResult(anim);
+                this.overlayTextOnBoard(rendered, 1, setCell); // Board row 5 (visible row 1)
+            }
+            else if (anim.type === 'comboCounter') {
+                const data = anim.data;
+                const combo = data.combo;
+                const progress = anim.elapsed / anim.duration;
+                if (progress < 0.8) {
+                    const color = combo >= 15 ? 'red' : combo >= 10 ? 'yellow' : 'cyan';
+                    const comboText = `${combo} COMBO!`;
+                    const boldTag = progress < 0.2 ? '{bold}' : '';
+                    const boldEnd = progress < 0.2 ? '{/bold}' : '';
+                    this.overlayTextOnBoard(`{${color}-fg}${boldTag}${comboText}${boldEnd}{/${color}-fg}`, 6, setCell);
+                }
+            }
+            else if (anim.type === 'tSpin') {
+                const progress = anim.elapsed / anim.duration;
+                if (progress < 0.6) {
+                    this.overlayTextOnBoard('{magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}', 8, setCell);
+                }
+            }
+            // lockGlow handled in layer 4 above
+        }
+    }
+    /**
+     * Overlay text centered on the board at a given visible row offset
+     * Text may contain blessed tags. Plain text chars are extracted for positioning.
+     * visibleRow: 0-19 offset from top of visible board (board y=4+visibleRow)
+     */
+    overlayTextOnBoard(taggedText, visibleRow, setCell) {
+        // Split multi-line text
+        const lines = taggedText.split('\n');
+        for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+            const line = lines[lineIdx];
+            // Strip blessed tags to get plain text length for centering
+            const plainText = line.replace(/\{[^}]*\}/g, '');
+            const boardWidth = 10; // cells
+            const textCellWidth = Math.ceil(plainText.length / 2); // Each cell is 2 chars
+            const startCell = Math.floor((boardWidth - textCellWidth) / 2);
+            const boardY = 4 + visibleRow + lineIdx;
+            // Build cells from the tagged text
+            // Strategy: extract plain chars with their surrounding tags
+            // For simplicity, render the entire line into consecutive board cells
+            let charCount = 0;
+            let currentTags = '';
+            let cellChars = [];
+            for (let i = 0; i < line.length; i++) {
+                if (line[i] === '{') {
+                    const end = line.indexOf('}', i);
+                    if (end !== -1) {
+                        currentTags += line.substring(i, end + 1);
+                        i = end;
+                        continue;
+                    }
+                }
+                cellChars.push(line[i]);
+            }
+            // Now spread cellChars into 2-char board cells, wrapped in original tags
+            // Re-extract the tag prefix and suffix from the line
+            const tagPrefix = line.match(/^(\{[^}]*\})+/)?.[0] || '';
+            const tagSuffix = line.match(/(\{\/[^}]*\})+$/)?.[0] || '';
+            for (let ci = 0; ci < cellChars.length; ci += 2) {
+                const c1 = cellChars[ci] || ' ';
+                const c2 = cellChars[ci + 1] || ' ';
+                const cellX = startCell + Math.floor(ci / 2);
+                setCell(cellX, boardY, `${tagPrefix}${c1}${c2}${tagSuffix}`);
             }
         }
     }
@@ -1080,6 +1110,17 @@ class GameScreen {
                         }
                     }
                 }
+                // Apply board overlay (text announcements, particles, floating text, lock glow)
+                // This is the highest-priority visual layer
+                if (this.boardOverlay.length > 0) {
+                    const overlayRow = y - 4;
+                    if (overlayRow >= 0 && overlayRow < this.boardOverlay.length) {
+                        const overlayCell = this.boardOverlay[overlayRow][x];
+                        if (overlayCell !== null) {
+                            char = overlayCell;
+                        }
+                    }
+                }
                 content += char;
             }
         }
@@ -1348,7 +1389,6 @@ class GameScreen {
         this.statsBox?.destroy();
         this.gradeBox?.destroy();
         this.sectionBox?.destroy();
-        this.effectsBox?.destroy();
     }
     /**
      * Stop the game loop early without showing game over (for attract mode exit)

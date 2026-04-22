@@ -122,15 +122,7 @@ class AttractScreen {
             fixed: true,
         });
         this.infoBox.hide(); // Hidden during boot
-        // Effects overlay
-        this.effectsBox = (0, blessed_helpers_1.createBox)({
-            parent: this.screen,
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            style: { fg: 'white', bg: 'transparent' },
-        });
+        // Effects are rendered inline in board content by GameScreen's boardOverlay compositor
     }
     /**
      * Run attract mode
@@ -249,7 +241,6 @@ class AttractScreen {
         this.mainBox.hide();
         this.demoBox.show();
         this.infoBox.show();
-        this.effectsBox?.show();
         // Create demo engine
         this.demoEngine = new game_1.GameEngine('master', this.state.settings, this.sounds);
         this.demoEngine.start();
@@ -357,7 +348,7 @@ class AttractScreen {
         // Check for grade change
         if (gameState.grade !== this.lastGrade) {
             this.animations.gradeUp(this.lastGrade, gameState.grade, 40, 5);
-            this.particles.spawn('gradeUp', 40, 5);
+            this.particles.spawn('gradeUp', 5, 7);
             this.shaker.shake('lineClear');
             this.sounds.playSfx('grade_up');
             this.lastGrade = gameState.grade;
@@ -366,35 +357,35 @@ class AttractScreen {
         if (gameState.lines > this.lastLines) {
             const linesCleared = gameState.lines - this.lastLines;
             if (gameState.lastTSpin === 'full') {
-                this.particles.spawn('tetris', 12, 12);
+                this.particles.spawn('tetris', 5, 14);
                 this.shaker.shake('tetris');
                 this.animations.tSpin(12, 12);
                 this.sounds.playSfx('tetris');
                 this.sounds.playVoice('tetris_voice');
             }
             else if (linesCleared === 4) {
-                this.particles.spawn('tetris', 12, 12);
+                this.particles.spawn('tetris', 5, 14);
                 this.shaker.shake('tetris');
                 this.animations.lineClearFlash([], 4);
                 this.sounds.playSfx('tetris');
                 this.sounds.playVoice('tetris_voice');
             }
             else if (linesCleared === 3) {
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.shaker.shake('lineClear');
                 this.animations.lineClearFlash([], linesCleared);
                 this.sounds.playSfx('line_clear');
                 this.sounds.playVoice('triple');
             }
             else if (linesCleared === 2) {
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.shaker.shake('lineClear');
                 this.animations.lineClearFlash([], linesCleared);
                 this.sounds.playSfx('line_clear');
                 this.sounds.playVoice('double');
             }
             else if (linesCleared >= 1) {
-                this.particles.spawn('lineClear', 12, 12);
+                this.particles.spawn('lineClear', 5, 14);
                 this.shaker.shake('lineClear');
                 this.animations.lineClearFlash([], linesCleared);
                 this.sounds.playSfx('line_clear');
@@ -534,61 +525,6 @@ class AttractScreen {
         }
         if (needsRender) {
             this.screen.render();
-        }
-    }
-    /**
-     * DEPRECATED: GameScreen now handles all effects rendering!
-     */
-    renderEffects_UNUSED() {
-        let effectsContent = '';
-        const screenWidth = this.screen.width;
-        const screenHeight = this.screen.height;
-        // Render particles
-        const particles = this.particles.getRenderableParticles();
-        for (const particle of particles) {
-            const x = Math.floor(particle.x);
-            const y = Math.floor(particle.y);
-            if (x >= 0 && x < screenWidth && y >= 0 && y < screenHeight) {
-                if (particle.alpha > 0.7) {
-                    effectsContent += `\x1b[${y};${x}H{${particle.color}-fg}${particle.char}{/}`;
-                }
-                else if (particle.alpha > 0.3) {
-                    effectsContent += `\x1b[${y};${x}H{gray-fg}${particle.char}{/}`;
-                }
-            }
-        }
-        // Render active animations
-        const animations = this.animations.getAnimations();
-        for (const anim of animations) {
-            if (anim.type === 'gradeUp') {
-                const rendered = animations_1.AnimationRenderer.renderGradeUp(anim);
-                effectsContent += `\x1b[${5};${40}H${rendered}`;
-            }
-            else if (anim.type === 'cool' || anim.type === 'regret') {
-                const rendered = animations_1.AnimationRenderer.renderSectionResult(anim);
-                effectsContent += `\x1b[${3};${30}H${rendered}`;
-            }
-            else if (anim.type === 'lockGlow') {
-                const intensity = animations_1.AnimationRenderer.getLockGlowIntensity(anim);
-                if (intensity > 0.3) {
-                    const data = anim.data;
-                    for (const cell of data.cells) {
-                        if (cell.y < 4)
-                            continue;
-                        const x = 4 + cell.x * 2;
-                        const y = cell.y + 1;
-                        if (intensity > 0.7) {
-                            effectsContent += `\x1b[${y};${x}H{white-fg}{bold}██{/bold}{/}`;
-                        }
-                        else {
-                            effectsContent += `\x1b[${y};${x}H{white-fg}░░{/}`;
-                        }
-                    }
-                }
-            }
-        }
-        if (this.effectsBox) {
-            this.effectsBox.setContent(effectsContent);
         }
     }
     getBoardHash(state) {
@@ -988,7 +924,6 @@ class AttractScreen {
         this.mainBox?.destroy();
         this.demoBox?.destroy();
         this.infoBox?.destroy();
-        this.effectsBox?.destroy();
         // Only remove our specific handler, not all keypress listeners
         if (this.exitHandler) {
             this.screen.removeListener('keypress', this.exitHandler);

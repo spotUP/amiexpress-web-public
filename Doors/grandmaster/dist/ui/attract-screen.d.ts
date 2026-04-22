@@ -21,7 +21,6 @@ export declare class AttractScreen {
     private mainBox;
     private demoBox;
     private infoBox;
-    private effectsBox;
     private attractState;
     private stateTimer;
     private running;
@@ -90,10 +89,6 @@ export declare class AttractScreen {
      * Render attract mode
      */
     private render;
-    /**
-     * DEPRECATED: GameScreen now handles all effects rendering!
-     */
-    private renderEffects_UNUSED;
     private getBoardHash;
     private getPieceGlowColor;
     private getHardDropTrailChar;

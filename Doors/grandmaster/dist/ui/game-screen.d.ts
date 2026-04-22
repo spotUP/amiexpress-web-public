@@ -21,7 +21,7 @@ export declare class GameScreen {
     private statsBox;
     private gradeBox;
     private sectionBox;
-    private effectsBox;
+    private boardOverlay;
     private lastRender;
     private readonly RENDER_FPS;
     private readonly RENDER_INTERVAL;
@@ -99,9 +99,24 @@ export declare class GameScreen {
     private getBoardHash;
     private renderStats;
     /**
-     * Render visual effects overlay
+     * Build board overlay grid from all active effects
+     *
+     * Z-order (highest priority first):
+     * 1. Text announcements (gradeUp, cool/regret, combo, tSpin)
+     * 2. Floating text (score popups)
+     * 3. Particles (converted to board coords)
+     * 4. Lock glow (piece lock flash)
+     *
+     * Board coordinates: x=0..9, y=4..23 (visible area)
+     * Each overlay cell is a 2-char blessed-tagged string or null
      */
-    private renderEffects;
+    private buildBoardOverlay;
+    /**
+     * Overlay text centered on the board at a given visible row offset
+     * Text may contain blessed tags. Plain text chars are extracted for positioning.
+     * visibleRow: 0-19 offset from top of visible board (board y=4+visibleRow)
+     */
+    private overlayTextOnBoard;
     /**
      * Update grade display animation
      */
