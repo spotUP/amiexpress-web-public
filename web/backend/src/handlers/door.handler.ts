@@ -1542,8 +1542,18 @@ console.log(`[executeTypeScriptDoor] Found root server.ts, using source instead 
             const packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8') as string);
             // Check if it's a hybrid door with explicit server entry
             if (packageJson.runtime === 'hybrid' && packageJson.server && packageJson.server.entry) {
-              // Use server entry from manifest (e.g., "./server.ts")
-              const serverEntry = packageJson.server.entry.replace(/^\.\//, '');
+              // Use server entry from manifest (e.g., "./server.ts" -> "server.ts")
+              let serverEntry = packageJson.server.entry.replace(/^\.\//, '');
+              // In production, resolve .ts to compiled .js in dist/
+              if (isProduction && serverEntry.endsWith('.ts')) {
+                const compiledEntry = 'dist/' + serverEntry.replace(/\.ts$/, '.js');
+                const compiledPath = path.join(projectRoot, doorPath, compiledEntry);
+                if (amigafs.existsSync(compiledPath)) {
+                  serverEntry = compiledEntry;
+                } else {
+                  serverEntry = serverEntry.replace(/\.ts$/, '.js');
+                }
+              }
               doorPath = path.join(doorPath, serverEntry);
 console.log(`[executeTypeScriptDoor] Hybrid door detected, using server entry: ${serverEntry}`);
             } else if (packageJson.main) {

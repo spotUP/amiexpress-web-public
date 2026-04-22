@@ -49,6 +49,21 @@ console.log(`[DoorAPI] Serving bundle for door: ${doorId}`);
 console.log(`[DoorAPI] Entry point for ${doorId}: ${entryPoint}`);
 console.log(`[DoorAPI] Door base path: ${doorBasePath}`);
 
+    // In production, serve pre-built bundle if available (avoids needing .ts source)
+    const isProduction = process.env.NODE_ENV === 'production';
+    const preBundlePath = doorManifest.client?.bundle
+      ? path.join(doorBasePath, doorManifest.client.bundle)
+      : null;
+
+    if (isProduction && preBundlePath && fs.existsSync(preBundlePath)) {
+console.log(`[DoorAPI] Serving pre-built bundle: ${preBundlePath}`);
+      const bundleCode = fs.readFileSync(preBundlePath, 'utf8');
+      res.setHeader('Content-Type', 'application/javascript');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Bundle-Size', Buffer.byteLength(bundleCode).toString());
+      return res.send(bundleCode);
+    }
+
     // Resolve door path - use actual door base path from registry, not doorId
     const doorPath = path.join(doorBasePath, entryPoint);
 
@@ -57,7 +72,7 @@ console.log(`[DoorAPI] Door base path: ${doorBasePath}`);
     const bundle = await bundler.bundle({
       doorPath,
       doorId,
-      minify: process.env.NODE_ENV === 'production',
+      minify: isProduction,
       sourcemap: process.env.NODE_ENV === 'development',
     });
 
