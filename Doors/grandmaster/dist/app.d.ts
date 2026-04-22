@@ -40,6 +40,18 @@ export declare class GrandmasterApp {
      */
     private createInitialState;
     /**
+     * Get settings file path for current user
+     */
+    private getSettingsPath;
+    /**
+     * Load user settings from disk
+     */
+    private loadSettings;
+    /**
+     * Save user settings to disk
+     */
+    private saveSettings;
+    /**
      * Check if a modal/dialog is currently open
      * This prevents screen-level escape handlers from firing when a modal is handling ESC
      */

@@ -21,6 +21,7 @@ export declare class GameScreen {
     private statsBox;
     private gradeBox;
     private sectionBox;
+    private footerBox;
     private boardOverlay;
     private lastRender;
     private readonly RENDER_FPS;

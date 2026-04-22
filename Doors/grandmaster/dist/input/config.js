@@ -58,7 +58,7 @@ function keyToAction(key, config = exports.DEFAULT_KEYS) {
         return 'soft_drop';
     if (config.hardDrop.includes(key))
         return 'hard_drop';
-    if (config.sonicDrop.includes(key))
+    if (config.sonicDrop?.includes(key))
         return 'sonic_drop';
     if (config.hold.includes(key))
         return 'hold';

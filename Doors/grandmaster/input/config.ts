@@ -68,7 +68,7 @@ export function keyToAction(key: string, config: KeyConfig = DEFAULT_KEYS): Game
   if (config.rotate180.includes(key)) return 'rotate_180';
   if (config.softDrop.includes(key)) return 'soft_drop';
   if (config.hardDrop.includes(key)) return 'hard_drop';
-  if (config.sonicDrop.includes(key)) return 'sonic_drop';
+  if (config.sonicDrop?.includes(key)) return 'sonic_drop';
   if (config.hold.includes(key)) return 'hold';
   if (config.pause.includes(key)) return 'pause';
   return null;

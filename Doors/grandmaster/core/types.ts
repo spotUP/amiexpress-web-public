@@ -143,6 +143,7 @@ export interface KeyBindings {
   rotate180: string[];
   softDrop: string[];
   hardDrop: string[];
+  sonicDrop?: string[];
   hold: string[];
   pause: string[];
 }

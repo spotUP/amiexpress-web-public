@@ -94,6 +94,11 @@ export class SettingsScreen {
         left: 1,
         width: 58,
         height: 13,
+        scrollable: true,
+        scrollbar: {
+          ch: ' ',
+          style: { bg: 'cyan' },
+        },
         style: {
           selected: { bg: 'cyan', fg: 'black' },
           item: { fg: 'white' },
@@ -504,7 +509,7 @@ export class SettingsScreen {
       fixed: true,
     });
 
-    const keys = [...currentKeys];
+    const keys = [...(currentKeys || [])];
 
     const updateDisplay = () => {
       bindingBox.setContent(

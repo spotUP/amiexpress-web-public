@@ -85,6 +85,11 @@ class SettingsScreen {
                 left: 1,
                 width: 58,
                 height: 13,
+                scrollable: true,
+                scrollbar: {
+                    ch: ' ',
+                    style: { bg: 'cyan' },
+                },
                 style: {
                     selected: { bg: 'cyan', fg: 'black' },
                     item: { fg: 'white' },
@@ -468,7 +473,7 @@ class SettingsScreen {
             content: '',
             fixed: true,
         });
-        const keys = [...currentKeys];
+        const keys = [...(currentKeys || [])];
         const updateDisplay = () => {
             bindingBox.setContent(`{bold}{cyan-fg}${displayName.toUpperCase()}{/cyan-fg}{/bold}\n\n` +
                 `Current: {yellow-fg}${formatKeyBinding(keys)}{/yellow-fg}\n\n` +

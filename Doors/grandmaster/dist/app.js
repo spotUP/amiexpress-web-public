@@ -81,6 +81,7 @@ class GrandmasterApp {
         this.currentScreen = 'menu';
         this.session = session;
         this.state = this.createInitialState();
+        this.loadSettings(); // Load per-user settings from disk
         this.sounds = new sounds_1.SoundEngine(session);
         this.highScores = new high_scores_1.HighScoreManager();
         this.multiplayerServer = new multiplayer_server_1.MultiplayerServer();
@@ -156,6 +157,53 @@ class GrandmasterApp {
                 perfectClears: 0,
             },
         };
+    }
+    /**
+     * Get settings file path for current user
+     */
+    getSettingsPath() {
+        const username = this.session.user?.username || 'guest';
+        const path = require('path');
+        return path.join(__dirname, '../data', `settings-${username}.json`);
+    }
+    /**
+     * Load user settings from disk
+     */
+    loadSettings() {
+        try {
+            const fs = require('fs');
+            const filePath = this.getSettingsPath();
+            if (fs.existsSync(filePath)) {
+                const json = fs.readFileSync(filePath, 'utf-8');
+                const saved = JSON.parse(json);
+                // Merge saved settings over defaults (preserves new fields)
+                Object.assign(this.state.settings, saved);
+                console.log(`[GRANDMASTER] Loaded settings for ${this.session.user?.username}`);
+            }
+        }
+        catch (error) {
+            console.error('[GRANDMASTER] Failed to load settings:', error);
+        }
+    }
+    /**
+     * Save user settings to disk
+     */
+    saveSettings() {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const filePath = this.getSettingsPath();
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            const json = JSON.stringify(this.state.settings, null, 2);
+            fs.writeFileSync(filePath, json, 'utf-8');
+            console.log(`[GRANDMASTER] Saved settings for ${this.session.user?.username}`);
+        }
+        catch (error) {
+            console.error('[GRANDMASTER] Failed to save settings:', error);
+        }
     }
     /**
      * Check if a modal/dialog is currently open
@@ -1037,11 +1085,10 @@ class GrandmasterApp {
             top: 1,
             left: 22,
             width: 20,
-            height: 3,
-            border: { type: 'line' },
+            height: 1,
             style: {
-                border: { fg: 'white' },
-                focus: { fg: 'cyan' },
+                fg: 'cyan',
+                focus: { fg: 'white' },
             },
             inputOnFocus: true,
             mouse: true,
@@ -1797,6 +1844,8 @@ class GrandmasterApp {
         await settingsScreen.show();
         // Update input handler with any changed key bindings
         this.inputHandler.updateConfig(this.state.settings.keyBindings);
+        // Persist settings to disk for this user
+        this.saveSettings();
     }
     /**
      * Show statistics/leaderboard screen
@@ -1908,7 +1957,7 @@ class GrandmasterApp {
             width: 50,
             height: 10,
             border: { type: 'line' },
-            style: { border: { fg: 'yellow' } },
+            style: { bg: 'black', border: { fg: 'yellow' } },
             content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +
                 `{white-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/white-fg}\n` +
                 `{white-fg}Score: {bold}${score.toLocaleString()}{/bold}{/white-fg}\n\n` +

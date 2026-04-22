@@ -1453,27 +1453,29 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'yellow' } },
       align: 'center',
-      content: '\n{bold}PAUSED{/bold}\n\nPress ESC to resume\nPress Q to quit',
+      content: '\n{bold}PAUSED{/bold}\n\nPress P to resume\nPress ESC/Q to quit',
       fixed: true,
     });
 
     this.screen.render();
 
-    const resumeHandler = () => {
-      this.screen.removeListener('keypress', resumeHandler);
-      pauseBox.destroy();
-      this.engine.resume();
-      this.screen.render();
+    const handler = (ch: string | undefined, key: any) => {
+      if (!key) return;
+      if (key.name === 'p') {
+        this.screen.removeListener('keypress', handler);
+        pauseBox.destroy();
+        this.engine.resume();
+        this.screen.render();
+      } else if (key.name === 'escape' || key.name === 'q') {
+        this.screen.removeListener('keypress', handler);
+        pauseBox.destroy();
+        this.stoppedEarly = true;
+        this.running = false;
+        this.screen.render();
+      }
     };
 
-    this.screen.on('keypress', (ch: string | undefined, key: any) => {
-      if (key.name === 'escape') {
-        resumeHandler();
-      } else if (key.name === 'q' || key.name === 'Q') {
-        this.running = false;
-        resumeHandler();
-      }
-    });
+    this.screen.on('keypress', handler);
   }
 
   /**
@@ -1491,6 +1493,19 @@ export class GameScreen {
       gameOverColor = 'yellow';
       this.sounds.playVoice('bravo');
     }
+
+    // Clear all game UI to prevent border overlap
+    this.cleanup();
+
+    // Full-screen black background
+    const bg = createBox({
+      parent: this.screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      style: { bg: 'black' },
+    });
 
     const gameOverBox = createBox({
       parent: this.screen,
@@ -1513,11 +1528,12 @@ export class GameScreen {
 
     this.screen.render();
     this.sounds.playSfx('game_over');
-    this.sounds.stopMusic(); // Stop current music before playing game over music
+    this.sounds.stopMusic();
     this.sounds.playMusic('game_over', false);
 
     await this.waitForKey();
     gameOverBox.destroy();
+    bg.destroy();
   }
 
   private waitForKey(): Promise<void> {

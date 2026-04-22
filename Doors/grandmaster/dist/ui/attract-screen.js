@@ -174,15 +174,17 @@ class AttractScreen {
             '  ██  ██  ██ ██   ██      ██    ██    ██      ██   ██ ',
             '  ██      ██ ██   ██ ███████    ██    ███████ ██   ██ ',
         ];
-        // Animate logo line by line
+        // Animate logo line by line with rainbow colors
         for (let i = 0; i < logo.length; i++) {
             if (!this.running)
                 return;
-            let content = '{cyan-fg}{bold}\n\n\n\n';
+            let content = '{bold}\n\n\n\n';
             for (let j = 0; j <= i; j++) {
-                content += logo[j] + '\n';
+                const colorIndex = (Math.floor(i / 2) + j) % this.RAINBOW_COLORS.length;
+                const color = this.RAINBOW_COLORS[colorIndex];
+                content += `{${color}-fg}${logo[j]}{/${color}-fg}\n`;
             }
-            content += '{/bold}{/cyan-fg}';
+            content += '{/bold}';
             this.mainBox.setContent(content);
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 100));

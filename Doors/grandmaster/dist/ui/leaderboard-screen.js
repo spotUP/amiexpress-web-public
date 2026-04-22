@@ -119,7 +119,7 @@ class LeaderboardScreen {
             top: 20,
             left: 2,
             width: 76,
-            height: 4,
+            height: 5,
             border: { type: 'line' },
             style: { border: { fg: 'magenta' } },
             label: ' Your Best ',
@@ -191,7 +191,7 @@ class LeaderboardScreen {
         if (scores.length === 0) {
             return '\n\n{gray-fg}No scores yet{/gray-fg}\n\nBe the first to set a record!';
         }
-        let content = '{bold}  #  Player              Grade  Level    Score      Time      Date{/bold}\n';
+        let content = '{bold}  #  Player           Grade  Level     Score     Time      Date{/bold}\n';
         content += '  ───────────────────────────────────────────────────────────────────\n';
         for (let i = 0; i < 10; i++) {
             if (i < scores.length) {
@@ -203,7 +203,7 @@ class LeaderboardScreen {
                 const score = this.formatScore(entry.score);
                 const time = this.formatTime(entry.time);
                 const date = this.formatDate(entry.date);
-                content += `  ${rank}  ${player}  ${grade}  ${level}  ${score}  ${time}  ${date}\n`;
+                content += `  ${rank}  ${player}${grade}  ${level}  ${score}  ${time}  ${date}\n`;
             }
             else {
                 content += `  ${this.formatRank(i + 1)}  {gray-fg}───{/gray-fg}\n`;
@@ -218,11 +218,9 @@ class LeaderboardScreen {
         if (!best) {
             return '{gray-fg}No personal record in this mode yet{/gray-fg}';
         }
-        return (`Grade: ${this.formatGrade(best.grade)}  |  ` +
-            `Level: ${this.formatLevel(best.level)}  |  ` +
-            `Score: ${this.formatScore(best.score)}  |  ` +
-            `Time: ${this.formatTime(best.time)}  |  ` +
-            `Date: ${this.formatDate(best.date)}`);
+        return (`Grade: ${this.formatGrade(best.grade)}  Level: ${this.formatLevel(best.level)}  ` +
+            `Score: ${this.formatScore(best.score)}  ` +
+            `Time: ${this.formatTime(best.time)}  ${this.formatDate(best.date)}`);
     }
     /**
      * Format rank

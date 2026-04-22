@@ -439,7 +439,7 @@ class GameScreen {
             mouse: false,
             clickable: false,
         });
-        (0, blessed_helpers_1.createBox)({
+        this.footerBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             bottom: 0,
             left: 0,
@@ -447,7 +447,7 @@ class GameScreen {
             height: 1,
             align: 'center',
             style: { bg: 'black', fg: 'gray' },
-            content: '←→ Move | Z/X Rotate | ↓ Soft | Enter Hard | C Hold | ESC Pause',
+            content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | ESC Pause',
             focusable: false,
             mouse: false,
             clickable: false,
@@ -727,11 +727,11 @@ class GameScreen {
                 const rendered = animations_1.AnimationRenderer.renderGradeUp(anim);
                 // Center "GRADE UP!" (9 chars) on board (10 cells = 20 chars)
                 // Then second line with grade transition
-                this.overlayTextOnBoard(rendered, 3, setCell); // Board row 7 (visible row 3)
+                this.overlayTextOnBoard(rendered, 7, setCell); // Board center area
             }
             else if (anim.type === 'cool' || anim.type === 'regret') {
                 const rendered = animations_1.AnimationRenderer.renderSectionResult(anim);
-                this.overlayTextOnBoard(rendered, 1, setCell); // Board row 5 (visible row 1)
+                this.overlayTextOnBoard(rendered, 5, setCell); // Mid-upper area
             }
             else if (anim.type === 'comboCounter') {
                 const data = anim.data;
@@ -742,13 +742,13 @@ class GameScreen {
                     const comboText = `${combo} COMBO!`;
                     const boldTag = progress < 0.2 ? '{bold}' : '';
                     const boldEnd = progress < 0.2 ? '{/bold}' : '';
-                    this.overlayTextOnBoard(`{${color}-fg}${boldTag}${comboText}${boldEnd}{/${color}-fg}`, 6, setCell);
+                    this.overlayTextOnBoard(`{${color}-fg}${boldTag}${comboText}${boldEnd}{/${color}-fg}`, 10, setCell);
                 }
             }
             else if (anim.type === 'tSpin') {
                 const progress = anim.elapsed / anim.duration;
                 if (progress < 0.6) {
-                    this.overlayTextOnBoard('{magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}', 8, setCell);
+                    this.overlayTextOnBoard('{magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}', 9, setCell);
                 }
             }
             // lockGlow handled in layer 4 above
@@ -1307,25 +1307,28 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'yellow' } },
             align: 'center',
-            content: '\n{bold}PAUSED{/bold}\n\nPress ESC to resume\nPress Q to quit',
+            content: '\n{bold}PAUSED{/bold}\n\nPress P to resume\nPress ESC/Q to quit',
             fixed: true,
         });
         this.screen.render();
-        const resumeHandler = () => {
-            this.screen.removeListener('keypress', resumeHandler);
-            pauseBox.destroy();
-            this.engine.resume();
-            this.screen.render();
-        };
-        this.screen.on('keypress', (ch, key) => {
-            if (key.name === 'escape') {
-                resumeHandler();
+        const handler = (ch, key) => {
+            if (!key)
+                return;
+            if (key.name === 'p') {
+                this.screen.removeListener('keypress', handler);
+                pauseBox.destroy();
+                this.engine.resume();
+                this.screen.render();
             }
-            else if (key.name === 'q' || key.name === 'Q') {
+            else if (key.name === 'escape' || key.name === 'q') {
+                this.screen.removeListener('keypress', handler);
+                pauseBox.destroy();
+                this.stoppedEarly = true;
                 this.running = false;
-                resumeHandler();
+                this.screen.render();
             }
-        });
+        };
+        this.screen.on('keypress', handler);
     }
     /**
      * Show game over screen
@@ -1341,6 +1344,17 @@ class GameScreen {
             gameOverColor = 'yellow';
             this.sounds.playVoice('bravo');
         }
+        // Clear all game UI to prevent border overlap
+        this.cleanup();
+        // Full-screen black background
+        const bg = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            style: { bg: 'black' },
+        });
         const gameOverBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
@@ -1361,10 +1375,11 @@ class GameScreen {
         });
         this.screen.render();
         this.sounds.playSfx('game_over');
-        this.sounds.stopMusic(); // Stop current music before playing game over music
+        this.sounds.stopMusic();
         this.sounds.playMusic('game_over', false);
         await this.waitForKey();
         gameOverBox.destroy();
+        bg.destroy();
     }
     waitForKey() {
         return new Promise((resolve) => {
@@ -1389,6 +1404,7 @@ class GameScreen {
         this.statsBox?.destroy();
         this.gradeBox?.destroy();
         this.sectionBox?.destroy();
+        this.footerBox?.destroy();
     }
     /**
      * Stop the game loop early without showing game over (for attract mode exit)
