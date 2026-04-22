@@ -228,6 +228,19 @@ else
             echo "[Entrypoint] Doors directory re-initialized from default-data"
         fi
     fi
+
+    # ALWAYS sync Doors, Commands, Screens, Libs, C from image on every startup
+    # This ensures deploys update code/binaries while preserving user data
+    echo "[Entrypoint] Syncing code directories from image..."
+    for sync_dir in Doors Commands Screens Libs C; do
+        if [ -d "$DEFAULT_DATA_DIR/$sync_dir" ]; then
+            # Use cp with --update to only overwrite older files, and --no-clobber
+            # for safety. But for code we WANT to overwrite, so use rsync-like approach:
+            # Copy all files from image, but don't delete user-created files on disk.
+            cp -r "$DEFAULT_DATA_DIR/$sync_dir/." "$BBS_DATA_DIR/$sync_dir/" 2>/dev/null
+            echo "[Entrypoint]   Synced $sync_dir from image"
+        fi
+    done
 fi
 
 # Show what data exists
