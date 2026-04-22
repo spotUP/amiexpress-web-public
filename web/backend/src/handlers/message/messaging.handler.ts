@@ -795,15 +795,25 @@ export function handleEnterMessageFullCommand(
   // Set environment status - express.e:24862
   _setEnvStat(session, EnvStat.MAIL);
 
-console.log('[ENV] Mail');
-
-  // Prompt for editor type (text or ANSI)
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('Text or Ansi (T/a): ', 'cyan'));
-
   session.inputBuffer = '';
   session.tempData = { isPrivate: true, messageEntry: {} };
-  session.subState = LoggedOnSubState.POST_MESSAGE_TYPE;
+
+  // Check if ANSI mail-composer door is installed
+  const { getDoors } = require('../door.handler');
+  const doors = getDoors();
+  const hasAnsiEditor = doors.some(
+    (d: any) => d.path?.includes('mail-composer') || d.name.toLowerCase() === 'mail composer' || d.name.toLowerCase() === 'mail-composer'
+  );
+
+  if (hasAnsiEditor) {
+    // Offer choice between text and ANSI editor
+    emitText(socket, '\r\n');
+    emitText(socket, AnsiUtil.colorize('Text or Ansi (T/a): ', 'cyan'));
+    session.subState = LoggedOnSubState.POST_MESSAGE_TYPE;
+  } else {
+    // No ANSI editor available - go straight to text editor
+    showTextEditorRecipientPrompt(socket, session);
+  }
 }
 
 /**
@@ -821,7 +831,7 @@ export async function handlePostMessageTypeInput(
     const { getDoors, executeDoor } = await import('../door.handler');
     const doors = getDoors();
     const mailComposer = doors.find(
-      (d) => d.name.toLowerCase() === 'mail-composer'
+      (d) => d.path?.includes('mail-composer') || d.name.toLowerCase() === 'mail composer' || d.name.toLowerCase() === 'mail-composer'
     );
 
     if (mailComposer) {
