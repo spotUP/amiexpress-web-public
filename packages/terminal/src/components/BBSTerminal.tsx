@@ -143,6 +143,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const transferTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gamepadManagerRef = useRef<GamepadManager | null>(null);
   const musicPlayerRef = useRef<HTMLAudioElement | null>(null);  // Background music player (for doors like GRANDMASTER)
+  const mouseTrackingDisabledRef = useRef<boolean>(false); // Ctrl+Shift+M toggle state
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -454,6 +455,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Custom keyboard handler for Shift+Arrow keys (for text selection in doors)
     // xterm.js doesn't send proper escape sequences for Shift+Arrow by default
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      // Block Ctrl/Cmd+Shift+M from reaching xterm (handled by window listener)
+      const modKey = event.ctrlKey || event.metaKey;
+      if (modKey && event.shiftKey && (event.key === 'M' || event.key === 'm')) {
+        return false;
+      }
+
+      // When mouse tracking is disabled, handle Cmd/Ctrl+C (copy) and Cmd/Ctrl+A (select all)
+      // via xterm's own API since browser native selection doesn't work in xterm canvas
+      if (mouseTrackingDisabledRef.current && modKey && event.type === 'keydown') {
+        if (event.key === 'a' || event.key === 'A') {
+          term.selectAll();
+          return false;
+        }
+        if (event.key === 'c' || event.key === 'C') {
+          const selection = term.getSelection();
+          if (selection) {
+            navigator.clipboard.writeText(selection).then(() => {
+              console.log('[BBSTerminal] Copied to clipboard:', selection.length, 'chars');
+            });
+          }
+          return false;
+        }
+      }
+
       // Only handle Shift+Arrow keys
       if (!event.shiftKey) return true; // Let xterm handle it
 
@@ -479,6 +504,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
+
+    // Global keydown listener for Ctrl/Cmd+Shift+M mouse toggle
+    // Must be on window because xterm.js may not pass modifier combos to attachCustomKeyEventHandler
+    const mouseToggleHandler = (event: KeyboardEvent) => {
+      const modKey = event.ctrlKey || event.metaKey;
+      if (modKey && event.shiftKey && (event.key === 'M' || event.key === 'm')) {
+        event.preventDefault();
+        event.stopPropagation();
+        mouseTrackingDisabledRef.current = !mouseTrackingDisabledRef.current;
+        if (mouseTrackingDisabledRef.current) {
+          term.write('\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l');
+          console.log('[BBSTerminal] Mouse tracking DISABLED (Ctrl+Shift+M)');
+        } else {
+          term.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
+          console.log('[BBSTerminal] Mouse tracking ENABLED (Ctrl+Shift+M)');
+        }
+      }
+    };
+    window.addEventListener('keydown', mouseToggleHandler, true);
 
     // Add native wheel event listener directly to xterm element (React onWheel doesn't capture xterm's wheel events)
     const xtermElement = terminalRef.current.querySelector('.xterm-screen') || terminalRef.current;
@@ -1404,11 +1448,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       const currentFont = term.options.fontFamily;
 
+      // Strip mouse enable sequences when user has toggled mouse tracking off
+      // This prevents blessed screen.render() from re-enabling mouse capture
+      let output = data;
+      if (mouseTrackingDisabledRef.current) {
+        output = output.replace(/\x1b\[\?(1000|1002|1003|1006)h/g, '');
+      }
+
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
-        modemEmulatorRef.current.write(data);
+        modemEmulatorRef.current.write(output);
       } else {
-        term.write(data);
+        term.write(output);
       }
       term.refresh(0, term.rows - 1);
     });
@@ -1996,6 +2047,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
       // Clean up resize handlers
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', mouseToggleHandler, true);
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
