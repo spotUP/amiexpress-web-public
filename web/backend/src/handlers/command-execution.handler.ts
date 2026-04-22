@@ -205,11 +205,11 @@ async function runCommand(
     commandDef = commandCache.bbscmd.get(cmdUpper) || null;
   }
 
-  // express.e:28256 - If no external command found, try internal commands
+  // If no external command found in cache, return FAILURE
+  // Internal commands are handled by processCommand() as the last fallback
+  // in the priority chain: SYSCMD -> BBSCMD -> Internal
   if (!commandDef) {
-    const { processBBSCommand } = require('./command-handler/internal-commands');
-    const internalResult = await processBBSCommand(socket, session, cmdUpper, params);
-    return internalResult;
+    return RESULT_FAILURE;
   }
 
   // Log "Executing" only AFTER command is found (not before lookup like old code did)
