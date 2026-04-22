@@ -85,10 +85,10 @@ export class MenuScreen {
 
       // Layout: 2 char margin on each side, panels fill 76 chars
       // menuPanel: 26, descBox: 30, info: 20 = 76 total
-      // Panels start at row 7, end at row 23 (1 row for footer) = 17 rows
+      // Panels start at row 7, end at row 22 (row 23 = outer border) = 16 rows
       const leftMargin = 2;
       const panelTop = 7;
-      const panelHeight = 17;
+      const panelHeight = 16;
 
       // Mode selection list - left panel
       const menuPanel = createBox({
