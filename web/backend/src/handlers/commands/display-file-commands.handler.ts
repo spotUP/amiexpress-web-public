@@ -128,7 +128,7 @@ export async function handleFileListCommand(socket: any, session: BBSSession, pa
 console.log('[ENV] Files');
 
   // Import and use the new FileListingHandler
-  const { FileListingHandler } = require('./file-listing.handler');
+  const { FileListingHandler } = require('../file/file-listing.handler');
   await FileListingHandler.handleFileList(socket, session, params, false);
 }
 
@@ -155,7 +155,7 @@ export async function handleFileListRawCommand(socket: any, session: BBSSession,
 console.log('[ENV] Files');
 
   // Import and use the new FileListingHandler
-  const { FileListingHandler } = require('./file-listing.handler');
+  const { FileListingHandler } = require('../file/file-listing.handler');
   await FileListingHandler.handleFileList(socket, session, params, true);
 }
 
