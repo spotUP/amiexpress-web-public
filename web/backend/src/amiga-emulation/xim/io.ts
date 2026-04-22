@@ -122,11 +122,9 @@ export class XIMIOHandler {
    * Called when a new door session begins to prevent leftover keystrokes
    * (e.g., Enter presses during login) from auto-responding to door prompts.
    *
-   * After clearing, seeds the queue with a single CR — matches real /X behavior
-   * where the Enter that completes the user's command invocation is still
-   * pending in the serial buffer when the door starts. Doors like JoinCnf
-   * rely on this to dismiss an opening "press <RETURN>" prompt invisibly
-   * (they print the prompt, readChar returns immediately, then they BS/erase it).
+   * Clears any buffered input from before the door started.
+   * express.e: lineInput() consumes the CR from command entry, so there
+   * is NO leftover CR in the serial buffer when the door starts.
    */
   clearQueuedInput(): void {
     const queueSize = this.inputQueue.length;
@@ -134,8 +132,6 @@ export class XIMIOHandler {
       debugLog(`[XIMIOHandler] Clearing ${queueSize} queued inputs from before door started`);
       this.inputQueue.length = 0;
     }
-    this.inputQueue.push('\r');
-debugLog('[XIMIOHandler] Seeded input queue with CR to match real /X command-entry buffering');
   }
 
   /**
@@ -180,7 +176,7 @@ debugLog('[XIMIOHandler] Seeded input queue with CR to match real /X command-ent
 
     // Parse input into tokens, preserving ANSI escape sequences
     const tokens = this.parseInputTokens(data);
-    debugLog(`[XIMIOHandler] queueInput: data="${data.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
+    debugLog(`[XIMIOHandler] queueInput: data="${data.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" waitingForHotkey=${this.waitingForHotkey} waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
 
     for (const token of tokens) {
       // Handle input during pause
@@ -739,6 +735,8 @@ debugLog('[XIMIOHandler] JH_HK: Hotkey input request');
 debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       this.emitText(prompt, false, false, false, msg);
     }
+
+    debugLog(`[XIMIOHandler] JH_HK: inputQueue.length=${this.inputQueue.length}`);
 
     if (this.inputQueue.length > 0) {
       const token = this.inputQueue.shift()!;
@@ -1720,6 +1718,7 @@ console.error(`[XIMIOHandler] Failed to display file ${filePath}:`, err);
 
   private getBbsRoot(): string {
     return (
+      (this.bbsSession as any)?.dataDir ||
       this.bbsSession?.bbsPath ||
       process.env.BBS_DATA_DIR ||
       path.resolve(process.cwd())

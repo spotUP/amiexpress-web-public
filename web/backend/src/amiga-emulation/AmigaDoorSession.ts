@@ -670,14 +670,13 @@ debugLog(
     // during initialization. We must create it BEFORE any door code can execute.
     // express.e creates port at lines 4316-4328 BEFORE startProcess() at line 4336.
     const doorType = (this.config.doorType || "").toUpperCase();
-debugLog(`[AmigaDoorSession][DEBUG] About to check doorType: "${doorType}" (XIM=${doorType === "XIM"}, AIM=${doorType === "AIM"})`);
+debugLog(`[AmigaDoorSession] doorType="${doorType}" for ${this.config.executablePath}`);
     if (doorType === "XIM" || doorType === "AIM") {
       const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
       const portName = `AEDoorPort${nodeId}`;
       this.doorPortName = portName;
-debugLog(`[AmigaDoorSession][DEBUG] Creating port: ${portName} for nodeId=${nodeId}`);
       const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
-debugLog(`[AmigaDoorSession] ✅ Created ${portName} at 0x${portAddr?.toString(16)} EARLY (before door load)`);
+debugLog(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)}`);
       this.createdDoorPort = true; // Delete on cleanup
     } else {
 debugLog(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM or AIM`);

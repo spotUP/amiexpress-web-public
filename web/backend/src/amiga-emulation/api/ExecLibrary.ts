@@ -5255,7 +5255,6 @@ debugLog(`[ExecLibrary]   Allocated new sigBit ${port.sigBit}`);
       // Signal the task that owns this port
       if (port.sigTask !== 0) {
         const signalMask = 1 << port.sigBit; // Convert bit number to mask
-        console.log(`[ExecLibrary] PutMsg: Calling Signal(task=0x${port.sigTask.toString(16)}, mask=0x${signalMask.toString(16)}) sigBit=${port.sigBit} portName=${port.name}`);
 debugLog(
           `[ExecLibrary]   *** Calling Signal() to wake waiting task ***`
         );

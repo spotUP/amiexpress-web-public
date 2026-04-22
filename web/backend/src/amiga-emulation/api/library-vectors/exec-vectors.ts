@@ -205,7 +205,8 @@ console.log(
     name: "FindPort",
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(9); // A1
-      return lib.findPort(nameAddr);
+      const result = lib.findPort(nameAddr);
+      return result;
     },
   },
   {
