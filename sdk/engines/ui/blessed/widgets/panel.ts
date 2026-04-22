@@ -50,7 +50,7 @@ export class Panel extends Box {
   constructor(options: PanelOptions = {}) {
     super({
       ...options,
-      border: options.border || { type: 'line', fg: 'blue' },
+      border: options.border !== undefined ? (options.border || undefined) : { type: 'line', fg: 'blue' },
       focusable: true,
       keys: true,
       mouse: true,
