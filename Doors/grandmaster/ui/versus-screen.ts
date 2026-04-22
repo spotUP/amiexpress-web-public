@@ -108,6 +108,9 @@ export class VersusScreen {
       width: 22,
       height: 3,
       content: '',
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Garbage queue indicator (right of board)
@@ -121,6 +124,9 @@ export class VersusScreen {
       style: { border: { fg: 'red' } },
       content: '{red-fg}GARBAGE{/red-fg}',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Attack indicator
@@ -134,6 +140,9 @@ export class VersusScreen {
       style: { border: { fg: 'yellow' } },
       content: '',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Minimap container (right side)
@@ -325,6 +334,9 @@ export class VersusScreen {
         width: 20,
         height: 5,
         content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
+        focusable: false,
+        mouse: false,
+        clickable: false,
       });
       this.screen.render();
       await new Promise(resolve => setTimeout(resolve, 1000));

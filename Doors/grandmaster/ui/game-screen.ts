@@ -436,6 +436,9 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'cyan' } },
       label: ' NEXT ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     this.holdBox = createBox({
@@ -448,6 +451,9 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'magenta' } },
       label: ' HOLD ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     this.gradeBox = createBox({
@@ -460,6 +466,9 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'yellow' } },
       label: ' GRADE ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     this.statsBox = createBox({
@@ -472,6 +481,9 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'green' } },
       label: ' STATS ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     this.sectionBox = createBox({
@@ -484,6 +496,9 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'cyan' } },
       label: ' SECTION ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     createBox({
@@ -495,6 +510,9 @@ export class GameScreen {
       align: 'center',
       style: { bg: 'black', fg: 'gray' },
       content: '←→ Move | Z/X Rotate | ↓ Soft | Enter Hard | C Hold | ESC Pause',
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Create effectsBox LAST so it renders on top of all other elements
@@ -507,6 +525,7 @@ export class GameScreen {
       style: { fg: 'white', bg: 'transparent' },
       clickable: false,
       mouse: false,
+      focusable: false,
       tags: true,
     });
   }

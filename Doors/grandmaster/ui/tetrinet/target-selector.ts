@@ -54,6 +54,9 @@ export class TargetSelector {
       label: ' Target ',
       content: '{gray-fg}No opponents{/gray-fg}',
       fixed: true,  // Fixed during gameplay, not dockable
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
   }
 

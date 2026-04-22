@@ -116,6 +116,9 @@ export class TetriNetScreen {
       style: { border: { fg: 'cyan' } },
       label: ' Next ',
       fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Inventory panel (below preview)
@@ -142,6 +145,9 @@ export class TetriNetScreen {
       width: 38,
       height: 2,  // Reduced from 3 to fit in terminal
       content: '',
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Sudden death timer (shown when active, overlays bottom of board)
@@ -153,6 +159,9 @@ export class TetriNetScreen {
       height: 1,
       content: '',
       style: { bg: 'red', fg: 'white' },  // High visibility during sudden death
+      focusable: false,
+      mouse: false,
+      clickable: false,
     });
 
     // Opponent boards (right side) - Fits 80 columns exactly
@@ -418,6 +427,9 @@ export class TetriNetScreen {
         width: 20,
         height: 5,
         content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
+        focusable: false,
+        mouse: false,
+        clickable: false,
       });
       this.screen.render();
       await new Promise(resolve => setTimeout(resolve, 1000));
