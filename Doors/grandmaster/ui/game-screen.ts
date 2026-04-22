@@ -461,7 +461,7 @@ export class GameScreen {
     this.gradeBox = createBox({
       parent: this.screen,
       top: 1,
-      left: 38,
+      left: 40,
       width: 15,
       height: 7,
       border: { type: 'line' },
@@ -476,7 +476,7 @@ export class GameScreen {
     this.statsBox = createBox({
       parent: this.screen,
       top: 9,
-      left: 38,
+      left: 40,
       width: 15,
       height: 8,
       border: { type: 'line' },
@@ -491,7 +491,7 @@ export class GameScreen {
     this.sectionBox = createBox({
       parent: this.screen,
       top: 17,
-      left: 38,
+      left: 40,
       width: 15,
       height: 6,
       border: { type: 'line' },
