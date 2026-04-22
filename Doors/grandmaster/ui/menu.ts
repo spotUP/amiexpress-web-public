@@ -69,10 +69,10 @@ export class MenuScreen {
       });
 
       // Title box - centered, wide enough for ASCII art
-      // Width matches the three panels below (26 + 30 + 20 = 76)
+      // Offset top:1 to avoid overlapping any parent border
       const title = createBox({
         parent: this.screen,
-        top: 0,
+        top: 1,
         left: 2,
         width: 76,
         height: 6,
@@ -85,15 +85,18 @@ export class MenuScreen {
 
       // Layout: 2 char margin on each side, panels fill 76 chars
       // menuPanel: 26, descBox: 30, info: 20 = 76 total
+      // Panels start at row 7, end at row 23 (1 row for footer) = 17 rows
       const leftMargin = 2;
+      const panelTop = 7;
+      const panelHeight = 17;
 
       // Mode selection list - left panel
       const menuPanel = createBox({
         parent: this.screen,
-        top: 6,
+        top: panelTop,
         left: leftMargin,
         width: 26,
-        height: 15,
+        height: panelHeight,
         border: { type: 'line' },
         label: ' SELECT MODE ',
         style: {
@@ -106,7 +109,7 @@ export class MenuScreen {
         top: 0,
         left: 1,
         width: 22,
-        height: 11,  // Leave room for panel border (15 - 2 borders - 2 padding = 11)
+        height: panelHeight - 2,  // Leave room for panel border
         scrollable: true,
         scrollbar: {
           ch: ' ',
@@ -140,10 +143,10 @@ export class MenuScreen {
       // Mode description box - middle panel
       const descBox = createBox({
         parent: this.screen,
-        top: 6,
-        left: leftMargin + 26,  // After menuPanel (no gap, borders touch)
+        top: panelTop,
+        left: leftMargin + 26,
         width: 30,
-        height: 15,
+        height: panelHeight,
         border: { type: 'line' },
         label: ' DESCRIPTION ',
         style: { border: { fg: 'gray' } },
@@ -162,10 +165,10 @@ export class MenuScreen {
       // Info box - right panel
       const info = createBox({
         parent: this.screen,
-        top: 6,
-        left: leftMargin + 26 + 30,  // After menuPanel + descBox
+        top: panelTop,
+        left: leftMargin + 26 + 30,
         width: 20,
-        height: 15,
+        height: panelHeight,
         border: { type: 'line' },
         label: ' PLAYER ',
         style: { border: { fg: 'gray' } },

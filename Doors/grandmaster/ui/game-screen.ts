@@ -822,10 +822,10 @@ export class GameScreen {
         const rendered = AnimationRenderer.renderGradeUp(anim);
         // Center "GRADE UP!" (9 chars) on board (10 cells = 20 chars)
         // Then second line with grade transition
-        this.overlayTextOnBoard(rendered, 3, setCell); // Board row 7 (visible row 3)
+        this.overlayTextOnBoard(rendered, 7, setCell); // Board center area
       } else if (anim.type === 'cool' || anim.type === 'regret') {
         const rendered = AnimationRenderer.renderSectionResult(anim);
-        this.overlayTextOnBoard(rendered, 1, setCell); // Board row 5 (visible row 1)
+        this.overlayTextOnBoard(rendered, 5, setCell); // Mid-upper area
       } else if (anim.type === 'comboCounter') {
         const data = anim.data as any;
         const combo = data.combo;
@@ -836,12 +836,12 @@ export class GameScreen {
           const comboText = `${combo} COMBO!`;
           const boldTag = progress < 0.2 ? '{bold}' : '';
           const boldEnd = progress < 0.2 ? '{/bold}' : '';
-          this.overlayTextOnBoard(`{${color}-fg}${boldTag}${comboText}${boldEnd}{/${color}-fg}`, 6, setCell);
+          this.overlayTextOnBoard(`{${color}-fg}${boldTag}${comboText}${boldEnd}{/${color}-fg}`, 10, setCell);
         }
       } else if (anim.type === 'tSpin') {
         const progress = anim.elapsed / anim.duration;
         if (progress < 0.6) {
-          this.overlayTextOnBoard('{magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}', 8, setCell);
+          this.overlayTextOnBoard('{magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}', 9, setCell);
         }
       }
       // lockGlow handled in layer 4 above
