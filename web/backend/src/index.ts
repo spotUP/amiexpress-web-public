@@ -1135,6 +1135,12 @@ console.log(
     if (connection.session) {
       sessions.delete(connection.sessionId);
     }
+    // Release node back to available pool
+    if (connection.nodeId !== undefined) {
+      nodeManager.releaseSession(connection.sessionId).catch((err: Error) => {
+        console.error(`[${type.toUpperCase()}] Failed to release node on disconnect:`, err);
+      });
+    }
   });
 
   // Handle errors

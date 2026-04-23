@@ -11,6 +11,13 @@ export class NodeManager {
 
   constructor() {
     this.initializeNodes();
+
+    // Periodic cleanup of leaked nodes (every 5 minutes)
+    setInterval(() => {
+      this.cleanupInactiveSessions(30).catch(err => {
+        console.error('[NodeManager] Periodic cleanup failed:', err);
+      });
+    }, 5 * 60 * 1000);
   }
 
   // Initialize nodes from database
@@ -44,6 +51,9 @@ export class NodeManager {
   async assignSessionToNode(sessionId: string, socketId: string, userId?: string): Promise<NodeSession> {
     const availableNode = await this.getAvailableNode();
     if (!availableNode) {
+      const busyCount = Array.from(this.nodes.values()).filter(n => n.status === 'busy').length;
+      const sessionCount = this.sessions.size;
+      console.error(`[NodeManager] No available nodes! busy=${busyCount}, sessions=${sessionCount}`);
       throw new Error('No available nodes');
     }
 
@@ -103,6 +113,7 @@ export class NodeManager {
       // Update node status to available
       const node = this.nodes.get(session.nodeId);
       if (node) {
+        console.log(`[NodeManager] Releasing node ${session.nodeId} (session ${sessionId})`);
         node.status = 'available';
         node.currentUser = undefined;
       }

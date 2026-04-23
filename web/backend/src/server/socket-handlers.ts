@@ -944,6 +944,8 @@ console.log(`[DISCONNECT] Sysop kicked user, skipping grace period`);
 
     const session = getSession(socket.id);
     if (!session) {
+      // Release node even if session was already cleaned up
+      await nodeManager.releaseSession(socket.id);
       deleteSession(socket.id);
       return;
     }
