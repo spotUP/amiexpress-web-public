@@ -21,6 +21,8 @@ export class GameScreen {
   private running: boolean = false;
   private stoppedEarly: boolean = false;  // True if stopped externally (not gameover)
   private cleanedUp: boolean = false;  // Prevent double cleanup
+  private outerFrame: any;
+  private escHandler: ((ch: string | undefined, key: any) => void) | null = null;
   private boardBox: any;
   private nextBox: any;
   private holdBox: any;
@@ -417,6 +419,20 @@ export class GameScreen {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
 
+    // Outer frame wrapping the entire game area (consistency with main menu)
+    this.outerFrame = createBox({
+      parent: this.screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'gray' } },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
     this.boardBox = createBox({
       parent: this.screen,
       top: 1,
@@ -505,13 +521,13 @@ export class GameScreen {
 
     this.footerBox = createBox({
       parent: this.screen,
-      bottom: 0,
-      left: 0,
-      right: 0,
+      bottom: 1,
+      left: 1,
+      right: 1,
       height: 1,
       align: 'center',
       style: { bg: 'black', fg: 'gray' },
-      content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | ESC Pause',
+      content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | P Pause | ESC Quit',
       focusable: false,
       mouse: false,
       clickable: false,
@@ -588,6 +604,17 @@ export class GameScreen {
         this.showPauseMenu();
       }
     });
+
+    // ESC directly quits the game (bypass pause menu)
+    // Handled via screen keypress since ESC is not mapped in input config
+    this.escHandler = (_ch: string | undefined, key: any) => {
+      if (!key || !this.input) return;
+      if (key.name === 'escape' && this.engine.getState().status === 'playing') {
+        this.stoppedEarly = true;
+        this.running = false;
+      }
+    };
+    this.screen.on('keypress', this.escHandler);
   }
 
   /**
@@ -1552,6 +1579,10 @@ export class GameScreen {
     if (this.input) {
       this.input.reset();
     }
+    if (this.escHandler) {
+      this.screen.removeListener('keypress', this.escHandler);
+      this.escHandler = null;
+    }
     this.sounds.stopMusic();
     this.boardBox?.destroy();
     this.nextBox?.destroy();
@@ -1560,6 +1591,7 @@ export class GameScreen {
     this.gradeBox?.destroy();
     this.sectionBox?.destroy();
     this.footerBox?.destroy();
+    this.outerFrame?.destroy();
   }
 
   /**

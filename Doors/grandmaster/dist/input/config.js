@@ -23,7 +23,7 @@ exports.DEFAULT_KEYS = {
     hardDrop: ['up', 'return', 'enter'], // Up arrow = hard drop
     sonicDrop: [],
     hold: ['c', 'lshift', 'rshift'],
-    pause: ['escape', 'p'],
+    pause: ['p'],
 };
 /**
  * Alternative key bindings (modern Tetris)
@@ -38,7 +38,7 @@ exports.MODERN_KEYS = {
     hardDrop: ['space', 'return'],
     sonicDrop: [],
     hold: ['c', 'lshift'],
-    pause: ['escape'],
+    pause: ['p'],
 };
 /**
  * Map key name to game action

@@ -25,6 +25,7 @@ class GameScreen {
         this.running = false;
         this.stoppedEarly = false; // True if stopped externally (not gameover)
         this.cleanedUp = false; // Prevent double cleanup
+        this.escHandler = null;
         // Board overlay compositor: effects rendered inline in board content
         // Each cell is a blessed-tagged 2-char string or null (no overlay)
         this.boardOverlay = [];
@@ -358,6 +359,19 @@ class GameScreen {
     setupUI() {
         // Clear screen
         this.screen.children.forEach(child => child.destroy());
+        // Outer frame wrapping the entire game area (consistency with main menu)
+        this.outerFrame = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            border: { type: 'line' },
+            style: { bg: 'black', border: { fg: 'gray' } },
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
         this.boardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
@@ -440,13 +454,13 @@ class GameScreen {
         });
         this.footerBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
-            bottom: 0,
-            left: 0,
-            right: 0,
+            bottom: 1,
+            left: 1,
+            right: 1,
             height: 1,
             align: 'center',
             style: { bg: 'black', fg: 'gray' },
-            content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | ESC Pause',
+            content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | P Pause | ESC Quit',
             focusable: false,
             mouse: false,
             clickable: false,
@@ -517,6 +531,17 @@ class GameScreen {
                 this.showPauseMenu();
             }
         });
+        // ESC directly quits the game (bypass pause menu)
+        // Handled via screen keypress since ESC is not mapped in input config
+        this.escHandler = (_ch, key) => {
+            if (!key || !this.input)
+                return;
+            if (key.name === 'escape' && this.engine.getState().status === 'playing') {
+                this.stoppedEarly = true;
+                this.running = false;
+            }
+        };
+        this.screen.on('keypress', this.escHandler);
     }
     /**
      * Render game state
@@ -1396,6 +1421,10 @@ class GameScreen {
         if (this.input) {
             this.input.reset();
         }
+        if (this.escHandler) {
+            this.screen.removeListener('keypress', this.escHandler);
+            this.escHandler = null;
+        }
         this.sounds.stopMusic();
         this.boardBox?.destroy();
         this.nextBox?.destroy();
@@ -1404,6 +1433,7 @@ class GameScreen {
         this.gradeBox?.destroy();
         this.sectionBox?.destroy();
         this.footerBox?.destroy();
+        this.outerFrame?.destroy();
     }
     /**
      * Stop the game loop early without showing game over (for attract mode exit)

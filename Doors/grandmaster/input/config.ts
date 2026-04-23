@@ -38,7 +38,7 @@ export const DEFAULT_KEYS: KeyConfig = {
   hardDrop: ['up', 'return', 'enter'],  // Up arrow = hard drop
   sonicDrop: [],
   hold: ['c', 'lshift', 'rshift'],
-  pause: ['escape', 'p'],
+  pause: ['p'],
 };
 
 /**
@@ -54,7 +54,7 @@ export const MODERN_KEYS: KeyConfig = {
   hardDrop: ['space', 'return'],
   sonicDrop: [],
   hold: ['c', 'lshift'],
-  pause: ['escape'],
+  pause: ['p'],
 };
 
 /**

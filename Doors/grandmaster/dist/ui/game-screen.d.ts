@@ -15,6 +15,8 @@ export declare class GameScreen {
     private running;
     private stoppedEarly;
     private cleanedUp;
+    private outerFrame;
+    private escHandler;
     private boardBox;
     private nextBox;
     private holdBox;
