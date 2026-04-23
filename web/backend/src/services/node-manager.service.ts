@@ -20,11 +20,19 @@ export class NodeManager {
     }, 5 * 60 * 1000);
   }
 
-  // Initialize nodes from database
+  // Initialize nodes - reads max_nodes from DB config, default 40
   private async initializeNodes(): Promise<void> {
-    // AmiExpress supports up to 256 nodes (0-255)
-    // Web BBS needs many nodes for simultaneous browser connections
-    for (let i = 1; i <= 256; i++) {
+    let maxNodes = 40;
+    try {
+      const sysConfig = db.getConfigRepository().getSystemConfig();
+      if (sysConfig?.max_nodes && sysConfig.max_nodes > 0) {
+        maxNodes = Math.min(sysConfig.max_nodes, 256);
+      }
+    } catch {
+      // DB may not be ready yet at construction time
+    }
+    console.log(`[NodeManager] Initializing ${maxNodes} nodes`);
+    for (let i = 1; i <= maxNodes; i++) {
       if (!this.nodes.has(i)) {
         const nodeInfo: NodeInfo = {
           id: i,
