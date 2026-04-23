@@ -1494,6 +1494,15 @@ console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
 console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
   let wrappedSocket: any;
 
+  // Save and disable modem speed throttling for TypeScript doors (they need full speed)
+  const { getModemEmulator } = require('../utils/modem-emulator.util');
+  const modemEmulator = getModemEmulator(socket);
+  const savedModemSpeed = (session as any).modemSpeed || 0;
+  if (savedModemSpeed > 0) {
+    modemEmulator.disable();
+    socket.emit('modem-speed', 0);
+  }
+
   // Save original subState to check if we're in display flow (inline ~CC_ command)
   // Door execution changes subState to DOOR_RUNNING, so we need to remember the original
   const originalSubState = session.subState;
@@ -1805,6 +1814,13 @@ console.log(`[executeTypeScriptDoor] Cleared inDoorManager, doorInputHandler, mo
     // Notify frontend that door is stopped
     socket.emit('door:status', { status: 'stopped' });
     socket.emit('door-active', false);
+
+    // Restore modem speed emulation if it was active before door
+    if (savedModemSpeed > 0) {
+      (session as any).modemSpeed = savedModemSpeed;
+      modemEmulator.enable(savedModemSpeed);
+      socket.emit('modem-speed', savedModemSpeed);
+    }
 console.log(`[executeTypeScriptDoor] Sent door:status: stopped, door-active: false`);
 
     // Return to menu and pause before showing (only if user is logged in)
@@ -1893,6 +1909,13 @@ console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err)
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.menuPause = false;
     socket.emit('door-active', false);
+
+    // Restore modem speed emulation if it was active before door
+    if (savedModemSpeed > 0) {
+      (session as any).modemSpeed = savedModemSpeed;
+      modemEmulator.enable(savedModemSpeed);
+      socket.emit('modem-speed', savedModemSpeed);
+    }
 
     // Only display menu if user is logged in
     if (session.state === BBSState.LOGGEDON && session.user) {
@@ -3482,6 +3505,15 @@ console.log(`[executeClientDoor] Starting client door: ${door.name}`);
     session.inDoorManager = true;
 console.log(`[executeClientDoor] Set inDoorManager=true for session`);
     session.clientDoorActive = true;
+
+    // Disable modem speed throttling for client doors (they need full speed)
+    const { getModemEmulator: getClientModemEmulator } = require('../utils/modem-emulator.util');
+    const clientModemEmu = getClientModemEmulator(socket);
+    (session as any)._savedModemSpeed = (session as any).modemSpeed || 0;
+    if ((session as any)._savedModemSpeed > 0) {
+      clientModemEmu.disable();
+      socket.emit('modem-speed', 0);
+    }
 
     // Enable mouse events for client doors (needed for games like Arkanoid)
     session.mouseEventsEnabled = true;

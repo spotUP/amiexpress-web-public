@@ -504,6 +504,17 @@ console.log(`[ClientDoorBridge] Ending session ${sessionId}`);
     }
     (session.bbsSession as any).cmdShortcuts = false;
 
+    // Restore modem speed emulation if it was active before door
+    const savedSpeed = (session.bbsSession as any)._savedModemSpeed;
+    if (savedSpeed && savedSpeed > 0) {
+      (session.bbsSession as any).modemSpeed = savedSpeed;
+      const { getModemEmulator } = require('../utils/modem-emulator.util');
+      const modemEmu = getModemEmulator(session.socket);
+      modemEmu.enable(savedSpeed);
+      session.socket.emit('modem-speed', savedSpeed);
+    }
+    delete (session.bbsSession as any)._savedModemSpeed;
+
     // Return to menu with pause
     session.bbsSession.subState = LoggedOnSubState.DISPLAY_MENU;
     session.bbsSession.menuPause = true;
