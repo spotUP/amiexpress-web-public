@@ -15,10 +15,9 @@ export class NodeManager {
 
   // Initialize nodes from database
   private async initializeNodes(): Promise<void> {
-    // Load nodes from database
-    // For now, create default nodes if they don't exist
-    // Increased to 20 nodes for web-based BBS with multiple simultaneous connections
-    for (let i = 1; i <= 20; i++) {
+    // AmiExpress supports up to 256 nodes (0-255)
+    // Web BBS needs many nodes for simultaneous browser connections
+    for (let i = 1; i <= 256; i++) {
       if (!this.nodes.has(i)) {
         const nodeInfo: NodeInfo = {
           id: i,
