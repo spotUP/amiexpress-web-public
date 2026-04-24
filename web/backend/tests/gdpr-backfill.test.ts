@@ -162,4 +162,33 @@ describe('GDPR Phase 2 — backfill consent', () => {
     const after = await db.getUserById(id);
     expect(after.gdprConsentAt).toBeUndefined();
   });
+
+  // Regression guard for 2026-04-24: the initial Phase 2 commit placed the
+  // GDPR_BACKFILL case inside handleMessageEntryInput (POST_MESSAGE_*
+  // dispatcher only), so the backfill handler was never reached on live
+  // user Enter. This grep-style test pins the case inside the top-level
+  // handleCommand function instead.
+  test('command.handler.ts has the GDPR_BACKFILL branch inside handleCommand, not handleMessageEntryInput', () => {
+    const fs = require('fs');
+    const pathMod = require('path');
+    const src: string = fs.readFileSync(
+      pathMod.join(__dirname, '..', 'src', 'handlers', 'command.handler.ts'),
+      'utf8'
+    );
+
+    const messageFnStart = src.indexOf('async function handleMessageEntryInput');
+    const commandFnStart = src.indexOf('export async function handleCommand');
+    expect(messageFnStart).toBeGreaterThan(0);
+    expect(commandFnStart).toBeGreaterThan(messageFnStart);
+
+    // GDPR_BACKFILL must NOT appear inside handleMessageEntryInput
+    // (between its start and handleCommand's start).
+    const messageEntrySlice = src.slice(messageFnStart, commandFnStart);
+    expect(messageEntrySlice).not.toMatch(/GDPR_BACKFILL/);
+
+    // And it MUST appear inside handleCommand (after its start).
+    const commandSlice = src.slice(commandFnStart);
+    expect(commandSlice).toMatch(/LoggedOnSubState\.GDPR_BACKFILL/);
+    expect(commandSlice).toMatch(/handleGdprBackfillInput/);
+  });
 });
