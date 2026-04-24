@@ -750,6 +750,17 @@ console.log('[LOGIN] Quick logon - skipping LOGON screen per express.e:29853');
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       triggerSamiLogRefresh();
 
+      // WEB_: GDPR Phase 2 — if this user has no consent stamp (pre-GDPR
+      // account), block the bulletin flow until they accept the notice
+      // once. Account untouched on decline; user can reconnect or email
+      // the sysop for erasure. See thoughts/shared/plans/
+      // 2026-04-24-gdpr-hobby-baseline.md Phase 2.
+      if (!(session.user as any)?.gdprConsentAt) {
+        const { promptGdprBackfill } = require('../handlers/user/gdpr.handler');
+        await promptGdprBackfill(socket, session);
+        return;
+      }
+
       if (logonDisplayed) {
         // LOGON screen displayed - honor express.e doPause() (express.e:29854)
         // NOTE: We don't pass an onComplete callback because handleCommand (command.handler.ts:692-693)

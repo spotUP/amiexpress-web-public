@@ -474,6 +474,25 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       await handleConferenceAccountingInput(socket, session, data);
       return;
 
+    // WEB_: GDPR Phase 2 backfill consent for pre-GDPR users on next login.
+    // Line-input: accumulate until Enter, then dispatch.
+    case LoggedOnSubState.GDPR_BACKFILL:
+      if (data === '\r' || data === '\n') {
+        const gbInput = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        const { handleGdprBackfillInput } = require('./user/gdpr.handler');
+        await handleGdprBackfillInput(socket, session, gbInput);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          emitText(socket, '\b \b');
+        }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+        emitText(socket, data);
+      }
+      return;
+
     // Forward message states (express.e forwardMSG:9807-9871)
     case LoggedOnSubState.FORWARD_MESSAGE_TO:
       if (data === '\r' || data === '\n') {

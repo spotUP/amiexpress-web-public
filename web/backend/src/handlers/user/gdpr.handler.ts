@@ -9,15 +9,50 @@
  * See thoughts/shared/plans/2026-04-24-gdpr-hobby-baseline.md Phase 3.
  */
 
+import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import type { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
 import { eraseUserData } from '../../services/gdpr-erasure.service';
 import { db } from '../../database';
+import { config } from '../../config';
+import { loadBBSConfig } from '../../services/bbs-config-file.service';
 // Runtime require for bcrypt to match the import style used elsewhere in the
 // codebase (avoids TypeScript default-import interop surprises).
 const bcrypt: any = require('bcryptjs');
+
+// Must match GDPR_NOTICE_VERSION in new-user.handler.ts — bump together
+// when the privacy notice text changes materially.
+const GDPR_NOTICE_VERSION = '1.0';
+
+/**
+ * Read Screens/PRIVACY.TXT and substitute $SYSOP_EMAIL$ with the configured
+ * value from bbsConfig.info. Used by both the new-user consent gate (Phase 1)
+ * and the backfill consent gate (Phase 2). Returns a fallback text if the
+ * screen file is missing so consent can still be captured.
+ */
+function loadPrivacyNoticeBody(): string {
+  const baseDir = config.getConfig().dataDir;
+  let body = '';
+  try {
+    body = amigafs.readFileSync(path.join(baseDir, 'Screens', 'PRIVACY.TXT'), 'utf8') as string;
+  } catch (error) {
+    console.warn('[gdpr] Unable to read PRIVACY.TXT:', error);
+    body = '\r\nPrivacy notice unavailable. Contact the sysop before accepting.\r\n';
+  }
+
+  let sysopEmail = '';
+  try {
+    const bbsCfg = loadBBSConfig(baseDir);
+    sysopEmail = (bbsCfg.sysop_email || '').trim();
+  } catch (error) {
+    console.warn('[gdpr] Unable to load bbsConfig for sysop email:', error);
+  }
+  const emailReplacement = sysopEmail.length > 0 ? sysopEmail : '(not configured)';
+  return body.replace(/\$SYSOP_EMAIL\$/g, emailReplacement);
+}
 
 function setPasswordMask(socket: any, session: any, enabled: boolean) {
   if (!!session.maskInput === enabled) return;
@@ -196,4 +231,76 @@ async function cancelErasure(socket: any, session: BBSSession, reason: string): 
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
   const { handleWriteUserParamsCommand } = require('../commands/info-commands.handler');
   handleWriteUserParamsCommand(socket, session);
+}
+
+/**
+ * Phase 2 — one-shot backfill consent gate for pre-GDPR users.
+ *
+ * Called by auth-socket-handlers immediately after a successful login when
+ * the user row has no gdpr_consent_at. Shows the same PRIVACY.TXT the
+ * new-user gate uses, prompts Y/n (Enter defaults to Y), stamps consent
+ * with source='relogin' on accept, or drops the connection on decline.
+ *
+ * The decline path doesn't delete the user — they can reconnect and accept
+ * later (or request erasure via email/sysop contact).
+ */
+export async function promptGdprBackfill(socket: any, session: BBSSession): Promise<void> {
+  const body = loadPrivacyNoticeBody();
+  emitText(socket, body);
+  emitPrompt(
+    socket,
+    AnsiUtil.colorize('\r\nYou haven\'t accepted the current privacy notice. Accept now (Y/n)? ', 'white')
+  );
+  session.subState = LoggedOnSubState.GDPR_BACKFILL;
+  session.inputBuffer = '';
+}
+
+export async function handleGdprBackfillInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const answer = input.trim().toLowerCase();
+  const user: any = session.user;
+  if (!user) {
+    emitText(socket, '\r\n\x1b[31mSession error — no user bound. Disconnecting.\x1b[0m\r\n');
+    setTimeout(() => { try { (socket as any).disconnect(true); } catch { socket.disconnect(); } }, 500);
+    return;
+  }
+
+  // Accept: blank Enter, y, or yes.
+  if (answer === '' || answer === 'y' || answer === 'yes') {
+    const nowIso = new Date().toISOString();
+    try {
+      await db.updateUser(user.id, {
+        gdprConsentAt: nowIso,
+        gdprNoticeVersion: GDPR_NOTICE_VERSION,
+        gdprConsentSource: 'relogin',
+      } as any);
+      user.gdprConsentAt = nowIso;
+      user.gdprNoticeVersion = GDPR_NOTICE_VERSION;
+      user.gdprConsentSource = 'relogin';
+    } catch (error) {
+      console.error('[gdpr] backfill updateUser failed:', error);
+    }
+    emitText(socket, '\r\n\x1b[32mThanks.\x1b[0m\r\n');
+
+    // Resume the normal post-login flow: DISPLAY_BULL through MENU.
+    session.subState = LoggedOnSubState.DISPLAY_BULL;
+    const { handleCommand } = require('../command.handler');
+    await handleCommand(socket, session, '');
+    return;
+  }
+
+  // Decline: drop the connection. Account is unchanged — the user can
+  // reconnect and accept, or email the sysop for erasure.
+  if (answer === 'n' || answer === 'no') {
+    emitText(socket, '\r\n\x1b[33mConsent is required to use the BBS. Goodbye.\x1b[0m\r\n');
+    emitText(socket, '\r\nNO CARRIER\r\n');
+    (session as any).state = 'await';
+    session.subState = undefined;
+    (session as any).user = undefined;
+    setTimeout(() => { try { (socket as any).disconnect(true); } catch { socket.disconnect(); } }, 500);
+    return;
+  }
+
+  // Any other input: re-prompt.
+  emitText(socket, '\r\n\x1b[31mPlease answer Y or n (blank = yes).\x1b[0m\r\n');
+  await promptGdprBackfill(socket, session);
 }

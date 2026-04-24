@@ -215,6 +215,8 @@ export enum LoggedOnSubState {
   W_FORGETME_CONFIRM = 'w_forgetme_confirm',          // Erasure step 1: type 'YES ERASE' (option 20)
   W_FORGETME_PASSWORD = 'w_forgetme_password',        // Erasure step 2: re-enter password
   W_FORGETME_USERNAME = 'w_forgetme_username',        // Erasure step 3: type username verbatim
+  // WEB_: GDPR Phase 2 — one-shot consent prompt for pre-GDPR users on next login
+  GDPR_BACKFILL = 'gdpr_backfill',
 
   // User Stats (S command) - Web-specific font selection
   USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option
