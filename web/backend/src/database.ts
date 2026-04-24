@@ -1082,6 +1082,41 @@ console.error('Error running migrations:', error);
         }
       } catch (e) { /* FTS table may not exist yet */ }
 
+      // DM threads (1:1 and group)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_dm_threads (
+          thread_id TEXT PRIMARY KEY,
+          participants_hash TEXT NOT NULL UNIQUE,
+          is_group INTEGER DEFAULT 0,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          last_activity_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_dm_participants (
+          thread_id TEXT NOT NULL REFERENCES chat_dm_threads(thread_id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          username TEXT NOT NULL,
+          joined_at INTEGER DEFAULT (strftime('%s', 'now')),
+          last_read_at INTEGER DEFAULT 0,
+          PRIMARY KEY (thread_id, user_id)
+        )
+      `);
+
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_dm_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          thread_id TEXT NOT NULL REFERENCES chat_dm_threads(thread_id) ON DELETE CASCADE,
+          sender_id TEXT NOT NULL REFERENCES users(id),
+          sender_username TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_dm_messages_thread ON chat_dm_messages(thread_id, created_at)`);
+
       // Room bans table
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS room_bans (
