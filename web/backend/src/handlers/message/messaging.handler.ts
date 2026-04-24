@@ -771,7 +771,16 @@ async function listAllMessages(socket: any, session: BBSSession): Promise<void> 
 }
 
 /**
- * Save message pointer and exit reader
+ * Save message pointer and exit reader.
+ *
+ * WEB_: after exit we return straight to DISPLAY_MENU rather than replaying
+ * DISPLAY_CONF_BULL → DISPLAY_NODE_BULL → ... the way the pre-fix code did.
+ * express.e's R command exits back to STATE_LOGGEDON/SUBSTATE_READ_COMMAND
+ * (the menu prompt), not through the login bulletin chain — see express.e
+ * main loop at 32024 (processLoggedOnUser) where R returns. The previous
+ * DISPLAY_CONF_BULL transition was a divergence that showed CONF_BULL/NODE_
+ * BULL/MENU again every time the user pressed Enter at the last message
+ * (reported 2026-04-24).
  */
 async function saveMessagePointerAndExit(socket: any, session: BBSSession): Promise<void> {
   const highestRead = session.tempData.msgReaderHighestRead;
@@ -789,7 +798,7 @@ async function saveMessagePointerAndExit(socket: any, session: BBSSession): Prom
 
   emitText(socket, '\r\n');
   session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
