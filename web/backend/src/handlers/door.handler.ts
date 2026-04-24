@@ -2111,8 +2111,41 @@ console.log(`[executeAmigaDoor] Found door at alternate path: ${altPath}`);
         }
       }
 
-      // If still not found, error out
+      // If still not found, check whether the parent directory is a TypeScript
+      // door that replaced the Amiga binary (e.g. Doors/bbslink replaced
+      // the Doors:bbslink/bbslink XIM binary).  If so, redirect to TS execution.
       if (!amigafs.existsSync(doorPath)) {
+        const parentDir = path.dirname(doorPath);
+        const parentPkg = path.join(parentDir, 'package.json');
+        if (amigafs.existsSync(parentPkg)) {
+          try {
+            const pkg = JSON.parse(amigafs.readFileSync(parentPkg, 'utf8') as string);
+            const relPath = path.relative(bbsRoot, parentDir);
+            // Build a minimal Door object pointing at the TypeScript implementation
+            const tsDoor: Door = {
+              id:          door.id,
+              name:        door.name,
+              command:     door.command,
+              description: door.description || '',
+              path:        relPath,
+              type:        'typescript',
+              accessLevel: door.accessLevel || 0,
+              enabled:     true,
+              parameters:  door.parameters || [],
+            };
+            const tsDoorSession: DoorSession = {
+              doorId:    tsDoor.id,
+              userId:    session.user?.id || '',
+              startTime: getSystemTime(),
+              status:    'running',
+            };
+console.log(`[executeAmigaDoor] Binary not found but TS door exists at ${relPath} — redirecting`);
+            await executeTypeScriptDoor(socket, session, tsDoor, tsDoorSession, null);
+            return;
+          } catch (e) {
+console.error('[executeAmigaDoor] TS-redirect failed:', e);
+          }
+        }
 console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
 console.error(`[executeAmigaDoor] Tried alternate paths:`, alternatePaths);
         emitText(socket, '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
