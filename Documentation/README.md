@@ -30,6 +30,8 @@ Choose your role to find relevant documentation:
 
 📥 **[Importing Data](1-Users/IMPORTING.md)** - Import from classic Amiga BBS (507 lines)
 
+🛡️ **[Privacy Notice](PRIVACY.md)** - What data the BBS collects, how long it's kept, how to export or erase your data (`W` -> 19 / 20)
+
 ---
 
 ## For Sysops

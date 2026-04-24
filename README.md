@@ -20,6 +20,8 @@
 
 📖 **See [PROJECT_SAFETY.md](./PROJECT_SAFETY.md) for complete safety documentation**
 
+🛡️ **Privacy notice:** [Documentation/PRIVACY.md](./Documentation/PRIVACY.md) — what data the BBS collects and how users export/erase it.
+
 ---
 
 ## 📊 Project Scale & Status
