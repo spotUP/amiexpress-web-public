@@ -5145,16 +5145,19 @@ var init_dockable_panel = __esm({
     DockablePanel = class _DockablePanel extends Panel {
       constructor(options = {}) {
         const fixed = options.fixed === true;
+        const isStatic = fixed || options.draggable === false && options.resizable === false;
         const normalizedOptions = {
           ...options,
           draggable: fixed ? false : options.draggable,
           resizable: fixed ? false : options.resizable,
-          allowAutoDock: fixed ? false : options.allowAutoDock,
-          allowFloat: fixed ? false : options.allowFloat,
-          allowResize: fixed ? false : options.allowResize,
-          allowMinimize: fixed ? false : options.allowMinimize
+          allowAutoDock: isStatic ? false : options.allowAutoDock,
+          allowFloat: isStatic ? false : options.allowFloat,
+          allowResize: isStatic ? false : options.allowResize,
+          allowMinimize: isStatic ? false : options.allowMinimize,
+          showMinimizeButton: isStatic ? false : options.showMinimizeButton,
+          showCloseButton: isStatic ? false : options.showCloseButton
         };
-        const mergedStyle = {
+        const mergedStyle = isStatic ? normalizedOptions.style : {
           ...normalizedOptions.style,
           hover: {
             border: { fg: "white" },
@@ -5194,6 +5197,7 @@ var init_dockable_panel = __esm({
         this.dockPosition = normalizedOptions.dockPosition || "float";
         this.useTitleBar = normalizedOptions.useTitleBar !== false;
         this.fixed = fixed;
+        this.isStatic = isStatic;
         this.panelState = {
           position: this.dockPosition,
           minimized: normalizedOptions.minimized || false,
@@ -5225,14 +5229,14 @@ var init_dockable_panel = __esm({
         } else {
           this.fitContentSettings = { width: true, height: true };
         }
-        if (this.useTitleBar) {
+        if (this.useTitleBar && !this.isStatic) {
           this.options.label = void 0;
         }
         if (this._originalBorderColor === void 0) {
           const borderFg = this.options.border?.fg || this.options.style?.border?.fg || this.style?.border?.fg || "blue";
           this._originalBorderColor = borderFg;
         }
-        if (this.useTitleBar) {
+        if (this.useTitleBar && !this.isStatic) {
           this.setupTitleBar(normalizedOptions);
         }
         this.setupDocking();
@@ -5545,7 +5549,7 @@ var init_dockable_panel = __esm({
        * Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
        */
       setupDragging() {
-        if (this.fixed)
+        if (this.fixed || this.isStatic)
           return;
         this.on("mousedown", (data) => {
           if (this.resizable) {
@@ -5594,7 +5598,7 @@ var init_dockable_panel = __esm({
         this.on("keypress", (_ch, key) => {
           if (!key)
             return;
-          if (this.fixed)
+          if (this.fixed || this.isStatic)
             return;
           const ctrl = key.ctrl;
           const shift = key.shift;
@@ -9111,22 +9115,22 @@ var require_events = __commonJS({
     var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value) {
       return value !== value;
     };
-    function EventEmitter22() {
-      EventEmitter22.init.call(this);
+    function EventEmitter23() {
+      EventEmitter23.init.call(this);
     }
-    module.exports = EventEmitter22;
+    module.exports = EventEmitter23;
     module.exports.once = once;
-    EventEmitter22.EventEmitter = EventEmitter22;
-    EventEmitter22.prototype._events = void 0;
-    EventEmitter22.prototype._eventsCount = 0;
-    EventEmitter22.prototype._maxListeners = void 0;
+    EventEmitter23.EventEmitter = EventEmitter23;
+    EventEmitter23.prototype._events = void 0;
+    EventEmitter23.prototype._eventsCount = 0;
+    EventEmitter23.prototype._maxListeners = void 0;
     var defaultMaxListeners = 10;
     function checkListener(listener) {
       if (typeof listener !== "function") {
         throw new TypeError('The "listener" argument must be of type Function. Received type ' + typeof listener);
       }
     }
-    Object.defineProperty(EventEmitter22, "defaultMaxListeners", {
+    Object.defineProperty(EventEmitter23, "defaultMaxListeners", {
       enumerable: true,
       get: function() {
         return defaultMaxListeners;
@@ -9138,14 +9142,14 @@ var require_events = __commonJS({
         defaultMaxListeners = arg;
       }
     });
-    EventEmitter22.init = function() {
+    EventEmitter23.init = function() {
       if (this._events === void 0 || this._events === Object.getPrototypeOf(this)._events) {
         this._events = /* @__PURE__ */ Object.create(null);
         this._eventsCount = 0;
       }
       this._maxListeners = this._maxListeners || void 0;
     };
-    EventEmitter22.prototype.setMaxListeners = function setMaxListeners(n) {
+    EventEmitter23.prototype.setMaxListeners = function setMaxListeners(n) {
       if (typeof n !== "number" || n < 0 || NumberIsNaN(n)) {
         throw new RangeError('The value of "n" is out of range. It must be a non-negative number. Received ' + n + ".");
       }
@@ -9154,13 +9158,13 @@ var require_events = __commonJS({
     };
     function _getMaxListeners(that) {
       if (that._maxListeners === void 0)
-        return EventEmitter22.defaultMaxListeners;
+        return EventEmitter23.defaultMaxListeners;
       return that._maxListeners;
     }
-    EventEmitter22.prototype.getMaxListeners = function getMaxListeners() {
+    EventEmitter23.prototype.getMaxListeners = function getMaxListeners() {
       return _getMaxListeners(this);
     };
-    EventEmitter22.prototype.emit = function emit(type) {
+    EventEmitter23.prototype.emit = function emit(type) {
       var args = [];
       for (var i = 1; i < arguments.length; i++)
         args.push(arguments[i]);
@@ -9238,11 +9242,11 @@ var require_events = __commonJS({
       }
       return target;
     }
-    EventEmitter22.prototype.addListener = function addListener(type, listener) {
+    EventEmitter23.prototype.addListener = function addListener(type, listener) {
       return _addListener(this, type, listener, false);
     };
-    EventEmitter22.prototype.on = EventEmitter22.prototype.addListener;
-    EventEmitter22.prototype.prependListener = function prependListener(type, listener) {
+    EventEmitter23.prototype.on = EventEmitter23.prototype.addListener;
+    EventEmitter23.prototype.prependListener = function prependListener(type, listener) {
       return _addListener(this, type, listener, true);
     };
     function onceWrapper() {
@@ -9261,17 +9265,17 @@ var require_events = __commonJS({
       state.wrapFn = wrapped;
       return wrapped;
     }
-    EventEmitter22.prototype.once = function once2(type, listener) {
+    EventEmitter23.prototype.once = function once2(type, listener) {
       checkListener(listener);
       this.on(type, _onceWrap(this, type, listener));
       return this;
     };
-    EventEmitter22.prototype.prependOnceListener = function prependOnceListener(type, listener) {
+    EventEmitter23.prototype.prependOnceListener = function prependOnceListener(type, listener) {
       checkListener(listener);
       this.prependListener(type, _onceWrap(this, type, listener));
       return this;
     };
-    EventEmitter22.prototype.removeListener = function removeListener(type, listener) {
+    EventEmitter23.prototype.removeListener = function removeListener(type, listener) {
       var list, events, position, i, originalListener;
       checkListener(listener);
       events = this._events;
@@ -9311,8 +9315,8 @@ var require_events = __commonJS({
       }
       return this;
     };
-    EventEmitter22.prototype.off = EventEmitter22.prototype.removeListener;
-    EventEmitter22.prototype.removeAllListeners = function removeAllListeners(type) {
+    EventEmitter23.prototype.off = EventEmitter23.prototype.removeListener;
+    EventEmitter23.prototype.removeAllListeners = function removeAllListeners(type) {
       var listeners, events, i;
       events = this._events;
       if (events === void 0)
@@ -9364,20 +9368,20 @@ var require_events = __commonJS({
         return unwrap ? [evlistener.listener || evlistener] : [evlistener];
       return unwrap ? unwrapListeners(evlistener) : arrayClone(evlistener, evlistener.length);
     }
-    EventEmitter22.prototype.listeners = function listeners(type) {
+    EventEmitter23.prototype.listeners = function listeners(type) {
       return _listeners(this, type, true);
     };
-    EventEmitter22.prototype.rawListeners = function rawListeners(type) {
+    EventEmitter23.prototype.rawListeners = function rawListeners(type) {
       return _listeners(this, type, false);
     };
-    EventEmitter22.listenerCount = function(emitter, type) {
+    EventEmitter23.listenerCount = function(emitter, type) {
       if (typeof emitter.listenerCount === "function") {
         return emitter.listenerCount(type);
       } else {
         return listenerCount.call(emitter, type);
       }
     };
-    EventEmitter22.prototype.listenerCount = listenerCount;
+    EventEmitter23.prototype.listenerCount = listenerCount;
     function listenerCount(type) {
       var events = this._events;
       if (events !== void 0) {
@@ -9390,7 +9394,7 @@ var require_events = __commonJS({
       }
       return 0;
     }
-    EventEmitter22.prototype.eventNames = function eventNames() {
+    EventEmitter23.prototype.eventNames = function eventNames() {
       return this._eventsCount > 0 ? ReflectOwnKeys(this._events) : [];
     };
     function arrayClone(arr, n) {
@@ -29911,46 +29915,52 @@ var AudioEngine = class {
 };
 
 // ../../sdk/dist-esm/engines/network/network-engine.js
-var import_events17 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/connection.js
-var import_events6 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/lobby.js
-var import_events7 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
-var import_events8 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/sync.js
-var import_events9 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/prediction.js
-var import_events10 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/interpolation.js
-var import_events11 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/presence.js
-var import_events12 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/social.js
-var import_events13 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
-var import_events14 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/replay.js
-var import_events15 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/security.js
-var import_events16 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events18 = __toESM(require_events());
 
-// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+// ../../sdk/dist-esm/engines/network/broker/broker-client.js
+var import_events6 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/broker/lobby-broker.js
+var BROKER_KEY = Symbol.for("aex-lobby-broker");
+
+// ../../sdk/dist-esm/engines/network/modules/connection.js
+var import_events7 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/lobby.js
+var import_events8 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
+var import_events9 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/sync.js
+var import_events10 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/prediction.js
+var import_events11 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/interpolation.js
+var import_events12 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/presence.js
+var import_events13 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/social.js
+var import_events14 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
+var import_events15 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/replay.js
+var import_events16 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/security.js
+var import_events17 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events19 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+var import_events20 = __toESM(require_events());
 var TerrainType;
 (function(TerrainType2) {
   TerrainType2["Plains"] = "plains";
@@ -30000,19 +30010,19 @@ var UnitClass;
 })(UnitClass || (UnitClass = {}));
 
 // ../../sdk/dist-esm/components/level/level-manager.js
-var import_events20 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events21 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
+// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events22 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/quest/quest-system.js
+// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
 var import_events23 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/tactical/class-system.js
+// ../../sdk/dist-esm/components/quest/quest-system.js
 var import_events24 = __toESM(require_events());
+
+// ../../sdk/dist-esm/components/tactical/class-system.js
+var import_events25 = __toESM(require_events());
 var MovementType;
 (function(MovementType2) {
   MovementType2["Infantry"] = "Infantry";
