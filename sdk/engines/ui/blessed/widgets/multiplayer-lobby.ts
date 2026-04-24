@@ -956,8 +956,8 @@ export class MultiplayerLobby extends EventEmitter {
       });
     }
 
-    // Tab key cycles focus between panels and buttons
-    const focusTargets = [
+    // Tab key cycles focus between panels and buttons (skip hidden ones).
+    const allFocusTargets = [
       this.playerList,
       this.teamSelector,
       this.settingsEditorList,
@@ -966,18 +966,19 @@ export class MultiplayerLobby extends EventEmitter {
       this.leaveButton,
     ].filter(Boolean) as any[];
 
+    const getVisibleFocusTargets = () => allFocusTargets.filter(t => !t.hidden);
+
     let focusIndex = 0;
     this.parent.key(['tab'], () => {
-      console.log('[MultiplayerLobby] Tab pressed, current focusIndex:', focusIndex, 'targets:', focusTargets.length);
+      const focusTargets = getVisibleFocusTargets();
+      if (focusTargets.length === 0) return;
       focusIndex = (focusIndex + 1) % focusTargets.length;
-      console.log('[MultiplayerLobby] Focusing target', focusIndex, ':', focusTargets[focusIndex] ? {
-        type: (focusTargets[focusIndex] as any).type,
-        constructor: (focusTargets[focusIndex] as any).constructor?.name
-      } : null);
       focusTargets[focusIndex]?.focus();
       this.parent.render();
     });
     this.parent.key(['S-tab'], () => {
+      const focusTargets = getVisibleFocusTargets();
+      if (focusTargets.length === 0) return;
       focusIndex = (focusIndex - 1 + focusTargets.length) % focusTargets.length;
       focusTargets[focusIndex]?.focus();
       this.parent.render();
@@ -1818,11 +1819,26 @@ export class MultiplayerLobby extends EventEmitter {
   private setAsHost(isHost: boolean): void {
     console.log('[MultiplayerLobby] setAsHost called with:', isHost);
     this.isHost = isHost;
+
+    // Only ONE of Ready / Start is visible at a time:
+    //   - Host is implicitly ready, so Ready is hidden for host and Start is shown.
+    //   - Non-host can never start, so Start is hidden and Ready is shown.
+    this.readyButton.hidden = isHost;
     this.startButton.hidden = !isHost;
-    console.log('[MultiplayerLobby] startButton.hidden set to:', this.startButton.hidden);
+
+    // Reposition so Leave sits flush next to the active action button (no gap).
+    const actionButton = isHost ? this.startButton : this.readyButton;
+    (actionButton as any).left = 2;
+    (this.leaveButton as any).left = 14;
+    let nextLeft = 26;
     if (this.fillBotsButton) {
       this.fillBotsButton.hidden = !isHost;
+      if (isHost) {
+        (this.fillBotsButton as any).left = nextLeft;
+        nextLeft += 12;
+      }
     }
+
     // Enable settings editing for host
     this.updateSettingsEditor();
     this.parent.render();

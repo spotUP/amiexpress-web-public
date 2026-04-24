@@ -48,11 +48,12 @@ export class RadioButton extends Box {
 
     super({
       ...options,
-      focusable: true,
+      focusable: options.focusable ?? true,
       clickable: true,
       touchFriendly: true,
       height: options.height || 1,
       width: options.width || (options.text ? options.text.length + 4 : 3),
+      tabIndex: -1,  // Exclude from Tab cycling - RadioSet handles navigation
       style: {
         ...baseStyle,
         focus: focusStyle,
@@ -94,6 +95,20 @@ export class RadioButton extends Box {
     this.on('blur', () => {
       this.screen?.render();
     });
+  }
+
+  /**
+   * Override focus() to prevent RadioButton from stealing keyboard focus.
+   * When clicked, focus is delegated to the parent RadioSet instead.
+   * This prevents double-highlight (yellow border on parent + yellow bg on button).
+   */
+  override focus(): void {
+    // Delegate keyboard focus to parent so RadioSet handles navigation
+    if (this.parent && typeof (this.parent as any).focus === 'function') {
+      (this.parent as any).focus();
+      return;
+    }
+    super.focus();
   }
 
   /**

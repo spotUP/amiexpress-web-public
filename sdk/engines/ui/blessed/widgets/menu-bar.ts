@@ -121,6 +121,7 @@ export class MenuBar extends Element {
         mouse: true,
         clickable: true,
         focusable: true,
+        tabIndex: -1,  // Exclude from Tab cycling - menu activated by click/hover, not Tab
         keys: true,
       });
 

@@ -115,6 +115,7 @@ export class DockablePanel extends Panel {
   private _unsubscribeSwipeUndock?: () => void;
   private useTitleBar: boolean;
   private fixed: boolean;
+  private isStatic: boolean;
 
   private screenListenersBound: boolean = false;
 
@@ -124,17 +125,21 @@ export class DockablePanel extends Panel {
 
   constructor(options: DockablePanelOptions = {}) {
     const fixed = options.fixed === true;
+    const isStatic = fixed || (options.draggable === false && options.resizable === false);
     const normalizedOptions: DockablePanelOptions = {
       ...options,
       draggable: fixed ? false : options.draggable,
       resizable: fixed ? false : options.resizable,
-      allowAutoDock: fixed ? false : options.allowAutoDock,
-      allowFloat: fixed ? false : options.allowFloat,
-      allowResize: fixed ? false : options.allowResize,
-      allowMinimize: fixed ? false : options.allowMinimize,
+      allowAutoDock: isStatic ? false : options.allowAutoDock,
+      allowFloat: isStatic ? false : options.allowFloat,
+      allowResize: isStatic ? false : options.allowResize,
+      allowMinimize: isStatic ? false : options.allowMinimize,
+      showMinimizeButton: isStatic ? false : options.showMinimizeButton,
+      showCloseButton: isStatic ? false : options.showCloseButton,
     };
     // Merge hover style for resize edge indication (white border on hover)
-    const mergedStyle = {
+    // Skip for static panels - no resize affordance needed
+    const mergedStyle = isStatic ? normalizedOptions.style : {
       ...normalizedOptions.style,
       hover: {
         border: { fg: 'white' },  // White border on hover
@@ -155,6 +160,7 @@ export class DockablePanel extends Panel {
     this.dockPosition = normalizedOptions.dockPosition || 'float';
     this.useTitleBar = normalizedOptions.useTitleBar !== false;
     this.fixed = fixed;
+    this.isStatic = isStatic;
     this.panelState = {
       position: this.dockPosition,
       minimized: normalizedOptions.minimized || false,
@@ -191,8 +197,8 @@ export class DockablePanel extends Panel {
       this.fitContentSettings = { width: true, height: true };
     }
 
-    // Suppress the border label when using a title bar
-    if (this.useTitleBar) {
+    // Suppress the border label when using a title bar (not for static panels which keep border label)
+    if (this.useTitleBar && !this.isStatic) {
       // DockablePanel uses its own titleBar widget for the title
       this.options.label = undefined;
     }
@@ -207,7 +213,7 @@ export class DockablePanel extends Panel {
       (this as any)._originalBorderColor = borderFg;
     }
 
-    if (this.useTitleBar) {
+    if (this.useTitleBar && !this.isStatic) {
       this.setupTitleBar(normalizedOptions);
     }
     this.setupDocking();
@@ -585,7 +591,7 @@ export class DockablePanel extends Panel {
    * Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
    */
   private setupDragging(): void {
-    if (this.fixed) return;
+    if (this.fixed || this.isStatic) return;
     this.on('mousedown', (data: any) => {
       // Don't start drag if clicking on a resize edge (handled by setupResizing)
       if (this.resizable) {
@@ -643,7 +649,7 @@ export class DockablePanel extends Panel {
     // Panel must be focused to receive key events
     this.on('keypress', (_ch: string, key: any) => {
       if (!key) return;
-      if (this.fixed) return;
+      if (this.fixed || this.isStatic) return;
 
       const ctrl = key.ctrl;
       const shift = key.shift;

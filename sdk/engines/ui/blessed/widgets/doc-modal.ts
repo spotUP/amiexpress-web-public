@@ -193,7 +193,9 @@ export class DocModal extends Box {
 
       // Restore focus
       if (this.screen) {
-        if ((this.screen as any).focusPop) {
+        if ((this.screen as any).releaseFocusTrap) {
+          (this.screen as any).releaseFocusTrap();
+        } else if ((this.screen as any).focusPop) {
           (this.screen as any).focusPop();
         }
         if ((this.screen as any).restoreFocus && this._savedFocus) {
@@ -353,7 +355,10 @@ export class DocModal extends Box {
       if ((this.screen as any).saveFocus) {
         this._savedFocus = (this.screen as any).saveFocus();
       }
-      if ((this.screen as any).focusPush) {
+      // Use trapFocus to constrain Tab/Shift+Tab cycling within the modal
+      if ((this.screen as any).trapFocus) {
+        (this.screen as any).trapFocus(this);
+      } else if ((this.screen as any).focusPush) {
         (this.screen as any).focusPush(this);
       }
       this._trapCleanup = trapModalInput(this);
