@@ -180,6 +180,21 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
         ...data.data
       }
     });
+
+    // Score and match result events also trigger Discord/Slack webhooks
+    if (data.eventType === 'score' || data.eventType === 'score_submitted' || data.eventType === 'match_result') {
+      try {
+        const { webhookService, WebhookTrigger } = require('./webhook.service');
+        webhookService.sendWebhook(WebhookTrigger.DOOR_SCORE, {
+          username: data.username,
+          door: data.doorName,
+          message: data.message,
+          ...data.data,
+        });
+      } catch (err) {
+        // Webhook service may not be available - don't crash
+      }
+    }
   }
 
   /**

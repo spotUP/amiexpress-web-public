@@ -23,7 +23,8 @@ export enum WebhookTrigger {
   VOTE_CAST = 'vote_cast',
   PRIVATE_MESSAGE = 'private_message',
   USER_KICKED = 'user_kicked',
-  MAIL_SCAN = 'mail_scan'
+  MAIL_SCAN = 'mail_scan',
+  DOOR_SCORE = 'door_score'
 }
 
 /**
@@ -269,6 +270,20 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
         description = `${data.username} performed a mail scan`;
         break;
 
+      case WebhookTrigger.DOOR_SCORE:
+        color = 0xffd700; // Gold
+        title = `🏆 ${data.door || 'Door'} Score`;
+        description = data.message || `${data.username} posted a score`;
+        fields = [];
+        if (data.score !== undefined) fields.push({ name: 'Score', value: String(data.score), inline: true });
+        if (data.grade) fields.push({ name: 'Grade', value: data.grade, inline: true });
+        if (data.level !== undefined) fields.push({ name: 'Level', value: String(data.level), inline: true });
+        if (data.lines !== undefined) fields.push({ name: 'Lines', value: String(data.lines), inline: true });
+        if (data.mode) fields.push({ name: 'Mode', value: data.mode, inline: true });
+        if (data.rank !== undefined) fields.push({ name: 'Rank', value: `#${data.rank}`, inline: true });
+        if (data.isPersonalBest) fields.push({ name: 'Personal Best', value: 'Yes!', inline: true });
+        break;
+
       default:
         color = 0x808080; // Gray
         title = '📢 BBS Event';
@@ -452,6 +467,19 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
         fields = [
           { title: 'User', value: data.username || 'Unknown', short: true }
         ];
+        break;
+
+      case WebhookTrigger.DOOR_SCORE:
+        emoji = ':trophy:';
+        title = `${data.door || 'Door'} Score`;
+        fields = [
+          { title: 'Player', value: data.username || 'Unknown', short: true },
+        ];
+        if (data.score !== undefined) fields.push({ title: 'Score', value: String(data.score), short: true });
+        if (data.grade) fields.push({ title: 'Grade', value: data.grade, short: true });
+        if (data.level !== undefined) fields.push({ title: 'Level', value: String(data.level), short: true });
+        if (data.mode) fields.push({ title: 'Mode', value: data.mode, short: true });
+        if (data.rank !== undefined) fields.push({ title: 'Rank', value: `#${data.rank}`, short: true });
         break;
 
       default:
