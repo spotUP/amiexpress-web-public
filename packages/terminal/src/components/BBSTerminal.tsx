@@ -663,6 +663,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[BBSTerminal] ResizeObserver attached');
     }
 
+    // Track pressed keys in normal mode for stuck-key detection
+    const normalPressedKeys = new Map<string, number>(); // code -> first press timestamp
+    const blockedKeys = new Set<string>(); // keys blocked until real keyup
+    const MAX_NORMAL_REPEAT_MS = 5000; // max ms before we assume key is stuck (normal mode only)
+
     // Custom key event handler - intercepts keys before xterm processes them
     // This is critical for game mode because xterm normally intercepts all keys
     // NOTE: We only BLOCK xterm here - actual key handling is done by window event listeners
@@ -673,6 +678,38 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // Block xterm from processing any keys in game mode
         return false;
       }
+
+      // Normal mode: detect stuck keys using repeat duration
+      const keyId = ev.code || ev.key;
+
+      if (ev.type === 'keydown') {
+        // If this key was blocked as stuck, suppress until real keyup
+        if (blockedKeys.has(keyId)) {
+          ev.preventDefault();
+          return false;
+        }
+
+        if (ev.repeat) {
+          // Check if this key has been repeating too long
+          const firstPress = normalPressedKeys.get(keyId);
+          if (firstPress && Date.now() - firstPress > MAX_NORMAL_REPEAT_MS) {
+            // Key has been "held" for too long - likely stuck
+            blockedKeys.add(keyId);
+            normalPressedKeys.delete(keyId);
+            ev.preventDefault();
+            return false;
+          }
+        } else {
+          // Fresh keydown - record timestamp, unblock if previously blocked
+          normalPressedKeys.set(keyId, Date.now());
+          blockedKeys.delete(keyId);
+        }
+      } else if (ev.type === 'keyup') {
+        // Key released - clear all tracking
+        normalPressedKeys.delete(keyId);
+        blockedKeys.delete(keyId);
+      }
+
       // Not in game mode - let xterm handle normally
       return true;
     });
@@ -896,6 +933,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     window.addEventListener('keydown', handleGameKeyDown);
     window.addEventListener('keyup', handleGameKeyUp);
+
+    // Clear all key state and repeat timers (used on blur/visibility loss)
+    const clearAllKeyState = () => {
+      // Game mode: send key-up for all held keys so backend knows they're released
+      if (gameMode.current) {
+        for (const key of Object.keys(keyState.current)) {
+          if (keyState.current[key] && socketRef.current?.connected) {
+            socketRef.current.emit('key-up', { key, code: '' });
+          }
+          stopKeyRepeat(key);
+        }
+        keyState.current = {};
+      }
+      // Normal mode: clear tracked keys to prevent stale repeat detection
+      normalPressedKeys.clear();
+    };
+
+    // Prevent stuck keys: clear state when window loses focus or tab becomes hidden
+    const handleWindowBlur = () => clearAllKeyState();
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearAllKeyState();
+    };
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Connect to BBS backend
     // In production, start with polling to wake up sleeping servers (Render free tier),
@@ -2043,6 +2104,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       keyRepeatTimers.current = {};
       window.removeEventListener('keydown', handleGameKeyDown);
       window.removeEventListener('keyup', handleGameKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       // Clean up wheel handler
       if (terminalRef.current) {
         const handler = (terminalRef.current as any)._wheelHandler;

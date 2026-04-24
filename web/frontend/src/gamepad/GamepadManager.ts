@@ -141,8 +141,8 @@ export class GamepadManager {
         const previousValue = previousState.axes[i];
 
         // Apply deadzone
-        const adjustedValue = Math.abs(value) < this.config.deadzone ? 0 : value;
-        const adjustedPrevious = Math.abs(previousValue) < this.config.deadzone ? 0 : previousValue;
+        const adjustedValue = Math.abs(value) < this.config.deadzone! ? 0 : value;
+        const adjustedPrevious = Math.abs(previousValue) < this.config.deadzone! ? 0 : previousValue;
 
         if (adjustedValue !== adjustedPrevious) {
           this.options.onEvent({
