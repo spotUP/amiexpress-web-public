@@ -67,17 +67,10 @@ import blessed, {
   Image,
   Video,
   DockablePanel,
-  Panel
+  Panel,
+  AutocompleteTextbox,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { BrailleVUMeter } from '@amiexpress/bbs-door-sdk/engines/graphics/braille-graphics';
-import {
-  AutocompleteManager,
-  AutocompleteDialog,
-  UsernameProvider,
-  BBSCodeProvider,
-  WordProvider,
-  type AutocompleteContext,
-} from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
 import {
   createScreen,
   DoorInputManager
@@ -2327,152 +2320,98 @@ End of sample markdown.`;
   function showAutocompleteDemo() {
     clearDemo();
     currentDemo = 'autocomplete';
-    demoBox.setLabel(' Autocomplete Demo - Ctrl+Space ');
+    demoBox.setLabel(' Autocomplete Demo — Type to trigger suggestions ');
 
-    // Create input area
-    const inputBox = blessed.box({
-      parent: demoBox,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 15,
-      border: { type: 'line' },
-      label: ' Type here (Ctrl+Space for suggestions) ',
-      style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'cyan' },
-      },
-    });
+    // Three separate AutocompleteTextbox widgets, each showing a different provider.
+    // AutocompleteTextbox handles triggering, popup positioning, and selection internally.
+    // No Ctrl+Space needed — suggestions appear automatically as you type.
 
-    const textarea = blessed.textarea({
-      parent: inputBox,
-      top: 0,
-      left: 0,
-      width: '100%-2',
-      height: '100%-2',
-      keys: true,
-      mouse: true,
-      inputOnFocus: true,
-      style: {
-        fg: 'white',
-        bg: 'black',
-      },
-      value: 'Try typing:\n@spot - for username completion\n[bold] - for BBSCode tags\nHello world - for word completion\n\nPress Ctrl+Space to show autocomplete!',
-    });
-
-    // Create autocomplete manager with all providers
-    const usernames = ['spot', 'admin', 'sysop', 'guest', 'testuser'];
-    const usernameProvider = new UsernameProvider(usernames);
-    const bbscodeProvider = new BBSCodeProvider();
-    const wordProvider = new WordProvider();
-
-    const autocompleteManager = new AutocompleteManager([
-      usernameProvider,
-      bbscodeProvider,
-      wordProvider,
-    ]);
-
-    // Create autocomplete dialog
-    const autocompleteDialog = new AutocompleteDialog({
-      parent: screen,
-      cursorRow: 5,
-      cursorCol: 10,
-      onSelect: (suggestion: { insertText?: string }) => {
-        // Get current value and insert suggestion
-        const currentValue = textarea.getValue();
-        const lines = currentValue.split('\n');
-        const cursorPos = (textarea as any).cursor;
-
-        if (cursorPos && suggestion.insertText) {
-          const line = lines[cursorPos.line] || '';
-          const newLine =
-            line.substring(0, cursorPos.col) +
-            suggestion.insertText +
-            line.substring(cursorPos.col);
-          lines[cursorPos.line] = newLine;
-          textarea.setValue(lines.join('\n'));
-
-          // Move cursor after insertion
-          (textarea as any).cursor.col += suggestion.insertText.length;
-        }
-
-        textarea.focus();
-        screen.render();
-      },
-      onCancel: () => {
-        textarea.focus();
-        screen.render();
-      },
-    });
-
-    // Handle Ctrl+Space for autocomplete
-    textarea.key(['C-space'], () => {
-      const currentValue = textarea.getValue();
-      const lines = currentValue.split('\n');
-      const cursorPos = (textarea as any).cursor || { line: 0, col: 0 };
-
-      const context: AutocompleteContext = {
-        currentLine: lines[cursorPos.line] || '',
-        cursorPosition: cursorPos.col || 0,
-        documentContent: lines,
-        lineNumber: cursorPos.line || 0,
-      };
-
-      if (!autocompleteManager.shouldTrigger(context)) {
-        setStatus('No autocomplete suggestions for current context');
-        return;
-      }
-
-      autocompleteManager.getSuggestions(context).then(suggestions => {
-        if (suggestions.length === 0) {
-          setStatus('No autocomplete suggestions found');
-          return;
-        }
-
-        // Update dialog position
-        const boxTop = inputBox.top as number;
-        const boxLeft = inputBox.left as number;
-        (autocompleteDialog as any).box.top = boxTop + 1 + (cursorPos.line || 0);
-        (autocompleteDialog as any).box.left = boxLeft + 1 + (cursorPos.col || 0);
-
-        autocompleteDialog.showSuggestions(suggestions);
-        setStatus(`Showing ${suggestions.length} autocomplete suggestions`);
-      });
-    });
-
-    // Info panel
+    // --- 1. Username completion (@name) ---
     blessed.box({
+      parent: demoBox, top: 0, left: 0, right: 0, height: 1, tags: true,
+      content: '{cyan-fg}Username completion{/} — type {bold}@{/} then letters (e.g. @sp, @ad)',
+    });
+    const usernameInput = new AutocompleteTextbox({
       parent: demoBox,
-      top: 15,
-      left: 0,
-      width: '100%',
-      height: 10,
+      top: 1, left: 0, right: 0, height: 3,
       border: { type: 'line' },
-      label: ' Features ',
-      tags: true,
-      style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'yellow' },
+      label: ' @mention ',
+      style: { fg: 'white', border: { fg: 'cyan' } },
+      value: '@',
+      getSuggestions: async (text: string) => {
+        const m = text.match(/@(\w*)$/);
+        if (!m) return [];
+        const q = m[1].toLowerCase();
+        return ['spot', 'admin', 'sysop', 'guest', 'testuser']
+          .filter(u => u.startsWith(q))
+          .map(u => '@' + u);
       },
-      content: [
-        '{cyan-fg}Autocomplete Features:{/}',
-        '',
-        '{green-fg}Username Provider:{/} Type @ followed by name',
-        '  {gray-fg}Suggests: @spot, @admin, @sysop, @guest, @testuser{/}',
-        '',
-        '{green-fg}BBSCode Provider:{/} Type [ followed by tag name',
-        '  {gray-fg}Suggests: [bold], [color], [url], [quote], etc.{/}',
-        '',
-        '{green-fg}Word Provider:{/} Type 3+ letter word',
-        '  {gray-fg}Suggests words from document{/}',
-      ].join('\n'),
+      minLength: 1,
+    });
+    usernameInput.on('select', (val: string) => {
+      setStatus(`Username selected: ${val}`);
+      addResult('Autocomplete @mention', 'pass', val);
+      screen.render();
     });
 
-    textarea.focus();
-    setStatus('Type text and press Ctrl+Space for autocomplete suggestions');
-    addResult('Autocomplete', 'pass', 'All providers working');
+    // --- 2. BBSCode tag completion ([tag) ---
+    blessed.box({
+      parent: demoBox, top: 5, left: 0, right: 0, height: 1, tags: true,
+      content: '{yellow-fg}BBSCode completion{/} — type {bold}[{/} then letters (e.g. [bo, [co)',
+    });
+    const bbsInput = new AutocompleteTextbox({
+      parent: demoBox,
+      top: 6, left: 0, right: 0, height: 3,
+      border: { type: 'line' },
+      label: ' [BBSCode] ',
+      style: { fg: 'white', border: { fg: 'yellow' } },
+      value: '[',
+      suggestions: ['[bold]', '[italic]', '[underline]', '[color=red]', '[center]',
+                    '[quote]', '[code]', '[url]', '[img]', '[size=12]'],
+      minLength: 1,
+    });
+    bbsInput.on('select', (val: string) => {
+      setStatus(`BBSCode selected: ${val}`);
+      addResult('Autocomplete BBSCode', 'pass', val);
+      screen.render();
+    });
+
+    // --- 3. Word completion (dictionary) ---
+    blessed.box({
+      parent: demoBox, top: 10, left: 0, right: 0, height: 1, tags: true,
+      content: '{green-fg}Word completion{/} — type 3+ letters from the word list below',
+    });
+    const WORDS = ['amiga', 'assembly', 'awesome', 'blessed', 'bulletin',
+                   'commodore', 'cursor', 'debug', 'demo', 'door',
+                   'emulation', 'express', 'keyboard', 'mouse', 'screen',
+                   'scroll', 'sysop', 'terminal', 'typescript', 'widget'];
+    const wordInput = new AutocompleteTextbox({
+      parent: demoBox,
+      top: 11, left: 0, right: 0, height: 3,
+      border: { type: 'line' },
+      label: ' Words ',
+      style: { fg: 'white', border: { fg: 'green' } },
+      suggestions: WORDS,
+      minLength: 3,
+      matchAnywhere: false,
+    });
+    wordInput.on('select', (val: string) => {
+      setStatus(`Word selected: ${val}`);
+      addResult('Autocomplete words', 'pass', val);
+      screen.render();
+    });
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
+      tags: true,
+      content: '{yellow-fg}AutocompleteTextbox:{/}\n' +
+        'Suggestions appear as you type — arrow keys to navigate, Enter to select, Esc to dismiss.\n' +
+        `Words: ${WORDS.join(', ')}`,
+    });
+
+    usernameInput.focus();
+    setStatus('Type to trigger suggestions. Tab between fields.');
+    addResult('Autocomplete', 'pass', 'AutocompleteTextbox working');
     screen.render();
   }
 

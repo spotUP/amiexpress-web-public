@@ -55,6 +55,10 @@ export class Viewport extends Box {
       ...boxOptions,
       scrollable: true,
       alwaysScroll: alwaysScroll !== false,
+      // Viewport is always focusable so viewport.focus() works and key handlers fire.
+      // The Element base defaults focusable to false; override unless caller explicitly
+      // sets focusable: false.
+      focusable: boxOptions.focusable !== false,
       // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
       scrollbar: options.scrollbar !== undefined ? options.scrollbar : {
         ch: ' ',
