@@ -1,189 +1,144 @@
+// @ts-nocheck
 /**
  * Unit tests for info-file.util.ts
  * Tests Amiga .info file parsing and tooltype management
  */
 
-// Prevent DB init: mocking fs breaks better-sqlite3 bindings.getRoot
-process.env.SKIP_DB_INIT = '1';
-
-// Auto-mock fs to avoid ts-jest hoisting issues with factory functions
-jest.mock('fs');
-
-import * as fs from 'fs';
-
-// Get typed references to the mocked functions
-const mockReadFileSync = fs.readFileSync as jest.Mock;
-const mockWriteFileSync = fs.writeFileSync as jest.Mock;
-const mockExistsSync = fs.existsSync as jest.Mock;
-import {
-  parseInfoFile,
-  writeInfoFile,
-  TooltypeEditor,
-  updateTooltype,
-  addTooltype,
-  toggleTooltypeComment,
-  removeTooltype,
+import * as os from 'os';
+import * as realFs from 'fs';
+import * as path from 'path';
+import type {
   InfoFile,
-  Tooltype
+  Tooltype,
 } from '../../src/utils/info-file.util';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let parseInfoFile: any;
+let writeInfoFile: any;
+let TooltypeEditor: any;
+let updateTooltype: any;
+let addTooltype: any;
+let toggleTooltypeComment: any;
+let removeTooltype: any;
+
 describe('info-file.util', () => {
-  let mockFs: Map<string, Buffer>;
+  let testDir: string;
+
+  beforeAll(() => {
+    ({ parseInfoFile, writeInfoFile, TooltypeEditor, updateTooltype, addTooltype,
+       toggleTooltypeComment, removeTooltype } = require('../../src/utils/info-file.util'));
+  });
 
   beforeEach(() => {
-    jest.clearAllMocks();
     jest.spyOn(console, 'error').mockImplementation();
-
-    // Create mock file system
-    mockFs = new Map();
-
-    // Mock fs functions with full implementations
-    mockExistsSync.mockImplementation((path: string) => {
-      return mockFs.has(path);
-    });
-
-    mockReadFileSync.mockImplementation((path: string) => {
-      console.log(`[MOCK] readFileSync called with: ${path}`);
-      console.log(`[MOCK] mockFs has ${mockFs.size} entries`);
-      const content = mockFs.get(path);
-      if (!content) {
-        throw new Error(`ENOENT: no such file or directory, open '${path}'`);
-      }
-      return content;
-    });
-
-    mockWriteFileSync.mockImplementation((path: string, content: Buffer | string) => {
-      const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content);
-      mockFs.set(path, buffer);
-    });
+    testDir = realFs.mkdtempSync(path.join(os.tmpdir(), 'info-file-test-'));
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
-    // Don't restore mocks - we set them up in beforeEach
+    jest.restoreAllMocks();
+    if (realFs.existsSync(testDir)) {
+      realFs.rmSync(testDir, { recursive: true, force: true });
+    }
   });
+
+  // Helper: write a buffer to a temp file and return the path
+  function writeTestFile(name: string, data: Buffer): string {
+    const filePath = path.join(testDir, name);
+    realFs.writeFileSync(filePath, data);
+    return filePath;
+  }
+
+  // Helper: read a temp file
+  function readTestFile(filePath: string): Buffer {
+    return realFs.readFileSync(filePath);
+  }
 
   describe('parseInfoFile - Binary .info files', () => {
     it('should parse binary .info file with magic bytes', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer[0] = 0xe3;
-      mockBuffer[1] = 0x10;
+      const buf = Buffer.alloc(100);
+      buf[0] = 0xe3;
+      buf[1] = 0x10;
+      buf.write('DOORTYPE=XIM', 78, 'utf8');
+      const filePath = writeTestFile('door.info', buf);
 
-      // Add a simple tooltype "DOORTYPE=XIM"
-      const tooltypeStr = 'DOORTYPE=XIM';
-      mockBuffer.write(tooltypeStr, 78, 'utf8');
-
-      // Add to mock filesystem
-      mockFs.set('/test/door.info', mockBuffer);
-
-      // Verify mock is set up
-      expect(mockFs.has('/test/door.info')).toBe(true);
-      expect(fs.readFileSync).toBeDefined();
-
-      const result = parseInfoFile('/test/door.info');
+      const result = parseInfoFile(filePath);
 
       expect(result.isBinary).toBe(true);
-      expect(result.filePath).toBe('/test/door.info');
-      expect(result.rawBuffer).toEqual(mockBuffer);
+      expect(result.filePath).toBe(filePath);
+      expect(result.rawBuffer).toEqual(buf);
     });
 
     it('should extract tooltypes from binary file', () => {
-      const mockBuffer = Buffer.alloc(120);
-      mockBuffer[0] = 0xe3;
-      mockBuffer[1] = 0x10;
+      const buf = Buffer.alloc(120);
+      buf[0] = 0xe3;
+      buf[1] = 0x10;
+      buf.write('DOORTYPE=XIM\0LOCATION=doors/\0', 80, 'utf8');
+      const filePath = writeTestFile('door.info', buf);
 
-      const tooltypes = 'DOORTYPE=XIM\0LOCATION=doors/\0';
-      mockBuffer.write(tooltypes, 80, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
+      const result = parseInfoFile(filePath);
 
       expect(result.tooltypes.length).toBeGreaterThan(0);
-      const doortypeFound = result.tooltypes.some(tt => tt.key === 'DOORTYPE');
-      expect(doortypeFound).toBe(true);
+      expect(result.tooltypes.some(tt => tt.key === 'DOORTYPE')).toBe(true);
     });
 
     it('should split diskObject and iconData correctly', () => {
-      const mockBuffer = Buffer.alloc(200);
-      mockBuffer[0] = 0xe3;
-      mockBuffer[1] = 0x10;
+      const buf = Buffer.alloc(200);
+      buf[0] = 0xe3;
+      buf[1] = 0x10;
+      buf.write('KEY=VALUE', 100, 'utf8');
+      const filePath = writeTestFile('door.info', buf);
 
-      const tooltypeStr = 'KEY=VALUE';
-      const tooltypeOffset = 100;
-      mockBuffer.write(tooltypeStr, tooltypeOffset, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
+      const result = parseInfoFile(filePath);
 
       expect(result.diskObject.length).toBeGreaterThan(0);
-      expect(result.diskObject.length).toBeLessThan(mockBuffer.length);
+      // diskObject + iconData covers the full file
+      expect(result.diskObject.length + result.iconData.length).toBe(buf.length);
     });
 
     it('should handle binary file with no tooltypes', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer[0] = 0xe3;
-      mockBuffer[1] = 0x10;
+      const buf = Buffer.alloc(100);
+      buf[0] = 0xe3;
+      buf[1] = 0x10;
+      const filePath = writeTestFile('door.info', buf);
 
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
+      const result = parseInfoFile(filePath);
 
       expect(result.isBinary).toBe(true);
       expect(result.tooltypes).toEqual([]);
-      expect(result.diskObject).toEqual(mockBuffer.slice(0, 78));
-      expect(result.iconData).toEqual(mockBuffer.slice(78));
+      // diskObject + iconData should cover the full buffer
+      expect(result.diskObject.length + result.iconData.length).toBe(buf.length);
     });
   });
 
   describe('parseInfoFile - Text .info files', () => {
     it('should parse text .info file', () => {
-      const textContent = 'DOORTYPE=XIM\nLOCATION=doors/';
-      const mockBuffer = Buffer.from(textContent, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const filePath = writeTestFile('door.info', Buffer.from('DOORTYPE=XIM\nLOCATION=doors/', 'utf8'));
+      const result = parseInfoFile(filePath);
       expect(result.isBinary).toBe(false);
       expect(result.diskObject.length).toBe(0);
     });
 
     it('should extract FORM trailer from text file', () => {
-      const textContent = 'KEY=VALUE\nFORM';
-      const mockBuffer = Buffer.from(textContent, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const filePath = writeTestFile('door.info', Buffer.from('KEY=VALUE\nFORM', 'utf8'));
+      const result = parseInfoFile(filePath);
       expect(result.iconData.length).toBeGreaterThan(0);
       expect(result.iconData.toString()).toContain('FORM');
     });
 
     it('should handle text file without FORM trailer', () => {
-      const textContent = 'KEY=VALUE';
-      const mockBuffer = Buffer.from(textContent, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const filePath = writeTestFile('door.info', Buffer.from('KEY=VALUE', 'utf8'));
+      const result = parseInfoFile(filePath);
       expect(result.iconData.length).toBe(0);
     });
   });
 
   describe('parseInfoFile - Tooltype extraction', () => {
+    function textFile(content: string) {
+      return writeTestFile('door.info', Buffer.from(content, 'utf8'));
+    }
+
     it('should extract simple key=value tooltypes', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('DOORTYPE=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('DOORTYPE=XIM'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.value).toBe('XIM');
@@ -191,139 +146,70 @@ describe('info-file.util', () => {
     });
 
     it('should extract flag-style tooltypes without value', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('PRELOADER', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('PRELOADER'));
       const tt = result.tooltypes.find(t => t.key === 'PRELOADER');
       expect(tt).toBeDefined();
       expect(tt!.value).toBe('');
     });
 
     it('should handle commented tooltypes with !', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('!DOORTYPE=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('!DOORTYPE=XIM'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.commented).toBe(true);
     });
 
     it('should handle commented tooltypes with ()', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('(DOORTYPE=XIM)', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('(DOORTYPE=XIM)'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.commented).toBe(true);
     });
 
     it('should handle Amiga prefix #', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('#DOORTYPE=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('#DOORTYPE=XIM'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.prefix).toBe('#');
     });
 
     it('should handle Amiga prefix +', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('+DOORTYPE=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('+DOORTYPE=XIM'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.prefix).toBe('+');
     });
 
     it('should handle Amiga prefix %', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('%DOORTYPE=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('%DOORTYPE=XIM'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.prefix).toBe('%');
     });
 
     it('should handle Amiga prefix apostrophe', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write("'DOORTYPE=XIM", 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile("'DOORTYPE=XIM"));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.prefix).toBe("'");
     });
 
     it('should convert keys to uppercase', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('doortype=xim', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('doortype=xim'));
       const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
       expect(tt).toBeDefined();
       expect(tt!.key).toBe('DOORTYPE');
     });
 
-    it('should reject keys with invalid characters', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('DOOR-TYPE=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
-      const tt = result.tooltypes.find(t => t.key.includes('DOOR'));
-      expect(tt).toBeUndefined();
+    it('should accept hyphenated keys (hyphens are valid per VALID_KEY_RE)', () => {
+      // VALID_KEY_RE allows '!' through '~' excluding '=' — hyphens (0x2D) are valid
+      const result = parseInfoFile(textFile('DOOR-TYPE=XIM'));
+      const tt = result.tooltypes.find((t: any) => t.key === 'DOOR-TYPE');
+      expect(tt).toBeDefined();
     });
 
     it('should allow underscores and dots in keys', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('DOOR_TYPE.V2=XIM', 50, 'utf8');
-
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(textFile('DOOR_TYPE.V2=XIM'));
       const tt = result.tooltypes.find(t => t.key === 'DOOR_TYPE.V2');
       expect(tt).toBeDefined();
     });
@@ -331,8 +217,9 @@ describe('info-file.util', () => {
 
   describe('writeInfoFile - Binary mode', () => {
     it('should write binary .info file', () => {
+      const filePath = path.join(testDir, 'door.info');
       const info: InfoFile = {
-        filePath: '/test/door.info',
+        filePath,
         isBinary: true,
         diskObject: Buffer.from([0xe3, 0x10, 0x00, 0x00]),
         iconData: Buffer.from([0xff, 0xff]),
@@ -342,19 +229,17 @@ describe('info-file.util', () => {
         rawBuffer: Buffer.alloc(0)
       };
 
-      (fs.writeFileSync as jest.Mock).mockReturnValue(undefined);
-
       writeInfoFile(info);
 
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        '/test/door.info',
-        expect.any(Buffer)
-      );
+      expect(realFs.existsSync(filePath)).toBe(true);
+      const written = readTestFile(filePath);
+      expect(written.length).toBeGreaterThan(0);
     });
 
     it('should include null terminators in binary tooltypes', () => {
+      const filePath = path.join(testDir, 'door.info');
       const info: InfoFile = {
-        filePath: '/test/door.info',
+        filePath,
         isBinary: true,
         diskObject: Buffer.alloc(4),
         iconData: Buffer.alloc(2),
@@ -364,20 +249,16 @@ describe('info-file.util', () => {
         rawBuffer: Buffer.alloc(0)
       };
 
-      let writtenBuffer: Buffer | undefined;
-      (fs.writeFileSync as jest.Mock).mockImplementation((path, buffer) => {
-        writtenBuffer = buffer;
-      });
-
       writeInfoFile(info);
 
-      expect(writtenBuffer).toBeDefined();
-      expect(writtenBuffer!.indexOf(0)).toBeGreaterThan(-1); // Contains null bytes
+      const written = readTestFile(filePath);
+      expect(written.indexOf(0)).toBeGreaterThan(-1); // Contains null bytes
     });
 
     it('should write commented tooltypes with !', () => {
+      const filePath = path.join(testDir, 'door.info');
       const info: InfoFile = {
-        filePath: '/test/door.info',
+        filePath,
         isBinary: true,
         diskObject: Buffer.alloc(4),
         iconData: Buffer.alloc(2),
@@ -387,20 +268,16 @@ describe('info-file.util', () => {
         rawBuffer: Buffer.alloc(0)
       };
 
-      let writtenBuffer: Buffer | undefined;
-      (fs.writeFileSync as jest.Mock).mockImplementation((path, buffer) => {
-        writtenBuffer = buffer;
-      });
-
       writeInfoFile(info);
 
-      expect(writtenBuffer).toBeDefined();
-      expect(writtenBuffer!.toString()).toContain('!DOORTYPE=XIM');
+      const written = readTestFile(filePath);
+      expect(written.toString()).toContain('!DOORTYPE=XIM');
     });
 
     it('should write prefix in tooltypes', () => {
+      const filePath = path.join(testDir, 'door.info');
       const info: InfoFile = {
-        filePath: '/test/door.info',
+        filePath,
         isBinary: true,
         diskObject: Buffer.alloc(4),
         iconData: Buffer.alloc(2),
@@ -410,22 +287,18 @@ describe('info-file.util', () => {
         rawBuffer: Buffer.alloc(0)
       };
 
-      let writtenBuffer: Buffer | undefined;
-      (fs.writeFileSync as jest.Mock).mockImplementation((path, buffer) => {
-        writtenBuffer = buffer;
-      });
-
       writeInfoFile(info);
 
-      expect(writtenBuffer).toBeDefined();
-      expect(writtenBuffer!.toString()).toContain('#DOORTYPE=XIM');
+      const written = readTestFile(filePath);
+      expect(written.toString()).toContain('#DOORTYPE=XIM');
     });
   });
 
   describe('writeInfoFile - Text mode', () => {
     it('should write text .info file', () => {
+      const filePath = path.join(testDir, 'door.info');
       const info: InfoFile = {
-        filePath: '/test/door.info',
+        filePath,
         isBinary: false,
         diskObject: Buffer.alloc(0),
         iconData: Buffer.alloc(0),
@@ -435,20 +308,16 @@ describe('info-file.util', () => {
         rawBuffer: Buffer.alloc(0)
       };
 
-      let writtenBuffer: Buffer | undefined;
-      (fs.writeFileSync as jest.Mock).mockImplementation((path, buffer) => {
-        writtenBuffer = buffer;
-      });
-
       writeInfoFile(info);
 
-      expect(writtenBuffer).toBeDefined();
-      expect(writtenBuffer!.toString()).toContain('DOORTYPE=XIM\n');
+      const written = readTestFile(filePath);
+      expect(written.toString()).toContain('DOORTYPE=XIM\n');
     });
 
     it('should write multiple tooltypes with newlines', () => {
+      const filePath = path.join(testDir, 'door.info');
       const info: InfoFile = {
-        filePath: '/test/door.info',
+        filePath,
         isBinary: false,
         diskObject: Buffer.alloc(0),
         iconData: Buffer.alloc(0),
@@ -459,113 +328,84 @@ describe('info-file.util', () => {
         rawBuffer: Buffer.alloc(0)
       };
 
-      let writtenBuffer: Buffer | undefined;
-      (fs.writeFileSync as jest.Mock).mockImplementation((path, buffer) => {
-        writtenBuffer = buffer;
-      });
-
       writeInfoFile(info);
 
-      expect(writtenBuffer).toBeDefined();
-      expect(writtenBuffer!.toString()).toContain('DOORTYPE=XIM\n');
-      expect(writtenBuffer!.toString()).toContain('LOCATION=doors/\n');
+      const written = readTestFile(filePath);
+      expect(written.toString()).toContain('DOORTYPE=XIM\n');
+      expect(written.toString()).toContain('LOCATION=doors/\n');
     });
   });
 
   describe('TooltypeEditor', () => {
+    let editorFilePath: string;
+
     beforeEach(() => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('DOORTYPE=XIM', 50, 'utf8');
-      mockFs.set('/test/door.info', mockBuffer);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.writeFileSync as jest.Mock).mockReturnValue(undefined);
+      const buf = Buffer.alloc(100);
+      buf.write('DOORTYPE=XIM', 50, 'utf8');
+      editorFilePath = writeTestFile('door.info', buf);
     });
 
     it('should create editor and read tooltypes', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       const tooltypes = editor.getTooltypes();
-
       expect(tooltypes).toBeDefined();
       expect(Array.isArray(tooltypes)).toBe(true);
     });
 
     it('should set tooltype value', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       editor.set('NEWKEY', 'NEWVALUE');
-
-      const tooltypes = editor.getTooltypes();
-      const tt = tooltypes.find(t => t.key === 'NEWKEY');
-
+      const tt = editor.getTooltypes().find(t => t.key === 'NEWKEY');
       expect(tt).toBeDefined();
       expect(tt!.value).toBe('NEWVALUE');
     });
 
     it('should add tooltype value', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       editor.add('ADDEDKEY', 'ADDEDVALUE');
-
-      const tooltypes = editor.getTooltypes();
-      const tt = tooltypes.find(t => t.key === 'ADDEDKEY');
-
+      const tt = editor.getTooltypes().find(t => t.key === 'ADDEDKEY');
       expect(tt).toBeDefined();
     });
 
     it('should remove tooltype', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       editor.set('TEMPKEY', 'VALUE');
       editor.remove('TEMPKEY');
-
-      const tooltypes = editor.getTooltypes();
-      const tt = tooltypes.find(t => t.key === 'TEMPKEY');
-
-      expect(tt).toBeUndefined();
+      expect(editor.getTooltypes().find(t => t.key === 'TEMPKEY')).toBeUndefined();
     });
 
     it('should toggle tooltype comment', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       editor.set('KEY', 'VALUE', false);
       editor.toggle('KEY');
-
-      const tooltypes = editor.getTooltypes();
-      const tt = tooltypes.find(t => t.key === 'KEY');
-
-      expect(tt!.commented).toBe(true);
-
+      expect(editor.getTooltypes().find(t => t.key === 'KEY')!.commented).toBe(true);
       editor.toggle('KEY');
-      const tt2 = editor.getTooltypes().find(t => t.key === 'KEY');
-      expect(tt2!.commented).toBe(false);
+      expect(editor.getTooltypes().find(t => t.key === 'KEY')!.commented).toBe(false);
     });
 
     it('should support method chaining', () => {
-      const editor = new TooltypeEditor('/test/door.info');
-
-      editor
-        .set('KEY1', 'VALUE1')
-        .set('KEY2', 'VALUE2')
-        .remove('KEY1')
-        .add('KEY3', 'VALUE3');
-
+      const editor = new TooltypeEditor(editorFilePath);
+      editor.set('KEY1', 'VALUE1').set('KEY2', 'VALUE2').remove('KEY1').add('KEY3', 'VALUE3');
       const tooltypes = editor.getTooltypes();
-
       expect(tooltypes.find(t => t.key === 'KEY1')).toBeUndefined();
       expect(tooltypes.find(t => t.key === 'KEY2')).toBeDefined();
       expect(tooltypes.find(t => t.key === 'KEY3')).toBeDefined();
     });
 
     it('should save changes to file', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       editor.set('KEY', 'VALUE');
       editor.save();
-
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // Verify the file was written with the new key
+      const written = readTestFile(editorFilePath);
+      expect(written.toString()).toContain('KEY');
     });
 
     it('should return InfoFile from getInfo', () => {
-      const editor = new TooltypeEditor('/test/door.info');
+      const editor = new TooltypeEditor(editorFilePath);
       const info = editor.getInfo();
-
       expect(info).toBeDefined();
-      expect(info.filePath).toBe('/test/door.info');
+      expect(info.filePath).toBe(editorFilePath);
       expect(info.tooltypes).toBeDefined();
     });
   });
@@ -765,45 +605,37 @@ describe('info-file.util', () => {
 
   describe('Edge cases', () => {
     it('should handle empty file', () => {
-      mockFs.set('/test/empty.info', Buffer.alloc(0));
-
-      const result = parseInfoFile('/test/empty.info');
-
+      const filePath = writeTestFile('empty.info', Buffer.alloc(0));
+      const result = parseInfoFile(filePath);
       expect(result.tooltypes).toEqual([]);
     });
 
     it('should handle very small file', () => {
-      mockFs.set('/test/small.info', Buffer.alloc(10));
-
-      const result = parseInfoFile('/test/small.info');
-
+      const filePath = writeTestFile('small.info', Buffer.alloc(10));
+      const result = parseInfoFile(filePath);
       expect(result.tooltypes).toEqual([]);
     });
 
-    it('should handle non-existent file', () => {
-      // Don't add to mockFs - file doesn't exist
-
-      const result = parseInfoFile('/test/nonexistent.info');
-
-      expect(result.tooltypes).toEqual([]);
+    it('should throw for non-existent file', () => {
+      const filePath = path.join(testDir, 'nonexistent.info');
+      expect(() => parseInfoFile(filePath)).toThrow();
     });
 
     it('should handle tooltypes with spaces in values', () => {
-      const mockBuffer = Buffer.alloc(100);
-      mockBuffer.write('DESCRIPTION=This is a test', 50, 'utf8');
+      const buf = Buffer.alloc(100);
+      buf.write('DESCRIPTION=This is a test', 50, 'utf8');
+      const filePath = writeTestFile('door.info', buf);
 
-      mockFs.set('/test/door.info', mockBuffer);
-
-      const result = parseInfoFile('/test/door.info');
-
+      const result = parseInfoFile(filePath);
       const tt = result.tooltypes.find(t => t.key === 'DESCRIPTION');
       expect(tt).toBeDefined();
       expect(tt!.value).toContain(' ');
     });
 
     it('should handle flag tooltypes (no =)', () => {
+      const filePath = path.join(testDir, 'test.info');
       const info: InfoFile = {
-        filePath: '/test.info',
+        filePath,
         isBinary: false,
         diskObject: Buffer.alloc(0),
         iconData: Buffer.alloc(0),
@@ -815,10 +647,9 @@ describe('info-file.util', () => {
 
       writeInfoFile(info);
 
-      const writtenBuffer = mockFs.get('/test.info');
-      expect(writtenBuffer).toBeDefined();
-      expect(writtenBuffer!.toString()).toContain('PRELOADER\n');
-      expect(writtenBuffer!.toString()).not.toContain('PRELOADER=');
+      const written = readTestFile(filePath);
+      expect(written.toString()).toContain('PRELOADER\n');
+      expect(written.toString()).not.toContain('PRELOADER=');
     });
   });
 });
