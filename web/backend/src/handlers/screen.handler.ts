@@ -3110,9 +3110,10 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
 
   // Install a minimal pagination gate so the next keypress is required before
   // the display flow continues (matches express.e pause semantics).
+  // '\r\x1b[K' = CR + erase-to-EOL: visually clears the pause prompt when Space is pressed.
   session.paginatedScreen = {
-    lines: [''],
-    nextIndex: 1,
+    lines: ['\r\x1b[K'],
+    nextIndex: 0,
     pageSize: 1,
     eventName: 'ansi-output',
     commands: [],
