@@ -2749,7 +2749,7 @@ async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, 
 
   // Query database for unchecked files (checked = 'N')
   const result = await db.query(
-    "SELECT filename, size, uploader FROM file_entries WHERE checked = 'N' ORDER BY upload_date DESC LIMIT 10"
+    "SELECT filename, size, uploader FROM file_entries WHERE checked = 'N' ORDER BY uploaddate DESC LIMIT 10"
   );
 
   const uncheckedFiles = result.rows;
