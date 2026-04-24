@@ -106,6 +106,24 @@ console.log('[Session Restore] User not found:', sessionData.userId);
       // Check if there's an existing session for this user
       const existingSession = userSessions.get(String(user.id));
       if (existingSession) {
+        // CRITICAL: only adopt the existing session if its old socket is gone.
+        // If the old socket is still connected (a concurrent browser tab,
+        // not a reload/reconnect), adopting it would rebind session.socketId
+        // to this new socket and route all output here — the old tab would
+        // receive the new tab's output and vice versa (cross-tab leak,
+        // 2026-04-24). Refuse restore in that case; the new tab falls
+        // through to a normal fresh login.
+        const oldSocketId = existingSession.socketId;
+        const oldSocketAlive = Boolean(
+          oldSocketId &&
+          oldSocketId !== socket.id &&
+          (socket.nsp as any).sockets?.has?.(oldSocketId)
+        );
+        if (oldSocketAlive) {
+console.log(`[Session Restore] Old socket ${oldSocketId} still alive — refusing restore, forcing fresh login on a new node`);
+          socket.emit('session-restore-failed', 'Another tab or client is already signed in as this user.');
+          return;
+        }
 console.log('[Session Restore] Found existing session for user, rebinding to new socket');
 
         // Update socket mappings

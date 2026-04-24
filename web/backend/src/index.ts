@@ -1359,9 +1359,13 @@ console.error("Failed to assign node to session:", error);
   const { loadBBSConfig } = await import("./services/bbs-config-file.service");
   const diskConfig = loadBBSConfig(bbsConfig.dataDir);
 
-  // Get version from package.json
+  // Emulated AmiExpress version we report (matches xim/bbs-info.ts fallback
+  // used for EXPRESS_VERSION responses to doors). Keep in sync if you change
+  // the mimic'd version.
+  const amiExpressVersion = "v5.6";
+  // Web-port version, shown on the "Web port" credit line below.
   const packageJson = require("../package.json");
-  const bbsVersion = packageJson.version || "1.0.0-web";
+  const webPortVersion = packageJson.version || "1.0.0";
 
   const connectionTime = getSystemTime();
   const dateStr = connectionTime.toLocaleString("en-US", {
@@ -1416,9 +1420,9 @@ console.log(
   const currentYear = getSystemTime().getFullYear();
   socket.emit(
     "ansi-output",
-    `\r\n\r\nRunning AmiExpress ${bbsVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`
+    `\r\n\r\nRunning AmiExpress ${amiExpressVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`
   );
-  socket.emit("ansi-output", `Web port by Spot/Up Rough\r\n`);
+  socket.emit("ansi-output", `Web port ${webPortVersion} by Spot/Up Rough\r\n`);
 
   // express.e:29516-29517 - Registration and node info
   // Use reg_key from disk config (bbsConfig.info REG_KEY tooltype)

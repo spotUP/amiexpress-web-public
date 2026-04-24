@@ -2068,7 +2068,7 @@ export function addAnsiEscapes(content: string): string {
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
-export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true): Promise<boolean> {
+export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
   screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
@@ -2723,20 +2723,22 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
   } else {
     // Screen not found - return false silently (matches express.e behavior)
     // Caller decides whether to show error or skip
+    if (!silent) {
 console.error(`[displayScreen] ========================================`);
 console.error(`[displayScreen]  SCREEN FILE NOT FOUND: ${screenName}`);
 console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
 console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
 console.error(`[displayScreen] ========================================`);
-    SysopDebugUtil.debug(
-      socket,
-      session,
-      'SCREEN',
-      `Screen file not found: ${screenName}`,
-      { conferenceId: session.currentConf || 'none' },
-      DebugSeverity.CRITICAL
-    );
-    notifySysop(session, `Screen not found: ${screenName}`);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'SCREEN',
+        `Screen file not found: ${screenName}`,
+        { conferenceId: session.currentConf || 'none' },
+        DebugSeverity.CRITICAL
+      );
+      notifySysop(session, `Screen not found: ${screenName}`);
+    }
     session.lastScreenFilePath = undefined;
     return false;
   }
