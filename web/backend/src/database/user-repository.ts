@@ -42,6 +42,11 @@ function fieldToColumn(field: string): string {
     byteLimit: 'bytelimit',
     userFlags: 'userflags',
     baud: 'baud',
+    gdprConsentAt: 'gdpr_consent_at',
+    gdprNoticeVersion: 'gdpr_notice_version',
+    gdprConsentSource: 'gdpr_consent_source',
+    deletedAt: 'deleted_at',
+    erasedAt: 'erased_at',
   };
   return map[field] || field.toLowerCase();
 }
@@ -63,8 +68,9 @@ export class UserRepository extends BaseRepository<User> {
         lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
         linesperscreen, computer, screentype, protocol, editor, zoomtype,
         availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
-        topuploadcps, topdownloadcps, bytelimit, baud
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        topuploadcps, topdownloadcps, bytelimit, baud,
+        gdpr_consent_at, gdpr_notice_version, gdpr_consent_source
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id, safeUsername, userData.passwordHash, userData.realname,
       userData.location, userData.phone, userData.email, userData.secLevel,
@@ -78,7 +84,10 @@ export class UserRepository extends BaseRepository<User> {
       userData.screenType, userData.protocol, userData.editor, userData.zoomType,
       userData.availableForChat ? 1 : 0, userData.quietNode ? 1 : 0, userData.autoRejoin,
       userData.confAccess, userData.areaName, userData.uuCP ? 1 : 0, userData.topUploadCPS,
-      userData.topDownloadCPS, userData.byteLimit, userData.baud ?? 0
+      userData.topDownloadCPS, userData.byteLimit, userData.baud ?? 0,
+      userData.gdprConsentAt ?? null,
+      userData.gdprNoticeVersion ?? null,
+      userData.gdprConsentSource ?? null
     ]);
 
     // CRITICAL: Write to disk files for Amiga door compatibility
@@ -188,6 +197,11 @@ console.error(`[Database] Failed to sync user to disk:`, error);
       byteLimit: safeNumber(user.bytelimit, 0),
       userFlags: safeNumber(user.userflags, 0),
       fontPreference: user.fontpreference || 'TopazPlus_a1200',  // Web font preference
+      gdprConsentAt: user.gdpr_consent_at || undefined,
+      gdprNoticeVersion: user.gdpr_notice_version || undefined,
+      gdprConsentSource: user.gdpr_consent_source || undefined,
+      deletedAt: user.deleted_at || undefined,
+      erasedAt: user.erased_at || undefined,
       created: new Date(user.created * 1000),
       updated: new Date(user.updated * 1000),
     } as User;

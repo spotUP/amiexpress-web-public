@@ -79,6 +79,13 @@ export interface User {
   secOverride?: string;
   userFlags: number;
   fontPreference?: string;  // Terminal font preference (web extension)
+  // WEB_: GDPR consent metadata (ISO-8601 timestamp, notice semver, capture point)
+  gdprConsentAt?: string;
+  gdprNoticeVersion?: string;
+  gdprConsentSource?: 'registration' | 'relogin' | 'import';
+  // WEB_: GDPR soft-delete + erasure markers (Phase 3).
+  deletedAt?: string;
+  erasedAt?: string;
   created: Date;
   updated: Date;
 }

@@ -25,6 +25,11 @@ import { emitUserLogin } from '../../services/bbs-event-emitter';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
+import { loadBBSConfig } from '../../services/bbs-config-file.service';
+
+// WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
+// materially, so re-consent can be forced for existing users).
+const GDPR_NOTICE_VERSION = '1.0';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -117,13 +122,15 @@ console.log(' [NEW USER] Starting registration for:', username);
   session.replayingDisplayInputs = false;
   session.menuPause = false;
 
-  if (await showScreen(socket, session, screenConfig.NONEWUSERS)) {
+  // These screens are optional gates: their presence signals "block registration".
+  // Missing is the common case, so suppress the "Screen not found" sysop alert.
+  if (await showScreen(socket, session, screenConfig.NONEWUSERS, /* silent */ true)) {
     doPause(socket, session);
     await abortNewUser(socket, session, '\r\n\x1b[31mNew user registrations are currently closed.\x1b[0m\r\n');
     return;
   }
 
-  if (await showScreen(socket, session, screenConfig.NONEWATBAUD)) {
+  if (await showScreen(socket, session, screenConfig.NONEWATBAUD, /* silent */ true)) {
     doPause(socket, session);
     await abortNewUser(socket, session, '\r\n\x1b[31mNew user registrations are blocked at this connection speed.\x1b[0m\r\n');
     return;
@@ -149,9 +156,77 @@ console.log(' [NEW USER] Starting registration for:', username);
     autoValidated: false,
     linesCountdownShown: false,
     questionnaire: undefined,
-    computerChoices: undefined
+    computerChoices: undefined,
+    // WEB_: GDPR consent captured before any PII is requested.
+    gdprConsentAt: undefined,
+    gdprConsentSource: undefined
   };
 
+  // WEB_: require explicit consent to the privacy notice before prompting
+  // for any PII (name, location, etc.). See thoughts/shared/plans/
+  // 2026-04-24-gdpr-hobby-baseline.md Phase 1.
+  session.subState = LoggedOnSubState.NEW_USER_GDPR_CONSENT;
+  await promptForGdprConsent(socket, session);
+  return;
+}
+
+/**
+ * WEB_: show the privacy notice and prompt accept/decline.
+ * Called before any PII-gathering prompt in startNewUserRegistration.
+ */
+async function promptForGdprConsent(socket: Socket, session: any) {
+  const baseDir = config.getConfig().dataDir;
+  const screenPath = path.join(baseDir, 'Screens', 'PRIVACY.TXT');
+  let body = '';
+  try {
+    body = amigafs.readFileSync(screenPath, 'utf8') as string;
+  } catch (error) {
+    console.warn('[NEW USER] Unable to read PRIVACY.TXT:', error);
+    // Fallback minimal notice so consent can still be captured if file is missing.
+    body = '\r\nPrivacy notice unavailable. Contact the sysop before registering.\r\n';
+  }
+
+  let sysopEmail = '';
+  try {
+    const bbsCfg = loadBBSConfig(baseDir);
+    sysopEmail = (bbsCfg.sysop_email || '').trim();
+  } catch (error) {
+    console.warn('[NEW USER] Unable to load bbsConfig for sysop email:', error);
+  }
+  const emailReplacement = sysopEmail.length > 0 ? sysopEmail : '(not configured)';
+  body = body.replace(/\$SYSOP_EMAIL\$/g, emailReplacement);
+
+  socket.emit('ansi-output', body);
+  socket.emit('ansi-output', '\r\n\x1b[1;37mAccept privacy notice (Y/n)? \x1b[0m');
+  session.inputBuffer = '';
+}
+
+/**
+ * WEB_: handle the consent answer. `y`/`yes` stamps consent and proceeds to
+ * the access-password screen or the intro screens. Anything else is a
+ * decline and disconnects.
+ */
+export async function handleGdprConsentInput(socket: Socket, session: any, input: string) {
+  const answer = input.trim().toLowerCase();
+  // Blank (Enter) or y/yes accepts. Default is Y to match the (Y/n) prompt.
+  if (answer === '' || answer === 'y' || answer === 'yes') {
+    session.newUserData.gdprConsentAt = new Date().toISOString();
+    session.newUserData.gdprNoticeVersion = GDPR_NOTICE_VERSION;
+    session.newUserData.gdprConsentSource = 'registration';
+    socket.emit('ansi-output', '\r\n');
+    await continueAfterGdprConsent(socket, session);
+    return;
+  }
+  if (answer === 'n' || answer === 'no') {
+    await abortNewUser(socket, session, '\r\n\x1b[33mRegistration cancelled. No data has been stored.\x1b[0m\r\n');
+    return;
+  }
+  socket.emit('ansi-output', '\r\n\x1b[31mPlease answer Y or n (blank = yes).\x1b[0m\r\n');
+  await promptForGdprConsent(socket, session);
+}
+
+async function continueAfterGdprConsent(socket: Socket, session: any) {
+  const username = session.newUserData?.username || '';
   if (newUserAccessPassword) {
     if (await showScreen(socket, session, screenConfig.NEWUSERPW)) {
       doPause(socket, session);
@@ -233,21 +308,22 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
  * Prompt for location - express.e:30172
  */
 function promptForLocation(socket: Socket, session: any) {
-  socket.emit('ansi-output', '\r\nCity, State: ');
+  // WEB_: label changed from "City, State" to "Group Affiliation" for scene BBS context.
+  // Backend field remains `location` to preserve door compatibility.
+  socket.emit('ansi-output', '\r\nGroup Affiliation: ');
   session.inputBuffer = '';
 }
 
 /**
  * Handle location input - express.e:30172-30179
+ * WEB_: blank no longer retreats to name; field is required and re-prompts.
  */
 export async function handleLocationInput(socket: Socket, session: any, input: string) {
   const location = input.trim();
 
-  // Blank line - go back to name (express.e:30177 JUMP iJLoop)
   if (location === '') {
-    socket.emit('ansi-output', '\r\n');
-    session.subState = LoggedOnSubState.NEW_USER_NAME;
-    promptForName(socket, session);
+    socket.emit('ansi-output', '\r\nGroup Affiliation is required.\r\n');
+    promptForLocation(socket, session);
     return;
   }
 
@@ -260,25 +336,17 @@ export async function handleLocationInput(socket: Socket, session: any, input: s
  * Prompt for phone - express.e:30181
  */
 function promptForPhone(socket: Socket, session: any) {
-  socket.emit('ansi-output', '\r\nPhone Number: ');
+  socket.emit('ansi-output', '\r\nPhone Number (Enter to skip): ');
   session.inputBuffer = '';
 }
 
 /**
  * Handle phone input - express.e:30181-30189
+ * WEB_: phone is optional; blank is accepted and advances to email.
+ * Diverges from express.e:30186 retreat-to-location behavior.
  */
 export async function handlePhoneInput(socket: Socket, session: any, input: string) {
-  const phone = input.trim();
-
-  // Blank line - go back to location (express.e:30186 JUMP jLoop2)
-  if (phone === '') {
-    socket.emit('ansi-output', '\r\n');
-    session.subState = LoggedOnSubState.NEW_USER_LOCATION;
-    promptForLocation(socket, session);
-    return;
-  }
-
-  session.newUserData.phone = phone;
+  session.newUserData.phone = input.trim();
   session.subState = LoggedOnSubState.NEW_USER_EMAIL;
   promptForEmail(socket, session);
 }
@@ -293,15 +361,14 @@ function promptForEmail(socket: Socket, session: any) {
 
 /**
  * Handle email input - express.e:30191-30199
+ * WEB_: blank no longer retreats to phone; field is required and re-prompts.
  */
 export async function handleEmailInput(socket: Socket, session: any, input: string) {
   const email = input.trim();
 
-  // Blank line - go back to phone (express.e:30196 JUMP jLoop3)
   if (email === '') {
-    socket.emit('ansi-output', '\r\n');
-    session.subState = LoggedOnSubState.NEW_USER_PHONE;
-    promptForPhone(socket, session);
+    socket.emit('ansi-output', '\r\nE-Mail Address is required.\r\n');
+    promptForEmail(socket, session);
     return;
   }
 
@@ -421,18 +488,18 @@ function finishIntroAndPromptName(socket: Socket, session: any) {
   }
   session.inputBuffer = '';
 
-  // express.e:30135 - Show "Blank line to retreat" before name prompt
-  socket.emit('ansi-output', '\r\nBlank line to retreat\r\n');
+  // WEB_: retreat-on-blank disabled; required fields re-prompt instead of jumping back.
+  // Diverges from express.e:30135 "Blank line to retreat" UX by design.
 
   // Always ask for handle first (express.e jLoop1)
   session.subState = LoggedOnSubState.NEW_USER_NAME;
   promptForName(socket, session);
 }
 
-async function showScreen(socket: Socket, session: any, screenName?: string): Promise<boolean> {
+async function showScreen(socket: Socket, session: any, screenName?: string, silent: boolean = false): Promise<boolean> {
   if (!screenName) return false;
   try {
-    return await displayScreen(socket, session, screenName);
+    return await displayScreen(socket, session, screenName, true, silent);
   } catch (error) {
 console.warn('[NEW USER] Failed to display screen', screenName, error);
     return false;
@@ -444,7 +511,22 @@ async function abortNewUser(socket: Socket, session: any, message: string) {
     socket.emit('ansi-output', message);
   }
   setPasswordMask(socket, session, false);
-  setTimeout(() => socket.disconnect(), 500);
+  // Park the session in AWAIT so any stray input in the 500ms window can't
+  // re-enter the registration flow; clear volatile scratch data.
+  session.state = BBSState.AWAIT;
+  session.subState = undefined;
+  session.newUserData = undefined;
+  // Authentic AmiExpress/modem behaviour: line-drop is announced as NO CARRIER.
+  socket.emit('ansi-output', '\r\nNO CARRIER\r\n');
+  // socket.io v4: pass true to close the underlying transport, not just this
+  // namespace — otherwise the terminal sees no obvious end.
+  setTimeout(() => {
+    try {
+      (socket as any).disconnect(true);
+    } catch {
+      socket.disconnect();
+    }
+  }, 500);
 }
 
 function setPasswordMask(socket: Socket, session: any, enabled: boolean) {
@@ -555,16 +637,14 @@ function passwordMeetsStrength(password: string, minStrength: number): boolean {
 
 /**
  * Handle password input - express.e:30203-30234
+ * WEB_: blank no longer retreats to email; field is required and re-prompts.
  */
 export async function handlePasswordInput(socket: Socket, session: any, input: string) {
   const password = input.trim();
 
-  // Blank line - go back to email (express.e:30205 JUMP jLoop4)
   if (password === '') {
-    socket.emit('ansi-output', '\r\n');
-    setPasswordMask(socket, session, false);
-    session.subState = LoggedOnSubState.NEW_USER_EMAIL;
-    promptForEmail(socket, session);
+    socket.emit('ansi-output', '\r\nPassword is required.\r\n');
+    promptForPassword(socket, session);
     return;
   }
 
@@ -619,7 +699,7 @@ function promptForLines(socket: Socket, session: any) {
       socket.emit('ansi-output', ` ${count}\r\n`);
     }
   }
-  socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
+  socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (0 or Enter for Auto): ');
   session.inputBuffer = '';
 }
 
@@ -661,7 +741,7 @@ async function promptForComputer(socket: Socket, session: any) {
     }
     socket.emit('ansi-output', `${left}${right}`);
   }
-  socket.emit('ansi-output', '\r\nChoose computer type: ');
+  socket.emit('ansi-output', '\r\nChoose computer type (Enter for default): ');
   session.inputBuffer = '';
 }
 
@@ -695,7 +775,7 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
  * Prompt for screen clear preference - express.e:30250
  */
 function promptForScreenClear(socket: Socket, session: any) {
-  socket.emit('ansi-output', 'You want Screen Clears after Messages ? ');
+  socket.emit('ansi-output', 'You want Screen Clears after Messages ? (y/N) ');
   session.inputBuffer = '';
 }
 
@@ -728,7 +808,7 @@ function showSummaryAndConfirm(socket: Socket, session: any) {
 
   // Format matches express.e StringF calls 30264-30281
   socket.emit('ansi-output', `Handle: ${data.username}\r\n`);
-  socket.emit('ansi-output', `City, St.: ${data.location}\r\n`);
+  socket.emit('ansi-output', `Group Aff: ${data.location}\r\n`);
   socket.emit('ansi-output', `Phone Num: ${data.phone}\r\n`);
   socket.emit('ansi-output', `E-Mail   : ${data.email}\r\n`);
   
@@ -1190,7 +1270,11 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       uuCP: false,
       topUploadCPS: 0,
       topDownloadCPS: 0,
-      byteLimit: 0
+      byteLimit: 0,
+      // WEB_: GDPR consent captured pre-registration (Phase 1).
+      gdprConsentAt: data.gdprConsentAt,
+      gdprNoticeVersion: data.gdprNoticeVersion,
+      gdprConsentSource: data.gdprConsentSource
     });
 
     if (!newUserId) {

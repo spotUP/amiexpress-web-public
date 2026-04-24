@@ -1786,6 +1786,9 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
       const newUserHandler = require('./user/new-user.handler');
 
       switch (session.subState) {
+        case LoggedOnSubState.NEW_USER_GDPR_CONSENT:
+          await newUserHandler.handleGdprConsentInput(socket, session, input);
+          break;
         case LoggedOnSubState.NEW_USER_NAME:
           await newUserHandler.handleNameInput(socket, session, input);
           break;

@@ -390,6 +390,31 @@ console.log('✓ Added fontpreference column');
 console.log('✓ Added baud column');
       }
 
+      if (!columnNames.includes('gdpr_consent_at')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN gdpr_consent_at TEXT');
+console.log('✓ Added gdpr_consent_at column');
+      }
+
+      if (!columnNames.includes('gdpr_notice_version')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN gdpr_notice_version TEXT');
+console.log('✓ Added gdpr_notice_version column');
+      }
+
+      if (!columnNames.includes('gdpr_consent_source')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN gdpr_consent_source TEXT');
+console.log('✓ Added gdpr_consent_source column');
+      }
+
+      if (!columnNames.includes('deleted_at')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN deleted_at TEXT');
+console.log('✓ Added deleted_at column (GDPR soft-delete)');
+      }
+
+      if (!columnNames.includes('erased_at')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN erased_at TEXT');
+console.log('✓ Added erased_at column (GDPR erasure timestamp)');
+      }
+
       // Check and add missing columns to system_config table
 console.log('Checking for missing columns in system_config table...');
       const systemConfigInfo = this.db.prepare('PRAGMA table_info(system_config)').all() as any[];
@@ -774,6 +799,11 @@ console.error('Error running migrations:', error);
           secoverride TEXT DEFAULT NULL,
           userflags INTEGER DEFAULT 0,
           baud INTEGER DEFAULT 56000,
+          gdpr_consent_at TEXT,
+          gdpr_notice_version TEXT,
+          gdpr_consent_source TEXT,
+          deleted_at TEXT,
+          erased_at TEXT,
           created INTEGER DEFAULT (strftime('%s', 'now')),
           updated INTEGER DEFAULT (strftime('%s', 'now'))
         )

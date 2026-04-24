@@ -160,6 +160,7 @@ export enum LoggedOnSubState {
   OLM_COMPOSE = 'olm_compose',              // Composing OLM message (line editor)
 
   // New User Registration - express.e:30003-30310 (doNewUser)
+  NEW_USER_GDPR_CONSENT = 'new_user_gdpr_consent', // WEB_: privacy notice accept/decline gate
   NEW_USER_NAME = 'new_user_name',          // Entering name with duplicate check
   NEW_USER_LOCATION = 'new_user_location',  // City, State
   NEW_USER_PHONE = 'new_user_phone',        // Phone number
@@ -209,6 +210,11 @@ export enum LoggedOnSubState {
   W_EDIT_TRANSLATOR = 'w_edit_translator',            // Edit translator (option 15)
   W_EDIT_MODEM_SPEED = 'w_edit_modem_speed',          // Edit modem emulation speed (web extension)
   W_EDIT_FONT = 'w_edit_font',                        // Edit terminal font (web extension)
+  // WEB_: GDPR self-service options under W (see Phase 3 plan).
+  W_VIEW_MY_DATA_PAUSE = 'w_view_my_data_pause',      // Paused mid-dump of user record (option 19)
+  W_FORGETME_CONFIRM = 'w_forgetme_confirm',          // Erasure step 1: type 'YES ERASE' (option 20)
+  W_FORGETME_PASSWORD = 'w_forgetme_password',        // Erasure step 2: re-enter password
+  W_FORGETME_USERNAME = 'w_forgetme_username',        // Erasure step 3: type username verbatim
 
   // User Stats (S command) - Web-specific font selection
   USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option
