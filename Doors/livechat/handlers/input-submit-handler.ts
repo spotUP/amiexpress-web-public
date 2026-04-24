@@ -46,7 +46,8 @@ export function createSubmitHandler(
   updateUserTable: () => void,
   showFileSharing: () => void,
   updateTypingPreview: () => void,
-  clearChatLog: () => void
+  clearChatLog: () => void,
+  tryJoinVoiceChannel?: (channelName: string) => boolean
 ) {
   return async (value: string) => {
     try {
@@ -95,9 +96,14 @@ export function createSubmitHandler(
 
         // Handle various commands
         if (r.action === 'join' && r.data?.channel) {
-          if (state.currentChannel) socket.emit('room:leave');
-          socket.emit('room:join', { roomName: r.data.channel });
-          showLoading(`Joining #${r.data.channel}...`);
+          // Check if this is a voice channel (via callback to server.ts)
+          if (tryJoinVoiceChannel && tryJoinVoiceChannel(r.data.channel)) {
+            // Voice channel join handled
+          } else {
+            if (state.currentChannel) socket.emit('room:leave');
+            socket.emit('room:join', { roomName: r.data.channel });
+            showLoading(`Joining #${r.data.channel}...`);
+          }
         }
 
         if (r.action === 'leave' || cmdName === 'leave' || cmdName === 'part') {

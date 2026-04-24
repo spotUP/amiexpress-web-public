@@ -132,6 +132,12 @@ export interface DoorContext {
   /** BBS session (for advanced use cases like blessed) */
   bbsSession?: any;
 
+  /** Audio streaming API (voice chat) */
+  audio?: any;
+
+  /** Video streaming API (webcam/screen share) */
+  video?: any;
+
   /** Close the door and return to BBS */
   close(): Promise<void>;
 }

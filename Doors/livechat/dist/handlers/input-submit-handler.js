@@ -5,7 +5,7 @@ const command_exec_1 = require("../core/command-exec");
 const emojis_1 = require("../utils/emojis");
 const format_1 = require("../utils/format");
 const formatter_1 = require("../core/formatter");
-function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog) {
+function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, tryJoinVoiceChannel) {
     return async (value) => {
         try {
             // Hide command suggestions on submit
@@ -43,10 +43,16 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 }
                 // Handle various commands
                 if (r.action === 'join' && r.data?.channel) {
-                    if (state.currentChannel)
-                        socket.emit('room:leave');
-                    socket.emit('room:join', { roomName: r.data.channel });
-                    showLoading(`Joining #${r.data.channel}...`);
+                    // Check if this is a voice channel (via callback to server.ts)
+                    if (tryJoinVoiceChannel && tryJoinVoiceChannel(r.data.channel)) {
+                        // Voice channel join handled
+                    }
+                    else {
+                        if (state.currentChannel)
+                            socket.emit('room:leave');
+                        socket.emit('room:join', { roomName: r.data.channel });
+                        showLoading(`Joining #${r.data.channel}...`);
+                    }
                 }
                 if (r.action === 'leave' || cmdName === 'leave' || cmdName === 'part') {
                     if (state.currentChannel) {

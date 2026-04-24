@@ -51,13 +51,14 @@ class VideoGrid {
         this.currentUserId = options.currentUserId;
         this.currentUsername = options.currentUsername;
         this.viewMode = options.viewMode ?? 'speaker'; // Default to speaker mode for low-res terminals
-        // Main container for video grid
+        // Main container for video grid (no outer border — tiles have their own)
         this.container = blessed_1.default.box({
             parent: options.parent,
             left: options.left ?? 0,
             top: options.top ?? 0,
             width: options.width ?? '100%',
             height: options.height ?? '100%',
+            border: undefined,
             style: {
                 bg: 'transparent',
             },

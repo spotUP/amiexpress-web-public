@@ -247,10 +247,20 @@ console.error('[Session Manager] CRITICAL: Tried to set session without nodeId!'
   // Store the session: nodeId → session
   sessions.set(nodeId.toString(), session);
 
-  // Also map user → session if logged in
-  const userId = (session as any).user?.id || (session as any).user?.userId;
-  if (userId) {
-    userSessions.set(String(userId), session);
+  // Also map user → session if logged in.
+  //
+  // CRITICAL: Do NOT claim the userSessions slot for chatOnly (web /chat/ SSO)
+  // sessions. The same user may have an active BBS session on another tab whose
+  // socketToUser[socketId] → userId → userSessions[userId] lookup chain must
+  // keep resolving to the BBS session, not the chat-only one. Overwriting this
+  // map causes BBS/door output from the BBS tab to be routed through the chat
+  // tab's socket (cross-tab output leak — e.g. AquaScan file listings and
+  // prompts appearing inside /chat/).
+  if (!(session as any).chatOnly) {
+    const userId = (session as any).user?.id || (session as any).user?.userId;
+    if (userId) {
+      userSessions.set(String(userId), session);
+    }
   }
 }
 

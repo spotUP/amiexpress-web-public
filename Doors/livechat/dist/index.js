@@ -13,10 +13,14 @@ const chat_only_login_1 = require("./chat-only-login");
 const door = new bbs_door_sdk_1.ServerDoor(config_1.metadata);
 door.onStart(async (ctx) => {
     const session = ctx;
-    // Check if this is chat-only mode without a user (needs login)
+    // Check if this is chat-only mode without a real logged-in user.
+    // IMPORTANT: session.user is ALWAYS set by the backend (uses guest User
+    // as a shim when bbsSession.user is absent). The authoritative signal of
+    // "user is logged in" is bbsSession.user — that's only populated after a
+    // real authentication flow (BBS login or runChatOnlyLogin).
     const chatOnly = session.bbsSession?.tempData?.chatOnly;
-    const hasUser = session.user || session.bbsSession?.user;
-    if (chatOnly && !hasUser) {
+    const hasRealUser = !!session.bbsSession?.user;
+    if (chatOnly && !hasRealUser) {
         // Show login modal and wait for authentication
         const loginSuccessful = await (0, chat_only_login_1.runChatOnlyLogin)(session);
         if (!loginSuccessful) {

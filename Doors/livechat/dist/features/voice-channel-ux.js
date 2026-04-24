@@ -40,15 +40,18 @@ class VoiceControlBar {
         this.setupSocketHandlers();
     }
     createUI(parent) {
-        // Detect if we are inside a DockablePanel (like the sidebar)
-        const isInsidePanel = parent && (parent.constructor.name === 'DockablePanel' || parent.options?.title);
-        // Bottom control bar container (Discord-style: bottom left corner)
+        // Voice controls always render inside the sidebar panel (Discord-style)
+        // Layout:
+        // ├────────────────────┤
+        // │ [*] username       │  <- status row (speaking indicator)
+        // │ [M] [V] [S] [X]   │  <- controls row
+        // └────────────────────┘
         this.container = blessed_1.default.box({
             parent,
-            bottom: isInsidePanel ? 0 : 4,
+            bottom: 0,
             left: 0,
-            width: isInsidePanel ? '100%' : 42,
-            height: 3,
+            width: '100%',
+            height: 4,
             tags: true,
             style: {
                 fg: 'white',
@@ -63,109 +66,101 @@ class VoiceControlBar {
             label: ' Voice ',
             hidden: true,
         });
-        // Set moderate z-index - above chat content (10) but below command suggestions (10000)
-        this.container.zIndex = 100;
-        // User status with speaking indicator
+        // User status with speaking indicator (row 0)
         this.statusBox = blessed_1.default.box({
             parent: this.container,
             top: 0,
             left: 1,
-            width: isInsidePanel ? '35%' : 14,
+            width: '100%-4',
             height: 1,
             tags: true,
-            content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 8)}`,
+            border: undefined, // Prevent Panel default border (blessed.box returns Panel)
+            content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 12)}`,
             style: {
                 fg: 'white',
                 bg: 'black',
             },
         });
-        // Mute button [M] - shows mic status
+        // Controls row (row 1): [M] [V] [S] [X]
+        // Mute button [M]
         this.muteButton = blessed_1.default.box({
             parent: this.container,
-            top: 0,
-            left: isInsidePanel ? '40%' : 15,
-            width: 5,
+            top: 1,
+            left: 1,
+            width: 3,
             height: 1,
             tags: true,
+            border: undefined, // Prevent Panel default border
             content: '{green-fg}[M]{/green-fg}',
             mouse: true,
             clickable: true,
             style: {
                 fg: 'green',
                 bg: 'black',
-                hover: {
-                    fg: 'white',
-                    bg: 'green',
-                },
+                hover: { fg: 'white', bg: 'green' },
             },
         });
         this.muteButton.on('click', () => {
             this.toggleMute();
         });
-        // Video button [V] - shows camera status
+        // Video button [V]
         this.videoButton = blessed_1.default.box({
             parent: this.container,
-            top: 0,
-            left: isInsidePanel ? '55%' : 21,
-            width: 5,
+            top: 1,
+            left: 5,
+            width: 3,
             height: 1,
             tags: true,
+            border: undefined, // Prevent Panel default border
             content: '{gray-fg}[V]{/gray-fg}',
             mouse: true,
             clickable: true,
             style: {
                 fg: 'gray',
                 bg: 'black',
-                hover: {
-                    fg: 'white',
-                    bg: 'cyan',
-                },
+                hover: { fg: 'white', bg: 'cyan' },
             },
         });
         this.videoButton.on('click', () => {
             this.toggleVideo();
         });
-        // Grid toggle button [G] - toggle between speaker/grid view
+        // Grid toggle button [S]
         this.gridToggleButton = blessed_1.default.box({
             parent: this.container,
-            top: 0,
-            left: isInsidePanel ? '65%' : 27,
-            width: 5,
+            top: 1,
+            left: 9,
+            width: 3,
             height: 1,
             tags: true,
-            content: '{yellow-fg}[S]{/yellow-fg}', // S = Speaker mode (default)
+            border: undefined, // Prevent Panel default border
+            content: '{yellow-fg}[S]{/yellow-fg}',
             mouse: true,
             clickable: true,
             style: {
                 fg: 'yellow',
                 bg: 'black',
-                hover: {
-                    fg: 'white',
-                    bg: 'yellow',
-                },
+                hover: { fg: 'white', bg: 'yellow' },
             },
         });
         this.gridToggleButton.on('click', () => {
             this.toggleGrid();
         });
-        // Disconnect button [X] Leave
+        // Disconnect button [X]
         this.disconnectButton = blessed_1.default.box({
             parent: this.container,
-            top: 0,
+            top: 1,
             right: 1,
-            width: isInsidePanel ? '25%' : 12,
+            width: 3,
             height: 1,
             tags: true,
-            content: '{red-fg}[X] Leave{/red-fg}',
+            border: undefined, // Prevent Panel default border
+            content: '{red-fg}[X]{/red-fg}',
             mouse: true,
             clickable: true,
             style: {
                 fg: 'red',
                 bg: 'black',
-                hover: {
-                    fg: 'white',
-                    bg: 'red',
-                },
+                hover: { fg: 'white', bg: 'red' },
             },
         });
         this.disconnectButton.on('click', () => {
@@ -247,10 +242,10 @@ class VoiceControlBar {
             return;
         // Discord-style: green ring when speaking
         if (this.isSpeaking) {
-            this.statusBox.setContent(`{green-fg}[*]{/green-fg} ${this.username.substring(0, 8)}`);
+            this.statusBox.setContent(`{green-fg}[*]{/green-fg} ${this.username.substring(0, 12)}`);
         }
         else {
-            this.statusBox.setContent(`{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 8)}`);
+            this.statusBox.setContent(`{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 12)}`);
         }
         this.screen.render();
     }
@@ -403,7 +398,7 @@ class EnhancedVoiceChannel {
         const hasAnyVideo = this.videoGrid.getParticipants().some(p => p.hasVideo);
         if (inVoice && hasAnyVideo && !this.videoGrid.isVisible()) {
             this.videoGrid.show();
-            // Don't call setFront() - rely on zIndex so command suggestions stay on top
+            this.videoGrid.setFront();
         }
         else if ((!inVoice || !hasAnyVideo) && this.videoGrid.isVisible()) {
             this.videoGrid.hide();
@@ -427,7 +422,7 @@ class EnhancedVoiceChannel {
                     width: videoOptions?.asciiWidth || 80,
                     height: videoOptions?.asciiHeight || 24,
                     fps: videoOptions?.fps || 10,
-                    colored: videoOptions?.colored ?? true,
+                    colored: false,
                 });
                 // Route local frames to the video grid for preview
                 this.ctx.video.onFrame((frame) => {
@@ -487,6 +482,7 @@ class EnhancedVoiceChannel {
                 left: 0,
                 width: '100%',
                 height: '100%',
+                border: undefined, // Prevent Panel default border
                 style: { bg: 'black', transparent: true },
                 // @ts-ignore
                 zIndex: 99998,
@@ -605,18 +601,38 @@ class EnhancedVoiceChannel {
                 focusables[focusIndex].focus();
                 this.screen.render();
             };
-            // Setup keyboard handlers on dialog for global shortcuts
-            dialog.key(['tab'], () => {
+            // Setup keyboard handlers on SCREEN (not dialog) so they fire
+            // regardless of which inner widget currently has focus (checkboxes/buttons
+            // steal focus from the dialog). Handlers are removed in cleanup().
+            const onTab = () => {
                 cycleFocus(1);
-                return false; // Prevent propagation
-            });
-            dialog.key(['S-tab'], () => {
+            };
+            const onSTab = () => {
                 cycleFocus(-1);
-                return false;
-            });
-            dialog.key(['escape'], () => {
+            };
+            const onEscape = () => {
                 resolveOnce(null);
-            });
+            };
+            const onEnter = () => {
+                const focused = this.screen.focused;
+                // Checkboxes handle their own Enter via Checkbox.key(['space','enter']) — don't double-toggle.
+                if (focused === micCheckbox || focused === cameraCheckbox) {
+                    return;
+                }
+                if (focused === cancelButton) {
+                    resolveOnce(null);
+                    return;
+                }
+                // Default / join button: submit with current checkbox values
+                resolveOnce({
+                    enableMic: micCheckbox.isChecked(),
+                    enableCamera: cameraCheckbox.isChecked(),
+                });
+            };
+            this.screen.key(['tab'], onTab);
+            this.screen.key(['S-tab'], onSTab);
+            this.screen.key(['escape'], onEscape);
+            this.screen.key(['enter'], onEnter);
             // Button press handlers
             joinButton.on('press', () => {
                 resolveOnce({
@@ -637,8 +653,12 @@ class EnhancedVoiceChannel {
             cancelButton.key(['enter'], () => {
                 resolveOnce(null);
             });
-            // Cleanup function to destroy all elements
+            // Cleanup function to destroy all elements + unbind screen-level keys
             const cleanup = () => {
+                this.screen.unkey(['tab'], onTab);
+                this.screen.unkey(['S-tab'], onSTab);
+                this.screen.unkey(['escape'], onEscape);
+                this.screen.unkey(['enter'], onEnter);
                 dialog.destroy();
                 modalOverlay.destroy();
                 this.screen.render();
@@ -665,12 +685,10 @@ class EnhancedVoiceChannel {
         if (this.currentVoiceChannel) {
             await this.leaveVoiceChannel();
         }
-        // Show permissions dialog
-        const permissions = await this.showVoicePermissionsDialog();
-        if (!permissions) {
-            // User cancelled
-            return;
-        }
+        // Skip permissions dialog — mic + camera are ON by default.
+        // Browser will prompt for getUserMedia permission automatically when
+        // startAudioStreaming / toggleVideo fires. User can toggle via sidebar buttons.
+        const permissions = { enableMic: true, enableCamera: true };
         try {
             // Helper to complete the join (called on success or timeout)
             const completeJoin = async (participants) => {
@@ -747,8 +765,9 @@ class EnhancedVoiceChannel {
                 if (permissions.enableMic) {
                     await this.startAudioStreaming();
                 }
-                // Show control bar
+                // Show control bar and shrink channel list to make room
                 this.controlBar.show();
+                this.adjustChannelListForVoice(true);
                 // Enable camera if requested
                 if (permissions.enableCamera) {
                     // Wait a bit for control bar to render
@@ -797,9 +816,10 @@ class EnhancedVoiceChannel {
             this.socket.emit('voice:leave-channel', {
                 channelId: this.currentVoiceChannel,
             });
-            // Hide control bar
+            // Hide control bar and restore channel list height
             if (this.controlBar) {
                 this.controlBar.hide();
+                this.adjustChannelListForVoice(false);
             }
             this.currentVoiceChannel = undefined;
             if (this.onLeaveVoiceCallback) {
@@ -811,8 +831,6 @@ class EnhancedVoiceChannel {
     }
     async startAudioStreaming() {
         if (!this.ctx?.audio || !this.qualityManager) {
-            // Audio API not available - this is normal for terminal/telnet clients
-            // Only web clients have audio support
             return;
         }
         try {
@@ -843,6 +861,23 @@ class EnhancedVoiceChannel {
     }
     getVoiceChannels() {
         return Array.from(this.voiceChannels.values());
+    }
+    /**
+     * Adjust channel list height to make room for voice controls in sidebar.
+     * Voice control bar is 4 rows tall at the bottom of the sidebar.
+     */
+    adjustChannelListForVoice(voiceActive) {
+        if (!this.channelList)
+            return;
+        // Channel list default: '100%-2' (full sidebar minus border)
+        // When voice active: shrink by 4 rows for the voice control bar
+        if (voiceActive) {
+            this.channelList.height = '100%-6'; // 2 for border + 4 for voice bar
+        }
+        else {
+            this.channelList.height = '100%-2';
+        }
+        this.screen.render();
     }
     destroy() {
         if (this.controlBar) {

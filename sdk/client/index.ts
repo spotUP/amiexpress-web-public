@@ -91,6 +91,11 @@ export class ClientDoor extends EventEmitter {
     'audio:data',
     // Voice activity detection
     'voice:speaking',
+    // Video streaming events
+    'video:started',
+    'video:stopped',
+    'video:error',
+    'video:frame',
   ]);
 
   /**
@@ -208,6 +213,18 @@ export class ClientDoor extends EventEmitter {
         });
         socket.on('audio:mute', (data: any) => {
           this.emit('audio:mute', data);
+        });
+        // Video streaming events for webcam in voice chat
+        socket.on('video:start-stream', (data: any) => {
+          console.log('[ClientDoor] Received video:start-stream event:', data);
+          this.emit('video:start-stream', data);
+        });
+        socket.on('video:stop-stream', (data: any) => {
+          console.log('[ClientDoor] Received video:stop-stream event:', data);
+          this.emit('video:stop-stream', data);
+        });
+        socket.on('video:frame', (data: any) => {
+          this.emit('video:frame', data);
         });
         // Audio data from other users (for voice chat playback)
         socket.on('audio:data', (data: any) => {

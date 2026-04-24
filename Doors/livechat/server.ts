@@ -514,8 +514,8 @@ export async function createApp(session: DoorSession) {
     maxWidth: 35,  // Max 35 chars to leave room for chat (80 - 35 = 45 chars for chat)
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
     dockPosition: 'left',
-    resizable: true,
-    draggable: true,
+    resizable: chatOnly ? true : false,
+    draggable: chatOnly ? true : false,
     zIndex: 1,
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
@@ -639,8 +639,8 @@ export async function createApp(session: DoorSession) {
       // Add default voice channel if none exist
       const isInVoice = voiceChannel.isInVoiceChannel();
       const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : '{gray-fg}[V]{/gray-fg}';
-      items.push(icon + ' General {gray-fg}(0){/gray-fg}');
-      channelItems.push({ id: 'voice-general', name: 'General', type: 'voice' as const });
+      items.push(icon + ' Voice {gray-fg}(0){/gray-fg}');
+      channelItems.push({ id: 'voice-voice', name: 'Voice', type: 'voice' as const });
     } else {
       voiceChannels.forEach(vc => {
         const count = vc.participants.length;
@@ -652,17 +652,6 @@ export async function createApp(session: DoorSession) {
     }
 
     // Debug: show what items we're setting and calculate expected width
-    const itemLengths = items.map((item, i) => {
-      const stripped = item.replace(/{[^}]+}/g, ''); // Strip blessed tags
-      return { index: i, text: stripped, length: stripped.length };
-    });
-    const longestItem = itemLengths.reduce((max, curr) => curr.length > max.length ? curr : max, { index: 0, text: '', length: 0 });
-
-    // Write to file since console.log doesn't show up
-    const fs = require('fs');
-    const debugLog = `\n=== updateChannelList ${new Date().toISOString()} ===\nItems:\n${itemLengths.map(item => `  [${item.index}] "${item.text}" (${item.length} chars)${item.index === longestItem.index ? ' <- LONGEST' : ''}`).join('\n')}\nExpected width: ${longestItem.length} + 3 (borders+buffer) = ${longestItem.length + 3}\n`;
-    fs.appendFileSync('logs/sidebar-debug.log', debugLog);
-
     channelList.setItems(items);
 
     // CRITICAL: Force screen render before fitToContent so blessed populates internal state
@@ -670,26 +659,14 @@ export async function createApp(session: DoorSession) {
       screen.render();
     }
 
-    // Debug: log width before/after
-    const widthBefore = sidebarPanel.width;
     sidebarPanel.fitToContent();
-    const widthAfter = sidebarPanel.width;
-
-    fs.appendFileSync('logs/sidebar-debug.log', `Width before fitToContent: ${widthBefore}\nWidth after fitToContent: ${widthAfter}\n`);
-    fs.appendFileSync('logs/sidebar-debug.log', `fitContent settings: ${JSON.stringify((sidebarPanel as any).fitContentSettings)}\n`);
-    fs.appendFileSync('logs/sidebar-debug.log', `channelList.items.length: ${(channelList as any).items?.length}\n\n`);
 
     // CRITICAL: Force list to update its width based on parent panel
     // When panel expands, child list doesn't auto-recalculate '100%-2' width
     const newListWidth = (sidebarPanel.width as number) - 2; // Panel width minus borders
 
-    fs.appendFileSync('logs/sidebar-debug.log', `Setting list width to: ${newListWidth}\n`);
-    fs.appendFileSync('logs/sidebar-debug.log', `List width before: ${channelList.width}\n`);
-
     channelList.width = newListWidth;
     (channelList as any).position.width = newListWidth;
-
-    fs.appendFileSync('logs/sidebar-debug.log', `List width after: ${channelList.width}\n`);
 
     // Invalidate blessed's internal cache to force re-layout
     if ((channelList as any)._clines) {
@@ -703,8 +680,6 @@ export async function createApp(session: DoorSession) {
     if (typeof (channelList as any)._invalidateCoords === 'function') {
       (channelList as any)._invalidateCoords();
     }
-
-    fs.appendFileSync('logs/sidebar-debug.log', `List iwidth: ${(channelList as any).iwidth}, ileft: ${(channelList as any).ileft}\n`);
 
     // Re-render to apply new width
     screen.render();
@@ -769,16 +744,13 @@ export async function createApp(session: DoorSession) {
       voiceChannel.hideGrid(); // Hide video grid when viewing text
     }
 
-    // Return focus to input after selection
-    inputBox.focus();
+    // Return focus to input after text channel selection only
+    if (channel.type !== 'voice') {
+      inputBox.focus();
+    }
   }
 
-  // Handle channel selection with Enter key (emits 'select item')
-  channelList.on('select item', (_item: any, index: number) => {
-    handleChannelSelect(index);
-  });
-
-  // Handle channel selection with click (emits 'select')
+  // Handle channel selection with Enter key or click (blessed emits 'select' for both)
   channelList.on('select', (_item: any, index: number) => {
     handleChannelSelect(index);
   });
@@ -1366,7 +1338,7 @@ export async function createApp(session: DoorSession) {
 
   // ========== VOICE CHANNEL (Discord-style UX) ==========
   const voiceChannel = createEnhancedVoiceChannel({
-    parent: screen,  // Parent to screen so control bar floats at bottom, not in sidebar
+    parent: sidebarPanel,  // Parent to sidebar so controls appear at bottom of sidebar (Discord-style)
     channelList,
     screen,
     socket,
@@ -1964,6 +1936,20 @@ export async function createApp(session: DoorSession) {
       chatMessages.length = 0;
       chatLog.setContent('');
       screen.render();
+    },
+    // tryJoinVoiceChannel - check if channel name matches a voice channel
+    (channelName: string): boolean => {
+      const match = channelItems.find(
+        c => c.type === 'voice' && c.name.toLowerCase() === channelName.toLowerCase()
+      );
+      if (match) {
+        const channelId = match.id.replace('voice-', '');
+        voiceChannel.joinVoiceChannel(channelId);
+        voiceChannel.showGrid();
+        addSystemMessage(`Joining voice channel: ${match.name}`);
+        return true;
+      }
+      return false;
     }
   );
   inputBox.on('submit', (value: string) => { asyncSubmitHandler(value); });
@@ -1989,11 +1975,27 @@ export async function createApp(session: DoorSession) {
       return;
     }
 
+    // Tab/Shift+Tab: accept ghost completion if available, otherwise let screen-level handler cycle focus
+    if (key.name === 'tab') {
+      if (commandSuggestionsVisible && currentGhostCompletion) {
+        // Accept ghost completion
+        inputBox.setValue(`/${currentGhostCompletion} `);
+        inputBox.focus();
+        hideCommandSuggestions();
+        screen.render();
+        return;
+      }
+      // Don't handle Tab here - let screen-level key handler cycle focus
+      // (keyboard-shortcuts.ts binds screen.key(['tab'], cycleFocusForward))
+      hideCommandSuggestions();
+      return;
+    }
+
     // Handle command autocomplete navigation when dropdown is visible
     if (commandSuggestionsVisible) {
-      // Tab or Right arrow: accept ghost text completion (if available)
+      // Right arrow: accept ghost text completion (if available)
       // But ONLY if shift is not pressed (Shift+Right is for selection)
-      if ((key.name === 'tab' || (key.name === 'right' && !key.shift)) && currentGhostCompletion) {
+      if ((key.name === 'right' && !key.shift) && currentGhostCompletion) {
         // Accept the ghost completion
         inputBox.setValue(`/${currentGhostCompletion} `);
         inputBox.focus();

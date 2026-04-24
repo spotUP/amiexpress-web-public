@@ -25,10 +25,12 @@ function createDialogs(s, ib) {
         mo.setFront(); // Bring overlay to front first
         w.show();
         w.setFront(); // Then bring modal on top of overlay
+        s.trapFocus(w); // Jail keyboard focus inside modal
         w.focus();
         s.render();
     }
     function hideModal(w) {
+        s.releaseFocusTrap(); // Release focus trap before hiding
         mo.hide();
         w.hide();
         ib.focus();

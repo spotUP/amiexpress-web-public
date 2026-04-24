@@ -8,7 +8,7 @@
  * - Username label
  */
 
-import blessed, { Video } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export interface VideoTileOptions {
@@ -62,7 +62,7 @@ function getBackgroundColor(username: string): string {
  */
 export class VideoTile {
   private container: any; // Using any since Box type doesn't expose runtime properties
-  private videoBox: Video;
+  private videoBox: any;
   private statusBar: any;
   private screen: Screen;
   private options: VideoTileOptions;
@@ -92,19 +92,19 @@ export class VideoTile {
       tags: true,
     });
 
-    // Video/avatar display area
-    this.videoBox = new Video({
+    // Video/avatar display area (no border — outer container already provides one)
+    this.videoBox = blessed.box({
       parent: this.container,
       left: 0,
       top: 0,
-      width: '100%',
-      height: '100%-1',
+      width: '100%-2',
+      height: '100%-3',
+      border: undefined,
       style: {
-        bg: options.hasVideo ? 'black' : getBackgroundColor(options.username),
+        bg: 'black',
       },
       tags: true,
-      controls: false, // Disable controls for tile view
-    });
+    }) as any;
 
     // Render avatar or video placeholder
     this.updateVideoDisplay();
@@ -132,21 +132,13 @@ export class VideoTile {
     if (this.options.hasVideo) {
       // Only show placeholder if we haven't received any frames yet
       if (!this.hasFrame) {
-        const width = (this.container.width as number) - 4;
-        const height = (this.container.height as number) - 4;
-        
-        // Create a centered message
+        const height = Math.max(0, (this.container.height as number) - 3);
         const message = this.videoError || 'WAITING FOR VIDEO...';
         const topPadding = Math.max(0, Math.floor((height - 1) / 2));
-        
         const placeholder = [
-          '{gray-fg}' + '┌' + '─'.repeat(width) + '┐' + '{/gray-fg}',
-          ...Array(topPadding).fill('{gray-fg}│' + ' '.repeat(width) + '│{/gray-fg}'),
-          '{gray-fg}│{/gray-fg}{center}{yellow-fg}{bold}' + message + '{/yellow-fg}{/bold}{/center}{gray-fg}│{/gray-fg}',
-          ...Array(Math.max(0, height - topPadding - 1)).fill('{gray-fg}│' + ' '.repeat(width) + '│{/gray-fg}'),
-          '{gray-fg}└' + '─'.repeat(width) + '┘' + '{/gray-fg}',
+          ...Array(topPadding).fill(''),
+          `{center}{yellow-fg}{bold}${message}{/bold}{/yellow-fg}{/center}`,
         ];
-        
         this.videoBox.setContent(placeholder.join('\n'));
       }
       this.videoBox.style.bg = 'black';

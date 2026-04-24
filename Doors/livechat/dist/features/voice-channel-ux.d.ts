@@ -118,6 +118,11 @@ export declare class EnhancedVoiceChannel {
     isInVoiceChannel(): boolean;
     getCurrentVoiceChannel(): string | undefined;
     getVoiceChannels(): VoiceChannelItem[];
+    /**
+     * Adjust channel list height to make room for voice controls in sidebar.
+     * Voice control bar is 4 rows tall at the bottom of the sidebar.
+     */
+    private adjustChannelListForVoice;
     destroy(): void;
 }
 export declare function createEnhancedVoiceChannel(options: EnhancedVoiceChannelOptions): EnhancedVoiceChannel;

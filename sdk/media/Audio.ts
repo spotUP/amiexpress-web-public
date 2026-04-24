@@ -35,23 +35,17 @@ export class Audio implements AudioAPI {
   }
 
   async startStreaming(options?: AudioStreamOptions): Promise<string> {
-    return new Promise((resolve, reject) => {
-      this.socket.emit('audio:start-streaming', options, (response: any) => {
-        if (response && response.success) {
-          resolve(response.streamId);
-        } else {
-          reject(new Error(response?.error || 'Failed to start audio streaming'));
-        }
-      });
-    });
+    // The browser-side ClientDoor SDK doesn't ack this event (it re-emits it
+    // locally for the door code to handle). Historically, waiting for an ack
+    // here caused startStreaming() to hang forever. We resolve immediately
+    // after emitting; the actual capture happens when the client calls
+    // getUserMedia. Any capture errors come back via the 'audio:error' event.
+    this.socket.emit('audio:start-streaming', options);
+    return `stream-${Date.now()}`;
   }
 
   async stopStreaming(): Promise<void> {
-    return new Promise((resolve) => {
-      this.socket.emit('audio:stop-streaming', () => {
-        resolve();
-      });
-    });
+    this.socket.emit('audio:stop-streaming');
   }
 
   getActiveStreams(): AudioStreamInfo[] {

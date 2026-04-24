@@ -35,27 +35,13 @@ export class Video implements VideoAPI {
   }
 
   async startStream(source: VideoSource, options?: VideoStreamOptions): Promise<string> {
-    return new Promise((resolve, reject) => {
-      this.socket.emit('video:start-stream', { source, options }, (response: any) => {
-        if (response && response.success) {
-          resolve(response.streamId);
-        } else {
-          reject(new Error(response?.error || 'Failed to start video stream'));
-        }
-      });
-    });
+    // Browser-side ClientDoor doesn't ack; resolve immediately after emitting.
+    this.socket.emit('video:start-stream', { source, options });
+    return `video-${Date.now()}`;
   }
 
   async stopStream(streamId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.socket.emit('video:stop-stream', { streamId }, (response: any) => {
-        if (response && response.success) {
-          resolve();
-        } else {
-          reject(new Error(response?.error || 'Failed to stop video stream'));
-        }
-      });
-    });
+    this.socket.emit('video:stop-stream', { streamId });
   }
 
   async subscribe(streamId: string): Promise<void> {

@@ -19,6 +19,8 @@ import type {
 import { Output } from './Output';
 import { Input } from './Input';
 import { Storage } from './Storage';
+import { Audio } from '../../media/Audio';
+import { Video } from '../../media/Video';
 
 export class Door {
   public readonly config: DoorConfig;
@@ -181,12 +183,17 @@ export class Door {
       global: !user,
     });
 
+    const audio = new Audio(socket, bbsSession?.currentRoomId);
+    const video = new Video(socket);
+
     return {
       user: user || { id: '0', username: 'Guest', accessLevel: 0, timesCalled: 0, uploads: 0, downloads: 0 },
       nodeId,
       output,
       input,
       storage,
+      audio,
+      video,
       params,
       bbs,
       socket,

@@ -667,8 +667,11 @@ console.error(
         throw new Error("User not found");
       }
 
-      // Check if this is a chat-only user (from web chat login)
-      if (decoded.chatOnly) {
+      // Check if this is a chat-only user:
+      //  - decoded.chatOnly=true: token minted via /api/chat/login
+      //  - OR the handshake query ?chatOnly=true: standard BBS token reused for SSO
+      const chatOnlyQuery = socket.handshake?.query?.chatOnly === "true";
+      if (decoded.chatOnly || chatOnlyQuery) {
         // Create a proper BBS session for web chat users
         const nodeId = getNextAvailableNodeId();
         const session = createSession(nodeId);
@@ -1188,11 +1191,35 @@ console.log(`Client connected from ${clientIp}`);
   // Check if this is a web chat user (session already created in JWT auth middleware)
   const existingSession = (socket as any).session;
   if (existingSession?.chatOnly) {
-console.log(
-      `[Socket.IO] Web chat user ${existingSession.user?.username} - skipping BBS initialization`
+    console.log(
+      `[Socket.IO] Web chat user ${existingSession.user?.username} - launching livechat door via SSO`
     );
-    // Just register the socket handlers for chat functionality
+
+    // Register socket handlers
     registerSocketHandlers(io, socket, chatState);
+
+    // Mark tempData so livechat knows this is chat-only mode
+    if (!existingSession.tempData) existingSession.tempData = {};
+    existingSession.tempData.chatOnly = true;
+    // Copy session.user to bbsSession-equivalent fields so livechat finds it
+    // (livechat checks ctx.bbsSession?.user — session here IS the bbsSession)
+
+    // Launch LiveChat door directly — user is already authenticated
+    const { executeDoor } = require("./handlers/door.handler");
+    const liveChatDoor = {
+      id: "livechat",
+      name: "LiveChat",
+      command: "livechat",
+      type: "typescript",
+      path: "Doors/livechat",
+    };
+
+    console.log("[SSO] Executing LiveChat door for authenticated user");
+    // Small delay to ensure client handlers are fully registered
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    executeDoor(socket, existingSession, liveChatDoor).catch((err: any) => {
+      console.error("[SSO] LiveChat door execution failed:", err);
+    });
     return;
   }
 

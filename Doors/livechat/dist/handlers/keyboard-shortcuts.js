@@ -72,10 +72,16 @@ function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, s
         return ps;
     };
     const fpi = (ps, f) => ps.findIndex(p => p === f || (p.rows && p.rows === f));
-    s.key(['tab'], () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1)
-        ci = 0; const ni = (ci + 1) % ps.length; ps[ni].focus(); s.render(); });
-    s.key(['S-tab'], () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1)
-        ci = 0; const pi = (ci - 1 + ps.length) % ps.length; ps[pi].push ? ps[pi].focus() : ps[pi].focus(); s.render(); });
+    // Exported focus cycling functions for use by inputBox tab handler
+    const cycleFocusForward = () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1)
+        ci = 0; const ni = (ci + 1) % ps.length; ps[ni].focus(); s.render(); return true; };
+    const cycleFocusBackward = () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1)
+        ci = 0; const pi = (ci - 1 + ps.length) % ps.length; ps[pi].focus(); s.render(); return true; };
+    s.key(['tab'], cycleFocusForward);
+    s.key(['S-tab'], cycleFocusBackward);
+    // Expose on screen for inputBox to call
+    s._cycleFocusForward = cycleFocusForward;
+    s._cycleFocusBackward = cycleFocusBackward;
     // Emergency Layout Reset (Alt+R)
     s.key(['M-r'], () => {
         // Reset sidebar to left dock

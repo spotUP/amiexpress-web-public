@@ -67,6 +67,11 @@ export default function ChatTerminal() {
     // Track mouse tracking state for Ctrl+M toggle
     let mouseTrackingDisabled = false;
 
+    // Track pressed keys for stuck-key detection
+    const normalPressedKeys = new Map<string, number>(); // code -> first press timestamp
+    const blockedKeys = new Set<string>(); // keys blocked until real keyup
+    const MAX_NORMAL_REPEAT_MS = 5000; // max ms before we assume key is stuck
+
     // Custom keyboard handler
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       // Ctrl+Shift+M: toggle mouse tracking on/off
@@ -82,6 +87,30 @@ export default function ChatTerminal() {
           console.log('[ChatTerminal] Mouse tracking ENABLED (Ctrl+M)');
         }
         return false;
+      }
+
+      // Stuck key detection: block keys repeating beyond threshold
+      const keyId = event.code || event.key;
+      if (event.type === 'keydown') {
+        if (blockedKeys.has(keyId)) {
+          event.preventDefault();
+          return false;
+        }
+        if (event.repeat) {
+          const firstPress = normalPressedKeys.get(keyId);
+          if (firstPress && Date.now() - firstPress > MAX_NORMAL_REPEAT_MS) {
+            blockedKeys.add(keyId);
+            normalPressedKeys.delete(keyId);
+            event.preventDefault();
+            return false;
+          }
+        } else {
+          normalPressedKeys.set(keyId, Date.now());
+          blockedKeys.delete(keyId);
+        }
+      } else if (event.type === 'keyup') {
+        normalPressedKeys.delete(keyId);
+        blockedKeys.delete(keyId);
       }
 
       // Shift+Arrow keys for text selection in livechat
@@ -208,6 +237,11 @@ export default function ChatTerminal() {
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const backendUrl = isDevelopment ? 'http://localhost:3001' : window.location.origin;
 
+    // Check for SSO token from main BBS login
+    const ssoToken =
+      localStorage.getItem('authToken') ||
+      localStorage.getItem('bbs_auth_token');
+
     // Connect with chatOnly flag - backend will auto-launch LiveChat after login
     // IMPORTANT: autoConnect: false to ensure handlers are registered before connection
     // This prevents race condition where backend emits door:load-client before handlers exist
@@ -217,6 +251,7 @@ export default function ChatTerminal() {
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       autoConnect: false,  // Don't connect until handlers are registered
+      auth: ssoToken ? { token: ssoToken } : {},
       query: {
         chatOnly: 'true'  // Signal to backend this is chat-only mode
       }
@@ -331,12 +366,28 @@ export default function ChatTerminal() {
 
     term.focus();
 
+    // Prevent stuck keys: clear tracking when window loses focus or tab becomes hidden
+    const handleWindowBlur = () => {
+      normalPressedKeys.clear();
+      blockedKeys.clear();
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        normalPressedKeys.clear();
+        blockedKeys.clear();
+      }
+    };
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // NOW connect - all handlers are registered, safe to receive events
     console.log('[ChatTerminal] All handlers registered, connecting...');
     socket.connect();
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (resizeObserver) {
         resizeObserver.disconnect();
       }

@@ -8,42 +8,12 @@
  * - Active speaker highlighting
  * - Username label
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoTile = void 0;
-const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 /**
  * Generate ASCII avatar based on username
  */
@@ -97,18 +67,18 @@ class VideoTile {
             },
             tags: true,
         });
-        // Video/avatar display area
-        this.videoBox = new blessed_1.Video({
+        // Video/avatar display area (no border — outer container already provides one)
+        this.videoBox = blessed_1.default.box({
             parent: this.container,
             left: 0,
             top: 0,
-            width: '100%',
-            height: '100%-1',
+            width: '100%-2',
+            height: '100%-3',
+            border: undefined,
             style: {
-                bg: options.hasVideo ? 'black' : getBackgroundColor(options.username),
+                bg: 'black',
             },
             tags: true,
-            controls: false, // Disable controls for tile view
         });
         // Render avatar or video placeholder
         this.updateVideoDisplay();
@@ -134,17 +104,12 @@ class VideoTile {
         if (this.options.hasVideo) {
             // Only show placeholder if we haven't received any frames yet
             if (!this.hasFrame) {
-                const width = this.container.width - 4;
-                const height = this.container.height - 4;
-                // Create a centered message
+                const height = Math.max(0, this.container.height - 3);
                 const message = this.videoError || 'WAITING FOR VIDEO...';
                 const topPadding = Math.max(0, Math.floor((height - 1) / 2));
                 const placeholder = [
-                    '{gray-fg}' + '┌' + '─'.repeat(width) + '┐' + '{/gray-fg}',
-                    ...Array(topPadding).fill('{gray-fg}│' + ' '.repeat(width) + '│{/gray-fg}'),
-                    '{gray-fg}│{/gray-fg}{center}{yellow-fg}{bold}' + message + '{/yellow-fg}{/bold}{/center}{gray-fg}│{/gray-fg}',
-                    ...Array(Math.max(0, height - topPadding - 1)).fill('{gray-fg}│' + ' '.repeat(width) + '│{/gray-fg}'),
-                    '{gray-fg}└' + '─'.repeat(width) + '┘' + '{/gray-fg}',
+                    ...Array(topPadding).fill(''),
+                    `{center}{yellow-fg}{bold}${message}{/bold}{/yellow-fg}{/center}`,
                 ];
                 this.videoBox.setContent(placeholder.join('\n'));
             }

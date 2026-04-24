@@ -87,7 +87,9 @@ export class BBSEventHandler {
 
         // Color-code based on event type
         let eventColor = 'white-fg';
-        if (eventType.includes('create') || eventType.includes('add') || eventType.includes('new')) {
+        if (eventType === 'score' || eventType === 'score_submitted') {
+          eventColor = 'yellow-fg';
+        } else if (eventType.includes('create') || eventType.includes('add') || eventType.includes('new')) {
           eventColor = 'green-fg';
         } else if (eventType.includes('delete') || eventType.includes('remove')) {
           eventColor = 'red-fg';
@@ -97,6 +99,17 @@ export class BBSEventHandler {
           eventColor = 'yellow-fg';
         } else if (eventType.includes('update') || eventType.includes('edit') || eventType.includes('move')) {
           eventColor = 'cyan-fg';
+        }
+
+        // Score events get a special trophy prefix
+        if (eventType === 'score' || eventType === 'score_submitted') {
+          const pbTag = event.data?.isPersonalBest ? ' {lightgreen-fg}[NEW PB!]{/}' : '';
+          return `{cyan-fg}[${timestamp}]{/} {${eventColor}}[${doorName}]{/} {white-fg}${username}{/}: ${message}${pbTag}`;
+        }
+
+        // Match result events (winner/loser)
+        if (eventType === 'match_result') {
+          return `{cyan-fg}[${timestamp}]{/} {yellow-fg}[${doorName}]{/} {white-fg}${username}{/} ${message}`;
         }
 
         return `{cyan-fg}[${timestamp}]{/} {${eventColor}}[${doorName}]{/} {white-fg}${username}{/}: ${message}`;

@@ -684,6 +684,14 @@ console.log('🎯 F1 pressed during chat - exiting chat');
     }
 
     if (session.clientDoorActive) {
+      // Exception: if a server-side blessed modal has installed a doorInputHandler
+      // (e.g., chat-only login modal during hybrid-door startup), route input there.
+      // The client bundle loads before the server onStart login modal shows, so
+      // clientDoorActive is already true by the time the user needs to type.
+      if (session.inDoorManager && session.doorInputHandler) {
+        console.log('[socket-handlers] clientDoorActive=true BUT server doorInputHandler set — routing to server modal');
+        session.doorInputHandler(data);
+      }
       return;
     }
 

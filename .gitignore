@@ -334,6 +334,7 @@ Doors/AquaScan/AquaScan.Date.*
 # GMaster binary assets (large audio files)
 Doors/grandmaster/assets/music/
 Doors/grandmaster/assets/sounds/
+Doors/grandmaster/assets/voices/
 
 # SDK build artifacts (compiled JS in dist-esm)
 sdk/dist-esm/**/*.js
@@ -342,6 +343,8 @@ sdk/dist-esm/**/*.d.ts
 # Conference runtime files
 Conf*/Dir1
 Conf*/Dir1.test
+Conf*/DIR[0-9]
+Conf*/DIR[0-9][0-9]
 Conf*/NumULs
 Conf*/Files/*.dir
 Conf*/Upload/FILES.BBS

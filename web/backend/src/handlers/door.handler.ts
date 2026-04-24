@@ -1861,7 +1861,12 @@ console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment 
       LoggedOnSubState?.DISPLAY_MENU,
     ];
     const wasInDisplayFlow = displayFlowStates.includes(originalSubState);
-    if (session.state === BBSState.LOGGEDON && session.user && !wasInDisplayFlow) {
+    // Suppress BBS menu for chatOnly SSO sessions — there is no BBS context to
+    // return to on the /chat/ page. Showing the main menu here causes a BBS
+    // login prompt to appear inside /chat/ when the livechat door exits (e.g.
+    // after a transient socket disconnect that reaches this cleanup path).
+    const isChatOnly = (session as any).chatOnly === true || session.tempData?.chatOnly === true;
+    if (session.state === BBSState.LOGGEDON && session.user && !wasInDisplayFlow && !isChatOnly) {
       await displayMainMenu(socket, session);
     } else if (wasInDisplayFlow) {
       // Restore original subState for display flow to continue
@@ -1917,8 +1922,9 @@ console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err)
       socket.emit('modem-speed', savedModemSpeed);
     }
 
-    // Only display menu if user is logged in
-    if (session.state === BBSState.LOGGEDON && session.user) {
+    // Only display menu if user is logged in (and not chatOnly — see note above)
+    const isChatOnlyErr = (session as any).chatOnly === true || session.tempData?.chatOnly === true;
+    if (session.state === BBSState.LOGGEDON && session.user && !isChatOnlyErr) {
       await displayMainMenu(socket, session);
     }
   }

@@ -51,6 +51,12 @@ class LiveChatClient {
   private mediaRecorder: MediaRecorder | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
 
+  // Video capture state
+  private videoStream: MediaStream | null = null;
+  private videoElement: HTMLVideoElement | null = null;
+  private videoCanvas: HTMLCanvasElement | null = null;
+  private videoFrameInterval: ReturnType<typeof setInterval> | null = null;
+
   // Voice state
   private isStreaming: boolean = false;
   private isMuted: boolean = false;
@@ -158,6 +164,20 @@ class LiveChatClient {
     this.door.on('audio:mute', (data: { muted: boolean }) => {
       console.log('[LiveChatClient] Received mute command:', data.muted);
       this.setMuted(data.muted);
+    });
+
+    // ==========================================================================
+    // Video Capture
+    // ==========================================================================
+
+    this.door.on('video:start-stream', async (data: any) => {
+      console.log('[LiveChatClient] Received video:start-stream command:', data);
+      await this.startVideoCapture(data?.options || {});
+    });
+
+    this.door.on('video:stop-stream', async () => {
+      console.log('[LiveChatClient] Received video:stop-stream command');
+      this.stopVideoCapture();
     });
 
     // Incoming audio from other users in voice channel
@@ -541,6 +561,124 @@ class LiveChatClient {
     } catch (error) {
       console.error('[LiveChatClient] Fallback playback error:', error);
     }
+  }
+
+  // ==========================================================================
+  // Video Capture (Webcam)
+  // ==========================================================================
+
+  private async startVideoCapture(options: any): Promise<void> {
+    if (this.videoStream) {
+      console.log('[LiveChatClient] Video already capturing');
+      return;
+    }
+
+    try {
+      console.log('[LiveChatClient] Requesting camera access...');
+      this.videoStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+          frameRate: { ideal: options.fps || 10 },
+        },
+        audio: false,
+      });
+
+      console.log('[LiveChatClient] Got video stream:', this.videoStream.id);
+
+      // Create a hidden <video> to play the stream
+      if (!this.videoElement) {
+        this.videoElement = document.createElement('video');
+        this.videoElement.autoplay = true;
+        this.videoElement.muted = true;
+        this.videoElement.playsInline = true;
+        this.videoElement.style.display = 'none';
+        document.body.appendChild(this.videoElement);
+      }
+      this.videoElement.srcObject = this.videoStream;
+      await this.videoElement.play().catch(() => {});
+
+      // Create hidden canvas for frame capture
+      if (!this.videoCanvas) {
+        this.videoCanvas = document.createElement('canvas');
+        this.videoCanvas.style.display = 'none';
+        document.body.appendChild(this.videoCanvas);
+      }
+      this.videoCanvas.width = options.width || 80;
+      this.videoCanvas.height = options.height || 24;
+
+      // Send frames at configured FPS
+      const fps = options.fps || 10;
+      const intervalMs = Math.max(50, Math.floor(1000 / fps));
+      this.videoFrameInterval = setInterval(() => {
+        this.sendVideoFrame(!!options.colored);
+      }, intervalMs);
+
+      this.door.emit('video:started');
+      console.log('[LiveChatClient] Video capture started');
+    } catch (error) {
+      console.error('[LiveChatClient] Failed to start video:', error);
+      this.door.emit('video:error', { message: (error as Error).message });
+      this.stopVideoCapture();
+    }
+  }
+
+  private sendVideoFrame(colored: boolean): void {
+    if (!this.videoElement || !this.videoCanvas || !this.videoStream) return;
+    if (this.videoElement.videoWidth === 0) return;
+    const ctx = this.videoCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(
+      this.videoElement,
+      0,
+      0,
+      this.videoCanvas.width,
+      this.videoCanvas.height,
+    );
+    // Convert to simple ASCII art frame (one line per row)
+    const imgData = ctx.getImageData(
+      0,
+      0,
+      this.videoCanvas.width,
+      this.videoCanvas.height,
+    );
+    const chars = ' .:-=+*#%@';
+    let ascii = '';
+    for (let y = 0; y < this.videoCanvas.height; y++) {
+      for (let x = 0; x < this.videoCanvas.width; x++) {
+        const i = (y * this.videoCanvas.width + x) * 4;
+        const r = imgData.data[i];
+        const g = imgData.data[i + 1];
+        const b = imgData.data[i + 2];
+        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        const ch = chars[Math.floor(lum * (chars.length - 1))] || ' ';
+        if (colored) {
+          // Build a minimal ANSI 24-bit foreground
+          ascii += `\x1b[38;2;${r};${g};${b}m${ch}`;
+        } else {
+          ascii += ch;
+        }
+      }
+      if (colored) ascii += '\x1b[0m';
+      ascii += '\n';
+    }
+    this.door.emit('video:frame', { frame: ascii });
+  }
+
+  private stopVideoCapture(): void {
+    if (this.videoFrameInterval) {
+      clearInterval(this.videoFrameInterval);
+      this.videoFrameInterval = null;
+    }
+    if (this.videoStream) {
+      this.videoStream.getTracks().forEach((t) => t.stop());
+      this.videoStream = null;
+    }
+    if (this.videoElement) {
+      this.videoElement.srcObject = null;
+    }
+    this.door.emit('video:stopped');
+    console.log('[LiveChatClient] Video capture stopped');
   }
 
   public start(): void {
