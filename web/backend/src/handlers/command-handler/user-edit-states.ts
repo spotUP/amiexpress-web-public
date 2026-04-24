@@ -27,6 +27,11 @@ import {
   handleWEditModemSpeedInput,
   handleWEditFontInput,
 } from '../commands/info-commands.handler';
+import {
+  handleForgetMeConfirmInput,
+  handleForgetMePasswordInput,
+  handleForgetMeUsernameInput,
+} from '../user/gdpr.handler';
 import { emitText } from '../../utils/output.util';
 
 /**
@@ -50,6 +55,11 @@ const W_EDIT_HANDLERS: Map<LoggedOnSubState, (socket: any, session: BBSSession, 
   [LoggedOnSubState.W_EDIT_TRANSLATOR, handleWEditTranslatorInput],
   [LoggedOnSubState.W_EDIT_MODEM_SPEED, handleWEditModemSpeedInput],
   [LoggedOnSubState.W_EDIT_FONT, handleWEditFontInput],
+  // WEB_ GDPR self-service (Phase 3). 'YES ERASE' is case-sensitive so we
+  // need echo; password step is password-masked via the NO_ECHO set.
+  [LoggedOnSubState.W_FORGETME_CONFIRM, handleForgetMeConfirmInput],
+  [LoggedOnSubState.W_FORGETME_PASSWORD, handleForgetMePasswordInput],
+  [LoggedOnSubState.W_FORGETME_USERNAME, handleForgetMeUsernameInput],
 ]);
 
 /**
@@ -70,6 +80,8 @@ const ECHO_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.W_EDIT_TRANSLATOR,
   LoggedOnSubState.W_EDIT_MODEM_SPEED,
   LoggedOnSubState.W_EDIT_FONT,
+  LoggedOnSubState.W_FORGETME_CONFIRM,
+  LoggedOnSubState.W_FORGETME_USERNAME,
 ]);
 
 /**
@@ -78,6 +90,7 @@ const ECHO_STATES = new Set<LoggedOnSubState>([
 const NO_ECHO_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.W_EDIT_PASSWORD,
   LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM,
+  LoggedOnSubState.W_FORGETME_PASSWORD,
 ]);
 
 /**

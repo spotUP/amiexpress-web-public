@@ -492,6 +492,22 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, AnsiUtil.colorize(userFont, 'yellow'));
   emitText(socket, '\r\n');
 
+  // WEB_: Phase 3 GDPR self-service — see thoughts/shared/plans/
+  // 2026-04-24-gdpr-hobby-baseline.md. No express.e counterpart.
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, ' 19');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('VIEW MY DATA (GDPR).... ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize('print a copy of your record', 'yellow'));
+  emitText(socket, '\r\n');
+
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, ' 20');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('DELETE MY ACCOUNT...... ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize('erase your data (GDPR)', 'red'));
+  emitText(socket, '\r\n');
+
   emitText(socket, '\r\n');
   emitText(socket, 'Which to change <CR>=QUIT ? ');
 }
@@ -552,8 +568,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
 
   const option = parseInt(trimmed, 10);
 
-  // Invalid option number
-  if (isNaN(option) || option < 0 || option > 18) {
+  // Invalid option number (18 = last express.e/web-extension option, 19/20 = GDPR)
+  if (isNaN(option) || option < 0 || option > 20) {
     _displayWCommandMenu(socket, session);
     return;
   }
@@ -734,6 +750,18 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       emitText(socket, 'Select (1-5) or <CR>=Cancel: ');
       session.subState = LoggedOnSubState.W_EDIT_FONT;
       break;
+
+    case 19: { // WEB_ GDPR view-my-data (Phase 3 plan)
+      const { handleViewMyDataOption } = require('../user/gdpr.handler');
+      await handleViewMyDataOption(socket, session);
+      break;
+    }
+
+    case 20: { // WEB_ GDPR delete-my-account (Phase 3 plan)
+      const { startForgetMe } = require('../user/gdpr.handler');
+      startForgetMe(socket, session);
+      break;
+    }
 
     default:
       _displayWCommandMenu(socket, session);
