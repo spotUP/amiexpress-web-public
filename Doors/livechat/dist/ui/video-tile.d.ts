@@ -63,7 +63,9 @@ export declare class VideoTile {
      */
     setVideoError(message: string): void;
     /**
-     * Set active speaker highlighting
+     * Set active speaker highlighting. Tile container is borderless now (to
+     * avoid nested-window visual clutter), so indicate active speaker via
+     * the status bar background instead.
      */
     setActive(active: boolean): void;
     /**

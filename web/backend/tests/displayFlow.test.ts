@@ -96,6 +96,14 @@ jest.mock('../src/handlers/operations/conference.handler', () => ({
   joinConference: jest.fn(),
 }));
 
+// Mock confScan so it doesn't call the real message scanner or set menuPause
+jest.mock('../src/handlers/message/message-scan.handler', () => ({
+  performConferenceScan: jest.fn(async (_socket: any, session: any) => {
+    const { LoggedOnSubState } = require('../src/constants/bbs-states');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  }),
+}));
+
 jest.mock('../src/handlers/door.handler', () => ({
   executeDoor: jest.fn(),
   displayDoorMenu: jest.fn(),
@@ -169,31 +177,53 @@ describe('Display flow parity', () => {
   test('advances through display flow states (BULL -> NODE_BULL -> CONF_BULL -> MENU)', async () => {
     const session = baseSession();
 
-    // For this test, doPause should NOT set paginatedScreen (so flow continues)
+    // For this test, doPause should NOT set paginatedScreen (so bulletin flow continues)
     doPauseMock.mockImplementation(() => {
       // Don't set paginatedScreen - let the flow continue
     });
 
-    // Call handleCommand to trigger display flow
+    // First call: BULL → NODE_BULL → CONF_BULL → AUTO_REJOIN → DISPLAY_MENU.
+    // CONF_SCAN sets session.menuPause=true, so DISPLAY_MENU calls doPause and returns.
     await handleCommand(socket, session, '');
-
-    // Verify screens were displayed in correct order
     expect(displayScreenMock).toHaveBeenCalled();
-    const screenCalls = displayScreenMock.mock.calls;
-    const screenNames = screenCalls.map((call: any[]) => call[2]);
-
-    // Should display BULL and NODE_BULL (flow continues without pausing)
+    const screenNames = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
     expect(screenNames).toContain('BULL');
     expect(screenNames).toContain('NODE_BULL');
-
-    // Should call conference bulletins
     expect(displayConferenceBulletinsMock).toHaveBeenCalled();
-
-    // Should eventually call main menu
-    expect(displayMainMenuMock).toHaveBeenCalled();
-
-    // doPause should be called for pauses (even though we don't stop)
     expect(doPauseMock).toHaveBeenCalled();
+
+    // Second call: resumes from DISPLAY_MENU (menuPause now false) — main menu shown.
+    displayScreenMock.mockClear();
+    await handleCommand(socket, session, '');
+    expect(displayMainMenuMock).toHaveBeenCalled();
+  });
+
+  // express.e:29853-29855 — quickFlag=TRUE skips BULL bulletin display
+  test('express.e:29853 — quickFlag=true skips BULL screen entirely', async () => {
+    doPauseMock.mockImplementation(() => {}); // no-pause, let flow continue
+    const session = baseSession();
+    session.quickFlag = true;
+
+    await handleCommand(socket, session, '');
+
+    const bullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'BULL');
+    expect(bullCalls).toHaveLength(0);
+    const nodeBullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'NODE_BULL');
+    expect(nodeBullCalls).toHaveLength(0);
+  });
+
+  // express.e:28556 — doPause IS called when BULL screen was shown
+  test('express.e:28556 — doPause called when BULL displayScreen returns true', async () => {
+    // Default doPauseMock installs a paginatedScreen — the flow stops at BULL
+    const session = baseSession();
+
+    await handleCommand(socket, session, '');
+
+    expect(doPauseMock).toHaveBeenCalled();
+    const bullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'BULL');
+    expect(bullCalls.length).toBeGreaterThan(0);
+    // Flow should be paused (paginatedScreen set by doPauseMock)
+    expect(session.paginatedScreen).toBeDefined();
   });
 
   test('skips bull screens when NO_BULLS/NO_CONF_BULLS set', async () => {

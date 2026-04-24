@@ -29,7 +29,11 @@ export interface VideoTileOptions {
 }
 
 /**
- * Generate ASCII avatar based on username
+ * Generate ASCII avatar based on username. Foreground colour is still
+ * derived from the username so different users are visually distinct,
+ * but the background stays black (see constructor) — the loud per-user
+ * bg tint (magenta/red/etc.) that 2026-04-24 feedback flagged as "looks
+ * wrong" is gone.
  */
 function generateAvatar(username: string): string[] {
   const colors = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan'];
@@ -49,15 +53,6 @@ function generateAvatar(username: string): string[] {
 }
 
 /**
- * Get background color based on username
- */
-function getBackgroundColor(username: string): string {
-  const colors = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan'];
-  const colorIndex = username.length % colors.length;
-  return colors[colorIndex];
-}
-
-/**
  * VideoTile - Individual participant tile
  */
 export class VideoTile {
@@ -74,31 +69,28 @@ export class VideoTile {
     this.options = options;
     this.screen = options.screen;
 
-    // Tile container with border
+    // Tile container — no inner border; the parent chat panel already
+    // has its own. Adding another one just makes the video area look like
+    // nested windows (reported 2026-04-24).
     this.container = blessed.box({
       parent: options.parent,
       left: options.left,
       top: options.top,
       width: options.width,
       height: options.height,
-      border: {
-        type: 'line',
-      },
-      style: {
-        border: {
-          fg: 'white',
-        },
-      },
+      border: undefined,
+      style: { bg: 'black' },
       tags: true,
     });
 
-    // Video/avatar display area (no border — outer container already provides one)
+    // Video/avatar display area — fills the container, leaving one row
+    // at the bottom for the status bar (container is now borderless).
     this.videoBox = blessed.box({
       parent: this.container,
       left: 0,
       top: 0,
-      width: '100%-2',
-      height: '100%-3',
+      width: '100%',
+      height: '100%-1',
       border: undefined,
       style: {
         bg: 'black',
@@ -132,7 +124,9 @@ export class VideoTile {
     if (this.options.hasVideo) {
       // Only show placeholder if we haven't received any frames yet
       if (!this.hasFrame) {
-        const height = Math.max(0, (this.container.height as number) - 3);
+        // Container is borderless now; videoBox is height-1 inside it
+        // (status bar takes the last row).
+        const height = Math.max(0, (this.container.height as number) - 1);
         const message = this.videoError || 'WAITING FOR VIDEO...';
         const topPadding = Math.max(0, Math.floor((height - 1) / 2));
         const placeholder = [
@@ -146,7 +140,8 @@ export class VideoTile {
       // Reset frame tracking and error when video is disabled
       this.hasFrame = false;
       this.videoError = null;
-      // Show avatar with colored background
+      // Show avatar on black — avatar fg is per-user (see generateAvatar)
+      // so users are visually distinct without a loud background tint.
       const avatar = generateAvatar(this.options.username);
       const avatarContent = [
         '',
@@ -154,7 +149,7 @@ export class VideoTile {
         '',
       ];
       this.videoBox.setContent(avatarContent.join('\n'));
-      this.videoBox.style.bg = getBackgroundColor(this.options.username);
+      this.videoBox.style.bg = 'black';
     }
   }
 
@@ -226,21 +221,16 @@ export class VideoTile {
   }
 
   /**
-   * Set active speaker highlighting
+   * Set active speaker highlighting. Tile container is borderless now (to
+   * avoid nested-window visual clutter), so indicate active speaker via
+   * the status bar background instead.
    */
   setActive(active: boolean): void {
     this.isActive = active;
-
-    if (active) {
-      // Green double-line border for active speaker
-      this.container.border = { type: 'line' };
-      this.container.style.border = { fg: 'green' };
-    } else {
-      // Normal white border
-      this.container.border = { type: 'line' };
-      this.container.style.border = { fg: 'white' };
+    if (this.statusBar) {
+      this.statusBar.style.bg = active ? 'green' : 'black';
+      this.statusBar.style.fg = active ? 'black' : 'white';
     }
-
     this.screen.render();
   }
 

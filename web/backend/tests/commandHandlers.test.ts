@@ -1,6 +1,162 @@
 import { Database } from '../src/database';
 import { ConfigManager } from '../src/config';
 
+// Mocks required to call processBBSCommand without booting the Amiga emulator
+jest.mock('../src/index', () => ({
+  BBSState: { LOGGEDON: 'loggedon', AWAIT: 'await' },
+  LoggedOnSubState: {},
+}));
+jest.mock('../src/handlers/door.handler', () => ({
+  DoorHandler: class { async runDoor() {} },
+  executeDoor: jest.fn().mockResolvedValue(undefined),
+  handleDoorCommand: jest.fn().mockResolvedValue(undefined),
+  displayDoorMenu: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../src/handlers/screen.handler', () => ({
+  displayScreen: jest.fn().mockResolvedValue(false),
+  doPause: jest.fn().mockResolvedValue(undefined),
+  hasKeysFile: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../src/handlers/command-handler/dependency-injection', () => ({
+  getConfig: jest.fn().mockReturnValue({}),
+  getMessageBases: jest.fn().mockReturnValue([]),
+  getProcessOlmMessageQueue: jest.fn().mockReturnValue(jest.fn()),
+  getScreenMenu: jest.fn().mockReturnValue(null),
+  getDoors: jest.fn().mockReturnValue([]),
+  getDatabase: jest.fn().mockReturnValue({
+    getActiveSessions: jest.fn().mockResolvedValue([]),
+    getUsers: jest.fn().mockResolvedValue([]),
+    getUserByUsername: jest.fn().mockResolvedValue(null),
+    createChatSession: jest.fn().mockResolvedValue('sess-1'),
+  }),
+  getConferences: jest.fn().mockReturnValue([]),
+  getFileAreas: jest.fn().mockReturnValue([]),
+  getSessions: jest.fn().mockReturnValue(new Map()),
+}));
+jest.mock('../src/utils/output.util', () => ({
+  emitText: jest.fn((s: any, t: string) => s?.emit?.('ansi-output', t)),
+  emitPrompt: jest.fn((s: any, t: string) => s?.emit?.('ansi-output', t)),
+}));
+jest.mock('../src/handlers/file/download.handler', () => ({
+  DownloadHandler: { handleDownloadCommand: jest.fn().mockResolvedValue(undefined) },
+}));
+jest.mock('../src/handlers/transfer/batch-download.handler', () => ({
+  BatchDownloadHandler: { handleBatchDownload: jest.fn().mockResolvedValue(undefined) },
+}));
+jest.mock('../src/handlers/command-execution.handler', () => ({
+  commandCache: { bbscmd: new Map(), syscmd: new Map() },
+  runBbsCommand: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../src/handlers/transfer/olm.handler', () => ({
+  handleOlmCommand: jest.fn().mockResolvedValue(undefined),
+  handleQuietCommand: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../src/handlers/room-commands.handler', () => ({ handleRoomCommand: jest.fn() }), { virtual: true });
+jest.mock('../src/handlers/content/view-file.handler', () => ({
+  ViewFileHandler: { handleViewFile: jest.fn(), handleViewFileCommand: jest.fn().mockResolvedValue(undefined) },
+}));
+jest.mock('../src/handlers/zippy-search.handler', () => ({
+  ZippySearchHandler: { handleZippySearchCommand: jest.fn().mockResolvedValue(undefined), handle: jest.fn() },
+}), { virtual: true });
+jest.mock('../src/server/session-manager', () => ({ setSession: jest.fn(), userSessions: new Map() }));
+jest.mock('../src/handlers/commands/system-commands.handler', () => ({
+  handleGoodbyeCommand: jest.fn(async (s: any) => { s.disconnect(); }),
+  handleQuietModeCommand: jest.fn().mockResolvedValue(undefined),
+  handleHelpCommand: jest.fn().mockResolvedValue(undefined),
+  handleReadMessagesCommand: jest.fn().mockResolvedValue(undefined),
+  handleEnterMessageCommand: jest.fn().mockResolvedValue(undefined),
+  setSystemCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/user-commands.handler', () => ({
+  handleUploadCommand: jest.fn().mockResolvedValue(undefined),
+  handleJoinConferenceCommand: jest.fn().mockResolvedValue(undefined),
+  handleUserStatsCommand: jest.fn().mockResolvedValue(undefined),
+  setUserCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/webhook-commands.handler', () => ({
+  WebhookCommandsHandler: { handleWebhookCommand: jest.fn() },
+}));
+jest.mock('../src/handlers/command-handler/page-sysop-command', () => ({
+  handlePageSysopCommand: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../src/handlers/commands/navigation-commands.handler', () => ({
+  handleTimeCommand: jest.fn().mockResolvedValue(undefined),
+  handleNewFilesCommand: jest.fn().mockResolvedValue(undefined),
+  handlePreviousConferenceCommand: jest.fn().mockResolvedValue(undefined),
+  handleNextConferenceCommand: jest.fn().mockResolvedValue(undefined),
+  handlePreviousMessageBaseCommand: jest.fn().mockResolvedValue(undefined),
+  handleNextMessageBaseCommand: jest.fn().mockResolvedValue(undefined),
+  setNavigationCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/display-file-commands.handler', () => ({
+  handleQuestionMarkCommand: jest.fn().mockResolvedValue(undefined),
+  handleFileListCommand: jest.fn().mockResolvedValue(undefined),
+  handleFileListRawCommand: jest.fn().mockResolvedValue(undefined),
+  handleAlterFlagsCommand: jest.fn().mockResolvedValue(undefined),
+  handleFileStatusCommand: jest.fn().mockResolvedValue(undefined),
+  handleReadBulletinCommand: jest.fn().mockResolvedValue(undefined),
+  setDisplayFileCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/chat/preference-chat-commands.handler', () => ({
+  handleAnsiModeCommand: jest.fn().mockResolvedValue(undefined),
+  handleExpertModeCommand: jest.fn().mockResolvedValue(undefined),
+  handleCommentToSysopCommand: jest.fn().mockResolvedValue(undefined),
+  setPreferenceChatCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/chat/chat-commands.handler', () => ({
+  handleLiveChatCommand: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../src/handlers/commands/advanced-commands.handler', () => ({
+  handleGreetingsCommand: jest.fn().mockResolvedValue(undefined),
+  handleMailScanCommand: jest.fn().mockResolvedValue(undefined),
+  handleConferenceFlagsCommand: jest.fn().mockResolvedValue(undefined),
+  setAdvancedCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/message/message-commands.handler', () => ({
+  handleJoinMessageBaseCommand: jest.fn().mockResolvedValue(undefined),
+  handleNodeManagementCommand: jest.fn().mockResolvedValue(undefined),
+  handleConferenceMaintenanceCommand: jest.fn().mockResolvedValue(undefined),
+  setMessageCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/info-commands.handler', () => ({
+  handleVersionCommand: jest.fn(async (s: any) => { s.emit('ansi-output', 'v1.0'); }),
+  handleWhoDetailedCommand: jest.fn().mockResolvedValue(undefined),
+  handleWriteUserParamsCommand: jest.fn().mockResolvedValue(undefined),
+  handleWhoCommand: jest.fn().mockResolvedValue(undefined),
+  setInfoCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/utility-commands.handler', () => ({
+  handleRelogonCommand: jest.fn().mockResolvedValue(undefined),
+  handleZoomCommand: jest.fn().mockResolvedValue(undefined),
+  handleHelpFilesCommand: jest.fn().mockResolvedValue(undefined),
+  setUtilityCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/sysop-commands.handler', () => ({
+  handleRemoteShellCommand: jest.fn().mockResolvedValue(undefined),
+  handleAccountEditingCommand: jest.fn().mockResolvedValue(undefined),
+  handleCallersLogCommand: jest.fn().mockResolvedValue(undefined),
+  handleEditDirectoryFilesCommand: jest.fn().mockResolvedValue(undefined),
+  handleEditAnyFileCommand: jest.fn().mockResolvedValue(undefined),
+  handleChangeDirectoryCommand: jest.fn().mockResolvedValue(undefined),
+  setSysopCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/commands/transfer-misc-commands.handler', () => ({
+  handleZmodemUploadCommand: jest.fn().mockResolvedValue(undefined),
+  handleSysopUploadCommand: jest.fn().mockResolvedValue(undefined),
+  handleNodeUptimeCommand: jest.fn().mockResolvedValue(undefined),
+  handleVotingBoothCommand: jest.fn().mockResolvedValue(undefined),
+  handleDownloadWithStatusCommand: jest.fn().mockResolvedValue(undefined),
+  setTransferMiscCommandsDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/message/messaging.handler', () => ({
+  handleReadMessagesFullCommand: jest.fn().mockResolvedValue(undefined),
+  handleEnterMessageFullCommand: jest.fn().mockResolvedValue(undefined),
+  setMessagingDependencies: jest.fn(),
+}));
+jest.mock('../src/handlers/file/file-maintenance.handler', () => ({
+  FileMaintenanceHandler: { handleFileMaintenanceCommand: jest.fn().mockResolvedValue(undefined), handle: jest.fn() },
+}));
+
 describe('Command Handlers', () => {
   let db: Database;
   let config: ConfigManager;
@@ -147,14 +303,22 @@ describe('Command Handlers', () => {
   });
 
   describe('System Commands', () => {
-    test('should handle ? command (Help)', () => {
-      // Help command should return help text
-      expect(true).toBe(true); // Placeholder - actual help logic would be tested
+    // Shared dispatch helper for processBBSCommand tests
+    async function dispatchCmd(cmd: string, secLevel = 255) {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'sysop', secLevel } };
+      return { result: await processBBSCommand(sock, sess, cmd), sock };
+    }
+
+    test('? command (Help) — express.e:24594 — dispatched and handled (returns 0)', async () => {
+      expect((await dispatchCmd('?')).result).toBe(0);
     });
 
-    test('should handle G command (Goodbye)', () => {
-      // Logout functionality
-      expect(true).toBe(true); // Placeholder - actual logout logic would be tested
+    test('G command (Goodbye) — express.e:25047 — calls socket.disconnect', async () => {
+      const { result, sock } = await dispatchCmd('G');
+      expect(result).toBe(0);
+      expect(sock.disconnect).toHaveBeenCalled();
     });
 
     test('should handle Q command (Quiet Node)', async () => {
@@ -317,9 +481,12 @@ describe('Command Handlers', () => {
       expect(uptime).toBeGreaterThan(0);
     });
 
-    test('should handle VER command (Version)', () => {
-      // Version command should return version info
-      expect(true).toBe(true); // Placeholder - actual version logic would be tested
+    test('VER command — express.e:25688 — dispatched and emits output', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'sysop', secLevel: 255 } };
+      expect(await processBBSCommand(sock, sess, 'VER')).toBe(0);
+      expect(sock.emit).toHaveBeenCalled();
     });
 
     test('should handle W command (User Parameters)', async () => {
@@ -374,84 +541,37 @@ describe('Command Handlers', () => {
     });
   });
 
-  describe('Advanced Commands', () => {
-    test('should handle O command (Online Users)', async () => {
-      // Test online users display
-      const sessions = await db.getActiveSessions();
-      expect(Array.isArray(sessions)).toBe(true);
-    });
+  describe('Advanced Commands — dispatch via processBBSCommand', () => {
+    async function dispatch(cmd: string, secLevel = 255) {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'sysop', secLevel } };
+      return (await processBBSCommand(sock, sess, cmd));
+    }
 
-    test('should handle OLM command (Online Message)', async () => {
-      // Test online message functionality
-      expect(true).toBe(true); // Placeholder - actual OLM logic would be tested
-    });
-
-    test('should handle RL command (Relogon)', () => {
-      // Test relogon functionality
-      expect(true).toBe(true); // Placeholder - actual relogon logic would be tested
-    });
-
-    test('should handle RZ command (Zmodem Upload)', () => {
-      // Test Zmodem upload functionality
-      expect(true).toBe(true); // Placeholder - actual RZ logic would be tested
-    });
-
-    test('should handle MS command (Mailscan)', async () => {
-      // Test mailscan functionality
-      const messages = await db.getMessages(1, 1);
-      expect(Array.isArray(messages)).toBe(true);
-    });
-
-    test('should handle ZOOM command (QWK Download)', () => {
-      // Test QWK download functionality
-      expect(true).toBe(true); // Placeholder - actual ZOOM logic would be tested
-    });
-
-    test('should handle CF command (Conference Config)', () => {
-      // Test conference configuration
-      expect(true).toBe(true); // Placeholder - actual CF logic would be tested
-    });
-
-    test('should handle VO command (Voting Booth)', () => {
-      // Test voting booth functionality
-      expect(true).toBe(true); // Placeholder - actual VO logic would be tested
-    });
-
-    test('should handle 0 command (Remote Shell)', () => {
-      // Test remote shell access
-      expect(true).toBe(true); // Placeholder - actual remote shell logic would be tested
-    });
-
-    test('should handle 1 command (Account Editing)', () => {
-      // Test account editing (sysop only)
-      expect(true).toBe(true); // Placeholder - actual account editing logic would be tested
-    });
-
-    test('should handle 2 command (Callers Log)', () => {
-      // Test callers log viewing (sysop only)
-      expect(true).toBe(true); // Placeholder - actual callers log logic would be tested
-    });
-
-    test('should handle 3 command (Edit Directory Files)', () => {
-      // Test directory file editing (sysop only)
-      expect(true).toBe(true); // Placeholder - actual directory editing logic would be tested
-    });
-
-    test('should handle 4 command (Edit Any File)', () => {
-      // Test any file editing (sysop only)
-      expect(true).toBe(true); // Placeholder - actual file editing logic would be tested
-    });
-
-    test('should handle 5 command (List System Directories)', () => {
-      // Test system directory listing (sysop only)
-      expect(true).toBe(true); // Placeholder - actual directory listing logic would be tested
-    });
+    test('O — Online Users (express.e:25372) — returns 0', async () => expect(await dispatch('O')).toBe(0));
+    test('OLM — Online Message (express.e:25406) — returns 0', async () => expect(await dispatch('OLM')).toBe(0));
+    test('RL — Relogon (express.e:25534) — returns 0', async () => expect(await dispatch('RL')).toBe(0));
+    test('RZ — Zmodem Upload (express.e:25608) — returns 0', async () => expect(await dispatch('RZ')).toBe(0));
+    test('MS — Mail Scan (express.e:25250) — returns 0', async () => expect(await dispatch('MS')).toBe(0));
+    test('ZOOM — QWK Download — returns 0', async () => expect(await dispatch('ZOOM')).toBe(0));
+    test('CF — Conference Flags (express.e:24672) — returns 0', async () => expect(await dispatch('CF')).toBe(0));
+    test('VO — Voting Booth (express.e:25700) — returns 0', async () => expect(await dispatch('VO')).toBe(0));
+    test('0 — Remote Shell (express.e:24424, sysop) — returns 0', async () => expect(await dispatch('0', 255)).toBe(0));
+    test('1 — Account Editing (express.e:24453, sysop) — returns 0', async () => expect(await dispatch('1', 255)).toBe(0));
+    test('2 — Callers Log (express.e:24461, sysop) — returns 0', async () => expect(await dispatch('2', 255)).toBe(0));
+    test('3 — Edit Directory Files (express.e:24511, sysop) — returns 0', async () => expect(await dispatch('3', 255)).toBe(0));
+    test('4 — Edit Any File (express.e:24517, sysop) — returns 0', async () => expect(await dispatch('4', 255)).toBe(0));
+    test('5 — Change Directory (express.e:24523, sysop) — returns 0', async () => expect(await dispatch('5', 255)).toBe(0));
+    test('unknown command — returns -1 (RESULT_FAILURE)', async () => expect(await dispatch('__NO_SUCH_CMD__')).toBe(-1));
   });
 
   describe('Door Commands', () => {
-    test('should handle DOORS command (Door Games Menu)', () => {
-      // Test door games menu
-      expect(true).toBe(true); // Placeholder - actual doors logic would be tested
+    test('DOORS command — door games menu — dispatched and returns 0', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
+      expect(await processBBSCommand(sock, sess, 'DOORS')).toBe(0);
     });
   });
 
@@ -501,26 +621,34 @@ describe('Command Handlers', () => {
       expect(foundFile?.downloads).toBe(1);
     });
 
-    test('should handle Zmodem protocol operations', () => {
-      // Test Zmodem protocol handling
-      expect(true).toBe(true); // Placeholder - actual Zmodem logic would be tested
+    test('U command (Upload) — express.e:25646 — dispatched correctly', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
+      expect(await processBBSCommand(sock, sess, 'U')).toBe(0);
     });
 
-    test('should handle FTP protocol operations', () => {
-      // Test FTP protocol handling
-      expect(true).toBe(true); // Placeholder - actual FTP logic would be tested
+    test('UP command (Node Uptime) — express.e:25667 — dispatched correctly', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
+      expect(await processBBSCommand(sock, sess, 'UP')).toBe(0);
     });
   });
 
   describe('Chat System', () => {
-    test('should handle chat message operations', () => {
-      // Test chat message functionality
-      expect(true).toBe(true); // Placeholder - actual chat logic would be tested
+    test('O command (Page Sysop) — express.e:25372 — dispatched correctly', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
+      expect(await processBBSCommand(sock, sess, 'O')).toBe(0);
     });
 
-    test('should handle sysop paging', () => {
-      // Test sysop paging functionality
-      expect(true).toBe(true); // Placeholder - actual paging logic would be tested
+    test('Q command (Quiet Mode) — express.e:25505 — dispatched correctly', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
+      expect(await processBBSCommand(sock, sess, 'Q')).toBe(0);
     });
 
     test('should handle comment to sysop', async () => {
@@ -545,9 +673,11 @@ describe('Command Handlers', () => {
   });
 
   describe('Error Handling', () => {
-    test('should handle invalid commands gracefully', () => {
-      // Test invalid command handling
-      expect(true).toBe(true); // Placeholder - actual error handling would be tested
+    test('invalid command returns -1 (RESULT_FAILURE)', async () => {
+      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
+      const sock = { emit: jest.fn(), disconnect: jest.fn() };
+      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
+      expect(await processBBSCommand(sock, sess, 'NOTACOMMAND')).toBe(-1);
     });
 
     test('should handle permission denied scenarios', async () => {
