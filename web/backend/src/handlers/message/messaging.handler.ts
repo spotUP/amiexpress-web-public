@@ -23,17 +23,15 @@ import { ACSPermission as ACSPerm } from '../../constants/acs-permissions';
 let _db: any;
 let _callersLog: any;
 let _setEnvStat: any;
+let _setMessagingDependenciesCallCount = 0;
 
 function _requireDb(caller: string): any {
-  // If initializeData() failed mid-way (e.g. a ConfConfig load error) before
-  // reaching setMessagingDependencies, _db ends up undefined. Raise a
-  // diagnostic error rather than a generic 'Cannot read properties of
-  // undefined' so sysops can spot the wiring problem in logs.
   if (!_db) {
     throw new Error(
       `[messaging.handler] _db is undefined in ${caller} — setMessagingDependencies ` +
-      `was never called. Check initializeData() in server/initialization.ts for a ` +
-      `pre-DI exception in the logs.`
+      `was called ${_setMessagingDependenciesCallCount} time(s) but none provided deps.db. ` +
+      `If the count is 0, initializeData() aborted pre-DI; check server logs. If >0, ` +
+      `check if module duplication is happening (dynamic import vs static import).`
     );
   }
   return _db;
@@ -77,10 +75,17 @@ export function setMessagingDependencies(deps: {
   validatePointers?: any;
   updateReadPointer?: any;
 }) {
+  _setMessagingDependenciesCallCount++;
+  const hasDb = !!deps.db;
+  const hasCallersLog = !!deps.callersLog;
+  const hasSetEnvStat = !!deps.setEnvStat;
   if (deps.db) _db = deps.db;
   if (deps.callersLog) _callersLog = deps.callersLog;
   if (deps.setEnvStat) _setEnvStat = deps.setEnvStat;
-  // Note: other deps (messages, getMailStatFile, etc.) not used yet but accepted for future use
+  // Diagnostic for the 2026-04-24 read-mail crash: log what arrived in each
+  // setter call so we can see if _db ever actually lands.
+  const callerLine = (new Error().stack || '').split('\n')[2]?.trim() || '(stack unavailable)';
+  console.log(`[setMessagingDependencies] call #${_setMessagingDependenciesCallCount} hasDb=${hasDb} hasCallersLog=${hasCallersLog} hasSetEnvStat=${hasSetEnvStat} _dbTypeAfter=${typeof _db} from ${callerLine}`);
 }
 
 /**
