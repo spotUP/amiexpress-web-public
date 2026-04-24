@@ -1344,8 +1344,16 @@ console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${i
 console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
 
       if (result.success) {
-        // Refresh door cache so the deleted door is removed from listings
+        // Refresh amiga door cache
         await refreshDoorCache();
+        // Also reload the TypeScript door registry so the deleted door
+        // is removed from getDoors() immediately (without server restart)
+        try {
+          const { initializeDoors } = require('../handlers/door.handler');
+          await initializeDoors();
+        } catch (e) {
+          console.warn('[BBSApi.deleteDoor] Could not reload door registry:', e);
+        }
       }
 
       return result;

@@ -1388,15 +1388,18 @@ console.error('Door deletion error:', error);
       // Try to get the command name from package.json or door's .info file
       let commandName: string | null = null;
 
-      // Check package.json for bbsCommand
+      // Check package.json for command name
+      // Doors use doorMetadata.command (not bbsCommand)
       const pkgPath = path.join(doorPath, 'package.json');
       if (amigafs.existsSync(pkgPath)) {
         try {
           const pkgContent = amigafs.readFileSync(pkgPath, 'utf8') as string;
           const pkg = JSON.parse(pkgContent);
-          if (pkg.bbsCommand) {
-            commandName = pkg.bbsCommand.toUpperCase();
-          }
+          commandName = (
+            pkg.doorMetadata?.command ||
+            pkg.bbsCommand ||
+            pkg.doorMetadata?.name
+          )?.toUpperCase() || null;
         } catch (e) {
           // Ignore parse errors
         }
