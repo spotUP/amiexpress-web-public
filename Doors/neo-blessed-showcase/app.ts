@@ -117,6 +117,15 @@ export async function createApp(session: DoorSession) {
     fastCSR: false,    // Disable fast CSR as well - forces full redraws instead of scroll optimizations
   });
 
+  // Clear screen immediately after createScreen, before any widget creation or
+  // inputManager setup. Matches the doors-menu pattern that fixes ghost borders.
+  // The preloader exits without clearing the screen, leaving box borders at rows 8-13
+  // plus BBS menu residue. clearRegion+alloc wipes blessed's internal buffer too.
+  screen.program.write('\x1b[2J');
+  screen.program.write('\x1b[H');
+  screen.clearRegion(0, screen.width, 0, screen.height);
+  screen.alloc();
+
   // ========== CONNECT INPUT ==========
   // Create input manager (showcase door with smooth keyboard and mouse)
   const inputManager = new DoorInputManager(session, screen, {
@@ -3683,15 +3692,6 @@ End of sample markdown.`;
   // ========== MAIN ==========
   return {
     async run() {
-      // Clear screen the same way grandmaster does: terminal clear + blessed buffer flush.
-      // bbs.write('\x1b[2J') alone only clears the visible terminal; blessed's internal
-      // buffer may still contain the previous screen's content (borders, text) which bleeds
-      // through as ghost borders. clearRegion + alloc wipes the blessed-side buffer too.
-      screen.program.write('\x1b[2J');
-      screen.program.write('\x1b[H');
-      screen.clearRegion(0, screen.width, 0, screen.height);
-      screen.alloc();
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
       menuList.focus();
       screen.render();
       await new Promise<void>((resolve) => screen.on('destroy', resolve));

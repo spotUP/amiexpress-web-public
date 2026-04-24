@@ -3380,11 +3380,34 @@ export async function initializeDoors() {
     return totalSize;
   };
 
+  // AmigaDOS assign map for path resolution in door size calculation.
+  // LOCATION= fields use assigns like "Doors:SomeDoor/binary" which must be
+  // stripped and replaced with their physical path before stat-ing.
+  const amigaAssigns: Record<string, string> = {
+    'bbs:':       bbsBaseDir,
+    'doors:':     path.join(bbsBaseDir, 'Doors'),
+    'screens:':   path.join(bbsBaseDir, 'Screens'),
+    'storage:':   path.join(bbsBaseDir, 'Storage'),
+    'protocols:': path.join(bbsBaseDir, 'Protocols'),
+    'utils:':     path.join(bbsBaseDir, 'Utils'),
+    'libs:':      path.join(bbsBaseDir, 'Libs'),
+  };
+
+  const resolveAmigaPath = (amigaPath: string): string => {
+    const lower = amigaPath.toLowerCase();
+    for (const [assign, physPath] of Object.entries(amigaAssigns)) {
+      if (lower.startsWith(assign)) {
+        return path.join(physPath, amigaPath.substring(assign.length));
+      }
+    }
+    return path.isAbsolute(amigaPath) ? amigaPath : path.join(bbsBaseDir, amigaPath);
+  };
+
   // Helper to get door size from path
   const getDoorSize = (doorPath: string): number => {
     if (!doorPath) return 0;
-    // Resolve path relative to BBS base dir
-    const fullPath = path.isAbsolute(doorPath) ? doorPath : path.join(bbsBaseDir, doorPath);
+    // Resolve AmigaDOS assign prefix before building filesystem path
+    const fullPath = resolveAmigaPath(doorPath);
     try {
       const stats = amigafs.statSync(fullPath);
       if (stats.isDirectory()) {
@@ -3392,6 +3415,14 @@ export async function initializeDoors() {
       }
       return stats.size;
     } catch {
+      // Binary not found at LOCATION path — try the parent directory
+      // (TypeScript doors at e.g. Doors/bbslink/ replace the Amiga binary)
+      const parentDir = path.dirname(fullPath);
+      try {
+        if (amigafs.existsSync(parentDir)) {
+          return calculateDirSize(parentDir);
+        }
+      } catch { /* ignore */ }
       return 0;
     }
   };
