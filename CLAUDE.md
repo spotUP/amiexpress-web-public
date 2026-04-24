@@ -35,9 +35,19 @@ Before using the debug MCP, call `GET /debug/api/sessions` and check `activeDoor
 
 ## Critical Rules
 
-### 1. Validate Against express.e Before Changing BBS Behavior
+### 1. Always 1:1 With express.e For Existing Functionality
 
-MCP workflow: `search_express_source "keyword"` -> `read_express_module "module"` -> implement identically (same pauses, screens, flow). "Bugs" in AmiExpress are often intentional design. If it's not in express.e, prefix new features `WEB_*` / `MODERN_*` / `CUSTOM_*` / `ADMIN_*`.
+**Existing BBS functionality is 1:1 with express.e. No exceptions without explicit user direction.**
+
+MCP workflow BEFORE touching any existing flow: `search_express_source "keyword"` -> `read_express_module "module"` / `read_source_range` -> implement identically (same pauses, screens, flow, prompt order, byte-level ABI). "Bugs" in AmiExpress are often intentional design; don't "improve" them.
+
+If a user asks for a behavior change to existing functionality (e.g. "make phone optional", "rename a prompt", "remove retreat"):
+1. First answer with what express.e does, citing the line number(s).
+2. Confirm the user wants to diverge from express.e before implementing.
+3. Tag the divergence in code with a `WEB_:` comment citing the express.e line being deviated from, plus a plain-English reason.
+4. If it's a new feature with no express.e equivalent, prefix it with `WEB_*` / `MODERN_*` / `CUSTOM_*` / `ADMIN_*`.
+
+Never silently change behavior that has an express.e counterpart. 4000+ real Amiga doors depend on exact behavior — prompt order, pauses, screen flow, field widths, byte-level ABI. Silent divergence breaks door compatibility and BBS authenticity.
 
 Examples to honor:
 - `IF (displayScreen(SCREEN_BULL)) THEN doPause()` (express.e:28556)
