@@ -579,6 +579,11 @@ export async function initializeData(io?: SocketIOServer) {
 
     process.stdout.write(`[initializeData] Loaded ${conferences.length} conferences, ${messageBases.length} bases, ${fileAreas.length} areas, ${getDoors().length} doors\n`);
   } catch (error) {
-    // console.error eliminated to prevent terminal pollution
+    // Surfacing this error: it used to be silently swallowed, which left
+    // handlers with uninjected dependencies (e.g. messaging.handler _db)
+    // and caused cryptic 'Cannot read properties of undefined' crashes
+    // deep in the app. Better to boot loudly-broken than silently-broken.
+    const stack = error instanceof Error ? (error.stack || error.message) : String(error);
+    process.stderr.write(`[initializeData] FAILED mid-init — some handlers will be unwired:\n${stack}\n`);
   }
 }

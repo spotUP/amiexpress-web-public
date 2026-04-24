@@ -24,13 +24,28 @@ let _db: any;
 let _callersLog: any;
 let _setEnvStat: any;
 
+function _requireDb(caller: string): any {
+  // If initializeData() failed mid-way (e.g. a ConfConfig load error) before
+  // reaching setMessagingDependencies, _db ends up undefined. Raise a
+  // diagnostic error rather than a generic 'Cannot read properties of
+  // undefined' so sysops can spot the wiring problem in logs.
+  if (!_db) {
+    throw new Error(
+      `[messaging.handler] _db is undefined in ${caller} — setMessagingDependencies ` +
+      `was never called. Check initializeData() in server/initialization.ts for a ` +
+      `pre-DI exception in the logs.`
+    );
+  }
+  return _db;
+}
+
 // Helper functions for database operations
 async function _deleteMessage(messageId: number): Promise<void> {
-  await _db.deleteMessage(messageId);
+  await _requireDb('_deleteMessage').deleteMessage(messageId);
 }
 
 async function _updateReadPointer(userId: number, confId: number, msgBaseId: number, lastRead: number): Promise<void> {
-  await _db.updateReadPointer(userId, confId, msgBaseId, lastRead);
+  await _requireDb('_updateReadPointer').updateReadPointer(userId, confId, msgBaseId, lastRead);
 }
 
 /**
