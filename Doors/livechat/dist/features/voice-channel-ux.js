@@ -583,6 +583,12 @@ class EnhancedVoiceChannel {
         this.renderMode = cycle[(idx + 1) % cycle.length];
         console.log('[voice-channel-ux] renderMode →', this.renderMode);
         this.controlBar?.updateModeButtonLabel(this.renderMode);
+        // Push the mode into the self-tile's status bar so the user can see
+        // "spot [V] [HALFBLOCK]" and identify which encoder produced a given
+        // look without having to cycle and guess.
+        if (this.videoGrid) {
+            this.videoGrid.setTileRenderMode(this.userId, this.renderMode);
+        }
         // System-message feedback so the user sees something changed even when
         // video is off (no stream to visibly re-encode).
         if (this.onRenderModeChange)
@@ -896,6 +902,9 @@ class EnhancedVoiceChannel {
                     isSpeaking: false,
                     audioLevel: 0,
                 });
+                // Seed the self-tile's render-mode label so it's visible before
+                // the first cycleRenderMode() call.
+                this.videoGrid.setTileRenderMode(this.userId, this.renderMode);
                 // Add existing participants if provided
                 if (participants) {
                     for (const p of participants) {

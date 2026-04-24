@@ -26,6 +26,7 @@ export interface VideoTileOptions {
   audioLevel: number;
   isCurrentUser: boolean;
   avatar?: string;
+  renderMode?: string;  // For the self-tile: shown in the status bar
 }
 
 /**
@@ -378,8 +379,14 @@ export class VideoTile {
     const muteIcon = this.options.isMuted ? '{red-fg}[M]{/red-fg}' : '';
     const videoIcon = this.options.hasVideo ? '{blue-fg}[V]{/blue-fg}' : '';
     const youLabel = this.options.isCurrentUser ? ' {yellow-fg}(you){/yellow-fg}' : '';
+    // Show the active render mode on the self-tile so the user can see
+    // which encoder produced what they're looking at (ascii/color/
+    // halfblock/braille all look quite different).
+    const modeLabel = this.options.isCurrentUser && this.options.renderMode
+      ? ` {magenta-fg}[${this.options.renderMode.toUpperCase()}]{/magenta-fg}`
+      : '';
 
-    return ` ${speakingIcon} ${username}${youLabel} ${muteIcon} ${videoIcon}`.trim();
+    return ` ${speakingIcon} ${username}${youLabel} ${muteIcon} ${videoIcon}${modeLabel}`.trim();
   }
 
   /**
@@ -390,7 +397,11 @@ export class VideoTile {
     hasVideo?: boolean;
     isSpeaking?: boolean;
     audioLevel?: number;
+    renderMode?: string;
   }): void {
+    if (status.renderMode !== undefined) {
+      this.options.renderMode = status.renderMode;
+    }
     if (status.isMuted !== undefined) {
       this.options.isMuted = status.isMuted;
     }
@@ -478,9 +489,15 @@ export class VideoTile {
    * of leaving a 80x24 patch in a much larger panel.
    */
   getVideoDims(): { width: number; height: number } {
-    const w = (this.videoBox.width as number) || 0;
-    const h = (this.videoBox.height as number) || 0;
-    return { width: w, height: h };
+    // The container dims are the authoritative numeric source — videoBox
+    // was created with width:'100%' / height:'100%-1', which blessed
+    // returns verbatim (as a string) when read back. Math.floor('100%')
+    // is NaN, so reading off videoBox directly made computeStreamDims
+    // propagate NaN into the capture canvas and produced a garbled
+    // halfblock / braille frame. Derive from the container instead.
+    const cw = Number(this.container.width) || 0;
+    const ch = Number(this.container.height) || 0;
+    return { width: cw, height: Math.max(1, ch - 1) };
   }
 
   /**

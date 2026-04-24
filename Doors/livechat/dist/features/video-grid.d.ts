@@ -118,6 +118,12 @@ export declare class VideoGrid {
         height: number;
     } | null;
     /**
+     * Set the render-mode label for a tile's status bar. Only the sender
+     * sees this (the VideoTile only shows it when isCurrentUser), so
+     * calling it for a remote participant is a safe no-op label-wise.
+     */
+    setTileRenderMode(userId: number | string, mode: string): void;
+    /**
      * Attach a right-click handler to a freshly-created tile so the door
      * host can pop its shared context menu. No-op when no callback was
      * supplied at grid construction.

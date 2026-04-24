@@ -23,6 +23,7 @@ export interface VideoTileOptions {
     audioLevel: number;
     isCurrentUser: boolean;
     avatar?: string;
+    renderMode?: string;
 }
 /**
  * VideoTile - Individual participant tile
@@ -53,6 +54,7 @@ export declare class VideoTile {
         hasVideo?: boolean;
         isSpeaking?: boolean;
         audioLevel?: number;
+        renderMode?: string;
     }): void;
     /**
      * Set a new video frame (ASCII)
