@@ -1319,7 +1319,6 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     modalOverlay.setFront();
     promptDialog.show();
     promptDialog.setFront();
-    promptDialog.focus();
     promptDialog.once('hide', () => {
       modalOverlay.hide();
       if (returnFocusElement) returnFocusElement.focus();
@@ -1328,6 +1327,18 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     promptDialog.showInput(text, value, (err, val) => {
       callback(err, val);
     });
+    // Force the text input to take focus on the next tick — otherwise
+    // focus lands on the dialog itself (or the Cancel button) and the
+    // user has to Tab into the field before typing. Scheduling after the
+    // current event loop lets all of blessed's focus-stack bookkeeping
+    // settle first.
+    setTimeout(() => {
+      const input = (promptDialog as any).inputField;
+      if (input && typeof input.focus === 'function') {
+        input.focus();
+        screen.render();
+      }
+    }, 0);
   }
 
   function showConfirmDialog(text: string, callback: (answer: boolean) => void) {

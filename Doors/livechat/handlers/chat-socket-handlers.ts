@@ -41,7 +41,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:reaction', (d: any) => {
-    acm(`{cyan-fg}[${d.username} reacted ${d.emoji}]{/cyan-fg}`);
+    acm(`{cyan-fg}[${d.username} reacted ${d.emoji}]{/cyan-fg}`, false);
     aa(`${d.username}: ${d.emoji}`);
     aud.onReaction();
   });
@@ -66,8 +66,15 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:dm', (d: any) => {
-    acm(`{magenta-fg}[DM from ${d.from}]: ${d.preview || d.message}{/magenta-fg}`);
-    aa(`{magenta-fg}DM from ${d.from}{/magenta-fg}`);
+    // DoorSocket loops server-side outgoing emits back to server-side
+    // listeners (see door.handler.ts:95 onAnyOutgoing). Our OUTGOING DM
+    // shape is `{to, message}`; INCOMING DMs would carry `from`. If
+    // there's no `from`, this is our own outgoing echo — ignore it so
+    // we don't render "[DM from ???]".
+    if (!d || !d.from) return;
+    const sender = d.from;
+    acm(`{magenta-fg}[DM from ${sender}]: ${d.preview || d.message || ''}{/magenta-fg}`, false);
+    aa(`{magenta-fg}DM from ${sender}{/magenta-fg}`);
     aud.onDM();
   });
 

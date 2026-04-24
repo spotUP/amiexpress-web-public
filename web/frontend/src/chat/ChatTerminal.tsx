@@ -64,6 +64,11 @@ export default function ChatTerminal() {
     terminalInstance.current = term;
     console.log('[ChatTerminal] Terminal opened and instance stored');
 
+    // Suppress the browser's native right-click menu over the terminal
+    // — blessed doors use rightclick as their context-menu trigger, and
+    // letting the OS menu pop instead hid ours entirely.
+    terminalRef.current.addEventListener('contextmenu', (e) => e.preventDefault());
+
     // Track mouse tracking state for Ctrl+M toggle
     let mouseTrackingDisabled = false;
 

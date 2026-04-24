@@ -203,6 +203,13 @@ export async function createApp(session: DoorSession) {
   // bar as literal text (2026-04-24 repro).
   inputManager.enable();
 
+  // Diagnostic: confirm mouse events are reaching blessed's screen.
+  screen.on('mousedown', (event: any) => {
+    const els = (screen as any).getElementsAt?.(event.x, event.y) || [];
+    const elNames = els.map((e: any) => e.options?.label || e.type || e.constructor?.name || 'unknown').slice(0, 5);
+    console.log('[livechat DIAG] mousedown at', event.x, event.y, '→ elements:', JSON.stringify(elNames));
+  });
+
   // Now wrap the handler that setupInputHandler just installed, ONLY to
   // intercept F1 (Help). Do NOT filter any other escape sequences here —
   // `\x1b[<...M/m` is the SGR mouse protocol and blessed's parser
@@ -584,7 +591,16 @@ export async function createApp(session: DoorSession) {
   ];
 
   // Track channel data for selection handling
-  let channelItems: Array<{ id: string; name: string; type: 'text' | 'voice' | 'header' | 'spacer' }> = [];
+  let channelItems: Array<{ id: string; name: string; type: 'text' | 'voice' | 'header' | 'spacer' | 'user'; username?: string }> = [];
+
+  // Per-channel expand state.
+  //   - `expandedChannels`: user explicitly expanded this channel (even
+  //     when it's not the active one)
+  //   - `collapsedChannels`: user explicitly collapsed this channel —
+  //     needed so the active channel (which auto-expands) can still be
+  //     forced closed by a second double-click.
+  const expandedChannels: Set<string> = new Set();
+  const collapsedChannels: Set<string> = new Set();
 
   function isCurrentChannel(targetId?: string, targetName?: string): boolean {
     if (!state.currentChannel) return false;
@@ -616,11 +632,19 @@ export async function createApp(session: DoorSession) {
     items.push('{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}');
     channelItems.push({ id: '', name: '', type: 'header' as const });
 
-    // Add text channels
+    // Add text channels (Discord-style: joined channel auto-expands, plus
+    // any channel the user explicitly toggled into `expandedChannels`).
+    // Expanded channels render their online users indented below.
     channelsToShow.forEach(ch => {
       const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
       const isActive = isCurrentChannel(ch.id, ch.name);
       const hasUnread = ch.unreadCount && ch.unreadCount > 0;
+      // Active channel auto-expands unless the user has explicitly
+      // collapsed it (double-click toggle). Non-active channels show
+      // their users only if in `expandedChannels`.
+      const isExpanded = collapsedChannels.has(ch.id)
+        ? false
+        : (isActive || expandedChannels.has(ch.id));
 
       let color: string;
       let endColor: string;
@@ -635,8 +659,24 @@ export async function createApp(session: DoorSession) {
         endColor = '{/gray-fg}';
       }
 
-      items.push(color + '# ' + ch.name + unread + endColor);
+      const arrow = isExpanded ? 'v' : '>';
+      items.push(color + arrow + ' # ' + ch.name + unread + endColor);
       channelItems.push({ id: ch.id, name: ch.name, type: 'text' as const });
+
+      if (isExpanded) {
+        // Only show users for the channel we're actually in — `onlineUsers`
+        // is a global map (no per-channel filter available), so for any
+        // expanded non-current channel we just don't know who's there.
+        if (isActive) {
+          for (const [uid, u] of onlineUsers) {
+            const presence = presenceService.get(parseInt(uid));
+            const status = presence?.status || u.status;
+            const indicator = PRESENCE_INDICATORS[status as PresenceStatus] || '*';
+            items.push(`  {gray-fg}${indicator}{/gray-fg} ${u.username.slice(0, 12)}`);
+            channelItems.push({ id: `user-${uid}`, name: u.username, type: 'user' as const, username: u.username });
+          }
+        }
+      }
     });
 
     // Add spacer
@@ -745,6 +785,14 @@ export async function createApp(session: DoorSession) {
       return;
     }
 
+    if (channel.type === 'user') {
+      // Clicking a user row under an expanded channel opens a DM prompt.
+      if (channel.username && channel.username !== username) {
+        showDMPrompt(channel.username);
+      }
+      return;
+    }
+
     if (channel.type === 'voice') {
       // Join voice channel
       const channelId = channel.id.replace('voice-', '');
@@ -752,10 +800,24 @@ export async function createApp(session: DoorSession) {
       voiceChannel.showGrid(); // Show the video grid
       addSystemMessage(`Joining voice channel: ${channel.name}`);
     } else if (!isCurrentChannel(channel.id, channel.name)) {
-      // Join text channel
+      // Join text channel — joining auto-expands the user list underneath.
       if (state.currentChannel) socket.emit('room:leave');
       socket.emit('room:join', { roomName: channel.name });
       voiceChannel.hideGrid(); // Hide video grid when viewing text
+    } else {
+      // Click on the channel we're already in → toggle expand/collapse.
+      // Using single-click for this (instead of dblclick) dodges the
+      // timing-based off-by-one the user hit with rapid click pairs.
+      const id = channel.id;
+      const currentlyExpanded = collapsedChannels.has(id) ? false : true;
+      if (currentlyExpanded) {
+        expandedChannels.delete(id);
+        collapsedChannels.add(id);
+      } else {
+        collapsedChannels.delete(id);
+        expandedChannels.add(id);
+      }
+      updateChannelList();
     }
 
     // Return focus to input after text channel selection only
@@ -822,6 +884,10 @@ export async function createApp(session: DoorSession) {
     userList.setItems(items);
     // Keep tabs in label
     userList.setLabel(` Ch [Us] (${onlineUsers.size}) `);
+
+    // Also refresh the channel list — expanded channels render their
+    // members inline, so a user joining/leaving must redraw both views.
+    if (typeof updateChannelList === 'function') updateChannelList();
   }
 
   // Function to switch sidebar tabs
@@ -1144,9 +1210,16 @@ export async function createApp(session: DoorSession) {
     return channelId;
   }
 
+  // Track the current video render mode so we can include it in the chat
+  // header. Seeded to 'halfblock' (default); updated by onRenderModeChange.
+  let currentRenderMode: 'ascii' | 'color' | 'halfblock' | 'braille' = 'halfblock';
+
   function updateChatHeader() {
-    const label = getChannelDisplayName(state.currentChannel) || 'Lobby';
-    updateChatHeaderFn(chatLog, label);
+    const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';
+    const modeSuffix = voiceChannel?.isInVoiceChannel?.()
+      ? ` [${currentRenderMode.toUpperCase()}]`
+      : '';
+    updateChatHeaderFn(chatLog, channelName + modeSuffix);
   }
 
   function updateStatusBar() {
@@ -1378,6 +1451,21 @@ export async function createApp(session: DoorSession) {
         socket.emit('voice:mute-remote', { userId: uid });
         addSystemMessage(`{yellow-fg}Muted remote audio for user ${uid}{/yellow-fg}`);
       },
+      onToggleChannelExpand: (channelName) => {
+        // Find the channel by name and flip its collapse state.
+        const ch = channelItems.find(c => c.type === 'text' && c.name === channelName);
+        if (!ch) return;
+        const id = ch.id;
+        const currentlyExpanded = collapsedChannels.has(id) ? false : true;
+        if (currentlyExpanded) {
+          expandedChannels.delete(id);
+          collapsedChannels.add(id);
+        } else {
+          collapsedChannels.delete(id);
+          expandedChannels.add(id);
+        }
+        updateChannelList();
+      },
     }
   );
 
@@ -1393,12 +1481,16 @@ export async function createApp(session: DoorSession) {
     chatPanel, // Pass chat panel so video grid renders in correct location
     onJoinVoice: (channelId: string) => {
       addSystemMessage(`Joined voice channel`);
+      updateChatHeader();  // add [MODE] tag to chat panel label
     },
     onLeaveVoice: () => {
       addSystemMessage(`Left voice channel`);
+      updateChatHeader();  // strip [MODE] tag
     },
     onRenderModeChange: (mode) => {
+      currentRenderMode = mode;
       addSystemMessage(`{magenta-fg}Video render mode: ${mode}{/magenta-fg}`);
+      updateChatHeader();
     },
     onTileRightClick: (uid, x, y) => {
       showContextMenu(x, y, 'video', uid);
@@ -1520,50 +1612,108 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // User list right-click to show context menu
+  // User list right-click to show context menu. Resolve the target row
+  // from the actual click Y — `list.selected` is set by the last
+  // left-click and will be stale (or 0) if the user right-clicks without
+  // first selecting something.
+  function rowAtClick(list: any, event: any): number | undefined {
+    const pos = list._getCoords?.();
+    if (!pos) return undefined;
+    const hasDrawnBorder = !!(list.options?.border && list.options.border.type && list.options.border.type !== 'none');
+    const border = hasDrawnBorder ? 1 : 0;
+    const pad = list.options?.padding;
+    const padTop = typeof pad === 'number' ? pad : (pad?.top ?? 0);
+    const relY = (event?.y ?? 0) - pos.yi - border - padTop;
+    if (relY < 0) return undefined;
+    const scroll = list.getScroll?.() ?? 0;
+    return relY + scroll;
+  }
+
   userList.on('rightclick', (event: any) => {
     userList.focus();
-    const selected = (userList as any).selected;
     const items = (userList as any).items || [];
-    if (selected !== undefined && items[selected]) {
-      const text = typeof items[selected] === 'string' ? items[selected] : (items[selected] as any)?.content || '';
+    const row = rowAtClick(userList, event);
+    console.log('[livechat DIAG] userList rightclick x=%d y=%d row=%s items.len=%d', event?.x, event?.y, row, items.length);
+    if (row !== undefined && row >= 0 && row < items.length) {
+      const text = typeof items[row] === 'string' ? items[row] : (items[row] as any)?.content || '';
       const match = text.match(/^.\s+(\S+)/);
+      console.log('[livechat DIAG] userList rightclick text=%j match=%j', text, match);
       if (match && match[1] && match[1] !== username) {
-        // Use screen-absolute coordinates from click event
-        const x = event.x || 0;
-        const y = event.y || 0;
-        showContextMenu(x, y, 'user', match[1]);
+        showContextMenu(event.x || 0, event.y || 0, 'user', match[1]);
       }
     }
     screen.render();
   });
 
-  // Channel list left-click to select and join channel
-  channelList.on('click', (mouse: any) => {
+  // Channel list left-click: focus + let blessed's internal List._onClick
+  // compute the row and fire 'select'. The 'select' handler calls
+  // handleChannelSelect which joins on first click and toggles
+  // expand/collapse when the user clicks the channel they're already in.
+  channelList.on('click', () => {
     channelList.focus();
-
-    // Calculate item index from click position
-    const listTop = (channelList as any).atop || 0;
-    const borderOffset = 1; // Top border
-    const scrollOffset = (channelList as any).childBase || 0;
-    const clickedRow = (mouse?.y || 0) - listTop - borderOffset + scrollOffset;
-
-    if (clickedRow >= 0 && clickedRow < channelItems.length) {
-      channelList.select(clickedRow);
-      handleChannelSelect(clickedRow);
-    }
     screen.render();
   });
 
-  // Channel list right-click to show context menu
+  // Space on the highlighted channel toggles expand/collapse. This is
+  // independent of "current" channel, so with a 500-user list the user
+  // can still navigate to any channel and collapse it without scrolling
+  // back to the channel name.
+  function toggleChannelExpand(id: string) {
+    const currentlyExpanded = collapsedChannels.has(id) ? false : true;
+    if (currentlyExpanded) {
+      expandedChannels.delete(id);
+      collapsedChannels.add(id);
+    } else {
+      collapsedChannels.delete(id);
+      expandedChannels.add(id);
+    }
+    updateChannelList();
+    screen.render();
+  }
+  channelList.key(['space'], () => {
+    const sel = (channelList as any).selected;
+    const item = sel !== undefined ? channelItems[sel] : undefined;
+    if (item && item.type === 'text') toggleChannelExpand(item.id);
+  });
+  // Right arrow = force-expand, Left arrow = force-collapse on the
+  // highlighted channel — matches file-browser / tree-widget UX.
+  channelList.key(['right'], () => {
+    const sel = (channelList as any).selected;
+    const item = sel !== undefined ? channelItems[sel] : undefined;
+    if (!item || item.type !== 'text') return;
+    if (collapsedChannels.has(item.id) || !expandedChannels.has(item.id)) {
+      collapsedChannels.delete(item.id);
+      expandedChannels.add(item.id);
+      updateChannelList();
+      screen.render();
+    }
+  });
+  channelList.key(['left'], () => {
+    const sel = (channelList as any).selected;
+    const item = sel !== undefined ? channelItems[sel] : undefined;
+    if (!item || item.type !== 'text') return;
+    expandedChannels.delete(item.id);
+    collapsedChannels.add(item.id);
+    updateChannelList();
+    screen.render();
+  });
+
+  // Channel list right-click to show context menu. Uses the row under
+  // the cursor (via rowAtClick), not `.selected` — right-click shouldn't
+  // require a prior left-click to select.
   channelList.on('rightclick', (event: any) => {
     channelList.focus();
-    const selected = (channelList as any).selected;
-    if (selected !== undefined && channelItems[selected]) {
-      // Use screen-absolute coordinates from click event
+    const row = rowAtClick(channelList, event);
+    const item = row !== undefined ? channelItems[row] : undefined;
+    console.log('[livechat DIAG] channelList rightclick x=%d y=%d row=%s item=%s', event?.x, event?.y, row, item ? `${item.type}:${item.username || item.name}` : 'none');
+    if (item) {
       const x = event.x || 0;
       const y = event.y || 0;
-      showContextMenu(x, y, 'channel', channelItems[selected].name);
+      if (item.type === 'user' && item.username) {
+        showContextMenu(x, y, 'user', item.username);
+      } else if (item.type === 'text' || item.type === 'voice') {
+        showContextMenu(x, y, 'channel', item.name);
+      }
     }
     screen.render();
   });

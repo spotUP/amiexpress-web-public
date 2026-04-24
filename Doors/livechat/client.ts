@@ -56,8 +56,46 @@ function pixelsPerChar(mode: string): { px: number; py: number } {
 
 const ASCII_RAMP = ' .:-=+*#%@';
 
+/**
+ * Map an RGB triplet to the nearest blessed 16-colour palette token.
+ * Blessed's tag parser only understands named colours, not 24-bit; every
+ * attempt to pass raw `\x1b[38;2;R;G;B m` through a blessed widget ended
+ * up mis-aligned because blessed's internal cell buffer can't account
+ * for those bytes. Neoshowcase's working webcam demo uses this same
+ * approach (rgbToBlessed + {name-fg} tags).
+ */
+const PALETTE: Array<[string, number, number, number]> = [
+  ['black',    0,   0,   0],
+  ['red',      170, 0,   0],
+  ['green',    0,   170, 0],
+  ['yellow',   170, 85,  0],
+  ['blue',     0,   0,   170],
+  ['magenta',  170, 0,   170],
+  ['cyan',     0,   170, 170],
+  ['white',    170, 170, 170],
+  ['gray',     85,  85,  85],
+  ['lightred', 255, 85,  85],
+  ['lightgreen',   85,  255, 85],
+  ['lightyellow',  255, 255, 85],
+  ['lightblue',    85,  85,  255],
+  ['lightmagenta', 255, 85,  255],
+  ['lightcyan',    85,  255, 255],
+  ['lightwhite',   255, 255, 255],
+];
+function rgbToBlessed(r: number, g: number, b: number): string {
+  let best = 'white';
+  let bestDist = Infinity;
+  for (const [name, pr, pg, pb] of PALETTE) {
+    const dr = r - pr, dg = g - pg, db = b - pb;
+    const d = dr*dr + dg*dg + db*db;
+    if (d < bestDist) { bestDist = d; best = name as string; }
+  }
+  return best;
+}
+
 function renderAscii(img: ImageData, w: number, h: number, colored: boolean): string {
   let out = '';
+  let lastFg = '';
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
@@ -66,31 +104,46 @@ function renderAscii(img: ImageData, w: number, h: number, colored: boolean): st
       const b = img.data[i + 2];
       const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       const ch = ASCII_RAMP[Math.floor(lum * (ASCII_RAMP.length - 1))] || ' ';
-      out += colored ? `\x1b[38;2;${r};${g};${b}m${ch}` : ch;
+      if (colored) {
+        const fg = rgbToBlessed(r, g, b);
+        if (fg !== lastFg) {
+          if (lastFg) out += '{/}';
+          out += `{${fg}-fg}`;
+          lastFg = fg;
+        }
+      }
+      out += ch;
     }
-    if (colored) out += '\x1b[0m';
+    if (lastFg) { out += '{/}'; lastFg = ''; }
     out += '\n';
   }
   return out.replace(/\n+$/, '');
 }
 
 /**
- * Half-block: U+2580 with fg=top pixel, bg=bottom pixel. Source canvas is
- * w x (h*2) pixels; each output char encodes one column over two rows. This
- * doubles the vertical resolution and shows real colour on both halves.
+ * Half-block: U+2580 with fg=top, bg=bottom — each char encodes two
+ * vertically-stacked pixels. Uses blessed 16-colour palette tokens via
+ * rgbToBlessed() so the output is safe for blessed's cell buffer.
  */
 function renderHalfblock(img: ImageData, w: number, h: number): string {
-  const sw = w; // source width = char width (1 pixel per char column)
+  const sw = w;
   let out = '';
+  let lastFg = '', lastBg = '';
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const topI = ((y * 2) * sw + x) * 4;
       const botI = ((y * 2 + 1) * sw + x) * 4;
-      const tr = img.data[topI], tg = img.data[topI + 1], tb = img.data[topI + 2];
-      const br = img.data[botI], bg = img.data[botI + 1], bb = img.data[botI + 2];
-      out += `\x1b[38;2;${tr};${tg};${tb}m\x1b[48;2;${br};${bg};${bb}m▀`;
+      const fg = rgbToBlessed(img.data[topI], img.data[topI + 1], img.data[topI + 2]);
+      const bg = rgbToBlessed(img.data[botI], img.data[botI + 1], img.data[botI + 2]);
+      if (fg !== lastFg || bg !== lastBg) {
+        if (lastFg || lastBg) out += '{/}';
+        out += `{${fg}-fg}{${bg}-bg}`;
+        lastFg = fg; lastBg = bg;
+      }
+      out += '▀';
     }
-    out += '\x1b[0m\n';
+    if (lastFg || lastBg) { out += '{/}'; lastFg = ''; lastBg = ''; }
+    out += '\n';
   }
   return out.replace(/\n+$/, '');
 }
@@ -172,6 +225,17 @@ class LiveChatClient {
     gainNode: GainNode;
     chunks: ArrayBuffer[];
   }> = new Map();
+
+  // UI sound effects bus (reverb + echo) — matches the /sdk/ preview
+  // SoundEffects chain so chat clicks/hovers/mentions feel like the same
+  // space. Lazily built the first time audioContext is ready.
+  private sfxReverb: ConvolverNode | null = null;
+  private sfxDelay: DelayNode | null = null;
+  private sfxFeedback: GainNode | null = null;
+  private sfxWet: GainNode | null = null;
+  private sfxDry: GainNode | null = null;
+  private sfxMaster: GainNode | null = null;
+  private sfxBusReady: boolean = false;
 
   constructor() {
     this.door = new ClientDoor({
@@ -306,6 +370,61 @@ class LiveChatClient {
   // ============================================================================
 
   /**
+   * Build a reverb-impulse + delay effects bus once audioContext exists,
+   * mirroring sdk/tools/preview/frontend/src/components/ui/SoundEffects.
+   * UI sounds (hover/click/message/mention/etc) route through wet+dry;
+   * mic & remote audio bypass this and go straight to destination.
+   */
+  private setupSfxBus(): void {
+    if (this.sfxBusReady || !this.audioContext) return;
+    const ctx = this.audioContext;
+
+    // Reverb: convolver fed by a synthetic 3s exponential-decay impulse.
+    this.sfxReverb = ctx.createConvolver();
+    this.sfxReverb.buffer = this.makeReverbImpulse(3.0, 3.0);
+
+    // Echo: ~250ms delay with 30% feedback loop.
+    this.sfxDelay = ctx.createDelay(2.0);
+    this.sfxDelay.delayTime.value = 0.25;
+    this.sfxFeedback = ctx.createGain();
+    this.sfxFeedback.gain.value = 0.3;
+
+    // Wet/dry mix + master.
+    this.sfxWet = ctx.createGain(); this.sfxWet.gain.value = 0.5;
+    this.sfxDry = ctx.createGain(); this.sfxDry.gain.value = 0.5;
+    this.sfxMaster = ctx.createGain(); this.sfxMaster.gain.value = 1.0;
+
+    // Echo feedback loop.
+    this.sfxDelay.connect(this.sfxFeedback);
+    this.sfxFeedback.connect(this.sfxDelay);
+    // Wet: delay -> reverb -> wet -> master.
+    this.sfxDelay.connect(this.sfxReverb);
+    this.sfxReverb.connect(this.sfxWet);
+    this.sfxWet.connect(this.sfxMaster);
+    // Dry: dry -> master.
+    this.sfxDry.connect(this.sfxMaster);
+    // Master -> speakers.
+    this.sfxMaster.connect(ctx.destination);
+
+    this.sfxBusReady = true;
+  }
+
+  private makeReverbImpulse(durationSec: number, decay: number): AudioBuffer {
+    const ctx = this.audioContext!;
+    const sampleRate = ctx.sampleRate;
+    const length = Math.floor(sampleRate * durationSec);
+    const impulse = ctx.createBuffer(2, length, sampleRate);
+    const l = impulse.getChannelData(0);
+    const r = impulse.getChannelData(1);
+    for (let i = 0; i < length; i++) {
+      const envelope = Math.exp(-i / (sampleRate * decay));
+      l[i] = (Math.random() * 2 - 1) * envelope;
+      r[i] = (Math.random() * 2 - 1) * envelope;
+    }
+    return impulse;
+  }
+
+  /**
    * Synthesize and play a note-based sound using Web Audio API
    */
   private async playSound(soundId: string, params?: any): Promise<void> {
@@ -395,9 +514,18 @@ class LiveChatClient {
     gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01); // Attack
     gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration); // Decay
 
-    // Connect nodes
+    // Route through the reverb+echo bus if it's been built. This matches
+    // the /sdk/ preview's SoundEffects: oscillator -> gain -> (delay+reverb
+    // wet path) + (dry path) -> master -> speakers. Falls back to a direct
+    // connection if the bus isn't ready (first sound may still be queued).
     oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
+    this.setupSfxBus();
+    if (this.sfxBusReady && this.sfxDry && this.sfxDelay) {
+      gainNode.connect(this.sfxDry);
+      gainNode.connect(this.sfxDelay);
+    } else {
+      gainNode.connect(this.audioContext.destination);
+    }
 
     // Play
     oscillator.start(now);

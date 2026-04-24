@@ -506,9 +506,11 @@ export class DockablePanel extends Panel {
         }
       });
 
-      // Drag to move (only when not minimized)
+      // Drag to move (only when not minimized, only LEFT mouse button).
+      // Right-click must fall through to context menus.
       if (options.draggable !== false) {
         this.titleBar.on('mousedown', (data: any) => {
+          if (data?.button && data.button !== 'left') return;
           if (!this.panelState.minimized && !this.isMaximized) {
             this.startDrag(data.x, data.y);
           }
@@ -593,6 +595,11 @@ export class DockablePanel extends Panel {
   private setupDragging(): void {
     if (this.fixed || this.isStatic) return;
     this.on('mousedown', (data: any) => {
+      // Left mouse button only. RMB is reserved for context menus;
+      // previously any button started a drag, so right-clicking and
+      // releasing glued the panel to the cursor.
+      if (data?.button && data.button !== 'left') return;
+
       // Don't start drag if clicking on a resize edge (handled by setupResizing)
       if (this.resizable) {
         const edge = this.detectResizeEdge(data.x, data.y);
@@ -621,8 +628,10 @@ export class DockablePanel extends Panel {
   private setupResizing(): void {
     if (this.fixed || !this.resizable) return;
 
-    // Handle mousedown on panel - detect if click is on border edge/corner
+    // Handle mousedown on panel - detect if click is on border edge/corner.
+    // Left button only — RMB must reach context menu handlers.
     this.on('mousedown', (data: any) => {
+      if (data?.button && data.button !== 'left') return;
       const edge = this.detectResizeEdge(data.x, data.y);
       if (edge) {
         this.startResizeFromEdge(edge, data.x, data.y);
@@ -2012,6 +2021,41 @@ export class DockablePanel extends Panel {
         this.switchTab(index);
       });
 
+      // Left-drag a tab OUT of the header to detach it — the undo for
+      // an accidental merge. Right-click stays reserved for the door's
+      // own context menus.
+      let dragStart: { x: number; y: number } | null = null;
+      let detached = false;
+      btn.on('mousedown', (data: any) => {
+        if (data?.button && data.button !== 'left') return;
+        dragStart = { x: data?.x ?? 0, y: data?.y ?? 0 };
+        detached = false;
+      });
+      if (this.screen) {
+        const onMove = (data: any) => {
+          if (!dragStart || detached) return;
+          if (data.action !== 'mousemove' && data.action !== 'mousedown') return;
+          const dx = (data.x ?? 0) - dragStart.x;
+          const dy = (data.y ?? 0) - dragStart.y;
+          // Pull-out threshold: ~3 cells in any direction.
+          if (Math.abs(dx) + Math.abs(dy) < 3) return;
+          detached = true;
+          const panelToDetach = this.tabs[index];
+          if (panelToDetach && panelToDetach !== this) {
+            this.detachTab(index);
+            // Hand the drag over to the freshly-detached panel so the
+            // user can keep dragging without releasing.
+            (panelToDetach as any).startDrag?.(data.x, data.y);
+          }
+        };
+        const onUp = () => {
+          dragStart = null;
+          detached = false;
+        };
+        this.screen.on('mousemove', onMove);
+        this.screen.on('mouseup', onUp);
+      }
+
       this.tabButtons.push(btn);
       currentX += String(label).length + 3;
     });
@@ -2036,6 +2080,70 @@ export class DockablePanel extends Panel {
     this.activeTab = index;
     this.updateTabs();
     this.emit('tab-switch', index);
+  }
+
+  /**
+   * Detach a tab back into its own floating DockablePanel. The inverse of
+   * `mergeWith`. Right-click on the tab button triggers this so a user
+   * who accidentally merged two panels can separate them again.
+   *
+   * Behaviour:
+   *  - The extracted panel re-parents to the screen, restores its label
+   *    and border, floats at an offset position, and is shown.
+   *  - If only one tab is left in the container after removal, the tab
+   *    bar is cleared and the remaining panel goes back to behaving as
+   *    a normal single-panel container.
+   */
+  public detachTab(index: number): void {
+    if (index < 0 || index >= this.tabs.length) return;
+    const detached = this.tabs[index];
+    if (!detached || detached === this) {
+      // index 0 (self) — move a different tab out instead: pick the
+      // active one that isn't self.
+      const other = this.tabs.find((t, i) => i !== index && t !== this);
+      if (other) this.detachTab(this.tabs.indexOf(other));
+      return;
+    }
+
+    // Remove from tabs array.
+    this.tabs.splice(index, 1);
+    if (this.activeTab >= this.tabs.length) this.activeTab = Math.max(0, this.tabs.length - 1);
+
+    // Restore detached panel's layout as a floating window.
+    (detached as any).detach?.();
+    const root = this.screen;
+    if (root) {
+      (root as any).append?.(detached);
+      detached.parent = root as any;
+    }
+    // Put it back to a sensible floating position offset from the host
+    // so the two don't overlap 1:1.
+    const hostCoords = this._getCoords();
+    const offsetLeft = (hostCoords?.xi ?? 0) + 4;
+    const offsetTop  = (hostCoords?.yi ?? 0) + 2;
+    detached.position = {
+      left: offsetLeft,
+      top: offsetTop,
+      width: (detached.options as any)?.width ?? 40,
+      height: (detached.options as any)?.height ?? 15,
+    } as any;
+    // Restore border + label the merge had stripped.
+    (detached as any).border = (detached.options as any)?.border ?? { type: 'line' };
+    (detached as any).show?.();
+    (detached as any)._invalidateCoords?.();
+
+    // If only this (host) is left, clear tab UI entirely.
+    if (this.tabs.length <= 1) {
+      for (const btn of this.tabButtons) btn.destroy();
+      this.tabButtons = [];
+      this.tabs = [];
+    } else {
+      this.updateTabs();
+    }
+
+    detached.emit('undock-tab');
+    this.emit('detach', detached);
+    this.screen?.render();
   }
 
   /**

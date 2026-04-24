@@ -6,9 +6,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createContextMenus = createContextMenus;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
-    const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
+    const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
     // Set high z-index to ensure menu appears on top
     cm.zi = 9999;
+    cm.zIndex = 9999;
     let cmt = '';
     let cmty = 'chat';
     function scm(x, y, t, tgt) {
@@ -25,7 +26,7 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
             its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
         }
         else if (t === 'channel' && tgt) {
-            its.push('Join', 'Leave', 'Info', '---', 'Pin Channel');
+            its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', 'Pin Channel');
             if (extras.isSysop) {
                 its.push('---', 'Clear History', '{red-fg}Archive{/red-fg}', '{red-fg}Delete Channel{/red-fg}');
             }
@@ -43,6 +44,7 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
         cm.show();
         cm.setFront(); // Bring to front
         cm.focus();
+        console.log('[context-menus DIAG] scm type=%s target=%s click=(%d,%d) final=(%d,%d) wxh=%dx%d hidden=%s items=%d', t, tgt, x, y, cm.left, cm.top, cm.width, cm.height, cm.hidden, its.length);
         s.render();
     }
     function hcm() {
@@ -165,6 +167,9 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     break;
                 case 'Info':
                     asm(`Channel: ${cmt}`);
+                    break;
+                case 'Expand/Collapse':
+                    extras.onToggleChannelExpand?.(cmt);
                     break;
                 case 'Pin Channel':
                     asm(`{cyan-fg}Pinned ${cmt}{/cyan-fg}`);

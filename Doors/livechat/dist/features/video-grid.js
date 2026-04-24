@@ -212,7 +212,7 @@ class VideoGrid {
                     hasVideo: participantToShow.hasVideo,
                     isSpeaking: participantToShow.isSpeaking,
                     audioLevel: participantToShow.audioLevel,
-                    isCurrentUser: participantToShow.userId === this.currentUserId,
+                    isCurrentUser: String(participantToShow.userId) === String(this.currentUserId),
                     avatar: participantToShow.avatar,
                 };
                 const tile = new video_tile_1.VideoTile(tileOptions);
@@ -267,7 +267,7 @@ class VideoGrid {
                 hasVideo: participant.hasVideo,
                 isSpeaking: participant.isSpeaking,
                 audioLevel: participant.audioLevel,
-                isCurrentUser: participant.userId === this.currentUserId,
+                isCurrentUser: String(participant.userId) === String(this.currentUserId),
                 avatar: participant.avatar,
             };
             const tile = new video_tile_1.VideoTile(tileOptions);

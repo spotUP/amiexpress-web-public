@@ -6,13 +6,15 @@ export interface ContextMenuExtras {
   onFocusTile?: (userId: string) => void;
   onHideTile?: (userId: string) => void;
   onMuteRemote?: (userId: string) => void;
+  onToggleChannelExpand?: (channelName: string) => void;
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
-  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
+  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } } as any);
 
   // Set high z-index to ensure menu appears on top
   (cm as any).zi = 9999;
+  (cm as any).zIndex = 9999;
 
   let cmt = '';
   let cmty: 'user' | 'chat' | 'channel' | 'video' = 'chat';
@@ -29,7 +31,7 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     } else if (t === 'chat') {
       its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
     } else if (t === 'channel' && tgt) {
-      its.push('Join', 'Leave', 'Info', '---', 'Pin Channel');
+      its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', 'Pin Channel');
       if (extras.isSysop) {
         its.push('---', 'Clear History', '{red-fg}Archive{/red-fg}', '{red-fg}Delete Channel{/red-fg}');
       }
@@ -46,6 +48,8 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     cm.show();
     cm.setFront();  // Bring to front
     cm.focus();
+    console.log('[context-menus DIAG] scm type=%s target=%s click=(%d,%d) final=(%d,%d) wxh=%dx%d hidden=%s items=%d',
+      t, tgt, x, y, (cm as any).left, (cm as any).top, (cm as any).width, (cm as any).height, cm.hidden, its.length);
     s.render();
   }
 
@@ -164,6 +168,9 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           break;
         case 'Info':
           asm(`Channel: ${cmt}`);
+          break;
+        case 'Expand/Collapse':
+          extras.onToggleChannelExpand?.(cmt);
           break;
         case 'Pin Channel':
           asm(`{cyan-fg}Pinned ${cmt}{/cyan-fg}`);

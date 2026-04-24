@@ -71,10 +71,36 @@ export function parseEmotes(text: string): string {
   return text;
 }
 
+// Recognised blessed tag names (the full set of colour tokens blessed
+// understands). Braces that wrap one of these are preserved; other
+// user-typed braces are escaped so they render literally.
+const BLESSED_TAG_NAMES = new Set([
+  'bold', 'underline', 'blink', 'inverse', 'invisible', 'italic',
+  'open', 'close',
+  'black-fg', 'red-fg', 'green-fg', 'yellow-fg', 'blue-fg', 'magenta-fg', 'cyan-fg', 'white-fg', 'gray-fg',
+  'black-bg', 'red-bg', 'green-bg', 'yellow-bg', 'blue-bg', 'magenta-bg', 'cyan-bg', 'white-bg', 'gray-bg',
+  'lightblack-fg', 'lightred-fg', 'lightgreen-fg', 'lightyellow-fg', 'lightblue-fg', 'lightmagenta-fg', 'lightcyan-fg', 'lightwhite-fg', 'lightgray-fg',
+  'lightblack-bg', 'lightred-bg', 'lightgreen-bg', 'lightyellow-bg', 'lightblue-bg', 'lightmagenta-bg', 'lightcyan-bg', 'lightwhite-bg', 'lightgray-bg',
+  'left', 'right', 'center',
+]);
+
+function isBlessedTag(name: string): boolean {
+  if (!name) return false;
+  if (name.startsWith('/')) name = name.slice(1);
+  return BLESSED_TAG_NAMES.has(name);
+}
+
 /** Full markdown parsing (excludes animations - those are parsed separately) */
 export function parseContent(text: string): string {
-  // FIRST: Escape raw text to prevent user-injected blessed tags from causing bleed
-  let result = text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
+  // Escape braces that DON'T belong to a recognised blessed tag. Previous
+  // behaviour escaped every `{` / `}`, which broke callers passing
+  // pre-formatted strings like `{magenta-fg}[DM to foo]{/magenta-fg}`
+  // — the escape turned those into `{open}magenta-fg{close}…` and blessed
+  // rendered the raw tags as text. Now only stray user-typed braces get
+  // escaped.
+  let result = text.replace(/\{([^{}]*)\}/g, (m, inner) => {
+    return isBlessedTag(inner) ? m : `{open}${inner}{close}`;
+  });
 
   // THEN: Parse our supported formatting which will inject its own tags
   result = parseCodeBlock(result);

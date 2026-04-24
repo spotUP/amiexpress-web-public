@@ -254,7 +254,7 @@ export class VideoGrid {
           hasVideo: participantToShow.hasVideo,
           isSpeaking: participantToShow.isSpeaking,
           audioLevel: participantToShow.audioLevel,
-          isCurrentUser: participantToShow.userId === this.currentUserId,
+          isCurrentUser: String(participantToShow.userId) === String(this.currentUserId),
           avatar: participantToShow.avatar,
         };
 
@@ -318,7 +318,7 @@ export class VideoGrid {
         hasVideo: participant.hasVideo,
         isSpeaking: participant.isSpeaking,
         audioLevel: participant.audioLevel,
-        isCurrentUser: participant.userId === this.currentUserId,
+        isCurrentUser: String(participant.userId) === String(this.currentUserId),
         avatar: participant.avatar,
       };
 

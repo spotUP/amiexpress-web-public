@@ -25,8 +25,15 @@ export class ScrollableText extends Text {
       } : undefined,
     });
 
-    // Enable mouse wheel scrolling
-    this.enableMouse();
+    // Force non-clickable so this internal content area doesn't swallow
+    // clicks meant for its wrapping widget (e.g. List, which extends
+    // Element and uses a ScrollableText-like scrollable area internally).
+    // Callers can still pass `mouse: true` for wheel events — Element's
+    // wheel emit path runs regardless of `clickable`.
+    (this as any).clickable = false;
+    (this.options as any).clickable = false;
+    this.on('wheelup', () => this.scroll(-3));
+    this.on('wheeldown', () => this.scroll(3));
 
     // Set up key bindings for scrolling
     this.key(['up', 'k'], () => this.scroll(-1));

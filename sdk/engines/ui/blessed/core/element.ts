@@ -2166,17 +2166,34 @@ export class Element extends EventEmitter {
     this.emit(event.action, event);
 
     if (event.action === 'mousedown') {
-      // Check for scrollbar click
+      // Priority claim: scrollbar drag always wins and stops propagation.
       if (this.hasScrollbar() && this.isOnScrollbar(event.x, event.y)) {
         this._startScrollbarDrag(event);
         return true;
       }
 
-      this.emit('click', event);
-      if (this.clickable) {
+      // Dispatch the right event name for the button pressed. Without
+      // this split, the old code emitted 'click' for every button, so
+      // right-click never triggered context-menu handlers.
+      const btn = (event as any).button;
+      if (btn === 'right') {
+        this.emit('rightclick', event);
+      } else if (btn === 'middle') {
+        this.emit('middleclick', event);
+      } else {
+        this.emit('click', event);
+      }
+
+      // Left-click on a clickable element claims focus and stops
+      // propagation — that's blessed's original model; DOM-style bubbling
+      // breaks dialog buttons because overlapping widgets in the z-stack
+      // all fire click and the user's intended target is ambiguous.
+      if (btn !== 'right' && btn !== 'middle' && this.clickable) {
         this.focus();
         return true;
       }
+      // Right/middle click never claims focus (must not steal focus from
+      // the currently-focused text widget).
     }
 
     return this.clickable;

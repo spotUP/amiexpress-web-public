@@ -287,6 +287,11 @@ class VideoTile {
             style: {
                 bg: 'black',
             },
+            // Frames are now emitted as blessed colour tags ({red-fg} etc.)
+            // matching the backend/neoshowcase pipeline — blessed's cell
+            // buffer doesn't handle raw 24-bit ANSI reliably (row mis-align
+            // reported 2026-04-24). Tag parsing via tags:true keeps widths
+            // consistent across rows.
             tags: true,
         });
         // Render avatar or video placeholder
@@ -311,10 +316,7 @@ class VideoTile {
      */
     updateVideoDisplay() {
         if (this.options.hasVideo) {
-            // Only show placeholder if we haven't received any frames yet
             if (!this.hasFrame) {
-                // Container is borderless now; videoBox is height-1 inside it
-                // (status bar takes the last row).
                 const height = Math.max(0, this.container.height - 1);
                 const message = this.videoError || 'WAITING FOR VIDEO...';
                 const topPadding = Math.max(0, Math.floor((height - 1) / 2));
@@ -327,11 +329,8 @@ class VideoTile {
             this.videoBox.style.bg = 'black';
         }
         else {
-            // Reset frame tracking and error when video is disabled
             this.hasFrame = false;
             this.videoError = null;
-            // Show avatar on black — avatar fg is per-user (see generateAvatar)
-            // so users are visually distinct without a loud background tint.
             const avatar = generateAvatar(this.options.username);
             const avatarContent = [
                 '',
@@ -445,15 +444,18 @@ class VideoTile {
      * of leaving a 80x24 patch in a much larger panel.
      */
     getVideoDims() {
-        // The container dims are the authoritative numeric source — videoBox
-        // was created with width:'100%' / height:'100%-1', which blessed
-        // returns verbatim (as a string) when read back. Math.floor('100%')
-        // is NaN, so reading off videoBox directly made computeStreamDims
-        // propagate NaN into the capture canvas and produced a garbled
-        // halfblock / braille frame. Derive from the container instead.
+        // Derive dims from the tile container — reading videoBox directly
+        // can return the layout spec string ('100%-1') instead of a number.
+        // Reserve:
+        //   - 2 columns of width safety — halfblock/color frames emit a
+        //     trailing `\x1b[0m` per row; if a line ends right at the last
+        //     column, blessed wraps it and doubles the row count, which
+        //     looks like the frame "breaks" / overruns the status bar.
+        //   - 2 rows of height safety so the status bar at `bottom: 0` is
+        //     never overwritten by an overflowing final row.
         const cw = Number(this.container.width) || 0;
         const ch = Number(this.container.height) || 0;
-        return { width: cw, height: Math.max(1, ch - 1) };
+        return { width: Math.max(1, cw - 2), height: Math.max(1, ch - 2) };
     }
     /**
      * Get user ID
