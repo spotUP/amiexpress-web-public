@@ -5,7 +5,7 @@
  * Based on express.e conference functions.
  */
 
-import { displayScreen } from '../screen.handler';
+import { displayScreen, doPause } from '../screen.handler';
 import { displayMainMenu } from '../command-handler/menu';
 import { getMailStatFile, loadMsgPointers, validatePointers } from '../../utils/message-pointers.util';
 import { finalizeCommand } from '../../utils/command-response.util';
@@ -200,6 +200,21 @@ console.warn('[joinConference] Mail scan error:', err);
   }
 
   if (!silent) {
+    // express.e:5056-5061 - Display per-conference CONF_BULL screen every
+    // join. Resolver looks in Conf{N}/Screens/ so each conference can ship
+    // its own ASCII banner. Missing file is fine (optional per conf).
+    // Reported 2026-04-24: conference banners only appeared 'rarely' because
+    // this call wasn't wired. Silent=true so conferences without a CONF_BULL
+    // don't pop the 'Screen not found' sysop alert.
+    try {
+      const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
+      if (shown) {
+        doPause(socket, session);
+      }
+    } catch (err) {
+      console.warn('[joinConference] CONF_BULL display failed:', err);
+    }
+
     // express.e:5066-5088 - auto-rejoin shows user stats and different message
     if (auto) {
       console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);

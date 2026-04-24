@@ -620,7 +620,10 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // SCREEN_NODE_BULL looks in NodeN/Screens/ for BULL.TXT (express.e:6551-6553)
         if (!toolFlags.noBulls) {
           displayFlowLog('showing NODE_BULL');
-          const shown = await displayScreen(socket, session, 'NODE_BULL');
+          // NODE_BULL is optional — a missing file is normal ("no per-node
+          // bulletin configured"), not an error. Silence the sysop alert
+          // that fired after new-user registration completion on 2026-04-24.
+          const shown = await displayScreen(socket, session, 'NODE_BULL', true, /* silent */ true);
           if (shown && pauseDisplayFlow(socket, session)) {
             // Advance to next state so we don't loop back to displaying this screen
             session.subState = LoggedOnSubState.CONF_SCAN;
