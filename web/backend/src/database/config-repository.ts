@@ -1049,6 +1049,7 @@ export class ConfigRepository extends BaseRepository<any> {
       log_level: row.log_level,
       log_retention_days: row.log_retention_days,
       sysop_debug_enabled: Boolean(row.sysop_debug_enabled),
+      webhook_include_pii: Boolean(row.webhook_include_pii),
       vapid_public_key: row.vapid_public_key || '',
       vapid_private_key: decryptSecret(row.vapid_private_key || ''),
       vapid_contact_email: row.vapid_contact_email || '',

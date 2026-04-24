@@ -320,6 +320,8 @@ export interface SystemConfig {
   log_level: string;
   log_retention_days: number;
   sysop_debug_enabled: boolean;
+  /** WEB_: GDPR Phase 5 — default false; anonymises webhook payloads. */
+  webhook_include_pii?: boolean;
 
   // Push Notifications (VAPID)
   vapid_public_key: string;

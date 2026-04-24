@@ -107,6 +107,9 @@ export const SystemConfigSchema = z.object({
   log_level: z.enum(['debug', 'info', 'warning', 'error']).optional(),
   log_retention_days: z.number().int().min(1).max(365).optional(),
   sysop_debug_enabled: z.boolean().optional(),
+  // WEB_: GDPR Phase 5 — default false (PII stripped). When true, webhook
+  // payloads include username, real name, location, phone, email verbatim.
+  webhook_include_pii: z.boolean().optional(),
 
   // Push Notifications (VAPID)
   vapid_public_key: z.string().max(500).optional(),

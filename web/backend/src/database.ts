@@ -445,6 +445,12 @@ console.log('✓ Added smtp_from_email column');
 console.log('✓ Added sysop_email column');
       }
 
+      if (!systemConfigColumns.includes('webhook_include_pii')) {
+        // WEB_: GDPR Phase 5 — default 0 (strip PII from webhook payloads).
+        this.db.exec('ALTER TABLE system_config ADD COLUMN webhook_include_pii INTEGER DEFAULT 0');
+console.log('✓ Added webhook_include_pii column (GDPR Phase 5)');
+      }
+
       if (!systemConfigColumns.includes('bbs_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN bbs_email TEXT DEFAULT \'\'');
 console.log('✓ Added bbs_email column');

@@ -52,6 +52,44 @@ export interface WebhookEventData {
   };
 }
 
+/**
+ * WEB_: GDPR Phase 5 — when WEBHOOK_INCLUDE_PII is false (default), return a
+ * sanitised copy of the event data where the handle is replaced with
+ * `User #<id>` (or `anon` if no id), and free-text PII fields (real name,
+ * location, phone, email) are dropped. This leaves the trigger type + any
+ * non-identifying metadata (filesize, conference name, door, etc.) intact
+ * so sysops still see useful events in Discord/Slack without broadcasting
+ * users' personal data to a third party.
+ *
+ * Exported for tests; production callers should let the formatters
+ * invoke it implicitly.
+ */
+export function applyPiiPolicy(data: WebhookEventData['data'], overrideIncludePii?: boolean): WebhookEventData['data'] {
+  let includePii = false;
+  if (typeof overrideIncludePii === 'boolean') {
+    includePii = overrideIncludePii;
+  } else {
+    try {
+      const repo = (db as any).getConfigRepository?.();
+      const sys = repo?.getSystemConfig?.();
+      if (typeof sys?.webhook_include_pii === 'boolean') {
+        includePii = sys.webhook_include_pii;
+      }
+    } catch {
+      // Fall back to safe default (strip PII) if config can't be read.
+    }
+  }
+  if (includePii) return data;
+
+  const anon = data.userId ? `User #${data.userId}` : 'anon';
+  const sanitised: WebhookEventData['data'] = { ...data };
+  sanitised.username = anon;
+  for (const k of ['realname', 'realName', 'location', 'phone', 'phoneNumber', 'email']) {
+    if (k in sanitised) delete (sanitised as any)[k];
+  }
+  return sanitised;
+}
+
 class WebhookService {
   /**
    * Send webhook notification to all webhooks subscribed to this trigger
@@ -104,7 +142,8 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
    * Format payload for Discord webhook
    */
   private formatDiscordPayload(eventData: WebhookEventData): any {
-    const { trigger, data } = eventData;
+    const { trigger } = eventData;
+    const data = applyPiiPolicy(eventData.data);
 
     let color: number;
     let title: string;
@@ -308,7 +347,8 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
    * Format payload for Slack webhook
    */
   private formatSlackPayload(eventData: WebhookEventData): any {
-    const { trigger, data } = eventData;
+    const { trigger } = eventData;
+    const data = applyPiiPolicy(eventData.data);
 
     let emoji: string;
     let title: string;
