@@ -149,19 +149,19 @@ async function createApp(session) {
     const initialRoomName = session.bbsSession?.currentRoomName;
     // ========== INPUT HANDLING ==========
     // Use DoorInputManager for proper input routing and cleanup.
-    // WEB_ 2026-04-24: enableMouse is OFF. With it on, DoorInputManager
-    // writes DECSET 1000/1002/1006 to the terminal to turn on SGR mouse
-    // reporting. xterm.js then forwards every mouse move back to the door
-    // as raw '\x1b[<btn;col;row;M' sequences via the 'command' socket
-    // channel. Those leak to the chat area as literal text instead of
-    // being consumed by blessed's key parser — reported as "mouse chords
-    // are leaking into the /chat/ page". Blessed widget hover styles
-    // won't fire without it, but chat is text-driven and this is the
-    // pragmatic fix.
+    // WEB_ 2026-04-24: enableMouse MUST be true. xterm.js in this BBS
+    // already emits SGR mouse sequences regardless — if blessed's parser
+    // isn't armed, those sequences are misread as keystrokes and leak to
+    // the chat area as literal '[<btn;col;row;M'. Previous fix of
+    // disabling the parser + filtering them out also silently dropped
+    // real mouse clicks, breaking dropdown menus, context menus, and
+    // video-tile right-click. Arm the parser so blessed widgets with
+    // `mouse: true` (menu bar, control buttons, video tiles) receive
+    // proper events.
     const inputManager = new door_input_manager_1.DoorInputManager(session, screen, {
         enableGameMode: false, // Blessed UI mode, not ncurses game mode
         enableGrabKeys: false, // Blessed focus system handles keys
-        enableMouse: false, // See WEB_ note above
+        enableMouse: true, // See WEB_ note above — required for clicks
         debug: false,
         debugName: 'LiveChat'
     });
@@ -172,26 +172,18 @@ async function createApp(session) {
     // sticky xterm mouse-reporting leaked '[<btn;col;row;M' into the status
     // bar as literal text (2026-04-24 repro).
     inputManager.enable();
-    // Now wrap the handler that setupInputHandler just installed.
+    // Now wrap the handler that setupInputHandler just installed, ONLY to
+    // intercept F1 (Help). Do NOT filter any other escape sequences here —
+    // `\x1b[<...M/m` is the SGR mouse protocol and blessed's parser
+    // (enabled above) needs to see those to route clicks.
     if (session.bbsSession) {
         const innerHandler = session.bbsSession.doorInputHandler;
         session.bbsSession.doorInputHandler = (data) => {
-            // Handle F1 directly (escape sequences: \x1bOP or \x1b[11~)
             if (data === '\x1bOP' || data === '\x1b[11~') {
                 if (showHelpFn)
                     showHelpFn();
                 return true;
             }
-            // Drop SGR mouse codes (\x1b[<btn;col;row;M or ;m). Belt-and-suspenders
-            // alongside enableMouse:false above — if any prior session left the
-            // browser's xterm in mouse-reporting mode, those sequences would
-            // otherwise leak to the chat area as literal text.
-            if (data && data.length > 3 && data.charCodeAt(0) === 0x1b
-                && data.charCodeAt(1) === 0x5b /* [ */
-                && data.charCodeAt(2) === 0x3c /* < */) {
-                return true;
-            }
-            // Call the DoorInputManager's handler
             return innerHandler ? innerHandler(data) : true;
         };
     }
