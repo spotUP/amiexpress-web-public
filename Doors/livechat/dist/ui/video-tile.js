@@ -15,26 +15,242 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoTile = void 0;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 /**
- * Generate ASCII avatar based on username. Foreground colour is still
- * derived from the username so different users are visually distinct,
- * but the background stays black (see constructor) — the loud per-user
- * bg tint (magenta/red/etc.) that 2026-04-24 feedback flagged as "looks
- * wrong" is gone.
+ * Generate the no-video avatar: a large block-letter initial of the user's
+ * handle, in a per-user foreground colour so tiles are visually distinct.
+ * Replaced the face-glyph (two block columns + chin) which 2026-04-24
+ * feedback flagged as looking like Mickey Mouse ears.
  */
 function generateAvatar(username) {
     const colors = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan'];
-    const colorIndex = username.length % colors.length;
-    const color = colors[colorIndex];
-    // Simple ASCII face
-    return [
-        `{${color}-fg}     ███████████  ███████████{/${color}-fg}`,
-        `{${color}-fg}     ███████████  ███████████{/${color}-fg}`,
-        `{${color}-fg}     ███████████  ███████████{/${color}-fg}`,
-        `{${color}-fg}           ████████████{/${color}-fg}`,
-        `{${color}-fg}         ████████████████{/${color}-fg}`,
-        `{${color}-fg}         ████████████████{/${color}-fg}`,
-        `{${color}-fg}           ▀▀▀▀▀▀▀▀▀▀▀▀{/${color}-fg}`,
-    ];
+    const color = colors[username.length % colors.length];
+    const initial = (username?.[0] || '?').toUpperCase();
+    return blockLetter(initial).map(row => `{${color}-fg}${row}{/${color}-fg}`);
+}
+/**
+ * 8x8 block-letter glyphs for A-Z and '?'. Rendered with █ for ink,
+ * space for background. Terminal rows are roughly half as tall as wide,
+ * so the glyph looks proportional in a typical font.
+ */
+function blockLetter(ch) {
+    const G = {
+        A: [
+            '   ████   ',
+            '  ██  ██  ',
+            ' ██    ██ ',
+            ' ████████ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+        ],
+        B: [
+            ' ███████  ',
+            ' ██    ██ ',
+            ' ███████  ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ███████  ',
+        ],
+        C: [
+            '  ███████ ',
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+            '  ███████ ',
+        ],
+        D: [
+            ' ██████   ',
+            ' ██   ██  ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██   ██  ',
+            ' ██████   ',
+        ],
+        E: [
+            ' ████████ ',
+            ' ██       ',
+            ' ██████   ',
+            ' ██       ',
+            ' ██       ',
+            ' ████████ ',
+        ],
+        F: [
+            ' ████████ ',
+            ' ██       ',
+            ' ██████   ',
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+        ],
+        G: [
+            '  ███████ ',
+            ' ██       ',
+            ' ██  ████ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            '  ██████  ',
+        ],
+        H: [
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ████████ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+        ],
+        I: [
+            ' ████████ ',
+            '    ██    ',
+            '    ██    ',
+            '    ██    ',
+            '    ██    ',
+            ' ████████ ',
+        ],
+        J: [
+            ' ████████ ',
+            '      ██  ',
+            '      ██  ',
+            '      ██  ',
+            ' ██   ██  ',
+            '  █████   ',
+        ],
+        K: [
+            ' ██    ██ ',
+            ' ██   ██  ',
+            ' █████    ',
+            ' ██   ██  ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+        ],
+        L: [
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+            ' ████████ ',
+        ],
+        M: [
+            ' ██    ██ ',
+            ' ███  ███ ',
+            ' ██ ██ ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+        ],
+        N: [
+            ' ██    ██ ',
+            ' ███   ██ ',
+            ' ████  ██ ',
+            ' ██ ██ ██ ',
+            ' ██  ████ ',
+            ' ██   ███ ',
+        ],
+        O: [
+            '  ██████  ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            '  ██████  ',
+        ],
+        P: [
+            ' ███████  ',
+            ' ██    ██ ',
+            ' ███████  ',
+            ' ██       ',
+            ' ██       ',
+            ' ██       ',
+        ],
+        Q: [
+            '  ██████  ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██ ██ ██ ',
+            ' ██  ████ ',
+            '  ███████ ',
+        ],
+        R: [
+            ' ███████  ',
+            ' ██    ██ ',
+            ' ███████  ',
+            ' ██  ██   ',
+            ' ██   ██  ',
+            ' ██    ██ ',
+        ],
+        S: [
+            '  ███████ ',
+            ' ██       ',
+            '  ██████  ',
+            '       ██ ',
+            '       ██ ',
+            ' ███████  ',
+        ],
+        T: [
+            ' ████████ ',
+            '    ██    ',
+            '    ██    ',
+            '    ██    ',
+            '    ██    ',
+            '    ██    ',
+        ],
+        U: [
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            '  ██████  ',
+        ],
+        V: [
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            '  ██  ██  ',
+            '   ████   ',
+            '    ██    ',
+        ],
+        W: [
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██    ██ ',
+            ' ██ ██ ██ ',
+            ' ███  ███ ',
+            ' ██    ██ ',
+        ],
+        X: [
+            ' ██    ██ ',
+            '  ██  ██  ',
+            '   ████   ',
+            '   ████   ',
+            '  ██  ██  ',
+            ' ██    ██ ',
+        ],
+        Y: [
+            ' ██    ██ ',
+            '  ██  ██  ',
+            '   ████   ',
+            '    ██    ',
+            '    ██    ',
+            '    ██    ',
+        ],
+        Z: [
+            ' ████████ ',
+            '      ██  ',
+            '    ██    ',
+            '  ██      ',
+            ' ██       ',
+            ' ████████ ',
+        ],
+        '?': [
+            '  ██████  ',
+            '      ██  ',
+            '    ███   ',
+            '   ██     ',
+            '          ',
+            '   ██     ',
+        ],
+    };
+    return G[ch] || G['?'];
 }
 /**
  * VideoTile - Individual participant tile

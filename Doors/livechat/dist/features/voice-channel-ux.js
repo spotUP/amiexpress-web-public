@@ -301,8 +301,13 @@ class EnhancedVoiceChannel {
                 });
                 this.updateChannelList();
             }
-            // Add to video grid
-            if (this.videoGrid && String(data.userId) !== String(this.userId)) {
+            // Add to video grid. Self is included so the user gets a self-preview
+            // tile (the local onFrame() handler at ~line 537 feeds their camera
+            // frames into this same grid via updateParticipantVideo). Previously
+            // self was filtered out and the user saw only other participants —
+            // or nothing at all when alone in a channel, which flagged 2026-04-24
+            // as 'where's my ASCII video?'.
+            if (this.videoGrid) {
                 this.videoGrid.addParticipant({
                     userId: String(data.userId),
                     username: data.username,
