@@ -35,6 +35,108 @@ interface AudioLevels {
 }
 
 // =============================================================================
+// Video render modes (browser-side ASCII encoders)
+// =============================================================================
+
+/**
+ * Source pixels per output char for each render mode.
+ *  - ascii / color: 1 char = 1 pixel
+ *  - halfblock:     1 char = 1x2 pixels (top half + bottom half)
+ *  - braille:       1 char = 2x4 pixels (8 dots)
+ */
+function pixelsPerChar(mode: string): { px: number; py: number } {
+  switch (mode) {
+    case 'braille': return { px: 2, py: 4 };
+    case 'halfblock': return { px: 1, py: 2 };
+    case 'color':
+    case 'ascii':
+    default: return { px: 1, py: 1 };
+  }
+}
+
+const ASCII_RAMP = ' .:-=+*#%@';
+
+function renderAscii(img: ImageData, w: number, h: number, colored: boolean): string {
+  let out = '';
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const r = img.data[i];
+      const g = img.data[i + 1];
+      const b = img.data[i + 2];
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      const ch = ASCII_RAMP[Math.floor(lum * (ASCII_RAMP.length - 1))] || ' ';
+      out += colored ? `\x1b[38;2;${r};${g};${b}m${ch}` : ch;
+    }
+    if (colored) out += '\x1b[0m';
+    out += '\n';
+  }
+  return out.replace(/\n+$/, '');
+}
+
+/**
+ * Half-block: U+2580 with fg=top pixel, bg=bottom pixel. Source canvas is
+ * w x (h*2) pixels; each output char encodes one column over two rows. This
+ * doubles the vertical resolution and shows real colour on both halves.
+ */
+function renderHalfblock(img: ImageData, w: number, h: number): string {
+  const sw = w; // source width = char width (1 pixel per char column)
+  let out = '';
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const topI = ((y * 2) * sw + x) * 4;
+      const botI = ((y * 2 + 1) * sw + x) * 4;
+      const tr = img.data[topI], tg = img.data[topI + 1], tb = img.data[topI + 2];
+      const br = img.data[botI], bg = img.data[botI + 1], bb = img.data[botI + 2];
+      out += `\x1b[38;2;${tr};${tg};${tb}m\x1b[48;2;${br};${bg};${bb}m▀`;
+    }
+    out += '\x1b[0m\n';
+  }
+  return out.replace(/\n+$/, '');
+}
+
+/**
+ * Braille: 1 char = 2x4 source pixels mapped to 8 braille dots. Mono only
+ * (Unicode braille blocks have no fg/bg style by themselves; renderer
+ * picks a threshold). 8x effective resolution.
+ *
+ * Dot positions in U+2800..U+28FF:
+ *   1 4
+ *   2 5
+ *   3 6
+ *   7 8
+ */
+function renderBraille(img: ImageData, w: number, h: number): string {
+  const sw = w * 2;
+  // (col, row) in the 2x4 cell -> dot bit
+  const dotBits = [
+    [0x01, 0x08], // row 0
+    [0x02, 0x10], // row 1
+    [0x04, 0x20], // row 2
+    [0x40, 0x80], // row 3
+  ];
+  let out = '';
+  for (let cy = 0; cy < h; cy++) {
+    for (let cx = 0; cx < w; cx++) {
+      let bits = 0;
+      for (let dy = 0; dy < 4; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          const px = cx * 2 + dx;
+          const py = cy * 4 + dy;
+          const i = (py * sw + px) * 4;
+          const r = img.data[i], g = img.data[i + 1], b = img.data[i + 2];
+          const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          if (lum > 0.5) bits |= dotBits[dy][dx];
+        }
+      }
+      out += String.fromCharCode(0x2800 + bits);
+    }
+    out += '\n';
+  }
+  return out.replace(/\n+$/, '');
+}
+
+// =============================================================================
 // LiveChat Client
 // =============================================================================
 
@@ -604,14 +706,21 @@ class LiveChatClient {
         this.videoCanvas.style.display = 'none';
         document.body.appendChild(this.videoCanvas);
       }
-      this.videoCanvas.width = options.width || 80;
-      this.videoCanvas.height = options.height || 24;
+      // Capture canvas is sized to the *source* pixel resolution required
+      // by the chosen render mode. halfblock packs 1 char per 1x2 pixels;
+      // braille packs 1 char per 2x4 pixels. ascii/color = 1:1.
+      const charW = options.width || 80;
+      const charH = options.height || 24;
+      const mode = (options.mode as string) || (options.colored ? 'color' : 'ascii');
+      const { px, py } = pixelsPerChar(mode);
+      this.videoCanvas.width = charW * px;
+      this.videoCanvas.height = charH * py;
 
       // Send frames at configured FPS
       const fps = options.fps || 10;
       const intervalMs = Math.max(50, Math.floor(1000 / fps));
       this.videoFrameInterval = setInterval(() => {
-        this.sendVideoFrame(!!options.colored);
+        this.sendVideoFrame(mode, charW, charH);
       }, intervalMs);
 
       this.door.emit('video:started');
@@ -623,11 +732,17 @@ class LiveChatClient {
     }
   }
 
-  private sendVideoFrame(colored: boolean): void {
+  private sendVideoFrame(mode: string, charW: number, charH: number): void {
     if (!this.videoElement || !this.videoCanvas || !this.videoStream) return;
     if (this.videoElement.videoWidth === 0) return;
     const ctx = this.videoCanvas.getContext('2d');
     if (!ctx) return;
+    // Flip horizontally so the webcam reads as a mirror (what the user
+    // expects when looking at themselves) — the raw <video> feed would
+    // otherwise show their left hand on the right side of the frame.
+    ctx.save();
+    ctx.translate(this.videoCanvas.width, 0);
+    ctx.scale(-1, 1);
     ctx.drawImage(
       this.videoElement,
       0,
@@ -635,34 +750,30 @@ class LiveChatClient {
       this.videoCanvas.width,
       this.videoCanvas.height,
     );
-    // Convert to simple ASCII art frame (one line per row)
+    ctx.restore();
     const imgData = ctx.getImageData(
       0,
       0,
       this.videoCanvas.width,
       this.videoCanvas.height,
     );
-    const chars = ' .:-=+*#%@';
-    let ascii = '';
-    for (let y = 0; y < this.videoCanvas.height; y++) {
-      for (let x = 0; x < this.videoCanvas.width; x++) {
-        const i = (y * this.videoCanvas.width + x) * 4;
-        const r = imgData.data[i];
-        const g = imgData.data[i + 1];
-        const b = imgData.data[i + 2];
-        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        const ch = chars[Math.floor(lum * (chars.length - 1))] || ' ';
-        if (colored) {
-          // Build a minimal ANSI 24-bit foreground
-          ascii += `\x1b[38;2;${r};${g};${b}m${ch}`;
-        } else {
-          ascii += ch;
-        }
-      }
-      if (colored) ascii += '\x1b[0m';
-      ascii += '\n';
+    let frame: string;
+    switch (mode) {
+      case 'braille':
+        frame = renderBraille(imgData, charW, charH);
+        break;
+      case 'halfblock':
+        frame = renderHalfblock(imgData, charW, charH);
+        break;
+      case 'color':
+        frame = renderAscii(imgData, charW, charH, true);
+        break;
+      case 'ascii':
+      default:
+        frame = renderAscii(imgData, charW, charH, false);
+        break;
     }
-    this.door.emit('video:frame', { frame: ascii });
+    this.door.emit('video:frame', { frame });
   }
 
   private stopVideoCapture(): void {

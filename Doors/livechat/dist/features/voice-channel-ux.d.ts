@@ -28,6 +28,7 @@ export interface VoiceControlBarOptions {
     onDisconnect?: () => void;
     onVideoToggle?: () => void;
     onGridToggle?: () => void;
+    onModeCycle?: () => void;
 }
 /**
  * Bottom Control Bar (Discord-style)
@@ -42,6 +43,7 @@ export declare class VoiceControlBar {
     private muteButton;
     private videoButton;
     private gridToggleButton;
+    private modeButton;
     private disconnectButton;
     private username;
     private isMuted;
@@ -50,6 +52,7 @@ export declare class VoiceControlBar {
     private onDisconnectCallback?;
     private onVideoToggleCallback?;
     private onGridToggleCallback?;
+    private onModeCycleCallback?;
     constructor(options: VoiceControlBarOptions);
     private createUI;
     private setupSocketHandlers;
@@ -57,6 +60,7 @@ export declare class VoiceControlBar {
     private toggleVideo;
     private toggleGrid;
     updateGridButtonLabel(viewMode: 'speaker' | 'grid'): void;
+    updateModeButtonLabel(mode: 'ascii' | 'color' | 'halfblock' | 'braille'): void;
     private disconnect;
     private updateSpeakingIndicator;
     show(): void;
@@ -79,6 +83,8 @@ export interface EnhancedVoiceChannelOptions {
     onJoinVoice?: (channelId: string) => void;
     onLeaveVoice?: () => void;
     showConfirmDialog?: (title: string, message: string) => Promise<boolean>;
+    onRenderModeChange?: (mode: 'ascii' | 'color' | 'halfblock' | 'braille') => void;
+    onTileRightClick?: (userId: string, x: number, y: number) => void;
 }
 export declare class EnhancedVoiceChannel {
     private parent?;
@@ -98,13 +104,41 @@ export declare class EnhancedVoiceChannel {
     private onJoinVoiceCallback?;
     private onLeaveVoiceCallback?;
     private showConfirmDialog?;
+    private onRenderModeChange?;
+    private onTileRightClick?;
     private videoEnabled;
+    private currentStreamDims;
+    private resizeStreamTimer;
+    private renderMode;
+    private static readonly RENDER_MODE_CYCLE;
     constructor(options: EnhancedVoiceChannelOptions);
     private setupSocketHandlers;
     private setupAdaptiveQuality;
     private updateChannelList;
     private updateVideoGridVisibility;
     toggleVideo(): Promise<void>;
+    /**
+     * Compute the ASCII width/height the SDK should render for the local
+     * stream. Reads the actual self-tile dims so the picture fills the
+     * available space (whole chat panel when alone, half when 2 people, etc).
+     * Falls back to 80x24 if the tile isn't measurable yet.
+     */
+    private computeStreamDims;
+    /**
+     * If the self-tile has changed size enough to matter (>20% on either
+     * axis), stop the current ASCII stream and restart at the new dims.
+     * Debounced so a burst of voice:joined / voice:left / resize events
+     * collapses to a single restart.
+     */
+    private scheduleStreamResize;
+    private restartStreamIfDimsChanged;
+    /**
+     * Cycle the local outgoing stream's render mode (ascii → color →
+     * halfblock → braille → ascii). If video is currently on, restart
+     * the stream with the new encoder so other users see the change too.
+     */
+    cycleRenderMode(): Promise<void>;
+    getRenderMode(): 'ascii' | 'color' | 'halfblock' | 'braille';
     /**
      * Show voice permissions dialog and return user's choices
      * Uses proper blessed components: Checkbox, Button with focus cycling

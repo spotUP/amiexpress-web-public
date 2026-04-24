@@ -911,6 +911,14 @@ export interface VideoStreamOptions {
 
   /** Character set for ASCII conversion */
   charSet?: 'blocks' | 'gradient' | 'simple';
+
+  /**
+   * Render mode for hybrid doors that do their own browser-side encoding
+   * (livechat). Backend `video:data` pipeline supports `braille|superres|
+   * halfblock|ascii|hsv|shape`; livechat's lightweight client supports the
+   * subset below.
+   */
+  mode?: 'ascii' | 'color' | 'halfblock' | 'braille';
 }
 
 /**

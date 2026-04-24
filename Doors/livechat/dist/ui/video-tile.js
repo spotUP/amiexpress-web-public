@@ -430,6 +430,17 @@ class VideoTile {
         return this.container;
     }
     /**
+     * Get the actual character dimensions of the inner video area (excluding
+     * the 1-row status bar). Used to ask the SDK to render ASCII frames at
+     * the tile's real size so the picture fills the available space instead
+     * of leaving a 80x24 patch in a much larger panel.
+     */
+    getVideoDims() {
+        const w = this.videoBox.width || 0;
+        const h = this.videoBox.height || 0;
+        return { width: w, height: h };
+    }
+    /**
      * Get user ID
      */
     getUserId() {

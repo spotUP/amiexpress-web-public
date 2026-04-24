@@ -5,8 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createContextMenus = createContextMenus;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
-function createContextMenus(s, ib, sup, sdp, asm, sock) {
-    const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 22, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
+function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
+    const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
     // Set high z-index to ensure menu appears on top
     cm.zi = 9999;
     let cmt = '';
@@ -17,17 +17,26 @@ function createContextMenus(s, ib, sup, sdp, asm, sock) {
         const its = [];
         if (t === 'user' && tgt) {
             its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', 'Mute User', 'Ignore', 'Block');
+            if (extras.isSysop) {
+                its.push('---', '{red-fg}Kick User{/red-fg}', '{red-fg}Ban User{/red-fg}');
+            }
         }
         else if (t === 'chat') {
             its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
         }
         else if (t === 'channel' && tgt) {
-            its.push('Join', 'Leave', 'Info');
+            its.push('Join', 'Leave', 'Info', '---', 'Pin Channel');
+            if (extras.isSysop) {
+                its.push('---', 'Clear History', '{red-fg}Archive{/red-fg}', '{red-fg}Delete Channel{/red-fg}');
+            }
+        }
+        else if (t === 'video' && tgt) {
+            its.push('Focus (Fullscreen)', 'Hide Stream', 'Mute Audio', '---', 'View Profile', 'Send Message');
         }
         cm.setItems(its);
         cm.height = its.length + 2;
         // Ensure max positions are non-negative to prevent off-screen rendering
-        const mx = Math.max(s.width - 24, 0);
+        const mx = Math.max(s.width - 26, 0);
         const my = Math.max(s.height - (its.length + 4), 0);
         cm.top = Math.max(0, Math.min(y, my));
         cm.left = Math.max(0, Math.min(x, mx));
@@ -42,7 +51,10 @@ function createContextMenus(s, ib, sup, sdp, asm, sock) {
         s.render();
     }
     cm.on('select', (it, idx) => {
-        const si = typeof it === 'string' ? it : it.content || '';
+        const raw = typeof it === 'string' ? it : it.content || '';
+        // Strip blessed color tags so we can compare plain labels (sysop items
+        // are styled like '{red-fg}Kick User{/red-fg}').
+        const si = raw.replace(/\{[^}]*\}/g, '');
         // Ignore separator lines
         if (si === '---') {
             s.render();
@@ -86,6 +98,22 @@ function createContextMenus(s, ib, sup, sdp, asm, sock) {
                 case 'Block':
                     asm(`{red-fg}Blocked ${cmt} - they cannot contact you{/red-fg}`);
                     // TODO: Send block request to server
+                    break;
+                case 'Kick User':
+                    if (!extras.isSysop) {
+                        asm('{red-fg}Sysop only.{/red-fg}');
+                        break;
+                    }
+                    sock.emit('admin:kick-user', { username: cmt });
+                    asm(`{red-fg}Kick requested for ${cmt}{/red-fg}`);
+                    break;
+                case 'Ban User':
+                    if (!extras.isSysop) {
+                        asm('{red-fg}Sysop only.{/red-fg}');
+                        break;
+                    }
+                    sock.emit('admin:ban-user', { username: cmt });
+                    asm(`{red-fg}Ban requested for ${cmt}{/red-fg}`);
                     break;
             }
         }
@@ -133,10 +161,57 @@ function createContextMenus(s, ib, sup, sdp, asm, sock) {
                     sock.emit('room:join', { roomName: cmt });
                     break;
                 case 'Leave':
-                    sock.emit('room:leave');
+                    sock.emit('room:leave', { roomName: cmt });
                     break;
                 case 'Info':
                     asm(`Channel: ${cmt}`);
+                    break;
+                case 'Pin Channel':
+                    asm(`{cyan-fg}Pinned ${cmt}{/cyan-fg}`);
+                    // TODO: persist a local pinned-channels list in prefs
+                    break;
+                case 'Clear History':
+                    if (!extras.isSysop) {
+                        asm('{red-fg}Sysop only.{/red-fg}');
+                        break;
+                    }
+                    sock.emit('admin:clear-channel-history', { channel: cmt });
+                    asm(`{red-fg}Clear history requested for ${cmt}{/red-fg}`);
+                    break;
+                case 'Archive':
+                    if (!extras.isSysop) {
+                        asm('{red-fg}Sysop only.{/red-fg}');
+                        break;
+                    }
+                    sock.emit('admin:archive-channel', { channel: cmt });
+                    asm(`{red-fg}Archive requested for ${cmt}{/red-fg}`);
+                    break;
+                case 'Delete Channel':
+                    if (!extras.isSysop) {
+                        asm('{red-fg}Sysop only.{/red-fg}');
+                        break;
+                    }
+                    sock.emit('admin:delete-channel', { channel: cmt });
+                    asm(`{red-fg}Delete requested for ${cmt}{/red-fg}`);
+                    break;
+            }
+        }
+        else if (cmty === 'video' && cmt) {
+            switch (si) {
+                case 'Focus (Fullscreen)':
+                    extras.onFocusTile?.(cmt);
+                    break;
+                case 'Hide Stream':
+                    extras.onHideTile?.(cmt);
+                    break;
+                case 'Mute Audio':
+                    extras.onMuteRemote?.(cmt);
+                    break;
+                case 'View Profile':
+                    sup(cmt);
+                    break;
+                case 'Send Message':
+                    sdp(cmt);
                     break;
             }
         }

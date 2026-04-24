@@ -34,6 +34,7 @@ export interface VoiceControlBarOptions {
   onDisconnect?: () => void;
   onVideoToggle?: () => void;
   onGridToggle?: () => void;  // Toggle between speaker/grid view
+  onModeCycle?: () => void;   // Cycle local-stream render mode (ascii/color/halfblock/braille)
 }
 
 /**
@@ -49,6 +50,7 @@ export class VoiceControlBar {
   private muteButton: any;
   private videoButton: any;
   private gridToggleButton: any;
+  private modeButton: any;
   private disconnectButton: any;
   private username: string;
   private isMuted = false;
@@ -57,6 +59,7 @@ export class VoiceControlBar {
   private onDisconnectCallback?: () => void;
   private onVideoToggleCallback?: () => void;
   private onGridToggleCallback?: () => void;
+  private onModeCycleCallback?: () => void;
 
   constructor(options: VoiceControlBarOptions) {
     this.screen = options.screen;
@@ -66,6 +69,7 @@ export class VoiceControlBar {
     this.onDisconnectCallback = options.onDisconnect;
     this.onVideoToggleCallback = options.onVideoToggle;
     this.onGridToggleCallback = options.onGridToggle;
+    this.onModeCycleCallback = options.onModeCycle;
 
     this.createUI(options.parent);
     this.setupSocketHandlers();
@@ -76,7 +80,7 @@ export class VoiceControlBar {
     // Layout:
     // ├────────────────────┤
     // │ [*] username       │  <- status row (speaking indicator)
-    // │ [M] [V] [S] [X]   │  <- controls row
+    // │ [M] [V] [F] [X]    │  <- controls row ([R]ender = keyboard 'r' / View menu)
     // └────────────────────┘
     this.container = blessed.box({
       parent,
@@ -162,7 +166,10 @@ export class VoiceControlBar {
       this.toggleVideo();
     });
 
-    // Grid toggle button [S]
+    // Fullscreen/Grid toggle button.
+    // Speaker mode = [F] (Fullscreen — active speaker fills the whole chat
+    // panel, falling back to self if nobody is talking).
+    // Grid mode    = [G] (split-view grid showing every participant).
     this.gridToggleButton = blessed.box({
       parent: this.container,
       top: 1,
@@ -171,7 +178,7 @@ export class VoiceControlBar {
       height: 1,
       tags: true,
       border: undefined,  // Prevent Panel default border
-      content: '{yellow-fg}[S]{/yellow-fg}',
+      content: '{yellow-fg}[F]{/yellow-fg}',
       mouse: true,
       clickable: true,
       style: {
@@ -184,6 +191,14 @@ export class VoiceControlBar {
     this.gridToggleButton.on('click', () => {
       this.toggleGrid();
     });
+
+    // Render-mode cycle button: not put in the control bar because the
+    // sidebar (~15 chars wide) can't fit a 5th 3-wide button without
+    // overlapping [X]. Cycling is triggered via keyboard `r` and the
+    // View menu instead — see `cycleRenderMode` in EnhancedVoiceChannel.
+    // `modeButton` field kept (set to null) so the rest of the code can
+    // safely call `updateModeButtonLabel` as a no-op.
+    this.modeButton = null;
 
     // Disconnect button [X]
     this.disconnectButton = blessed.box({
@@ -270,12 +285,21 @@ export class VoiceControlBar {
   }
 
   public updateGridButtonLabel(viewMode: 'speaker' | 'grid') {
-    // Update button to show current mode
+    // Speaker mode = [F] fullscreen/focus; grid = [G] split-view.
     if (viewMode === 'speaker') {
-      this.gridToggleButton.setContent('{yellow-fg}[S]{/yellow-fg}');  // S = Speaker mode
+      this.gridToggleButton.setContent('{yellow-fg}[F]{/yellow-fg}');
     } else {
-      this.gridToggleButton.setContent('{cyan-fg}[G]{/cyan-fg}');  // G = Grid mode
+      this.gridToggleButton.setContent('{cyan-fg}[G]{/cyan-fg}');
     }
+    this.screen.render();
+  }
+
+  public updateModeButtonLabel(mode: 'ascii' | 'color' | 'halfblock' | 'braille') {
+    // First letter of the mode in the button slot so the user can read
+    // the current encoder at a glance.
+    const map: Record<string, string> = { ascii: 'A', color: 'C', halfblock: 'H', braille: 'B' };
+    const ch = map[mode] || 'R';
+    this.modeButton?.setContent(`{magenta-fg}[${ch}]{/magenta-fg}`);
     this.screen.render();
   }
 
@@ -331,6 +355,8 @@ export interface EnhancedVoiceChannelOptions {
   onJoinVoice?: (channelId: string) => void;
   onLeaveVoice?: () => void;
   showConfirmDialog?: (title: string, message: string) => Promise<boolean>;  // Confirmation dialog
+  onRenderModeChange?: (mode: 'ascii' | 'color' | 'halfblock' | 'braille') => void;
+  onTileRightClick?: (userId: string, x: number, y: number) => void;
 }
 
 export class EnhancedVoiceChannel {
@@ -351,7 +377,14 @@ export class EnhancedVoiceChannel {
   private onJoinVoiceCallback?: (channelId: string) => void;
   private onLeaveVoiceCallback?: () => void;
   private showConfirmDialog?: (title: string, message: string) => Promise<boolean>;
+  private onRenderModeChange?: (mode: 'ascii' | 'color' | 'halfblock' | 'braille') => void;
+  private onTileRightClick?: (userId: string, x: number, y: number) => void;
   private videoEnabled = false;
+  private currentStreamDims: { width: number; height: number } | null = null;
+  private resizeStreamTimer: NodeJS.Timeout | null = null;
+  private renderMode: 'ascii' | 'color' | 'halfblock' | 'braille' = 'halfblock';
+  private static readonly RENDER_MODE_CYCLE: Array<'ascii' | 'color' | 'halfblock' | 'braille'> =
+    ['ascii', 'color', 'halfblock', 'braille'];
 
   constructor(options: EnhancedVoiceChannelOptions) {
     this.parent = options.parent;
@@ -365,6 +398,8 @@ export class EnhancedVoiceChannel {
     this.onJoinVoiceCallback = options.onJoinVoice;
     this.onLeaveVoiceCallback = options.onLeaveVoice;
     this.showConfirmDialog = options.showConfirmDialog;
+    this.onRenderModeChange = options.onRenderModeChange;
+    this.onTileRightClick = options.onTileRightClick;
 
     this.setupSocketHandlers();
     this.setupAdaptiveQuality();
@@ -409,6 +444,8 @@ export class EnhancedVoiceChannel {
           isSpeaking: false,
           audioLevel: 0,
         });
+        // My self-tile shrank/grew — rerun the SDK encode at the new dims.
+        this.scheduleStreamResize();
       }
     });
 
@@ -422,6 +459,8 @@ export class EnhancedVoiceChannel {
       // Remove from video grid
       if (this.videoGrid) {
         this.videoGrid.removeParticipant(String(data.userId));
+        // Tile sizes changed — re-encode local stream at new dims.
+        this.scheduleStreamResize();
       }
     });
 
@@ -548,15 +587,18 @@ export class EnhancedVoiceChannel {
           this.videoGrid.updateParticipant(this.userId, { hasVideo: true });
         }
 
+        const dims = this.computeStreamDims();
+        this.currentStreamDims = dims;
         const videoOptions = this.qualityManager?.getVideoProfile();
         await this.ctx.video.startStream(
           { type: 'webcam' },
           {
-            width: videoOptions?.asciiWidth || 80,
-            height: videoOptions?.asciiHeight || 24,
+            width: dims.width,
+            height: dims.height,
             fps: videoOptions?.fps || 10,
-            colored: false,
-          }
+            colored: this.renderMode === 'color',
+            mode: this.renderMode,
+          } as any
         );
       } catch (error: any) {
         console.log('[Voice] Video stream failed:', error.message);
@@ -575,6 +617,7 @@ export class EnhancedVoiceChannel {
         await this.ctx.video.stopStream(myStreamId);
         // Remove listener
         this.ctx.video.onFrame(() => {});
+        this.currentStreamDims = null;
       } catch (error: any) {
         console.log('[Voice] Stop video failed:', error.message);
       }
@@ -587,6 +630,98 @@ export class EnhancedVoiceChannel {
       });
       this.updateVideoGridVisibility();
     }
+  }
+
+  /**
+   * Compute the ASCII width/height the SDK should render for the local
+   * stream. Reads the actual self-tile dims so the picture fills the
+   * available space (whole chat panel when alone, half when 2 people, etc).
+   * Falls back to 80x24 if the tile isn't measurable yet.
+   */
+  private computeStreamDims(): { width: number; height: number } {
+    const dims = this.videoGrid?.getTileVideoDims(this.userId) ?? null;
+    if (!dims || !dims.width || !dims.height) {
+      return { width: 80, height: 24 };
+    }
+    // Floor to whole chars; clamp to a sensible minimum so the SDK doesn't
+    // get a 0xN request if the tile is briefly unsized during a relayout.
+    const w = Math.max(40, Math.floor(dims.width));
+    const h = Math.max(12, Math.floor(dims.height));
+    return { width: w, height: h };
+  }
+
+  /**
+   * If the self-tile has changed size enough to matter (>20% on either
+   * axis), stop the current ASCII stream and restart at the new dims.
+   * Debounced so a burst of voice:joined / voice:left / resize events
+   * collapses to a single restart.
+   */
+  private scheduleStreamResize(): void {
+    if (!this.videoEnabled || !this.ctx?.video || !this.currentStreamDims) return;
+    if (this.resizeStreamTimer) clearTimeout(this.resizeStreamTimer);
+    this.resizeStreamTimer = setTimeout(() => {
+      this.resizeStreamTimer = null;
+      this.restartStreamIfDimsChanged().catch(err => {
+        console.log('[voice-channel-ux] stream resize failed:', err?.message ?? err);
+      });
+    }, 150);
+  }
+
+  private async restartStreamIfDimsChanged(): Promise<void> {
+    if (!this.videoEnabled || !this.ctx?.video || !this.currentStreamDims) return;
+    const target = this.computeStreamDims();
+    const cur = this.currentStreamDims;
+    const wDelta = Math.abs(target.width - cur.width) / Math.max(1, cur.width);
+    const hDelta = Math.abs(target.height - cur.height) / Math.max(1, cur.height);
+    if (wDelta < 0.2 && hDelta < 0.2) return;
+
+    console.log('[voice-channel-ux] resize stream %dx%d -> %dx%d', cur.width, cur.height, target.width, target.height);
+    const myStreamId = `video-${this.socket.id}`;
+    try {
+      await this.ctx.video.stopStream(myStreamId);
+    } catch {
+      // best-effort
+    }
+    this.currentStreamDims = target;
+    const videoOptions = this.qualityManager?.getVideoProfile();
+    await this.ctx.video.startStream(
+      { type: 'webcam' },
+      {
+        width: target.width,
+        height: target.height,
+        fps: videoOptions?.fps || 10,
+        colored: this.renderMode === 'color',
+        mode: this.renderMode,
+      } as any
+    );
+  }
+
+  /**
+   * Cycle the local outgoing stream's render mode (ascii → color →
+   * halfblock → braille → ascii). If video is currently on, restart
+   * the stream with the new encoder so other users see the change too.
+   */
+  public async cycleRenderMode(): Promise<void> {
+    const cycle = EnhancedVoiceChannel.RENDER_MODE_CYCLE;
+    const idx = cycle.indexOf(this.renderMode);
+    this.renderMode = cycle[(idx + 1) % cycle.length];
+    console.log('[voice-channel-ux] renderMode →', this.renderMode);
+    this.controlBar?.updateModeButtonLabel(this.renderMode);
+
+    // System-message feedback so the user sees something changed even when
+    // video is off (no stream to visibly re-encode).
+    if (this.onRenderModeChange) this.onRenderModeChange(this.renderMode);
+
+    if (!this.videoEnabled || !this.ctx?.video) return;
+
+    // Force a stream restart by invalidating dims, then run the
+    // resize path (debounced, dedupe-friendly).
+    this.currentStreamDims = { width: 0, height: 0 };
+    this.scheduleStreamResize();
+  }
+
+  public getRenderMode(): 'ascii' | 'color' | 'halfblock' | 'braille' {
+    return this.renderMode;
   }
 
   /**
@@ -864,9 +999,19 @@ export class EnhancedVoiceChannel {
                 this.videoGrid.toggleViewMode();
                 const newMode = this.videoGrid.getViewMode();
                 this.controlBar?.updateGridButtonLabel(newMode);
+                // Tile size jumps between speaker/grid layouts — rescale.
+                this.scheduleStreamResize();
               }
             },
+            onModeCycle: () => {
+              this.cycleRenderMode().catch(err => {
+                console.log('[voice-channel-ux] cycleRenderMode failed:', err?.message ?? err);
+              });
+            },
           });
+
+          // Sync the control bar label to the initial render mode.
+          this.controlBar.updateModeButtonLabel(this.renderMode);
         }
 
         // Create video grid
@@ -883,10 +1028,17 @@ export class EnhancedVoiceChannel {
             height: '100%',
             currentUserId: this.userId,
             currentUsername: this.username,
+            onTileRightClick: (uid, x, y) => {
+              this.onTileRightClick?.(uid, x, y);
+            },
           });
 
           // Start hidden until someone enables video
           this.videoGrid.hide();
+
+          // Terminal resize → re-encode local stream so it tracks the new
+          // chat-panel size. Debounced inside scheduleStreamResize.
+          this.screen.on('resize', () => this.scheduleStreamResize());
         }
 
         // Add current user to video grid

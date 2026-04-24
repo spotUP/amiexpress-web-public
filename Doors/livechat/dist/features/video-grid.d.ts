@@ -29,6 +29,7 @@ export interface VideoGridOptions {
     currentUserId: number | string;
     currentUsername: string;
     viewMode?: 'speaker' | 'grid';
+    onTileRightClick?: (userId: string, x: number, y: number) => void;
 }
 /**
  * VideoGrid - Displays all participants in an adaptive grid layout
@@ -44,6 +45,7 @@ export declare class VideoGrid {
     private lastWidth;
     private lastHeight;
     private viewMode;
+    private onTileRightClick?;
     constructor(options: VideoGridOptions);
     /**
      * Add or update a participant in the grid
@@ -105,6 +107,22 @@ export declare class VideoGrid {
      * Get participant count
      */
     getParticipantCount(): number;
+    /**
+     * Get the inner video-area dims (chars) of a tile. Used by callers that
+     * stream their own webcam to ask the SDK for an ASCII frame that
+     * matches the tile size — so a single-tile speaker view fills the chat
+     * panel instead of leaving 80x24 in a much larger area.
+     */
+    getTileVideoDims(userId: number | string): {
+        width: number;
+        height: number;
+    } | null;
+    /**
+     * Attach a right-click handler to a freshly-created tile so the door
+     * host can pop its shared context menu. No-op when no callback was
+     * supplied at grid construction.
+     */
+    private attachTileRightClick;
     /**
      * Get all participants
      */

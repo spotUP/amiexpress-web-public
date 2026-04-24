@@ -34,6 +34,7 @@ export interface VideoGridOptions {
   currentUserId: number | string;
   currentUsername: string;
   viewMode?: 'speaker' | 'grid';  // Default: 'speaker' for low-res terminals
+  onTileRightClick?: (userId: string, x: number, y: number) => void;
 }
 
 /**
@@ -65,12 +66,14 @@ export class VideoGrid {
   private lastWidth: number = 0;
   private lastHeight: number = 0;
   private viewMode: 'speaker' | 'grid';  // speaker = show one person, grid = show all
+  private onTileRightClick?: (userId: string, x: number, y: number) => void;
 
   constructor(options: VideoGridOptions) {
     this.screen = options.screen;
     this.currentUserId = options.currentUserId;
     this.currentUsername = options.currentUsername;
     this.viewMode = options.viewMode ?? 'speaker';  // Default to speaker mode for low-res terminals
+    this.onTileRightClick = options.onTileRightClick;
 
     // Main container for video grid (no outer border — tiles have their own)
     this.container = blessed.box({
@@ -257,6 +260,7 @@ export class VideoGrid {
 
         const tile = new VideoTile(tileOptions);
         this.tiles.set(String(participantToShow.userId), tile);
+        this.attachTileRightClick(tile, participantToShow.userId);
       }
 
       this.screen.render();
@@ -320,6 +324,7 @@ export class VideoGrid {
 
       const tile = new VideoTile(tileOptions);
       this.tiles.set(String(participant.userId), tile);
+      this.attachTileRightClick(tile, participant.userId);
     });
 
     this.screen.render();
@@ -388,6 +393,36 @@ export class VideoGrid {
    */
   getParticipantCount(): number {
     return this.participants.size;
+  }
+
+  /**
+   * Get the inner video-area dims (chars) of a tile. Used by callers that
+   * stream their own webcam to ask the SDK for an ASCII frame that
+   * matches the tile size — so a single-tile speaker view fills the chat
+   * panel instead of leaving 80x24 in a much larger area.
+   */
+  getTileVideoDims(userId: number | string): { width: number; height: number } | null {
+    const tile = this.tiles.get(String(userId));
+    if (!tile) return null;
+    return tile.getVideoDims();
+  }
+
+  /**
+   * Attach a right-click handler to a freshly-created tile so the door
+   * host can pop its shared context menu. No-op when no callback was
+   * supplied at grid construction.
+   */
+  private attachTileRightClick(tile: VideoTile, userId: number | string): void {
+    if (!this.onTileRightClick) return;
+    const container = tile.getContainer();
+    try {
+      // blessed needs `mouse: true` for rightclick events to fire.
+      container.enableMouse?.();
+      container.mouse = true;
+    } catch { /* ignore */ }
+    container.on('rightclick', (data: any) => {
+      this.onTileRightClick?.(String(userId), data?.x ?? 0, data?.y ?? 0);
+    });
   }
 
   /**

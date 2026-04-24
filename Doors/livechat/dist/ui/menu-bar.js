@@ -17,6 +17,8 @@ const buildMenuItems = () => ([
             { label: 'Help (F1)', action: () => globalHandlers.onHelp?.() },
             { label: 'Channel List (F2)', action: () => globalHandlers.onList?.() },
             { label: 'Next Channel (F3)', action: () => globalHandlers.onChTab?.() },
+            { label: 'Join Channel...', action: () => globalHandlers.onJoinChannel?.() },
+            { label: 'Leave Channel', action: () => globalHandlers.onLeaveChannel?.() },
         ],
     },
     {
@@ -26,17 +28,24 @@ const buildMenuItems = () => ([
             { label: 'Files (F6)', action: () => globalHandlers.onFiles?.() },
             { label: 'Pins (F7)', action: () => globalHandlers.onPins?.() },
             { label: 'Search (Ctrl+F)', action: () => globalHandlers.onSearch?.() },
+            { label: 'Threads', action: () => globalHandlers.onThreads?.() },
         ],
     },
     {
         label: 'View',
         items: [
             { label: 'Settings (Ctrl+S)', action: () => globalHandlers.onSettings?.() },
+            { label: 'Cycle Render Mode (r)', action: () => globalHandlers.onRenderMode?.() },
+            { label: 'Fullscreen / Grid', action: () => globalHandlers.onToggleView?.() },
+            { label: 'Toggle Sidebar', action: () => globalHandlers.onToggleSidebar?.() },
+            { label: 'Clear Chat', action: () => globalHandlers.onClearChat?.() },
         ],
     },
     {
         label: 'Help',
         items: [
+            { label: 'About', action: () => globalHandlers.onAbout?.() },
+            { label: 'Keyboard Shortcuts', action: () => globalHandlers.onShortcuts?.() },
             { label: 'Quit (Ctrl+Q)', action: () => globalHandlers.onQuit?.() },
         ],
     },

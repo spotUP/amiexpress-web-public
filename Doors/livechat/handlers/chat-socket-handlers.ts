@@ -47,6 +47,14 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('bbs:event', (e: any) => {
+    // Skip Guest activity — pre-login users cycling through FRONTEND/etc
+    // spam [EVENT] lines and have no chat identity. Reported 2026-04-24.
+    if (e?.username === 'Guest') return;
+    // Skip the legacy [EVENT] path for event types already rendered by
+    // BBSEventHandler (door_activity, custom_door_event). getEventMessage
+    // only knows door_enter/door_exit, so door_activity falls through to
+    // the JSON.stringify default and prints "[EVENT] undefined".
+    if (e?.type === 'door_activity' || e?.type === 'custom_door_event') return;
     if (!sse(e, st.prefs)) return;
     const { msg, c } = gem(e);
     uef(`{${c}-fg}${msg}{/${c}-fg}`);

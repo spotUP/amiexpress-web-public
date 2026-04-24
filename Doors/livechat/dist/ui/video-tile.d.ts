@@ -77,6 +77,16 @@ export declare class VideoTile {
      */
     getContainer(): any;
     /**
+     * Get the actual character dimensions of the inner video area (excluding
+     * the 1-row status bar). Used to ask the SDK to render ASCII frames at
+     * the tile's real size so the picture fills the available space instead
+     * of leaving a 80x24 patch in a much larger panel.
+     */
+    getVideoDims(): {
+        width: number;
+        height: number;
+    };
+    /**
      * Get user ID
      */
     getUserId(): number | string;

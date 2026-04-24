@@ -166,9 +166,15 @@ async function createApp(session) {
         debugName: 'LiveChat'
     });
     let showHelpFn = null;
-    // Custom input handler for F1 help key
+    // Enable door input FIRST (this calls setupInputHandler which installs its
+    // own doorInputHandler, so we have to wrap AFTER) — if we wrapped before,
+    // our SGR-mouse filter was getting silently overwritten and the browser's
+    // sticky xterm mouse-reporting leaked '[<btn;col;row;M' into the status
+    // bar as literal text (2026-04-24 repro).
+    inputManager.enable();
+    // Now wrap the handler that setupInputHandler just installed.
     if (session.bbsSession) {
-        const originalHandler = session.bbsSession.doorInputHandler;
+        const innerHandler = session.bbsSession.doorInputHandler;
         session.bbsSession.doorInputHandler = (data) => {
             // Handle F1 directly (escape sequences: \x1bOP or \x1b[11~)
             if (data === '\x1bOP' || data === '\x1b[11~') {
@@ -179,18 +185,16 @@ async function createApp(session) {
             // Drop SGR mouse codes (\x1b[<btn;col;row;M or ;m). Belt-and-suspenders
             // alongside enableMouse:false above — if any prior session left the
             // browser's xterm in mouse-reporting mode, those sequences would
-            // otherwise leak to the chat area as literal text (2026-04-24).
+            // otherwise leak to the chat area as literal text.
             if (data && data.length > 3 && data.charCodeAt(0) === 0x1b
                 && data.charCodeAt(1) === 0x5b /* [ */
                 && data.charCodeAt(2) === 0x3c /* < */) {
                 return true;
             }
             // Call the DoorInputManager's handler
-            return originalHandler ? originalHandler(data) : true;
+            return innerHandler ? innerHandler(data) : true;
         };
     }
-    // Enable door input (sets all flags correctly)
-    inputManager.enable();
     // ========== LOADING SCREEN ==========
     // Layout constants for 80x24 terminal
     const SIDEBAR_WIDTH = 15; // Minimum sidebar width (will auto-expand via fitContent to fit content)
@@ -1142,7 +1146,32 @@ async function createApp(session) {
     // ========== FILE SHARING ==========
     const { fileSharingOverlay, showFileSharing } = (0, file_sharing_1.createFileSharing)(screen, socket, state, username, addSystemMessage, addChatMessage, addActivity, audio, showModal, hideModal);
     // ========== CONTEXT MENUS ==========
-    const { contextMenu, showContextMenu, hideContextMenu } = (0, context_menus_1.createContextMenus)(screen, inputBox, showUserProfile, showDMPrompt, addSystemMessage, socket);
+    // secLevel >= 255 is the AmiExpress sysop tier; any door admin item
+    // (kick/ban/archive/etc) is gated on this.
+    const isSysop = (session?.user?.secLevel ?? 0) >= 255;
+    const hiddenTiles = new Set();
+    const { contextMenu, showContextMenu, hideContextMenu } = (0, context_menus_1.createContextMenus)(screen, inputBox, showUserProfile, showDMPrompt, addSystemMessage, socket, {
+        isSysop,
+        onFocusTile: (uid) => {
+            const vg = voiceChannel.videoGrid;
+            if (!vg)
+                return;
+            if (vg.getViewMode() !== 'speaker')
+                vg.toggleViewMode();
+            vg.setActiveSpeaker(uid);
+            addSystemMessage(`{cyan-fg}Focused stream: user ${uid}{/cyan-fg}`);
+        },
+        onHideTile: (uid) => {
+            hiddenTiles.add(uid);
+            const vg = voiceChannel.videoGrid;
+            vg?.removeParticipant(uid);
+            addSystemMessage(`Hidden stream for user ${uid} (rejoin voice to restore).`);
+        },
+        onMuteRemote: (uid) => {
+            socket.emit('voice:mute-remote', { userId: uid });
+            addSystemMessage(`{yellow-fg}Muted remote audio for user ${uid}{/yellow-fg}`);
+        },
+    });
     // ========== VOICE CHANNEL (Discord-style UX) ==========
     const voiceChannel = (0, voice_channel_ux_1.createEnhancedVoiceChannel)({
         parent: sidebarPanel, // Parent to sidebar so controls appear at bottom of sidebar (Discord-style)
@@ -1158,6 +1187,12 @@ async function createApp(session) {
         },
         onLeaveVoice: () => {
             addSystemMessage(`Left voice channel`);
+        },
+        onRenderModeChange: (mode) => {
+            addSystemMessage(`{magenta-fg}Video render mode: ${mode}{/magenta-fg}`);
+        },
+        onTileRightClick: (uid, x, y) => {
+            showContextMenu(x, y, 'video', uid);
         },
     });
     // ========== MOUSE HANDLING & SCROLL WHEEL ==========
@@ -1739,6 +1774,18 @@ async function createApp(session) {
         }
     };
     screen.key(['f5'], showFormatPicker);
+    // Press `r` (outside the input box) to cycle the outgoing webcam render
+    // mode. Only fires when we're in a voice channel so it doesn't collide
+    // with people typing the letter 'r' elsewhere in the UI.
+    screen.key(['r'], () => {
+        if (screen.focused === inputBox)
+            return;
+        if (!voiceChannel.isInVoiceChannel())
+            return;
+        voiceChannel.cycleRenderMode().catch(err => {
+            console.log('[livechat] cycleRenderMode failed:', err?.message ?? err);
+        });
+    });
     // ========== MENU BAR CLICK HANDLERS ==========
     menuBar.setHandlers({
         onHelp: () => showHelp(),
@@ -1799,6 +1846,61 @@ async function createApp(session) {
             screen.render();
         },
         onSettings: () => showSettingsOverlay(),
+        onJoinChannel: () => {
+            // Use the existing channel-list tab so it's consistent with F2.
+            sidebarTab !== 'channels' && switchSidebarTab('channels');
+            if (channelList.hidden)
+                channelList.toggle();
+            channelList.focus();
+            screen.render();
+        },
+        onLeaveChannel: () => {
+            const ch = state.currentChannel;
+            if (!ch || ch === 'general' || ch === 'lobby') {
+                addSystemMessage('{yellow-fg}Cannot leave the default channel.{/yellow-fg}');
+                return;
+            }
+            socket.emit('room:leave', { roomId: ch });
+            addSystemMessage(`Leaving {cyan-fg}${ch}{/cyan-fg}...`);
+        },
+        onThreads: () => {
+            // No dedicated overlay yet — surface what /threads does.
+            addSystemMessage('{yellow-fg}Threads: use /threads or reply on any message to open the thread view.{/yellow-fg}');
+        },
+        onRenderMode: () => {
+            if (!voiceChannel.isInVoiceChannel()) {
+                addSystemMessage('{yellow-fg}Render mode applies to the webcam stream — join a voice channel first.{/yellow-fg}');
+                return;
+            }
+            voiceChannel.cycleRenderMode().catch(() => { });
+        },
+        onToggleView: () => {
+            // Fullscreen (speaker mode) <-> grid split-view
+            const vg = voiceChannel.videoGrid;
+            if (!vg) {
+                addSystemMessage('{yellow-fg}Video grid not active — join a voice channel and enable video.{/yellow-fg}');
+                return;
+            }
+            vg.toggleViewMode();
+            addSystemMessage(`View: ${vg.getViewMode() === 'speaker' ? 'Fullscreen (focus)' : 'Grid (split)'}`);
+        },
+        onToggleSidebar: () => {
+            if (sidebarTab === 'channels')
+                channelList.toggle();
+            else
+                userList.toggle();
+            screen.render();
+        },
+        onClearChat: () => {
+            chatLog.setContent('');
+            screen.render();
+        },
+        onAbout: () => {
+            addSystemMessage('{cyan-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/cyan-fg}');
+        },
+        onShortcuts: () => {
+            addSystemMessage('{cyan-fg}Shortcuts:{/cyan-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)');
+        },
         onQuit: () => {
             showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {
                 if (confirmed) {

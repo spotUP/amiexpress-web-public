@@ -8,11 +8,20 @@ export interface MenuBarHandlers {
     onHelp?: () => void;
     onList?: () => void;
     onChTab?: () => void;
+    onJoinChannel?: () => void;
+    onLeaveChannel?: () => void;
     onEmoji?: () => void;
     onFiles?: () => void;
     onPins?: () => void;
     onSearch?: () => void;
+    onThreads?: () => void;
     onSettings?: () => void;
+    onRenderMode?: () => void;
+    onToggleView?: () => void;
+    onToggleSidebar?: () => void;
+    onClearChat?: () => void;
+    onAbout?: () => void;
+    onShortcuts?: () => void;
     onQuit?: () => void;
 }
 export interface MenuBar {

@@ -1,30 +1,45 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
-export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any) {
-  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 22, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
+export interface ContextMenuExtras {
+  isSysop?: boolean;
+  onFocusTile?: (userId: string) => void;
+  onHideTile?: (userId: string) => void;
+  onMuteRemote?: (userId: string) => void;
+}
+
+export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
+  const cm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' }, selected: { fg: 'black', bg: 'cyan' } } });
 
   // Set high z-index to ensure menu appears on top
   (cm as any).zi = 9999;
 
   let cmt = '';
-  let cmty: 'user' | 'chat' | 'channel' = 'chat';
+  let cmty: 'user' | 'chat' | 'channel' | 'video' = 'chat';
 
-  function scm(x: number, y: number, t: 'user' | 'chat' | 'channel', tgt?: string) {
+  function scm(x: number, y: number, t: 'user' | 'chat' | 'channel' | 'video', tgt?: string) {
     cmty = t;
     cmt = tgt || '';
     const its: string[] = [];
     if (t === 'user' && tgt) {
       its.push('View Profile', 'Send Message', 'Whois', '---', 'Mention', 'Add Note', 'View History', '---', 'Mute User', 'Ignore', 'Block');
+      if (extras.isSysop) {
+        its.push('---', '{red-fg}Kick User{/red-fg}', '{red-fg}Ban User{/red-fg}');
+      }
     } else if (t === 'chat') {
       its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
     } else if (t === 'channel' && tgt) {
-      its.push('Join', 'Leave', 'Info');
+      its.push('Join', 'Leave', 'Info', '---', 'Pin Channel');
+      if (extras.isSysop) {
+        its.push('---', 'Clear History', '{red-fg}Archive{/red-fg}', '{red-fg}Delete Channel{/red-fg}');
+      }
+    } else if (t === 'video' && tgt) {
+      its.push('Focus (Fullscreen)', 'Hide Stream', 'Mute Audio', '---', 'View Profile', 'Send Message');
     }
     cm.setItems(its);
     (cm as any).height = its.length + 2;
     // Ensure max positions are non-negative to prevent off-screen rendering
-    const mx = Math.max((s.width as number) - 24, 0);
+    const mx = Math.max((s.width as number) - 26, 0);
     const my = Math.max((s.height as number) - (its.length + 4), 0);
     (cm as any).top = Math.max(0, Math.min(y, my));
     (cm as any).left = Math.max(0, Math.min(x, mx));
@@ -41,7 +56,10 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
   }
 
   cm.on('select', (it: any, idx: number) => {
-    const si = typeof it === 'string' ? it : (it as any).content || '';
+    const raw = typeof it === 'string' ? it : (it as any).content || '';
+    // Strip blessed color tags so we can compare plain labels (sysop items
+    // are styled like '{red-fg}Kick User{/red-fg}').
+    const si = raw.replace(/\{[^}]*\}/g, '');
 
     // Ignore separator lines
     if (si === '---') {
@@ -88,6 +106,16 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           asm(`{red-fg}Blocked ${cmt} - they cannot contact you{/red-fg}`);
           // TODO: Send block request to server
           break;
+        case 'Kick User':
+          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          sock.emit('admin:kick-user', { username: cmt });
+          asm(`{red-fg}Kick requested for ${cmt}{/red-fg}`);
+          break;
+        case 'Ban User':
+          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          sock.emit('admin:ban-user', { username: cmt });
+          asm(`{red-fg}Ban requested for ${cmt}{/red-fg}`);
+          break;
       }
     } else if (cmty === 'chat') {
       switch (si) {
@@ -132,10 +160,47 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           sock.emit('room:join', { roomName: cmt });
           break;
         case 'Leave':
-          sock.emit('room:leave');
+          sock.emit('room:leave', { roomName: cmt });
           break;
         case 'Info':
           asm(`Channel: ${cmt}`);
+          break;
+        case 'Pin Channel':
+          asm(`{cyan-fg}Pinned ${cmt}{/cyan-fg}`);
+          // TODO: persist a local pinned-channels list in prefs
+          break;
+        case 'Clear History':
+          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          sock.emit('admin:clear-channel-history', { channel: cmt });
+          asm(`{red-fg}Clear history requested for ${cmt}{/red-fg}`);
+          break;
+        case 'Archive':
+          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          sock.emit('admin:archive-channel', { channel: cmt });
+          asm(`{red-fg}Archive requested for ${cmt}{/red-fg}`);
+          break;
+        case 'Delete Channel':
+          if (!extras.isSysop) { asm('{red-fg}Sysop only.{/red-fg}'); break; }
+          sock.emit('admin:delete-channel', { channel: cmt });
+          asm(`{red-fg}Delete requested for ${cmt}{/red-fg}`);
+          break;
+      }
+    } else if (cmty === 'video' && cmt) {
+      switch (si) {
+        case 'Focus (Fullscreen)':
+          extras.onFocusTile?.(cmt);
+          break;
+        case 'Hide Stream':
+          extras.onHideTile?.(cmt);
+          break;
+        case 'Mute Audio':
+          extras.onMuteRemote?.(cmt);
+          break;
+        case 'View Profile':
+          sup(cmt);
+          break;
+        case 'Send Message':
+          sdp(cmt);
           break;
       }
     }

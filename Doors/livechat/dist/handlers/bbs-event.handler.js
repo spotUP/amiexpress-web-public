@@ -20,6 +20,11 @@ class BBSEventHandler {
      */
     listen() {
         this.socket.on('bbs:event', (payload) => {
+            // Skip Guest activity — pre-login / unauthenticated sessions
+            // cycling through FRONTEND and similar doors have no chat identity
+            // and spam the log. Reported 2026-04-24.
+            if (payload?.username === 'Guest')
+                return;
             if (this.eventCallback) {
                 this.eventCallback(payload);
             }
