@@ -384,7 +384,10 @@ class VideoTile {
         if (this.options.hasVideo) {
             this.hasFrame = true;
             this.videoError = null; // Clear error on frame
-            this.videoBox.setFrame(frame);
+            // blessed.box has no `setFrame` method — that was silently eating every
+            // ASCII video frame, so the self-preview tile stayed on the 'S'
+            // avatar even while the camera streamed. setContent paints the frame.
+            this.videoBox.setContent(frame);
             this.screen.render();
         }
     }
