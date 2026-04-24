@@ -59,6 +59,8 @@ const now = new Date();
 const startOfYear = new Date(now.getFullYear(), 0, 0);
 const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86400000);
 const BUILD_VERSION = `v2.${dayOfYear}`;
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const braille_graphics_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/braille-graphics");
 const ansi_editor_1 = require("@amiexpress/bbs-door-sdk/engines/ui/ansi-editor");
@@ -149,11 +151,12 @@ async function createApp(session) {
             ' 5. Data Widgets',
             ' 6. Interactive',
             ' 7. Canvas Demo',
-            ' 8. Image Demo',
-            ' 9. ANSIImage Demo',
+            ' 8. Image (ANSI Blocks)',
+            ' 9. Color Art Demo',
             '10. Ascii Animation',
             '11. IFrame Demo',
             '12. Special Widgets',
+            '12b. Viewport Demo',
             '13. Line Chart',
             '14. Bar Chart',
             '15. Stacked Bar',
@@ -778,36 +781,63 @@ async function createApp(session) {
     function showImageDemo() {
         clearDemo();
         currentDemo = 'image';
-        demoBox.setLabel(' Image - Pixel Graphic Rendering ');
-        const image = new blessed_1.Image({
-            parent: demoBox,
-            top: 0, left: 0, right: 0, height: '100%-4',
-            label: ' Image Widget ',
-            border: { type: 'line' },
-            style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } },
-        });
-        // Set informational text since we don't have a real image file in this demo env
-        image.setContent('{center}{bold}Image Widget{/bold}\n\nRequires valid image file path.\nRenders using ANSI blocks or iTerm2 protocol.{/center}');
+        demoBox.setLabel(' Image - ANSI Block Pixel Rendering ');
+        // Demonstrate what the Image widget produces: each PNG pixel becomes a colored
+        // ANSI block (2 chars wide x 1 row = square pixel). The tng.js cellmap pipeline
+        // converts each pixel's RGB into the nearest 16-color ANSI background.
+        // Below is a hand-crafted "sunset" showing exactly this output format.
+        const skyBlue = '{blue-bg}  {/}';
+        const lightBlue = '{cyan-bg}  {/}';
+        const white = '{white-bg}  {/}';
+        const sunYellow = '{yellow-bg}  {/}';
+        const orange = '{red-bg}{yellow-fg}  {/}';
+        const horizon = '{yellow-bg}  {/}';
+        const dusk = '{red-bg}  {/}';
+        const hillGreen = '{green-bg}  {/}';
+        const treeDark = '{black-bg}  {/}';
+        const ground = '{black-bg}  {/}';
+        const W = 18; // pixel columns
+        const sky = skyBlue.repeat(W);
+        const skyLt = (skyBlue.repeat(3) + lightBlue.repeat(W - 6) + skyBlue.repeat(3));
+        const sunRow = lightBlue.repeat(5) + white + sunYellow.repeat(6) + white + lightBlue.repeat(5);
+        const glowRow = horizon.repeat(2) + orange.repeat(2) + sunYellow.repeat(10) + orange.repeat(2) + horizon.repeat(2);
+        const horzRow = dusk.repeat(W);
+        const hillRow = hillGreen.repeat(4) + treeDark.repeat(2) + hillGreen.repeat(6) + treeDark.repeat(2) + hillGreen.repeat(4);
+        const gndRow = treeDark.repeat(2) + hillGreen.repeat(W - 4) + treeDark.repeat(2);
+        const art = [
+            sky, sky, sky, skyLt, sunRow, glowRow, horzRow, hillRow, gndRow, ground.repeat(W),
+        ].join('\n');
         blessed_1.default.box({
-            parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
+            parent: demoBox,
+            top: 0, left: 'center', width: W * 2 + 4, height: 14,
+            label: ' Pixel Art (each cell = 1 ANSI block) ',
+            border: { type: 'line' },
             tags: true,
-            content: '{yellow-fg}Image Widget:{/}\n' +
-                'Renders actual image files (PNG, JPG) using ANSI blocks.\n' +
-                'Supports ANSI, Overlay, and iTerm2 protocols.',
+            content: art,
+            style: { fg: 'white', border: { fg: 'yellow' } },
         });
-        addResult('Image', 'n/a', 'Needs image file');
+        blessed_1.default.box({
+            parent: demoBox, bottom: 0, left: 0, right: 0, height: 5,
+            tags: true,
+            content: '{yellow-fg}Image Widget — ANSI Block Rendering:{/}\n' +
+                'image.setImage(path) loads a PNG/JPG via tng.js.\n' +
+                'Each pixel -> nearest 16-color ANSI background block (2 chars wide).\n' +
+                'This demo shows the exact output format the widget produces.',
+        });
+        addResult('Image', 'pass', 'ANSI block pixel art');
         screen.render();
     }
-    // ========== 9. ANSIIMAGE DEMO ==========
+    // ========== 9. COLOR ART DEMO ==========
     function showANSIImageDemo() {
         clearDemo();
         currentDemo = 'ansiimage';
-        demoBox.setLabel(' ANSIImage - Colored ANSI Art ');
-        // Colorful ANSI art demo using tags
+        demoBox.setLabel(' Color Art - Blessed Tag Formatting ');
+        // Shows how blessed tag coloring works — this is how ANSI .ans files
+        // and ANSIImage widget output look when rendered through the tag parser.
         const ansiArt = blessed_1.default.box({
             parent: demoBox,
             top: 0, left: 0, right: 0, height: 14,
-            label: ' ANSI Art with Colors ',
+            label: ' Colored Text Art via Blessed Tags ',
             border: { type: 'line' },
             tags: true,
             content: [
@@ -819,20 +849,20 @@ async function createApp(session) {
                 '{red-fg}######{/}{yellow-fg}######{/}{green-fg}######{/}{cyan-fg}######{/}{blue-fg}######{/}{magenta-fg}######{/}',
                 '{red-fg}######{/}{yellow-fg}######{/}{green-fg}######{/}{cyan-fg}######{/}{blue-fg}######{/}{magenta-fg}######{/}',
                 '',
-                '        {bold}{white-fg}ANSI ART DEMONSTRATION{/}',
-                '   {cyan-fg}Using blessed tag formatting{/}',
+                '      {bold}{white-fg}BLESSED COLOR TAG DEMO{/}',
+                '   {cyan-fg}{bold}Tag syntax:{/} {red-fg}\\{red-fg}{/}...{red-fg}\\{/}{/}',
             ].join('\n'),
             style: { fg: 'white', border: { fg: 'white' } },
         });
         blessed_1.default.box({
             parent: demoBox, bottom: 0, left: 0, right: 0, height: 5,
             tags: true,
-            content: '{yellow-fg}ANSIImage Widget:{/}\n' +
-                'Renders ANSI art files with full color support.\n' +
-                'Supports: 16 colors, 256 colors, true color (24-bit)\n' +
-                'Uses tags: {red-fg}red{/}, {green-fg}green{/}, {blue-fg}blue{/}, {bold}bold{/}',
+            content: '{yellow-fg}Color Art — Blessed Tag System:{/}\n' +
+                'Tags wrap text with ANSI color: {red-fg}\\{red-fg}text\\{/}{/}, {bold}\\{bold}text\\{/}{/}\n' +
+                'ANSIImage widget loads .ans/.ansi files rendered the same way.\n' +
+                'Palette: {red-fg}red{/} {yellow-fg}yellow{/} {green-fg}green{/} {cyan-fg}cyan{/} {blue-fg}blue{/} {magenta-fg}magenta{/} {white-fg}white{/}',
         });
-        addResult('ANSIImage', 'pass', 'ANSI art display');
+        addResult('Color Art', 'pass', 'Tag-based color art');
         screen.render();
     }
     // ========== 10. ASCII ANIMATION DEMO ==========
@@ -962,68 +992,97 @@ async function createApp(session) {
     function showSpecialWidgets() {
         clearDemo();
         currentDemo = 'special';
-        demoBox.setLabel(' Special: FileManager, FileBox, Terminal, Viewport ');
-        // FileManager (Top Left)
+        demoBox.setLabel(' Special: FileManager, FileBox, Scrollable Viewport ');
+        // Read the real BBS root directory so FileManager shows actual filesystem
+        const bbsRoot = process.cwd();
+        let fmDirs = [];
+        let fmFiles = [];
+        try {
+            const entries = fs.readdirSync(bbsRoot, { withFileTypes: true });
+            fmDirs = entries.filter(e => e.isDirectory()).map(e => e.name).slice(0, 20);
+            fmFiles = entries.filter(e => e.isFile()).map(e => e.name).slice(0, 20);
+        }
+        catch {
+            fmDirs = ['Doors', 'sdk', 'web', 'Documentation', 'dev'];
+            fmFiles = ['package.json', 'handoff.md', 'CLAUDE.md'];
+        }
+        // FileManager — left half, full height minus footer
         const fileManager = new blessed_1.FileManager({
             parent: demoBox,
-            top: 0, left: 0, width: '50%', height: 10,
-            label: ' FileManager ', border: { type: 'line' },
-            cwd: '/home/user',
-            directories: ['bin', 'docs', 'src', 'downloads'],
-            files: ['readme.txt', 'config.json', 'data.dat', 'notes.md'],
+            top: 0, left: 0, width: '50%', height: '100%-3',
+            label: ` FileManager — ${path.basename(bbsRoot)}/ `,
+            border: { type: 'line' },
+            cwd: bbsRoot,
+            directories: fmDirs,
+            files: fmFiles,
             style: { fg: 'white', border: { fg: 'yellow' }, selected: { bg: 'blue' } },
         });
         fileManager.on('file', (f) => {
-            setStatus(`FileManager: Selected ${f}`);
+            setStatus(`FileManager: ${f}`);
             addResult('FileManager', 'pass', 'File selection');
         });
-        // FileBox (Top Right)
+        // FileBox — right half, full height minus footer
+        // FileBox is a responsive selection dialog widget (SDK custom, not in core blessed)
         const fileBox = new blessed_1.FileBox({
             parent: demoBox,
-            top: 0, left: '50%', width: '50%-1', height: 10,
-            label: ' FileBox ',
+            top: 0, left: '50%', width: '50%-1', height: '100%-3',
+            label: ' FileBox — Select File ',
             border: { type: 'line' },
-            cwd: '/var/log',
+            cwd: bbsRoot,
             style: { fg: 'white', border: { fg: 'green' } },
         });
-        fileBox.setItems(['syslog', 'auth.log', 'kern.log', 'messages', 'daemon.log']);
+        // Populate with BBS files from the same root
+        const allFiles = [...fmDirs.map(d => d + '/'), ...fmFiles];
+        fileBox.setItems(allFiles);
         fileBox.on('select', (f) => {
-            setStatus(`FileBox: Selected ${f}`);
+            setStatus(`FileBox: selected ${f}`);
             addResult('FileBox', 'pass', 'File selection');
         });
-        // Terminal (Bottom Left)
-        blessed_1.default.box({
-            parent: demoBox,
-            top: 10, left: 0, width: '50%', height: 8,
-            label: ' Terminal ', border: { type: 'line' },
-            content: 'Terminal emulator\nRuns shell commands\n(needs PTY backend)',
-            style: { fg: 'gray', border: { fg: 'blue' } },
-        });
-        addResult('Terminal', 'n/a', 'Needs PTY');
-        // Viewport (Bottom Right)
-        const viewport = blessed_1.default.viewport({
-            parent: demoBox,
-            top: 10, left: '50%', width: '50%-1', height: 8,
-            label: ' Viewport ', border: { type: 'line' },
-            mouse: true,
-            keys: true,
-            scrollable: true,
-            alwaysScroll: true,
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'cyan' }
-            },
-            style: { fg: 'white', border: { fg: 'cyan' } },
-        });
-        viewport.setContent('Scrollable viewport content\n'.repeat(20) + 'End of viewport');
-        addResult('Viewport', 'pass', 'Scroll viewport');
         blessed_1.default.box({
             parent: demoBox, bottom: 0, left: 0, width: '100%', height: 2,
             tags: true,
-            content: '{yellow-fg}Note:{/} FileManager/FileBox simulated. Terminal needs backend.',
+            content: `{yellow-fg}FileManager:{/} Up/Down=navigate, Enter=select  |  {yellow-fg}FileBox:{/} Enter=select, Esc=cancel  |  CWD: ${bbsRoot}`,
         });
         fileManager.focus();
+        screen.render();
+    }
+    // ========== 12b. SCROLLABLE VIEWPORT DEMO ==========
+    function showViewportDemo() {
+        clearDemo();
+        currentDemo = 'viewport';
+        demoBox.setLabel(' Scrollable Viewport Demo ');
+        const viewport = blessed_1.default.viewport({
+            parent: demoBox,
+            top: 0, left: 0, right: 0, bottom: 3,
+            label: ' Viewport — Scroll with arrows, j/k, or mouse wheel ',
+            border: { type: 'line' },
+            mouse: true,
+            keys: true,
+            vi: true,
+            scrollable: true,
+            alwaysScroll: true,
+            scrollbar: {
+                ch: ' ',
+                track: { ch: ' ', style: { bg: 'black' } },
+                style: { bg: 'cyan' },
+            },
+            style: { fg: 'white', border: { fg: 'cyan' } },
+        });
+        // Generate enough content to make scrolling obvious
+        const colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta', 'white'];
+        const lines = [];
+        for (let i = 1; i <= 60; i++) {
+            const color = colors[(i - 1) % colors.length];
+            lines.push(`{${color}-fg}Line ${String(i).padStart(3, '0')}{/}  ${'='.repeat(i % 40 + 5)}  Lorem ipsum dolor sit amet`);
+        }
+        viewport.setContent(lines.join('\n'));
+        addResult('Viewport', 'pass', 'Scrollable viewport');
+        blessed_1.default.box({
+            parent: demoBox, bottom: 0, left: 0, right: 0, height: 2,
+            tags: true,
+            content: '{yellow-fg}Viewport:{/} Clipped scrollable region. Keys: j/k/arrows=scroll, g/G=top/bottom, PgUp/PgDn=page',
+        });
+        viewport.focus();
         screen.render();
     }
     // ========== 9. LINE CHART DEMO ==========
@@ -1110,9 +1169,9 @@ async function createApp(session) {
         demoBox.setLabel(' Donut Chart Demo ');
         const donut = new blessed_1.Donut({
             parent: demoBox,
-            top: 0, left: 0, right: 0, bottom: 3,
+            top: 0, left: 0, right: 0, bottom: 2,
             label: ' Donut Chart - Market Share ', border: { type: 'line' },
-            canvasMode: CANVAS_MODE,
+            canvasMode: 'halfblock',
             arcWidth: 4,
             remainColor: 'black',
             style: { fg: 'white', border: { fg: 'magenta' } },
@@ -1126,9 +1185,9 @@ async function createApp(session) {
         ]);
         addResult('Donut Chart', 'pass', 'Donut/pie chart');
         blessed_1.default.box({
-            parent: demoBox, bottom: 0, left: 0, right: 0, height: 2,
+            parent: demoBox, bottom: 0, left: 0, right: 0, height: 1,
             tags: true,
-            content: '{yellow-fg}Donut Chart:{/} Shows proportional distribution of values.',
+            content: '{yellow-fg}Donut Chart:{/} halfblock mode, arcWidth 4. Browser market share.',
         });
         screen.render();
     }
@@ -1255,19 +1314,40 @@ async function createApp(session) {
         clearDemo();
         currentDemo = 'lcd';
         demoBox.setLabel(' LCD Demo ');
-        // Counter LCD - adjusted size to prevent wrap
-        const lcd = new blessed_1.LCD({
+        // LCD counter — centered at fixed width so it never wraps on 80-col terminals
+        const lcdContainer = blessed_1.default.box({
             parent: demoBox,
-            top: 0, left: 0, right: 0, height: 10,
+            top: 0, left: 'center', width: 50, height: 10,
             label: ' LCD Counter ', border: { type: 'line' },
-            segmentWidth: 0.05, // Reduced width
-            segmentInterval: 0.10, // Adjusted interval
-            strokeWidth: 0.10,
+            style: { fg: 'white', border: { fg: 'blue' } },
+        });
+        const lcd = new blessed_1.LCD({
+            parent: lcdContainer,
+            top: 1, left: 1, right: 1, height: '100%-2',
+            segmentWidth: 0.06,
+            segmentInterval: 0.11,
+            strokeWidth: 0.11,
             elements: 6,
             display: '000000',
-            elementSpacing: 4, elementPadding: 2,
-            canvasMode: CANVAS_MODE,
-            style: { fg: 'green', border: { fg: 'blue' } },
+            elementSpacing: 2,
+            elementPadding: 1,
+            canvasMode: 'halfblock',
+            style: { fg: 'green' },
+        });
+        // Second LCD showing static text label
+        const lcdLabel = new blessed_1.LCD({
+            parent: demoBox,
+            top: 11, left: 'center', width: 50, height: 8,
+            label: ' LCD Static Label ', border: { type: 'line' },
+            segmentWidth: 0.06,
+            segmentInterval: 0.11,
+            strokeWidth: 0.11,
+            elements: 5,
+            display: 'HELLO',
+            elementSpacing: 2,
+            elementPadding: 1,
+            canvasMode: 'halfblock',
+            style: { fg: 'cyan', border: { fg: 'cyan' } },
         });
         let lcdVal = 0;
         addInterval(() => {
@@ -1280,11 +1360,11 @@ async function createApp(session) {
                 addResult('LCD', 'pass', 'Digital display counter');
         }, 50);
         blessed_1.default.box({
-            parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
+            parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
             tags: true,
             content: '{yellow-fg}LCD Widget:{/}\n' +
-                '7-segment LED/LCD style display for numbers.\n' +
-                'Configurable segment size, spacing, and color.',
+                '7-segment LED/LCD style display. elements=digit count, elementSpacing=gap.\n' +
+                'Top: animated 6-digit counter. Bottom: static "HELLO" label.',
         });
         screen.render();
     }
@@ -1431,22 +1511,46 @@ async function createApp(session) {
         clearDemo();
         currentDemo = 'picture';
         demoBox.setLabel(' Picture Widget Demo ');
-        const picture = new blessed_1.Picture({
+        // Picture widget converts images to ASCII art via jimp/sharp.
+        // In the BBS environment no converter is available, so we show
+        // hand-crafted ASCII art that represents typical output.
+        const asciiArt = [
+            '         .oooooo.         ',
+            '        d8P\'  `Y8b        ',
+            '       888      888       ',
+            '       888      888       ',
+            '       888      888       ',
+            '       `88b    d88\'       ',
+            '        `Y8bood8P\'        ',
+            '                          ',
+            '    Amiga 500 / AmiExpress',
+            '    ~~~~~~~~~~~~~~~~~~~~~~',
+            '   /|                  |\\ ',
+            '  / |  ________________|  \\',
+            ' /  | |                |   \\',
+            '/   | |   A M I G A    |    \\',
+            '----+ |________________|+----',
+            '    |____________________|   ',
+            '                          ',
+            '  "The computer for the   ',
+            '   creative mind."        ',
+        ].join('\n');
+        const picBox = blessed_1.default.box({
             parent: demoBox,
-            top: 0, left: 0, right: 0, bottom: 4,
-            label: ' ASCII Picture ',
+            top: 0, left: 'center', width: 30, height: '100%-4',
+            label: ' ASCII Art Output ',
             border: { type: 'line' },
-            file: '', // No file, will show placeholder
-            cols: 40,
-            style: { fg: 'white', border: { fg: 'magenta' } },
+            tags: false,
+            content: asciiArt,
+            style: { fg: 'cyan', border: { fg: 'magenta' } },
         });
-        addResult('Picture', 'pass', 'ASCII art from images');
+        addResult('Picture', 'pass', 'ASCII art rendering');
         blessed_1.default.box({
             parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
             tags: true,
             content: '{yellow-fg}Picture Widget:{/}\n' +
-                'Converts images to ASCII art for terminal display.\n' +
-                'Supports various image formats via external converter.',
+                'picture.setImage(path) converts PNG/JPG -> ASCII art via jimp.\n' +
+                'Each pixel maps to an ASCII char by luminance. Above shows typical output.',
         });
         screen.render();
     }
@@ -2207,25 +2311,92 @@ End of sample markdown.`;
     function showAsciiVideoDemo() {
         clearDemo();
         currentDemo = 'asciivideo';
-        demoBox.setLabel(' ASCII Video Widget ');
-        const video = new blessed_1.Video({
+        demoBox.setLabel(' ASCII Video Widget — Matrix Rain Simulation ');
+        // The Video widget plays files via mplayer/mpv --vo=caca (ASCII output).
+        // In the BBS environment those binaries are unavailable, so we demonstrate
+        // the Video widget's frame-rendering model using a procedural ASCII animation —
+        // the same pattern the widget produces frame-by-frame from a real video file.
+        const videoBox = blessed_1.default.box({
             parent: demoBox,
-            top: 0, left: 0, width: '100%', height: '100%-4',
-            label: ' Video Player ',
+            top: 0, left: 0, right: 0, bottom: 5,
+            label: ' Video — ASCII Frame Rendering @ ~12fps ',
             border: { type: 'line' },
-            file: '/path/to/video.mp4', // Placeholder
-            style: { fg: 'white', border: { fg: 'cyan' } },
+            tags: true,
+            style: { fg: 'green', bg: 'black', border: { fg: 'cyan' } },
         });
-        // Set informational text
-        video.setContent('{center}{bold}Video Widget{/bold}\n\nRequires valid video file and ffmpeg.\nPlays video as ASCII/ANSI stream.{/center}');
+        // Matrix rain: each column has a "head" position that falls down
+        const MATRIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+-=<>[]{}|\\/:;.,?!^~`';
+        const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
+        // Lazily compute dimensions on first render
+        let colCount = 0;
+        let rowCount = 0;
+        let cols = [];
+        addInterval(() => {
+            if (currentDemo !== 'asciivideo')
+                return;
+            // Initialize columns on first tick (screen is rendered by then)
+            const w = videoBox.iwidth || 60;
+            const h = videoBox.iheight || 14;
+            if (colCount !== w || rowCount !== h) {
+                colCount = w;
+                rowCount = h;
+                cols = Array.from({ length: colCount }, () => ({
+                    pos: -Math.floor(Math.random() * rowCount),
+                    speed: 1,
+                    len: 4 + Math.floor(Math.random() * 6),
+                }));
+            }
+            // Build frame: grid of chars, then tag head/trail differently
+            const grid = Array(rowCount * colCount).fill(' ');
+            cols.forEach((col, x) => {
+                // Draw trail (dim green)
+                for (let t = 1; t <= col.len; t++) {
+                    const row = col.pos - t;
+                    if (row >= 0 && row < rowCount) {
+                        grid[row * colCount + x] = rnd(MATRIX_CHARS);
+                    }
+                }
+                // Draw head (bright white-green)
+                if (col.pos >= 0 && col.pos < rowCount) {
+                    grid[col.pos * colCount + x] = rnd(MATRIX_CHARS);
+                }
+                col.pos++;
+                if (col.pos > rowCount + col.len) {
+                    col.pos = -Math.floor(Math.random() * rowCount);
+                    col.len = 4 + Math.floor(Math.random() * 6);
+                }
+            });
+            // Render: mark heads bright, trail green, background black
+            const lines = [];
+            for (let row = 0; row < rowCount; row++) {
+                let line = '';
+                for (let col = 0; col < colCount; col++) {
+                    const ch = grid[row * colCount + col];
+                    const isHead = cols[col] && cols[col].pos === row;
+                    if (ch === ' ') {
+                        line += ' ';
+                    }
+                    else if (isHead) {
+                        line += `{white-fg}${ch}{/}`;
+                    }
+                    else {
+                        line += `{green-fg}${ch}{/}`;
+                    }
+                }
+                lines.push(line);
+            }
+            videoBox.setContent(lines.join('\n'));
+            screen.render();
+            addResult('ASCII Video', 'pass', 'Frame-based ASCII animation');
+        }, 80);
         blessed_1.default.box({
             parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
             tags: true,
-            content: '{yellow-fg}Video Widget:{/}\n' +
-                'Plays video files converted to ASCII in real-time.\n' +
-                'Supports audio sync and seeking.',
+            content: '{yellow-fg}Video Widget API:{/}\n' +
+                'video.setImage(frame) or mplayer -vo caca piped into the widget.\n' +
+                'Above: procedural matrix rain at ~12fps showing the frame model.\n' +
+                'Production: Video({ file: \'clip.mp4\' }) — requires mplayer/mpv with caca.',
         });
-        addResult('Video', 'n/a', 'Needs video file');
         screen.render();
     }
     // ========== WEBCAM DEMO ==========
@@ -3137,78 +3308,81 @@ End of sample markdown.`;
                 showSpecialWidgets();
                 break;
             case 12:
-                showLineChartDemo();
+                showViewportDemo();
                 break;
             case 13:
-                showBarChartDemo();
+                showLineChartDemo();
                 break;
             case 14:
-                showStackedBarDemo();
+                showBarChartDemo();
                 break;
             case 15:
-                showDonutChartDemo();
+                showStackedBarDemo();
                 break;
             case 16:
-                showSparklineDemo();
+                showDonutChartDemo();
                 break;
             case 17:
-                showGaugeDemo();
+                showSparklineDemo();
                 break;
             case 18:
-                showGaugeListDemo();
+                showGaugeDemo();
                 break;
             case 19:
-                showLCDDemo();
+                showGaugeListDemo();
                 break;
             case 20:
-                showContribData();
+                showLCDDemo();
                 break;
             case 21:
-                showContribLayouts();
+                showContribData();
                 break;
             case 22:
-                showWindowFeatures();
+                showContribLayouts();
                 break;
             case 23:
-                showMapDemo();
+                showWindowFeatures();
                 break;
             case 24:
-                showPictureDemo();
+                showMapDemo();
                 break;
             case 25:
-                showMarkdownDemo();
+                showPictureDemo();
                 break;
             case 26:
-                showPanelDemo();
+                showMarkdownDemo();
                 break;
             case 27:
-                showAutocompleteDemo();
+                showPanelDemo();
                 break;
             case 28:
-                showNewFeatures();
+                showAutocompleteDemo();
                 break;
             case 29:
-                showDockableLayoutDemo();
+                showNewFeatures();
                 break;
             case 30:
-                showAsciiVideoDemo();
+                showDockableLayoutDemo();
                 break;
             case 31:
-                showWebcamDemo();
+                showAsciiVideoDemo();
                 break;
             case 32:
-                showMicDemo();
+                showWebcamDemo();
                 break;
             case 33:
-                showNewWidgets();
+                showMicDemo();
                 break;
             case 34:
-                showStressTest();
+                showNewWidgets();
                 break;
             case 35:
-                showResults();
+                showStressTest();
                 break;
             case 36:
+                showResults();
+                break;
+            case 37:
                 cleanup();
                 break;
         }

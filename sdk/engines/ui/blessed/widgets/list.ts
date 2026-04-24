@@ -30,6 +30,7 @@ export class List extends Element {
   // Hover tracking for per-item hover effects
   private _hoveredItem: number = -1;
   private _lastKeyTime: number = 0;
+  private _lastWheelTime: number = 0;
 
   // Responsive tracking
   private _isMobileMode: boolean = false;
@@ -112,12 +113,19 @@ export class List extends Element {
     if (options.mouse !== false) {
       this.on('click', this._onClick.bind(this));
 
-      // Mouse wheel handlers - move selection (view auto-scrolls to follow)
+      // Mouse wheel handlers - move selection one item at a time, throttled to
+      // prevent browser scroll events from firing faster than intended.
       this.on('wheelup', () => {
+        const now = Date.now();
+        if (now - this._lastWheelTime < 80) return;
+        this._lastWheelTime = now;
         this.up();
         this.screen?.render();
       });
       this.on('wheeldown', () => {
+        const now = Date.now();
+        if (now - this._lastWheelTime < 80) return;
+        this._lastWheelTime = now;
         this.down();
         this.screen?.render();
       });
@@ -131,7 +139,12 @@ export class List extends Element {
     const pos = this._getCoords();
     if (!pos) return;
 
-    const border = this.options.border ? 1 : 0;
+    // `border: { type: 'none' }` is truthy but doesn't draw anything, so
+    // treating it as a 1-row offset caused the list to select the row
+    // above the one the user clicked (reported 2026-04-24). Only count
+    // border rows when a real border is actually rendered.
+    const hasDrawnBorder = !!(this.options.border && (this.options.border as any).type && (this.options.border as any).type !== 'none');
+    const border = hasDrawnBorder ? 1 : 0;
     const padding = this.options.padding || 0;
     const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
 
@@ -883,8 +896,11 @@ export class List extends Element {
     const coords = this._getCoords();
     if (!coords) return handled;
 
-    // Skip hover logic if mouse is over the scrollbar area (rightmost column)
-    const border = this.options.border ? 1 : 0;
+    // Skip hover logic if mouse is over the scrollbar area (rightmost column).
+    // Same `border: { type: 'none' }` truthiness trap as _onClick — only
+    // offset when a border is actually drawn.
+    const hasDrawnBorder = !!(this.options.border && (this.options.border as any).type && (this.options.border as any).type !== 'none');
+    const border = hasDrawnBorder ? 1 : 0;
     if (this.hasScrollbar() && event.x === coords.xl - border - 1) {
       if (this._hoveredItem !== -1) {
         this._hoveredItem = -1;
