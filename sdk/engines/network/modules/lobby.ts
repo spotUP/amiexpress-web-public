@@ -83,7 +83,11 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
   /**
    * Setup socket event handlers
    */
-  private setupEventHandlers(): void {
+  /**
+   * Setup socket event handlers
+   * Called in constructor and when socket changes (e.g., broker injection)
+   */
+  setupEventHandlers(): void {
     const socket = this.connection.getSocket();
     if (!socket) return;
 
@@ -104,7 +108,10 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
 
     socket.on('lobby:player_joined', (player: LobbyPlayer) => {
       if (this._current) {
-        this._current.players.push(player);
+        // Idempotent: only add if not already present
+        if (!this._current.players.some(p => p.id === player.id)) {
+          this._current.players.push(player);
+        }
         this.emit('player:joined', player);
       }
     });
@@ -642,6 +649,29 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
           resolve(response.lobbies);
         } else {
           reject(new Error(response.error || 'Failed to list lobbies'));
+        }
+      });
+    });
+  }
+
+  /**
+   * Atomic matchmake: find a waiting lobby or create one.
+   * Handled server-side to prevent race conditions.
+   */
+  async matchmake(config: LobbyConfig, mode: string): Promise<Lobby> {
+    return new Promise((resolve, reject) => {
+      const socket = this.connection.getSocket();
+      if (!socket?.connected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      socket.emit('lobby:matchmake', { config, mode }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
+        if (response.success && response.lobby) {
+          this._current = response.lobby;
+          resolve(response.lobby);
+        } else {
+          reject(new Error(response.error || 'Matchmaking failed'));
         }
       });
     });

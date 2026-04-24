@@ -70,6 +70,7 @@ export class MatchmakingEngine extends EventEmitter implements IMatchmakingEngin
   private currentMatch: MatchFound | null = null;
   private queueStartTime = 0;
   private statusUpdateInterval?: NodeJS.Timeout;
+  private _setupSocket: any = null;  // Track which socket handlers are bound to
 
   constructor(connection: ConnectionManager) {
     super();
@@ -100,6 +101,8 @@ export class MatchmakingEngine extends EventEmitter implements IMatchmakingEngin
    * Initialize matchmaking engine
    */
   async init(): Promise<void> {
+    // Bind socket event handlers now that connection exists
+    this.setupEventHandlers();
     // Load player skill on init
     try {
       this._skill = await this.getSkill();
@@ -109,11 +112,14 @@ export class MatchmakingEngine extends EventEmitter implements IMatchmakingEngin
   }
 
   /**
-   * Setup socket event handlers
+   * Setup socket event handlers.
+   * Public so NetworkEngine can rebind after broker/socket is injected.
+   * Guards against double-registration on the same socket instance.
    */
-  private setupEventHandlers(): void {
+  setupEventHandlers(): void {
     const socket = this.connection.getSocket();
-    if (!socket) return;
+    if (!socket || socket === this._setupSocket) return;
+    this._setupSocket = socket;
 
     socket.on('matchmaking:queued', (status: QueueStatus) => {
       this._status = status;

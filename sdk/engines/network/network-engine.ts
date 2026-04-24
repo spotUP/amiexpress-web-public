@@ -44,6 +44,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { BrokerClient, type BrokerClientConfig } from './broker/broker-client';
 import type {
   ConnectionConfig,
   ConnectionState,
@@ -117,6 +118,8 @@ export class NetworkEngine extends EventEmitter {
   readonly replay: ReplaySystem;
   readonly security: SecurityManager;
 
+  private brokerClient: BrokerClient | null = null;
+
   constructor(config: Partial<NetworkEngineConfig> = {}) {
     super();
 
@@ -137,6 +140,31 @@ export class NetworkEngine extends EventEmitter {
 
     // Wire up cross-module events
     this.setupCrossModuleEvents();
+  }
+
+  /**
+   * Connect to in-process lobby broker for BBS multiplayer.
+   * Creates a BrokerClient that acts as a socket, enabling lobby
+   * coordination between door instances in the same process.
+   */
+  connectBroker(config: BrokerClientConfig): void {
+    this.brokerClient = new BrokerClient(config);
+
+    // Inject broker client as the socket transport
+    this.connection.setSocket(this.brokerClient);
+
+    // Rebind lobby and matchmaking event handlers now that socket exists
+    this.lobby.setupEventHandlers();
+    this.matchmaking.setupEventHandlers();
+
+    this.emit('connected');
+  }
+
+  /**
+   * Get the broker client (if connected via broker)
+   */
+  getBrokerClient(): BrokerClient | null {
+    return this.brokerClient;
   }
 
   /**
@@ -401,6 +429,12 @@ export class NetworkEngine extends EventEmitter {
    * Dispose of all modules
    */
   dispose(): void {
+    // Dispose broker client if using in-process transport
+    if (this.brokerClient) {
+      this.brokerClient.dispose();
+      this.brokerClient = null;
+    }
+
     // Dispose all modules
     this.connection.dispose();
     this.lobby.dispose();

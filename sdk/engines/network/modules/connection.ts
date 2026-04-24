@@ -102,6 +102,19 @@ export class ConnectionManager extends EventEmitter implements IConnectionManage
   }
 
   /**
+   * Set a custom socket-like transport (e.g., BrokerClient for in-process multiplayer)
+   * Sets connection state to 'connected' immediately since no network handshake needed.
+   */
+  setSocket(socket: any): void {
+    this.socket = socket;
+    this.setStatus('connected');
+    this._state.connectedAt = new Date();
+    this._state.latency = 0;
+    this._state.quality = 'excellent';
+    this.emit('connected');
+  }
+
+  /**
    * Initialize the connection manager
    */
   async init(): Promise<void> {

@@ -45,6 +45,11 @@
 export { NetworkEngine } from './network-engine';
 export { default } from './network-engine';
 
+// Broker (in-process multiplayer for BBS doors)
+export { LobbyBroker } from './broker/lobby-broker';
+export { BrokerClient } from './broker/broker-client';
+export type { BrokerClientConfig } from './broker/broker-client';
+
 // Sub-modules
 export { ConnectionManager } from './modules/connection';
 export { default as LobbySystem } from './modules/lobby';

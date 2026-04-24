@@ -192,6 +192,7 @@ export interface GameSettings {
   duration?: number;
   scoreLimit?: number;
   difficulty?: string;
+  matchmaking?: boolean;
   customRules: Record<string, any>;
 }
 
