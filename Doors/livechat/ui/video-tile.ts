@@ -418,15 +418,19 @@ export class VideoTile {
    * Set a new video frame (ASCII)
    */
   setVideoFrame(frame: string): void {
-    if (this.options.hasVideo) {
-      this.hasFrame = true;
-      this.videoError = null; // Clear error on frame
-      // blessed.box has no `setFrame` method — that was silently eating every
-      // ASCII video frame, so the self-preview tile stayed on the 'S'
-      // avatar even while the camera streamed. setContent paints the frame.
-      this.videoBox.setContent(frame);
-      this.screen.render();
-    }
+    // Match the working neoshowcase webcam-demo pattern: if a frame
+    // arrives for this tile, paint it. The old `if (hasVideo)` gate was
+    // racing with the hasVideo flip in updateStatus — frames landed
+    // between startStream() returning and updateParticipant(hasVideo:true)
+    // firing, and got silently dropped while the tile still showed the
+    // no-video avatar.
+    this.hasFrame = true;
+    this.videoError = null;
+    this.videoBox.setContent(frame);
+    // Also flip our copy of hasVideo so updateVideoDisplay won't rewrite
+    // the avatar back over the frame on the next state tick.
+    this.options.hasVideo = true;
+    this.screen.render();
   }
 
   /**

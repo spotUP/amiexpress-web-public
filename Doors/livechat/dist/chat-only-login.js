@@ -47,6 +47,16 @@ async function runChatOnlyLogin(session) {
         // Set up input handler to route input to blessed screen
         // Note: inDoorManager flag is set in index.ts runDoor()
         bbsSession.doorInputHandler = (data) => {
+            // Drop SGR mouse codes — they are not consumed by the login modal's
+            // blessed widgets and were being echoed as literal '[<btn;col;row;M'
+            // text at the cursor position (2026-04-24 repro).
+            if (data && data.length > 3
+                && data.charCodeAt(0) === 0x1b
+                && data.charCodeAt(1) === 0x5b /* [ */
+                && data.charCodeAt(2) === 0x3c /* < */) {
+                return true;
+            }
+            console.log('[chat-only-login] input data=%s len=%d focused=%s screen?=%s', JSON.stringify(data.slice(0, 20)), data.length, screen.focused?.type || 'none', !!screen.program);
             if (screen.program) {
                 // Use proper emit API (not private _handleData) to prevent double processing
                 screen.program.emit('data', data);

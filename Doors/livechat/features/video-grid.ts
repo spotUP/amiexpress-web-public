@@ -144,6 +144,7 @@ export class VideoGrid {
   updateParticipantVideo(userId: number | string, frame: string): void {
     const id = String(userId);
     const tile = this.tiles.get(id);
+    console.log('[video-grid] updateParticipantVideo id=%s hasTile=%s tileCount=%d participantCount=%d', id, !!tile, this.tiles.size, this.participants.size);
     if (tile) {
       tile.setVideoFrame(frame);
     }
@@ -255,7 +256,7 @@ export class VideoGrid {
         };
 
         const tile = new VideoTile(tileOptions);
-        this.tiles.set(participantToShow.userId, tile);
+        this.tiles.set(String(participantToShow.userId), tile);
       }
 
       this.screen.render();
@@ -318,7 +319,7 @@ export class VideoGrid {
       };
 
       const tile = new VideoTile(tileOptions);
-      this.tiles.set(participant.userId, tile);
+      this.tiles.set(String(participant.userId), tile);
     });
 
     this.screen.render();

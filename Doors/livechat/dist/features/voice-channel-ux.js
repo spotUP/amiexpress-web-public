@@ -308,6 +308,7 @@ class EnhancedVoiceChannel {
             // or nothing at all when alone in a channel, which flagged 2026-04-24
             // as 'where's my ASCII video?'.
             if (this.videoGrid) {
+                console.log('[voice-channel-ux] voice:joined — adding to grid. data.userId=%s this.userId=%s isSelf=%s', data.userId, this.userId, String(data.userId) === String(this.userId));
                 this.videoGrid.addParticipant({
                     userId: String(data.userId),
                     username: data.username,
@@ -411,6 +412,7 @@ class EnhancedVoiceChannel {
     }
     async toggleVideo() {
         this.videoEnabled = !this.videoEnabled;
+        console.log('[voice-channel-ux] toggleVideo videoEnabled=%s hasCtxVideo=%s gridParticipants=%d inVoice=%s', this.videoEnabled, !!this.ctx?.video, this.videoGrid?.getParticipantCount() ?? -1, this.isInVoiceChannel());
         // Check if video API is available (only for web clients, not terminal)
         if (!this.ctx?.video) {
             console.log('[Voice] Video API not available - web client required for video');
@@ -422,18 +424,29 @@ class EnhancedVoiceChannel {
         // Handle video streaming
         if (this.videoEnabled) {
             try {
+                // Register the frame handler BEFORE calling startStream — matches the
+                // working neoshowcase webcam-demo ordering so no frames between
+                // 'startStream returned' and 'onFrame registered' can slip through
+                // unhandled.
+                this.ctx.video.onFrame((frame) => {
+                    console.log('[voice-channel-ux] onFrame fired, videoEnabled:', this.videoEnabled, 'hasGrid:', !!this.videoGrid, 'userId:', this.userId, 'participants:', this.videoGrid?.getParticipantCount(), 'frame len:', frame?.length ?? 0);
+                    if (this.videoEnabled && this.videoGrid) {
+                        this.videoGrid.updateParticipantVideo(this.userId, frame);
+                    }
+                });
+                // Flip the self-tile's hasVideo BEFORE frames start arriving so
+                // updateVideoDisplay() doesn't briefly paint the no-video avatar
+                // between startStream() and the first frame (also avoids the
+                // previous race where setVideoFrame's hasVideo-gate dropped frames).
+                if (this.videoGrid) {
+                    this.videoGrid.updateParticipant(this.userId, { hasVideo: true });
+                }
                 const videoOptions = this.qualityManager?.getVideoProfile();
                 await this.ctx.video.startStream({ type: 'webcam' }, {
                     width: videoOptions?.asciiWidth || 80,
                     height: videoOptions?.asciiHeight || 24,
                     fps: videoOptions?.fps || 10,
                     colored: false,
-                });
-                // Route local frames to the video grid for preview
-                this.ctx.video.onFrame((frame) => {
-                    if (this.videoEnabled && this.videoGrid) {
-                        this.videoGrid.updateParticipantVideo(this.userId, frame);
-                    }
                 });
             }
             catch (error) {

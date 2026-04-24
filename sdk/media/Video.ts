@@ -24,6 +24,7 @@ export class Video implements VideoAPI {
     });
 
     this.socket.on('video:frame', (data: { frame: string }) => {
+      console.log('[sdk/Video] video:frame received, has handler:', !!this.frameHandler, 'frame len:', data?.frame?.length ?? 0);
       if (this.frameHandler) {
         this.frameHandler(data.frame);
       }
@@ -31,6 +32,7 @@ export class Video implements VideoAPI {
   }
 
   onFrame(handler: VideoFrameHandler): void {
+    console.log('[sdk/Video] onFrame handler registered (prev handler present:', !!this.frameHandler, ')');
     this.frameHandler = handler;
   }
 
