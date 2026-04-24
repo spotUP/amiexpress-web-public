@@ -2822,7 +2822,13 @@ console.log(' In conference selection state');
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
-      const { handleMessageReaderNav } = await import('./message/messaging.handler');
+      // Use the static import binding from line 183 rather than a dynamic
+      // import(). tsx gives ESM `import()` and CJS `require()` separate
+      // module caches, so a dynamic import here would resolve messaging.handler
+      // to a second instance with its own _db module variable — exactly the
+      // 2026-04-24 prod crash where setMessagingDependencies had set _db on
+      // the static-imported instance but the R-command path hit an
+      // undefined-_db on the dynamic-imported instance.
       await handleMessageReaderNav(socket, session, input);
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {

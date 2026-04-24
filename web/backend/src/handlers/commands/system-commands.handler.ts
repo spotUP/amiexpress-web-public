@@ -258,8 +258,11 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
  * Implementation in messaging.handler.ts
  */
 export async function handleReadMessagesCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
-  // Import and call the full implementation
-  const { handleReadMessagesFullCommand } = await import('../message/messaging.handler');
+  // CJS require, not ESM import(): tsx keeps ESM and CJS caches separate,
+  // so a dynamic import() would resolve messaging.handler to a different
+  // module instance than initialization.ts's static-import-compiled-to-
+  // require, leaving _db undefined on the wrong instance (2026-04-24 bug).
+  const { handleReadMessagesFullCommand } = require('../message/messaging.handler');
   await handleReadMessagesFullCommand(socket, session, params);
 }
 
