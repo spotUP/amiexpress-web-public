@@ -60,33 +60,49 @@ export function getMailStatsPath(confNum: number, bbsDataPath: string): string {
 export async function readMailStats(confNum: number, bbsDataPath: string): Promise<MailStats> {
   const mailStatsPath = getMailStatsPath(confNum, bbsDataPath);
 
+  let buffer: Buffer;
   try {
-    const buffer = await fs.readFile(mailStatsPath);
-
-    // Binary format: 3 x 4-byte integers (little-endian)
-    if (buffer.length < 12) {
-      throw new Error('Invalid MailStats file size');
-    }
-
-    return {
-      lowestKey: buffer.readInt32LE(0),
-      lowestNotDel: buffer.readInt32LE(4),
-      highMsgNum: buffer.readInt32LE(8)
-    };
+    buffer = await fs.readFile(mailStatsPath);
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      // File doesn't exist - create default (express.e:8691-8693)
+      // File doesn't exist - create default (express.e:8691-8693).
       const defaultStats: MailStats = {
         lowestKey: 1,
         lowestNotDel: 0,
-        highMsgNum: 1
+        highMsgNum: 1,
       };
-
       await writeMailStats(confNum, bbsDataPath, defaultStats);
       return defaultStats;
     }
     throw error;
   }
+
+  // Binary format: 3 x 4-byte integers (little-endian) = 12 bytes.
+  //
+  // Historically some MailStats files were created in an older 2-int32 (8-byte)
+  // format or left zeroed by stale init paths. Rather than throwing and
+  // blocking every message post in the conference, treat an undersized file
+  // as equivalent to missing: log a warning, rebuild with defaults, continue.
+  // New posts then get a fresh high-water message ID from 1.
+  if (buffer.length < 12) {
+console.warn(
+      `[MailStats] ${mailStatsPath} is ${buffer.length} bytes (expected >=12). ` +
+      `Treating as corrupted and rebuilding with defaults.`
+    );
+    const defaultStats: MailStats = {
+      lowestKey: 1,
+      lowestNotDel: 0,
+      highMsgNum: 1,
+    };
+    await writeMailStats(confNum, bbsDataPath, defaultStats);
+    return defaultStats;
+  }
+
+  return {
+    lowestKey: buffer.readInt32LE(0),
+    lowestNotDel: buffer.readInt32LE(4),
+    highMsgNum: buffer.readInt32LE(8),
+  };
 }
 
 /**
