@@ -480,7 +480,7 @@ describe('File I/O Utility Functions', () => {
       fs.writeFileSync(testFile, 'test');
       const modTime = getFileModTime(testFile);
       expect(typeof modTime.getTime()).toBe('number');
-      expect(modTime.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(modTime.getTime()).toBeLessThanOrEqual(Date.now() + 5); // +5ms tolerance for timing
       expect(modTime.getTime()).toBeGreaterThan(Date.now() - 10000); // Within last 10 seconds
     });
 
