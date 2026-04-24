@@ -5,6 +5,10 @@
  * Based on express.e:525-566 time tracking logic.
  */
 
+jest.mock('../../src/handlers/screen.handler', () => ({
+  displayScreen: jest.fn().mockResolvedValue(false),
+}));
+
 import {
   updateTimeUsed,
   checkTimeUsed,
@@ -31,7 +35,7 @@ describe('Time Tracking Utility Functions', () => {
     mockSession = {
       user: {
         username: 'testuser',
-        secLevel: 10,
+        secLevel: 5,  // below >= 10 threshold, so OVERRIDE_TIMELIMIT check returns false
         timeLimit: 3600, // 60 minutes in seconds
         timeTotal: 3600,
         timeUsed: 0,
@@ -182,39 +186,39 @@ describe('Time Tracking Utility Functions', () => {
   });
 
   describe('checkTimeUsed', () => {
-    it('should return false when time limit not exceeded', () => {
+    it('should return false when time limit not exceeded', async () => {
       mockSession.user!.timeTotal = 3600;
       mockSession.user!.timeUsed = 1000;
 
-      const result = checkTimeUsed(mockSocket, mockSession);
+      const result = await checkTimeUsed(mockSocket, mockSession);
 
       expect(result).toBe(false);
       expect(emittedEvents).toHaveLength(0);
     });
 
-    it('should return false when time remaining is exactly 0', () => {
+    it('should return false when time remaining is exactly 0', async () => {
       mockSession.user!.timeTotal = 3600;
       mockSession.user!.timeUsed = 3600;
 
-      const result = checkTimeUsed(mockSocket, mockSession);
+      const result = await checkTimeUsed(mockSocket, mockSession);
 
       expect(result).toBe(false);
     });
 
-    it('should return true when time limit exceeded', () => {
+    it('should return true when time limit exceeded', async () => {
       mockSession.user!.timeTotal = 3600;
       mockSession.user!.timeUsed = 3601;
 
-      const result = checkTimeUsed(mockSocket, mockSession);
+      const result = await checkTimeUsed(mockSocket, mockSession);
 
       expect(result).toBe(true);
     });
 
-    it('should emit time exceeded message when limit exceeded', () => {
+    it('should emit time exceeded message when limit exceeded', async () => {
       mockSession.user!.timeTotal = 3600;
       mockSession.user!.timeUsed = 4000;
 
-      checkTimeUsed(mockSocket, mockSession);
+      await checkTimeUsed(mockSocket, mockSession);
 
       const outputs = emittedEvents
         .filter(e => e.event === 'ansi-output')
@@ -224,38 +228,38 @@ describe('Time Tracking Utility Functions', () => {
       expect(outputs.some((o: string) => o.includes('Goodbye'))).toBe(true);
     });
 
-    it('should emit two messages when time exceeded', () => {
+    it('should emit two messages when time exceeded', async () => {
       mockSession.user!.timeTotal = 3600;
       mockSession.user!.timeUsed = 3700;
 
-      checkTimeUsed(mockSocket, mockSession);
+      await checkTimeUsed(mockSocket, mockSession);
 
       const ansiOutputs = emittedEvents.filter(e => e.event === 'ansi-output');
       expect(ansiOutputs.length).toBeGreaterThanOrEqual(2);
     });
 
-    it('should handle session without user', () => {
+    it('should handle session without user', async () => {
       mockSession.user = null as any;
 
-      const result = checkTimeUsed(mockSocket, mockSession);
+      const result = await checkTimeUsed(mockSocket, mockSession);
 
       expect(result).toBe(false);
     });
 
-    it('should handle negative time remaining correctly', () => {
+    it('should handle negative time remaining correctly', async () => {
       mockSession.user!.timeTotal = 1000;
       mockSession.user!.timeUsed = 2000;
 
-      const result = checkTimeUsed(mockSocket, mockSession);
+      const result = await checkTimeUsed(mockSocket, mockSession);
 
       expect(result).toBe(true);
     });
 
-    it('should handle large time differences', () => {
+    it('should handle large time differences', async () => {
       mockSession.user!.timeTotal = 100;
       mockSession.user!.timeUsed = 100000;
 
-      const result = checkTimeUsed(mockSocket, mockSession);
+      const result = await checkTimeUsed(mockSocket, mockSession);
 
       expect(result).toBe(true);
     });
@@ -298,13 +302,14 @@ describe('Time Tracking Utility Functions', () => {
       expect(result).toBe(0);
     });
 
-    it('should return negative when time exceeded', () => {
+    it('should return 0 when time exceeded (clamped at 0)', () => {
+      // Production code uses Math.max(0, ...) to prevent negative display values
       mockSession.user!.timeTotal = 3600;
       mockSession.user!.timeUsed = 4200; // 10 minutes over
 
       const result = getTimeRemainingMinutes(mockSession);
 
-      expect(result).toBe(-10);
+      expect(result).toBe(0);
     });
 
     it('should handle zero time total', () => {
@@ -362,42 +367,42 @@ describe('Time Tracking Utility Functions', () => {
   });
 
   describe('integration tests', () => {
-    it('should track time correctly through full session lifecycle', () => {
+    it('should track time correctly through full session lifecycle', async () => {
       let currentTime = new Date('2024-01-01T10:00:00Z').getTime();
       Date.now = jest.fn(() => currentTime);
 
       // Initialize session
       updateTimeUsed(mockSocket, mockSession);
       expect(getTimeRemainingMinutes(mockSession)).toBe(60);
-      expect(checkTimeUsed(mockSocket, mockSession)).toBe(false);
+      expect(await checkTimeUsed(mockSocket, mockSession)).toBe(false);
 
       // 15 minutes later
       currentTime += 900000;
       Date.now = jest.fn(() => currentTime);
       updateTimeUsed(mockSocket, mockSession);
       expect(getTimeRemainingMinutes(mockSession)).toBe(45);
-      expect(checkTimeUsed(mockSocket, mockSession)).toBe(false);
+      expect(await checkTimeUsed(mockSocket, mockSession)).toBe(false);
 
       // Another 30 minutes
       currentTime += 1800000;
       Date.now = jest.fn(() => currentTime);
       updateTimeUsed(mockSocket, mockSession);
       expect(getTimeRemainingMinutes(mockSession)).toBe(15);
-      expect(checkTimeUsed(mockSocket, mockSession)).toBe(false);
+      expect(await checkTimeUsed(mockSocket, mockSession)).toBe(false);
 
       // Final 15 minutes
       currentTime += 900000;
       Date.now = jest.fn(() => currentTime);
       updateTimeUsed(mockSocket, mockSession);
       expect(getTimeRemainingMinutes(mockSession)).toBe(0);
-      expect(checkTimeUsed(mockSocket, mockSession)).toBe(false);
+      expect(await checkTimeUsed(mockSocket, mockSession)).toBe(false);
 
       // 1 second over
       currentTime += 1000;
       Date.now = jest.fn(() => currentTime);
       updateTimeUsed(mockSocket, mockSession);
-      expect(getTimeRemainingMinutes(mockSession)).toBe(-1); // Floor(-1/60) = -1
-      expect(checkTimeUsed(mockSocket, mockSession)).toBe(true);
+      expect(getTimeRemainingMinutes(mockSession)).toBe(0); // clamped to 0 by Math.max
+      expect(await checkTimeUsed(mockSocket, mockSession)).toBe(true);
     });
 
     it('should handle day boundary correctly', () => {
@@ -423,7 +428,7 @@ describe('Time Tracking Utility Functions', () => {
       expect(getTimeRemainingMinutes(mockSession)).toBe(60);
     });
 
-    it('should handle continuous updates correctly', () => {
+    it('should handle continuous updates correctly', async () => {
       let currentTime = 1640000000000;
       Date.now = jest.fn(() => currentTime);
 
@@ -434,7 +439,7 @@ describe('Time Tracking Utility Functions', () => {
         currentTime += 360000; // 6 minutes
         Date.now = jest.fn(() => currentTime);
         updateTimeUsed(mockSocket, mockSession);
-        expect(checkTimeUsed(mockSocket, mockSession)).toBe(false);
+        expect(await checkTimeUsed(mockSocket, mockSession)).toBe(false);
       }
 
       expect(mockSession.user!.timeUsed).toBe(3600);

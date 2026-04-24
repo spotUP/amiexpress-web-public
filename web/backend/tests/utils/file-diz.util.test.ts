@@ -3,6 +3,9 @@
  * Tests FILE_ID.DIZ extraction and reading (express.e:19258-19370)
  */
 
+// Prevent DB init: mocking fs/path breaks better-sqlite3 bindings.getRoot
+process.env.SKIP_DB_INIT = '1';
+
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import {

@@ -3,6 +3,9 @@
  * Tests HOLD directory file movement (express.e:19380-19410)
  */
 
+// Prevent DB init: mocking fs/path breaks better-sqlite3 bindings.getRoot
+process.env.SKIP_DB_INIT = '1';
+
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import {

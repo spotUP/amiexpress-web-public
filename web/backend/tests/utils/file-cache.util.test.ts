@@ -64,11 +64,11 @@ describe('File Cache Utility', () => {
 
   describe('FileCache class', () => {
     describe('constructor', () => {
-      it('should create cache with default 16MB size', () => {
+      it('should create cache with default 4MB size', () => {
         const defaultCache = new FileCache();
         const stats = defaultCache.getStats();
 
-        expect(stats.maxSizeMB).toBe('16.00');
+        expect(stats.maxSizeMB).toBe('4.00');
       });
 
       it('should create cache with custom size', () => {

@@ -3,6 +3,9 @@
  * Tests download/upload activity logging (express.e:9475+)
  */
 
+// Prevent DB init: mocking fs/path breaks better-sqlite3 bindings.getRoot
+process.env.SKIP_DB_INIT = '1';
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { logDownload, logUpload, logDivider } from '../../src/utils/download-logging.util';

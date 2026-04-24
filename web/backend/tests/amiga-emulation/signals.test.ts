@@ -180,6 +180,9 @@ describe('ExecLibrary Signal Handling', () => {
 
   describe('Signal', () => {
     test('should send signal to current task', () => {
+      // Allocate a door task so ExecBase.ThisTask is set
+      execLibrary.allocateDoorTask(0x082000);
+
       // Get current task address from ExecBase
       const execBaseAddr = execLibrary.getExecBaseAddress();
       expect(execBaseAddr).toBeGreaterThan(0);

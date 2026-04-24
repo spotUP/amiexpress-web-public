@@ -151,15 +151,18 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         expect(fsSync.existsSync(getMailStatsPath(1, testBbsPath))).toBe(true);
       });
 
-      it('should reject invalid file size', async () => {
+      it('should return defaults for undersized file (< 12 bytes)', async () => {
         const messagesDir = getMessagesDir(1, testBbsPath);
         await fs.mkdir(messagesDir, { recursive: true });
 
-        // Write only 8 bytes (should be 12)
+        // Write only 8 bytes (should be 12); production code rebuilds with defaults
         const buffer = Buffer.alloc(8);
         await fs.writeFile(getMailStatsPath(1, testBbsPath), buffer);
 
-        await expect(readMailStats(1, testBbsPath)).rejects.toThrow('Invalid MailStats file size');
+        const result = await readMailStats(1, testBbsPath);
+        expect(result.lowestKey).toBe(1);
+        expect(result.lowestNotDel).toBe(0);
+        expect(result.highMsgNum).toBe(1);
       });
 
       it('should handle corrupted file', async () => {

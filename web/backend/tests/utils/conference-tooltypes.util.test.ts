@@ -4,6 +4,9 @@
  * Tests conference tooltype flag parsing from .info files and database
  */
 
+// Prevent DB init: mocking fs breaks better-sqlite3 bindings.getRoot
+process.env.SKIP_DB_INIT = '1';
+
 // Mock dependencies BEFORE imports
 jest.mock('fs');
 jest.mock('child_process', () => ({
@@ -47,11 +50,14 @@ describe('Conference Tooltypes Utility', () => {
   const mockAmigafsExistsSync = amigafs.existsSync as jest.MockedFunction<
     typeof amigafs.existsSync
   >;
-  const mockFsReadFileSync = fs.readFileSync as jest.MockedFunction<typeof fs.readFileSync>;
+  const mockFsReadFileSync = fs.readFileSync as jest.Mock;
   const mockExecSync = childProcess.execSync as jest.MockedFunction<typeof childProcess.execSync>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Reset fs mock to prevent bleed from previous test implementations
+    mockFsReadFileSync.mockReset();
 
     // Default mock implementations
     mockConfigGetConfig.mockReturnValue({
@@ -244,9 +250,16 @@ describe('Conference Tooltypes Utility', () => {
     });
 
     describe('icon file tooltypes', () => {
+      // Production code uses fs.readFileSync to read the binary .info file,
+      // then scans for printable ASCII strings (charCodes 32-126).
+      function makeBuf(...keys: string[]): Buffer {
+        // Wrap each key in null bytes so the parser extracts them cleanly
+        return Buffer.from('\x00' + keys.join('\x00') + '\x00');
+      }
+
       it('should read FORCE_NEWSCAN from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_NEWSCAN\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('FORCE_NEWSCAN'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(20);
 
@@ -256,7 +269,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read NO_NEWSCAN from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('NO_NEWSCAN\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('NO_NEWSCAN'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(21);
 
@@ -265,7 +278,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read SHOW_NEW_FILES from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('SHOW_NEW_FILES\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('SHOW_NEW_FILES'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(22);
 
@@ -274,7 +287,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read NO_NEW_FILES from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('NO_NEW_FILES\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('NO_NEW_FILES'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(23);
 
@@ -283,7 +296,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read FORCE_MENUS from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_MENUS\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('FORCE_MENUS'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(24);
 
@@ -292,7 +305,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read NO_BULLS from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('NO_BULLS\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('NO_BULLS'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(25);
 
@@ -301,7 +314,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read NO_CONF_BULLS from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('NO_CONF_BULLS\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('NO_CONF_BULLS'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(26);
 
@@ -310,7 +323,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read FREEDOWNLOADS from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FREEDOWNLOADS\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('FREEDOWNLOADS'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(27);
 
@@ -319,7 +332,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should read multiple tooltypes from icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_NEWSCAN\nNO_NEW_FILES\nNO_BULLS\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('FORCE_NEWSCAN', 'NO_NEW_FILES', 'NO_BULLS'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(28);
 
@@ -331,7 +344,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle tooltypes with # prefix', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('#FORCE_NEWSCAN\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('#FORCE_NEWSCAN'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(29);
 
@@ -340,7 +353,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle tooltypes with + prefix', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('+NO_NEWSCAN\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('+NO_NEWSCAN'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(30);
 
@@ -349,7 +362,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it("should handle tooltypes with ' prefix", () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue("'SHOW_NEW_FILES\n");
+        mockFsReadFileSync.mockReturnValue(makeBuf("'SHOW_NEW_FILES"));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(31);
 
@@ -358,7 +371,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle tooltypes with = assignment', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_NEWSCAN=YES\n');
+        mockFsReadFileSync.mockReturnValue(makeBuf('FORCE_NEWSCAN=YES'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(32);
 
@@ -367,7 +380,8 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should ignore short strings (< 2 chars)', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('A\nFORCE_NEWSCAN\n');
+        // 'A' is only 1 char and is ignored; 'FORCE_NEWSCAN' is kept
+        mockFsReadFileSync.mockReturnValue(makeBuf('A', 'FORCE_NEWSCAN'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(33);
 
@@ -376,7 +390,10 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle binary data with non-printable characters', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_NEWSCAN\n');
+        // Embed the key within binary-looking data
+        mockFsReadFileSync.mockReturnValue(
+          Buffer.from([0x01, 0x02, ...Buffer.from('FORCE_NEWSCAN'), 0x03, 0x04])
+        );
 
         const flags = conferenceTooltypes.getConferenceToolFlags(34);
 
@@ -389,12 +406,12 @@ describe('Conference Tooltypes Utility', () => {
         const flags = conferenceTooltypes.getConferenceToolFlags(35);
 
         expect(flags.forceNewscan).toBe(false);
-        expect(mockExecSync).not.toHaveBeenCalled();
+        expect(mockFsReadFileSync).not.toHaveBeenCalled();
       });
 
       it('should handle icon file read error gracefully', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockImplementation(() => {
+        mockFsReadFileSync.mockImplementation(() => {
           throw new Error('File read error');
         });
 
@@ -406,7 +423,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle case-insensitive tooltype matching', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('force_newscan\n'); // lowercase
+        mockFsReadFileSync.mockReturnValue(makeBuf('force_newscan')); // lowercase
 
         const flags = conferenceTooltypes.getConferenceToolFlags(37);
 
@@ -423,7 +440,7 @@ describe('Conference Tooltypes Utility', () => {
         };
         mockDbGetConfigRepository.mockReturnValue(mockRepo as any);
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('NO_NEW_FILES\n');
+        mockFsReadFileSync.mockReturnValue(Buffer.from('\x00NO_NEW_FILES\x00'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(40);
 
@@ -439,7 +456,7 @@ describe('Conference Tooltypes Utility', () => {
         };
         mockDbGetConfigRepository.mockReturnValue(mockRepo as any);
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_NEWSCAN\n');
+        mockFsReadFileSync.mockReturnValue(Buffer.from('\x00FORCE_NEWSCAN\x00'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(41);
 
@@ -481,7 +498,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle empty icon file', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('');
+        mockFsReadFileSync.mockReturnValue(Buffer.alloc(0));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(50);
 
@@ -490,7 +507,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle icon file with only non-printable characters', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('');
+        mockFsReadFileSync.mockReturnValue(Buffer.from([0x01, 0x02, 0x03, 0x04]));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(51);
 
@@ -499,7 +516,7 @@ describe('Conference Tooltypes Utility', () => {
 
       it('should handle conflicting flags (force and no)', () => {
         mockAmigafsExistsSync.mockReturnValue(true);
-        mockExecSync.mockReturnValue('FORCE_NEWSCAN\nNO_NEWSCAN\n');
+        mockFsReadFileSync.mockReturnValue(Buffer.from('\x00FORCE_NEWSCAN\x00NO_NEWSCAN\x00'));
 
         const flags = conferenceTooltypes.getConferenceToolFlags(52);
 

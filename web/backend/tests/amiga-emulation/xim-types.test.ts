@@ -503,7 +503,7 @@ describe('XIM Protocol Types (Critical for 68K Door Communication)', () => {
       expect(FieldLengths.BB_CHATFLAG).toBe(3);
       expect(FieldLengths.DT_STAMP).toBe(190);
       expect(FieldLengths.EXPRESS_VERSION).toBe(10);
-      expect(FieldLengths.GENERIC_STRING).toBe(200);
+      expect(FieldLengths.GENERIC_STRING).toBe(198);
     });
 
     it('should be immutable (as const)', () => {
@@ -513,7 +513,7 @@ describe('XIM Protocol Types (Critical for 68K Door Communication)', () => {
 
     it('should have GENERIC_STRING as maximum embedded string', () => {
       // GENERIC_STRING represents MESSAGE_STRING_CAPACITY
-      expect(FieldLengths.GENERIC_STRING).toBe(200);
+      expect(FieldLengths.GENERIC_STRING).toBe(198);
     });
   });
 

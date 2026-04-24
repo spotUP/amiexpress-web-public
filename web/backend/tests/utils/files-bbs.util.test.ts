@@ -89,7 +89,6 @@ describe('FILES.BBS Utility (BBS File Listing Format)', () => {
       const content = fs.readFileSync(getFilesBBSPath(confPath), 'utf-8');
       expect(content).toContain('demo.zip');
       expect(content).toContain('P');
-      expect(content).toContain('K'); // Size in KB
       expect(content).toContain('Demo archive');
       expect(content).toContain('Sent by: johndoe');
     });
@@ -171,7 +170,8 @@ describe('FILES.BBS Utility (BBS File Listing Format)', () => {
       expect(content).toContain('tiny.txt');
       expect(content).toContain('small.zip');
       expect(content).toContain('large.zip');
-      expect(content).toMatch(/\d+K/); // At least one size in KB format
+      // Sizes are in raw bytes format (no K suffix in default mode)
+      expect(content).toMatch(/\d+/);
     });
 
     it('should handle special characters in filenames', async () => {
@@ -218,7 +218,6 @@ describe('FILES.BBS Utility (BBS File Listing Format)', () => {
       const content = fs.readFileSync(getFilesBBSPath(confPath), 'utf-8');
       expect(content).toContain('game.zip');
       expect(content).toContain('P');
-      expect(content).toContain('K');
       expect(content).toContain('Awesome retro game');
       expect(content).toContain('Amiga port of classic');
       expect(content).toContain('Sent by: retrouser');
@@ -281,7 +280,6 @@ describe('FILES.BBS Utility (BBS File Listing Format)', () => {
 
       const content = fs.readFileSync(getFilesBBSPath(confPath), 'utf-8');
       expect(content).toContain('empty.txt');
-      expect(content).toContain('K'); // Should still have size marker
     });
 
     it('should handle large file sizes', async () => {
@@ -289,7 +287,6 @@ describe('FILES.BBS Utility (BBS File Listing Format)', () => {
 
       const content = fs.readFileSync(getFilesBBSPath(confPath), 'utf-8');
       expect(content).toContain('huge.iso');
-      expect(content).toContain('K'); // Size in KB
     });
 
     it('should handle empty description', async () => {

@@ -150,40 +150,41 @@ describe('file-upload.util', () => {
   });
 
   describe('formatFileSize', () => {
-    it('should format bytes as KB with K suffix', () => {
-      expect(formatFileSize(1024)).toBe('    1K');
-      expect(formatFileSize(2048)).toBe('    2K');
-      expect(formatFileSize(10240)).toBe('   10K');
+    it('should format bytes as KB with K suffix (useKB=true)', () => {
+      expect(formatFileSize(1024, true)).toBe('     1K');  // padStart(7): "1K" → 5sp+1K
+      expect(formatFileSize(2048, true)).toBe('     2K');
+      expect(formatFileSize(10240, true)).toBe('    10K');
     });
 
-    it('should round up partial KB', () => {
-      expect(formatFileSize(1500)).toBe('    2K');
-      expect(formatFileSize(1)).toBe('    1K');
-      expect(formatFileSize(1023)).toBe('    1K');
+    it('should truncate partial KB (floor division, useKB=true)', () => {
+      expect(formatFileSize(1500, true)).toBe('     1K');  // 1500>>>10 = 1
+      expect(formatFileSize(1, true)).toBe('     0K');    // 1>>>10 = 0
+      expect(formatFileSize(1023, true)).toBe('     0K'); // 1023>>>10 = 0
     });
 
-    it('should pad to 6 characters', () => {
-      expect(formatFileSize(1024)).toHaveLength(6);
-      expect(formatFileSize(10240)).toHaveLength(6);
-      expect(formatFileSize(102400)).toHaveLength(6);
-      expect(formatFileSize(1024000)).toHaveLength(6);
+    it('should pad to 7 characters in KB mode', () => {
+      expect(formatFileSize(1024, true)).toHaveLength(7);
+      expect(formatFileSize(10240, true)).toHaveLength(7);
+      expect(formatFileSize(102400, true)).toHaveLength(7);
+      expect(formatFileSize(1024000, true)).toHaveLength(7);
     });
 
-    it('should handle zero bytes', () => {
-      expect(formatFileSize(0)).toBe('    0K');
+    it('should handle zero bytes in KB mode', () => {
+      expect(formatFileSize(0, true)).toBe('     0K');
     });
 
-    it('should handle large files', () => {
-      expect(formatFileSize(1048576)).toBe(' 1024K'); // 1 MB
-      expect(formatFileSize(10485760)).toBe('10240K'); // 10 MB
+    it('should handle large files in KB mode', () => {
+      expect(formatFileSize(1048576, true)).toBe('  1024K');  // 1 MB = 1024K
+      expect(formatFileSize(10485760, true)).toBe(' 10240K'); // 10 MB = 10240K
     });
 
-    it('should handle very large files', () => {
-      expect(formatFileSize(104857600)).toBe('102400K'); // 100 MB - note no padding when > 5 digits
+    it('should handle very large files in KB mode', () => {
+      expect(formatFileSize(104857600, true)).toBe('102400K'); // 100 MB - no padding > 6 digits+K
     });
 
-    it('should handle single byte', () => {
-      expect(formatFileSize(1)).toBe('    1K');
+    it('should format raw bytes by default', () => {
+      expect(formatFileSize(1024)).toBe('   1024'); // 7 chars, right-aligned
+      expect(formatFileSize(512)).toBe('    512');
     });
   });
 
@@ -432,9 +433,8 @@ describe('file-upload.util', () => {
     });
 
     it('should handle formatFileSize with negative bytes gracefully', () => {
-      // Math.ceil of negative divided by 1024 would be negative
-      // But this is an edge case that shouldn't happen in practice
-      const result = formatFileSize(-1024);
+      // Edge case: negative bytes shouldn't happen in practice
+      const result = formatFileSize(-1024, true);
       expect(result).toContain('K');
     });
 

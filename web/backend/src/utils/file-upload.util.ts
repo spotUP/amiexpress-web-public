@@ -207,10 +207,12 @@ export function formatFileSize(bytes: number, useKB: boolean = false): string {
  * @returns Formatted date string in MM-DD-YY format
  */
 export function formatUploadDate(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');  // 1-12 -> "01"-"12"
-  const day = String(date.getDate()).padStart(2, '0');         // 1-31 -> "01"-"31"
-  const year = String(date.getFullYear()).slice(-2);           // 2026 -> "26"
-  return `${month}-${day}-${year}`;  // "01-21-26"
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = months[date.getMonth()];
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day}-${month}-${year}`;  // express.e: "15-Jan-26" (DD-Mon-YY)
 }
 
 // Check if description starts with / (private upload marker) - express.e:19344

@@ -12,8 +12,9 @@ jest.mock('fs/promises', () => ({
 }));
 jest.mock('../../src/utils/file-upload.util', () => ({
   formatFileSize: jest.fn((size: number) => {
-    const kb = Math.ceil(size / 1024);
-    return `${kb}K`.padStart(6);
+    // Mirror production default: raw bytes, right-aligned in 7 chars
+    if (size <= 9999999) return String(size).padStart(7);
+    return String(size);
   }),
   formatUploadDate: jest.fn((date: Date) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -52,8 +53,9 @@ describe('DIR File Writing Utility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFormatFileSize.mockImplementation((size: number) => {
-      const kb = Math.ceil(size / 1024);
-      return `${kb}K`.padStart(6);
+      // Mirror production default: raw bytes, right-aligned in 7 chars
+      if (size <= 9999999) return String(size).padStart(7);
+      return String(size);
     });
     mockFormatUploadDate.mockImplementation((date: Date) => {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -123,7 +125,7 @@ describe('DIR File Writing Utility', () => {
       const line = buildDirEntryLine('test.txt', 123 * 1024, date, 'Test file', 'P');
 
       expect(line).toContain('test.txt');
-      expect(line).toContain(' 123K'); // "123K" padStart(6) = " 123K"
+      expect(line).toContain('125952'); // 123*1024=125952, raw bytes format
       expect(line).toContain('15-Jan-25');
       expect(line).toContain('Test file');
       expect(line).toMatch(/\n$/);
@@ -185,7 +187,7 @@ describe('DIR File Writing Utility', () => {
       const line = buildDirEntryLine('verylongfilename.txt', 1024, date, 'LC file', 'P', true);
 
       expect(line).toContain('verylongfilename.txt');
-      expect(line).toContain('1K');
+      expect(line).toContain('1024'); // raw bytes format for 1024 bytes
     });
 
     it('should not pad LC file with long filename', () => {
@@ -199,14 +201,17 @@ describe('DIR File Writing Utility', () => {
     it('should format different file sizes correctly', () => {
       const date = new Date(2025, 0, 15);
 
+      // 500*1024=512000 → " 512000" (7 chars, 1 space + 6 digits) → pos13=P, pos14=' ' → "P 512000"
       const lineK = buildDirEntryLine('file1.txt', 500 * 1024, date, 'Test', 'P');
-      expect(lineK).toContain('P 500K'); // Status at pos 13, then " 500K"
+      expect(lineK).toContain('P 512000');
 
+      // 5*1024*1024=5242880 → "5242880" (7 chars, no leading space) → pos13=P overwrites space, pos14='5' → "P5242880"
       const lineM = buildDirEntryLine('file2.txt', 5 * 1024 * 1024, date, 'Test', 'P');
-      expect(lineM).toContain('P5120K'); // Status at pos 13 overwrites leading space
+      expect(lineM).toContain('P5242880');
 
+      // 500 → "    500" (4 spaces + 500 = 7 chars) → pos13=P → "P    500"
       const lineBytes = buildDirEntryLine('file3.txt', 500, date, 'Test', 'P');
-      expect(lineBytes).toContain('P   1K'); // Status at pos 13 overwrites one space from "    1K"
+      expect(lineBytes).toContain('P    500');
     });
 
     it('should handle empty description', () => {

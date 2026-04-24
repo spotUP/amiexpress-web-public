@@ -3,18 +3,18 @@
  * Tests Amiga .info file parsing and tooltype management
  */
 
-// Mock dependencies - MUST be before imports for hoisting
-const mockReadFileSync = jest.fn();
-const mockWriteFileSync = jest.fn();
-const mockExistsSync = jest.fn();
+// Prevent DB init: mocking fs breaks better-sqlite3 bindings.getRoot
+process.env.SKIP_DB_INIT = '1';
 
-jest.mock('fs', () => ({
-  readFileSync: mockReadFileSync,
-  writeFileSync: mockWriteFileSync,
-  existsSync: mockExistsSync,
-}));
+// Auto-mock fs to avoid ts-jest hoisting issues with factory functions
+jest.mock('fs');
 
 import * as fs from 'fs';
+
+// Get typed references to the mocked functions
+const mockReadFileSync = fs.readFileSync as jest.Mock;
+const mockWriteFileSync = fs.writeFileSync as jest.Mock;
+const mockExistsSync = fs.existsSync as jest.Mock;
 import {
   parseInfoFile,
   writeInfoFile,
