@@ -6,6 +6,7 @@
  */
 
 import { NetworkEngine } from '@amiexpress/bbs-door-sdk/engines/network/network-engine';
+import { EventEmitter } from 'events';
 import type { GameState, GameMode, Board } from '../core/types';
 import type { OpponentState } from '../ui/minimap';
 import { StateSyncManager, StateInterpolator, type SyncPacket } from './sync';
@@ -72,11 +73,12 @@ export interface AttackPacket {
 /**
  * Grandmaster Network Manager
  */
-export class GrandmasterNetworkManager {
+export class GrandmasterNetworkManager extends EventEmitter {
   private network: NetworkEngine;
   private matchState: MatchState | null = null;
   private localPlayerId: string | null = null;
   private localPlayerName: string = 'Player';
+  private localPlayerNumericId: number = 0;
   private opponentStates: Map<string, OpponentState> = new Map();
   private updateCallbacks: Set<(update: GameUpdate) => void> = new Set();
   private attackCallbacks: Set<(attack: AttackPacket) => void> = new Set();
@@ -89,58 +91,112 @@ export class GrandmasterNetworkManager {
   private gameEngine: GameEngine | null = null;
 
   constructor(bbsSession: any) {
-    this.network = new NetworkEngine(bbsSession.socket);
+    super();
+    this.network = new NetworkEngine();
     // Get player info from session
     this.localPlayerId = bbsSession.user?.id || `player-${Date.now()}`;
     this.localPlayerName = bbsSession.user?.username || 'Player';
+    // Generate a stable numeric ID from user ID for SDK lobby system
+    this.localPlayerNumericId = typeof bbsSession.user?.id === 'number'
+      ? bbsSession.user.id
+      : this.hashStringToNumber(this.localPlayerId || 'unknown');
+
+    // Connect via in-process broker for BBS multiplayer
+    const nodeId = bbsSession.bbsSession?.nodeNumber ?? bbsSession.nodeNumber ?? 1;
+    this.network.connectBroker({
+      playerId: this.localPlayerNumericId,
+      playerName: this.localPlayerName,
+      nodeId,
+    });
+
     this.setupEventListeners();
   }
 
   /**
+   * Generate a stable numeric hash from a string ID
+   */
+  private hashStringToNumber(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
    * Setup network event listeners
+   * Hooks into SDK lobby system events to keep matchState in sync
    */
   private setupEventListeners(): void {
-    // Player joined match
-    this.network.on('player:joined', (player: PlayerInfo) => {
-      if (this.matchState) {
-        this.matchState.players.push(player);
-      }
+    const lobby = this.network.lobby;
+
+    // Lobby created - sync initial state
+    lobby.on('lobby:created', () => {
+      this.syncMatchStateFromLobby();
     });
 
-    // Player left match
-    this.network.on('player:left', (playerId: string) => {
-      if (this.matchState) {
-        this.matchState.players = this.matchState.players.filter(p => p.id !== playerId);
-      }
+    // Lobby joined - sync state
+    lobby.on('lobby:joined', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Lobby updated - resync
+    lobby.on('lobby:updated', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Player joined lobby
+    lobby.on('player:joined', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Player left lobby
+    lobby.on('player:left', (player: any) => {
+      const playerId = String(player?.id ?? player);
       this.opponentStates.delete(playerId);
+      this.syncMatchStateFromLobby();
     });
 
-    // Game update from opponent
-    this.network.on('game:update', (update: GameUpdate) => {
-      // Update opponent state
-      const existing = this.opponentStates.get(update.playerId);
-      if (existing) {
-        existing.board = update.board;
-        existing.level = update.level;
-        existing.grade = update.grade;
+    // Player ready state changed
+    lobby.on('player:ready', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Game starting
+    lobby.on('game:starting', () => {
+      if (this.matchState) {
+        this.matchState.status = 'countdown';
       }
-
-      // Notify callbacks
-      this.updateCallbacks.forEach(cb => cb(update));
     });
 
-    // Attack received
-    this.network.on('game:attack', (attack: AttackPacket) => {
-      this.attackCallbacks.forEach(cb => cb(attack));
-    });
-
-    // Match started
-    this.network.on('match:started', () => {
+    // Game started
+    lobby.on('game:start', () => {
       if (this.matchState) {
         this.matchState.status = 'playing';
         this.matchState.startTime = Date.now();
       }
     });
+
+    // Game update from opponent (via broker)
+    const socket = this.network.connection.getSocket();
+    if (socket) {
+      socket.on('game:update', (update: GameUpdate) => {
+        // Update opponent state
+        const existing = this.opponentStates.get(update.playerId);
+        if (existing) {
+          existing.board = update.board;
+          existing.level = update.level;
+          existing.grade = update.grade;
+        }
+        this.updateCallbacks.forEach(cb => cb(update));
+      });
+
+      socket.on('game:attack', (attack: AttackPacket) => {
+        this.attackCallbacks.forEach(cb => cb(attack));
+      });
+    }
 
     // Match finished
     this.network.on('match:finished', (winnerId: string) => {
@@ -152,34 +208,90 @@ export class GrandmasterNetworkManager {
   }
 
   /**
+   * Sync matchState from SDK lobby.current
+   * Translates LobbyPlayer (numeric ID) to PlayerInfo (string ID)
+   */
+  private syncMatchStateFromLobby(): void {
+    const lobby = this.network.lobby.current;
+    if (!lobby) return;
+
+    const players: PlayerInfo[] = lobby.players.map(p => ({
+      id: String(p.id),
+      name: p.username,
+      rank: 1,
+      rating: 1000,
+      ready: p.ready,
+      isBot: false,
+    }));
+
+    const prevPlayerCount = this.matchState?.players.length ?? 0;
+
+    if (this.matchState) {
+      this.matchState.players = players;
+      this.matchState.matchId = lobby.id;
+    } else {
+      this.matchState = {
+        mode: (lobby.settings?.mode as MultiplayerMode) || 'versus_1v1',
+        matchId: lobby.id,
+        players,
+        status: lobby.state === 'playing' ? 'playing' : lobby.state === 'countdown' || lobby.state === 'starting' ? 'countdown' : 'waiting',
+        startTime: null,
+        winner: null,
+      };
+    }
+
+    // Update opponent states for non-local players
+    for (const p of lobby.players) {
+      const pid = String(p.id);
+      if (pid !== this.localPlayerId && !this.opponentStates.has(pid)) {
+        this.opponentStates.set(pid, {
+          id: pid,
+          name: p.username,
+          board: {
+            width: 10,
+            height: 20,
+            grid: Array(20).fill(null).map(() => Array(10).fill(0)),
+          },
+          level: 1,
+          grade: '9',
+          alive: true,
+        });
+      }
+    }
+
+    // Emit events so the lobby adapter can update the UI
+    if (players.length > prevPlayerCount) {
+      const newPlayers = players.slice(prevPlayerCount);
+      for (const p of newPlayers) {
+        this.emit('player:joined', p);
+      }
+    }
+    this.emit('lobby:updated');
+
+    console.log(`[GrandmasterNetworkManager] syncMatchState: ${players.length} players in lobby ${lobby.id}`);
+  }
+
+  /**
    * Join matchmaking queue
+   * Uses atomic broker matchmaking to find or create a lobby
    */
   async joinQueue(mode: MultiplayerMode): Promise<void> {
     console.log(`[GrandmasterNetworkManager] joinQueue called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
 
-    // Initialize match state for local/single-player fallback
-    // Host is always ready, non-host starts as not ready
-    this.matchState = {
-      mode,
-      matchId: `match-${Date.now().toString(36)}`,
-      players: [{
-        id: this.localPlayerId!,
-        name: this.localPlayerName,
-        rank: 1,
-        rating: 1000,
-        ready: true,  // Host is always ready
-        isBot: false,
-      }],
-      status: 'waiting',
-      startTime: null,
-      winner: null,
+    const modeMaxPlayers: Record<string, number> = {
+      versus_1v1: 2,
+      team_2v2: 4,
+      battle_royale: 99,
     };
 
-    console.log(`[GrandmasterNetworkManager] matchState initialized:`, this.matchState);
+    const lobby = await this.network.lobby.matchmake({
+      name: 'GRANDMASTER Match',
+      maxPlayers: modeMaxPlayers[mode] || 2,
+      isPrivate: false,
+      settings: { mode, customRules: {} },
+    }, mode);
 
-    await this.network.joinQueue({
-      gameMode: mode,
-    });
+    console.log(`[GrandmasterNetworkManager] Matchmaking result: lobby=${lobby.id}, players=${lobby.players.length}`);
   }
 
   /**
@@ -190,64 +302,53 @@ export class GrandmasterNetworkManager {
   }
 
   /**
-   * Create custom lobby
+   * Create custom lobby via SDK broker
    */
   async createLobby(mode: MultiplayerMode, isPrivate: boolean = false): Promise<string> {
     console.log(`[GrandmasterNetworkManager] createLobby called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
 
-    const matchId = `match-${Date.now().toString(36)}`;
-
-    // Initialize match state for local/single-player fallback
-    this.matchState = {
-      mode,
-      matchId,
-      players: [{
-        id: this.localPlayerId!,
-        name: this.localPlayerName,
-        rank: 1,
-        rating: 1000,
-        ready: true,
-      }],
-      status: 'waiting',
-      startTime: null,
-      winner: null,
-    };
-
-    console.log(`[GrandmasterNetworkManager] matchState initialized:`, this.matchState);
-
-    // Also update opponent states for the local player
-    this.opponentStates.set(this.localPlayerId!, {
-      id: this.localPlayerId!,
-      name: this.localPlayerName,
-      board: {
-        width: 10,
-        height: 20,
-        grid: Array(20).fill(null).map(() => Array(10).fill(0)),
-      },
-      level: 1,
-      grade: '9',
-      alive: true,
+    const lobby = await this.network.createLobby({
+      name: 'GRANDMASTER Match',
+      maxPlayers: mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2,
+      isPrivate,
+      settings: { mode, customRules: {} },
     });
 
-    try {
-      const lobby = await this.network.createLobby({
-        name: 'GRANDMASTER Match',
-        maxPlayers: mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2,
-        isPrivate,
-      });
-      return lobby.id;
-    } catch (err) {
-      // Network might not be connected, use local fallback
-      console.log(`[GrandmasterNetworkManager] Network createLobby failed, using local fallback:`, err);
-      return matchId;
-    }
+    console.log(`[GrandmasterNetworkManager] Lobby created: ${lobby.id}, players: ${lobby.players.length}`);
+    return lobby.id;
   }
 
   /**
    * Join lobby by ID
    */
   async joinLobby(lobbyId: string): Promise<void> {
+    console.log(`[GrandmasterNetworkManager] joinLobby called, lobbyId=${lobbyId}`);
     await this.network.joinLobby(lobbyId);
+    // matchState will be synced via lobby:joined event handler
+  }
+
+  /**
+   * Leave current lobby
+   */
+  async leaveLobby(): Promise<void> {
+    console.log(`[GrandmasterNetworkManager] leaveLobby called`);
+    await this.network.leaveLobby();
+    this.matchState = null;
+    this.opponentStates.clear();
+  }
+
+  /**
+   * List available lobbies
+   */
+  async listLobbies(): Promise<Array<{ id: string; name: string; players: number; maxPlayers: number; mode: string }>> {
+    const lobbies = await this.network.lobby.listLobbies();
+    return lobbies.map(l => ({
+      id: l.id,
+      name: l.name,
+      players: l.players.length,
+      maxPlayers: l.maxPlayers,
+      mode: l.settings?.mode || 'unknown',
+    }));
   }
 
   /**
@@ -267,19 +368,11 @@ export class GrandmasterNetworkManager {
 
   /**
    * Start match (host only)
-   * Note: In a full implementation, this would be handled server-side
+   * Uses SDK lobby system's countdown mechanism
    */
   async startMatch(): Promise<void> {
-    console.log(`[GrandmasterNetworkManager] startMatch called, matchState=`, this.matchState);
-
-    // Emit a custom event that the server would handle
-    this.network.emit('match:start', {});
-
-    // Local fallback: update match state directly
-    if (this.matchState) {
-      this.matchState.status = 'countdown';
-      console.log(`[GrandmasterNetworkManager] Set matchState.status to countdown`);
-    }
+    console.log(`[GrandmasterNetworkManager] startMatch called`);
+    this.network.lobby.startCountdown(3);
   }
 
   /**
@@ -340,16 +433,16 @@ export class GrandmasterNetworkManager {
   }
 
   /**
-   * Subscribe to network events
+   * Subscribe to network engine events (forwarded, not local)
    */
-  on(event: string, callback: (...args: any[]) => void): void {
+  onNetwork(event: string, callback: (...args: any[]) => void): void {
     this.network.on(event, callback);
   }
 
   /**
-   * Emit network event
+   * Emit to network engine (forwarded to broker)
    */
-  emit(event: string, ...args: any[]): void {
+  emitNetwork(event: string, ...args: any[]): void {
     this.network.emit(event, ...args);
   }
 

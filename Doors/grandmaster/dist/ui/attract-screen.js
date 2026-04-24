@@ -174,10 +174,15 @@ class AttractScreen {
             '  ██  ██  ██ ██   ██      ██    ██    ██      ██   ██ ',
             '  ██      ██ ██   ██ ███████    ██    ███████ ██   ██ ',
         ];
+        // Listen for keypress during entire boot sequence (logo + rainbow)
+        let titleKeyPressed = false;
+        const titleHandler = () => { titleKeyPressed = true; };
+        this.screen.on('keypress', titleHandler);
+        this.screen.on('mouse', titleHandler);
         // Animate logo line by line with rainbow colors
         for (let i = 0; i < logo.length; i++) {
-            if (!this.running)
-                return;
+            if (!this.running || titleKeyPressed)
+                break;
             let content = '{bold}\n\n\n\n';
             for (let j = 0; j <= i; j++) {
                 const colorIndex = (Math.floor(i / 2) + j) % this.RAINBOW_COLORS.length;
@@ -189,8 +194,15 @@ class AttractScreen {
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        if (!this.running)
+        if (!this.running || titleKeyPressed) {
+            this.screen.removeListener('keypress', titleHandler);
+            this.screen.removeListener('mouse', titleHandler);
+            if (titleKeyPressed) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                this.exit();
+            }
             return;
+        }
         // Show version and press key message with rainbow animation
         await new Promise(resolve => setTimeout(resolve, 300));
         // Play ready sound
@@ -201,11 +213,6 @@ class AttractScreen {
         // We wait up to 10 seconds or until keypress
         const startTime = Date.now();
         const maxTitleWait = 10000;
-        // Internal input listener for the title screen specifically
-        let titleKeyPressed = false;
-        const titleHandler = () => { titleKeyPressed = true; };
-        this.screen.once('keypress', titleHandler);
-        this.screen.on('mouse', titleHandler);
         while (this.running && !titleKeyPressed && (Date.now() - startTime < maxTitleWait)) {
             this.rainbowTimer++;
             const colorIndex = Math.floor(this.rainbowTimer / 5) % this.RAINBOW_COLORS.length;

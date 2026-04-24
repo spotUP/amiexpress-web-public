@@ -25,7 +25,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
      */
     setupEventListeners() {
         // Player joined (from TetriNET protocol)
-        this.network.on('tetrinet:player_joined', (data) => {
+        this.network.onNetwork('tetrinet:player_joined', (data) => {
             if (!this.state)
                 return;
             const player = {
@@ -42,7 +42,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             this.emit('state:updated');
         });
         // Player left
-        this.network.on('tetrinet:player_left', (data) => {
+        this.network.onNetwork('tetrinet:player_left', (data) => {
             if (!this.state)
                 return;
             this.state.players = this.state.players.filter(p => p.slot !== data.slot);
@@ -50,7 +50,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             this.emit('state:updated');
         });
         // Team changed
-        this.network.on('tetrinet:team', (data) => {
+        this.network.onNetwork('tetrinet:team', (data) => {
             if (!this.state)
                 return;
             const player = this.state.players.find(p => p.slot === data.slot);
@@ -61,7 +61,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             }
         });
         // Chat message (partyline)
-        this.network.on('tetrinet:chat', (data) => {
+        this.network.onNetwork('tetrinet:chat', (data) => {
             if (!this.state)
                 return;
             const player = this.state.players.find(p => p.slot === data.slot);
@@ -77,7 +77,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             this.emit('chat:message', message);
         });
         // Game message (server announcement)
-        this.network.on('tetrinet:gmsg', (data) => {
+        this.network.onNetwork('tetrinet:gmsg', (data) => {
             if (!this.state)
                 return;
             const message = {
@@ -92,7 +92,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             this.emit('chat:message', message);
         });
         // Winlist updated
-        this.network.on('tetrinet:winlist', (data) => {
+        this.network.onNetwork('tetrinet:winlist', (data) => {
             if (!this.state)
                 return;
             this.state.winlist = data.entries.map((entry, index) => ({
@@ -104,14 +104,14 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             this.emit('leaderboard:updated', this.state.winlist);
         });
         // Game options updated (newgame command)
-        this.network.on('tetrinet:options', (options) => {
+        this.network.onNetwork('tetrinet:options', (options) => {
             if (!this.state)
                 return;
             this.state.gameOptions = { ...this.state.gameOptions, ...options };
             this.emit('settings:updated', this.state.gameOptions);
         });
         // Match starting
-        this.network.on('tetrinet:newgame', () => {
+        this.network.onNetwork('tetrinet:newgame', () => {
             this.emit('match:starting');
             // Short delay then match:started
             setTimeout(() => {
@@ -119,7 +119,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             }, 1000);
         });
         // Game ended
-        this.network.on('tetrinet:endgame', () => {
+        this.network.onNetwork('tetrinet:endgame', () => {
             // Back to waiting state
             if (this.state) {
                 this.state.players.forEach(p => p.ready = false);
@@ -263,7 +263,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
     async leaveLobby() {
         if (this.state?.localSlot) {
             // Send leave message
-            this.network.emit('tetrinet:leave', { slot: this.state.localSlot });
+            this.network.emitNetwork('tetrinet:leave', { slot: this.state.localSlot });
         }
         this.state = null;
     }
@@ -287,7 +287,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
         if (!this.state?.isHost)
             return;
         // Send newgame command with current options
-        this.network.emit('tetrinet:startgame', this.state.gameOptions);
+        this.network.emitNetwork('tetrinet:startgame', this.state.gameOptions);
         // Local fallback: start immediately when no server echoes newgame
         this.emit('match:starting');
         setTimeout(() => {
@@ -301,7 +301,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
         if (!this.state?.localSlot)
             return;
         // Send to network
-        this.network.emit('tetrinet:chat', {
+        this.network.emitNetwork('tetrinet:chat', {
             slot: this.state.localSlot,
             text: message,
             isAction,
@@ -329,7 +329,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
         if (player) {
             player.team = team;
             // Send to network
-            this.network.emit('tetrinet:team', {
+            this.network.emitNetwork('tetrinet:team', {
                 slot: this.state.localSlot,
                 team,
             });
@@ -348,7 +348,7 @@ class TetriNetLobbyAdapter extends blessed_1.EventEmitter {
             ...settings,
         };
         // Broadcast to other players
-        this.network.emit('tetrinet:options', this.state.gameOptions);
+        this.network.emitNetwork('tetrinet:options', this.state.gameOptions);
         this.emit('settings:updated', settings);
     }
     /**

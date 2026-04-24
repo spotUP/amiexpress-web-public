@@ -461,7 +461,7 @@ export class GameScreen {
 
     this.holdBox = createBox({
       parent: this.screen,
-      top: 14,
+      top: 16,
       left: 25,
       width: 14,
       height: 6,
@@ -491,7 +491,7 @@ export class GameScreen {
 
     this.statsBox = createBox({
       parent: this.screen,
-      top: 9,
+      top: 8,
       left: 40,
       width: 15,
       height: 8,
@@ -506,7 +506,7 @@ export class GameScreen {
 
     this.sectionBox = createBox({
       parent: this.screen,
-      top: 17,
+      top: 16,
       left: 40,
       width: 15,
       height: 6,
@@ -519,19 +519,9 @@ export class GameScreen {
       clickable: false,
     });
 
-    this.footerBox = createBox({
-      parent: this.screen,
-      bottom: 1,
-      left: 1,
-      right: 1,
-      height: 1,
-      align: 'center',
-      style: { bg: 'black', fg: 'gray' },
-      content: '\u2190\u2192 Move | Z/X Rotate | \u2193 Soft | Enter Hard | C Hold | P Pause | ESC Quit',
-      focusable: false,
-      mouse: false,
-      clickable: false,
-    });
+    // No footer in game screen - 24-row terminal has no room inside outer frame
+    // (outerFrame border uses 2 rows, board needs 22 rows = exactly 24)
+    // Key hints are shown on menu screen and in settings
 
     // Effects are now rendered inline in board content via boardOverlay compositor
     // No effectsBox needed - eliminates ghost artifacts from transparent overlays
@@ -577,9 +567,7 @@ export class GameScreen {
     });
 
     this.input.on('soft_drop', () => {
-      if (this.engine.softDrop()) {
-        this.sounds.playSfx('move');
-      }
+      this.engine.softDrop();
     });
 
     this.input.on('hard_drop', () => {

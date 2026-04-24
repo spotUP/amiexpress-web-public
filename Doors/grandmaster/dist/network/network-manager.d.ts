@@ -4,6 +4,7 @@
  * Wraps SDK NetworkEngine for GRANDMASTER multiplayer
  * Includes state sync, client prediction, and rollback netcode
  */
+import { EventEmitter } from 'events';
 import type { GameState, Board } from '../core/types';
 import type { OpponentState } from '../ui/minimap';
 import { type InputType } from './prediction';
@@ -62,11 +63,12 @@ export interface AttackPacket {
 /**
  * Grandmaster Network Manager
  */
-export declare class GrandmasterNetworkManager {
+export declare class GrandmasterNetworkManager extends EventEmitter {
     private network;
     private matchState;
     private localPlayerId;
     private localPlayerName;
+    private localPlayerNumericId;
     private opponentStates;
     private updateCallbacks;
     private attackCallbacks;
@@ -77,11 +79,22 @@ export declare class GrandmasterNetworkManager {
     private gameEngine;
     constructor(bbsSession: any);
     /**
+     * Generate a stable numeric hash from a string ID
+     */
+    private hashStringToNumber;
+    /**
      * Setup network event listeners
+     * Hooks into SDK lobby system events to keep matchState in sync
      */
     private setupEventListeners;
     /**
+     * Sync matchState from SDK lobby.current
+     * Translates LobbyPlayer (numeric ID) to PlayerInfo (string ID)
+     */
+    private syncMatchStateFromLobby;
+    /**
      * Join matchmaking queue
+     * Uses atomic broker matchmaking to find or create a lobby
      */
     joinQueue(mode: MultiplayerMode): Promise<void>;
     /**
@@ -89,7 +102,7 @@ export declare class GrandmasterNetworkManager {
      */
     leaveQueue(): Promise<void>;
     /**
-     * Create custom lobby
+     * Create custom lobby via SDK broker
      */
     createLobby(mode: MultiplayerMode, isPrivate?: boolean): Promise<string>;
     /**
@@ -97,12 +110,26 @@ export declare class GrandmasterNetworkManager {
      */
     joinLobby(lobbyId: string): Promise<void>;
     /**
+     * Leave current lobby
+     */
+    leaveLobby(): Promise<void>;
+    /**
+     * List available lobbies
+     */
+    listLobbies(): Promise<Array<{
+        id: string;
+        name: string;
+        players: number;
+        maxPlayers: number;
+        mode: string;
+    }>>;
+    /**
      * Set ready status in lobby
      */
     setReady(ready: boolean): Promise<void>;
     /**
      * Start match (host only)
-     * Note: In a full implementation, this would be handled server-side
+     * Uses SDK lobby system's countdown mechanism
      */
     startMatch(): Promise<void>;
     /**
@@ -130,13 +157,13 @@ export declare class GrandmasterNetworkManager {
      */
     getMatchState(): MatchState | null;
     /**
-     * Subscribe to network events
+     * Subscribe to network engine events (forwarded, not local)
      */
-    on(event: string, callback: (...args: any[]) => void): void;
+    onNetwork(event: string, callback: (...args: any[]) => void): void;
     /**
-     * Emit network event
+     * Emit to network engine (forwarded to broker)
      */
-    emit(event: string, ...args: any[]): void;
+    emitNetwork(event: string, ...args: any[]): void;
     /**
      * Enable competitive netcode (prediction + rollback)
      * Call this before starting a competitive match

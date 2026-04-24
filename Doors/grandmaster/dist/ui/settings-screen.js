@@ -75,6 +75,7 @@ class SettingsScreen {
                 border: { type: 'line' },
                 label: ' Settings ',
                 scrollable: true,
+                alwaysScroll: true,
                 scrollbar: {
                     ch: ' ',
                     style: { bg: 'cyan' },
@@ -127,6 +128,7 @@ class SettingsScreen {
                 // Play selection sound when opening a setting
                 this.sounds.playSfx('menu_ok');
                 this.handleSelection(index, menu).then(() => {
+                    menu.focus();
                     this.screen.render();
                 });
             });
@@ -340,7 +342,9 @@ class SettingsScreen {
                 `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
                 `{gray-fg}Press Enter to confirm{/gray-fg}`,
             fixed: true,
+            focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
         });
+        inputBox.focus();
         let newValue = current;
         return new Promise((resolve) => {
             const settingKey = key; // Capture the setting key before it gets shadowed
@@ -401,6 +405,7 @@ class SettingsScreen {
             style: { border: { fg: 'yellow' } },
             content: '',
             fixed: true,
+            focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
         });
         let volume = current;
         const updateDisplay = () => {
@@ -410,6 +415,7 @@ class SettingsScreen {
                 `{gray-fg}Left/Right: Adjust | Enter: Confirm{/gray-fg}`);
         };
         updateDisplay();
+        volumeBox.focus();
         return new Promise((resolve) => {
             const keyHandler = (_ch, keyEvent) => {
                 if (keyEvent.name === 'left') {
@@ -461,6 +467,7 @@ class SettingsScreen {
             style: { border: { fg: 'cyan' } },
             content: '',
             fixed: true,
+            focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
         });
         const keys = [...(currentKeys || [])];
         const updateDisplay = () => {
@@ -472,6 +479,7 @@ class SettingsScreen {
                 `{gray-fg}Press Enter to save, Escape to cancel{/gray-fg}`);
         };
         updateDisplay();
+        bindingBox.focus();
         this.screen.render();
         return new Promise((resolve) => {
             const keyHandler = (_ch, key) => {

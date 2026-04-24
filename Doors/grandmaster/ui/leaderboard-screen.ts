@@ -137,7 +137,7 @@ export class LeaderboardScreen {
       top: 20,
       left: 2,
       width: 76,
-      height: 4,
+      height: 3,
       border: { type: 'line' },
       style: { border: { fg: 'magenta' } },
       label: ' Your Best ',
@@ -216,8 +216,8 @@ export class LeaderboardScreen {
       return '\n\n{gray-fg}No scores yet{/gray-fg}\n\nBe the first to set a record!';
     }
 
-    let content = '{bold}  #  Player          Grade  Level    Score     Time      Date{/bold}\n';
-    content += '  ───────────────────────────────────────────────────────────────────\n';
+    let content = '{bold}  #  Player          Grade Level    Score  Time      Date{/bold}\n';
+    content += '  ─────────────────────────────────────────────────────────────\n';
 
     for (let i = 0; i < 10; i++) {
       if (i < scores.length) {
@@ -230,7 +230,7 @@ export class LeaderboardScreen {
         const time = this.formatTime(entry.time);
         const date = this.formatDate(entry.date);
 
-        content += `  ${rank}  ${player} ${grade}  ${level}  ${score}  ${time}  ${date}\n`;
+        content += `  ${rank}  ${player} ${grade} ${level} ${score}  ${time}  ${date}\n`;
       } else {
         content += `  ${this.formatRank(i + 1)}  {gray-fg}───{/gray-fg}\n`;
       }

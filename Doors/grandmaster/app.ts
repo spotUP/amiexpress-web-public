@@ -29,7 +29,7 @@ interface DoorSession {
   args?: string[];
 }
 
-import { GameMode, AppState } from './core/types';
+import { GameMode, AppState, GameResult } from './core/types';
 import { GameEngine } from './core/game';
 import { MenuScreen } from './ui/menu';
 import { GameScreen } from './ui/game-screen';
@@ -359,15 +359,15 @@ export class GrandmasterApp {
   private async showMainMenu(): Promise<void> {
     this.currentScreen = 'menu';
 
-    // Auto-suspend will handle disabling grabKeys when List widget gains focus
-    // No need for manual suspend/resume - DoorInputManager handles it automatically
-    this.inputHandler.setEnabled(false);  // Disable game input handler during menu
+    this.inputHandler.setEnabled(false);
+    this.inputManager.suspend();  // Disable grabKeys so List widget receives input
 
     const menuScreen = new MenuScreen(this.screen, this.state, this.sounds);
 
     const selection = await menuScreen.show();
 
-    this.inputHandler.setEnabled(true);  // Re-enable game input handler
+    this.inputManager.resume();
+    this.inputHandler.setEnabled(true);
 
     switch (selection) {
       case 'master':
@@ -566,8 +566,11 @@ export class GrandmasterApp {
       localPlayerId
     );
 
-    // Show lobby and wait for result
-    const result = await lobbyScreen.show('custom', selectedMode);
+    // Show lobby and wait for result.
+    // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
+    // waiting lobby with the same mode, or creates one the next player will join.
+    // 'custom' would make every player create their own private lobby (each sees only themselves).
+    const result = await lobbyScreen.show('matchmaking', selectedMode);
 
     // Re-enable game mode and input handler after lobby
     this.inputHandler.setEnabled(true);
@@ -668,12 +671,24 @@ export class GrandmasterApp {
     background.destroy();
 
     if (selection === 4 || selection === 6 || selection === 7) {
+      // Re-enable input before returning to menu
+      this.inputHandler.setEnabled(true);
+      this.inputManager.resume();
+      if (this.session.bbs?.enableGameMode) {
+        this.session.bbs.enableGameMode();
+      }
       return;  // Back to menu or separator
     }
 
     // Handle "Connect to External Server" option
     if (selection === 5) {
       await this.showTetriNetServerConnect();
+      // Re-enable input before returning to menu
+      this.inputHandler.setEnabled(true);
+      this.inputManager.resume();
+      if (this.session.bbs?.enableGameMode) {
+        this.session.bbs.enableGameMode();
+      }
       return;
     }
 
@@ -1430,7 +1445,6 @@ export class GrandmasterApp {
       // Show the external server lobby/game
       await this.runTetriNetExternalGame(client);
 
-      updateStatus('Disconnecting...');
       client.disconnect();
 
     } catch (error) {
@@ -1903,6 +1917,9 @@ export class GrandmasterApp {
   private async showCpuBattle(): Promise<void> {
     this.currentScreen = 'lobby';
 
+    // Disable grabKeys so List widgets can receive keyboard input
+    this.inputManager.suspend();
+
     // Show difficulty selection
     const difficultyPanel = createBox({
       parent: this.screen,
@@ -1962,12 +1979,16 @@ export class GrandmasterApp {
     difficultyPanel.destroy();
 
     if (selection === 6 || selection === 7) {
+      this.inputManager.resume();
       return;  // Back to menu
     }
 
     // Map selection to difficulty
     const difficulties = [1, 3, 5, 7, 9, 10];
     const botDifficulty = difficulties[selection];
+
+    // Re-enable grabKeys for game controls
+    this.inputManager.resume();
 
     // Start CPU battle with selected difficulty
     await this.startCpuBattle(botDifficulty);
@@ -2004,6 +2025,12 @@ export class GrandmasterApp {
 
     // Run game loop
     await versusScreen.run();
+
+    // Submit score and broadcast match result
+    const userId = this.session.user?.id || 'guest';
+    const username = this.session.user?.username || this.state.playerName;
+    await this.submitScore(userId, username);
+    this.broadcastMatchResult(username);
 
     // Update stats after game
     await this.updateStats();
@@ -2077,6 +2104,12 @@ export class GrandmasterApp {
     // Run game loop
     await versusScreen.run();
 
+    // Submit score and broadcast match result
+    const cpuUserId = this.session.user?.id || 'guest';
+    const cpuUsername = this.session.user?.username || this.state.playerName;
+    await this.submitScore(cpuUserId, cpuUsername);
+    this.broadcastMatchResult(cpuUsername);
+
     // Update stats after game
     await this.updateStats();
 
@@ -2097,8 +2130,10 @@ export class GrandmasterApp {
   private async showSettings(): Promise<void> {
     this.currentScreen = 'settings';
 
+    this.inputManager.suspend();
     const settingsScreen = new SettingsScreen(this.screen, this.state, this.sounds);
     await settingsScreen.show();
+    this.inputManager.resume();
 
     // Update input handler with any changed key bindings
     this.inputHandler.updateConfig(this.state.settings.keyBindings as any);
@@ -2113,6 +2148,7 @@ export class GrandmasterApp {
   private async showStats(): Promise<void> {
     this.currentScreen = 'stats';
 
+    this.inputManager.suspend();
     const leaderboardScreen = new LeaderboardScreen(
       this.screen,
       this.highScores,
@@ -2121,15 +2157,18 @@ export class GrandmasterApp {
     );
 
     await leaderboardScreen.show();
+    this.inputManager.resume();
   }
 
   /**
    * Show player manual
    */
   private async showManual(): Promise<void> {
+    this.inputManager.suspend();
     return new Promise((resolve) => {
       showManual(this.screen, () => {
         this.screen.render();
+        this.inputManager.resume();
         resolve();
       });
     });
@@ -2202,14 +2241,8 @@ export class GrandmasterApp {
       );
 
       if (submission.accepted) {
-        // Show submission success (optional)
-        // Could show rank, personal best, etc.
-        if (submission.isPersonalBest) {
-          // New personal best!
-        }
-        if (submission.isTopTen) {
-          // Made it to top 10!
-        }
+        // Broadcast score to livechat feed and Discord
+        this.broadcastScore(username, result, submission);
       } else {
         // Submission rejected (validation failed, anti-cheat, etc.)
         console.warn('Score submission rejected:', submission.reason);
@@ -2218,6 +2251,107 @@ export class GrandmasterApp {
       // Failed to submit (network error, server down, etc.)
       console.error('Failed to submit score:', error);
       // Don't throw - game should continue even if submission fails
+    }
+  }
+
+  /**
+   * Broadcast score to livechat feed and Discord webhook
+   */
+  private broadcastScore(
+    username: string,
+    result: GameResult,
+    submission: { rank?: number; isPersonalBest?: boolean; isTopTen?: boolean }
+  ): void {
+    if (!this.session.bbs?.emitCustomEvent) return;
+
+    const modeName = this.state.currentMode === 'tetrinet' ? 'TetriNET'
+      : this.state.currentMode === 'sprint' ? 'Sprint'
+      : this.state.currentMode === 'ultra' ? 'Ultra'
+      : this.state.currentMode === 'marathon' ? 'Marathon'
+      : this.state.currentMode === 'master' ? 'Master'
+      : this.state.currentMode || 'Classic';
+
+    const parts: string[] = [];
+    parts.push(`${modeName} - Score: ${result.score.toLocaleString()}`);
+    parts.push(`Grade: ${result.grade}`);
+    parts.push(`Level: ${result.level}`);
+    parts.push(`Lines: ${result.lines}`);
+    if (result.time) {
+      const mins = Math.floor(result.time / 60000);
+      const secs = Math.floor((result.time % 60000) / 1000);
+      parts.push(`Time: ${mins}:${secs.toString().padStart(2, '0')}`);
+    }
+    if (submission.rank) parts.push(`Rank: #${submission.rank}`);
+    if (submission.isPersonalBest) parts.push('NEW PB!');
+
+    try {
+      this.session.bbs.emitCustomEvent('score', parts.join(' | '), {
+        score: result.score,
+        grade: result.grade,
+        level: result.level,
+        lines: result.lines,
+        mode: modeName,
+        time: result.time,
+        rank: submission.rank,
+        isPersonalBest: submission.isPersonalBest || false,
+        isTopTen: submission.isTopTen || false,
+      });
+    } catch (err) {
+      console.error('[GRANDMASTER] Failed to broadcast score:', err);
+    }
+  }
+
+  /**
+   * Broadcast multiplayer match result (winner/loser) to livechat and Discord
+   */
+  private broadcastMatchResult(localUsername: string): void {
+    if (!this.session.bbs?.emitCustomEvent) return;
+    if (!this.network) return;
+
+    const matchState = this.network.getMatchState();
+    if (!matchState || matchState.players.length < 2) return;
+
+    const result = this.gameEngine?.getResult();
+    if (!result) return;
+
+    const isGameOver = result.completed || (result.score > 0);
+    if (!isGameOver) return;
+
+    // Determine winner in versus mode
+    const localAlive = result.lines > 0 || result.score > 0;
+    const opponents = matchState.players.filter(p => p.name !== localUsername);
+    const opponentNames = opponents.map(p => p.name).join(', ') || 'CPU';
+
+    // Check if local player won (survived) or lost (game over first)
+    const gameState = this.gameEngine?.getState();
+    const localWon = gameState?.status === 'complete' || gameState?.status !== 'gameover';
+
+    let message: string;
+    if (matchState.players.length === 2) {
+      // 1v1
+      if (localWon) {
+        message = `defeated ${opponentNames} in Versus!`;
+      } else {
+        message = `was defeated by ${opponentNames} in Versus`;
+      }
+    } else {
+      // Battle royale / team
+      const placement = localWon ? '1st' : `${matchState.players.length}th`;
+      message = `finished ${placement} in ${matchState.mode.replace('_', ' ')} (${matchState.players.length} players)`;
+    }
+
+    try {
+      this.session.bbs.emitCustomEvent('match_result', message, {
+        mode: matchState.mode,
+        players: matchState.players.length,
+        winner: localWon ? localUsername : opponentNames,
+        loser: localWon ? opponentNames : localUsername,
+        score: result.score,
+        level: result.level,
+        grade: result.grade,
+      });
+    } catch (err) {
+      console.error('[GRANDMASTER] Failed to broadcast match result:', err);
     }
   }
 

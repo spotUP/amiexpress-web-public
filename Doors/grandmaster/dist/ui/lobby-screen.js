@@ -21,20 +21,27 @@ class GrandmasterLobbyAdapter extends blessed_2.EventEmitter {
     }
     setupEventForwarding() {
         // Forward network events to lobby adapter events
+        // These come from the SDK lobby system via the broker
         this.network.on('player:joined', (player) => {
             this.emit('player:joined', this.convertPlayer(player));
+            this.emit('state:updated');
         });
         this.network.on('player:left', (playerId) => {
             this.emit('player:left', playerId);
+            this.emit('state:updated');
         });
         this.network.on('player:ready', (data) => {
             this.emit('player:ready', data);
+            this.emit('state:updated');
         });
         this.network.on('match:starting', () => {
             this.emit('match:starting');
         });
         this.network.on('match:started', () => {
             this.emit('match:started');
+        });
+        this.network.on('lobby:updated', () => {
+            this.emit('state:updated');
         });
     }
     convertPlayer(player) {
@@ -80,7 +87,7 @@ class GrandmasterLobbyAdapter extends blessed_2.EventEmitter {
         await this.network.joinLobby(lobbyId);
     }
     async leaveLobby() {
-        await this.network.leaveQueue();
+        await this.network.leaveLobby();
     }
     async setReady(ready) {
         await this.network.setReady(ready);

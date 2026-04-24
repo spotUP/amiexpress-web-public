@@ -431,7 +431,7 @@ export class SoundEngine {
       this.session.socket.emit('audio:voice', {
         sample,
         volume: this.sfxVolume,
-        file: `/api/doors/grandmaster/assets/voices/${sample}.wav`
+        file: `/api/doors/grandmaster/assets/voices/${sample}.mp3`
       });
     }
 

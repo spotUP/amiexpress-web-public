@@ -39,16 +39,20 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
 
   private setupEventForwarding(): void {
     // Forward network events to lobby adapter events
+    // These come from the SDK lobby system via the broker
     this.network.on('player:joined', (player: PlayerInfo) => {
       this.emit('player:joined', this.convertPlayer(player));
+      this.emit('state:updated');
     });
 
     this.network.on('player:left', (playerId: string) => {
       this.emit('player:left', playerId);
+      this.emit('state:updated');
     });
 
     this.network.on('player:ready', (data: { playerId: string; ready: boolean }) => {
       this.emit('player:ready', data);
+      this.emit('state:updated');
     });
 
     this.network.on('match:starting', () => {
@@ -57,6 +61,10 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
 
     this.network.on('match:started', () => {
       this.emit('match:started');
+    });
+
+    this.network.on('lobby:updated', () => {
+      this.emit('state:updated');
     });
   }
 
@@ -108,7 +116,7 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
   }
 
   async leaveLobby(): Promise<void> {
-    await this.network.leaveQueue();
+    await this.network.leaveLobby();
   }
 
   async setReady(ready: boolean): Promise<void> {

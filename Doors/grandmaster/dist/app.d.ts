@@ -133,6 +133,14 @@ export declare class GrandmasterApp {
      */
     private submitScore;
     /**
+     * Broadcast score to livechat feed and Discord webhook
+     */
+    private broadcastScore;
+    /**
+     * Broadcast multiplayer match result (winner/loser) to livechat and Discord
+     */
+    private broadcastMatchResult;
+    /**
      * Show high score notification
      */
     private showHighScoreNotification;

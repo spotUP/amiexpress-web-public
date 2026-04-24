@@ -134,7 +134,7 @@ export class MenuScreen {
           'TRAINING',
           '',
           'Settings',
-          'Statistics',
+          'High Scores',
           '{cyan-fg}Manual (F1){/cyan-fg}',
           '{red-fg}Quit{/red-fg}',
         ],
@@ -323,7 +323,7 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
       // Settings
       '{gray-fg}Configure game\noptions, controls,\nand preferences.{/gray-fg}',
 
-      // Statistics
+      // High Scores
       '{gray-fg}View your play\nhistory, records,\nand achievements.{/gray-fg}',
 
       // Manual
