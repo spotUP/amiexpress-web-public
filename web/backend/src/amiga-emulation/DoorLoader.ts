@@ -142,6 +142,13 @@ export class DoorLoader {
 debugLog(`[DoorLoader] Door binary size: ${binary.length} bytes`);
     this.logger?.info(`Binary loaded: ${binary.length} bytes`);
 
+    if (binary.length === 0) {
+      throw new Error(
+        `Door binary is empty (0 bytes): ${executablePath} — the file exists but contains no data. ` +
+        `This door cannot be executed.`
+      );
+    }
+
     // Parse Amiga HUNK format
     const hunkLoader = new HunkLoader();
     const hunkFile = hunkLoader.parse(Buffer.from(binary));
