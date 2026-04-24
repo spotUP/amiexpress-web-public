@@ -67,6 +67,7 @@ import { setDisplayFileCommandsDependencies } from '../handlers/commands/display
 import { setPreferenceChatCommandsDependencies } from '../handlers/chat/preference-chat-commands.handler';
 import { setAdvancedCommandsDependencies } from '../handlers/commands/advanced-commands.handler';
 import { setMessageCommandsDependencies } from '../handlers/message/message-commands.handler';
+import { logRetentionService, defaultRetentionTargets } from '../services/LogRetentionService';
 import { setInfoCommandsDependencies } from '../handlers/commands/info-commands.handler';
 import { setUtilityCommandsDependencies } from '../handlers/commands/utility-commands.handler';
 import { setSysopCommandsDependencies } from '../handlers/commands/sysop-commands.handler';
@@ -576,6 +577,27 @@ export async function initializeData(io?: SocketIOServer) {
 
     // Inject dependencies into command execution handler
     setCommandExecutionDependencies(executeDoor, processBBSCommand);
+
+    // WEB_: GDPR Phase 4 — bound storage of logs (IPs, handles) via the
+    // retention service. Runs a boot pass + a daily scheduled pass.
+    try {
+      const dataDir = config.get('dataDir');
+      const sysCfg = (() => {
+        try { return db.getConfigRepository().getSystemConfig(); } catch { return null; }
+      })();
+      const retentionDays = (sysCfg?.log_retention_days as number | undefined) ?? 90;
+      // 10 MB per file caps size; retentionDays is the spiritual budget but
+      // not enforced as a timestamp filter — this is the "good enough" hobby
+      // BBS approach documented in the Phase 4 plan.
+      logRetentionService.configure({
+        filePaths: defaultRetentionTargets(dataDir),
+        maxBytes: 10 * 1024 * 1024,
+      });
+      logRetentionService.start();
+      console.log(`[LogRetention] started — 10 MB cap per log file, retention target ~${retentionDays}d`);
+    } catch (retentionError) {
+      console.warn('[LogRetention] failed to start:', retentionError);
+    }
 
     process.stdout.write(`[initializeData] Loaded ${conferences.length} conferences, ${messageBases.length} bases, ${fileAreas.length} areas, ${getDoors().length} doors\n`);
   } catch (error) {
