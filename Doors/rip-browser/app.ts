@@ -35,8 +35,11 @@ export async function execute(session: any) {
 
   console.log('[RIP Browser] Screen initialized');
 
-  // Clear screen to wipe preloader
-  screen.clear();
+  // Clear terminal and blessed buffer to wipe previous screen content
+  screen.program.write('\x1b[2J');
+  screen.program.write('\x1b[H');
+  screen.clearRegion(0, screen.width, 0, screen.height);
+  screen.alloc();
 
   // Create input manager (browser door, no game mode needed)
   const inputManager = new DoorInputManager(session, screen, {

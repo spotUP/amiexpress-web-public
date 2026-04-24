@@ -350,6 +350,10 @@ class ANSIEditorDoor {
       title: 'ANSI Art Editor',
       responsive: true,
     });
+    this.screen.program.write('\x1b[2J');
+    this.screen.program.write('\x1b[H');
+    this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+    this.screen.alloc();
 
     // CRITICAL: enableGrabKeys MUST be false for blessed widgets!
     this.inputManager = new DoorInputManager(this.ctx as any, this.screen, {

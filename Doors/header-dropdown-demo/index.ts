@@ -38,6 +38,10 @@ door.onStart(async (ctx: DoorContext) => {
     dockBorders: true,
     title: 'Header Dropdown Demo',
   });
+  screen.program.write('\x1b[2J');
+  screen.program.write('\x1b[H');
+  screen.clearRegion(0, screen.width, 0, screen.height);
+  screen.alloc();
 
   // 2. Create input manager (dropdown menu door with mouse support)
   const inputManager = new DoorInputManager(ctx, screen, {

@@ -263,6 +263,10 @@ door.onStart(async (ctx: DoorContext) => {
     output: (data: string) => (bbs as any)?.write(data),
     responsive: true,
   });
+  screen.program.write('\x1b[2J');
+  screen.program.write('\x1b[H');
+  screen.clearRegion(0, screen.width, 0, screen.height);
+  screen.alloc();
 
   const userPanelDock = new DockablePanel({
     parent: screen,

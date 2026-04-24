@@ -33,6 +33,10 @@ door.onStart(async (ctx: DoorContext) => {
   const username = user?.username || 'Guest';
 
   const screen = createScreen(bbs, { title: 'Mail Composer' });
+  screen.program.write('\x1b[2J');
+  screen.program.write('\x1b[H');
+  screen.clearRegion(0, screen.width, 0, screen.height);
+  screen.alloc();
   activeScreen = screen;
 
   inputManager = new DoorInputManager(ctx as any, screen, {
