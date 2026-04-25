@@ -13,11 +13,15 @@ export class NodeManager {
     this.initializeNodes();
 
     // Periodic cleanup of leaked nodes (every 5 minutes)
-    setInterval(() => {
+    const cleanupTimer = setInterval(() => {
       this.cleanupInactiveSessions(30).catch(err => {
         console.error('[NodeManager] Periodic cleanup failed:', err);
       });
     }, 5 * 60 * 1000);
+    // unref so the timer doesn't keep the event loop alive (e.g. during tests)
+    if (typeof (cleanupTimer as any).unref === 'function') {
+      (cleanupTimer as any).unref();
+    }
   }
 
   // Initialize nodes - reads max_nodes from DB config, default 40

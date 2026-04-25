@@ -52,7 +52,7 @@ export function checkConnectionLimit(ip: string): boolean {
 /**
  * Cleanup old connection tracking data every 5 minutes
  */
-setInterval(() => {
+const _connectionCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [ip, connections] of recentConnections.entries()) {
     const recent = connections.filter(time => now - time < CONNECTION_WINDOW);
@@ -63,6 +63,10 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000); // 5 minutes
+// unref so the timer doesn't keep the event loop alive (e.g. during tests)
+if (typeof (_connectionCleanupTimer as any).unref === 'function') {
+  (_connectionCleanupTimer as any).unref();
+}
 
 /**
  * Get next available node ID (1-99)

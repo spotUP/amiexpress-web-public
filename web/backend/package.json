@@ -48,6 +48,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@swc/core": "^1.15.30",
+    "@swc/jest": "^0.2.39",
     "@types/adm-zip": "^0.5.7",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",

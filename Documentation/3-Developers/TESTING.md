@@ -17,3 +17,26 @@
 - **XIM Critical Requirements:** Run `dev/scripts/verify-xim-critical.sh` before committing XIM-related changes to prevent regressions. See `XIM_CRITICAL_REQUIREMENTS.md` for details.
 
 **Need instructions to add new tests?** The archived testing docs include templates for manual checklists, CLI scaffolding, and candidate PR descriptions (`PR_DESCRIPTION.md`). Refer there once the summary is solid.
+
+## 4. Fast-Iteration Testing (web/backend)
+
+The backend uses `@swc/jest` for fast TypeScript transformation -- typical single-suite runs are well under 2s. Run only the suite you're working on:
+
+```bash
+cd web/backend
+npm test -- tests/handlers/chat-room-mode.test.ts        # one file
+npm test -- tests/handlers/chat-                          # all chat-* handler tests
+npm test -- --testPathPattern='chat|dm|motd'              # regex match
+npm test -- -t "moderator can invite"                     # by test name
+```
+
+For watch mode while editing:
+
+```bash
+npm run test:watch -- tests/handlers/chat-room-mode.test.ts
+```
+
+Before commit, run the full suite once: `npm test`. CI runs the full suite.
+
+If a test ever needs the slower legacy `ts-jest` path (e.g. you suspect an `@swc/jest` transform regression), edit `dev-scripts/jest.config.ts` -- `ts-jest` is still installed as a fallback for one release.
+
