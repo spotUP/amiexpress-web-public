@@ -1,3 +1,5 @@
+import { formatDmLine } from './dm-render';
+
 export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
   // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
   // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
@@ -90,12 +92,10 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     if (!d) return;
     // Backend now persists DMs and echoes the canonical payload back to
     // both sender and recipient. `direction` tells us which side we are.
-    const dir = d.direction === 'sent' ? `[DM to ${d.to}]` : `[DM from ${d.from}]`;
-    const color = d.direction === 'sent' ? 'magenta-fg' : 'cyan-fg';
-    const offlineHint = d.direction === 'sent' && d.delivered === false ? ' {gray-fg}(offline){/gray-fg}' : '';
-    acm(`{${color}}${dir}: ${d.message}${offlineHint}{/${color}}`, false);
+    // Group DMs (isGroup=true) include a `participants` array.
+    acm(formatDmLine(d), false);
     if (d.direction === 'received') {
-      aa(`{cyan-fg}DM from ${d.from}{/cyan-fg}`);
+      aa(`{cyan-fg}${d.isGroup ? 'Group DM' : 'DM'} from ${d.from}{/cyan-fg}`);
       if (typeof aud?.onDM === 'function') aud.onDM();
     }
   });
