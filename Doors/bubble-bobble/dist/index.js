@@ -550,6 +550,10 @@ door.onStart(async (ctx) => {
         /* cached */
     }
     initScreen();
+    screen.program.write('\x1b[2J');
+    screen.program.write('\x1b[H');
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     // Set up gamepad support
     gamepadManager = new GamepadInputManager(ctx.session);
     // D-pad/analog for movement

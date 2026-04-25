@@ -168,6 +168,7 @@ export class Door {
       bbs,
       socket,
       bbsSession,
+      session: bbsSession, // alias used by older arcade door code (ctx.session)
       close: () => {
         this.isRunning = false;
 

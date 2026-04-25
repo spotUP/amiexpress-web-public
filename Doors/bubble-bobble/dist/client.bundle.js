@@ -3121,8 +3121,15 @@ var init_element = __esm({
             this._startScrollbarDrag(event);
             return true;
           }
-          this.emit("click", event);
-          if (this.clickable) {
+          const btn = event.button;
+          if (btn === "right") {
+            this.emit("rightclick", event);
+          } else if (btn === "middle") {
+            this.emit("middleclick", event);
+          } else {
+            this.emit("click", event);
+          }
+          if (btn !== "right" && btn !== "middle" && this.clickable) {
             this.focus();
             return true;
           }
@@ -5469,6 +5476,8 @@ var init_dockable_panel = __esm({
           });
           if (options.draggable !== false) {
             this.titleBar.on("mousedown", (data) => {
+              if (data?.button && data.button !== "left")
+                return;
               if (!this.panelState.minimized && !this.isMaximized) {
                 this.startDrag(data.x, data.y);
               }
@@ -5552,6 +5561,8 @@ var init_dockable_panel = __esm({
         if (this.fixed || this.isStatic)
           return;
         this.on("mousedown", (data) => {
+          if (data?.button && data.button !== "left")
+            return;
           if (this.resizable) {
             const edge = this.detectResizeEdge(data.x, data.y);
             if (edge) {
@@ -5577,6 +5588,8 @@ var init_dockable_panel = __esm({
         if (this.fixed || !this.resizable)
           return;
         this.on("mousedown", (data) => {
+          if (data?.button && data.button !== "left")
+            return;
           const edge = this.detectResizeEdge(data.x, data.y);
           if (edge) {
             this.startResizeFromEdge(edge, data.x, data.y);
@@ -6664,6 +6677,38 @@ var init_dockable_panel = __esm({
           btn.on("press", () => {
             this.switchTab(index);
           });
+          let dragStart = null;
+          let detached = false;
+          btn.on("mousedown", (data) => {
+            if (data?.button && data.button !== "left")
+              return;
+            dragStart = { x: data?.x ?? 0, y: data?.y ?? 0 };
+            detached = false;
+          });
+          if (this.screen) {
+            const onMove = (data) => {
+              if (!dragStart || detached)
+                return;
+              if (data.action !== "mousemove" && data.action !== "mousedown")
+                return;
+              const dx = (data.x ?? 0) - dragStart.x;
+              const dy = (data.y ?? 0) - dragStart.y;
+              if (Math.abs(dx) + Math.abs(dy) < 3)
+                return;
+              detached = true;
+              const panelToDetach = this.tabs[index];
+              if (panelToDetach && panelToDetach !== this) {
+                this.detachTab(index);
+                panelToDetach.startDrag?.(data.x, data.y);
+              }
+            };
+            const onUp = () => {
+              dragStart = null;
+              detached = false;
+            };
+            this.screen.on("mousemove", onMove);
+            this.screen.on("mouseup", onUp);
+          }
           this.tabButtons.push(btn);
           currentX += String(label).length + 3;
         });
@@ -6688,6 +6733,61 @@ var init_dockable_panel = __esm({
         this.activeTab = index;
         this.updateTabs();
         this.emit("tab-switch", index);
+      }
+      /**
+       * Detach a tab back into its own floating DockablePanel. The inverse of
+       * `mergeWith`. Right-click on the tab button triggers this so a user
+       * who accidentally merged two panels can separate them again.
+       *
+       * Behaviour:
+       *  - The extracted panel re-parents to the screen, restores its label
+       *    and border, floats at an offset position, and is shown.
+       *  - If only one tab is left in the container after removal, the tab
+       *    bar is cleared and the remaining panel goes back to behaving as
+       *    a normal single-panel container.
+       */
+      detachTab(index) {
+        if (index < 0 || index >= this.tabs.length)
+          return;
+        const detached = this.tabs[index];
+        if (!detached || detached === this) {
+          const other = this.tabs.find((t, i) => i !== index && t !== this);
+          if (other)
+            this.detachTab(this.tabs.indexOf(other));
+          return;
+        }
+        this.tabs.splice(index, 1);
+        if (this.activeTab >= this.tabs.length)
+          this.activeTab = Math.max(0, this.tabs.length - 1);
+        detached.detach?.();
+        const root = this.screen;
+        if (root) {
+          root.append?.(detached);
+          detached.parent = root;
+        }
+        const hostCoords = this._getCoords();
+        const offsetLeft = (hostCoords?.xi ?? 0) + 4;
+        const offsetTop = (hostCoords?.yi ?? 0) + 2;
+        detached.position = {
+          left: offsetLeft,
+          top: offsetTop,
+          width: detached.options?.width ?? 40,
+          height: detached.options?.height ?? 15
+        };
+        detached.border = detached.options?.border ?? { type: "line" };
+        detached.show?.();
+        detached._invalidateCoords?.();
+        if (this.tabs.length <= 1) {
+          for (const btn of this.tabButtons)
+            btn.destroy();
+          this.tabButtons = [];
+          this.tabs = [];
+        } else {
+          this.updateTabs();
+        }
+        detached.emit("undock-tab");
+        this.emit("detach", detached);
+        this.screen?.render();
       }
       /**
        * Set dock position with visual feedback
@@ -30170,6 +30270,17 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         socket.on("audio:mute", (data) => {
           this.emit("audio:mute", data);
         });
+        socket.on("video:start-stream", (data) => {
+          console.log("[ClientDoor] Received video:start-stream event:", data);
+          this.emit("video:start-stream", data);
+        });
+        socket.on("video:stop-stream", (data) => {
+          console.log("[ClientDoor] Received video:stop-stream event:", data);
+          this.emit("video:stop-stream", data);
+        });
+        socket.on("video:frame", (data) => {
+          this.emit("video:frame", data);
+        });
         socket.on("audio:data", (data) => {
           this.emit("audio:data", data);
         });
@@ -30600,7 +30711,12 @@ ClientDoor.SERVER_FORWARD_EVENTS = /* @__PURE__ */ new Set([
   "audio:chunk",
   "audio:data",
   // Voice activity detection
-  "voice:speaking"
+  "voice:speaking",
+  // Video streaming events
+  "video:started",
+  "video:stopped",
+  "video:error",
+  "video:frame"
 ]);
 
 // client.ts

@@ -679,6 +679,9 @@ export interface DoorContext {
   /** BBS session (for advanced use cases like blessed) */
   bbsSession?: any;
 
+  /** Alias for bbsSession — used by older arcade door code (ctx.session) */
+  session?: any;
+
   /** Close the door and return to BBS */
   close: () => void;
 }
