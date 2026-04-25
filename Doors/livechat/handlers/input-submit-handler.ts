@@ -256,6 +256,13 @@ export function createSubmitHandler(
             }
           }
           updateTypingPreview();
+          // Belt-and-suspenders: explicitly clear the input box after a DM
+          // send so typed text never lingers (mirrors the room-message branch
+          // and the post-block unified clear below).
+          inputBox.clearValue();
+          if ((inputBox as any).setContent) (inputBox as any).setContent('');
+          inputBox.focus();
+          screen.render();
         } else {
           // New message - generate ID and add to history
           const messageId = `${userId}-${Date.now()}`;

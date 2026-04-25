@@ -72,6 +72,9 @@ export function createInitialState(): AppState {
 /** State mutations */
 export function setChannel(state: AppState, channelId: string): void {
   state.currentChannel = channelId;
+  // Switching into a text channel implicitly leaves any DM context so
+  // callers can't accidentally have both contexts active simultaneously.
+  state.currentDmThread = null;
   state.messages = [];
   state.typingBuffers.clear();
 }
@@ -82,9 +85,14 @@ export function setChannel(state: AppState, channelId: string): void {
  * Clears the chat log and any in-progress typing buffers. The caller is
  * responsible for fetching `chat:dm-history` and re-rendering the sidebar
  * to highlight the new active thread.
+ *
+ * Also clears `currentChannel` so the room:leave guard in handleChannelSelect
+ * (`if (state.currentChannel) socket.emit('room:leave')`) doesn't re-emit
+ * room:leave on subsequent DM->DM switches.
  */
 export function setDmContext(state: AppState, threadId: string): void {
   state.currentDmThread = threadId;
+  state.currentChannel = '';
   state.messages = [];
   state.typingBuffers.clear();
 }

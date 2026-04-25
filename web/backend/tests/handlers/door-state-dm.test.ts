@@ -36,6 +36,15 @@ describe('LiveChat state DM context helpers', () => {
     expect(s.typingBuffers.size).toBe(0);
   });
 
+  it('setDmContext clears currentChannel so room:leave is not re-emitted on DM->DM switch', () => {
+    const s = createInitialState();
+    s.currentChannel = 'general';
+    setDmContext(s, 'dm-thread-abc');
+    // Empty string is the codebase convention for "no channel" (createInitialState
+    // initializes currentChannel: '' on line ~45 of core/state.ts).
+    expect(s.currentChannel).toBe('');
+  });
+
   it('clearDmContext nulls currentDmThread and clears messages', () => {
     const s = createInitialState();
     setDmContext(s, 'dm-thread-abc');
@@ -45,14 +54,14 @@ describe('LiveChat state DM context helpers', () => {
     expect(s.messages.length).toBe(0);
   });
 
-  it('setChannel does not touch currentDmThread (it is set via clearDmContext explicitly)', () => {
+  it('setChannel clears currentDmThread so callers can not leave both contexts active', () => {
     const s = createInitialState();
     setDmContext(s, 'dm-thread-abc');
     setChannel(s, 'general');
-    // setChannel intentionally leaves currentDmThread alone — caller must
-    // clearDmContext first when transitioning channel<->DM. Asserting the
-    // current behaviour so an accidental change to setChannel surfaces here.
-    expect(s.currentDmThread).toBe('dm-thread-abc');
+    // setChannel now also nulls currentDmThread (Task 7 follow-up): a single
+    // mutation switches contexts atomically without requiring callers to
+    // clearDmContext first.
+    expect(s.currentDmThread).toBeNull();
     expect(s.currentChannel).toBe('general');
     expect(s.messages.length).toBe(0);
   });
