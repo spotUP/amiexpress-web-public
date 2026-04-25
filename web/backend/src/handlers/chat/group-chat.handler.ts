@@ -301,6 +301,16 @@ console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roo
       }
     }
 
+    // Check invite-only ACL
+    if (room.is_invite_only) {
+      const isMember = await db.isUserInRoom(room.room_id, session.user?.id);
+      const hasInv = await db.hasInvite(room.room_id, session.user?.id);
+      const isOwner = room.created_by === session.user?.id;
+      if (!isMember && !hasInv && !isOwner) {
+        return sendRoomError(socket, 'This room is invite-only');
+      }
+    }
+
     // Check if room is full
     const memberCount = await db.getRoomMemberCount(room.room_id);
     if (memberCount >= room.max_users) {
@@ -315,6 +325,11 @@ console.log('ℹ️ User already in room, rejoining:', session.user?.username, r
 
     // Join room in database
     await db.joinChatRoom(room.room_id, session.user?.id, session.user?.username, socket.id, false);
+
+    // Consume invite if this was an invite-only room (no-op when no invite row exists)
+    if (room.is_invite_only) {
+      await db.revokeInvite(room.room_id, String(session.user?.id));
+    }
 
     // Join Socket.io room
     socket.join('room:' + room.room_id);
