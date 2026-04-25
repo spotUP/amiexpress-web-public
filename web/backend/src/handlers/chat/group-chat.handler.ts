@@ -532,6 +532,16 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
       return sendRoomError(socket, 'You are muted in this room');
     }
 
+    // +m (moderated): only moderators or voiced users can send
+    const room = await db.getChatRoom(session.currentRoomId);
+    if (room?.is_moderated) {
+      const isMod = await db.isUserModerator(session.currentRoomId, String(session.user?.id));
+      const isVoiced = await db.isUserVoiced(session.currentRoomId, String(session.user?.id));
+      if (!isMod && !isVoiced) {
+        return sendRoomError(socket, 'Room is moderated (+m); you need voice (+v) or op (+o) to speak');
+      }
+    }
+
     // Save message to database
     await db.saveChatRoomMessage({
       roomId: session.currentRoomId,
