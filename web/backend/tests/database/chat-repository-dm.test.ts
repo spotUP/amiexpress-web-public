@@ -82,4 +82,20 @@ describe('ChatRepository DMs', () => {
     const after = rawDb.prepare('SELECT COUNT(*) as c FROM chat_dm_threads').get() as any;
     expect(after.c).toBe(before.c);
   });
+
+  it('saveDmMessage and getDmHistory round-trip', async () => {
+    const tid = await repo.getOrCreateDmThread([uA, uB]);
+    await repo.saveDmMessage(tid, uA, 'InitUser', 'Hello');
+    await repo.saveDmMessage(tid, uB, 'RecipUser', 'Hi back');
+    const history = await repo.getDmHistory(tid, 50);
+    expect(history.length).toBe(2);
+    expect(history[0].message).toBe('Hello');
+    expect(history[1].message).toBe('Hi back');
+  });
+
+  it('listUserDmThreads returns threads user participates in', async () => {
+    const tid = await repo.getOrCreateDmThread([uA, uB]);
+    const list = await repo.listUserDmThreads(uA);
+    expect(list.some((t: any) => t.thread_id === tid)).toBe(true);
+  });
 });

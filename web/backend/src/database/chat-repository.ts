@@ -448,4 +448,29 @@ console.error('[ChatRepository] FTS index update failed:', e);
     });
     return threadId;
   }
+
+  async saveDmMessage(threadId: string, senderId: string, senderUsername: string, message: string): Promise<number> {
+    const res = this.prepare('INSERT INTO chat_dm_messages (thread_id, sender_id, sender_username, message) VALUES (?, ?, ?, ?)').run(threadId, senderId, senderUsername, message);
+    this.prepare(`UPDATE chat_dm_threads SET last_activity_at = strftime('%s', 'now') WHERE thread_id = ?`).run(threadId);
+    return res.lastInsertRowid as number;
+  }
+
+  async getDmHistory(threadId: string, limit = 50): Promise<any[]> {
+    const rows = this.prepare('SELECT * FROM chat_dm_messages WHERE thread_id = ? ORDER BY created_at ASC, id ASC LIMIT ?').all(threadId, limit) as any[];
+    return rows;
+  }
+
+  async listUserDmThreads(userId: string): Promise<any[]> {
+    return this.prepare(`
+      SELECT t.*, (SELECT COUNT(*) FROM chat_dm_participants p WHERE p.thread_id = t.thread_id) AS participant_count
+      FROM chat_dm_threads t
+      INNER JOIN chat_dm_participants p ON p.thread_id = t.thread_id
+      WHERE p.user_id = ?
+      ORDER BY t.last_activity_at DESC
+    `).all(userId) as any[];
+  }
+
+  async getDmParticipants(threadId: string): Promise<any[]> {
+    return this.prepare('SELECT user_id, username FROM chat_dm_participants WHERE thread_id = ?').all(threadId) as any[];
+  }
 }
