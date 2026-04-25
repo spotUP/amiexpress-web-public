@@ -349,6 +349,7 @@ Conf*/NumULs
 Conf*/Files/*.dir
 Conf*/Upload/FILES.BBS
 Conf*/Upload/*.LHA
+Conf*/Conftop.Data
 
 # Stats runtime files
 SysopStats/
