@@ -81,6 +81,10 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     asm(`Revoked invite for ${d.username}`);
   });
 
+  sock.on('room:mode', (d: any) => {
+    asm(`{yellow-fg}[${d.by}] set mode ${d.applied}{/yellow-fg}`);
+  });
+
   sock.on('chat:dm', (d: any) => {
     if (!d) return;
     // Backend now persists DMs and echoes the canonical payload back to

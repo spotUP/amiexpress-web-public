@@ -39,3 +39,15 @@ export const uninviteCmd: SlashCommand = {
     return { handled: true, data: { op: 'uninvite', target, room: roomArg || ctx.currentChannel } };
   },
 };
+
+export const modeCmd: SlashCommand = {
+  name: 'mode',
+  description: 'Set channel or user modes (+i/+m/+o/+v/-X). Moderator only.',
+  usage: '/mode <modes> [param]',
+  handler: (_ctx, args) => {
+    if (args.length === 0) return { handled: true, error: 'Usage: /mode <+modes> [param]  e.g. /mode +i  or /mode +o alice' };
+    const [modeString, ...params] = args;
+    if (!/^[+\-][a-zA-Z]/.test(modeString)) return { handled: true, error: 'Mode string must start with + or -' };
+    return { handled: true, data: { modeString, params } };
+  },
+};

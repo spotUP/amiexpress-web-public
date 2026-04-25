@@ -179,6 +179,9 @@ export function createSubmitHandler(
         if (cmdName === 'uninvite' && r.data?.target) {
           socket.emit('room:revoke-invite', { targetUsername: r.data.target, roomName: r.data.room });
         }
+        if (cmdName === 'mode' && r.data?.modeString) {
+          socket.emit('room:mode', { modeString: r.data.modeString, params: r.data.params || [] });
+        }
 
         if (cmdName === 'clear' || cmdName === 'cls') {
           clearChatLog();

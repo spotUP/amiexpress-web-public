@@ -8,7 +8,7 @@ import { helpCmd, quitCmd, clearCmd, searchCmd, pinCmd, pinsCmd } from './utilit
 import { soundsCmd, compactCmd, timestampsCmd } from './prefs';
 import { reactCmd, unreactCmd, reactionsCmd, thumbsUpCmd, heartCmd } from './reactions';
 import { voiceCmd, deafenCmd, undeafenCmd } from './voice';
-import { motdCmd, inviteCmd, uninviteCmd } from './mode';
+import { motdCmd, inviteCmd, uninviteCmd, modeCmd } from './mode';
 
 /** Create command registry with all commands */
 export function createCommandRegistry(): CommandRegistry {
@@ -32,6 +32,6 @@ export function createCommandRegistry(): CommandRegistry {
   // Voice
   [voiceCmd, deafenCmd, undeafenCmd].forEach(c => r.register(c));
   // Channel mode / MOTD / invites
-  [motdCmd, inviteCmd, uninviteCmd].forEach(c => r.register(c));
+  [motdCmd, inviteCmd, uninviteCmd, modeCmd].forEach(c => r.register(c));
   return r;
 }
