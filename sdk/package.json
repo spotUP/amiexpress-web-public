@@ -85,6 +85,10 @@
       "types": "./dist/utils/DoorLoader.d.ts",
       "default": "./dist/utils/DoorLoader.js"
     },
+    "./utils/door-preloader": {
+      "types": "./dist/utils/door-preloader.d.ts",
+      "default": "./dist/utils/door-preloader.js"
+    },
     "./types/gamepad": {
       "types": "./dist/types/gamepad.d.ts",
       "default": "./dist/types/gamepad.js"

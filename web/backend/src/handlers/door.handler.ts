@@ -1631,7 +1631,10 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
 
     let doorModule: any;
     if (showPreloader) {
-      const { showPreloaderWhile } = require('../../../../sdk/utils/door-preloader');
+      // Use SDK package name (not source-relative) so resolution works in
+      // production where only sdk/dist is shipped — the source path
+      // ../../../../sdk/utils/* doesn't exist in the Docker image.
+      const { showPreloaderWhile } = require('@amiexpress/bbs-door-sdk/utils/door-preloader');
       // Pass socket directly - session.socket doesn't exist, socket is a separate parameter
       const doorDisplayName = door.name || door.command || 'Application';
       doorModule = await showPreloaderWhile(
