@@ -155,6 +155,14 @@ export function createSubmitHandler(
           addSystemMessage('You are now online');
         }
 
+        if (cmdName === 'motd') {
+          if (r.data?.op === 'set') {
+            socket.emit('room:motd', { motd: r.data.motd });
+          } else {
+            addSystemMessage('Use /motd <text> to set, /motd --clear to clear.');
+          }
+        }
+
         if (cmdName === 'clear' || cmdName === 'cls') {
           clearChatLog();
         }

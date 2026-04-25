@@ -336,6 +336,10 @@ console.log('✅ User joined room:', session.user?.username, room.room_name);
       socket.emit('ansi-output', AnsiUtil.line('Topic: ' + room.topic));
     }
 
+    if (room.motd && room.motd.length > 0) {
+      socket.emit('ansi-output', AnsiUtil.line('MOTD: ' + room.motd));
+    }
+
     // Get room members
     const members = await db.getRoomMembers(room.room_id);
     socket.emit('ansi-output', AnsiUtil.line(''));
@@ -383,6 +387,8 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
       roomId: room.room_id,
       roomName: room.room_name,
       memberCount: members.length,
+      topic: room.topic || null,
+      motd: room.motd || null,
       members: members.map((m: any) => ({
         user_id: m.user_id,
         username: m.username,

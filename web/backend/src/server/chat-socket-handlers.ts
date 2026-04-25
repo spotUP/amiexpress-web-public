@@ -323,6 +323,14 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     }
   );
 
+  socket.on("room:motd", async (data: { motd: string | null }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+    const { handleSetRoomMotd } = require("../handlers/chat/room-motd.handler");
+    const ioServer = (socket as any).nsp?.server;
+    await handleSetRoomMotd({ io: ioServer, socket, session, data });
+  });
+
   // ===== DIRECT MESSAGES =====
   socket.on("chat:dm", async (data: { to: string; message: string }) => {
     const session = getSessionBySocketId(socket.id);

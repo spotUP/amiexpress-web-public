@@ -65,6 +65,11 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     aud.onNotification();
   });
 
+  sock.on('room:motd', (d: any) => {
+    if (d?.motd) asm(`{yellow-fg}[MOTD] ${d.motd}{/yellow-fg}`);
+    else asm('{yellow-fg}[MOTD] cleared{/yellow-fg}');
+  });
+
   sock.on('chat:dm', (d: any) => {
     if (!d) return;
     // Backend now persists DMs and echoes the canonical payload back to
