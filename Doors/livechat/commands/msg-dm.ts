@@ -1,17 +1,22 @@
 import type { SlashCommand } from './types';
 
-/** /msg - Send a direct message */
+/** /msg - Send a direct message (1:1 or group) */
 export const msgCmd: SlashCommand = {
   name: 'msg',
-  description: 'Send a direct message',
-  usage: '/msg @user message',
+  description: 'Send a direct message (1:1 or group). /msg @a [@b ...] text',
+  usage: '/msg @user [@user2 ...] message',
   aliases: ['dm', 'pm'],
-  handler: (ctx, args) => {
-    const target = args[0]?.replace('@', '');
-    const message = args.slice(1).join(' ');
-    if (!target || !message) return { handled: true, error: 'Usage: /msg @user message' };
-    return { handled: true, data: { target, message, type: 'dm' } };
-  }
+  handler: (_ctx, args) => {
+    const targets: string[] = [];
+    let idx = 0;
+    while (idx < args.length && args[idx].startsWith('@')) {
+      targets.push(args[idx].replace('@', ''));
+      idx++;
+    }
+    const message = args.slice(idx).join(' ');
+    if (targets.length === 0 || !message) return { handled: true, error: 'Usage: /msg @user [@user2 ...] message' };
+    return { handled: true, data: { targets, message, type: targets.length > 1 ? 'group-dm' : 'dm' } };
+  },
 };
 
 /** /me - Action message */

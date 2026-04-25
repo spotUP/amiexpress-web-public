@@ -12,7 +12,7 @@ jest.mock('../../src/services/UserDatabaseManager', () => ({
   }
 }));
 
-import { handleChatDm } from '../../src/handlers/chat/dm.handler';
+import { handleChatDm, handleChatGroupDm } from '../../src/handlers/chat/dm.handler';
 
 async function waitForTestDb(): Promise<any> {
   let attempts = 0;
@@ -136,7 +136,6 @@ describe('handleChatDm', () => {
     // Only one recipient (the sender) -> unique size 2, not 3.
     const lookup = (u: string) => u === unameB ? { userId: uB, socketId: null } : null;
 
-    const { handleChatGroupDm } = await import('../../src/handlers/chat/dm.handler');
     await handleChatGroupDm({ io, socket: senderSocket, session, data: { participants: [unameB], message: 'hi' }, resolveRecipient: lookup });
 
     expect(senderEmits.some(e => e.ev === 'chat:dm-error')).toBe(true);
@@ -158,5 +157,88 @@ describe('handleChatDm', () => {
     await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: 'b' }, resolveRecipient: () => ({ userId: uB, socketId: null }) });
     const offline = senderEmits.find(e => e.ev === 'chat:dm' && e.d.direction === 'sent');
     expect(offline?.d.delivered).toBe(false);
+  });
+});
+
+describe('handleChatGroupDm', () => {
+  let rawDb: any;
+  const uA = `gdm-a-${Date.now()}`;
+  const uB = `gdm-b-${Date.now()}`;
+  const uC = `gdm-c-${Date.now()}`;
+  const unameA = `gdmuser_a_${Date.now()}`;
+  const unameB = `gdmuser_b_${Date.now()}`;
+  const unameC = `gdmuser_c_${Date.now()}`;
+
+  beforeAll(async () => {
+    rawDb = ((global as any).testDb).db;
+    for (const [uid, uname] of [[uA, unameA], [uB, unameB], [uC, unameC]]) {
+      rawDb.prepare(`
+        INSERT OR IGNORE INTO users (id, username, realname, passwordhash, seclevel, firstlogin,
+          timetotal, timelimit, timeused, calls, uploads, downloads,
+          bytesupload, bytesdownload, ratio, ratiotype, chatlimit, chatused,
+          callstoday, expert, autorejoin, baud)
+        VALUES (?, ?, 'GDM', 'h', 10, 0, 3600, 3600, 0, 0, 0, 0, 0, 0, 0, 0, 60, 0, 0, 0, 1, 0)
+      `).run(uid, uname);
+    }
+  }, 30000);
+
+  it('delivers message to all participants and persists to chat_dm_messages', async () => {
+    const senderEmits: any[] = [];
+    const ioToCalls: Array<{ room: string; ev: string; d: any }> = [];
+    const senderSocket: any = { id: 'gdm-sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = {
+      sockets: { sockets: new Map() },
+      to: (room: string) => ({ emit: (ev: string, d: any) => ioToCalls.push({ room, ev, d }) }),
+    };
+    const session: any = { user: { id: uA, username: unameA } };
+    const lookup = (u: string) => {
+      if (u === unameB) return { userId: uB, socketId: 'gdm-sock-b' };
+      if (u === unameC) return { userId: uC, socketId: 'gdm-sock-c' };
+      return null;
+    };
+
+    const before = rawDb.prepare('SELECT COUNT(*) as c FROM chat_dm_messages').get() as any;
+    await handleChatGroupDm({ io, socket: senderSocket, session, data: { participants: [unameB, unameC], message: 'hi team' }, resolveRecipient: lookup });
+    const after = rawDb.prepare('SELECT COUNT(*) as c FROM chat_dm_messages').get() as any;
+
+    expect(after.c).toBe(before.c + 1);
+
+    // Sender sees direction='sent' with isGroup
+    const sent = senderEmits.find(e => e.ev === 'chat:dm' && e.d.direction === 'sent');
+    expect(sent).toBeTruthy();
+    expect(sent.d.isGroup).toBe(true);
+
+    // Both recipients pinged via user:<id> rooms (post Task 3.3 fix)
+    const fanouts = ioToCalls.filter(c => c.ev === 'chat:dm' && c.d.direction === 'received');
+    expect(fanouts.length).toBe(2);
+    const rooms = fanouts.map(f => f.room).sort();
+    expect(rooms).toEqual([`user:${uB}`, `user:${uC}`].sort());
+  });
+
+  it('rejects when fewer than 3 unique participants (sender + 1 recipient is 1:1, not group)', async () => {
+    const emits: any[] = [];
+    const senderSocket: any = { id: 's', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+    const io: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: uA, username: unameA } };
+    const lookup = (u: string) => u === unameB ? { userId: uB, socketId: null } : null;
+
+    await handleChatGroupDm({ io, socket: senderSocket, session, data: { participants: [unameB], message: 'hi' }, resolveRecipient: lookup });
+
+    expect(emits.some(e => e.ev === 'chat:dm-error')).toBe(true);
+  });
+
+  it('rejects when any participant cannot be resolved', async () => {
+    const emits: any[] = [];
+    const senderSocket: any = { id: 's', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+    const io: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: uA, username: unameA } };
+    const lookup = (u: string) => {
+      if (u === unameB) return { userId: uB, socketId: null };
+      return null;
+    };
+
+    await handleChatGroupDm({ io, socket: senderSocket, session, data: { participants: [unameB, 'no-such-user'], message: 'hi' }, resolveRecipient: lookup });
+
+    expect(emits.some(e => e.ev === 'chat:dm-error')).toBe(true);
   });
 });

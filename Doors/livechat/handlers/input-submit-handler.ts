@@ -128,9 +128,13 @@ export function createSubmitHandler(
           showUserList();
         }
 
-        if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.target && r.data?.message) {
+        if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.targets && r.data?.message) {
           const processedMsg = replaceEmojis(r.data.message);
-          socket.emit('chat:dm', { to: r.data.target, message: processedMsg });
+          if (r.data.targets.length === 1) {
+            socket.emit('chat:dm', { to: r.data.targets[0], message: processedMsg });
+          } else {
+            socket.emit('chat:group-dm', { participants: r.data.targets, message: processedMsg });
+          }
           // local echo removed: backend echoes sent DM with direction: 'sent'
         }
 

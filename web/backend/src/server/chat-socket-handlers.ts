@@ -374,6 +374,22 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleChatDm({ io, socket, session, data, resolveRecipient: lookupRecipient });
   });
 
+  // ===== GROUP DIRECT MESSAGES =====
+  socket.on("chat:group-dm", async (data: { participants: string[]; message: string }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+    const ioServer = (socket as any).nsp?.server;
+    if (!ioServer) return;
+    const { handleChatGroupDm } = require("../handlers/chat/dm.handler");
+    const lookupRecipient = async (uname: string) => {
+      const user = await db.getUserByUsername(uname);
+      if (!user) return null;
+      const targetSocketId = getSocketIdByUserId(String(user.id));
+      return { userId: String(user.id), socketId: targetSocketId };
+    };
+    await handleChatGroupDm({ io: ioServer, socket, session, data, resolveRecipient: lookupRecipient });
+  });
+
   socket.on("chat:dm-history", async (data: { threadId: string; limit?: number }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
