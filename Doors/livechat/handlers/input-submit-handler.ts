@@ -115,7 +115,13 @@ export function createSubmitHandler(
         }
 
         if (cmdName === 'create' && r.data?.name) {
-          socket.emit('room:create', { roomName: r.data.name, topic: r.data.topic || '', isPublic: true });
+          socket.emit('room:create', {
+            roomName: r.data.name,
+            topic: r.data.topic || '',
+            isPublic: !r.data.isPrivate,
+            isInviteOnly: r.data.isInviteOnly || r.data.isPrivate,
+            motd: r.data.motd || null,
+          });
         }
 
         if (cmdName === 'who' || cmdName === 'users') {

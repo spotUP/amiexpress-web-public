@@ -3,14 +3,26 @@ import type { SlashCommand } from './types';
 /** /create - Create a new channel */
 export const createCmd: SlashCommand = {
   name: 'create',
-  description: 'Create a new channel',
-  usage: '/create #name [topic]',
-  handler: (ctx, args) => {
-    const name = args[0]?.replace('#', '');
-    const topic = args.slice(1).join(' ');
-    if (!name) return { handled: true, error: 'Usage: /create #name [topic]' };
-    return { handled: true, message: `Creating #${name}...`, data: { name, topic } };
-  }
+  description: 'Create a new channel. --private and --invite-only make it members-only.',
+  usage: '/create #name [topic] [--private] [--invite-only] [--motd "text"]',
+  handler: (_ctx, args) => {
+    if (!args[0]) return { handled: true, error: 'Usage: /create #name [topic] [--private] [--invite-only] [--motd "text"]' };
+    const flags: { isPrivate?: boolean; isInviteOnly?: boolean; motd?: string } = {};
+    const name = args[0].replace(/^#/, '');
+    const rest: string[] = [];
+    for (let i = 1; i < args.length; i++) {
+      const a = args[i];
+      if (a === '--private') flags.isPrivate = true;
+      else if (a === '--invite-only') flags.isInviteOnly = true;
+      else if (a === '--motd') {
+        flags.motd = args.slice(i + 1).join(' ');
+        break;
+      }
+      else rest.push(a);
+    }
+    const topic = rest.join(' ');
+    return { handled: true, message: `Creating #${name}...`, data: { name, topic, ...flags } };
+  },
 };
 
 /** /delete - Delete a channel */

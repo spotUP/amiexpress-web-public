@@ -140,6 +140,9 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
   isPublic?: boolean;
   password?: string;
   maxUsers?: number;
+  isInviteOnly?: boolean;
+  isModerated?: boolean;
+  motd?: string | null;
 }) {
   try {
 console.log('📦 Room create request:', session.user?.id, data.roomName);
@@ -183,10 +186,21 @@ console.log('📦 Room create request:', session.user?.id, data.roomName);
       isPublic,
       maxUsers,
       isPersistent: true,
-      password: data.password || null
+      password: data.password || null,
+      isInviteOnly: data.isInviteOnly === true,
+      isModerated: data.isModerated === true,
+      motd: data.motd || null,
     });
 
 console.log('✅ Room created:', roomId, roomName);
+
+    // Auto-promote creator to moderator for private/invite-only rooms so they can
+    // /invite and /motd in their own room without a separate /op step.
+    // Public-room creators rely on the existing flow (handleRoomJoin adds them as
+    // a regular member when they next /join).
+    if (data.isInviteOnly === true) {
+      await db.joinChatRoom(roomId, session.user?.id, session.user?.username, socket.id, true /*isModerator*/);
+    }
 
     // Send success message
     socket.emit('ansi-output', AnsiUtil.successLine('Room "' + roomName + '" created successfully!'));
