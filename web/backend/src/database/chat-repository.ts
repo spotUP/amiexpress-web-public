@@ -443,11 +443,12 @@ console.error('[ChatRepository] FTS index update failed:', e);
   }
 
   async setVoiced(roomId: string, userId: string, on: boolean): Promise<void> {
-    this.prepare(`UPDATE chat_room_members SET is_voiced = ? WHERE room_id = ? AND user_id = ?`).run(on ? 1 : 0, roomId, userId);
+    const info = this.prepare(`UPDATE chat_room_members SET is_voiced = ? WHERE room_id = ? AND user_id = ?`).run(on ? 1 : 0, roomId, userId);
+    if (info.changes !== 1) throw new Error(`Cannot set voiced: user ${userId} is not a member of room ${roomId}`);
   }
 
   async inviteUser(roomId: string, userId: string, invitedBy: string): Promise<void> {
-    this.prepare(`INSERT OR REPLACE INTO chat_room_invites (room_id, user_id, invited_by) VALUES (?, ?, ?)`).run(roomId, userId, invitedBy);
+    this.prepare(`INSERT INTO chat_room_invites (room_id, user_id, invited_by) VALUES (?, ?, ?) ON CONFLICT(room_id, user_id) DO NOTHING`).run(roomId, userId, invitedBy);
   }
 
   async hasInvite(roomId: string, userId: string): Promise<boolean> {

@@ -88,4 +88,53 @@ describe('ChatRepository invites', () => {
     await repo.setVoiced(roomId, invitee, false);
     expect(await repo.isUserVoiced(roomId, invitee)).toBe(false);
   });
+
+  it('inviteUser is idempotent and preserves the original inviter', async () => {
+    const otherInviter = `inv-other-${Date.now()}`;
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO users (id, username, realname, passwordhash, seclevel, firstlogin,
+        timetotal, timelimit, timeused, calls, uploads, downloads,
+        bytesupload, bytesdownload, ratio, ratiotype, chatlimit, chatused,
+        callstoday, expert, autorejoin, baud)
+      VALUES (?, ?, 'X', 'h', 10, 0, 3600, 3600, 0, 0, 0, 0, 0, 0, 0, 0, 60, 0, 0, 0, 1, 0)
+    `).run(otherInviter, `inv_other_${Date.now()}`);
+
+    await repo.inviteUser(roomId, invitee, owner);
+    const before = rawDb.prepare('SELECT invited_by FROM chat_room_invites WHERE room_id = ? AND user_id = ?').get(roomId, invitee) as any;
+    expect(before.invited_by).toBe(owner);
+
+    // Second moderator re-invites — must not launder
+    await repo.inviteUser(roomId, invitee, otherInviter);
+    const after = rawDb.prepare('SELECT invited_by FROM chat_room_invites WHERE room_id = ? AND user_id = ?').get(roomId, invitee) as any;
+    expect(after.invited_by).toBe(owner);
+  });
+
+  it('revokeInvite on non-existent invite is a no-op', async () => {
+    await expect(repo.revokeInvite(roomId, 'no-such-user')).resolves.toBeUndefined();
+  });
+
+  it('chat_room_invites CASCADE on room delete', async () => {
+    const tempRoomId = `inv-cascade-${Date.now()}`;
+    await repo.createChatRoom({
+      roomId: tempRoomId, roomName: `CascadeRoom_${Date.now()}`,
+      createdBy: owner, createdByUsername: 'O', isPublic: false, isInviteOnly: true,
+    });
+    await repo.inviteUser(tempRoomId, invitee, owner);
+    expect(await repo.hasInvite(tempRoomId, invitee)).toBe(true);
+
+    rawDb.prepare('DELETE FROM chat_rooms WHERE room_id = ?').run(tempRoomId);
+    expect(await repo.hasInvite(tempRoomId, invitee)).toBe(false);
+  });
+
+  it('setVoiced on non-member throws', async () => {
+    const ghost = `inv-ghost-${Date.now()}`;
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO users (id, username, realname, passwordhash, seclevel, firstlogin,
+        timetotal, timelimit, timeused, calls, uploads, downloads,
+        bytesupload, bytesdownload, ratio, ratiotype, chatlimit, chatused,
+        callstoday, expert, autorejoin, baud)
+      VALUES (?, ?, 'X', 'h', 10, 0, 3600, 3600, 0, 0, 0, 0, 0, 0, 0, 0, 60, 0, 0, 0, 1, 0)
+    `).run(ghost, `inv_ghost_${Date.now()}`);
+    await expect(repo.setVoiced(roomId, ghost, true)).rejects.toThrow(/not a member/);
+  });
 });
