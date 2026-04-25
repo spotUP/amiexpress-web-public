@@ -1670,9 +1670,16 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
 
     // Hybrid doors where the server module only exports RPC handlers (no execute()).
     // The client bundle runs the full game; the server just provides data callbacks.
+    // A hybrid door is "RPC-only" on the server side only when its server module
+    // exports just data handlers (rpcHandlers) and NOT a full SDK door or legacy
+    // runDoor.  We must exclude SDK doors here because CoreDoor instances ARE
+    // objects — the old broad check fired for every hybrid SDK door.
     const hybridRpcHandlers = doorModule.rpcHandlers ||
-                              (packageJson?.runtime === 'hybrid' && typeof doorModule.default === 'object' && doorModule.default);
-    const isHybridRPCOnly = !!(packageJson?.runtime === 'hybrid' && hybridSessionId && hybridRpcHandlers);
+                              (!isSDKDoor && !hasRunDoor &&
+                               packageJson?.runtime === 'hybrid' &&
+                               typeof doorModule.default === 'object' && doorModule.default);
+    const isHybridRPCOnly = !!(packageJson?.runtime === 'hybrid' && hybridSessionId &&
+                                !isSDKDoor && !hasRunDoor && hybridRpcHandlers);
 
     if (!isSDKDoor && !hasRunDoor && !isHybridRPCOnly) {
       // Neither pattern found - show error
