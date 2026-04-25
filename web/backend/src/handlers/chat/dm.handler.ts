@@ -64,8 +64,9 @@ export async function handleChatDm(ctx: DmContext): Promise<void> {
     };
 
     socket.emit('chat:dm', { ...payload, direction: 'sent' });
-    if (recipient.socketId) {
-      io.to(recipient.socketId).emit('chat:dm', { ...payload, direction: 'received' });
+    // Multi-tab fanout: deliver to every recipient socket via the user:<id> room.
+    if (recipient.userId) {
+      io.to('user:' + recipient.userId).emit('chat:dm', { ...payload, direction: 'received' });
     }
   } catch (error) {
     console.error('[dm.handler] handleChatDm error:', error);
@@ -127,8 +128,9 @@ export async function handleChatGroupDm(ctx: GroupDmContext): Promise<void> {
       delivered: resolved.some(r => r.socketId !== null),
     };
     socket.emit('chat:dm', { ...payload, direction: 'sent' });
+    // Multi-tab fanout: deliver to every recipient socket via user:<id> rooms.
     for (const r of resolved) {
-      if (r.socketId) io.to(r.socketId).emit('chat:dm', { ...payload, direction: 'received' });
+      if (r.userId) io.to('user:' + r.userId).emit('chat:dm', { ...payload, direction: 'received' });
     }
   } catch (error) {
     console.error('[dm.handler] handleChatGroupDm error:', error);

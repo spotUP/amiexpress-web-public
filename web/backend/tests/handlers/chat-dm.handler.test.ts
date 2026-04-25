@@ -49,9 +49,10 @@ describe('handleChatDm', () => {
 
     const targetSocket: any = { id: 'sock-b', emit: (ev: string, d: any) => targetEmits.push({ ev, d }) };
     const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    // Multi-tab fanout: handler now uses io.to('user:'+userId) instead of io.to(socketId).
     const io: any = {
       sockets: { sockets: new Map([['sock-a', senderSocket], ['sock-b', targetSocket]]) },
-      to: (id: string) => ({ emit: (ev: string, d: any) => { if (id === 'sock-b') targetSocket.emit(ev, d); } })
+      to: (room: string) => ({ emit: (ev: string, d: any) => { if (room === 'user:' + uB) targetSocket.emit(ev, d); } })
     };
     const session: any = { user: { id: uA, username: unameA } };
 
@@ -119,8 +120,12 @@ describe('handleChatDm', () => {
     expect(after.c).toBe(before.c + 1);
     // Sender still sees the sent message
     expect(senderEmits.some(e => e.ev === 'chat:dm' && e.d.direction === 'sent')).toBe(true);
-    // io.to(null) must not have been invoked
-    expect(Object.keys(toEmits).length).toBe(0);
+    // Multi-tab fanout: handler always emits to user:<id> regardless of socketId.
+    // In production, an empty user room is a silent no-op in socket.io;
+    // our mock captures the to() call but the recipient still sees nothing because
+    // the room is empty. The delivered=false flag still reflects the offline state.
+    const offlineSent = senderEmits.find(e => e.ev === 'chat:dm' && e.d.direction === 'sent');
+    expect(offlineSent?.d.delivered).toBe(false);
   });
 
   it('handleChatGroupDm rejects when fewer than 3 unique participants', async () => {

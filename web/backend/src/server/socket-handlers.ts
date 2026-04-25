@@ -986,6 +986,8 @@ console.log(`[DISCONNECT] Sysop kicked user, skipping grace period`);
       const hasOtherSockets = Array.from(socketToUser.entries()).some(([id, uid]) => uid === userId && id !== socket.id);
 
 console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
+      // Multi-tab fanout: leave user:<id> room symmetrically with the join in auth-socket-handlers.
+      try { socket.leave('user:' + userId); } catch (_) {}
       socketToUser.delete(socket.id);
       socketToNodeId.delete(socket.id);
 

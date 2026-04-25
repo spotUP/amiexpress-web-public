@@ -6,7 +6,6 @@
 import type { Socket, Server as IOServer } from 'socket.io';
 import type { BBSSession } from '../../index';
 import { db } from '../../database';
-import { getSocketIdByUserId } from '../../server/session-manager';
 
 export interface InviteContext {
   io: IOServer;
@@ -53,15 +52,14 @@ export async function handleRoomInvite(ctx: InviteContext): Promise<void> {
     await db.inviteUser(room.room_id, String(targetUser.id), String(session.user.id));
     socket.emit('room:invited', { roomId: room.room_id, username: data.targetUsername });
 
-    // Ping the invitee on their connected socket if any
-    const targetSocketId = getSocketIdByUserId(String(targetUser.id));
-    if (targetSocketId) {
-      io.to(targetSocketId).emit('room:invite-received', {
-        roomId: room.room_id,
-        roomName: room.room_name,
-        from: session.user.username,
-      });
-    }
+    // Multi-tab fanout: ping every invitee socket via the user:<id> room.
+    // socket.io silently drops if the user has no connected sockets — no need
+    // to gate on getSocketIdByUserId here.
+    io.to('user:' + String(targetUser.id)).emit('room:invite-received', {
+      roomId: room.room_id,
+      roomName: room.room_name,
+      from: session.user.username,
+    });
   } catch (error) {
     console.error('[room-invite.handler] handleRoomInvite error:', error);
     socket.emit('room:error', { error: 'Failed to process invite' });

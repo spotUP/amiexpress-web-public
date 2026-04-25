@@ -21,7 +21,9 @@ export async function handleSetRoomMotd(ctx: SetMotdContext): Promise<void> {
       return;
     }
     const isMod = await db.isUserModerator(session.currentRoomId, String(session.user.id));
-    if (!isMod) {
+    const room = await db.getChatRoom(session.currentRoomId);
+    const isOwner = room?.created_by === session.user.id;
+    if (!isMod && !isOwner) {
       socket.emit('room:error', { error: 'Only moderators can set the MOTD' });
       return;
     }

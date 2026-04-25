@@ -130,6 +130,10 @@ console.log('[Session Restore] Found existing session for user, rebinding to new
         socketToUser.set(socket.id, String(user.id));
         socketToNodeId.set(socket.id, existingSession.nodeId);
 
+        // Multi-tab fanout: every authenticated socket joins user:<id> room.
+        // Lets DM/invite handlers io.to('user:'+id).emit() reach all tabs.
+        try { socket.join('user:' + String(user.id)); } catch (_) {}
+
         // Update session with new socket ID
         existingSession.socketId = socket.id;
         setSession(socket.id, existingSession);
@@ -570,6 +574,10 @@ console.log(`[SESSION-MIGRATION] Migrating session from socket-based to user-bas
 
       // Map this socket to the user
       socketToUser.set(socket.id, user.id);
+
+      // Multi-tab fanout: every authenticated socket joins user:<id> room.
+      // Lets DM/invite handlers io.to('user:'+id).emit() reach all tabs.
+      try { socket.join('user:' + String(user.id)); } catch (_) {}
 
 console.log(`[SESSION-MIGRATION] Session now keyed by user ID: ${user.id}`);
 

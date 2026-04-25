@@ -108,4 +108,31 @@ describe('room:motd handler', () => {
     const row = rawDb.prepare('SELECT motd FROM chat_rooms WHERE room_id = ?').get(roomId) as any;
     expect(row.motd).toBe('persist-test');
   });
+
+  it('owner who is not a member-row moderator can still set MOTD', async () => {
+    // Create a fresh room where the owner is NOT in chat_room_members at all
+    const ownerId = `motd-owner-noac-${Date.now()}`;
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO users (id, username, realname, passwordhash, seclevel, firstlogin,
+        timetotal, timelimit, timeused, calls, uploads, downloads,
+        bytesupload, bytesdownload, ratio, ratiotype, chatlimit, chatused,
+        callstoday, expert, autorejoin, baud)
+      VALUES (?, ?, 'X', 'h', 10, 0, 3600, 3600, 0, 0, 0, 0, 0, 0, 0, 0, 60, 0, 0, 0, 1, 0)
+    `).run(ownerId, `motdowner_noac_${Date.now()}`);
+
+    const ownedRoomId = `motd-owned-${Date.now()}`;
+    rawDb.prepare(`INSERT INTO chat_rooms (room_id, room_name, created_by, created_by_username, is_public) VALUES (?, ?, ?, 'X', 1)`).run(ownedRoomId, `OwnedRoom_${Date.now()}`, ownerId);
+    // No chat_room_members row -> isUserModerator returns false; owner exemption must save it
+
+    const ioEmits: any[] = [];
+    const socket: any = { id: 'sock', emit: () => {} };
+    const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
+    const session: any = { user: { id: ownerId, username: 'OwnerNoAc' }, currentRoomId: ownedRoomId };
+
+    await handleSetRoomMotd({ io, socket, session, data: { motd: 'owner-set' } });
+
+    expect(ioEmits.some(e => e.ev === 'room:motd' && e.d.motd === 'owner-set')).toBe(true);
+
+    rawDb.prepare('DELETE FROM chat_rooms WHERE room_id = ?').run(ownedRoomId);
+  });
 });

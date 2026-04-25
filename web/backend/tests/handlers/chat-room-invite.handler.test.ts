@@ -103,4 +103,52 @@ describe('handleRoomInvite', () => {
     const row = rawDb.prepare('SELECT 1 FROM chat_room_invites WHERE room_id = ? AND user_id = ?').get(roomId, invitee);
     expect(row).toBeFalsy();
   });
+
+  it('emits room:invite-received to user:<id> room on success', async () => {
+    const ioToCalls: Array<{ room: string; ev: string; d: any }> = [];
+    const fakeIo: any = {
+      sockets: { sockets: new Map() },
+      to: (room: string) => ({
+        emit: (ev: string, d: any) => ioToCalls.push({ room, ev, d }),
+      }),
+    };
+    const socket: any = { id: 'sock-mod', emit: () => {} };
+    const session: any = { user: { id: owner, username: ownerName } };
+
+    await handleRoomInvite({ io: fakeIo, socket, session, data: { roomId, targetUsername: inviteeName } });
+
+    const fanout = ioToCalls.find(c => c.ev === 'room:invite-received');
+    expect(fanout).toBeDefined();
+    expect(fanout!.room).toBe('user:' + invitee);
+    expect(fanout!.d.roomName).toBeTruthy();
+    expect(fanout!.d.from).toBe(ownerName);
+  });
+
+  it('emits room:error if db.inviteUser throws', async () => {
+    // db is a Proxy — patch the Database class prototype so the proxy resolves to our stub.
+    const { Database } = await import('../../src/database');
+    const realInvite = (Database as any).prototype.inviteUser;
+    (Database as any).prototype.inviteUser = jest.fn(async () => { throw new Error('boom'); });
+    try {
+      const emits: any[] = [];
+      const socket: any = { id: 's', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+      const fakeIo: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+      const session: any = { user: { id: owner, username: ownerName } };
+      await handleRoomInvite({ io: fakeIo, socket, session, data: { roomId, targetUsername: inviteeName } });
+      expect(emits.some(e => e.ev === 'room:error' && /Failed/.test(e.d.error))).toBe(true);
+    } finally {
+      (Database as any).prototype.inviteUser = realInvite;
+    }
+  });
+
+  it('revoke when no invite exists is a no-op + still emits room:invite-revoked', async () => {
+    const emits: any[] = [];
+    const socket: any = { id: 'sock-mod', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+    const fakeIo: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: owner, username: ownerName } };
+
+    await handleRoomInvite({ io: fakeIo, socket, session, data: { roomId, targetUsername: inviteeName }, revoke: true });
+
+    expect(emits.some(e => e.ev === 'room:invite-revoked')).toBe(true);
+  });
 });
