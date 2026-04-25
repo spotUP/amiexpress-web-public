@@ -708,6 +708,19 @@ console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS co
 console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
 console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
+    // Drop SGR mouse-reporting sequences when no door is consuming them.
+    // Why: xterm.js retains DEC mode 1006 across door exits / chat-only-login
+    // transitions; once enabled, every mouse move sends `\x1b[<btn;col;row;M`
+    // back over the 'command' channel. If that data falls through to handleCommand
+    // while subState=ANSI_PROMPT, the multi-char path at command.handler.ts:1020
+    // iterates each printable byte (skips ESC, echoes `[<35;X;Y;M`), leaking
+    // visible mouse-tracking text at the user's cursor. Doors that need mouse
+    // get the data via earlier routing branches; once we reach this fall-through,
+    // there is no valid consumer for SGR mouse and dropping is correct.
+    if (/^\x1b\[<\d+;\d+;\d+[Mm]/.test(data)) {
+      return;
+    }
+
     // Preserve escape sequences (arrow keys, etc.) as single inputs for history/navigation
     let input = data;
     if (input.startsWith('\x1bO') && input.length >= 3) {
