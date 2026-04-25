@@ -167,6 +167,13 @@ export function createSubmitHandler(
           }
         }
 
+        if (cmdName === 'invite' && r.data?.target) {
+          socket.emit('room:invite', { targetUsername: r.data.target, roomName: r.data.room });
+        }
+        if (cmdName === 'uninvite' && r.data?.target) {
+          socket.emit('room:revoke-invite', { targetUsername: r.data.target, roomName: r.data.room });
+        }
+
         if (cmdName === 'clear' || cmdName === 'cls') {
           clearChatLog();
         }

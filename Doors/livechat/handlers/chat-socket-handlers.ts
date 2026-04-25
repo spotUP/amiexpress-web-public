@@ -71,6 +71,16 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     else asm('{yellow-fg}[MOTD] cleared{/yellow-fg}');
   });
 
+  sock.on('room:invite-received', (d: any) => {
+    asm(`{cyan-fg}[INVITE] ${d.from} invited you to ${d.roomName}. Use /join ${d.roomName}{/cyan-fg}`);
+  });
+  sock.on('room:invited', (d: any) => {
+    asm(`Invited ${d.username} to the room`);
+  });
+  sock.on('room:invite-revoked', (d: any) => {
+    asm(`Revoked invite for ${d.username}`);
+  });
+
   sock.on('chat:dm', (d: any) => {
     if (!d) return;
     // Backend now persists DMs and echoes the canonical payload back to

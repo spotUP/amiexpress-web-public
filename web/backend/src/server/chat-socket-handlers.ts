@@ -331,6 +331,22 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleSetRoomMotd({ io: ioServer, socket, session, data });
   });
 
+  socket.on("room:invite", async (data: { roomName?: string; roomId?: string; targetUsername: string }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+    const { handleRoomInvite } = require("../handlers/chat/room-invite.handler");
+    const ioServer = (socket as any).nsp?.server;
+    await handleRoomInvite({ io: ioServer, socket, session, data });
+  });
+
+  socket.on("room:revoke-invite", async (data: { roomName?: string; roomId?: string; targetUsername: string }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+    const { handleRoomInvite } = require("../handlers/chat/room-invite.handler");
+    const ioServer = (socket as any).nsp?.server;
+    await handleRoomInvite({ io: ioServer, socket, session, data, revoke: true });
+  });
+
   // ===== DIRECT MESSAGES =====
   socket.on("chat:dm", async (data: { to: string; message: string }) => {
     const session = getSessionBySocketId(socket.id);
