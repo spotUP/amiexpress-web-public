@@ -7,7 +7,7 @@ import { Socket } from "socket.io";
 import { BBSSession } from "../index";
 import { LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
-import { getSessionBySocketId } from "./session-manager";
+import { getSessionBySocketId, getSocketIdByUserId } from "./session-manager";
 import { sendChatMessage, acceptChat } from "../handlers/chat/chat.handler";
 
 /**
@@ -330,16 +330,14 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     const io = (socket as any).nsp?.server;
     if (!io) return;
     const { handleChatDm } = require("../handlers/chat/dm.handler");
+    // O(1) reverse lookup via session-manager's socketToUser map.
+    // Avoids iterating every socket in the io namespace on every DM.
     const lookupRecipient = async (uname: string) => {
-      const user = await (db as any).getUserByUsername(uname);
+      const user = await db.getUserByUsername(uname);
       if (!user) return null;
-      let targetSocketId: string | null = null;
-      const sockets: Map<string, any> = io.sockets?.sockets ?? new Map();
-      for (const sid of sockets.keys()) {
-        const sess = getSessionBySocketId(sid);
-        if (sess?.user?.id === user.id) { targetSocketId = sid; break; }
-      }
-      return { userId: String(user.id), socketId: targetSocketId };
+      const userId = String(user.id);
+      const socketId = getSocketIdByUserId(userId); // null if offline
+      return { userId, socketId };
     };
     await handleChatDm({ io, socket, session, data, resolveRecipient: lookupRecipient });
   });

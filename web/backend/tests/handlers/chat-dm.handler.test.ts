@@ -76,4 +76,82 @@ describe('handleChatDm', () => {
 
     expect(senderEmits.some(e => e.ev === 'chat:dm-error')).toBe(true);
   });
+
+  it('emits chat:dm-error when message is empty', async () => {
+    const senderEmits: any[] = [];
+    const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: uA, username: unameA } };
+    const lookup = () => ({ userId: uB, socketId: 'sock-b' });
+
+    await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: '   ' }, resolveRecipient: lookup });
+
+    expect(senderEmits.some(e => e.ev === 'chat:dm-error')).toBe(true);
+  });
+
+  it('emits chat:dm-error when session has no user', async () => {
+    const senderEmits: any[] = [];
+    const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: undefined };
+    const lookup = () => null;
+
+    await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: 'hi' }, resolveRecipient: lookup });
+
+    expect(senderEmits.some(e => e.ev === 'chat:dm-error')).toBe(true);
+  });
+
+  it('persists to chat_dm_messages even when recipient is offline (no socketId)', async () => {
+    const senderEmits: any[] = [];
+    const toEmits: Record<string, any[]> = {};
+    const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = {
+      sockets: { sockets: new Map() },
+      to: (id: string) => ({ emit: (ev: string, d: any) => { (toEmits[id] = toEmits[id] || []).push({ ev, d }); } })
+    };
+    const session: any = { user: { id: uA, username: unameA } };
+    const lookup = () => ({ userId: uB, socketId: null });  // recipient offline
+
+    const before = rawDb.prepare('SELECT COUNT(*) as c FROM chat_dm_messages').get() as any;
+    await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: 'offline-test' }, resolveRecipient: lookup });
+    const after = rawDb.prepare('SELECT COUNT(*) as c FROM chat_dm_messages').get() as any;
+
+    expect(after.c).toBe(before.c + 1);
+    // Sender still sees the sent message
+    expect(senderEmits.some(e => e.ev === 'chat:dm' && e.d.direction === 'sent')).toBe(true);
+    // io.to(null) must not have been invoked
+    expect(Object.keys(toEmits).length).toBe(0);
+  });
+
+  it('handleChatGroupDm rejects when fewer than 3 unique participants', async () => {
+    const senderEmits: any[] = [];
+    const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: uA, username: unameA } };
+    // Only one recipient (the sender) -> unique size 2, not 3.
+    const lookup = (u: string) => u === unameB ? { userId: uB, socketId: null } : null;
+
+    const { handleChatGroupDm } = await import('../../src/handlers/chat/dm.handler');
+    await handleChatGroupDm({ io, socket: senderSocket, session, data: { participants: [unameB], message: 'hi' }, resolveRecipient: lookup });
+
+    expect(senderEmits.some(e => e.ev === 'chat:dm-error')).toBe(true);
+  });
+
+  it('handleChatDm payload includes delivered=true when recipient has socket, false when offline', async () => {
+    const senderEmits: any[] = [];
+    const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = { sockets: { sockets: new Map() }, to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: uA, username: unameA } };
+
+    // Online recipient
+    await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: 'a' }, resolveRecipient: () => ({ userId: uB, socketId: 'sock-b' }) });
+    const online = senderEmits.find(e => e.ev === 'chat:dm' && e.d.direction === 'sent');
+    expect(online?.d.delivered).toBe(true);
+
+    senderEmits.length = 0;
+    // Offline recipient
+    await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: 'b' }, resolveRecipient: () => ({ userId: uB, socketId: null }) });
+    const offline = senderEmits.find(e => e.ev === 'chat:dm' && e.d.direction === 'sent');
+    expect(offline?.d.delivered).toBe(false);
+  });
 });

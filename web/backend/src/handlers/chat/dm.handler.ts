@@ -8,6 +8,7 @@
 import type { Socket, Server as IOServer } from 'socket.io';
 import type { BBSSession } from '../../index';
 import { db } from '../../database';
+import { getSystemTime } from '../../utils/date-time.util';
 
 /**
  * Sanitize message (strip ANSI escape sequences for security).
@@ -30,39 +31,45 @@ export interface DmContext {
 
 export async function handleChatDm(ctx: DmContext): Promise<void> {
   const { io, socket, session, data, resolveRecipient } = ctx;
-  if (!session.user?.id || !session.user?.username) {
-    socket.emit('chat:dm-error', { error: 'Not logged in' });
-    return;
-  }
-  if (!data?.to || !data?.message?.trim()) {
-    socket.emit('chat:dm-error', { error: 'Usage: /msg @user message' });
-    return;
-  }
-  const recipient = await resolveRecipient(data.to);
-  if (!recipient) {
-    socket.emit('chat:dm-error', { error: `User ${data.to} not found` });
-    return;
-  }
+  try {
+    if (!session.user?.id || !session.user?.username) {
+      socket.emit('chat:dm-error', { error: 'Not logged in' });
+      return;
+    }
+    if (!data?.to || !data?.message?.trim()) {
+      socket.emit('chat:dm-error', { error: 'Usage: /msg @user message' });
+      return;
+    }
+    const recipient = await resolveRecipient(data.to);
+    if (!recipient) {
+      socket.emit('chat:dm-error', { error: `User ${data.to} not found` });
+      return;
+    }
 
-  const message = sanitizeMessage(data.message.trim()).slice(0, 500);
-  const senderId = String(session.user.id);
-  const senderName = session.user.username;
-  const threadId = await (db as any).getOrCreateDmThread([senderId, recipient.userId]);
-  const msgId = await (db as any).saveDmMessage(threadId, senderId, senderName, message);
-  const payload = {
-    threadId,
-    messageId: msgId,
-    from: senderName,
-    fromId: senderId,
-    to: data.to,
-    message,
-    timestamp: Date.now(),
-    isGroup: false,
-  };
+    const message = sanitizeMessage(data.message.trim()).slice(0, 500);
+    const senderId = String(session.user.id);
+    const senderName = session.user.username;
+    const threadId = await db.getOrCreateDmThread([senderId, recipient.userId]);
+    const msgId = await db.saveDmMessage(threadId, senderId, senderName, message);
+    const payload = {
+      threadId,
+      messageId: msgId,
+      from: senderName,
+      fromId: senderId,
+      to: data.to,
+      message,
+      timestamp: getSystemTime().getTime(),
+      isGroup: false,
+      delivered: !!recipient.socketId,
+    };
 
-  socket.emit('chat:dm', { ...payload, direction: 'sent' });
-  if (recipient.socketId) {
-    io.to(recipient.socketId).emit('chat:dm', { ...payload, direction: 'received' });
+    socket.emit('chat:dm', { ...payload, direction: 'sent' });
+    if (recipient.socketId) {
+      io.to(recipient.socketId).emit('chat:dm', { ...payload, direction: 'received' });
+    }
+  } catch (error) {
+    console.error('[dm.handler] handleChatDm error:', error);
+    socket.emit('chat:dm-error', { error: 'Failed to send DM' });
   }
 }
 
@@ -76,50 +83,56 @@ export interface GroupDmContext {
 
 export async function handleChatGroupDm(ctx: GroupDmContext): Promise<void> {
   const { io, socket, session, data, resolveRecipient } = ctx;
-  if (!session.user?.id || !session.user?.username) {
-    socket.emit('chat:dm-error', { error: 'Not logged in' });
-    return;
-  }
-  if (!Array.isArray(data.participants) || data.participants.length < 2) {
-    socket.emit('chat:dm-error', { error: 'Group DM requires 2+ other participants' });
-    return;
-  }
-  if (!data.message?.trim()) {
-    socket.emit('chat:dm-error', { error: 'Message required' });
-    return;
-  }
+  try {
+    if (!session.user?.id || !session.user?.username) {
+      socket.emit('chat:dm-error', { error: 'Not logged in' });
+      return;
+    }
+    if (!Array.isArray(data.participants) || data.participants.length < 2) {
+      socket.emit('chat:dm-error', { error: 'Group DM requires 2+ other participants' });
+      return;
+    }
+    if (!data.message?.trim()) {
+      socket.emit('chat:dm-error', { error: 'Message required' });
+      return;
+    }
 
-  const senderId = String(session.user.id);
-  const senderName = session.user.username;
-  const resolved: RecipientInfo[] = [];
-  for (const uname of data.participants) {
-    const r = await resolveRecipient(uname);
-    if (!r) { socket.emit('chat:dm-error', { error: `User ${uname} not found` }); return; }
-    resolved.push(r);
-  }
-  const userIds = [senderId, ...resolved.map(r => r.userId)];
-  const unique = Array.from(new Set(userIds));
-  if (unique.length < 3) {
-    socket.emit('chat:dm-error', { error: 'Group DM needs 3+ unique participants (use /msg for 1:1)' });
-    return;
-  }
-  const message = sanitizeMessage(data.message.trim()).slice(0, 500);
-  const threadId = await (db as any).getOrCreateDmThread(unique);
-  const msgId = await (db as any).saveDmMessage(threadId, senderId, senderName, message);
+    const senderId = String(session.user.id);
+    const senderName = session.user.username;
+    const resolved: RecipientInfo[] = [];
+    for (const uname of data.participants) {
+      const r = await resolveRecipient(uname);
+      if (!r) { socket.emit('chat:dm-error', { error: `User ${uname} not found` }); return; }
+      resolved.push(r);
+    }
+    const userIds = [senderId, ...resolved.map(r => r.userId)];
+    const unique = Array.from(new Set(userIds));
+    if (unique.length < 3) {
+      socket.emit('chat:dm-error', { error: 'Group DM needs 3+ unique participants (use /msg for 1:1)' });
+      return;
+    }
+    const message = sanitizeMessage(data.message.trim()).slice(0, 500);
+    const threadId = await db.getOrCreateDmThread(unique);
+    const msgId = await db.saveDmMessage(threadId, senderId, senderName, message);
 
-  const payload = {
-    threadId,
-    messageId: msgId,
-    from: senderName,
-    fromId: senderId,
-    participants: data.participants,
-    message,
-    timestamp: Date.now(),
-    isGroup: true,
-  };
-  socket.emit('chat:dm', { ...payload, direction: 'sent' });
-  for (const r of resolved) {
-    if (r.socketId) io.to(r.socketId).emit('chat:dm', { ...payload, direction: 'received' });
+    const payload = {
+      threadId,
+      messageId: msgId,
+      from: senderName,
+      fromId: senderId,
+      participants: data.participants,
+      message,
+      timestamp: getSystemTime().getTime(),
+      isGroup: true,
+      delivered: resolved.some(r => r.socketId !== null),
+    };
+    socket.emit('chat:dm', { ...payload, direction: 'sent' });
+    for (const r of resolved) {
+      if (r.socketId) io.to(r.socketId).emit('chat:dm', { ...payload, direction: 'received' });
+    }
+  } catch (error) {
+    console.error('[dm.handler] handleChatGroupDm error:', error);
+    socket.emit('chat:dm-error', { error: 'Failed to send DM' });
   }
 }
 
@@ -128,12 +141,17 @@ export async function handleChatDmHistory(
   session: BBSSession,
   data: { threadId: string; limit?: number },
 ): Promise<void> {
-  if (!session.user?.id) return;
-  const participants = await (db as any).getDmParticipants(data.threadId);
-  if (!participants.some((p: any) => String(p.user_id) === String(session.user!.id))) {
-    socket.emit('chat:dm-error', { error: 'Not a participant of this thread' });
-    return;
+  try {
+    if (!session.user?.id) return;
+    const participants = await db.getDmParticipants(data.threadId);
+    if (!participants.some((p: any) => String(p.user_id) === String(session.user!.id))) {
+      socket.emit('chat:dm-error', { error: 'Not a participant of this thread' });
+      return;
+    }
+    const history = await db.getDmHistory(data.threadId, data.limit || 50);
+    socket.emit('chat:dm-history', { threadId: data.threadId, messages: history });
+  } catch (error) {
+    console.error('[dm.handler] handleChatDmHistory error:', error);
+    socket.emit('chat:dm-error', { error: 'Failed to send DM' });
   }
-  const history = await (db as any).getDmHistory(data.threadId, data.limit || 50);
-  socket.emit('chat:dm-history', { threadId: data.threadId, messages: history });
 }

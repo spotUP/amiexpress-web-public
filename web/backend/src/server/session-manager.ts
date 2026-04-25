@@ -224,6 +224,23 @@ export function getSocketIdByNodeId(nodeId: number): string | undefined {
 }
 
 /**
+ * Get socket ID by user ID
+ * Reverse lookup over the socketToUser map (which is keyed by socketId).
+ * Returns the first socket bound to that user, or null if the user is offline.
+ * Used by DM delivery to find the recipient's live socket without iterating
+ * the entire io.sockets namespace.
+ */
+export function getSocketIdByUserId(userId: string): string | null {
+  const target = String(userId);
+  for (const [socketId, mappedUserId] of socketToUser.entries()) {
+    if (mappedUserId === target) {
+      return socketId;
+    }
+  }
+  return null;
+}
+
+/**
  * Set session for socket ID
  * CRITICAL: Stores session by nodeId and creates socket.id → nodeId mapping
  */
