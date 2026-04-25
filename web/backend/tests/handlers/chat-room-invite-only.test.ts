@@ -53,6 +53,12 @@ describe('handleRoomJoin invite enforcement', () => {
     setGroupChatDependencies({ db: testDb, sessions: new Map(), io });
   }, 30000);
 
+  afterEach(() => {
+    try {
+      rawDb.prepare('DELETE FROM chat_room_members WHERE room_id = ?').run(roomId);
+    } catch (_) {}
+  });
+
   afterAll(() => {
     try {
       rawDb.prepare('DELETE FROM chat_room_invites WHERE room_id = ?').run(roomId);
@@ -73,8 +79,6 @@ describe('handleRoomJoin invite enforcement', () => {
     // Invite should be consumed after a successful join
     const invs = rawDb.prepare('SELECT 1 FROM chat_room_invites WHERE room_id = ? AND user_id = ?').get(roomId, invited);
     expect(invs).toBeFalsy();
-    // Cleanup so subsequent test fixtures stay isolated
-    rawDb.prepare('DELETE FROM chat_room_members WHERE room_id = ? AND user_id = ?').run(roomId, invited);
   });
 
   it('rejects outsider with an invite-related error', async () => {
@@ -101,7 +105,5 @@ describe('handleRoomJoin invite enforcement', () => {
     const session: any = { user: { id: owner, username: ownerName } };
     await handleRoomJoin(socket, session, { roomId });
     expect(emits.some(e => e.ev === 'room:joined')).toBe(true);
-    // Cleanup
-    rawDb.prepare('DELETE FROM chat_room_members WHERE room_id = ? AND user_id = ?').run(roomId, owner);
   });
 });

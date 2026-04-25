@@ -302,12 +302,13 @@ console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roo
     }
 
     // Check invite-only ACL
+    // Existing members bypass invite check (revocation post-join is a kick/ban concern).
     if (room.is_invite_only) {
       const isMember = await db.isUserInRoom(room.room_id, session.user?.id);
-      const hasInv = await db.hasInvite(room.room_id, session.user?.id);
+      const hasInvite = await db.hasInvite(room.room_id, session.user?.id);
       const isOwner = room.created_by === session.user?.id;
-      if (!isMember && !hasInv && !isOwner) {
-        return sendRoomError(socket, 'This room is invite-only');
+      if (!isMember && !hasInvite && !isOwner) {
+        return sendRoomError(socket, 'This room is invite-only. Ask a member to /INVITE you.');
       }
     }
 
@@ -328,7 +329,7 @@ console.log('ℹ️ User already in room, rejoining:', session.user?.username, r
 
     // Consume invite if this was an invite-only room (no-op when no invite row exists)
     if (room.is_invite_only) {
-      await db.revokeInvite(room.room_id, String(session.user?.id));
+      await db.revokeInvite(room.room_id, session.user?.id);
     }
 
     // Join Socket.io room
