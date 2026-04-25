@@ -1668,7 +1668,13 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
     // Check for legacy runDoor pattern (for backward compatibility with old door versions)
     const hasRunDoor = typeof doorModule.runDoor === 'function';
 
-    if (!isSDKDoor && !hasRunDoor) {
+    // Hybrid doors where the server module only exports RPC handlers (no execute()).
+    // The client bundle runs the full game; the server just provides data callbacks.
+    const hybridRpcHandlers = doorModule.rpcHandlers ||
+                              (packageJson?.runtime === 'hybrid' && typeof doorModule.default === 'object' && doorModule.default);
+    const isHybridRPCOnly = !!(packageJson?.runtime === 'hybrid' && hybridSessionId && hybridRpcHandlers);
+
+    if (!isSDKDoor && !hasRunDoor && !isHybridRPCOnly) {
       // Neither pattern found - show error
       const reason = !doorModule.default && !hasRunDoor ? 'no default export or runDoor function' :
                      !doorModule.default ? 'no default export' :
@@ -1774,13 +1780,23 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
       }
     }
 
-    await doorInstance.execute({
-      socket: wrappedSocket,
-      bbsSession: session,
-      user: session.user,
-      bbs: bbsApi,
-      params: door.parameters || []
-    });
+    if (isHybridRPCOnly) {
+      // Server is RPC-only — client bundle drives the session.
+      // RPC handlers are already registered above; nothing else to execute.
+console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client to finish`);
+      // Wait for the client door session to close (signalled via client-door-bridge)
+      const { getClientDoorBridge } = require('../doors/client-door-bridge');
+      const bridge = getClientDoorBridge();
+      await bridge.waitForSessionEnd(hybridSessionId).catch(() => {/* session already gone */});
+    } else {
+      await doorInstance.execute({
+        socket: wrappedSocket,
+        bbsSession: session,
+        user: session.user,
+        bbs: bbsApi,
+        params: door.parameters || []
+      });
+    }
 
 console.log(`[executeTypeScriptDoor] Door.execute() returned`);
 
