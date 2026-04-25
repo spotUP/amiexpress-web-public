@@ -6149,7 +6149,8 @@ debugLog(
         this.emulator.setRegister(CPURegister.D0, this.Write());
         return true;
       case -66:
-        this.Seek();
+        // dos.library Seek() returns D0 = previous position (or -1 on error).
+        this.emulator.setRegister(CPURegister.D0, this.Seek());
         return true;
       case -72:
         console.log(`[DosLibrary] handleCall -72: DeleteFile() called`);
@@ -6162,10 +6163,12 @@ debugLog(
 
       // Console I/O
       case -54:
-        this.Input();
+        // dos.library Input() returns D0 = stdin BPTR.
+        this.emulator.setRegister(CPURegister.D0, this.Input());
         return true;
       case -60:
-        this.Output();
+        // dos.library Output() returns D0 = stdout BPTR.
+        this.emulator.setRegister(CPURegister.D0, this.Output());
         return true;
 
       // File/directory locking
@@ -6200,7 +6203,10 @@ debugLog(
 
       // Error handling
       case -132:
-        this.IoErr();
+        // dos.library IoErr() returns D0 = last error code. Doors call this
+        // immediately after every Open/Lock/Read/Write to branch on failure;
+        // a stale D0 makes them think every operation succeeded (or failed).
+        this.emulator.setRegister(CPURegister.D0, this.IoErr());
         return true;
       case -462: // SetIoErr - CORRECTED from -348 (off by 114!)
         this.emulator.setRegister(CPURegister.D0, this.SetIoErr());
@@ -6240,7 +6246,11 @@ debugLog(
 
       // Date/time
       case -192: // _LVODateStamp
-        this.DateStamp();
+        // dos.library DateStamp() returns D0 = pointer to DateStamp (same as D1).
+        // Amiga E `startds := DateStamp(currDate)` reads the result from D0 and
+        // dereferences .days; without this propagation D0 keeps its prior value
+        // and callers see garbage. (Trips Conftop's getSystemDate(), among others.)
+        this.emulator.setRegister(CPURegister.D0, this.DateStamp());
         return true;
       case -198: // _LVODelay
         this.Delay();
