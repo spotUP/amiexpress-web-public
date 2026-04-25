@@ -108,7 +108,8 @@ export class XIMSystemCommandsHandler {
     // Doors display their banners via JH_WRITE/JH_SM after registration, not via JH_REGISTER.
     // Previous "compatibility" output was incorrect and caused doubled output.
 
-    // express.e: for JH_REGISTER, return userLineLen in msg->Command (not Data).
+    // express.e: for JH_REGISTER, return userLineLen in msg->Command. We also mirror
+    // it into msg->Data — see the WEB_: note below the writeCommand call for why.
     const rawLineLen =
       this.bbsSession?.user?.linesPerScreen ??
       this.bbsSession?.user?.lineLength ??
@@ -116,6 +117,17 @@ export class XIMSystemCommandsHandler {
     const lineLen =
       typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 29;
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
+    // WEB_: divergence from express.e:3380 (which only writes msg.command).
+    // AEKIT-based 68K doors (SRH/TList/TLP2 disasm at TLP2:0x24f4 reads msg->data
+    // at offset 0xdc) use a generic CheckMessage() that returns msg->Data for ALL
+    // replies — they never read msg->Command after JH_REGISTER, so they end up
+    // with userLineLen=0 and the door's own paginator triggers (Pause)... after
+    // every line. Reference: Documentation/7-Reference Sources/AEKIT101/Sources/
+    // MISC/AEDoor.c line 171 (`ret = XIM_Msg->Data;`) — official Amiga Express
+    // door kit. Mirror userLineLen into msg.data so both reader styles see the
+    // right threshold. Additive: express.e-style doors that read command are
+    // unaffected because we still write command.
+    this.messageParser.writeData(msg.msgAddr, lineLen);
     const parsedFinal = this.messageParser.parseMessage(msg.msgAddr);
     if (!parsedFinal.messageLength) {
 console.warn('[XIMSystem][RegisterReply] mn_Length is 0; optional fields disabled');

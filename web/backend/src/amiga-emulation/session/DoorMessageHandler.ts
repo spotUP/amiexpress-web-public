@@ -641,6 +641,16 @@ debugLog(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
           msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
           lineLen
         );
+        // WEB_: divergence from express.e:3380 (which only writes msg.command).
+        // AEKIT-based 68K doors (SRH/TList/TLP2) read msg->Data via CheckMessage()
+        // for ALL replies (AEKIT101/Sources/MISC/AEDoor.c:171), so they ignore
+        // msg.command and treat userLineLen as 0 — pausing after every line.
+        // Mirror userLineLen into msg.data so AEKIT-style doors get the right
+        // threshold; express.e-style doors still read msg.command unchanged.
+        this.emulator.writeMemory32(
+          msgAddr + DoorConstants.MESSAGE_DATA_OFFSET,
+          lineLen
+        );
         this.emulator.writeMemory32(
           msgAddr + DoorConstants.MESSAGE_LINE_OFFSET,
           0
