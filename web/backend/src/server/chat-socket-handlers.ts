@@ -323,6 +323,34 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     }
   );
 
+  // ===== DIRECT MESSAGES =====
+  socket.on("chat:dm", async (data: { to: string; message: string }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+    const io = (socket as any).nsp?.server;
+    if (!io) return;
+    const { handleChatDm } = require("../handlers/chat/dm.handler");
+    const lookupRecipient = async (uname: string) => {
+      const user = await (db as any).getUserByUsername(uname);
+      if (!user) return null;
+      let targetSocketId: string | null = null;
+      const sockets: Map<string, any> = io.sockets?.sockets ?? new Map();
+      for (const sid of sockets.keys()) {
+        const sess = getSessionBySocketId(sid);
+        if (sess?.user?.id === user.id) { targetSocketId = sid; break; }
+      }
+      return { userId: String(user.id), socketId: targetSocketId };
+    };
+    await handleChatDm({ io, socket, session, data, resolveRecipient: lookupRecipient });
+  });
+
+  socket.on("chat:dm-history", async (data: { threadId: string; limit?: number }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
+    const { handleChatDmHistory } = require("../handlers/chat/dm.handler");
+    await handleChatDmHistory(socket, session, data);
+  });
+
   // ===== LIVE TYPING PREVIEW (Keystroke relaying) =====
 
   socket.on(

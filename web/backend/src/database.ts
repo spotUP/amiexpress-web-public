@@ -2417,6 +2417,27 @@ console.log(`[Database] Password updated for user ${userId}`);
     return this.chatRepo!.updateChatRoom(...args);
   }
 
+  // DM thread methods - delegate to ChatRepository
+  async getOrCreateDmThread(...args: Parameters<ChatRepository['getOrCreateDmThread']>) {
+    return this.chatRepo!.getOrCreateDmThread(...args);
+  }
+
+  async saveDmMessage(...args: Parameters<ChatRepository['saveDmMessage']>) {
+    return this.chatRepo!.saveDmMessage(...args);
+  }
+
+  async getDmHistory(...args: Parameters<ChatRepository['getDmHistory']>) {
+    return this.chatRepo!.getDmHistory(...args);
+  }
+
+  async listUserDmThreads(...args: Parameters<ChatRepository['listUserDmThreads']>) {
+    return this.chatRepo!.listUserDmThreads(...args);
+  }
+
+  async getDmParticipants(...args: Parameters<ChatRepository['getDmParticipants']>) {
+    return this.chatRepo!.getDmParticipants(...args);
+  }
+
   // Bulletin management methods - delegate to BulletinRepository
   async createBulletin(...args: Parameters<BulletinRepository['createBulletin']>) {
     return this.bulletinRepo!.createBulletin(...args);
