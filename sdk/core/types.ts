@@ -821,6 +821,16 @@ export interface BBSApi {
 
   /** Check if file exists */
   fileExists(filename: string): Promise<boolean>;
+
+  /**
+   * Switch the session into raw keydown/keyup ("game") mode.
+   * Frontend stops sending normal command input until disableGameMode() runs.
+   * Optional doorType is recorded on the session for diagnostics; defaults to 'TS'.
+   */
+  enableGameMode?(doorType?: string): void;
+
+  /** Restore normal input handling and clear any held-key state. */
+  disableGameMode?(): void;
 }
 
 /**

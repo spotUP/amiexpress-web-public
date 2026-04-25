@@ -50,43 +50,11 @@ import { getSystemTime } from '../utils/date-time.util';
 
 const DISCONNECT_GRACE_MS = 15000;
 
-/**
- * Enable game mode for a session
- *
- * IMPORTANT: This should ONLY be called for doors that need raw keydown/keyup events.
- * Traditional 68K doors (XIM/AMI) use normal character input via door:input and should NOT have game mode enabled.
- * Only TypeScript game doors that explicitly call bbs.enableGameMode() should use this.
- *
- * For SDK doors: Enables game mode flag and tells frontend to send raw keydown/keyup events
- */
-export function enableGameMode(socket: Socket, session: BBSSession, doorType: string): void {
-  session.gameModeEnabled = true;
-  session.currentDoorType = doorType;
-
-console.log(`[GameMode] Enabled for door (type=${doorType})`);
-
-  // Tell frontend to enable game mode (sends raw keydown/keyup events)
-  socket.emit('game-mode', true);
-}
-
-/**
- * Disable game mode for a session (auto-called when door exits)
- */
-export function disableGameMode(socket: Socket, session: BBSSession): void {
-  // Stop and clean up KeyRepeatManager if exists
-  if (session.keyRepeatManager) {
-    session.keyRepeatManager.stop();
-    session.keyRepeatManager = null;
-  }
-
-  session.gameModeEnabled = false;
-  session.currentDoorType = undefined;
-  session.keyState = {};
-
-  // Tell frontend to disable game mode
-  socket.emit('game-mode', false);
-console.log('[GameMode] Disabled');
-}
+// Game-mode helpers live in services/game-mode.service.ts so lighter consumers
+// (BBSApi, tests) can pull them in without the full socket-dispatch graph.
+// Re-exported here for backwards compatibility with handlers that already
+// import from socket-handlers.
+export { enableGameMode, disableGameMode } from '../services/game-mode.service';
 
 /**
  * Convert special key names to their corresponding characters or escape sequences

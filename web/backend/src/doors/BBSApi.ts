@@ -22,6 +22,10 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { db } from '../database';
 import { getSystemTime } from '../utils/date-time.util';
+import {
+  enableGameMode as enableGameModeForSession,
+  disableGameMode as disableGameModeForSession,
+} from '../services/game-mode.service';
 
 export interface BBSUser {
   id: string;
@@ -373,21 +377,17 @@ export class BBSApi {
    * - Use isKeyPressed() to check key states
    * - Use onKeyDown/onKeyUp for event callbacks
    */
-  enableGameMode(): void {
-    this.socket.emit('game-mode', true);
-console.log('[BBSApi] Game mode enabled');
+  enableGameMode(doorType: string = 'TS'): void {
+    // Delegate so session.gameModeEnabled / currentDoorType track the emit.
+    enableGameModeForSession(this.socket, this.session, doorType);
   }
 
   /**
    * Disable game mode and return to normal input
    */
   disableGameMode(): void {
-    this.socket.emit('game-mode', false);
-    // Clear key state
-    if (this.session.keyState) {
-      this.session.keyState = {};
-    }
-console.log('[BBSApi] Game mode disabled');
+    // Delegate so keyRepeatManager teardown + keyState reset happen too.
+    disableGameModeForSession(this.socket, this.session);
   }
 
   /**

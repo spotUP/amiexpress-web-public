@@ -1797,7 +1797,7 @@ console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client
       // because gameMode.current remains false for hybrid doors that never call execute().
       // After endSession cleans up inDoorManager the 'q' command would be processed by the
       // BBS, causing the door to "restart".
-      socket.emit('game-mode', true);
+      enableGameMode(socket, session, 'TS');
       // Wait for the client door session to close (signalled via client-door-bridge)
       const { getClientDoorBridge } = require('../doors/client-door-bridge');
       const bridge = getClientDoorBridge();
