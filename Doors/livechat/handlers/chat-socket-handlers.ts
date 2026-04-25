@@ -82,7 +82,8 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('room:mode', (d: any) => {
-    asm(`{yellow-fg}[${d.by}] set mode ${d.applied}{/yellow-fg}`);
+    if (!d || !d.applied) return;
+    asm(`{yellow-fg}[${d.by || '?'}] set mode ${d.applied}{/yellow-fg}`);
   });
 
   sock.on('chat:dm', (d: any) => {
