@@ -450,9 +450,13 @@ console.error('[ChatRepository] FTS index update failed:', e);
   }
 
   async saveDmMessage(threadId: string, senderId: string, senderUsername: string, message: string): Promise<number> {
-    const res = this.prepare('INSERT INTO chat_dm_messages (thread_id, sender_id, sender_username, message) VALUES (?, ?, ?, ?)').run(threadId, senderId, senderUsername, message);
-    this.prepare(`UPDATE chat_dm_threads SET last_activity_at = strftime('%s', 'now') WHERE thread_id = ?`).run(threadId);
-    return res.lastInsertRowid as number;
+    const insert = this.prepare('INSERT INTO chat_dm_messages (thread_id, sender_id, sender_username, message) VALUES (?, ?, ?, ?)');
+    const bump = this.prepare(`UPDATE chat_dm_threads SET last_activity_at = strftime('%s', 'now') WHERE thread_id = ?`);
+    return this.transaction(() => {
+      const res = insert.run(threadId, senderId, senderUsername, message);
+      bump.run(threadId);
+      return res.lastInsertRowid as number;
+    });
   }
 
   async getDmHistory(threadId: string, limit = 50): Promise<any[]> {
