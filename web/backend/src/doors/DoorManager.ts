@@ -42,6 +42,7 @@ import {
   renderInfoEditor,
   handleInfoEditorInput
 } from './DoorManagerInfoEditor';
+import { registerDoor } from '../services/door-install.service';
 
 interface DoorInfo {
   id: string;
@@ -769,20 +770,26 @@ console.error('Error extracting door info:', error);
       };
     }
 
-    // Reinstall to refresh Commands/BBSCmd and local configs
+    // Refresh Commands/BBSCmd/.info (in-process; previously spawned a dev-only
+    // ts-node script that wasn't shipped to Docker, so this whole step was
+    // failing on the live site for any sysop "rebuild door" attempt).
     try {
-      await new Promise<void>((resolve) => {
-        this.socket.emit('ansi-output', '\x1b[36m* Refreshing door registration...\x1b[0m\r\n');
-        const tsNodeProject = path.join(this.projectRoot, 'dev/scripts/tsconfig.json');
-        const installDoorScript = path.join(this.projectRoot, 'dev/scripts/install-sdk-doors.ts');
-        const proc = spawn('npx', ['ts-node', '-P', tsNodeProject, installDoorScript, '--door', doorName, '--quiet'], {
-          cwd: this.projectRoot,
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
-        proc.stdout?.on('data', data => appendBuildLog(data));
-        proc.stderr?.on('data', data => appendBuildLog(data));
-        proc.on('exit', () => resolve());
-      });
+      this.socket.emit('ansi-output', '\x1b[36m* Refreshing door registration...\x1b[0m\r\n');
+      const bbsCommandsDir = path.join(config.get('dataDir'), 'Commands', 'BBSCmd');
+      const result = registerDoor({ doorPath, bbsCommandsDir });
+      const summary = result.message
+        ? `[register] ${result.status}: ${result.message}\n`
+        : `[register] ${result.status}\n`;
+      appendBuildLog(summary);
+
+      // Reload door registry cache so renamed/new doors appear immediately
+      // (precedent: BBSApi.deleteDoor at BBSApi.ts:1346).
+      try {
+        const { initializeDoors } = require('../handlers/door.handler');
+        await initializeDoors();
+      } catch (e) {
+        appendBuildLog(`[register] door registry reload failed: ${(e as Error).message}\n`);
+      }
 
       // Refresh door list to pick up size/installed flag
       await this.scanDoors();
