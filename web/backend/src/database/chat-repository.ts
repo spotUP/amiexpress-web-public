@@ -219,12 +219,13 @@ export class ChatRepository extends BaseRepository<any> {
     const stmt = this.prepare(`
       INSERT INTO chat_rooms (
         room_id, room_name, topic, created_by, created_by_username,
-        is_public, max_users, is_persistent, password
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_public, max_users, is_persistent, password, motd
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       room.roomId, room.roomName, room.topic || null, room.createdBy, room.createdByUsername,
-      room.isPublic !== false ? 1 : 0, room.maxUsers || 50, room.isPersistent !== false ? 1 : 0, room.password || null
+      room.isPublic !== false ? 1 : 0, room.maxUsers || 50, room.isPersistent !== false ? 1 : 0,
+      room.password || null, room.motd || null,
     );
   }
 
@@ -412,6 +413,10 @@ console.error('[ChatRepository] FTS index update failed:', e);
       fields.push('password = ?');
       values.push(updates.password);
     }
+    if (updates.motd !== undefined) {
+      fields.push('motd = ?');
+      values.push(updates.motd || null);
+    }
 
     if (fields.length === 0) return;
 
@@ -421,6 +426,10 @@ console.error('[ChatRepository] FTS index update failed:', e);
     const sql = `UPDATE chat_rooms SET ${fields.join(', ')} WHERE room_id = ?`;
     const stmt = this.prepare(sql);
     stmt.run(...values);
+  }
+
+  async setMotd(roomId: string, motd: string | null): Promise<void> {
+    this.prepare(`UPDATE chat_rooms SET motd = ?, updated_at = strftime('%s', 'now') WHERE room_id = ?`).run(motd, roomId);
   }
 
   // DM thread methods

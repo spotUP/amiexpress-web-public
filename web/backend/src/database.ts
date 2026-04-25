@@ -1005,10 +1005,16 @@ console.error('Error running migrations:', error);
           max_users INTEGER DEFAULT 50,
           is_persistent INTEGER DEFAULT 1,
           password TEXT,
+          motd TEXT,
           created_at INTEGER DEFAULT (strftime('%s', 'now')),
           updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
+
+      // Add motd column if it doesn't exist (migration for existing databases)
+      try {
+        this.db.exec(`ALTER TABLE chat_rooms ADD COLUMN motd TEXT`);
+      } catch (e) { /* Column already exists */ }
 
       // Chat room members table
       this.db.exec(`
@@ -2415,6 +2421,10 @@ console.log(`[Database] Password updated for user ${userId}`);
 
   async updateChatRoom(...args: Parameters<ChatRepository['updateChatRoom']>) {
     return this.chatRepo!.updateChatRoom(...args);
+  }
+
+  async setMotd(roomId: string, motd: string | null): Promise<void> {
+    return this.chatRepo!.setMotd(roomId, motd);
   }
 
   // DM thread methods - delegate to ChatRepository
