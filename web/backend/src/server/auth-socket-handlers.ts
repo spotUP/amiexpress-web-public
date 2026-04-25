@@ -763,6 +763,7 @@ console.log('[LOGIN] Quick logon - skipping LOGON screen per express.e:29853');
       // once. Account untouched on decline; user can reconnect or email
       // the sysop for erasure. See thoughts/shared/plans/
       // 2026-04-24-gdpr-hobby-baseline.md Phase 2.
+      console.log('[gdpr-gate] user=%s consentAt=%s source=%s', session.user?.username, (session.user as any)?.gdprConsentAt ?? '(none)', (session.user as any)?.gdprConsentSource ?? '(none)');
       if (!(session.user as any)?.gdprConsentAt) {
         const { promptGdprBackfill } = require('../handlers/user/gdpr.handler');
         await promptGdprBackfill(socket, session);

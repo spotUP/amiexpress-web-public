@@ -1331,6 +1331,16 @@ console.error('[SystemStats] Error tracking login:', error);
             fs.appendFileSync('debug-display-flow.log', `[${new Date().toISOString()}] Login successful for ${user.username}. dataDir=${dataDir}\n`);
           } catch (e) {}
 
+          // WEB_: GDPR Phase 2 — same gate as auth-socket-handlers.ts for telnet/SSH.
+          // Pre-GDPR users with no consent stamp must accept before any LOGON/bulletin
+          // flow. Mirrors auth-socket-handlers.ts:766-770.
+          console.log('[gdpr-gate] user=%s consentAt=%s source=%s', session.user?.username, (session.user as any)?.gdprConsentAt ?? '(none)', (session.user as any)?.gdprConsentSource ?? '(none)');
+          if (!(session.user as any)?.gdprConsentAt) {
+            const { promptGdprBackfill } = require('./user/gdpr.handler');
+            await promptGdprBackfill(socket, session);
+            return;
+          }
+
           const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
 
           if (logonDisplayed) {
