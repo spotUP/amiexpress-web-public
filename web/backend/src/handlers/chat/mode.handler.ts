@@ -64,42 +64,50 @@ export async function handleRoomMode(ctx: ModeContext): Promise<void> {
 
     const tokens = parseModeString(data.modeString, data.params);
     const applied: string[] = [];
+    const appliedTokens: ModeToken[] = [];
 
     for (const t of tokens) {
       const on = t.sign === '+';
-      switch (t.flag) {
-        case 'i':
-          await db.setInviteOnly(roomId, on);
-          applied.push(`${t.sign}i`);
-          break;
-        case 'm':
-          await db.setModerated(roomId, on);
-          applied.push(`${t.sign}m`);
-          break;
-        case 'o':
-        case 'v':
-        case 'b': {
-          if (!t.param) {
-            socket.emit('room:error', { error: `Mode ${t.sign}${t.flag} requires a username` });
-            continue;
+      try {
+        switch (t.flag) {
+          case 'i':
+            await db.setInviteOnly(roomId, on);
+            applied.push(`${t.sign}i`);
+            appliedTokens.push(t);
+            break;
+          case 'm':
+            await db.setModerated(roomId, on);
+            applied.push(`${t.sign}m`);
+            appliedTokens.push(t);
+            break;
+          case 'o':
+          case 'v':
+          case 'b': {
+            if (!t.param) {
+              socket.emit('room:error', { error: `Mode ${t.sign}${t.flag} requires a username` });
+              break;
+            }
+            const u = await db.getUserByUsername(t.param);
+            if (!u) {
+              socket.emit('room:error', { error: `User ${t.param} not found` });
+              break;
+            }
+            if (t.flag === 'o') {
+              await db.updateRoomMember(roomId, String(u.id), { isModerator: on });
+            } else if (t.flag === 'v') {
+              await db.setVoiced(roomId, String(u.id), on);
+            } else if (t.flag === 'b') {
+              await db.updateRoomMember(roomId, String(u.id), { isMuted: on });
+            }
+            applied.push(`${t.sign}${t.flag} ${t.param}`);
+            appliedTokens.push(t);
+            break;
           }
-          const u = await db.getUserByUsername(t.param);
-          if (!u) {
-            socket.emit('room:error', { error: `User ${t.param} not found` });
-            continue;
-          }
-          if (t.flag === 'o') {
-            await db.updateRoomMember(roomId, String(u.id), { isModerator: on });
-          } else if (t.flag === 'v') {
-            await db.setVoiced(roomId, String(u.id), on);
-          } else if (t.flag === 'b') {
-            await db.updateRoomMember(roomId, String(u.id), { isMuted: on });
-          }
-          applied.push(`${t.sign}${t.flag} ${t.param}`);
-          break;
+          default:
+            socket.emit('room:error', { error: `Unknown mode flag: ${t.flag}` });
         }
-        default:
-          socket.emit('room:error', { error: `Unknown mode flag: ${t.flag}` });
+      } catch (tokenError) {
+        socket.emit('room:error', { error: `Mode ${t.sign}${t.flag}${t.param ? ' ' + t.param : ''}: ${tokenError instanceof Error ? tokenError.message : 'failed'}` });
       }
     }
 
@@ -107,7 +115,9 @@ export async function handleRoomMode(ctx: ModeContext): Promise<void> {
       io.to('room:' + roomId).emit('room:mode', {
         roomId,
         by: session.user.username,
+        byId: String(session.user.id),
         applied: applied.join(' '),
+        tokens: appliedTokens,
       });
     }
   } catch (error) {

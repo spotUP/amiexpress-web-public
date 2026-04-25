@@ -142,6 +142,71 @@ describe('handleRoomMode', () => {
       await db.updateRoomMember(roomId, owner, { isModerator: true });
     }
   });
+
+  it('+o without username param emits room:error', async () => {
+    const emits: any[] = [];
+    const socket: any = { id: 'sock', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+    const io: any = { to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: owner, username: ownerName }, currentRoomId: roomId };
+    await handleRoomMode({ io, socket, session, data: { modeString: '+o', params: [] } });
+    expect(emits.some(e => e.ev === 'room:error' && /requires a username/.test(JSON.stringify(e.d)))).toBe(true);
+  });
+
+  it('unknown flag +x emits room:error', async () => {
+    const emits: any[] = [];
+    const socket: any = { id: 'sock', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+    const io: any = { to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: owner, username: ownerName }, currentRoomId: roomId };
+    await handleRoomMode({ io, socket, session, data: { modeString: '+x', params: [] } });
+    expect(emits.some(e => e.ev === 'room:error' && /Unknown mode flag/.test(JSON.stringify(e.d)))).toBe(true);
+  });
+
+  it('+v on non-member emits a token-level error but does not abort the batch', async () => {
+    const ghostUname = `mode_ghost_${Date.now()}`;
+    const ghostId = `mode-ghost-${Date.now()}`;
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO users (id, username, realname, passwordhash, seclevel, firstlogin,
+        timetotal, timelimit, timeused, calls, uploads, downloads,
+        bytesupload, bytesdownload, ratio, ratiotype, chatlimit, chatused,
+        callstoday, expert, autorejoin, baud)
+      VALUES (?, ?, 'X', 'h', 10, 0, 3600, 3600, 0, 0, 0, 0, 0, 0, 0, 0, 60, 0, 0, 0, 1, 0)
+    `).run(ghostId, ghostUname);
+
+    const emits: any[] = [];
+    const ioEmits: any[] = [];
+    const socket: any = { id: 'sock', emit: (ev: string, d: any) => emits.push({ ev, d }) };
+    const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
+    const session: any = { user: { id: owner, username: ownerName }, currentRoomId: roomId };
+
+    // First reset i flag, then +iv ghost (parametric +v consumes ghostUname)
+    const { db } = require('../../src/database');
+    await db.setInviteOnly(roomId, false);
+
+    await handleRoomMode({ io, socket, session, data: { modeString: '+iv', params: [ghostUname] } });
+
+    // The +v token should fail (ghost is not a member) and emit a per-token room:error,
+    // but the +i token still applies and the broadcast still goes out.
+    expect(emits.some(e => e.ev === 'room:error')).toBe(true);
+    expect(ioEmits.some(e => e.ev === 'room:mode' && /\+i/.test(e.d.applied))).toBe(true);
+
+    const room = await db.getChatRoom(roomId);
+    expect(Boolean(room.is_invite_only)).toBe(true);
+    await db.setInviteOnly(roomId, false);
+  });
+
+  it('room:mode broadcast includes structured tokens array', async () => {
+    const ioEmits: any[] = [];
+    const socket: any = { id: 'sock', emit: () => {} };
+    const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
+    const session: any = { user: { id: owner, username: ownerName }, currentRoomId: roomId };
+    await handleRoomMode({ io, socket, session, data: { modeString: '+i', params: [] } });
+    const broadcast = ioEmits.find(e => e.ev === 'room:mode');
+    expect(broadcast).toBeTruthy();
+    expect(broadcast.d.tokens).toEqual([{ sign: '+', flag: 'i', param: undefined }]);
+    expect(broadcast.d.byId).toBe(owner);
+    const { db } = require('../../src/database');
+    await db.setInviteOnly(roomId, false);
+  });
 });
 
 describe('handleRoomMessage moderated mode (+m)', () => {

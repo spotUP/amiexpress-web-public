@@ -137,4 +137,17 @@ describe('ChatRepository invites', () => {
     `).run(ghost, `inv_ghost_${Date.now()}`);
     await expect(repo.setVoiced(roomId, ghost, true)).rejects.toThrow(/not a member/);
   });
+
+  it('updateRoomMember throws on non-member', async () => {
+    const ghost = `inv-um-ghost-${Date.now()}`;
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO users (id, username, realname, passwordhash, seclevel, firstlogin,
+        timetotal, timelimit, timeused, calls, uploads, downloads,
+        bytesupload, bytesdownload, ratio, ratiotype, chatlimit, chatused,
+        callstoday, expert, autorejoin, baud)
+      VALUES (?, ?, 'X', 'h', 10, 0, 3600, 3600, 0, 0, 0, 0, 0, 0, 0, 0, 60, 0, 0, 0, 1, 0)
+    `).run(ghost, `inv_um_ghost_${Date.now()}`);
+    const { db } = require('../../src/database');
+    await expect(db.updateRoomMember(roomId, ghost, { isModerator: true })).rejects.toThrow(/not in room/);
+  });
 });

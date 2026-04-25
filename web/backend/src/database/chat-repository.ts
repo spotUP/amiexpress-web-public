@@ -359,7 +359,8 @@ console.error('[ChatRepository] FTS index update failed:', e);
     values.push(roomId, userId);
     const sql = `UPDATE chat_room_members SET ${sets.join(', ')} WHERE room_id = ? AND user_id = ?`;
     const stmt = this.prepare(sql);
-    stmt.run(...values);
+    const info = stmt.run(...values);
+    if (info.changes !== 1) throw new Error(`Cannot update member: user ${userId} is not in room ${roomId}`);
   }
 
   async getUserRooms(userId: string): Promise<any[]> {
