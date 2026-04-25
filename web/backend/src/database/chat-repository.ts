@@ -219,13 +219,15 @@ export class ChatRepository extends BaseRepository<any> {
     const stmt = this.prepare(`
       INSERT INTO chat_rooms (
         room_id, room_name, topic, created_by, created_by_username,
-        is_public, max_users, is_persistent, password, motd
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_public, max_users, is_persistent, password, motd,
+        is_invite_only, is_moderated
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       room.roomId, room.roomName, room.topic || null, room.createdBy, room.createdByUsername,
       room.isPublic !== false ? 1 : 0, room.maxUsers || 50, room.isPersistent !== false ? 1 : 0,
       room.password || null, room.motd ?? null,
+      room.isInviteOnly ? 1 : 0, room.isModerated ? 1 : 0,
     );
   }
 
@@ -430,6 +432,36 @@ console.error('[ChatRepository] FTS index update failed:', e);
 
   async setMotd(roomId: string, motd: string | null): Promise<void> {
     this.prepare(`UPDATE chat_rooms SET motd = ?, updated_at = strftime('%s', 'now') WHERE room_id = ?`).run(motd, roomId);
+  }
+
+  async setInviteOnly(roomId: string, on: boolean): Promise<void> {
+    this.prepare(`UPDATE chat_rooms SET is_invite_only = ?, updated_at = strftime('%s','now') WHERE room_id = ?`).run(on ? 1 : 0, roomId);
+  }
+
+  async setModerated(roomId: string, on: boolean): Promise<void> {
+    this.prepare(`UPDATE chat_rooms SET is_moderated = ?, updated_at = strftime('%s','now') WHERE room_id = ?`).run(on ? 1 : 0, roomId);
+  }
+
+  async setVoiced(roomId: string, userId: string, on: boolean): Promise<void> {
+    this.prepare(`UPDATE chat_room_members SET is_voiced = ? WHERE room_id = ? AND user_id = ?`).run(on ? 1 : 0, roomId, userId);
+  }
+
+  async inviteUser(roomId: string, userId: string, invitedBy: string): Promise<void> {
+    this.prepare(`INSERT OR REPLACE INTO chat_room_invites (room_id, user_id, invited_by) VALUES (?, ?, ?)`).run(roomId, userId, invitedBy);
+  }
+
+  async hasInvite(roomId: string, userId: string): Promise<boolean> {
+    const row = this.prepare('SELECT 1 FROM chat_room_invites WHERE room_id = ? AND user_id = ?').get(roomId, userId) as any;
+    return !!row;
+  }
+
+  async revokeInvite(roomId: string, userId: string): Promise<void> {
+    this.prepare('DELETE FROM chat_room_invites WHERE room_id = ? AND user_id = ?').run(roomId, userId);
+  }
+
+  async isUserVoiced(roomId: string, userId: string): Promise<boolean> {
+    const row = this.prepare('SELECT is_voiced FROM chat_room_members WHERE room_id = ? AND user_id = ?').get(roomId, userId) as any;
+    return row ? Boolean(row.is_voiced) : false;
   }
 
   // DM thread methods

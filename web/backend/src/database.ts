@@ -1006,6 +1006,8 @@ console.error('Error running migrations:', error);
           is_persistent INTEGER DEFAULT 1,
           password TEXT,
           motd TEXT,
+          is_invite_only INTEGER DEFAULT 0,
+          is_moderated INTEGER DEFAULT 0,
           created_at INTEGER DEFAULT (strftime('%s', 'now')),
           updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
@@ -1015,6 +1017,9 @@ console.error('Error running migrations:', error);
       try {
         this.db.exec(`ALTER TABLE chat_rooms ADD COLUMN motd TEXT`);
       } catch (e) { /* Column already exists */ }
+      try { this.db.exec(`ALTER TABLE chat_rooms ADD COLUMN is_invite_only INTEGER DEFAULT 0`); } catch (e) { /* already exists */ }
+      try { this.db.exec(`ALTER TABLE chat_rooms ADD COLUMN is_moderated INTEGER DEFAULT 0`); } catch (e) { /* already exists */ }
+      try { this.db.exec(`ALTER TABLE chat_room_members ADD COLUMN is_voiced INTEGER DEFAULT 0`); } catch (e) { /* already exists */ }
 
       // Chat room members table
       this.db.exec(`
@@ -1026,8 +1031,20 @@ console.error('Error running migrations:', error);
           socket_id TEXT NOT NULL,
           is_moderator INTEGER DEFAULT 0,
           is_muted INTEGER DEFAULT 0,
+          is_voiced INTEGER DEFAULT 0,
           joined_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(room_id, user_id)
+        )
+      `);
+
+      // Chat room invites table (for invite-only rooms)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_room_invites (
+          room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          invited_by TEXT NOT NULL,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          PRIMARY KEY (room_id, user_id)
         )
       `);
 
@@ -2426,6 +2443,14 @@ console.log(`[Database] Password updated for user ${userId}`);
   async setMotd(roomId: string, motd: string | null): Promise<void> {
     return this.chatRepo!.setMotd(roomId, motd);
   }
+
+  async setInviteOnly(roomId: string, on: boolean): Promise<void> { return this.chatRepo!.setInviteOnly(roomId, on); }
+  async setModerated(roomId: string, on: boolean): Promise<void> { return this.chatRepo!.setModerated(roomId, on); }
+  async setVoiced(roomId: string, userId: string, on: boolean): Promise<void> { return this.chatRepo!.setVoiced(roomId, userId, on); }
+  async inviteUser(roomId: string, userId: string, invitedBy: string): Promise<void> { return this.chatRepo!.inviteUser(roomId, userId, invitedBy); }
+  async hasInvite(roomId: string, userId: string): Promise<boolean> { return this.chatRepo!.hasInvite(roomId, userId); }
+  async revokeInvite(roomId: string, userId: string): Promise<void> { return this.chatRepo!.revokeInvite(roomId, userId); }
+  async isUserVoiced(roomId: string, userId: string): Promise<boolean> { return this.chatRepo!.isUserVoiced(roomId, userId); }
 
   // DM thread methods - delegate to ChatRepository
   async getOrCreateDmThread(...args: Parameters<ChatRepository['getOrCreateDmThread']>) {
