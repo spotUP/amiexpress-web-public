@@ -15,8 +15,11 @@ export const createCmd: SlashCommand = {
       if (a === '--private') flags.isPrivate = true;
       else if (a === '--invite-only') flags.isInviteOnly = true;
       else if (a === '--motd') {
-        flags.motd = args.slice(i + 1).join(' ');
-        break;
+        const parts: string[] = [];
+        while (i + 1 < args.length && !args[i + 1].startsWith('--')) {
+          parts.push(args[++i]);
+        }
+        flags.motd = parts.join(' ').replace(/^["']|["']$/g, '');
       }
       else rest.push(a);
     }

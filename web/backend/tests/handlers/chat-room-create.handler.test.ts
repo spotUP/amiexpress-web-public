@@ -107,4 +107,32 @@ describe('handleRoomCreate flags', () => {
     expect(row.motd).toBe('motd-only-room');
     createdRooms.push(created.d.roomId);
   });
+
+  it('isModerated flag persists is_moderated=1', async () => {
+    const { socket, emits } = makeSocket();
+    const session: any = { user: { id: owner, username: ownerName } };
+    const roomName = `mod_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    await handleRoomCreate(socket, session, { roomName, isModerated: true });
+    const created = emits.find(e => e.ev === 'room:created');
+    expect(created).toBeTruthy();
+    const row = rawDb.prepare('SELECT is_moderated FROM chat_rooms WHERE room_id = ?').get(created.d.roomId) as any;
+    expect(Boolean(row.is_moderated)).toBe(true);
+    createdRooms.push(created.d.roomId);
+  });
+
+  it('createCmd: --motd followed by --private keeps both flags intact', () => {
+    // Door-side parsing test - pulls createCmd from chan-admin.ts to validate token splitting.
+    const { createCmd } = require('../../../../Doors/livechat/commands/chan-admin');
+    const ctx: any = { currentChannel: '' };
+    const result = createCmd.handler(ctx, ['#room', 'topic', '--motd', '"hi"', '--private']);
+    expect(result.data.motd).toBe('hi');
+    expect(result.data.isPrivate).toBe(true);
+  });
+
+  it('createCmd: --motd captures multi-token text, strips surrounding quotes', () => {
+    const { createCmd } = require('../../../../Doors/livechat/commands/chan-admin');
+    const ctx: any = { currentChannel: '' };
+    const result = createCmd.handler(ctx, ['#room', '--motd', '"hello', 'world"']);
+    expect(result.data.motd).toBe('hello world');
+  });
 });
