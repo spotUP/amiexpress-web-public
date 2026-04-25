@@ -16,8 +16,22 @@
             username: root
             key: ${{ secrets.HETZNER_SSH_KEY }}
             script: |
+              set -euo pipefail
               cd /app/amiexpress
               git pull origin main
               docker compose up -d --build
               echo "Deploy complete: $(date)"
-              
+              # Sanity check: a green workflow used to ship even when docker
+              # compose up -d --build silently failed (no set -e), leaving a
+              # stale container running. Assert the bbs container was
+              # actually recreated by this build, not a leftover from an
+              # earlier successful run.
+              CREATED_AT=$(docker inspect -f '{{.Created}}' amiexpress-bbs)
+              echo "Running container created: $CREATED_AT"
+              CREATED_EPOCH=$(date -d "$CREATED_AT" +%s)
+              NOW_EPOCH=$(date +%s)
+              AGE=$((NOW_EPOCH - CREATED_EPOCH))
+              if [ "$AGE" -gt 600 ]; then
+                echo "ERROR: container is ${AGE}s old (> 600s) -- build did not recreate it" >&2
+                exit 1
+              fi
