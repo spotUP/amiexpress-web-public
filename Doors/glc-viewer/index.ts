@@ -341,6 +341,18 @@ async function fetchGLCData(config: GLCConfig, page: number = 1): Promise<string
       }
     };
 
+    let settled = false;
+    const safeReject = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    const safeResolve = (data: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(data);
+    };
+
     const req = http.request(options, (res) => {
       let data = '';
 
@@ -352,20 +364,26 @@ async function fetchGLCData(config: GLCConfig, page: number = 1): Promise<string
         // Extract body after double CRLF
         const bodyStart = data.indexOf('\r\n\r\n');
         if (bodyStart !== -1) {
-          resolve(data.substring(bodyStart + 4));
+          safeResolve(data.substring(bodyStart + 4));
         } else {
-          resolve(data);
+          safeResolve(data);
         }
+      });
+
+      // CRITICAL: response streams emit 'error' on mid-download disconnects.
+      // Without this listener it propagates as an uncaught exception and crashes the process.
+      res.on('error', (err) => {
+        safeReject(err);
       });
     });
 
     req.on('error', (err) => {
-      reject(err);
+      safeReject(err);
     });
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('HTTP request timed out'));
+      safeReject(new Error('HTTP request timed out'));
     });
 
     req.end();

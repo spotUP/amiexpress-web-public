@@ -281,6 +281,10 @@ var BugTrackerApp = class {
       fastCSR: false,
       mouse: true
     });
+    screen.program.write("\x1B[2J");
+    screen.program.write("\x1B[H");
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     return screen;
   }
   // Key handler management to prevent accumulation
@@ -1795,6 +1799,7 @@ var BugTrackerApp = class {
   // UI Helpers
   // ============================================================================
   showSelector(title, items, callback) {
+    const previousFocus = this.screen.focused;
     setImmediate(() => {
       const previousView = this.currentView;
       this.currentView = "dialog";
@@ -1834,6 +1839,9 @@ var BugTrackerApp = class {
         backdrop.detach();
         list.detach();
         this.currentView = previousView;
+        if (previousFocus && typeof previousFocus.focus === "function") {
+          previousFocus.focus();
+        }
         this.screen.render();
       };
       list.once("select", (_item, idx) => {
@@ -1852,6 +1860,7 @@ var BugTrackerApp = class {
     });
   }
   showTextInput(title, defaultValue, multiline, callback) {
+    const previousFocus = this.screen.focused;
     setImmediate(() => {
       const previousView = this.currentView;
       this.currentView = "dialog";
@@ -1919,6 +1928,9 @@ var BugTrackerApp = class {
         backdrop.detach();
         inputBox.detach();
         this.currentView = previousView;
+        if (previousFocus && typeof previousFocus.focus === "function") {
+          previousFocus.focus();
+        }
         this.screen.render();
       };
       textbox.on("submit", () => {
@@ -1938,6 +1950,7 @@ var BugTrackerApp = class {
     });
   }
   showMessage(title, message, callback) {
+    const previousFocus = this.screen.focused;
     setImmediate(() => {
       const previousView = this.currentView;
       this.currentView = "dialog";
@@ -1977,6 +1990,9 @@ ${message}
         backdrop.detach();
         msgBox.detach();
         this.currentView = previousView;
+        if (previousFocus && typeof previousFocus.focus === "function") {
+          previousFocus.focus();
+        }
         this.screen.render();
       };
       msgBox.once("keypress", () => {

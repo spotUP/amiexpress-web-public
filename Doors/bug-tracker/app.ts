@@ -2159,6 +2159,10 @@ export class BugTrackerApp {
   // ============================================================================
 
   private showSelector(title: string, items: string[], callback: (idx: number) => void): void {
+    // Capture the currently-focused element so we can restore it on cleanup.
+    // Without this, after the dialog closes no widget has focus and key input
+    // appears frozen until the user clicks something.
+    const previousFocus = (this.screen as any).focused;
     // Defer to next tick to avoid Enter key propagation from parent
     setImmediate(() => {
       const previousView = this.currentView;
@@ -2203,6 +2207,9 @@ export class BugTrackerApp {
         backdrop.detach();
         list.detach();
         this.currentView = previousView;
+        if (previousFocus && typeof previousFocus.focus === 'function') {
+          previousFocus.focus();
+        }
         this.screen.render();
       };
 
@@ -2227,6 +2234,7 @@ export class BugTrackerApp {
   }
 
   private showTextInput(title: string, defaultValue: string, multiline: boolean, callback: (value: string | null) => void): void {
+    const previousFocus = (this.screen as any).focused;
     // Defer to next tick to avoid Enter key propagation from parent
     setImmediate(() => {
       const previousView = this.currentView;
@@ -2301,6 +2309,9 @@ export class BugTrackerApp {
         backdrop.detach();
         inputBox.detach();
         this.currentView = previousView;
+        if (previousFocus && typeof previousFocus.focus === 'function') {
+          previousFocus.focus();
+        }
         this.screen.render();
       };
 
@@ -2326,6 +2337,7 @@ export class BugTrackerApp {
   }
 
   private showMessage(title: string, message: string, callback?: () => void): void {
+    const previousFocus = (this.screen as any).focused;
     // Defer to next tick to avoid key propagation from parent
     setImmediate(() => {
       const previousView = this.currentView;
@@ -2367,6 +2379,9 @@ export class BugTrackerApp {
         backdrop.detach();
         msgBox.detach();
         this.currentView = previousView;
+        if (previousFocus && typeof previousFocus.focus === 'function') {
+          previousFocus.focus();
+        }
         this.screen.render();
       };
 
