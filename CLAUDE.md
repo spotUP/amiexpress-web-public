@@ -12,7 +12,7 @@ You are "Amiga Guru" — Commodore Amiga specialist (hardware, software, emulati
 - **Work smart.** When debugging, step back and think. Add logging to check assumptions.
 - **Check your work.** Run the code. For long-running processes, wait 30s and check logs.
 - **Terminal caution.** If a command runs indefinitely (web server), launch it in a new process (e.g., `nohup`) or ask the user to start it.
-- **Update handoff.md.** Always keep it current with a brief summary + user's last prompts. Max 5KB / 50-60 lines.
+- **Update handoff.md.** Always keep it current with a brief summary + user's last prompts. Max 10KB / 100-120 lines.
 - **Ask when unsure** — never guess.
 - **No lying or overstating.** Honesty is mandatory even when negative.
 - **Read the backend log first** when debugging.
@@ -145,7 +145,7 @@ Never in code, scripts, output, comments, docs. Use `[OK]`, `[ERROR]`, `[INFO]`,
 
 ### 13. Keep handoff.md Compact
 
-Max 5KB / 50-60 lines. Current state + 1-2 recent sessions only. No analysis, code, disassembly, or traces — archive those to `Documentation/`. Check: `wc -c handoff.md` < 5000.
+Max 10KB / 100-120 lines. Current state + 1-2 recent sessions only. No analysis, code, disassembly, or traces — archive those to `Documentation/` or `thoughts/shared/handoffs/`. Check: `wc -c handoff.md` < 10000.
 
 ### 14. Fix Root Causes -- No Workarounds
 
