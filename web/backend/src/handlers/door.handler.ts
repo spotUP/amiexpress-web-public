@@ -1791,6 +1791,13 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
       // Server is RPC-only — client bundle drives the session.
       // RPC handlers are already registered above; nothing else to execute.
 console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client to finish`);
+      // Enable game mode so the terminal's onData handler stops forwarding raw key
+      // events to the BBS command processor.  Without this, every key the user presses
+      // in the browser game (e.g. Q to quit arkanoid) is ALSO sent as socket.emit('command')
+      // because gameMode.current remains false for hybrid doors that never call execute().
+      // After endSession cleans up inDoorManager the 'q' command would be processed by the
+      // BBS, causing the door to "restart".
+      socket.emit('game-mode', true);
       // Wait for the client door session to close (signalled via client-door-bridge)
       const { getClientDoorBridge } = require('../doors/client-door-bridge');
       const bridge = getClientDoorBridge();

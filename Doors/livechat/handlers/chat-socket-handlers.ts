@@ -66,16 +66,17 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:dm', (d: any) => {
-    // DoorSocket loops server-side outgoing emits back to server-side
-    // listeners (see door.handler.ts:95 onAnyOutgoing). Our OUTGOING DM
-    // shape is `{to, message}`; INCOMING DMs would carry `from`. If
-    // there's no `from`, this is our own outgoing echo — ignore it so
-    // we don't render "[DM from ???]".
-    if (!d || !d.from) return;
-    const sender = d.from;
-    acm(`{magenta-fg}[DM from ${sender}]: ${d.preview || d.message || ''}{/magenta-fg}`, false);
-    aa(`{magenta-fg}DM from ${sender}{/magenta-fg}`);
-    aud.onDM();
+    if (!d) return;
+    // Backend now persists DMs and echoes the canonical payload back to
+    // both sender and recipient. `direction` tells us which side we are.
+    const dir = d.direction === 'sent' ? `[DM to ${d.to}]` : `[DM from ${d.from}]`;
+    const color = d.direction === 'sent' ? 'magenta-fg' : 'cyan-fg';
+    const offlineHint = d.direction === 'sent' && d.delivered === false ? ' {gray-fg}(offline){/gray-fg}' : '';
+    acm(`{${color}}${dir}: ${d.message}${offlineHint}{/${color}}`, false);
+    if (d.direction === 'received') {
+      aa(`{cyan-fg}DM from ${d.from}{/cyan-fg}`);
+      if (typeof aud?.onDM === 'function') aud.onDM();
+    }
   });
 
   sock.on('chat:message', (m: any) => {

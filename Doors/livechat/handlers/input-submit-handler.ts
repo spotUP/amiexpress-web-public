@@ -125,7 +125,7 @@ export function createSubmitHandler(
         if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.target && r.data?.message) {
           const processedMsg = replaceEmojis(r.data.message);
           socket.emit('chat:dm', { to: r.data.target, message: processedMsg });
-          addChatMessage(`{magenta-fg}[DM to ${r.data.target}]: ${processedMsg}{/magenta-fg}`, false);
+          // local echo removed: backend echoes sent DM with direction: 'sent'
         }
 
         if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
