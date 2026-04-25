@@ -68,6 +68,15 @@ export async function handleChatDm(ctx: DmContext): Promise<void> {
     if (recipient.userId) {
       io.to('user:' + recipient.userId).emit('chat:dm', { ...payload, direction: 'received' });
     }
+
+    // Refresh sidebar DM thread lists for every participant (sender + recipient).
+    // Keeps the LiveChat "DIRECT MESSAGES" section sorted/bumped without polling.
+    try {
+      const { broadcastDmThreadsToParticipants } = require('./dm-thread-list.handler');
+      await broadcastDmThreadsToParticipants(io, [senderId, recipient.userId]);
+    } catch (err) {
+      console.error('[dm.handler] sidebar broadcast (1:1) error:', err);
+    }
   } catch (error) {
     console.error('[dm.handler] handleChatDm error:', error);
     socket.emit('chat:dm-error', { error: 'Failed to send DM' });
@@ -131,6 +140,14 @@ export async function handleChatGroupDm(ctx: GroupDmContext): Promise<void> {
     // Multi-tab fanout: deliver to every recipient socket via user:<id> rooms.
     for (const r of resolved) {
       if (r.userId) io.to('user:' + r.userId).emit('chat:dm', { ...payload, direction: 'received' });
+    }
+
+    // Refresh sidebar DM thread lists for every participant.
+    try {
+      const { broadcastDmThreadsToParticipants } = require('./dm-thread-list.handler');
+      await broadcastDmThreadsToParticipants(io, unique);
+    } catch (err) {
+      console.error('[dm.handler] sidebar broadcast (group) error:', err);
     }
   } catch (error) {
     console.error('[dm.handler] handleChatGroupDm error:', error);

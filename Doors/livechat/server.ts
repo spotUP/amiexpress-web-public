@@ -42,7 +42,7 @@ function stripTags(text: string): string {
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 
 // Core state and services
-import { addMessage, setChannel, AppState } from './core/state';
+import { addMessage, setChannel, setDmContext, clearDmContext, AppState } from './core/state';
 import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage, formatReactions } from './core/formatter';
 import { shouldShowEvent } from './core/socket-typing';
@@ -81,6 +81,8 @@ import { createEnhancedVoiceChannel } from './features/voice-channel-ux';
 // Handlers
 import { setupRoomHandlers } from './handlers/room-socket-handlers';
 import { setupChatHandlers } from './handlers/chat-socket-handlers';
+import { setupDmSidebarHandlers } from './handlers/dm-sidebar-handlers';
+import { buildSidebarItems } from './handlers/sidebar-items-builder';
 import { setupKeyboardShortcuts } from './handlers/keyboard-shortcuts';
 import { BBSEventHandler } from './handlers/bbs-event.handler';
 import { setupThreadListeners, replyToThread, getThreadMessages, cleanupThreadListeners } from './handlers/thread-handlers';
@@ -591,7 +593,7 @@ export async function createApp(session: DoorSession) {
   ];
 
   // Track channel data for selection handling
-  let channelItems: Array<{ id: string; name: string; type: 'text' | 'voice' | 'header' | 'spacer' | 'user'; username?: string }> = [];
+  let channelItems: Array<{ id: string; name: string; type: 'text' | 'voice' | 'header' | 'spacer' | 'user' | 'dm'; username?: string; isGroup?: boolean }> = [];
 
   // Per-channel expand state.
   //   - `expandedChannels`: user explicitly expanded this channel (even
@@ -623,90 +625,23 @@ export async function createApp(session: DoorSession) {
       unreadCount: 0,
     }));
 
-    // Build channel list with text and voice channels
-    // CRITICAL: channelItems must be built in SAME order as items for index matching
-    channelItems = [];
-    const items: string[] = [];
-
-    // Add TEXT CHANNELS header
-    items.push('{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}');
-    channelItems.push({ id: '', name: '', type: 'header' as const });
-
-    // Add text channels (Discord-style: joined channel auto-expands, plus
-    // any channel the user explicitly toggled into `expandedChannels`).
-    // Expanded channels render their online users indented below.
-    channelsToShow.forEach(ch => {
-      const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
-      const isActive = isCurrentChannel(ch.id, ch.name);
-      const hasUnread = ch.unreadCount && ch.unreadCount > 0;
-      // Active channel auto-expands unless the user has explicitly
-      // collapsed it (double-click toggle). Non-active channels show
-      // their users only if in `expandedChannels`.
-      const isExpanded = collapsedChannels.has(ch.id)
-        ? false
-        : (isActive || expandedChannels.has(ch.id));
-
-      let color: string;
-      let endColor: string;
-      if (isActive) {
-        color = '{white-fg}';
-        endColor = '{/white-fg}';
-      } else if (hasUnread) {
-        color = '{green-fg}';
-        endColor = '{/green-fg}';
-      } else {
-        color = '{gray-fg}';
-        endColor = '{/gray-fg}';
-      }
-
-      const arrow = isExpanded ? 'v' : '>';
-      items.push(color + arrow + ' # ' + ch.name + unread + endColor);
-      channelItems.push({ id: ch.id, name: ch.name, type: 'text' as const });
-
-      if (isExpanded) {
-        // Only show users for the channel we're actually in — `onlineUsers`
-        // is a global map (no per-channel filter available), so for any
-        // expanded non-current channel we just don't know who's there.
-        if (isActive) {
-          for (const [uid, u] of onlineUsers) {
-            const presence = presenceService.get(parseInt(uid));
-            const status = presence?.status || u.status;
-            const indicator = PRESENCE_INDICATORS[status as PresenceStatus] || '*';
-            items.push(`  {gray-fg}${indicator}{/gray-fg} ${u.username.slice(0, 12)}`);
-            channelItems.push({ id: `user-${uid}`, name: u.username, type: 'user' as const, username: u.username });
-          }
-        }
-      }
+    // Build sidebar rows via the pure builder. Keeps server.ts under
+    // the 2000-line limit and lets the row layout be unit-tested.
+    const built = buildSidebarItems({
+      channelsToShow,
+      state,
+      onlineUsers,
+      presenceService,
+      presenceIndicators: PRESENCE_INDICATORS as Record<string, string>,
+      isCurrentChannel,
+      expandedChannels,
+      collapsedChannels,
+      voiceChannelService: voiceChannel,
     });
-
-    // Add spacer
-    items.push('');
-    channelItems.push({ id: '', name: '', type: 'spacer' as const });
-
-    // Add VOICE CHANNELS header
-    items.push('{cyan-fg}{bold}VOICE CHANNELS{/bold}{/cyan-fg}');
-    channelItems.push({ id: '', name: '', type: 'header' as const });
-
-    // Add voice channels
-    const voiceChannels = voiceChannel.getVoiceChannels();
-    if (voiceChannels.length === 0) {
-      // Add default voice channel if none exist
-      const isInVoice = voiceChannel.isInVoiceChannel();
-      const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : '{gray-fg}[V]{/gray-fg}';
-      items.push(icon + ' Voice {gray-fg}(0){/gray-fg}');
-      channelItems.push({ id: 'voice-voice', name: 'Voice', type: 'voice' as const });
-    } else {
-      voiceChannels.forEach(vc => {
-        const count = vc.participants.length;
-        const isInVoice = voiceChannel.getCurrentVoiceChannel() === vc.id;
-        const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : count > 0 ? '{cyan-fg}[V]{/cyan-fg}' : '{gray-fg}[V]{/gray-fg}';
-        items.push(icon + ' ' + vc.name + ' {gray-fg}(' + count + '){/gray-fg}');
-        channelItems.push({ id: 'voice-' + vc.id, name: vc.name, type: 'voice' as const });
-      });
-    }
+    channelItems = built.channelItems as typeof channelItems;
 
     // Debug: show what items we're setting and calculate expected width
-    channelList.setItems(items);
+    channelList.setItems(built.items);
 
     // CRITICAL: Force screen render before fitToContent so blessed populates internal state
     if (screen) {
@@ -738,8 +673,15 @@ export async function createApp(session: DoorSession) {
     // Re-render to apply new width
     screen.render();
 
-    // Select current channel if in the list
-    const currentIdx = channelItems.findIndex(ch => ch.id === state.currentChannel);
+    // Select active row: prefer the DM thread when the user is in DM context,
+    // otherwise the active text channel.
+    let currentIdx = -1;
+    if (state.currentDmThread) {
+      currentIdx = channelItems.findIndex(ch => ch.type === 'dm' && ch.id === state.currentDmThread);
+    }
+    if (currentIdx < 0) {
+      currentIdx = channelItems.findIndex(ch => ch.type === 'text' && ch.id === state.currentChannel);
+    }
     if (currentIdx >= 0) {
       channelList.select(currentIdx);
     }
@@ -793,6 +735,28 @@ export async function createApp(session: DoorSession) {
       return;
     }
 
+    if (channel.type === 'dm') {
+      // Switch into a DM thread context.
+      // Leave any current text room (so room:message no longer routes there)
+      // and ask the server for the thread history.
+      if (state.currentDmThread === channel.id) {
+        // Already active — no-op, just keep focus on input.
+        inputBox.focus();
+        return;
+      }
+      if (state.currentChannel) socket.emit('room:leave');
+      setDmContext(state, channel.id);
+      // Wipe what's on screen so the previous channel's chat doesn't leak.
+      try { (chatLog as any).setContent(''); } catch { /* ignore */ }
+      voiceChannel.hideGrid();
+      addSystemMessage(`{cyan-fg}--- DM with ${channel.name} ---{/cyan-fg}`);
+      socket.emit('chat:dm-history', { threadId: channel.id, limit: 50 });
+      updateChannelList();
+      updateStatusBar();
+      inputBox.focus();
+      return;
+    }
+
     if (channel.type === 'voice') {
       // Join voice channel
       const channelId = channel.id.replace('voice-', '');
@@ -801,23 +765,31 @@ export async function createApp(session: DoorSession) {
       addSystemMessage(`Joining voice channel: ${channel.name}`);
     } else if (!isCurrentChannel(channel.id, channel.name)) {
       // Join text channel — joining auto-expands the user list underneath.
+      if (state.currentDmThread) clearDmContext(state);
       if (state.currentChannel) socket.emit('room:leave');
       socket.emit('room:join', { roomName: channel.name });
       voiceChannel.hideGrid(); // Hide video grid when viewing text
     } else {
-      // Click on the channel we're already in → toggle expand/collapse.
-      // Using single-click for this (instead of dblclick) dodges the
-      // timing-based off-by-one the user hit with rapid click pairs.
-      const id = channel.id;
-      const currentlyExpanded = collapsedChannels.has(id) ? false : true;
-      if (currentlyExpanded) {
-        expandedChannels.delete(id);
-        collapsedChannels.add(id);
+      // Click on the channel we're already in. Two meaningful actions:
+      //   1. If the video grid is covering the chat (we're in voice),
+      //      hide it to return the user to the text-chat view. This is
+      //      the "click general to go back to chat" reflex.
+      //   2. Otherwise, toggle the expand/collapse state of this
+      //      channel's member list.
+      if (voiceChannel?.isGridVisible?.()) {
+        voiceChannel.hideGrid();
       } else {
-        collapsedChannels.delete(id);
-        expandedChannels.add(id);
+        const id = channel.id;
+        const currentlyExpanded = collapsedChannels.has(id) ? false : true;
+        if (currentlyExpanded) {
+          expandedChannels.delete(id);
+          collapsedChannels.add(id);
+        } else {
+          collapsedChannels.delete(id);
+          expandedChannels.add(id);
+        }
+        updateChannelList();
       }
-      updateChannelList();
     }
 
     // Return focus to input after text channel selection only
@@ -1216,10 +1188,17 @@ export async function createApp(session: DoorSession) {
 
   function updateChatHeader() {
     const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';
-    const modeSuffix = voiceChannel?.isInVoiceChannel?.()
-      ? ` [${currentRenderMode.toUpperCase()}]`
-      : '';
+    const inVoice = !!(voiceChannel && (voiceChannel as any).isInVoiceChannel?.());
+    const modeSuffix = inVoice ? ` [${currentRenderMode.toUpperCase()}]` : '';
+    const fullLabel = ` ${channelName}${modeSuffix} `;
+    // Inner Log label (chatLog is borderless, label rarely visible).
     updateChatHeaderFn(chatLog, channelName + modeSuffix);
+    // Outer DockablePanel label — this is what the user actually sees
+    // across the top of the chat panel border.
+    if (chatPanel && (chatPanel as any).setLabel) {
+      (chatPanel as any).setLabel(fullLabel);
+      (chatPanel as any).screen?.render?.();
+    }
   }
 
   function updateStatusBar() {
@@ -2003,6 +1982,9 @@ export async function createApp(session: DoorSession) {
     addSystemMessage(`{yellow-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/yellow-fg}`);
   });
 
+  // ========== DM SIDEBAR / CONTEXT EVENT LISTENERS ==========
+  setupDmSidebarHandlers({ socket, state, userId, screen, updateChannelList, addChatMessage });
+
   // ========== CONNECTION ERROR HANDLING ==========
 
   let reconnectAttempts = 0;
@@ -2587,6 +2569,9 @@ export async function createApp(session: DoorSession) {
         // Request room list
         addSystemMessage('Loading rooms...');
         socket.emit('room:list', {});
+
+        // Request DM thread list for the sidebar.
+        socket.emit('chat:dm-threads:list');
 
         // Wait for exit
         await new Promise<void>((resolve) => {

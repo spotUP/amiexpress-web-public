@@ -397,6 +397,23 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleChatDmHistory(socket, session, data);
   });
 
+  // Sidebar DM thread list: door requests; backend returns display-ready
+  // payloads. Also emitted automatically after every DM send (see
+  // dm.handler) so all sidebars stay in sync without polling.
+  socket.on("chat:dm-threads:list", async () => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session?.user?.id) return;
+    const {
+      getDmThreadList,
+    } = require("../handlers/chat/dm-thread-list.handler");
+    try {
+      const threads = await getDmThreadList(String(session.user.id));
+      socket.emit("chat:dm-threads", { threads });
+    } catch (error) {
+      console.error("[CHAT] chat:dm-threads:list error:", error);
+    }
+  });
+
   // ===== LIVE TYPING PREVIEW (Keystroke relaying) =====
 
   socket.on(

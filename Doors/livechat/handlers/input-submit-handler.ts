@@ -236,6 +236,26 @@ export function createSubmitHandler(
           const processedMsg = replaceEmojis(msg);
           socket.emit('chat:edit', { messageId: editId, newText: processedMsg });
           addSystemMessage(`(edited) ${msg}`);
+        } else if (state.currentDmThread) {
+          // DM context: route via chat:dm (1:1) or chat:group-dm (group).
+          // Backend echoes the canonical payload back via 'chat:dm' so
+          // we deliberately do NOT add a local chat-log line here.
+          const processedMsg = replaceEmojis(msg);
+          const thread = (state.dmThreads || []).find((t: any) => t.threadId === state.currentDmThread);
+          if (!thread) {
+            addSystemMessage('{red-fg}DM thread not found in sidebar; refreshing...{/red-fg}');
+            socket.emit('chat:dm-threads:list');
+          } else if (thread.isGroup) {
+            socket.emit('chat:group-dm', { participants: thread.participants, message: processedMsg });
+          } else {
+            const target = thread.participants[0];
+            if (!target) {
+              addSystemMessage('{red-fg}DM thread has no recipient.{/red-fg}');
+            } else {
+              socket.emit('chat:dm', { to: target, message: processedMsg });
+            }
+          }
+          updateTypingPreview();
         } else {
           // New message - generate ID and add to history
           const messageId = `${userId}-${Date.now()}`;

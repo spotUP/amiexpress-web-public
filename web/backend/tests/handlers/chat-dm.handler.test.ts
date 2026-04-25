@@ -141,6 +141,26 @@ describe('handleChatDm', () => {
     expect(senderEmits.some(e => e.ev === 'chat:dm-error')).toBe(true);
   });
 
+  it('emits chat:dm-threads to sender and recipient user-rooms after a 1:1 DM', async () => {
+    const senderEmits: any[] = [];
+    const calls: Array<{ room: string; ev: string; d: any }> = [];
+    const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
+    const io: any = {
+      sockets: { sockets: new Map() },
+      to: (room: string) => ({ emit: (ev: string, d: any) => calls.push({ room, ev, d }) })
+    };
+    const session: any = { user: { id: uA, username: unameA } };
+
+    await handleChatDm({ io, socket: senderSocket, session, data: { to: unameB, message: 'sidebar bump' }, resolveRecipient: () => ({ userId: uB, socketId: 'sock-b' }) });
+
+    const senderTopic = calls.find(c => c.room === `user:${uA}` && c.ev === 'chat:dm-threads');
+    const recipTopic = calls.find(c => c.room === `user:${uB}` && c.ev === 'chat:dm-threads');
+    expect(senderTopic).toBeTruthy();
+    expect(recipTopic).toBeTruthy();
+    expect(Array.isArray(senderTopic?.d?.threads)).toBe(true);
+    expect(Array.isArray(recipTopic?.d?.threads)).toBe(true);
+  });
+
   it('handleChatDm payload includes delivered=true when recipient has socket, false when offline', async () => {
     const senderEmits: any[] = [];
     const senderSocket: any = { id: 'sock-a', emit: (ev: string, d: any) => senderEmits.push({ ev, d }) };
@@ -213,6 +233,11 @@ describe('handleChatGroupDm', () => {
     expect(fanouts.length).toBe(2);
     const rooms = fanouts.map(f => f.room).sort();
     expect(rooms).toEqual([`user:${uB}`, `user:${uC}`].sort());
+
+    // Sidebar broadcast: every participant (including sender) gets a chat:dm-threads ping.
+    const sidebarPings = ioToCalls.filter(c => c.ev === 'chat:dm-threads');
+    const sidebarRooms = sidebarPings.map(c => c.room).sort();
+    expect(sidebarRooms).toEqual([`user:${uA}`, `user:${uB}`, `user:${uC}`].sort());
   });
 
   it('rejects when fewer than 3 unique participants (sender + 1 recipient is 1:1, not group)', async () => {
