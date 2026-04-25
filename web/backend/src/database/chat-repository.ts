@@ -431,14 +431,21 @@ console.error('[ChatRepository] FTS index update failed:', e);
   async getOrCreateDmThread(userIds: string[]): Promise<string> {
     if (userIds.length < 2) throw new Error('DM thread needs >=2 participants');
     const hash = this.dmParticipantsHash(userIds);
-    const existing = this.prepare('SELECT thread_id FROM chat_dm_threads WHERE participants_hash = ?').get(hash) as any;
+    const existing = this.prepare('SELECT thread_id FROM chat_dm_threads WHERE participants_hash = ?').get(hash) as { thread_id: string } | undefined;
     if (existing) return existing.thread_id;
 
     const threadId = `dm-${crypto.randomUUID()}`;
     const isGroup = userIds.length > 2 ? 1 : 0;
-    this.prepare('INSERT INTO chat_dm_threads (thread_id, participants_hash, is_group) VALUES (?, ?, ?)').run(threadId, hash, isGroup);
-    const insertP = this.prepare('INSERT INTO chat_dm_participants (thread_id, user_id, username) SELECT ?, id, username FROM users WHERE id = ?');
-    for (const uid of userIds) insertP.run(threadId, uid);
+    const insertThread = this.prepare('INSERT INTO chat_dm_threads (thread_id, participants_hash, is_group) VALUES (?, ?, ?)');
+    const insertParticipant = this.prepare('INSERT INTO chat_dm_participants (thread_id, user_id, username) SELECT ?, id, username FROM users WHERE id = ?');
+
+    this.transaction(() => {
+      insertThread.run(threadId, hash, isGroup);
+      for (const uid of userIds) {
+        const info = insertParticipant.run(threadId, uid);
+        if (info.changes !== 1) throw new Error(`User not found: ${uid}`);
+      }
+    });
     return threadId;
   }
 }
