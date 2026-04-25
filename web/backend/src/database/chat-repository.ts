@@ -225,7 +225,7 @@ export class ChatRepository extends BaseRepository<any> {
     stmt.run(
       room.roomId, room.roomName, room.topic || null, room.createdBy, room.createdByUsername,
       room.isPublic !== false ? 1 : 0, room.maxUsers || 50, room.isPersistent !== false ? 1 : 0,
-      room.password || null, room.motd || null,
+      room.password || null, room.motd ?? null,
     );
   }
 
@@ -415,7 +415,7 @@ console.error('[ChatRepository] FTS index update failed:', e);
     }
     if (updates.motd !== undefined) {
       fields.push('motd = ?');
-      values.push(updates.motd || null);
+      values.push(updates.motd);
     }
 
     if (fields.length === 0) return;

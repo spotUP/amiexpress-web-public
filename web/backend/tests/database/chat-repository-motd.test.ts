@@ -67,4 +67,16 @@ describe('ChatRepository MOTD', () => {
     const room = await repo.getChatRoom(roomId);
     expect(room.motd).toBeFalsy();
   });
+
+  it('setMotd preserves empty string verbatim (not coerced to null)', async () => {
+    await repo.setMotd(roomId, '');
+    const room = await repo.getChatRoom(roomId);
+    expect(room.motd).toBe('');
+  });
+
+  it('updateChatRoom motd preserves empty string verbatim', async () => {
+    await repo.updateChatRoom(roomId, { motd: '' });
+    const room = await repo.getChatRoom(roomId);
+    expect(room.motd).toBe('');
+  });
 });
