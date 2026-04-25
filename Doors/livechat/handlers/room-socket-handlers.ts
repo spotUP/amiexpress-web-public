@@ -23,6 +23,7 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
   sock.on('room:joined', (d: any) => {
     sc(st, d.roomId || d.roomName);
     setCrl(d.roomName || '');
+    st.currentRoomMotd = d.motd ?? null;
     if (d.members && Array.isArray(d.members)) {
       ou.clear();
       // Find current user in members list to get their UUID
@@ -47,7 +48,7 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
     aud.onNotification();
   });
 
-  sock.on('room:left', (d: any) => { sc(st, ''); setCrl(''); ucl(); usb(); asm(`Left ${d.roomName}`); });
+  sock.on('room:left', (d: any) => { sc(st, ''); setCrl(''); st.currentRoomMotd = null; ucl(); usb(); asm(`Left ${d.roomName}`); });
 
   sock.on('room:created', (d: any) => {
     st.channels.push({ id: d.roomId, name: d.roomName, displayName: '#' + d.roomName, topic: d.topic || '', type: d.isPublic ? 'public' : 'private', createdBy: un, createdAt: new Date(), memberCount: 1, unreadCount: 0 });

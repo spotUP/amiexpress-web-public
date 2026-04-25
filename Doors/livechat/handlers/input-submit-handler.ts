@@ -158,6 +158,10 @@ export function createSubmitHandler(
         if (cmdName === 'motd') {
           if (r.data?.op === 'set') {
             socket.emit('room:motd', { motd: r.data.motd });
+          } else if (r.data?.op === 'show') {
+            const cached = state.currentRoomMotd;
+            if (cached) addSystemMessage(`{yellow-fg}[MOTD] ${cached}{/yellow-fg}`);
+            else addSystemMessage('No MOTD set. Use /motd <text> to set, /motd --clear to clear.');
           } else {
             addSystemMessage('Use /motd <text> to set, /motd --clear to clear.');
           }

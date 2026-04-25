@@ -70,4 +70,42 @@ describe('room:motd handler', () => {
     await handleSetRoomMotd({ io, socket, session, data: { motd: 'X' } });
     expect(emits.some(e => e.ev === 'room:error')).toBe(true);
   });
+
+  it('truncates MOTD to 500 chars', async () => {
+    const ioEmits: any[] = [];
+    const socket: any = { id: 'sock', emit: () => {} };
+    const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
+    const session: any = { user: { id: owner, username: 'O' }, currentRoomId: roomId };
+    const longMotd = 'a'.repeat(600);
+    await handleSetRoomMotd({ io, socket, session, data: { motd: longMotd } });
+    const broadcast = ioEmits.find(e => e.ev === 'room:motd');
+    expect(broadcast?.d.motd?.length).toBe(500);
+    // Persisted row also reflects truncation
+    const row = rawDb.prepare('SELECT motd FROM chat_rooms WHERE room_id = ?').get(roomId) as any;
+    expect(row.motd.length).toBe(500);
+  });
+
+  it('null motd clears the row and broadcasts null', async () => {
+    // First set a known value
+    rawDb.prepare(`UPDATE chat_rooms SET motd = 'temp' WHERE room_id = ?`).run(roomId);
+    const ioEmits: any[] = [];
+    const socket: any = { id: 'sock', emit: () => {} };
+    const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
+    const session: any = { user: { id: owner, username: 'O' }, currentRoomId: roomId };
+    await handleSetRoomMotd({ io, socket, session, data: { motd: null } });
+    const broadcast = ioEmits.find(e => e.ev === 'room:motd');
+    expect(broadcast?.d.motd).toBeNull();
+    const row = rawDb.prepare('SELECT motd FROM chat_rooms WHERE room_id = ?').get(roomId) as any;
+    expect(row.motd).toBeNull();
+  });
+
+  it('happy path also persists to chat_rooms.motd', async () => {
+    rawDb.prepare(`UPDATE chat_rooms SET motd = NULL WHERE room_id = ?`).run(roomId);
+    const socket: any = { id: 'sock', emit: () => {} };
+    const io: any = { to: () => ({ emit: () => {} }) };
+    const session: any = { user: { id: owner, username: 'O' }, currentRoomId: roomId };
+    await handleSetRoomMotd({ io, socket, session, data: { motd: 'persist-test' } });
+    const row = rawDb.prepare('SELECT motd FROM chat_rooms WHERE room_id = ?').get(roomId) as any;
+    expect(row.motd).toBe('persist-test');
+  });
 });

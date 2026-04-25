@@ -14,6 +14,7 @@ export interface AppState {
   typingUsers: Set<number>;
   prefs: EventPrefs;
   lastMessageId: string | null;
+  currentRoomMotd: string | null;
 }
 
 /** Create initial state */
@@ -40,7 +41,8 @@ export function createInitialState(): AppState {
       notificationSound: true,
       mentionSound: true
     },
-    lastMessageId: null
+    lastMessageId: null,
+    currentRoomMotd: null
   };
 }
 
