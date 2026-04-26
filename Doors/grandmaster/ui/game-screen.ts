@@ -1,9 +1,10 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
-import type { AppState, Piece, PieceType } from '../core/types';
+import type { AppState, GameAction, Piece, PieceType } from '../core/types';
 import { PIECE_COLORS, ARS_COLORS } from '../core/pieces';
 import { getGhostY } from '../core/board';
 import { ScreenShaker } from '../effects/screen-shake';
@@ -87,7 +88,8 @@ export class GameScreen {
     private engine: GameEngine,
     private input: InputHandler | null,  // Null for attract mode (AI-controlled)
     private sounds: SoundEngine,
-    private state: AppState
+    private state: AppState,
+    private gamepadMapper: GamepadActionMapper<GameAction> | null = null
   ) {
     // Initialize effect systems
     this.shaker = new ScreenShaker();
@@ -534,19 +536,25 @@ export class GameScreen {
     // Skip input setup for attract mode (AI-controlled)
     if (!this.input) return;
 
-    this.input.on('left', () => {
+    // Helper: register a callback on both keyboard and gamepad inputs
+    const on = (action: GameAction, cb: () => void) => {
+      this.input!.on(action, cb);
+      this.gamepadMapper?.on(action, cb);
+    };
+
+    on('left', () => {
       if (this.engine.move(-1)) {
         this.sounds.playSfx('move');
       }
     });
 
-    this.input.on('right', () => {
+    on('right', () => {
       if (this.engine.move(1)) {
         this.sounds.playSfx('move');
       }
     });
 
-    this.input.on('rotate_cw', () => {
+    on('rotate_cw', () => {
       if (this.engine.rotate(1)) {
         this.sounds.playSfx('rotate');
       } else {
@@ -556,7 +564,7 @@ export class GameScreen {
       }
     });
 
-    this.input.on('rotate_ccw', () => {
+    on('rotate_ccw', () => {
       if (this.engine.rotate(-1)) {
         this.sounds.playSfx('rotate');
       } else {
@@ -566,17 +574,17 @@ export class GameScreen {
       }
     });
 
-    this.input.on('soft_drop', () => {
+    on('soft_drop', () => {
       this.engine.softDrop();
     });
 
-    this.input.on('hard_drop', () => {
+    on('hard_drop', () => {
       this.addHardDropTrail();
       this.engine.hardDrop();
       this.sounds.playSfx('hard_drop');
     });
 
-    this.input.on('hold', () => {
+    on('hold', () => {
       if (this.engine.hold()) {
         this.sounds.playSfx('hold');
       } else {
@@ -586,7 +594,7 @@ export class GameScreen {
       }
     });
 
-    this.input.on('pause', () => {
+    on('pause', () => {
       if (this.engine.getState().status === 'playing') {
         this.engine.pause();
         this.showPauseMenu();

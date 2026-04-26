@@ -40,6 +40,9 @@ import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
 import { DEFAULT_KEYS } from './input/config';
+import { GamepadActionMapper, GamepadButton, GamepadAxis } from '@amiexpress/bbs-door-sdk';
+import type { GamepadTrigger } from '@amiexpress/bbs-door-sdk';
+import type { GameAction } from './core/types';
 import { SoundEngine } from './audio/sounds';
 import { HighScoreManager } from './core/high-scores';
 import { GrandmasterNetworkManager } from './network/network-manager';
@@ -55,6 +58,20 @@ import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
 import { showManual } from './ui/manual';
+
+// Default gamepad button mapping for GrandMaster.
+// D-pad and left stick handle movement; face buttons handle rotation/actions.
+const GAMEPAD_MAPPING: Partial<Record<GameAction, GamepadTrigger[]>> = {
+  left:       [{ type: 'dpad', direction: 'left'  }, { type: 'axis', axis: GamepadAxis.LEFT_STICK_X, direction: 'negative' }],
+  right:      [{ type: 'dpad', direction: 'right' }, { type: 'axis', axis: GamepadAxis.LEFT_STICK_X, direction: 'positive' }],
+  soft_drop:  [{ type: 'dpad', direction: 'down'  }, { type: 'axis', axis: GamepadAxis.LEFT_STICK_Y, direction: 'positive' }],
+  hard_drop:  [{ type: 'dpad', direction: 'up'   }, { type: 'button', button: GamepadButton.A }],
+  rotate_cw:  [{ type: 'button', button: GamepadButton.B }, { type: 'button', button: GamepadButton.R1 }],
+  rotate_ccw: [{ type: 'button', button: GamepadButton.X }, { type: 'button', button: GamepadButton.L1 }],
+  rotate_180: [{ type: 'button', button: GamepadButton.Y }],
+  hold:       [{ type: 'button', button: GamepadButton.L2 }, { type: 'button', button: GamepadButton.R2 }],
+  pause:      [{ type: 'button', button: GamepadButton.START }],
+};
 
 /**
  * Main application class
@@ -432,17 +449,28 @@ export class GrandmasterApp {
     const username = this.session.user?.username || this.state.playerName;
     this.gameEngine.startRecording(userId, username);
 
+    // Create gamepad mapper (uses bbsSession so events route from browser → door)
+    const gamepadMapper = new GamepadActionMapper<GameAction>({
+      bbsSession: this.session.bbsSession,
+      mapping: GAMEPAD_MAPPING,
+      repeatActions: ['left', 'right', 'soft_drop'],
+      dasDelay: this.state.settings.das ?? 133,
+      arrRate: this.state.settings.arr ?? 10,
+    });
+
     // Create game screen
     const gameScreen = new GameScreen(
       this.screen,
       this.gameEngine,
       this.inputHandler,
       this.sounds,
-      this.state
+      this.state,
+      gamepadMapper
     );
 
     // Run game loop
     await gameScreen.run();
+    gamepadMapper.destroy();
 
     // Submit score and replay
     await this.submitScore(userId, username);

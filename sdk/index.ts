@@ -64,9 +64,11 @@ export { getTerminalDimensions, BBS_CONSTANTS } from './src/utils/screen-utils';
 
 // Gamepad support
 export { GamepadInputManager } from './utils/gamepad-input-manager';
+export { GamepadActionMapper } from './utils/gamepad-action-mapper';
+export type { GamepadTrigger, ButtonTrigger, DpadTrigger, AxisTrigger, GamepadActionMapperOptions } from './utils/gamepad-action-mapper';
+// GamepadButton and GamepadAxis are enums — export as values so door code can use them
+export { GamepadButton, GamepadAxis, DEFAULT_GAMEPAD_CONFIG } from './types/gamepad';
 export type {
-  GamepadButton,
-  GamepadAxis,
   GamepadEventType,
   DPadDirection,
   GamepadEvent,
@@ -79,7 +81,6 @@ export type {
   GamepadState,
   GamepadConfig,
 } from './types/gamepad';
-export { DEFAULT_GAMEPAD_CONFIG } from './types/gamepad';
 
 // Server runtime (Node.js)
 export { ServerDoor } from './server';
