@@ -68,8 +68,11 @@ export class MulticomManager {
    * Initialize MULTICOM structures in a session's emulator.
    * This should be called ONCE when a session starts.
    */
-  public initializeInEmulator(emulator: MoiraEmulator, sessionId: string, nodeId: number): void {
-    console.error(`[MulticomManager] initializeInEmulator: sessionId=${sessionId}, nodeId=${nodeId}`);
+  // WEB_*: RTW-specific cap — RTW iterates until it finds a null singlePort ptr at
+  // myNode[i]+0x74. Limiting to 8 prevents the table from overflowing a 24-line screen.
+  // Other WHO doors are unaffected (they receive the full 32-entry struct).
+  public initializeInEmulator(emulator: MoiraEmulator, sessionId: string, nodeId: number, maxLinkedNodes: number = MAX_NODES): void {
+    console.error(`[MulticomManager] initializeInEmulator: sessionId=${sessionId}, nodeId=${nodeId}, maxLinkedNodes=${maxLinkedNodes}`);
 
     // CRITICAL: Each door run creates a NEW emulator instance, even if sessionId is reused.
     // We must ALWAYS initialize the new emulator, replacing any old reference.
@@ -86,7 +89,7 @@ export class MulticomManager {
       this.clearMemoryRegion(emulator);
 
       // Create masterNode semaphore
-      this.createMasterNode(emulator);
+      this.createMasterNode(emulator, maxLinkedNodes);
 
       // Create myNode array (32 nodes)
       this.createMyNodeArray(emulator);
@@ -95,7 +98,7 @@ export class MulticomManager {
       this.createSinglePorts(emulator);
 
       // Link myNode entries to their singlePort structures
-      this.linkNodeStructures(emulator);
+      this.linkNodeStructures(emulator, maxLinkedNodes);
 
       // Write current status of ALL nodes to this emulator
       this.writeAllNodesToEmulator(emulator);
@@ -299,9 +302,9 @@ export class MulticomManager {
    * +0x00-0x2D: Semaphore header (46 bytes)
    * +0x2E-0x39: List header (12 bytes)
    */
-  private createMasterNode(emulator: MoiraEmulator): void {
+  private createMasterNode(emulator: MoiraEmulator, maxLinkedNodes: number = MAX_NODES): void {
     const addr = MASTER_NODE_BASE;
-    debugLog(`[MulticomManager] Creating masterNode semaphore at 0x${addr.toString(16)}`);
+    debugLog(`[MulticomManager] Creating masterNode semaphore at 0x${addr.toString(16)}, maxLinkedNodes=${maxLinkedNodes}`);
 
     // Semaphore structure (46 bytes for SignalSemaphore)
     emulator.writeMemory32(addr + 0x00, 0);          // ln_Succ
@@ -309,7 +312,10 @@ export class MulticomManager {
     emulator.writeMemory(addr + 0x08, 4);          // ln_Type = NT_SEMAPHORE
     emulator.writeMemory(addr + 0x09, 0);          // ln_Pri
     emulator.writeMemory32(addr + 0x0A, 0);          // ln_Name
-    emulator.writeMemory16(addr + 0x0E, 0);          // ss_NestCount
+    // WEB_*: ss_NestCount doubles as the active-node count that RTW reads to know
+    // how many rows to render. Writing maxLinkedNodes here (instead of 0) makes RTW
+    // iterate exactly that many times, fitting the table within a 24-line screen.
+    emulator.writeMemory16(addr + 0x0E, maxLinkedNodes); // ss_NestCount / node count
 
     // Wait queue (MsgPort-like structure, 14 bytes)
     emulator.writeMemory32(addr + 0x10, 0);          // mp_Node.ln_Succ
@@ -378,19 +384,19 @@ export class MulticomManager {
    * After handle[31] (31 bytes), there's 1 byte padding before netSocket.
    * This shifts all subsequent offsets by 1 byte compared to naive calculation.
    */
-  private linkNodeStructures(emulator: MoiraEmulator): void {
-    console.error('[MulticomManager] Linking myNode entries to singlePort structures');
+  private linkNodeStructures(emulator: MoiraEmulator, maxLinkedNodes: number = MAX_NODES): void {
+    console.error(`[MulticomManager] Linking myNode entries to singlePort structures (cap=${maxLinkedNodes})`);
 
     for (let i = 0; i < MAX_NODES; i++) {
       const nodeAddr = MY_NODE_ARRAY_BASE + (i * MY_NODE_SIZE);
-      const portAddr = SINGLE_PORTS_BASE + (i * SINGLE_PORT_SIZE);
-
-      // myNode[i].s (offset 0x74 with alignment, pointer to singlePort)
-      // RTW reads from masterNode + d4 + 0xAE where d4 is node offset
-      // For node 0: 0x3A + 0x74 = 0xAE - this matches RTW's expectations
-      emulator.writeMemory32(nodeAddr + 0x74, portAddr);
-
-      console.error(`[MulticomManager]   myNode[${i}] at 0x${nodeAddr.toString(16)} -> singlePort at 0x${portAddr.toString(16)}`);
+      // WEB_*: only write non-null singlePort ptr for nodes within the cap;
+      // nodes at and beyond the cap keep the zero written by clearMemoryRegion,
+      // which RTW treats as end-of-list (it stops when myNode[i]+0x74 == 0).
+      if (i < maxLinkedNodes) {
+        const portAddr = SINGLE_PORTS_BASE + (i * SINGLE_PORT_SIZE);
+        emulator.writeMemory32(nodeAddr + 0x74, portAddr);
+        console.error(`[MulticomManager]   myNode[${i}] at 0x${nodeAddr.toString(16)} -> singlePort at 0x${portAddr.toString(16)}`);
+      }
     }
 
     console.error('[MulticomManager] Node structures linked');

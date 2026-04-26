@@ -644,7 +644,8 @@ debugLog(
       const { multicomManager, ENV_DOORS } = await import("../nodes/MulticomManager.js");
       this.logger.log('MULTICOM', `multicomManager imported successfully`);
 
-      // Initialize structures in this emulator
+      // Initialize structures in this emulator (all nodes get valid singlePort ptrs;
+      // RTW output is capped via JH_SM filtering in io.ts, not via the struct).
       multicomManager.initializeInEmulator(this.emulator, sessionId, nodeId);
       this.logger.log('MULTICOM', `initializeInEmulator called`);
 

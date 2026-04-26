@@ -40,6 +40,20 @@ export class XIMIOHandler {
   private keyState: Record<string, boolean> = {}; // Simultaneous key state tracking
   private ximPort?: number; // Address of AEDoorPort for bidirectional XIM protocol detection
 
+  // WEB_*: RTW-specific row-cap state. RTW iterates all 32 myNode slots unconditionally.
+  // We suppress JH_SM output for rows 8-31 so the table fits a 24-line screen, but
+  // stop suppressing after all 32 rows are done so the closing footer renders.
+  // Header sends 3 newline messages (data=1), each node row sends 1. Cap = 3 + 8 = 11.
+  // rtwSuppressing is set when the Nth row's newline arrives; cleared after
+  // (MAX_NODES - NODE_CAP) more newlines so the footer passes through.
+  private rtwNewlineCount = 0;
+  private rtwSuppressing = false;
+  private rtwSuppressedRows = 0;
+  private rtwPassthrough = false;  // set after JH_HK — never re-suppress
+  private static readonly RTW_NODE_CAP = 8;
+  private static readonly RTW_HEADER_NEWLINES = 3;
+  private static readonly RTW_MAX_NODES = 32;
+
   // Line input state
   private waitingForLineInput: boolean = false;
   private lineInputMessage: XIMMessage | null = null;
@@ -519,6 +533,35 @@ debugLog(
    * From E sources (express.e:3406-3411)
    */
   handleSendMessage(msg: XIMMessage): void {
+    // WEB_*: RTW-specific fallback cap. If the ss_NestCount field approach doesn't
+    // stop RTW from iterating, this JH_SM filter catches overflow rows.
+    // rtwSuppressing is set on the last allowed newline so the NEXT row's content
+    // (data=0 messages, which arrive before their own newline) are also swallowed.
+    const doorName = (this.bbsSession as any)?.doorCommand ||
+                     (this.bbsSession as any)?.doorId ||
+                     (this.bbsSession as any)?.doorName || '';
+    if (doorName.toUpperCase() === 'RTW') {
+      if (this.rtwPassthrough) {
+        // Footer and cleanup — let everything through
+      } else if (this.rtwSuppressing) {
+        // Still suppressing: check if this is the footer start
+        const text = this.getMessageString(msg);
+        if (text.includes('|____|') || text.includes('|___')) {
+          // Footer detected — stop suppressing and let this message through
+          this.rtwSuppressing = false;
+          this.rtwPassthrough = true;
+        } else {
+          this.reply(msg, 1);
+          return;
+        }
+      } else if (msg.data !== 0) {
+        this.rtwNewlineCount++;
+        if (this.rtwNewlineCount >= XIMIOHandler.RTW_HEADER_NEWLINES + XIMIOHandler.RTW_NODE_CAP) {
+          this.rtwSuppressing = true;
+        }
+      }
+    }
+
     const text = this.getMessageString(msg);
     const shouldAddNewline = msg.data !== 0;
     const trimmed = text.trim();
@@ -695,6 +738,28 @@ debugLog(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0
    * - rawArrow=TRUE: Raw bytes (27 for ESC, then '[', then 'A'/'B'/'C'/'D' on subsequent calls)
    */
   handleHotkey(msg: XIMMessage): void {
+    // WEB_*: RTW-specific — auto-reply to ALL JH_HK for RTW so pause prompts
+    // never reach the user. After replying, unset rtwSuppressing so the
+    // remaining node rows and footer content pass through unfiltered.
+    {
+      const doorNameForHK = (this.bbsSession as any)?.doorCommand ||
+                             (this.bbsSession as any)?.doorId ||
+                             (this.bbsSession as any)?.doorName || '';
+      if (doorNameForHK.toUpperCase() === 'RTW') {
+        const stringAddr = msg.msgAddr + 0x14;
+        this.emulator.writeMemory(stringAddr, 13);
+        this.emulator.writeMemory(stringAddr + 1, 0);
+        this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
+        this.reply(msg, 1);
+        // Keep rtwSuppressing=true — footer detection in handleSendMessage will
+        // clear it when the |____|... closing border arrives.
+        this.waitingForHotkey = false;
+        this.hotkeyMessage = null;
+        this.emulator.resume();
+        return;
+      }
+    }
+
     const prompt = this.getMessageString(msg);
 
 debugLog('[XIMIOHandler] JH_HK: Hotkey input request');
