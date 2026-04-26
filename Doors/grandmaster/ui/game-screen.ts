@@ -1509,19 +1509,41 @@ export class GameScreen {
   }
 
   /**
-   * Show pause menu
+   * Show pause menu with live stats
    */
   private showPauseMenu(): void {
+    const state = this.engine.getState();
+    const elapsed = state.startTime ? Math.floor((Date.now() - state.startTime) / 1000) : 0;
+    const mins = Math.floor(elapsed / 60);
+    const secs = (elapsed % 60).toString().padStart(2, '0');
+    const pps = this.getPPS(state);
+    const finErr = this.engine.getFinesseErrors();
+    const secMs = state.sectionTime ?? 0;
+    const secSecs = Math.floor(secMs / 1000);
+    const secMins = Math.floor(secSecs / 60);
+    const secS = (secSecs % 60).toString().padStart(2, '0');
+
+    const content =
+      `\n{bold}{yellow-fg}PAUSED{/yellow-fg}{/bold}\n\n` +
+      `{white-fg}Time:    ${mins}:${secs}{/white-fg}\n` +
+      `{cyan-fg}Grade:   ${state.grade}{/cyan-fg}\n` +
+      `{white-fg}Level:   ${state.level}{/white-fg}\n` +
+      `{green-fg}PPS:     ${pps}{/green-fg}\n` +
+      `{white-fg}Section: ${secMins}:${secS}{/white-fg}\n` +
+      `{${finErr === 0 ? 'green' : 'red'}-fg}Finesse: ${finErr} err{/${finErr === 0 ? 'green' : 'red'}-fg}\n\n` +
+      `{gray-fg}P=resume  ESC/Q=quit{/gray-fg}`;
+
     const pauseBox = createBox({
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 30,
-      height: 8,
+      width: 32,
+      height: 14,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'yellow' } },
-      align: 'center',
-      content: '\n{bold}PAUSED{/bold}\n\nPress P to resume\nPress ESC/Q to quit',
+      align: 'left',
+      content,
+      tags: true,
       fixed: true,
     });
 

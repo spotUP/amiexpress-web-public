@@ -1097,6 +1097,13 @@ export class GameEngine {
   }
 
   /**
+   * Get total finesse errors accumulated so far
+   */
+  getFinesseErrors(): number {
+    return this.finesseEvaluator.getStats().finesseErrors;
+  }
+
+  /**
    * Get game result
    */
   getResult(): GameResult {
