@@ -572,9 +572,11 @@ console.error("[CRITICAL] Stack:", error.stack);
   } catch (logError) {
     console.error("[CRITICAL] Failed to write error log:", logError);
   }
-  // Don't exit - keep server running unless it's truly fatal
-  // Only exit for critical errors that could corrupt state
-  const fatalErrors = ["EADDRINUSE", "EACCES", "EMFILE"];
+  // Don't exit - keep server running unless it's truly fatal.
+  // EADDRINUSE is NOT fatal here: Telnet/SSH start is wrapped in try/catch
+  // and will log a warning + continue. Crashing the whole backend over a busy
+  // auxiliary port is wrong.
+  const fatalErrors = ["EACCES", "EMFILE"];
   if (fatalErrors.some((code) => (error as any).code === code)) {
 console.error("[CRITICAL] Fatal error - shutting down");
     process.exit(1);

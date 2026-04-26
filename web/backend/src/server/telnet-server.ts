@@ -424,17 +424,47 @@ export class TelnetServer extends EventEmitter {
   }
 
   /**
-   * Start telnet server
+   * Start telnet server with retry-backoff on EADDRINUSE.
+   *
+   * A stale previous process can hold the port in TIME_WAIT for ~60 s after
+   * kill. We retry 4 times (0 s, 2 s, 4 s, 8 s) to ride that out without
+   * crashing the whole backend.
    */
-  public start(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.server.listen(this.port, () => {
-console.log(`[Telnet Server] Listening on port ${this.port}`);
-        resolve();
-      });
+  public async start(): Promise<void> {
+    const maxAttempts = 4;
+    const delays = [0, 2000, 4000, 8000];
 
-      this.server.on('error', reject);
-    });
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (delays[attempt] > 0) {
+        console.log(`[Telnet Server] Port ${this.port} busy — retrying in ${delays[attempt] / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
+        await new Promise(r => setTimeout(r, delays[attempt]));
+      }
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const onError = (err: NodeJS.ErrnoException) => {
+            this.server.removeListener('error', onError);
+            reject(err);
+          };
+          this.server.once('error', onError);
+          this.server.listen(this.port, () => {
+            this.server.removeListener('error', onError);
+            console.log(`[Telnet Server] Listening on port ${this.port}`);
+            resolve();
+          });
+        });
+        return; // success
+      } catch (err: any) {
+        if (err.code === 'EADDRINUSE' && attempt < maxAttempts - 1) {
+          // If the server entered a bad state, recreate it for the retry
+          try { this.server.close(); } catch {}
+          const { Server: NetServer } = await import('net');
+          this.server = new NetServer();
+          continue;
+        }
+        throw err; // non-retryable or out of attempts
+      }
+    }
   }
 
   /**
