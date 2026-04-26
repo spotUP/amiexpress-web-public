@@ -18,6 +18,7 @@ import {
   clearLines,
   isTopOut,
   isPerfectClear,
+  addGarbageLines,
 } from './board';
 import type { AttackManager } from '../network/attack-system';
 import { FinesseEvaluator } from './finesse';
@@ -136,6 +137,7 @@ export class GameEngine {
       backToBackCount: 0,
       piecesPlaced: 0,
       ultraTimeRemaining: mode === 'ultra' ? 120000 : 0,
+      digLinesRemaining: mode === 'dig' ? 10 : 0,
 
       // T-Spin tracking (HeborisCE tspin_flag system)
       lastMove: null,
@@ -192,6 +194,10 @@ export class GameEngine {
     this.state.sectionTime = 0;
     this.state.grade = '9';     // Initialize grade
     this.spawnPiece();
+    // Dig mode: pre-fill bottom 10 rows with garbage
+    if (this.state.mode === 'dig') {
+      addGarbageLines(this.state.board, 10);
+    }
   }
 
   /**
@@ -823,6 +829,15 @@ export class GameEngine {
 
       // Clear lines
       clearLines(this.state.board, clearedLines);
+
+      // Dig mode: track remaining garbage lines
+      if (this.state.mode === 'dig' && this.state.digLinesRemaining > 0) {
+        this.state.digLinesRemaining = Math.max(0, this.state.digLinesRemaining - lineCount);
+        if (this.state.digLinesRemaining === 0) {
+          this.state.status = 'complete';
+          this.state.endTime = Date.now();
+        }
+      }
 
       // Record lines for credit roll qualification
       if (this.state.creditRollActive) {

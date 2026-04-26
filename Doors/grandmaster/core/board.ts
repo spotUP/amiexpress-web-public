@@ -286,6 +286,27 @@ export function addGarbage(board: Board, lines: number, holePosition: number): v
 }
 
 /**
+ * Pre-fill the bottom N rows with garbage for Dig mode.
+ * Each row has exactly one random hole position.
+ */
+export function addGarbageLines(board: Board, count: number): void {
+  const { width, height, grid } = board;
+  // Shift existing rows up
+  for (let y = 0; y < height - count; y++) {
+    grid[y] = grid[y + count];
+  }
+  // Fill bottom rows with garbage
+  for (let y = height - count; y < height; y++) {
+    const hole = Math.floor(Math.random() * width);
+    grid[y] = Array.from({ length: width }, (_, x) => ({
+      filled: x !== hole,
+      color: 'gray' as any,
+      locked: true,
+    }));
+  }
+}
+
+/**
  * Clone board for simulation
  */
 export function cloneBoard(board: Board): Board {

@@ -655,6 +655,15 @@ class GameScreen {
             return '0.00';
         return (state.piecesPlaced / elapsed).toFixed(2);
     }
+    getDigHud(state) {
+        if (state.mode !== 'dig')
+            return '';
+        const remaining = state.digLinesRemaining ?? 0;
+        const color = remaining <= 3 ? 'green' : remaining <= 6 ? 'yellow' : 'red';
+        const filled = 10 - remaining;
+        const bar = '#'.repeat(filled) + '-'.repeat(remaining);
+        return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
+    }
     getUltraTime(state) {
         if (state.mode !== 'ultra' || state.ultraTimeRemaining === undefined)
             return '';
@@ -681,7 +690,8 @@ class GameScreen {
             `  Combo: ${comboDisplay}\n` +
             `  Grav:  ${gravDisplay}G\n` +
             `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
-            this.getUltraTime(state);
+            this.getUltraTime(state) +
+            this.getDigHud(state);
         if (state.lastTSpin === 'full') {
             statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
         }
@@ -1429,8 +1439,13 @@ class GameScreen {
         const gameState = this.engine.getState();
         let gameOverTitle = '{bold}{red-fg}GAME OVER{/red-fg}{/bold}';
         let gameOverColor = 'red';
-        // Ultra mode time-up
-        if (gameState.mode === 'ultra' && gameState.status === 'complete') {
+        // Dig mode complete
+        if (gameState.mode === 'dig' && gameState.status === 'complete') {
+            gameOverTitle = '{bold}{green-fg}DIG COMPLETE!{/green-fg}{/bold}';
+            gameOverColor = 'green';
+        }
+        else if (gameState.mode === 'ultra' && gameState.status === 'complete') {
+            // Ultra mode time-up
             gameOverTitle = '{bold}{cyan-fg}TIME UP!{/cyan-fg}{/bold}';
             gameOverColor = 'cyan';
         }

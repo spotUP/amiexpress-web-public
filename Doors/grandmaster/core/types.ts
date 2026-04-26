@@ -78,6 +78,7 @@ export interface GameState {
   backToBackCount: number;  // Track chain length for B2B visual bonus
   piecesPlaced: number;          // Total pieces locked (for PPS = piecesPlaced / elapsedSeconds)
   ultraTimeRemaining: number;    // ms remaining for Ultra mode (0 when not ultra)
+  digLinesRemaining: number;     // Garbage rows left to clear in Dig mode
 
   // T-Spin tracking (HeborisCE tspin_flag system)
   lastMove: 'rotate' | 'move' | 'drop' | null;

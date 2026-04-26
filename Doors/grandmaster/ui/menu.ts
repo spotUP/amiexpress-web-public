@@ -19,6 +19,7 @@ export type MenuSelection =
   | 'tetrinet'
   | 'training'
   | 'ultra'
+  | 'dig'
   | 'settings'
   | 'stats'
   | 'manual'
@@ -134,6 +135,7 @@ export class MenuScreen {
           '{yellow-fg}TETRINET{/yellow-fg}',
           'TRAINING',
           '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
+          '{red-fg}DIG MODE{/red-fg}',
           '',
           'Settings',
           'High Scores',
@@ -205,6 +207,7 @@ export class MenuScreen {
           'tetrinet',
           'training',
           'ultra',
+          'dig',
           'master',  // Separator line, default to master
           'settings',
           'stats',
@@ -229,17 +232,17 @@ export class MenuScreen {
 
       // Handle quit key
       menu.key(['q', 'Q'], () => {
-        menu.emit('select', null, 13);  // Trigger quit selection (index 13)
+        menu.emit('select', null, 14);  // Trigger quit selection (index 14)
       });
 
       // Handle ESC key - same as quit
       menu.key(['escape'], () => {
-        menu.emit('select', null, 13);  // Trigger quit selection (index 13)
+        menu.emit('select', null, 14);  // Trigger quit selection (index 14)
       });
 
       // Handle F1 key for manual
       menu.key(['f1'], () => {
-        menu.emit('select', null, 12);  // Trigger manual selection (index 12)
+        menu.emit('select', null, 13);  // Trigger manual selection (index 13)
       });
 
       // Focus and render
@@ -326,6 +329,14 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
       'points as possible\n' +
       'in 2 minutes!\n\n' +
       '{cyan-fg}Race the clock!{/cyan-fg}',
+
+      // DIG MODE
+      '{bold}{red-fg}DIG MODE{/red-fg}{/bold}\n\n' +
+      'Board starts with\n' +
+      '10 garbage rows.\n\n' +
+      'Clear them all!\n' +
+      'Faster = better\n' +
+      'time score.',
 
       // Empty separator
       '',

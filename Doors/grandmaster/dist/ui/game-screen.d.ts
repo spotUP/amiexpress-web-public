@@ -108,6 +108,7 @@ export declare class GameScreen {
     private render;
     private getBoardHash;
     private getPPS;
+    private getDigHud;
     private getUltraTime;
     private renderStats;
     /**

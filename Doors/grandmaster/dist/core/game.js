@@ -93,6 +93,7 @@ class GameEngine {
             backToBackCount: 0,
             piecesPlaced: 0,
             ultraTimeRemaining: mode === 'ultra' ? 120000 : 0,
+            digLinesRemaining: mode === 'dig' ? 10 : 0,
             // T-Spin tracking (HeborisCE tspin_flag system)
             lastMove: null,
             lastTSpin: null,
@@ -140,6 +141,10 @@ class GameEngine {
         this.state.sectionTime = 0;
         this.state.grade = '9'; // Initialize grade
         this.spawnPiece();
+        // Dig mode: pre-fill bottom 10 rows with garbage
+        if (this.state.mode === 'dig') {
+            (0, board_1.addGarbageLines)(this.state.board, 10);
+        }
     }
     /**
      * Spawn new piece
@@ -672,6 +677,14 @@ class GameEngine {
             this.glowManager.addLockGlow(lockedCells, isCombo, isTSpin);
             // Clear lines
             (0, board_1.clearLines)(this.state.board, clearedLines);
+            // Dig mode: track remaining garbage lines
+            if (this.state.mode === 'dig' && this.state.digLinesRemaining > 0) {
+                this.state.digLinesRemaining = Math.max(0, this.state.digLinesRemaining - lineCount);
+                if (this.state.digLinesRemaining === 0) {
+                    this.state.status = 'complete';
+                    this.state.endTime = Date.now();
+                }
+            }
             // Record lines for credit roll qualification
             if (this.state.creditRollActive) {
                 this.creditRollManager.addLines(lineCount);

@@ -61,6 +61,11 @@ export declare function getBumpiness(board: Board): number;
  */
 export declare function addGarbage(board: Board, lines: number, holePosition: number): void;
 /**
+ * Pre-fill the bottom N rows with garbage for Dig mode.
+ * Each row has exactly one random hole position.
+ */
+export declare function addGarbageLines(board: Board, count: number): void;
+/**
  * Clone board for simulation
  */
 export declare function cloneBoard(board: Board): Board;

@@ -22,6 +22,7 @@ exports.getColumnHeight = getColumnHeight;
 exports.countHoles = countHoles;
 exports.getBumpiness = getBumpiness;
 exports.addGarbage = addGarbage;
+exports.addGarbageLines = addGarbageLines;
 exports.cloneBoard = cloneBoard;
 /**
  * Create empty board
@@ -248,6 +249,26 @@ function addGarbage(board, lines, holePosition) {
             }
         }
         board.grid.push(garbageLine);
+    }
+}
+/**
+ * Pre-fill the bottom N rows with garbage for Dig mode.
+ * Each row has exactly one random hole position.
+ */
+function addGarbageLines(board, count) {
+    const { width, height, grid } = board;
+    // Shift existing rows up
+    for (let y = 0; y < height - count; y++) {
+        grid[y] = grid[y + count];
+    }
+    // Fill bottom rows with garbage
+    for (let y = height - count; y < height; y++) {
+        const hole = Math.floor(Math.random() * width);
+        grid[y] = Array.from({ length: width }, (_, x) => ({
+            filled: x !== hole,
+            color: 'gray',
+            locked: true,
+        }));
     }
 }
 /**
