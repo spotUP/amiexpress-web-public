@@ -6,7 +6,8 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import type { AppState, PlayerSettings, RotationSystem, KeyBindings } from '../core/types';
+import { GamepadInputManager, GamepadAxis } from '@amiexpress/bbs-door-sdk';
+import type { AppState, PlayerSettings, RotationSystem, KeyBindings, GamepadBindings } from '../core/types';
 import type { SoundEngine } from '../audio/sounds';
 
 /**
@@ -41,6 +42,29 @@ function formatKeyBinding(keys: string[]): string {
   return keys.map(k => KEY_DISPLAY_NAMES[k] || k.toUpperCase()).join(' / ');
 }
 
+function formatTriggerStr(t: string): string {
+  if (t.startsWith('button:')) {
+    const btn = t.slice(7).toUpperCase();
+    const names: Record<string, string> = { L1: 'L1', R1: 'R1', L2: 'L2', R2: 'R2', L3: 'L3', R3: 'R3', SELECT: 'Sel', START: 'Start', HOME: 'Home' };
+    return names[btn] ?? `Btn-${btn}`;
+  }
+  if (t.startsWith('dpad:')) {
+    const dir = t.slice(5);
+    return `D-${dir.charAt(0).toUpperCase()}${dir.slice(1)}`;
+  }
+  if (t.startsWith('axis:')) {
+    const parts = t.split(':');
+    const axisDisplay: Record<string, string> = { 'left-x': 'LS-X', 'left-y': 'LS-Y', 'right-x': 'RS-X', 'right-y': 'RS-Y' };
+    return `${axisDisplay[parts[1]] ?? parts[1]}${parts[2] === 'negative' ? '-' : '+'}`;
+  }
+  return t;
+}
+
+function formatGamepadBinding(triggers: string[]): string {
+  if (!triggers.length) return '(unbound)';
+  return triggers.map(formatTriggerStr).join(' / ');
+}
+
 /**
  * Settings screen
  */
@@ -48,7 +72,8 @@ export class SettingsScreen {
   constructor(
     private screen: Screen,
     private state: AppState,
-    private sounds: SoundEngine
+    private sounds: SoundEngine,
+    private bbsSession: any = null
   ) {}
 
   /**
@@ -131,8 +156,8 @@ export class SettingsScreen {
 
       // Handle item selection - wrap async handler for blessed's sync event requirement
       menu.on('select', (_item: any, index: number) => {
-        // Check for Save & Exit (last item, index 31)
-        if (index === 31) {
+        // Check for Save & Exit (last item, index 42)
+        if (index === 42) {
           this.sounds.playSfx('menu_ok');
           exitSettings();
           return;
@@ -162,6 +187,7 @@ export class SettingsScreen {
   private getMenuItems(): string[] {
     const s = this.state.settings;
     const kb = s.keyBindings;
+    const gp = s.gamepadBindings ?? {};
     return [
       `Rotation System:   {yellow-fg}${s.rotationSystem}{/yellow-fg}`,
       `DAS (ms):          {yellow-fg}${s.das}{/yellow-fg}`,
@@ -193,6 +219,17 @@ export class SettingsScreen {
       `Hard Drop:         {yellow-fg}${formatKeyBinding(kb.hardDrop)}{/yellow-fg}`,
       `Hold:              {yellow-fg}${formatKeyBinding(kb.hold)}{/yellow-fg}`,
       `Pause:             {yellow-fg}${formatKeyBinding(kb.pause)}{/yellow-fg}`,
+      '',
+      '{cyan-fg}--- JOYPAD BINDINGS ---{/cyan-fg}',
+      `Move Left:         {yellow-fg}${formatGamepadBinding(gp['left'] ?? [])}{/yellow-fg}`,
+      `Move Right:        {yellow-fg}${formatGamepadBinding(gp['right'] ?? [])}{/yellow-fg}`,
+      `Rotate CW:         {yellow-fg}${formatGamepadBinding(gp['rotate_cw'] ?? [])}{/yellow-fg}`,
+      `Rotate CCW:        {yellow-fg}${formatGamepadBinding(gp['rotate_ccw'] ?? [])}{/yellow-fg}`,
+      `Rotate 180:        {yellow-fg}${formatGamepadBinding(gp['rotate_180'] ?? [])}{/yellow-fg}`,
+      `Soft Drop:         {yellow-fg}${formatGamepadBinding(gp['soft_drop'] ?? [])}{/yellow-fg}`,
+      `Hard Drop:         {yellow-fg}${formatGamepadBinding(gp['hard_drop'] ?? [])}{/yellow-fg}`,
+      `Hold:              {yellow-fg}${formatGamepadBinding(gp['hold'] ?? [])}{/yellow-fg}`,
+      `Pause:             {yellow-fg}${formatGamepadBinding(gp['pause'] ?? [])}{/yellow-fg}`,
       '',
       '{green-fg}Save & Exit{/green-fg}',
     ];
@@ -233,6 +270,17 @@ export class SettingsScreen {
       'Press any key to rebind Hard Drop',
       'Press any key to rebind Hold',
       'Press any key to rebind Pause',
+      '',
+      '',  // JOYPAD BINDINGS header
+      'Press a joypad button to bind Move Left',
+      'Press a joypad button to bind Move Right',
+      'Press a joypad button to bind Rotate Clockwise',
+      'Press a joypad button to bind Rotate Counter-Clockwise',
+      'Press a joypad button to bind Rotate 180',
+      'Press a joypad button to bind Soft Drop',
+      'Press a joypad button to bind Hard Drop',
+      'Press a joypad button to bind Hold',
+      'Press a joypad button to bind Pause',
       '',
       'Save changes and return to menu',
     ];
@@ -326,7 +374,17 @@ export class SettingsScreen {
       case 29:  // Pause
         await this.editKeyBinding('pause', 'Pause');
         break;
-      // Note: Save & Exit (case 31) is handled directly in menu.on('select')
+      // Joypad bindings (index 31 = header, 32-40 = bindings)
+      case 32: await this.editGamepadBinding('left', 'Move Left'); break;
+      case 33: await this.editGamepadBinding('right', 'Move Right'); break;
+      case 34: await this.editGamepadBinding('rotate_cw', 'Rotate Clockwise'); break;
+      case 35: await this.editGamepadBinding('rotate_ccw', 'Rotate Counter-Clockwise'); break;
+      case 36: await this.editGamepadBinding('rotate_180', 'Rotate 180'); break;
+      case 37: await this.editGamepadBinding('soft_drop', 'Soft Drop'); break;
+      case 38: await this.editGamepadBinding('hard_drop', 'Hard Drop'); break;
+      case 39: await this.editGamepadBinding('hold', 'Hold'); break;
+      case 40: await this.editGamepadBinding('pause', 'Pause'); break;
+      // Note: Save & Exit (case 42) is handled directly in menu.on('select')
     }
 
     // Update menu items
@@ -602,5 +660,115 @@ export class SettingsScreen {
     const current = modes.indexOf(this.state.settings.floatTextMode);
     const next = (current + 1) % modes.length;
     this.state.settings.floatTextMode = modes[next];
+  }
+
+  /**
+   * Edit a joypad binding — listen for the next gamepad button/axis/dpad press.
+   * Up to 3 triggers per action. Enter saves, Escape cancels, Backspace removes last.
+   */
+  private async editGamepadBinding(bindingKey: string, displayName: string): Promise<void> {
+    if (!this.bbsSession) {
+      // No session available (unlikely but guard it)
+      return;
+    }
+
+    if (!this.state.settings.gamepadBindings) {
+      this.state.settings.gamepadBindings = {};
+    }
+    const gp = this.state.settings.gamepadBindings;
+    const triggers = [...(gp[bindingKey] ?? [])];
+
+    const bindingBox = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 55,
+      height: 12,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      content: '',
+      fixed: true,
+      focusable: true,
+    });
+
+    const updateDisplay = () => {
+      const current = triggers.length
+        ? triggers.map(formatTriggerStr).join(' / ')
+        : '(none)';
+      bindingBox.setContent(
+        `{cyan-fg}${displayName.toUpperCase()}{/cyan-fg}\n\n` +
+        `Current: {yellow-fg}${current}{/yellow-fg}\n\n` +
+        `{gray-fg}Press a joypad button/stick to add (max 3){/gray-fg}\n` +
+        `{gray-fg}Backspace = remove last   Delete = clear all{/gray-fg}\n` +
+        `{gray-fg}Enter = save              Escape = cancel{/gray-fg}`
+      );
+      this.screen.render();
+    };
+
+    updateDisplay();
+    bindingBox.focus();
+
+    return new Promise((resolve) => {
+      const gim = new GamepadInputManager(this.bbsSession);
+
+      const cleanup = () => {
+        this.screen.removeListener('keypress', keyHandler);
+        gim.destroy();
+        bindingBox.destroy();
+        this.screen.render();
+        resolve();
+      };
+
+      const addTrigger = (t: string) => {
+        if (!triggers.includes(t) && triggers.length < 3) {
+          triggers.push(t);
+          updateDisplay();
+        }
+      };
+
+      // Keyboard controls for the dialog
+      const keyHandler = (_ch: any, key: any) => {
+        if (!key) return;
+        const k = key.full || key.name;
+        if (k === 'return' || k === 'enter') {
+          gp[bindingKey] = [...triggers];
+          cleanup();
+        } else if (k === 'escape') {
+          cleanup();
+        } else if (k === 'backspace') {
+          triggers.pop();
+          updateDisplay();
+        } else if (k === 'delete') {
+          triggers.length = 0;
+          updateDisplay();
+        }
+      };
+      this.screen.on('keypress', keyHandler);
+
+      // Detect button presses
+      for (const btn of ['a', 'b', 'x', 'y', 'l1', 'r1', 'l2', 'r2', 'select', 'start', 'l3', 'r3', 'home']) {
+        gim.on(`button:${btn}`, (pressed: boolean) => {
+          if (pressed) addTrigger(`button:${btn}`);
+        });
+      }
+
+      // Detect dpad
+      gim.on('dpad', (direction: string) => {
+        if (direction && direction !== 'none') addTrigger(`dpad:${direction}`);
+      });
+
+      // Detect analog axes — require high deflection (0.85) to avoid accidental binding
+      const axisNames: Record<number, string> = {
+        [GamepadAxis.LEFT_STICK_X]: 'left-x',
+        [GamepadAxis.LEFT_STICK_Y]: 'left-y',
+        [GamepadAxis.RIGHT_STICK_X]: 'right-x',
+        [GamepadAxis.RIGHT_STICK_Y]: 'right-y',
+      };
+      gim.on('axis', (axis: GamepadAxis, value: number) => {
+        const name = axisNames[axis];
+        if (!name || Math.abs(value) < 0.85) return;
+        addTrigger(`axis:${name}:${value > 0 ? 'positive' : 'negative'}`);
+      });
+    });
   }
 }

@@ -135,6 +135,12 @@ export interface GameState {
 // Player Settings
 // ============================================================================
 
+/**
+ * Gamepad bindings stored as trigger strings: "button:a", "dpad:left", "axis:left-x:negative"
+ * Keys match GameAction names.
+ */
+export type GamepadBindings = Partial<Record<string, string[]>>;
+
 export interface KeyBindings {
   left: string[];
   right: string[];
@@ -159,6 +165,7 @@ export interface PlayerSettings {
   musicVolume: number;
   sfxVolume: number;
   keyBindings: KeyBindings;
+  gamepadBindings?: GamepadBindings;
 
   // Visual Effects Settings
   blockGlow: boolean;                 // Enable/disable block glow system

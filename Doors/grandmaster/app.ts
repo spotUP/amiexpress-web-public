@@ -60,6 +60,55 @@ import { MultiplayerServer } from './server/multiplayer-server';
 import { showManual } from './ui/manual';
 
 // Default gamepad button mapping for GrandMaster.
+// Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
+// into a GamepadTrigger object. Returns null for unknown formats.
+function parseTriggerStr(t: string): GamepadTrigger | null {
+  if (t.startsWith('button:')) {
+    const btn = t.slice(7);
+    const btnMap: Record<string, GamepadButton> = {
+      a: GamepadButton.A, b: GamepadButton.B, x: GamepadButton.X, y: GamepadButton.Y,
+      l1: GamepadButton.L1, r1: GamepadButton.R1, l2: GamepadButton.L2, r2: GamepadButton.R2,
+      select: GamepadButton.SELECT, start: GamepadButton.START,
+      l3: GamepadButton.L3, r3: GamepadButton.R3, home: GamepadButton.HOME,
+    };
+    const button = btnMap[btn];
+    return button !== undefined ? { type: 'button', button } : null;
+  }
+  if (t.startsWith('dpad:')) {
+    const dir = t.slice(5) as 'up' | 'down' | 'left' | 'right';
+    return { type: 'dpad', direction: dir };
+  }
+  if (t.startsWith('axis:')) {
+    const [, axisName, dirStr] = t.split(':');
+    const axisMap: Record<string, GamepadAxis> = {
+      'left-x': GamepadAxis.LEFT_STICK_X, 'left-y': GamepadAxis.LEFT_STICK_Y,
+      'right-x': GamepadAxis.RIGHT_STICK_X, 'right-y': GamepadAxis.RIGHT_STICK_Y,
+    };
+    const axis = axisMap[axisName];
+    if (axis === undefined) return null;
+    return { type: 'axis', axis, direction: dirStr as 'positive' | 'negative' };
+  }
+  return null;
+}
+
+// Merge user's saved gamepad bindings on top of the default mapping.
+// Actions with user-defined triggers override the default; empty arrays disable.
+function buildGamepadMapping(
+  defaults: Partial<Record<GameAction, GamepadTrigger[]>>,
+  saved: Partial<Record<string, string[]>>
+): Partial<Record<GameAction, GamepadTrigger[]>> {
+  const result = { ...defaults };
+  for (const [action, trigStrs] of Object.entries(saved)) {
+    const triggers = (trigStrs as string[]).map(parseTriggerStr).filter(Boolean) as GamepadTrigger[];
+    if (triggers.length > 0) {
+      result[action as GameAction] = triggers;
+    } else {
+      delete result[action as GameAction]; // user disabled this action
+    }
+  }
+  return result;
+}
+
 // D-pad and left stick handle movement; face buttons handle rotation/actions.
 const GAMEPAD_MAPPING: Partial<Record<GameAction, GamepadTrigger[]>> = {
   left:       [{ type: 'dpad', direction: 'left'  }, { type: 'axis', axis: GamepadAxis.LEFT_STICK_X, direction: 'negative' }],
@@ -449,10 +498,10 @@ export class GrandmasterApp {
     const username = this.session.user?.username || this.state.playerName;
     this.gameEngine.startRecording(userId, username);
 
-    // Create gamepad mapper (uses bbsSession so events route from browser → door)
+    // Create gamepad mapper — merge user's saved bindings over the defaults
     const gamepadMapper = new GamepadActionMapper<GameAction>({
       bbsSession: this.session.bbsSession,
-      mapping: GAMEPAD_MAPPING,
+      mapping: buildGamepadMapping(GAMEPAD_MAPPING, this.state.settings.gamepadBindings ?? {}),
       repeatActions: ['left', 'right', 'soft_drop'],
       dasDelay: this.state.settings.das ?? 133,
       arrRate: this.state.settings.arr ?? 10,
@@ -2159,7 +2208,7 @@ export class GrandmasterApp {
     this.currentScreen = 'settings';
 
     this.inputManager.suspend();
-    const settingsScreen = new SettingsScreen(this.screen, this.state, this.sounds);
+    const settingsScreen = new SettingsScreen(this.screen, this.state, this.sounds, this.session.bbsSession);
     await settingsScreen.show();
     this.inputManager.resume();
 
