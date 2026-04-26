@@ -45,11 +45,32 @@ export function TerminalPage(): JSX.Element {
     };
   }, []);
 
+  // On mobile: xterm keeps a hidden textarea focused to capture input.
+  // iOS sees any focused textarea and opens the native keyboard.
+  // inputmode="none" tells iOS not to show a virtual keyboard for this element.
+  // Applied after a short delay to let the terminal initialize its DOM.
+  useEffect(() => {
+    if (!isMobile) return;
+    const timer = setTimeout(() => {
+      const textarea = terminalRef.current?.getTerminal()?.textarea;
+      if (textarea) textarea.setAttribute('inputmode', 'none');
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [isMobile]);
+
   const handleKey = useCallback((data: string) => {
+    // If user previously used ABC (inputmode=text), restore suppression on next custom keypress
+    const textarea = terminalRef.current?.getTerminal()?.textarea;
+    if (textarea && textarea.getAttribute('inputmode') !== 'none') {
+      textarea.setAttribute('inputmode', 'none');
+    }
     terminalRef.current?.sendCommand(data);
   }, []);
 
   const handleOpenNativeKeyboard = useCallback(() => {
+    // Temporarily allow native keyboard for text entry
+    const textarea = terminalRef.current?.getTerminal()?.textarea;
+    if (textarea) textarea.setAttribute('inputmode', 'text');
     terminalRef.current?.focus();
   }, []);
 
