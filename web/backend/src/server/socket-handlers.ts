@@ -504,17 +504,11 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
     }
   });
 
-  // Handle gamepad events
+  // Handle gamepad events — forward to GamepadInputManager via session.gamepadHandler
   socket.on('gamepad-event', (event: any) => {
     const session = getSession(socket.id);
     if (!session) return;
-
-    // Gamepad events are handled by the door's input handler if active
-    // TODO: Implement proper gamepad routing to doors
-    if (session.inDoorManager) {
-      // Gamepad events would need a dedicated handler - for now, log
-      console.log('[socket-handlers] gamepad-event received while in door, event:', event);
-    }
+    session.gamepadHandler?.(event);
   });
 
   socket.on('command', (data: string) => {

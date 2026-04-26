@@ -50,10 +50,11 @@ export class GamepadInputManager extends EventEmitter {
     this.bbsSession = bbsSession;
     this.config = { ...DEFAULT_GAMEPAD_CONFIG, ...config };
 
-    // Listen for gamepad events from backend (only when a valid session is provided).
-    // Client-side browser doors may pass null/undefined; guard to avoid crash.
-    if (this.bbsSession && typeof this.bbsSession.on === 'function') {
-      this.bbsSession.on('gamepad', this.handleGamepadEvent.bind(this));
+    // Register on bbsSession.gamepadHandler — the socket handler routes gamepad-event
+    // events from the browser to this callback. Client-side browser doors pass
+    // null/undefined for bbsSession and get events directly from the browser instead.
+    if (this.bbsSession) {
+      this.bbsSession.gamepadHandler = this.handleGamepadEvent.bind(this);
     }
   }
 
@@ -269,7 +270,9 @@ export class GamepadInputManager extends EventEmitter {
    * Clean up
    */
   destroy(): void {
-    this.bbsSession.off('gamepad', this.handleGamepadEvent.bind(this));
+    if (this.bbsSession?.gamepadHandler) {
+      this.bbsSession.gamepadHandler = undefined;
+    }
     this.removeAllListeners();
     this.connectedControllers.clear();
     this.buttonStates.clear();
