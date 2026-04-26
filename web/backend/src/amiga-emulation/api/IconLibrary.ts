@@ -950,9 +950,13 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
             continue;
           }
 
-          // Scan the string for validity
+          // Scan the string for validity.
+          // CRITICAL: Amiga .info length-prefixed strings INCLUDE the null terminator in
+          // the length. We must stop scanning at null (not treat it as invalid).
+          let actualLen = possibleLen;
           for (let j = 0; j < possibleLen; j++) {
             const c = buffer[strStart + j];
+            if (c === 0) { actualLen = j; break; } // null terminator — end of string
             if (c === 61) hasEquals = true; // '='
             // Allow printable ASCII
             if (c < 32 || c > 126) {
@@ -964,19 +968,24 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
           }
 
           // Valid tooltype should have uppercase key and either be a flag or KEY=VALUE
-          // Require at least 3 chars for flags without '=', and prefer ones with '='
-          if (isValid && (hasEquals || (possibleLen >= 3 && possibleLen <= 32))) {
-            // Additional validation: for flags without '=', the whole string should be UPPERCASE
+          // Require at least 1 char (actualLen, not possibleLen, to exclude the null)
+          if (isValid && actualLen >= 1 && (hasEquals || actualLen <= 32)) {
+            // Additional validation: for flags without '=', allow tooltype-style names
+            // (uppercase, digits, underscores, dots — e.g. "CONF.1", "ICONFACE")
             if (!hasEquals) {
-              let allUpperOrDigit = true;
-              for (let j = 0; j < possibleLen; j++) {
+              let validFlag = true;
+              for (let j = 0; j < actualLen; j++) {
                 const c = buffer[strStart + j];
-                if (!((c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95)) { // A-Z, 0-9, _
-                  allUpperOrDigit = false;
+                if (!((c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95 || c === 46)) {
+                  // A-Z, 0-9, _, . (dot for CONF.N style tooltypes)
+                  validFlag = false;
                   break;
                 }
               }
-              if (!allUpperOrDigit) continue;
+              if (!validFlag) continue;
+              // Reject pure-numeric strings and single-char strings as false positives
+              const flagStr = buffer.toString('latin1', strStart, strStart + actualLen);
+              if (/^\d+$/.test(flagStr) || actualLen < 2) continue;
             }
             tooltypeStart = i;
             break;
@@ -1011,8 +1020,8 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
                 }
                 tooltypes.push(currentString);
               }
-            } else if (currentString.length >= 2 && /^[A-Z0-9_]+$/.test(currentString)) {
-              // Standalone flag (no =)
+            } else if (currentString.length >= 2 && /^[A-Z][A-Z0-9_.]*$/.test(currentString)) {
+              // Standalone flag (no =) — must start with uppercase, allow dots (CONF.1 etc)
               tooltypes.push(currentString);
             }
             currentString = '';
@@ -1032,21 +1041,26 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
         }
 
         // Read the string (use latin1/binary to preserve ESC and other control chars)
-        const str = buffer.toString('latin1', offset + 4, offset + 4 + len);
+        // Strip trailing null terminator — Amiga includes it in the length
+        let rawStr = buffer.toString('latin1', offset + 4, offset + 4 + len);
+        const nullPos = rawStr.indexOf('\0');
+        if (nullPos >= 0) rawStr = rawStr.substring(0, nullPos);
 
         // Validate it looks like a tooltype
-        if (str.length >= 2) {
-          // Find start of actual key (skip any binary prefix)
+        if (rawStr.length >= 1) {
+          // Find start of actual key (skip any non-tooltype binary prefix)
           let keyStart = 0;
-          for (let j = 0; j < str.length; j++) {
-            const c = str.charCodeAt(j);
+          for (let j = 0; j < rawStr.length; j++) {
+            const c = rawStr.charCodeAt(j);
             if ((c >= 65 && c <= 90) || c === 95) { // A-Z or _
               keyStart = j;
               break;
             }
           }
-          const cleanStr = keyStart > 0 ? str.substring(keyStart) : str;
-          if (cleanStr.includes('=') || /^[A-Z0-9_]+$/.test(cleanStr)) {
+          const cleanStr = keyStart > 0 ? rawStr.substring(keyStart) : rawStr;
+          // Accept KEY=VALUE, or flag-style tooltypes (uppercase letters, digits, underscore, dot)
+          const isFlagLike = /^[A-Z][A-Z0-9_.]*$/.test(cleanStr);
+          if (cleanStr.includes('=') || isFlagLike) {
             tooltypes.push(cleanStr);
           } else {
             // Might be end of tooltypes section
@@ -1055,8 +1069,8 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
         }
 
         // Move to next entry (length + string + padding to word boundary)
+        // Amiga .info tooltype entries are packed contiguously (no inter-entry padding)
         offset += 4 + len;
-        if (offset % 2 !== 0) offset++; // Word align
       }
 
       return tooltypes.length > 0 ? tooltypes : null;
