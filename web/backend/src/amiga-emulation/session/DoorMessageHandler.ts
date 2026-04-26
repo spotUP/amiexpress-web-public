@@ -636,7 +636,9 @@ debugLog(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
           (this.config.bbsSession as any)?.user?.linesPerScreen ??
           (this.config.bbsSession as any)?.user?.lineLength ??
           24;
-        const lineLen = typeof rawLineLen === "number" && rawLineLen > 0 ? rawLineLen : 29;
+        // 0 = unlimited (AmiExpress convention). See xim/system-commands.ts
+        // handleRegister for the full rationale (JoinCnf equality-pagination).
+        const lineLen = typeof rawLineLen === "number" && rawLineLen >= 0 ? rawLineLen : 29;
         this.emulator.writeMemory32(
           msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
           lineLen

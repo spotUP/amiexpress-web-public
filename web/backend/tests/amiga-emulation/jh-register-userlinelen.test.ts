@@ -170,12 +170,17 @@ describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
     expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(29);
   });
 
-  test('coerces 0 / non-positive linesPerScreen to default 29 (no pause-every-line)', () => {
-    // If a user record has linesPerScreen=0 (or undefined coerced to 0) we must
-    // NOT pass 0 to the door — that would cause the door's checkForPause to
-    // treat its threshold as 0/1 and pause after every line (TLIST regression).
+  test('passes linesPerScreen=0 through unchanged (AmiExpress "unlimited" convention)', () => {
+    // 0 is a valid AmiExpress value meaning "no pagination" — must NOT be
+    // coerced to a default. JoinCnf 4.0 paginates by *equality* against this
+    // value (cmp.l <userLineLen>, lineCounter; bne skip-prompt). With 0,
+    // counter starts at 0, immediately increments to 1, never equals 0
+    // again → splash prompt is suppressed. With 23 (sysop default), counter
+    // hits 23 mid-banner → splash fires (the regression).
+    // express.e-style doors that use `if linelen==0 linelen:=22` still get
+    // their default pagination; TLP2-style BSS-init doors are unaffected.
     const { handler, emulator, msgAddr } = buildHandler({
-      username: 'broken',
+      username: 'unlimited-user',
       linesPerScreen: 0,
     });
 
@@ -189,10 +194,7 @@ describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
       string: '',
     } as any);
 
-    const writtenCmd = emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET);
-    const writtenData = emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET);
-    expect(writtenCmd).toBeGreaterThan(1);
-    expect(writtenCmd).toBe(29);
-    expect(writtenData).toBe(29);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(0);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(0);
   });
 });
