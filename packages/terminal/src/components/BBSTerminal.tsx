@@ -95,6 +95,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   forcedModeRef.current = forcedMode;
   const keepFocusedRef = useRef(keepFocused);
   keepFocusedRef.current = keepFocused;
+  // Tracks the current calibrated font size so set-font / font-preference events
+  // don't override the mobile-calibrated size with the hardcoded desktop 16px value.
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
 
   // Login state tracking
   const loginState = useRef<
@@ -2014,54 +2018,40 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('set-font', (fontName: string) => {
       console.log('[Font] Received set-font event:', fontName);
-      const fontMetrics: Record<string, { size: number; lineHeight: number }> = {
-        'mosoul': { size: 16, lineHeight: 1.2 },
-        'MicroKnight': { size: 16, lineHeight: 1.2 },
-        'MicroKnightPlus': { size: 16, lineHeight: 1.2 },
-        'P0T-NOoDLE': { size: 16, lineHeight: 1.2 },
-        'Topaz_a500': { size: 16, lineHeight: 1.2 },
-        'Topaz_a1200': { size: 16, lineHeight: 1.2 },
-        'TopazPlus_a500': { size: 16, lineHeight: 1.2 },
-        'TopazPlus_a1200': { size: 16, lineHeight: 1.2 }
+      const lineHeightMap: Record<string, number> = {
+        'mosoul': 1.2, 'MicroKnight': 1.2, 'MicroKnightPlus': 1.2,
+        'P0T-NOoDLE': 1.2, 'Topaz_a500': 1.2, 'Topaz_a1200': 1.2,
+        'TopazPlus_a500': 1.2, 'TopazPlus_a1200': 1.2,
       };
-
-      const metrics = fontMetrics[fontName] || { size: 16, lineHeight: 1.2 };
       const fontFamily = `${fontName}, "Courier New", monospace`;
-
-      // Update both the terminal options and the normalFont ref
+      const lineHeight = lineHeightMap[fontName] ?? 1.2;
+      // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
+      const size = fontSizeRef.current;
       term.options.fontFamily = fontFamily;
-      term.options.fontSize = metrics.size;
-      term.options.lineHeight = metrics.lineHeight;
+      term.options.fontSize = size;
+      term.options.lineHeight = lineHeight;
       normalFont.current = fontFamily;
-
-      console.log('[Font] Applied font:', fontName, 'size:', metrics.size, 'lineHeight:', metrics.lineHeight);
+      console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', lineHeight);
     });
 
     // Handle font preference loaded from database on login
     socket.on('font-preference', (data: { font: string }) => {
       console.log('[Font Preference] Received saved preference:', data.font);
-      const fontMetrics: Record<string, { size: number; lineHeight: number }> = {
-        'mosoul': { size: 16, lineHeight: 1.2 },
-        'MicroKnight': { size: 16, lineHeight: 1.2 },
-        'MicroKnightPlus': { size: 16, lineHeight: 1.2 },
-        'P0T-NOoDLE': { size: 16, lineHeight: 1.2 },
-        'Topaz_a500': { size: 16, lineHeight: 1.2 },
-        'Topaz_a1200': { size: 16, lineHeight: 1.2 },
-        'TopazPlus_a500': { size: 16, lineHeight: 1.2 },
-        'TopazPlus_a1200': { size: 16, lineHeight: 1.2 }
+      const lineHeightMap: Record<string, number> = {
+        'mosoul': 1.2, 'MicroKnight': 1.2, 'MicroKnightPlus': 1.2,
+        'P0T-NOoDLE': 1.2, 'Topaz_a500': 1.2, 'Topaz_a1200': 1.2,
+        'TopazPlus_a500': 1.2, 'TopazPlus_a1200': 1.2,
       };
-
       const fontName = data.font;
-      const metrics = fontMetrics[fontName] || { size: 16, lineHeight: 1.2 };
       const fontFamily = `${fontName}, "Courier New", monospace`;
-
-      // Update both the terminal options and the normalFont ref
+      const lineHeight = lineHeightMap[fontName] ?? 1.2;
+      // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
+      const size = fontSizeRef.current;
       term.options.fontFamily = fontFamily;
-      term.options.fontSize = metrics.size;
-      term.options.lineHeight = metrics.lineHeight;
+      term.options.fontSize = size;
+      term.options.lineHeight = lineHeight;
       normalFont.current = fontFamily;
-
-      console.log('[Font Preference] Applied saved font:', fontName, 'size:', metrics.size, 'lineHeight:', metrics.lineHeight);
+      console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', lineHeight);
     });
 
     // Keyboard input handling
