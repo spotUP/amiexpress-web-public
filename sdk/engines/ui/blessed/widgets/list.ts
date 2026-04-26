@@ -410,6 +410,13 @@ export class List extends Element {
     } else {
       this.selected = Math.min(this.selected, items.length - 1);
     }
+    // Invalidate the cached rendered lines. _updateContent has a fast path
+    // that early-returns when previousSelected === selected, which would
+    // skip the rebuild when a caller swaps the items array but lands on
+    // the same selection index (e.g., CategoryPicker switching tabs always
+    // re-selects index 0). Without this, the visible content stays as the
+    // old items until a real selection change forces a redraw.
+    (this as any)._lines = undefined;
     this._updateContent();
     this.emit('set items', items);
   }
