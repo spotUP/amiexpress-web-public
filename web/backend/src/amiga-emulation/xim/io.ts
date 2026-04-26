@@ -1596,14 +1596,17 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // as "[36m" instead of actual colored text.
     let converted = fullText.replace(/\x9b/g, '\x1b[');
 
-    // Convert Form Feed (0x0C) to ANSI clear screen + home cursor (ESC[2J ESC[H).
+    // Convert Form Feed (0x0C) to scroll-to-scrollback + home cursor.
     // On Amiga console.device, 0x0C (FF) is "Clear screen and home cursor" — doors
     // like dRE!WAll send \f\n\r as their first output to clear the terminal before
-    // drawing at absolute positions [5;0H, [22;0H, [23;1H. xterm.js treats 0x0C as
-    // plain line-feed, so without this translation the door overlays its banner on
-    // top of whatever BBS content was on screen. See console.device docs and
-    // Documentation/6-Progress/dRE_WALL_HANDOFF.md.
-    converted = converted.replace(/\f/g, '\x1b[2J\x1b[H');
+    // drawing at absolute positions [5;0H, [22;0H, [23;1H.
+    //
+    // ESC[2J erases the visible viewport WITHOUT pushing content to xterm.js scrollback,
+    // so previous output is permanently lost. Instead we scroll 30 lines (> one screen)
+    // to push all visible content into scrollback history, then cursor-home.
+    // The effect is the same visually: blank screen, cursor at top — but the user can
+    // still scroll up to see what was there before.
+    converted = converted.replace(/\f/g, '\r\n'.repeat(30) + '\x1b[H');
 
     // Filter out Amiga console.device specific codes that aren't standard ANSI:
     // - ESC[0 p = cursor off (Amiga-specific, not valid ANSI)
