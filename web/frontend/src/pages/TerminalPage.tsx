@@ -87,10 +87,12 @@ export function TerminalPage(): JSX.Element {
     requestAnimationFrame(() => {
       const el = terminalRef.current?.getTerminal()?.element;
       if (!el) return;
-      const actualWidth = el.offsetWidth;
+      // term.element is the outer container (full viewport width in fixed mode).
+      // .xterm-screen is the actual rendered cell area = 80 * charWidth pixels.
+      const screen = el.querySelector('.xterm-screen') as HTMLElement | null;
+      const actualWidth = screen?.offsetWidth ?? 0;
       if (actualWidth <= 0) return;
-      const target = window.innerWidth;
-      const corrected = Math.floor(fontSizeRef.current * target / actualWidth);
+      const corrected = Math.floor(fontSizeRef.current * window.innerWidth / actualWidth);
       if (corrected > 0 && corrected !== fontSizeRef.current) {
         setFontSize(corrected);
       }
