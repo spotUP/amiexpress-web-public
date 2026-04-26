@@ -74,12 +74,9 @@ export function TerminalPage(): JSX.Element {
   }, [isMobile]);
 
   const handleKey = useCallback((data: string) => {
-    // If user previously used ABC (inputmode=text), restore suppression on next custom keypress
-    const textarea = terminalRef.current?.getTerminal()?.textarea;
-    if (textarea && textarea.getAttribute('inputmode') !== 'none') {
-      textarea.setAttribute('inputmode', 'none');
-    }
     terminalRef.current?.sendCommand(data);
+    // Ensure terminal stays focused after every keypress (mobile & desktop)
+    terminalRef.current?.focus();
   }, []);
 
   return (
@@ -94,6 +91,7 @@ export function TerminalPage(): JSX.Element {
       <BBSTerminal
         ref={terminalRef}
         fontSize={fontSize}
+        keepFocused
       />
       {isMobile && (
         <MobileBBSKeyboard

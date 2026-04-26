@@ -42,6 +42,11 @@ interface BBSTerminalProps {
    * Pass 'wide' on mobile so FitAddon controls columns.
    */
   forcedMode?: 'fixed' | 'wide';
+  /**
+   * When true, the terminal refocuses itself whenever it loses focus.
+   * Use for full-screen BBS mode where input must always be captured.
+   */
+  keepFocused?: boolean;
 }
 
 export interface BBSTerminalRef {
@@ -76,13 +81,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   onDisconnect,
   onAnsiOutput,
   forcedMode,
+  keepFocused,
 }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  // Always-current ref so socket handlers see the latest forcedMode without dep-array reinit
+  // Always-current refs so socket handlers see the latest values without dep-array reinit
   const forcedModeRef = useRef(forcedMode);
   forcedModeRef.current = forcedMode;
+  const keepFocusedRef = useRef(keepFocused);
+  keepFocusedRef.current = keepFocused;
 
   // Login state tracking
   const loginState = useRef<
@@ -460,6 +468,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     term.open(terminalRef.current);
     terminalInstance.current = term;
+
+    // When keepFocused is set, auto-refocus whenever the terminal loses focus.
+    // This ensures the BBS always captures input on both desktop and mobile.
+    term.textarea?.addEventListener('blur', () => {
+      if (!keepFocusedRef.current) return;
+      requestAnimationFrame(() => {
+        if (document.visibilityState === 'visible') {
+          term.focus();
+        }
+      });
+    });
 
     // Custom keyboard handler for Shift+Arrow keys (for text selection in doors)
     // xterm.js doesn't send proper escape sequences for Shift+Arrow by default
