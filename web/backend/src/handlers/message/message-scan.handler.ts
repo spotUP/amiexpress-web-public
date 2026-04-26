@@ -362,15 +362,53 @@ console.log(`[confScan] Skipping ${confName} (index ${conf-1}) - char is "${acce
 console.log(`[confScan] -> Scanning ${confName} (${conf}/${numConf})`);
 
     try {
-      // Check if AquaScan (N S U) is installed - it handles both mail and file scanning
       const { runSysCommand } = require('../command-execution.handler');
       const hasAquaScan = await checkCommandExists('N');
 
-      if (hasAquaScan) {
-        // AquaScan installed - use it for both mail and file scanning (override)
-console.log(`[confScan] Using AquaScan (N S U) for conf ${conf}`);
+      // express.e:28092-28098 — Mail scan ALWAYS runs, regardless of file scanner.
+      // Previous code skipped mail scanning entirely when AquaScan was installed,
+      // which meant mail notifications (including "eall" from ctop) never appeared.
+      const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
 
-        // Find first message base for this conference
+      for (const msgBase of confMsgBases) {
+        const msgBaseId = msgBase.id;
+
+        // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
+        const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
+
+        // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...)
+        await joinConference(socket, session, conf, msgBaseId, true);
+
+        if (mscan) {
+console.log(`[confScan] Mail scan: ${confName} / msgBase ${msgBaseId}`);
+
+          const { newPublic, newPrivate, lastScanned } = await countNewMessages(
+            user.id,
+            conf,
+            msgBaseId,
+            username
+          );
+
+          session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
+          session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
+          session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
+
+          if (lastScanned > 0) {
+            await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
+          }
+
+          if (newPublic > 0 || newPrivate > 0) {
+            const total = newPublic + newPrivate;
+            socket.emit('ansi-output', `\x1b[32m${confName}\x1b[0m: ${total} new message${total !== 1 ? 's' : ''}\r\n`);
+            session.tempData.lineCount = (session.tempData.lineCount || 0) + 1;
+          }
+        }
+      }
+
+      // express.e:28089/28099 — File scan (new files): use AquaScan if available.
+      if (hasAquaScan) {
+console.log(`[confScan] File scan via AquaScan (N S U): ${confName}`);
+        // Join first message base for this conference before running AquaScan
         const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
         const msgBaseId = firstMsgBase ? firstMsgBase.id : 1;
         await joinConference(socket, session, conf, msgBaseId, true);
@@ -378,69 +416,20 @@ console.log(`[confScan] Using AquaScan (N S U) for conf ${conf}`);
         session.newFilesPauseFlag = true;
         await runSysCommand(socket, session, 'N', 'S U');
         session.newFilesPauseFlag = false;
-
-        const shouldContinue = await checkForPause(socket, session);
-        if (!shouldContinue) {
-console.log(`[confScan] User stopped scan at conference ${conf}`);
-          mystat = -1;
-        }
       } else {
-        // No AquaScan - use internal 1:1 express.e implementation
-        // express.e:28092-28098 - Loop through message bases for mail scanning
-        const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
-
-        for (const msgBase of confMsgBases) {
-          const msgBaseId = msgBase.id;
-
-          // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
-          const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
-
-          // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...)
-          await joinConference(socket, session, conf, msgBaseId, true);
-
-          // express.e:5119-5128 - Mail scanning in joinConf via callMsgFuncs(MAIL_SCAN)
-          if (mscan) {
-console.log(`[confScan] Internal mail scan: ${confName} / msgBase ${msgBaseId}`);
-
-            const { newPublic, newPrivate, lastScanned } = await countNewMessages(
-              user.id,
-              conf,
-              msgBaseId,
-              username
-            );
-
-            session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
-            session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
-            session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
-
-            if (lastScanned > 0) {
-              await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
-            }
-
-            if (newPublic > 0 || newPrivate > 0) {
-              const total = newPublic + newPrivate;
-              socket.emit('ansi-output', `\x1b[32m${confName}\x1b[0m: ${total} new message${total !== 1 ? 's' : ''}\r\n`);
-              session.tempData.lineCount = (session.tempData.lineCount || 0) + 1;
-            }
-          }
-        }
-
-        // express.e:28089 - fscan:=checkFileConfScan(conf)
         const fscan = await checkFileConfScan(conf, user.id);
-
-        // express.e:28099-28104 - Internal file scan using runSysCommand
         if (fscan) {
 console.log(`[confScan] Internal file scan: ${confName}`);
           session.newFilesPauseFlag = true;
           await runSysCommand(socket, session, 'N', 'S U');
           session.newFilesPauseFlag = false;
-
-          const shouldContinue = await checkForPause(socket, session);
-          if (!shouldContinue) {
-console.log(`[confScan] User stopped scan at conference ${conf}`);
-            mystat = -1;
-          }
         }
+      }
+
+      const shouldContinue = await checkForPause(socket, session);
+      if (!shouldContinue) {
+console.log(`[confScan] User stopped scan at conference ${conf}`);
+        mystat = -1;
       }
     } catch (err) {
 console.error(`[confScan] Conference ${conf} scan failed:`, err);
