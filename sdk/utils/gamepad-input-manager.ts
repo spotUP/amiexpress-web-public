@@ -44,17 +44,20 @@ export class GamepadInputManager extends EventEmitter {
   private connectedControllers: Set<number> = new Set();
   private buttonStates: Map<number, Map<GamepadButton, boolean>> = new Map();
   private axisValues: Map<number, Map<GamepadAxis, number>> = new Map();
+  private _prevHandler: ((e: AnyGamepadEvent) => void) | undefined;
+  private _boundHandler: (e: AnyGamepadEvent) => void;
 
   constructor(bbsSession: any, config?: Partial<GamepadConfig>) {
     super();
     this.bbsSession = bbsSession;
     this.config = { ...DEFAULT_GAMEPAD_CONFIG, ...config };
+    this._boundHandler = this.handleGamepadEvent.bind(this);
 
-    // Register on bbsSession.gamepadHandler — the socket handler routes gamepad-event
-    // events from the browser to this callback. Client-side browser doors pass
-    // null/undefined for bbsSession and get events directly from the browser instead.
+    // Push onto the session handler stack — saves whatever was there before so
+    // destroy() can restore it (enables proper nesting: nav → wizard → nav).
     if (this.bbsSession) {
-      this.bbsSession.gamepadHandler = this.handleGamepadEvent.bind(this);
+      this._prevHandler = this.bbsSession.gamepadHandler;
+      this.bbsSession.gamepadHandler = this._boundHandler;
     }
   }
 
@@ -288,8 +291,10 @@ export class GamepadInputManager extends EventEmitter {
    * Clean up
    */
   destroy(): void {
-    if (this.bbsSession?.gamepadHandler) {
-      this.bbsSession.gamepadHandler = undefined;
+    // Restore the handler that was active before this GIM was created so
+    // any outer GIM (e.g. a menu navigator) resumes receiving events.
+    if (this.bbsSession && this.bbsSession.gamepadHandler === this._boundHandler) {
+      this.bbsSession.gamepadHandler = this._prevHandler;
     }
     this.removeAllListeners();
     this.connectedControllers.clear();

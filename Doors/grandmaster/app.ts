@@ -40,7 +40,7 @@ import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
 import { DEFAULT_KEYS } from './input/config';
-import { GamepadActionMapper, GamepadButton, GamepadAxis } from '@amiexpress/bbs-door-sdk';
+import { GamepadActionMapper, GamepadButton, GamepadAxis, GamepadInputManager } from '@amiexpress/bbs-door-sdk';
 import type { GamepadTrigger } from '@amiexpress/bbs-door-sdk';
 import type { GameAction } from './core/types';
 import { SoundEngine } from './audio/sounds';
@@ -107,6 +107,35 @@ function buildGamepadMapping(
     }
   }
   return result;
+}
+
+// Creates a menu-navigation GIM for non-game screens (menus, settings, etc.).
+// Dpad/stick → arrow keys; A/Start → Enter; B/Select → Escape.
+// Destroy the returned object when leaving the screen to restore the previous handler.
+function createMenuNav(bbsSession: any, screen: any): { destroy: () => void } {
+  const gim = new GamepadInputManager(bbsSession);
+
+  const emit = (name: string, sequence: string) =>
+    screen.emit('keypress', sequence, { name, full: name, sequence });
+
+  gim.on('dpad', (dir: string) => {
+    if (dir === 'up')    emit('up',    '\x1b[A');
+    if (dir === 'down')  emit('down',  '\x1b[B');
+    if (dir === 'left')  emit('left',  '\x1b[D');
+    if (dir === 'right') emit('right', '\x1b[C');
+  });
+  gim.on('axis', (axis: number, value: number) => {
+    if (axis === 1 /* left-y */) {
+      if (value < -0.7) emit('up',   '\x1b[A');
+      if (value >  0.7) emit('down', '\x1b[B');
+    }
+  });
+  gim.on('button:a',      (p: boolean) => { if (p) emit('enter',  '\r');    });
+  gim.on('button:start',  (p: boolean) => { if (p) emit('enter',  '\r');    });
+  gim.on('button:b',      (p: boolean) => { if (p) emit('escape', '\x1b'); });
+  gim.on('button:select', (p: boolean) => { if (p) emit('escape', '\x1b'); });
+
+  return { destroy: () => gim.destroy() };
 }
 
 // D-pad and left stick handle movement; face buttons handle rotation/actions.
@@ -429,8 +458,10 @@ export class GrandmasterApp {
     this.inputManager.suspend();  // Disable grabKeys so List widget receives input
 
     const menuScreen = new MenuScreen(this.screen, this.state, this.sounds);
+    const nav = createMenuNav(this.session.bbsSession, this.screen);
 
     const selection = await menuScreen.show();
+    nav.destroy();
 
     this.inputManager.resume();
     this.inputHandler.setEnabled(true);
@@ -2208,8 +2239,10 @@ export class GrandmasterApp {
     this.currentScreen = 'settings';
 
     this.inputManager.suspend();
+    const nav = createMenuNav(this.session.bbsSession, this.screen);
     const settingsScreen = new SettingsScreen(this.screen, this.state, this.sounds, this.session.bbsSession);
     await settingsScreen.show();
+    nav.destroy();
     this.inputManager.resume();
 
     // Update input handler with any changed key bindings
@@ -2226,6 +2259,7 @@ export class GrandmasterApp {
     this.currentScreen = 'stats';
 
     this.inputManager.suspend();
+    const nav = createMenuNav(this.session.bbsSession, this.screen);
     const leaderboardScreen = new LeaderboardScreen(
       this.screen,
       this.highScores,
@@ -2234,6 +2268,7 @@ export class GrandmasterApp {
     );
 
     await leaderboardScreen.show();
+    nav.destroy();
     this.inputManager.resume();
   }
 
