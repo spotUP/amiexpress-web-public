@@ -9,6 +9,7 @@ import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-he
 import { GamepadInputManager, GamepadAxis } from '@amiexpress/bbs-door-sdk';
 import type { AppState, PlayerSettings, RotationSystem, KeyBindings, GamepadBindings } from '../core/types';
 import type { SoundEngine } from '../audio/sounds';
+import { KEY_PRESETS } from '../input/config';
 
 /**
  * Friendly names for key bindings
@@ -156,8 +157,8 @@ export class SettingsScreen {
 
       // Handle item selection - wrap async handler for blessed's sync event requirement
       menu.on('select', (_item: any, index: number) => {
-        // Check for Save & Exit (last item, index 35)
-        if (index === 35) {
+        // Check for Save & Exit (last item, index 30)
+        if (index === 30) {
           this.sounds.playSfx('menu_ok');
           exitSettings();
           return;
@@ -210,18 +211,13 @@ export class SettingsScreen {
       `Connected Blocks:  {yellow-fg}${s.connectedBlocks ? 'ON' : 'OFF'}{/yellow-fg}`,
       '',
       '{cyan-fg}--- KEY BINDINGS ---{/cyan-fg}',
-      `Move Left:         {yellow-fg}${formatKeyBinding(kb.left)}{/yellow-fg}`,
-      `Move Right:        {yellow-fg}${formatKeyBinding(kb.right)}{/yellow-fg}`,
-      `Rotate CW (X):     {yellow-fg}${formatKeyBinding(kb.rotateCW)}{/yellow-fg}`,
-      `Rotate CCW (Z):    {yellow-fg}${formatKeyBinding(kb.rotateCCW)}{/yellow-fg}`,
-      `Rotate 180:        {yellow-fg}${formatKeyBinding(kb.rotate180)}{/yellow-fg}`,
-      `Soft Drop:         {yellow-fg}${formatKeyBinding(kb.softDrop)}{/yellow-fg}`,
-      `Hard Drop:         {yellow-fg}${formatKeyBinding(kb.hardDrop)}{/yellow-fg}`,
-      `Hold:              {yellow-fg}${formatKeyBinding(kb.hold)}{/yellow-fg}`,
-      `Pause:             {yellow-fg}${formatKeyBinding(kb.pause)}{/yellow-fg}`,
+      `Bind Keys:         {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
+      `Key Preset:        {yellow-fg}[Enter to pick layout]{/yellow-fg}`,
+      `Clear Keys:        {yellow-fg}[Enter to clear]{/yellow-fg}`,
       '',
       '{cyan-fg}--- JOYPAD BINDINGS ---{/cyan-fg}',
       `Bind Joypad:       {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
+      `Joypad Preset:     {yellow-fg}[Enter to pick layout]{/yellow-fg}`,
       `Clear Joypad:      {yellow-fg}[Enter to clear all]{/yellow-fg}`,
       '',
       '{green-fg}Save & Exit{/green-fg}',
@@ -254,18 +250,13 @@ export class SettingsScreen {
       'Enable/disable connected block rendering',
       '',
       '',  // KEY BINDINGS header
-      'Press any key to rebind Move Left',
-      'Press any key to rebind Move Right',
-      'Press any key to rebind Rotate Clockwise',
-      'Press any key to rebind Rotate Counter-Clockwise',
-      'Press any key to rebind Rotate 180',
-      'Press any key to rebind Soft Drop',
-      'Press any key to rebind Hard Drop',
-      'Press any key to rebind Hold',
-      'Press any key to rebind Pause',
+      'Open wizard to bind all keys in sequence',
+      'Pick a key layout preset (TGM Classic, WASD, Modern)',
+      'Clear all key bindings',
       '',
       '',  // JOYPAD BINDINGS header
       'Open wizard to bind all joypad buttons in sequence',
+      'Pick a joypad layout preset (Standard, Stick)',
       'Clear all joypad bindings (restores defaults)',
       '',
       'Save changes and return to menu',
@@ -360,10 +351,15 @@ export class SettingsScreen {
       case 29:  // Pause
         await this.editKeyBinding('pause', 'Pause');
         break;
-      // Joypad bindings (index 31 = header, 32 = wizard, 33 = clear)
-      case 32: await this.editAllGamepadBindings(0); break;
-      case 33: this.clearGamepadBindings(); break;
-      // Note: Save & Exit (case 35) is handled directly in menu.on('select')
+      // Key bindings (index 20 = header, 21 = wizard, 22 = preset, 23 = clear)
+      case 21: await this.bindAllKeys(); break;
+      case 22: await this.pickKeyPreset(); break;
+      case 23: this.clearKeyBindings(); break;
+      // Joypad bindings (index 25 = header, 26 = wizard, 27 = preset, 28 = clear)
+      case 26: await this.editAllGamepadBindings(0); break;
+      case 27: await this.pickGamepadPreset(); break;
+      case 28: this.clearGamepadBindings(); break;
+      // Note: Save & Exit (case 30) is handled directly in menu.on('select')
     }
 
     // Update menu items
@@ -642,6 +638,217 @@ export class SettingsScreen {
     const current = modes.indexOf(this.state.settings.floatTextMode);
     const next = (current + 1) % modes.length;
     this.state.settings.floatTextMode = modes[next];
+  }
+
+  /**
+   * Key binding wizard — same UX as joypad wizard but captures keypresses.
+   * Enter=skip, Escape=done, any other key=bind and auto-advance.
+   */
+  private async bindAllKeys(): Promise<void> {
+    const ACTIONS: { key: keyof KeyBindings; name: string }[] = [
+      { key: 'left',      name: 'Move Left' },
+      { key: 'right',     name: 'Move Right' },
+      { key: 'rotateCW',  name: 'Rotate CW' },
+      { key: 'rotateCCW', name: 'Rotate CCW' },
+      { key: 'rotate180', name: 'Rotate 180' },
+      { key: 'softDrop',  name: 'Soft Drop' },
+      { key: 'hardDrop',  name: 'Hard Drop' },
+      { key: 'hold',      name: 'Hold' },
+      { key: 'pause',     name: 'Pause' },
+    ];
+
+    const kb = this.state.settings.keyBindings;
+    let currentIdx = 0;
+    let waiting = false;
+
+    const bindingBox = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 57,
+      height: 14,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      content: '',
+      fixed: true,
+      focusable: true,
+    } as any);
+
+    const updateDisplay = (feedback?: string) => {
+      const action = ACTIONS[currentIdx];
+      const cur = (kb[action.key] as string[])?.[0];
+      const n = currentIdx + 1;
+      const total = ACTIONS.length;
+      const bar = '#'.repeat(n) + '-'.repeat(total - n);
+      bindingBox.setContent(
+        `{cyan-fg}Key Wizard (${n}/${total}){/cyan-fg}\n\n` +
+        `Action:  {yellow-fg}${action.name}{/yellow-fg}\n` +
+        `Current: {white-fg}${cur ? (KEY_DISPLAY_NAMES[cur] ?? cur) : '(unbound)'}{/white-fg}\n\n` +
+        (feedback
+          ? `{green-fg}${feedback}{/green-fg}\n\n`
+          : `{gray-fg}Press a key to bind{/gray-fg}\n` +
+            `{gray-fg}Enter=skip  Escape=done{/gray-fg}\n\n`) +
+        `{gray-fg}[${bar}] ${n}/${total}{/gray-fg}`
+      );
+      this.screen.render();
+    };
+
+    return new Promise((resolve) => {
+      const done = () => {
+        this.screen.removeListener('keypress', keyHandler);
+        bindingBox.destroy();
+        this.screen.render();
+        resolve();
+      };
+
+      const advance = () => {
+        waiting = false;
+        currentIdx++;
+        if (currentIdx >= ACTIONS.length) done();
+        else updateDisplay();
+      };
+
+      const keyHandler = (_ch: any, key: any) => {
+        if (!key || waiting) return;
+        const k = key.full || key.name;
+        if (k === 'escape') { done(); return; }
+        if (k === 'return' || k === 'enter') { advance(); return; }
+        waiting = true;
+        (kb[ACTIONS[currentIdx].key] as string[]) = [k];
+        updateDisplay(`Bound: ${KEY_DISPLAY_NAMES[k] ?? k}`);
+        setTimeout(advance, 600);
+      };
+
+      setImmediate(() => this.screen.on('keypress', keyHandler));
+      updateDisplay();
+      bindingBox.focus();
+    });
+  }
+
+  /** Clear all key bindings. */
+  private clearKeyBindings(): void {
+    const kb = this.state.settings.keyBindings;
+    (Object.keys(kb) as (keyof KeyBindings)[]).forEach(k => { (kb as any)[k] = []; });
+  }
+
+  /** Show a preset picker and apply the chosen key layout. */
+  private async pickKeyPreset(): Promise<void> {
+    const presetKeys = Object.keys(KEY_PRESETS);
+    const items = presetKeys.map(k => KEY_PRESETS[k].name);
+
+    return new Promise((resolve) => {
+      const list = createList({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 36,
+        height: items.length + 4,
+        label: ' Key Preset ',
+        tags: true,
+        keys: true,
+        vi: true,
+        mouse: true,
+        border: { type: 'line' },
+        style: {
+          border: { fg: 'cyan' },
+          selected: { bg: 'blue', fg: 'white' },
+        },
+        items,
+      } as any);
+
+      list.focus();
+
+      const done = (idx: number | null) => {
+        list.destroy();
+        this.screen.render();
+        if (idx !== null) {
+          const preset = KEY_PRESETS[presetKeys[idx]];
+          const kb = this.state.settings.keyBindings;
+          (Object.keys(preset) as (keyof typeof preset)[]).forEach(k => {
+            if (k !== 'name' && k in kb) (kb as any)[k] = [...(preset as any)[k]];
+          });
+        }
+        resolve();
+      };
+
+      list.key(['enter', 'return'], () => done((list as any).selected ?? 0));
+      list.key(['escape', 'q'], () => done(null));
+      this.screen.render();
+    });
+  }
+
+  /** Show a preset picker and apply the chosen joypad layout. */
+  private async pickGamepadPreset(): Promise<void> {
+    const GAMEPAD_PRESETS: Record<string, { name: string; bindings: Record<string, string[]> }> = {
+      standard: {
+        name: 'Standard (dpad + face buttons)',
+        bindings: {
+          left:       ['dpad:left'],
+          right:      ['dpad:right'],
+          soft_drop:  ['dpad:down'],
+          hard_drop:  ['dpad:up', 'button:a'],
+          rotate_cw:  ['button:b', 'button:r1'],
+          rotate_ccw: ['button:x', 'button:l1'],
+          rotate_180: ['button:y'],
+          hold:       ['button:l2', 'button:select'],
+          pause:      ['button:start'],
+        },
+      },
+      stick: {
+        name: 'Arcade Stick / Fighting',
+        bindings: {
+          left:       ['axis:left-x:negative', 'dpad:left'],
+          right:      ['axis:left-x:positive', 'dpad:right'],
+          soft_drop:  ['axis:left-y:positive', 'dpad:down'],
+          hard_drop:  ['button:a', 'button:r1'],
+          rotate_cw:  ['button:b', 'button:y'],
+          rotate_ccw: ['button:x', 'button:l1'],
+          rotate_180: ['button:r2'],
+          hold:       ['button:l2', 'button:select'],
+          pause:      ['button:start'],
+        },
+      },
+    };
+
+    const presetKeys = Object.keys(GAMEPAD_PRESETS);
+    const items = presetKeys.map(k => GAMEPAD_PRESETS[k].name);
+
+    return new Promise((resolve) => {
+      const list = createList({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 44,
+        height: items.length + 4,
+        label: ' Joypad Preset ',
+        tags: true,
+        keys: true,
+        vi: true,
+        mouse: true,
+        border: { type: 'line' },
+        style: {
+          border: { fg: 'cyan' },
+          selected: { bg: 'blue', fg: 'white' },
+        },
+        items,
+      } as any);
+
+      list.focus();
+
+      const done = (idx: number | null) => {
+        list.destroy();
+        this.screen.render();
+        if (idx !== null) {
+          const preset = GAMEPAD_PRESETS[presetKeys[idx]];
+          this.state.settings.gamepadBindings = { ...preset.bindings };
+        }
+        resolve();
+      };
+
+      list.key(['enter', 'return'], () => done((list as any).selected ?? 0));
+      list.key(['escape', 'q'], () => done(null));
+      this.screen.render();
+    });
   }
 
   /**

@@ -42,19 +42,49 @@ export const DEFAULT_KEYS: KeyConfig = {
 };
 
 /**
- * Alternative key bindings (modern Tetris)
+ * Key binding presets — named layouts the player can pick in settings.
+ * Each preset resets ALL bindings so the player starts clean.
  */
-export const MODERN_KEYS: KeyConfig = {
-  left: ['left', 'a'],
-  right: ['right', 'd'],
-  rotateCW: ['up', 'x'],
-  rotateCCW: ['z', 'lcontrol'],
-  rotate180: ['space'],
-  softDrop: ['down', 's'],
-  hardDrop: ['space', 'return'],
-  sonicDrop: [],
-  hold: ['c', 'lshift'],
-  pause: ['p'],
+export const KEY_PRESETS: Record<string, { name: string } & KeyConfig> = {
+  tgm: {
+    name: 'TGM Classic',
+    left:      ['left'],
+    right:     ['right'],
+    rotateCW:  ['x', 'pageup'],
+    rotateCCW: ['z', 'lcontrol', 'rcontrol'],
+    rotate180: ['space'],
+    softDrop:  ['down'],
+    hardDrop:  ['up'],
+    sonicDrop: [],
+    hold:      ['c', 'lshift'],
+    pause:     ['p'],
+  },
+  wasd: {
+    name: 'WASD',
+    left:      ['a'],
+    right:     ['d'],
+    rotateCW:  ['e', 'x'],
+    rotateCCW: ['q', 'z'],
+    rotate180: ['r'],
+    softDrop:  ['s'],
+    hardDrop:  ['w'],
+    sonicDrop: [],
+    hold:      ['lshift', 'c'],
+    pause:     ['p'],
+  },
+  modern: {
+    name: 'Modern (Jstris)',
+    left:      ['left', 'a'],
+    right:     ['right', 'd'],
+    rotateCW:  ['up', 'x'],
+    rotateCCW: ['z', 'lcontrol'],
+    rotate180: ['space'],
+    softDrop:  ['down', 's'],
+    hardDrop:  ['return'],
+    sonicDrop: [],
+    hold:      ['c', 'lshift'],
+    pause:     ['p'],
+  },
 };
 
 /**
