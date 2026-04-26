@@ -157,15 +157,18 @@ cleanup_logs_dir() {
 
   printf "%b\n" "${CYAN}→ Cleaning up old logs (retain ${retention_days}d, max ${max_files} files)...${RESET}"
 
-  # Delete huge consolidated door log if it exists (prevents 800MB+ files)
-  if [ -f "$LOGS_DIR/door-68k.log" ]; then
-    local log_size
-    log_size=$(du -m "$LOGS_DIR/door-68k.log" 2>/dev/null | cut -f1)
-    if [ -n "$log_size" ] && [ "$log_size" -gt 100 ]; then
-      printf "%b\n" "${YELLOW}   [CLEANUP] Removing large door-68k.log (${log_size}MB)${RESET}"
-      rm -f "$LOGS_DIR/door-68k.log"
+  # Truncate session debug logs — they accumulate across restarts and can reach
+  # hundreds of MB, causing OOM crashes. Only the current session's data matters.
+  for debug_log in door-68k.log filehandle-debug.log bb-conflocal-debug.log; do
+    if [ -f "$LOGS_DIR/$debug_log" ]; then
+      local log_size
+      log_size=$(du -k "$LOGS_DIR/$debug_log" 2>/dev/null | cut -f1)
+      if [ -n "$log_size" ] && [ "$log_size" -gt 0 ]; then
+        printf "%b\n" "${CYAN}   [CLEANUP] Truncating $debug_log (${log_size}KB)${RESET}"
+      fi
+      : > "$LOGS_DIR/$debug_log"
     fi
-  fi
+  done
 
   # Keep only recent door logs (prevent accumulation of hundreds of logs)
   local door_log_count
