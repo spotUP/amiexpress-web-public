@@ -946,11 +946,11 @@ debugLog(
         break;
 
       case XIMCommand.DISPLAY_FILE:
-        this.ioHandler.handleDisplayFileNonStop(msg);
+        await this.ioHandler.handleDisplayFileNonStop(msg);
         break;
 
       case XIMCommand.CHECK_TO_DISPLAY:
-        this.ioHandler.handleCheckToDisplay(msg);
+        await this.ioHandler.handleCheckToDisplay(msg);
         break;
 
       case XIMCommand.JH_DL:  // Alias for JH_ExtHK (both are value 15)

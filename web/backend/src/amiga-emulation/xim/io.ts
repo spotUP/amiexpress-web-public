@@ -1285,19 +1285,17 @@ console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
   }
 
   /**
-   * Handle DISPLAY_FILE (non-stop file display)
+   * Handle DISPLAY_FILE (non-stop file display).
+   * Returns the Promise so callers can drain before unblocking the door —
+   * fixes the trap-sync race where the next JH_WRITE landed before file bytes.
    */
-  handleDisplayFileNonStop(msg: XIMMessage): void {
-    const patched: XIMMessage = { ...msg, data: 1 };
-    this.handleShowFile(patched);
+  handleDisplayFileNonStop(msg: XIMMessage): Promise<void> {
+    return this.handleShowFile({ ...msg, data: 1 });
   }
 
-  /**
-   * Handle CHECK_TO_DISPLAY (non-stop gfile/ACS search)
-   */
-  handleCheckToDisplay(msg: XIMMessage): void {
-    const patched: XIMMessage = { ...msg, data: 1 };
-    this.handleShowGFile(patched);
+  /** Handle CHECK_TO_DISPLAY (non-stop gfile/ACS search). See handleDisplayFileNonStop. */
+  handleCheckToDisplay(msg: XIMMessage): Promise<void> {
+    return this.handleShowGFile({ ...msg, data: 1 });
   }
 
   /**

@@ -25,6 +25,7 @@
 // reply() having already run and set state.replyHandled — the callback
 // only falls back to replyMsg when the handler failed to reply.
 
+import * as deasync from "deasync";
 import type { LibraryManager } from "../../LibraryManager.js";
 import type { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
 import type { XIMProtocol } from "../../XIMProtocol.js";
@@ -32,6 +33,31 @@ import type { ExecutionState } from "../DoorLifecycleManager.js";
 
 /** Blocking I/O XIM command codes — must pre-pause before handleMessage. */
 const BLOCKING_COMMANDS = [6, 0, 5, 15]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_ExtHK=15
+
+/**
+ * Output-emitting commands whose handlers must finish ALL of their async work
+ * (file read + parseMciCodes + emitText) before the trap-sync path returns.
+ *
+ * Why: AEDoor.library's waitForReply is a tight synchronous loop holding the
+ * JS event loop. It calls our XIMProcessor callback once per iteration. The
+ * callback used to fire-and-forget handleMessage, then check wasReplyHandled
+ * synchronously — for these async-output commands the check returned false
+ * (the .then() chain hadn't run yet), so the fallback replyMsg() unblocked the
+ * door's waitForReply BEFORE the file content reached the socket. The door's
+ * next JH_WRITE then hit the wire ahead of the file bytes, breaking absolute
+ * cursor positioning in doors like dRE!Wall.
+ *
+ * Fix: for these commands, drive handleMessage to completion via
+ * deasync.loopWhile before we read wasReplyHandled. Same deasync pattern
+ * AEDoorLibrary.waitForReply itself uses in DOOR_ASYNC_WAIT mode.
+ *
+ * Numbers must match XIMCommand enum (web/backend/src/amiga-emulation/xim/types.ts):
+ *   JH_SG=7, JH_SF=8, JH_MCI=507, DISPLAY_FILE=617, CHECK_TO_DISPLAY=618
+ */
+const ASYNC_OUTPUT_COMMANDS = [7, 8, 507, 617, 618];
+
+/** 5 s wall-clock deadline mirrors AEDoorLibrary.waitForReply. */
+const ASYNC_HANDLER_DEADLINE_MS = 5000;
 
 export interface MessageCallbackDeps {
   libraryManager: LibraryManager;
@@ -117,7 +143,42 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
     // msg.string AND calls replyMsg() before handleMessage returns, then
     // marks state.replyHandled=true. Only fall back to replyMsg here
     // when the handler did NOT already reply (e.g. unhandled command).
-    ximProtocol.handleMessage(parsed);
+    //
+    // CRITICAL FIX (trap-sync race): For commands whose handlers do real
+    // async work before emitting (file read for JH_SF/JH_SG/DISPLAY_FILE/
+    // CHECK_TO_DISPLAY, DB-backed parseMciCodes for JH_MCI), the .then()
+    // chain hasn't run by the time wasReplyHandled is checked below — so
+    // we'd take the fallback replyMsg path, unblock the door's
+    // waitForReply, and watch the next JH_WRITE hit the socket BEFORE the
+    // file content. Drain the handler's promise via deasync.loopWhile so
+    // emit + reply land in order. Same deasync pattern AEDoorLibrary's
+    // waitForReply uses in DOOR_ASYNC_WAIT mode.
+    const handlePromise = ximProtocol.handleMessage(parsed);
+    if (ASYNC_OUTPUT_COMMANDS.includes(parsed.command)) {
+      let done = false;
+      let handlerError: unknown = null;
+      handlePromise.then(
+        () => {
+          done = true;
+        },
+        (err) => {
+          handlerError = err;
+          done = true;
+        }
+      );
+      const deadline = Date.now() + ASYNC_HANDLER_DEADLINE_MS;
+      deasync.loopWhile(() => !done && Date.now() < deadline);
+      if (!done) {
+        console.warn(
+          `[DoorLifecycleManager] XIMProcessor: async handler for cmd=${parsed.command} did not resolve within ${ASYNC_HANDLER_DEADLINE_MS}ms — falling through (door may be desynced)`,
+        );
+      } else if (handlerError) {
+        console.warn(
+          `[DoorLifecycleManager] XIMProcessor: async handler for cmd=${parsed.command} rejected:`,
+          handlerError,
+        );
+      }
+    }
     const replyHandled = ximProtocol.wasReplyHandled();
     if (!ximProtocol.isWaitingForLineInput() && !replyHandled) {
       console.log(
