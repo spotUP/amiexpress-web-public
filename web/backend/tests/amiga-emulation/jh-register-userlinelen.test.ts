@@ -170,15 +170,16 @@ describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
     expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(29);
   });
 
-  test('passes linesPerScreen=0 through unchanged (AmiExpress "unlimited" convention)', () => {
-    // 0 is a valid AmiExpress value meaning "no pagination" — must NOT be
-    // coerced to a default. JoinCnf 4.0 paginates by *equality* against this
-    // value (cmp.l <userLineLen>, lineCounter; bne skip-prompt). With 0,
-    // counter starts at 0, immediately increments to 1, never equals 0
-    // again → splash prompt is suppressed. With 23 (sysop default), counter
-    // hits 23 mid-banner → splash fires (the regression).
-    // express.e-style doors that use `if linelen==0 linelen:=22` still get
-    // their default pagination; TLP2-style BSS-init doors are unaffected.
+  test('coerces linesPerScreen=0 to 9999 (avoids JoinCnf fail-safe collapse)', () => {
+    // 0 in the user record means "unlimited" but JoinCnf 4.0 treats a
+    // threshold of 0 as "broken — show fail-safe single prompt screen",
+    // collapsing the banner entirely. We map 0 → 9999 so:
+    //   - JoinCnf's equality-pagination (cmp.l <userLineLen>, counter;
+    //     bne skip) never matches a sub-9999-line banner → no splash.
+    //   - express.e doors using `if linelen==0 linelen:=22` never see 0,
+    //     so they get 9999 = effectively no auto-pause.
+    //   - TLP2-style BSS-init doors are unaffected (they read BSS, not
+    //     this reply).
     const { handler, emulator, msgAddr } = buildHandler({
       username: 'unlimited-user',
       linesPerScreen: 0,
@@ -194,7 +195,7 @@ describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
       string: '',
     } as any);
 
-    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(0);
-    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(0);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(9999);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(9999);
   });
 });

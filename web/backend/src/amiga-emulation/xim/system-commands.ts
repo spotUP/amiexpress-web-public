@@ -114,14 +114,20 @@ export class XIMSystemCommandsHandler {
       this.bbsSession?.user?.linesPerScreen ??
       this.bbsSession?.user?.lineLength ??
       this.bbsSession?.user?.pageLength;
-    // 0 is a valid AmiExpress convention meaning "unlimited / no pagination" —
-    // pass it through unchanged. JoinCnf 4.0 (and other doors that paginate
-    // by *equality* against this value: cmp.l <userLineLen>, d0; bne skip)
-    // never matches when threshold=0 because the lineCount starts at 0 and
-    // immediately increments to 1, so the prompt is suppressed entirely.
-    // Only fall back to 29 when the field is genuinely missing (undefined/null).
-    const lineLen =
-      typeof rawLineLen === 'number' && rawLineLen >= 0 ? rawLineLen : 29;
+    // express.e:3380: msg.command:=IF loggedOnUser<>NIL THEN userLineLen ELSE 29
+    // Three cases:
+    //   1. No user logged on → 29 (express.e default).
+    //   2. User logged on with explicit positive linesPerScreen → that value.
+    //   3. User logged on but linesPerScreen=0/missing ("unlimited" convention)
+    //      → 9999. JoinCnf 4.0 paginates by equality (cmp.l <userLineLen>,
+    //      counter; bne skip-prompt). With 9999 the equality never matches
+    //      a sub-9999-line banner. With 0 the door treats it as "broken
+    //      threshold" and collapses to a single fail-safe prompt screen,
+    //      which is worse than pagination.
+    const hasUser = !!this.bbsSession?.user;
+    const lineLen = !hasUser
+      ? 29
+      : (typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 9999);
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
     // WEB_: divergence from express.e:3380 (which only writes msg.command).
     // AEKIT-based 68K doors (SRH/TList/TLP2 disasm at TLP2:0x24f4 reads msg->data
