@@ -135,15 +135,17 @@ export class GameScreen {
       tags: true,
     });
 
-    this.screen.render();
-    await new Promise(resolve => setTimeout(resolve, 900));
+    try {
+      this.screen.render();
+      await new Promise(resolve => setTimeout(resolve, 900));
 
-    readyBox.setContent('{bold}{green-fg}  GO !{/green-fg}{/bold}');
-    this.screen.render();
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    readyBox.destroy();
-    this.screen.render();
+      readyBox.setContent('{bold}{green-fg}  GO !{/green-fg}{/bold}');
+      this.screen.render();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } finally {
+      readyBox.destroy();
+      this.screen.render();
+    }
   }
 
   /**
