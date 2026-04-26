@@ -321,18 +321,29 @@ export class CategoryPicker extends Box {
     this._categoryList.select(0);
     this._loadCategory(this._categories[0]);
 
-    // Global click handler to close when clicking outside
+    // Global click handler to close when clicking outside.
+    // Listen on `mousedown` -- screen.handleMouseEvent emits the action
+    // names ('mousedown'/'mouseup'/'mousemove') and a generic 'mouse'
+    // event but never a synthetic 'click', so listening on 'click' here
+    // bound to a dead event and the picker would never close on outside
+    // clicks. mousedown fires on every left-press regardless of which
+    // widget is hit, which is exactly the lifecycle event we want.
     if (this.screen && this._globalClickHandler) {
-      this.screen.removeListener('click', this._globalClickHandler);
+      this.screen.removeListener('mousedown', this._globalClickHandler);
     }
 
     if (this.screen) {
       this._globalClickHandler = (data: any) => {
-        if (this.isVisible() && !this.hasMouseOver(data.x, data.y)) {
+        if (!this.isVisible()) return;
+        // Only close on left-button presses; right-clicks are reserved
+        // for context menus (e.g. inputBox right-click to re-open the
+        // format picker) and shouldn't dismiss the dialog.
+        if (data?.button && data.button !== 'left') return;
+        if (!this.hasMouseOver(data.x, data.y)) {
           this._handleCancel();
         }
       };
-      this.screen.on('click', this._globalClickHandler);
+      this.screen.on('mousedown', this._globalClickHandler);
     }
 
     this.screen?.render();
@@ -350,7 +361,7 @@ export class CategoryPicker extends Box {
     super.hide();
 
     if (this.screen && this._globalClickHandler) {
-      this.screen.removeListener('click', this._globalClickHandler);
+      this.screen.removeListener('mousedown', this._globalClickHandler);
       this._globalClickHandler = null;
     }
 

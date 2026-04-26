@@ -19,10 +19,16 @@ class EmojiPicker {
         this.picker = new blessed_1.CategoryPicker({
             parent: screen,
             title: 'Emoji Picker [Tab | Enter]',
-            width: 42,
+            width: 44,
             height: 14,
             categories: CATEGORIES,
-            categoryWidth: 12,
+            // categoryWidth was 12 -> 10 chars of content after the box border.
+            // List items are ` Category` (8+1 space) plus the `>>` selection
+            // marker the List itself prepends to the focused row = 11 chars,
+            // which made "Emotions"/"Actions"/"Symbols"/"Special" all wrap to
+            // a second line. 14 leaves 12 chars of content, comfortably fitting
+            // ` Emotions` + `>>`.
+            categoryWidth: 14,
             debounceMs: 80,
             borderColor: 'cyan',
             zIndex: 9990,
