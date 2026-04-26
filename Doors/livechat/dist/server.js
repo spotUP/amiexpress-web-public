@@ -360,7 +360,14 @@ async function createApp(session) {
             const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
             const usage = (cmd.usage || '').padEnd(usageWidth).slice(0, usageWidth);
             const desc = (cmd.description || '').slice(0, descWidth);
-            return `{cyan-fg}/${name}{/cyan-fg} {gray-fg}${usage}{/gray-fg} ${desc}`;
+            // Don't hardcode `{cyan-fg}` for the slash-name -- blessed's tag
+            // parser respects the latest color tag, so an inline cyan-fg
+            // overrides the List's `selected: { fg: 'white' }` wrapper and
+            // keeps the name cyan-on-cyan (invisible) when the row is the
+            // current selection. Let the base style's `fg: 'cyan'` colour the
+            // name on non-selected rows and the selected style's white-fg
+            // take over when highlighted.
+            return `/${name} {gray-fg}${usage}{/gray-fg} ${desc}`;
         });
         // Ensure list width is updated to match screen
         commandSuggestions.position.width = chatWidth;
