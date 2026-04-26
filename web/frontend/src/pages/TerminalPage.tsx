@@ -60,15 +60,17 @@ export function TerminalPage(): JSX.Element {
     };
   }, []);
 
-  // On mobile: xterm keeps a hidden textarea focused to capture input.
-  // iOS sees any focused textarea and opens the native keyboard.
-  // inputmode="none" tells iOS not to show a virtual keyboard for this element.
-  // Applied after a short delay to let the terminal initialize its DOM.
+  // On mobile portrait: suppress iOS native keyboard via inputmode="none".
+  // On landscape rotation: restore normal inputmode so keyboard doesn't appear.
   useEffect(() => {
-    if (!isMobile) return;
+    const textarea = terminalRef.current?.getTerminal()?.textarea;
+    if (!isMobile) {
+      if (textarea) textarea.removeAttribute('inputmode');
+      return;
+    }
     const timer = setTimeout(() => {
-      const textarea = terminalRef.current?.getTerminal()?.textarea;
-      if (textarea) textarea.setAttribute('inputmode', 'none');
+      const ta = terminalRef.current?.getTerminal()?.textarea;
+      if (ta) ta.setAttribute('inputmode', 'none');
     }, 600);
     return () => clearTimeout(timer);
   }, [isMobile]);
@@ -91,7 +93,7 @@ export function TerminalPage(): JSX.Element {
       <BBSTerminal
         ref={terminalRef}
         fontSize={fontSize}
-        keepFocused
+        keepFocused={isMobile}
       />
       {isMobile && (
         <MobileBBSKeyboard

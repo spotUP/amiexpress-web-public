@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import './MobileBBSKeyboard.css';
 
 interface MobileBBSKeyboardProps {
@@ -53,8 +54,29 @@ const ROWS: KeyDef[][] = [
 ];
 
 export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Use a non-passive touchstart listener via event delegation.
+  // Non-passive allows e.preventDefault() to block scroll/zoom/focus-steal on iOS.
+  // More reliable than React's onPointerDown which can be inconsistent on iOS Safari.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handler = (e: TouchEvent) => {
+      const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-bbs-key]');
+      if (!button) return;
+      e.preventDefault(); // block scroll, double-tap zoom, and focus steal
+      const data = button.dataset.bbsKey ?? '';
+      onKey(data);
+    };
+
+    el.addEventListener('touchstart', handler, { passive: false });
+    return () => el.removeEventListener('touchstart', handler);
+  }, [onKey]);
+
   return (
-    <div className="mobile-bbs-keyboard">
+    <div className="mobile-bbs-keyboard" ref={containerRef}>
       {ROWS.map((row, ri) => (
         <div key={ri} className="mobile-bbs-keyboard__row">
           {row.map((key, ki) => {
@@ -67,11 +89,7 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
               <button
                 key={ki}
                 className={cls}
-                onPointerDown={(e) => {
-                  e.preventDefault(); // prevent focus steal from terminal
-                  onKey(key.data);
-                }}
-                onClick={(e) => e.preventDefault()}
+                data-bbs-key={key.data}
                 type="button"
                 aria-label={key.label}
               >
