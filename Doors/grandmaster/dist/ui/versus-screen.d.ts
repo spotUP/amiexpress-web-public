@@ -28,6 +28,8 @@ export declare class VersusScreen {
     private botPlayer;
     private versusAI;
     private boardBox;
+    private opponentBoardBox;
+    private opponentInfoBox;
     private minimapContainer;
     private garbageIndicator;
     private attackIndicator;
@@ -71,6 +73,10 @@ export declare class VersusScreen {
      * Render the game board
      */
     private renderBoard;
+    /**
+     * Render opponent board (full size, same layout as player board)
+     */
+    private renderOpponentBoard;
     /**
      * Get colored block character for piece type
      */

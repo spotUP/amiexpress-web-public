@@ -36,7 +36,9 @@ export class VersusScreen {
 
   // UI Elements
   private boardBox: any;
-  private minimapContainer: any;
+  private opponentBoardBox: any;   // 1v1: full opponent board
+  private opponentInfoBox: any;    // 1v1: opponent name/stats
+  private minimapContainer: any;   // Battle royale: minimap grid
   private garbageIndicator: any;
   private attackIndicator: any;
   private statsBox: any;
@@ -61,7 +63,7 @@ export class VersusScreen {
     this.state = state;
     this.network = network;
     this.attackManager = attackManager;
-    this.minimapRenderer = new MinimapRenderer({ height: 10, compact: true });
+    this.minimapRenderer = new MinimapRenderer({ height: 18, compact: true });
     this.opponentTracker = new OpponentTracker();
 
     // Check if AI controller was passed (new implementation)
@@ -86,12 +88,17 @@ export class VersusScreen {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
 
-    // Main board (left side, smaller to make room for minimaps)
-    // Board: 10 columns × 2 chars = 20, plus 2 for borders = 22 width
-    // Height: 20 visible rows + 2 for borders = 22
+    // 80×24 layout — symmetric side-by-side for 1v1:
+    //   Col  0-21 : player board
+    //   Col 22-24 : garbage/attack strip
+    //   Col 25-46 : opponent board (full size)
+    //   Col 47-79 : stats / info panels
+    //   Row 23    : one-line stats bar (no border)
+
+    // Player board
     this.boardBox = createBox({
       parent: this.screen,
-      top: 1,  // Match game-screen positioning
+      top: 1,
       left: 0,
       width: 22,
       height: 22,
@@ -100,42 +107,62 @@ export class VersusScreen {
       fixed: true,
     });
 
-    // Stats (below board)
-    this.statsBox = createBox({
-      parent: this.screen,
-      top: 23,  // Below board (1 + 22 = 23)
-      left: 0,
-      width: 22,
-      height: 3,
-      content: '',
-      focusable: false,
-      mouse: false,
-      clickable: false,
-    });
-
-    // Garbage queue indicator (right of board)
+    // Garbage queue strip
     this.garbageIndicator = createBox({
       parent: this.screen,
       top: 1,
-      left: 22,  // Right edge of board
-      width: 6,
+      left: 22,
+      width: 3,
       height: 22,
       border: { type: 'line' },
       style: { border: { fg: 'red' } },
-      content: '{red-fg}GARBAGE{/red-fg}',
+      content: '',
       fixed: true,
       focusable: false,
       mouse: false,
       clickable: false,
     });
 
-    // Attack indicator
+    // Opponent full board (same dimensions as player board)
+    this.opponentBoardBox = createBox({
+      parent: this.screen,
+      top: 1,
+      left: 25,
+      width: 22,
+      height: 22,
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      label: ' CPU ',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // Opponent info: name, level, grade (right of opponent board)
+    this.opponentInfoBox = createBox({
+      parent: this.screen,
+      top: 1,
+      left: 47,
+      width: 33,
+      height: 10,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      label: ' VS ',
+      content: '',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // Attack indicator (below info box)
     this.attackIndicator = createBox({
       parent: this.screen,
-      top: 23,
-      left: 22,
-      width: 6,
-      height: 3,
+      top: 11,
+      left: 47,
+      width: 33,
+      height: 5,
       border: { type: 'line' },
       style: { border: { fg: 'yellow' } },
       content: '',
@@ -145,34 +172,22 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // Minimap container (right side)
-    // Screen width: 80, Board: 22, Garbage: 6, Remaining: 52 for minimap (includes borders)
-    const minimapPanel = createBox({
+    // Player stats — bottom row, no border
+    this.statsBox = createBox({
       parent: this.screen,
-      top: 1,
-      left: 28,
-      width: 52,
-      height: 25,
-      border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
-      label: ' Opponents ',
-      fixed: true,
-      focusable: false,
-      mouse: false,
-      clickable: false,
-    });
-
-    this.minimapContainer = createBox({
-      parent: minimapPanel,
-      top: 1,
-      left: 1,
-      width: 50,
-      height: 23,
+      top: 23,
+      left: 0,
+      width: 47,
+      height: 1,
+      border: 'none' as any,
       content: '',
       focusable: false,
       mouse: false,
       clickable: false,
     });
+
+    // minimapContainer kept as null — not used in 1v1
+    this.minimapContainer = null;
   }
 
   /**
@@ -360,22 +375,37 @@ export class VersusScreen {
       `Grade: {magenta-fg}${gameState.grade}{/magenta-fg}`
     );
 
-    // Render garbage queue
+    // Render garbage queue (compact: show count only)
     const pending = this.attackManager.getPendingGarbage();
-    if (pending > 0) {
-      const garbageDisplay = '█'.repeat(Math.min(pending, 20));
-      this.garbageIndicator.setContent(
-        `{red-fg}GARBAGE{/red-fg}\n\n{red-fg}${garbageDisplay}{/red-fg}\n{bold}${pending}{/bold}`
+    this.garbageIndicator.setContent(
+      pending > 0 ? `{red-fg}${pending}{/red-fg}` : ''
+    );
+
+    // Render opponent boards (1v1: full board; TODO: minimap for 3+ players)
+    const opponents = this.opponentTracker.getAliveOpponents();
+    if (opponents.length > 0) {
+      const opp = opponents[0];
+      this.renderOpponentBoard(opp);
+
+      // Update label with opponent name
+      (this.opponentBoardBox as any).setLabel(` ${opp.name || 'CPU'} `);
+
+      // Info box
+      const alive = opponents.filter(o => o.alive).length;
+      this.opponentInfoBox.setContent(
+        `{cyan-fg}${opp.name || 'CPU'}{/cyan-fg}\n` +
+        `Level: {yellow-fg}${opp.level}{/yellow-fg}\n` +
+        `Grade: {magenta-fg}${opp.grade}{/magenta-fg}\n` +
+        `Status: {${opp.alive ? 'green' : 'red'}-fg}${opp.alive ? 'ALIVE' : 'DEAD'}{/${opp.alive ? 'green' : 'red'}-fg}`
       );
-    } else {
-      this.garbageIndicator.setContent('{gray-fg}None{/gray-fg}');
     }
 
-    // Render opponent minimaps
-    this.minimapRenderer.renderMinimapGrid(
-      this.minimapContainer,
-      this.opponentTracker.getAliveOpponents(),
-      6  // Show up to 6 opponents
+    // Attack indicator
+    const attackPending = this.attackManager.getPendingGarbage();
+    this.attackIndicator.setContent(
+      attackPending > 0
+        ? `{red-fg}INCOMING\n${attackPending} lines{/red-fg}`
+        : '{gray-fg}No attack{/gray-fg}'
     );
 
     this.screen.render();
@@ -456,6 +486,24 @@ export class VersusScreen {
     }
 
     this.boardBox.setContent(content);
+  }
+
+  /**
+   * Render opponent board (full size, same layout as player board)
+   */
+  private renderOpponentBoard(opponent: any): void {
+    if (!this.opponentBoardBox || !opponent.board) return;
+    const board = opponent.board;
+    let content = '';
+    const startY = Math.max(0, board.height - 20);
+    for (let y = startY; y < board.height; y++) {
+      if (y > startY) content += '\n';
+      for (let x = 0; x < board.width; x++) {
+        const cell = board.grid[y]?.[x];
+        content += cell?.filled ? this.getBlockChar(cell.color) : '  ';
+      }
+    }
+    this.opponentBoardBox.setContent(content);
   }
 
   /**

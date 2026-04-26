@@ -83,11 +83,11 @@ class MinimapRenderer {
             return (a.rank || 99) - (b.rank || 99);
         })
             .slice(0, maxVisible);
-        // Calculate layout (2x3 grid)
-        const cols = 3;
-        const rows = Math.ceil(sorted.length / cols);
-        const minimapWidth = 12; // 10 chars + border
-        const minimapHeight = this.config.compact ? 12 : 15;
+        // Layout: scale columns to number of opponents so 1 opponent fills the space
+        const count = sorted.length;
+        const cols = count <= 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
+        const minimapWidth = count <= 1 ? 26 : count <= 2 ? 26 : 17;
+        const minimapHeight = this.config.compact ? 20 : 15;
         // Render each minimap
         sorted.forEach((opponent, index) => {
             const col = index % cols;
