@@ -47,17 +47,17 @@ export class Line extends Box {
   private getLineChar(type: string): string {
     if (this.orientation === 'horizontal') {
       const chars: any = {
-        line: '─',
-        heavy: '━',
-        double: '═',
+        line: '-',
+        heavy: '=',
+        double: '=',
         ascii: '-',
       };
       return chars[type] || chars.line;
     } else {
       const chars: any = {
-        line: '│',
-        heavy: '┃',
-        double: '║',
+        line: '|',
+        heavy: '|',
+        double: '|',
         ascii: '|',
       };
       return chars[type] || chars.line;

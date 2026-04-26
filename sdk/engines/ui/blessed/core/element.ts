@@ -2258,55 +2258,31 @@ export class Element extends EventEmitter {
       ? this.options.border
       : (this.options.border.type || 'line');
 
-    // Border character sets
+    // Border character sets - Amiga ASCII only
     const borders: any = {
       line: {
-        topLeft: '┌',
-        topRight: '┐',
-        bottomLeft: '└',
-        bottomRight: '┘',
-        horizontal: '─',
-        vertical: '│',
+        topLeft: '.', topRight: '.', bottomLeft: '`', bottomRight: '\'',
+        horizontal: '-', vertical: '|',
       },
       heavy: {
-        topLeft: '┏',
-        topRight: '┓',
-        bottomLeft: '┗',
-        bottomRight: '┛',
-        horizontal: '━',
-        vertical: '┃',
+        topLeft: '+', topRight: '+', bottomLeft: '+', bottomRight: '+',
+        horizontal: '=', vertical: '|',
       },
       double: {
-        topLeft: '╔',
-        topRight: '╗',
-        bottomLeft: '╚',
-        bottomRight: '╝',
-        horizontal: '═',
-        vertical: '║',
+        topLeft: '+', topRight: '+', bottomLeft: '+', bottomRight: '+',
+        horizontal: '=', vertical: '|',
       },
       round: {
-        topLeft: '╭',
-        topRight: '╮',
-        bottomLeft: '╰',
-        bottomRight: '╯',
-        horizontal: '─',
-        vertical: '│',
+        topLeft: '.', topRight: '.', bottomLeft: '`', bottomRight: '\'',
+        horizontal: '-', vertical: '|',
       },
       bg: {
-        topLeft: ' ',
-        topRight: ' ',
-        bottomLeft: ' ',
-        bottomRight: ' ',
-        horizontal: ' ',
-        vertical: ' ',
+        topLeft: ' ', topRight: ' ', bottomLeft: ' ', bottomRight: ' ',
+        horizontal: ' ', vertical: ' ',
       },
       ascii: {
-        topLeft: '.',
-        topRight: '.',
-        bottomLeft: '`',
-        bottomRight: '\'',
-        horizontal: '-',
-        vertical: '|',
+        topLeft: '.', topRight: '.', bottomLeft: '`', bottomRight: '\'',
+        horizontal: '-', vertical: '|',
       },
     };
 

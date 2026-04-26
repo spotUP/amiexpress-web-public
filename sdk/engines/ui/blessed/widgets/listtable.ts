@@ -192,7 +192,7 @@ export class ListTable extends Box {
    */
   private updateContent(): void {
     const lines: string[] = [];
-    const border = this.noCellBorders ? ' ' : '│';
+    const border = this.noCellBorders ? ' ' : '|';
 
     // Header row
     if (this.headers.length > 0) {
@@ -200,8 +200,8 @@ export class ListTable extends Box {
       lines.push(border + headerCells.join(border) + border);
 
       // Header separator
-      const separators = this.columnWidths.map(w => '─'.repeat(w));
-      lines.push(this.noCellBorders ? separators.join(' ') : '├' + separators.join('┼') + '┤');
+      const separators = this.columnWidths.map(w => '-'.repeat(w));
+      lines.push(this.noCellBorders ? separators.join(' ') : '+' + separators.join('+') + '+');
     }
 
     // Data rows

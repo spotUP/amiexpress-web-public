@@ -1305,12 +1305,12 @@ export class Screen extends Element {
     this._markDirty(pos.xi, pos.yi, pos.xl - 1, pos.yl - 1);
 
     const borderChars: Record<string, { tl: string; tr: string; bl: string; br: string; h: string; v: string }> = {
-      line: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
-      heavy: { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' },
-      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
-      round: { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
-      ascii: { tl: '.', tr: '.', bl: '`', br: '\'', h: '-', v: '|' },
-      bg: { tl: ' ', tr: ' ', bl: ' ', br: ' ', h: ' ', v: ' ' },
+      line:   { tl: '.', tr: '.',  bl: '`', br: '\'', h: '-', v: '|' },
+      heavy:  { tl: '+', tr: '+',  bl: '+', br: '+',  h: '=', v: '|' },
+      double: { tl: '+', tr: '+',  bl: '+', br: '+',  h: '=', v: '|' },
+      round:  { tl: '.', tr: '.',  bl: '`', br: '\'', h: '-', v: '|' },
+      ascii:  { tl: '.', tr: '.',  bl: '`', br: '\'', h: '-', v: '|' },
+      bg:     { tl: ' ', tr: ' ',  bl: ' ', br: ' ',  h: ' ', v: ' ' },
     };
 
     const chars = borderChars[borderType] ?? borderChars.line;
@@ -2753,75 +2753,11 @@ export class Screen extends Element {
   }
 }
 
-const ANGLES: Record<string, boolean> = {
-  '┘': true,
-  '┐': true,
-  '┌': true,
-  '└': true,
-  '┼': true,
-  '├': true,
-  '┤': true,
-  '┴': true,
-  '┬': true,
-  '│': true,
-  '─': true,
-};
-
-const L_ANGLES: Record<string, boolean> = {
-  '┌': true,
-  '└': true,
-  '┼': true,
-  '├': true,
-  '┴': true,
-  '┬': true,
-  '─': true,
-};
-
-const U_ANGLES: Record<string, boolean> = {
-  '┐': true,
-  '┌': true,
-  '┼': true,
-  '├': true,
-  '┤': true,
-  '┬': true,
-  '│': true,
-};
-
-const R_ANGLES: Record<string, boolean> = {
-  '┘': true,
-  '┐': true,
-  '┼': true,
-  '┤': true,
-  '┴': true,
-  '┬': true,
-  '─': true,
-};
-
-const D_ANGLES: Record<string, boolean> = {
-  '┘': true,
-  '└': true,
-  '┼': true,
-  '├': true,
-  '┤': true,
-  '┴': true,
-  '│': true,
-};
-
-const ANGLE_TABLE: Record<number, string> = {
-  0: '',
-  1: '│',
-  2: '─',
-  3: '┌',
-  4: '│',
-  5: '│',
-  6: '└',
-  7: '├',
-  8: '─',
-  9: '┐',
-  10: '─',
-  11: '┬',
-  12: '┘',
-  13: '┤',
-  14: '┴',
-  15: '┼',
-};
+// Junction-merging tables — empty because all borders now use Amiga ASCII
+// characters which are not ambiguous enough to auto-join (. is both TL and TR).
+const ANGLES: Record<string, boolean> = {};
+const L_ANGLES: Record<string, boolean> = {};
+const U_ANGLES: Record<string, boolean> = {};
+const R_ANGLES: Record<string, boolean> = {};
+const D_ANGLES: Record<string, boolean> = {};
+const ANGLE_TABLE: Record<number, string> = { 0: '', 1: '|', 2: '-', 3: '+', 4: '|', 5: '|', 6: '+', 7: '+', 8: '-', 9: '+', 10: '-', 11: '+', 12: '+', 13: '+', 14: '+', 15: '+' };

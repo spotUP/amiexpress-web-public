@@ -47,7 +47,7 @@ export class Table extends Element {
       lines.push(headerLine);
 
       // Separator
-      const separator = widths.map((w) => '─'.repeat(w)).join(' '.repeat(this.columnSpacing));
+      const separator = widths.map((w) => '-'.repeat(w)).join(' '.repeat(this.columnSpacing));
       lines.push(separator);
     }
 
