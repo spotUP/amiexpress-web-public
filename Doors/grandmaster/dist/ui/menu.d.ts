@@ -6,7 +6,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { AppState } from '../core/types';
 import type { SoundEngine } from '../audio/sounds';
-export type MenuSelection = 'master' | 'death' | 'sprint' | 'marathon' | 'cpu_battle' | 'versus' | 'tetrinet' | 'training' | 'settings' | 'stats' | 'manual' | 'quit';
+export type MenuSelection = 'master' | 'death' | 'sprint' | 'marathon' | 'cpu_battle' | 'versus' | 'tetrinet' | 'training' | 'ultra' | 'settings' | 'stats' | 'manual' | 'quit';
 /**
  * Main menu screen
  */

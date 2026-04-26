@@ -77,14 +77,48 @@ class GameScreen {
         this.connectedBlocks.setEnabled(state.settings.connectedBlocks);
     }
     /**
+     * Show READY -> GO countdown before game starts.
+     * Renders the next queue so the player can plan ahead.
+     */
+    async showReadyGo() {
+        const state = this.engine.getState();
+        // Show next queue preview during countdown
+        this.renderNext(state.nextQueue);
+        const readyBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 10,
+            left: 2,
+            width: 22,
+            height: 3,
+            border: { type: 'line' },
+            style: { bg: 'black', border: { fg: 'yellow' } },
+            align: 'center',
+            content: '{bold}{yellow-fg}READY{/yellow-fg}{/bold}',
+            fixed: true,
+            tags: true,
+        });
+        try {
+            this.screen.render();
+            await new Promise(resolve => setTimeout(resolve, 900));
+            readyBox.setContent('{bold}{green-fg}  GO !{/green-fg}{/bold}');
+            this.screen.render();
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        finally {
+            readyBox.destroy();
+            this.screen.render();
+        }
+    }
+    /**
      * Run the game loop
      */
     async run() {
+        // Setup UI and input
+        this.setupUI();
+        this.setupInput();
+        // Ready-Go sequence shows next queue before pieces start falling
+        await this.showReadyGo();
         return new Promise((resolve) => {
-            // Setup UI
-            this.setupUI();
-            // Setup input handlers
-            this.setupInput();
             // Start game
             this.engine.start();
             this.running = true;
@@ -147,8 +181,8 @@ class GameScreen {
                     this.render();
                     this.lastRender = now;
                 }
-                // Check for game over
-                if (gameState.status === 'gameover') {
+                // Check for game over or ultra completion
+                if (gameState.status === 'gameover' || gameState.status === 'complete') {
                     this.running = false;
                 }
             }, 16); // Logic at ~60 FPS
@@ -613,6 +647,24 @@ class GameScreen {
         // Simplified hash for board
         return `${piece}-${state.lines}-${this.shineTimer}`;
     }
+    getPPS(state) {
+        if (!state.startTime || state.piecesPlaced === 0)
+            return '0.00';
+        const elapsed = (Date.now() - state.startTime) / 1000;
+        if (elapsed < 0.1)
+            return '0.00';
+        return (state.piecesPlaced / elapsed).toFixed(2);
+    }
+    getUltraTime(state) {
+        if (state.mode !== 'ultra' || state.ultraTimeRemaining === undefined)
+            return '';
+        const ms = Math.max(0, state.ultraTimeRemaining);
+        const totalSecs = Math.ceil(ms / 1000);
+        const m = Math.floor(totalSecs / 60);
+        const s = (totalSecs % 60).toString().padStart(2, '0');
+        const color = ms < 30000 ? 'red' : ms < 60000 ? 'yellow' : 'green';
+        return `\n  {${color}-fg}TIME: ${m}:${s}{/${color}-fg}`;
+    }
     renderStats(state) {
         const comboDisplay = this.getAnimatedComboDisplay(state.combo);
         let gravDisplay;
@@ -627,7 +679,9 @@ class GameScreen {
             `  Lines: {green-fg}${state.lines}{/green-fg}\n` +
             `  Score: {white-fg}${state.score.toLocaleString()}{/white-fg}\n` +
             `  Combo: ${comboDisplay}\n` +
-            `  Grav:  ${gravDisplay}G`;
+            `  Grav:  ${gravDisplay}G\n` +
+            `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
+            this.getUltraTime(state);
         if (state.lastTSpin === 'full') {
             statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
         }
@@ -1313,19 +1367,38 @@ class GameScreen {
         }
     }
     /**
-     * Show pause menu
+     * Show pause menu with live stats
      */
     showPauseMenu() {
+        const state = this.engine.getState();
+        const elapsed = state.startTime ? Math.floor((Date.now() - state.startTime) / 1000) : 0;
+        const mins = Math.floor(elapsed / 60);
+        const secs = (elapsed % 60).toString().padStart(2, '0');
+        const pps = this.getPPS(state);
+        const finErr = this.engine.getFinesseErrors();
+        const secMs = state.sectionTime ?? 0;
+        const secSecs = Math.floor(secMs / 1000);
+        const secMins = Math.floor(secSecs / 60);
+        const secS = (secSecs % 60).toString().padStart(2, '0');
+        const content = `\n{bold}{yellow-fg}PAUSED{/yellow-fg}{/bold}\n\n` +
+            `{white-fg}Time:    ${mins}:${secs}{/white-fg}\n` +
+            `{cyan-fg}Grade:   ${state.grade}{/cyan-fg}\n` +
+            `{white-fg}Level:   ${state.level}{/white-fg}\n` +
+            `{green-fg}PPS:     ${pps}{/green-fg}\n` +
+            `{white-fg}Section: ${secMins}:${secS}{/white-fg}\n` +
+            `{${finErr === 0 ? 'green' : 'red'}-fg}Finesse: ${finErr} err{/${finErr === 0 ? 'green' : 'red'}-fg}\n\n` +
+            `{gray-fg}P=resume  ESC/Q=quit{/gray-fg}`;
         const pauseBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 30,
-            height: 8,
+            width: 32,
+            height: 14,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'yellow' } },
-            align: 'center',
-            content: '\n{bold}PAUSED{/bold}\n\nPress P to resume\nPress ESC/Q to quit',
+            align: 'left',
+            content,
+            tags: true,
             fixed: true,
         });
         this.screen.render();
@@ -1353,9 +1426,15 @@ class GameScreen {
      */
     async showGameOver() {
         const result = this.engine.getResult();
+        const gameState = this.engine.getState();
         let gameOverTitle = '{bold}{red-fg}GAME OVER{/red-fg}{/bold}';
         let gameOverColor = 'red';
-        if (result.grade === 'GMM' || result.grade === 'GM') {
+        // Ultra mode time-up
+        if (gameState.mode === 'ultra' && gameState.status === 'complete') {
+            gameOverTitle = '{bold}{cyan-fg}TIME UP!{/cyan-fg}{/bold}';
+            gameOverColor = 'cyan';
+        }
+        else if (result.grade === 'GMM' || result.grade === 'GM') {
             gameOverTitle = result.grade === 'GMM'
                 ? '{bold}{yellow-fg}GRAND MASTER MARU!{/yellow-fg}{/bold}'
                 : '{bold}{yellow-fg}GRAND MASTER!{/yellow-fg}{/bold}';

@@ -62,6 +62,11 @@ export declare class GameScreen {
     constructor(screen: Screen, engine: GameEngine, input: InputHandler | null, // Null for attract mode (AI-controlled)
     sounds: SoundEngine, state: AppState, gamepadMapper?: GamepadActionMapper<GameAction> | null);
     /**
+     * Show READY -> GO countdown before game starts.
+     * Renders the next queue so the player can plan ahead.
+     */
+    private showReadyGo;
+    /**
      * Run the game loop
      */
     run(): Promise<void>;
@@ -102,6 +107,8 @@ export declare class GameScreen {
      */
     private render;
     private getBoardHash;
+    private getPPS;
+    private getUltraTime;
     private renderStats;
     /**
      * Build board overlay grid from all active effects
@@ -198,7 +205,7 @@ export declare class GameScreen {
      */
     private applyGlow;
     /**
-     * Show pause menu
+     * Show pause menu with live stats
      */
     private showPauseMenu;
     /**

@@ -453,6 +453,9 @@ class GrandmasterApp {
             case 'tetrinet':
                 await this.showTetriNetLobby();
                 break;
+            case 'ultra':
+                await this.startGame('ultra');
+                break;
             case 'training':
                 await this.startTraining();
                 break;

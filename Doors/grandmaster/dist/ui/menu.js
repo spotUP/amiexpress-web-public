@@ -106,6 +106,7 @@ class MenuScreen {
                     'VERSUS',
                     '{yellow-fg}TETRINET{/yellow-fg}',
                     'TRAINING',
+                    '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
                     '',
                     'Settings',
                     'High Scores',
@@ -170,6 +171,7 @@ class MenuScreen {
                     'versus',
                     'tetrinet',
                     'training',
+                    'ultra',
                     'master', // Separator line, default to master
                     'settings',
                     'stats',
@@ -190,15 +192,15 @@ class MenuScreen {
             });
             // Handle quit key
             menu.key(['q', 'Q'], () => {
-                menu.emit('select', null, 12); // Trigger quit selection (index 12)
+                menu.emit('select', null, 13); // Trigger quit selection (index 13)
             });
             // Handle ESC key - same as quit
             menu.key(['escape'], () => {
-                menu.emit('select', null, 12); // Trigger quit selection (index 12)
+                menu.emit('select', null, 13); // Trigger quit selection (index 13)
             });
             // Handle F1 key for manual
             menu.key(['f1'], () => {
-                menu.emit('select', null, 11); // Trigger manual selection (index 11)
+                menu.emit('select', null, 12); // Trigger manual selection (index 12)
             });
             // Focus and render
             menu.focus();
@@ -268,6 +270,12 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
                 'Practice mode.\n\n' +
                 'Learn techniques,\n' +
                 'no pressure.',
+            // ULTRA MODE
+            '{bold}{cyan-fg}ULTRA 2MIN{/cyan-fg}{/bold}\n\n' +
+                'Score as many\n' +
+                'points as possible\n' +
+                'in 2 minutes!\n\n' +
+                '{cyan-fg}Race the clock!{/cyan-fg}',
             // Empty separator
             '',
             // Settings

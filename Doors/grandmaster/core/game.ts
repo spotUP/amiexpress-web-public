@@ -135,6 +135,7 @@ export class GameEngine {
       backToBack: false,
       backToBackCount: 0,
       piecesPlaced: 0,
+      ultraTimeRemaining: mode === 'ultra' ? 120000 : 0,
 
       // T-Spin tracking (HeborisCE tspin_flag system)
       lastMove: null,
@@ -318,6 +319,17 @@ export class GameEngine {
 
     // Apply gravity
     this.applyGravity();
+
+    // Ultra mode: count down the 2-minute time limit
+    if (this.state.mode === 'ultra' && this.state.ultraTimeRemaining > 0) {
+      this.state.ultraTimeRemaining -= this.FRAME_TIME;
+      if (this.state.ultraTimeRemaining <= 0) {
+        this.state.ultraTimeRemaining = 0;
+        this.state.status = 'complete';
+        this.state.endTime = Date.now();
+        return;
+      }
+    }
 
     // HeborisCE: update decay every frame
     this.gradeManager.updateDecay(this.state.combo, this.state.level, this.state.creditRollActive);

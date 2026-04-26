@@ -38,7 +38,8 @@ export declare class GameEngine {
     private devilNextRise;
     private readonly SHIRASE_RISE_MIN;
     private readonly SHIRASE_RISE_MAX;
-    constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager);
+    private readonly startLevel;
+    constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager, startLevel?: number);
     /**
      * Set animation manager (for visual effects)
      */
@@ -152,6 +153,10 @@ export declare class GameEngine {
      * Apply a line of garbage for Shirase mode
      */
     private applyShiraseGarbage;
+    /**
+     * Get total finesse errors accumulated so far
+     */
+    getFinesseErrors(): number;
     /**
      * Get game result
      */

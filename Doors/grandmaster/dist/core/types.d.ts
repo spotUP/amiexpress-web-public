@@ -36,6 +36,8 @@ export interface GameState {
     combo: number;
     backToBack: boolean;
     backToBackCount: number;
+    piecesPlaced: number;
+    ultraTimeRemaining: number;
     lastMove: 'rotate' | 'move' | 'drop' | null;
     lastTSpin: 'none' | 'mini' | 'full' | null;
     tSpinFlag: 0 | 1 | 2;

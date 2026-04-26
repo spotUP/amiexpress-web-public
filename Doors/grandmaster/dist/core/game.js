@@ -18,7 +18,7 @@ const credit_roll_1 = require("./credit-roll");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 class GameEngine {
-    constructor(mode, settings, sounds, attackManager) {
+    constructor(mode, settings, sounds, attackManager, startLevel = 0) {
         this.sounds = sounds;
         // Stats tracking
         this.tetrisCount = 0;
@@ -41,6 +41,7 @@ class GameEngine {
         this.SHIRASE_RISE_MAX = {
             5: 35, 6: 30, 7: 20, 8: 18, 9: 15
         };
+        this.startLevel = startLevel;
         this.settings = settings;
         // Initialize with stub managers (will be set via setters)
         this.animations = new animations_1.AnimationManager();
@@ -74,8 +75,8 @@ class GameEngine {
      * Create initial game state
      */
     createInitialState(mode) {
-        // Get initial speed parameters for level 0
-        const speedParams = (0, gravity_1.getSpeedParams)(0, mode);
+        // Get initial speed parameters for starting level
+        const speedParams = (0, gravity_1.getSpeedParams)(this.startLevel, mode);
         return {
             mode,
             board: (0, board_1.createBoard)(10, 24),
@@ -83,13 +84,15 @@ class GameEngine {
             holdPiece: null,
             canHold: true,
             nextQueue: this.pieceManager.fillQueue(this.settings.previewCount),
-            level: 0,
+            level: this.startLevel,
             lines: 0,
             score: 0,
             grade: '9',
             combo: 0,
             backToBack: false,
             backToBackCount: 0,
+            piecesPlaced: 0,
+            ultraTimeRemaining: mode === 'ultra' ? 120000 : 0,
             // T-Spin tracking (HeborisCE tspin_flag system)
             lastMove: null,
             lastTSpin: null,
@@ -247,6 +250,16 @@ class GameEngine {
         }
         // Apply gravity
         this.applyGravity();
+        // Ultra mode: count down the 2-minute time limit
+        if (this.state.mode === 'ultra' && this.state.ultraTimeRemaining > 0) {
+            this.state.ultraTimeRemaining -= this.FRAME_TIME;
+            if (this.state.ultraTimeRemaining <= 0) {
+                this.state.ultraTimeRemaining = 0;
+                this.state.status = 'complete';
+                this.state.endTime = Date.now();
+                return;
+            }
+        }
         // HeborisCE: update decay every frame
         this.gradeManager.updateDecay(this.state.combo, this.state.level, this.state.creditRollActive);
         this.state.grade = this.gradeManager.getGrade();
@@ -603,6 +616,7 @@ class GameEngine {
     lockPiece() {
         if (!this.state.currentPiece)
             return;
+        this.state.piecesPlaced++;
         const piece = this.state.currentPiece;
         const shape = this.pieceManager.getShape(piece.type, piece.rotation);
         // Detect T-Spin before placing piece (HeborisCE: confirm tspin_flag = 2)
@@ -915,6 +929,12 @@ class GameEngine {
             locked: true,
         }));
         this.sounds.playSfx('garbage');
+    }
+    /**
+     * Get total finesse errors accumulated so far
+     */
+    getFinesseErrors() {
+        return this.finesseEvaluator.getStats().finesseErrors;
     }
     /**
      * Get game result

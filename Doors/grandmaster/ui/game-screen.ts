@@ -231,8 +231,8 @@ export class GameScreen {
           this.lastRender = now;
         }
 
-        // Check for game over
-        if (gameState.status === 'gameover') {
+        // Check for game over or ultra completion
+        if (gameState.status === 'gameover' || gameState.status === 'complete') {
           this.running = false;
         }
       }, 16); // Logic at ~60 FPS
@@ -746,6 +746,16 @@ export class GameScreen {
     return (state.piecesPlaced / elapsed).toFixed(2);
   }
 
+  private getUltraTime(state: any): string {
+    if (state.mode !== 'ultra' || state.ultraTimeRemaining === undefined) return '';
+    const ms = Math.max(0, state.ultraTimeRemaining);
+    const totalSecs = Math.ceil(ms / 1000);
+    const m = Math.floor(totalSecs / 60);
+    const s = (totalSecs % 60).toString().padStart(2, '0');
+    const color = ms < 30000 ? 'red' : ms < 60000 ? 'yellow' : 'green';
+    return `\n  {${color}-fg}TIME: ${m}:${s}{/${color}-fg}`;
+  }
+
   private renderStats(state: any): void {
     const comboDisplay = this.getAnimatedComboDisplay(state.combo);
     let gravDisplay: string;
@@ -762,7 +772,8 @@ export class GameScreen {
       `  Score: {white-fg}${state.score.toLocaleString()}{/white-fg}\n` +
       `  Combo: ${comboDisplay}\n` +
       `  Grav:  ${gravDisplay}G\n` +
-      `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}`;
+      `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
+      this.getUltraTime(state);
 
     if (state.lastTSpin === 'full') {
       statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
@@ -1573,10 +1584,15 @@ export class GameScreen {
    */
   private async showGameOver(): Promise<void> {
     const result = this.engine.getResult();
+    const gameState = this.engine.getState();
     let gameOverTitle = '{bold}{red-fg}GAME OVER{/red-fg}{/bold}';
     let gameOverColor = 'red';
 
-    if (result.grade === 'GMM' || result.grade === 'GM') {
+    // Ultra mode time-up
+    if (gameState.mode === 'ultra' && gameState.status === 'complete') {
+      gameOverTitle = '{bold}{cyan-fg}TIME UP!{/cyan-fg}{/bold}';
+      gameOverColor = 'cyan';
+    } else if (result.grade === 'GMM' || result.grade === 'GM') {
       gameOverTitle = result.grade === 'GMM'
         ? '{bold}{yellow-fg}GRAND MASTER MARU!{/yellow-fg}{/bold}'
         : '{bold}{yellow-fg}GRAND MASTER!{/yellow-fg}{/bold}';

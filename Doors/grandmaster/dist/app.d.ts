@@ -77,6 +77,10 @@ export declare class GrandmasterApp {
      */
     private showMainMenu;
     /**
+     * Show training level selector then start training game
+     */
+    private startTraining;
+    /**
      * Start a game in specified mode
      */
     private startGame;
