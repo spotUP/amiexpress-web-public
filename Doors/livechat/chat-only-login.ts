@@ -11,8 +11,16 @@ import { createDisconnectionModal } from './ui/disconnection-modal';
  */
 async function verifyCredentials(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; error?: string }> {
   try {
-    // Dynamic require to get backend database module (we're running inside the backend process)
-    const { db } = require('~/Code/amiexpress-web/web/backend/src/database');
+    // Resolve the backend database module via process.cwd(). The backend is
+    // launched from `web/backend/` in both dev (start-servers.sh:676 cds
+    // there before `tsx src/index.ts`) and prod (Dockerfile:320 sets
+    // WORKDIR /app/web/backend before CMD), so this path works regardless
+    // of where the door dist sits on disk. Previously hardcoded as the
+    // developer's `~/...` absolute path which doesn't exist in
+    // the Docker container, so every chat-only-login submit on prod hit
+    // "Cannot find module" -> swallowed -> generic "server error".
+    const path = require('path');
+    const { db } = require(path.resolve(process.cwd(), 'src/database'));
 
     // Use the Database's authenticateUser method which handles password verification
     const user = await db.authenticateUser(credentials.username, credentials.password);
@@ -51,16 +59,17 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
 
     // Set up input handler to route input to blessed screen
     // Note: inDoorManager flag is set in index.ts runDoor()
+    //
+    // Previously this handler dropped SGR mouse codes (`\x1b[<...M/m`) to
+    // work around a 2026-04-24 leak where they showed up as literal
+    // `[<btn;col;row;M` text at the cursor. That leak is now handled at
+    // the source: (a) the SDK program parser at program.ts:1457-1471
+    // recognises and consumes SGR mouse, (b) the BBS fall-through in
+    // socket-handlers.ts drops any unconsumed SGR before the command
+    // handler can echo it. Dropping SGR here was actively breaking the
+    // login modal -- without mouse events reaching the textarea, users
+    // couldn't click to focus the username/password fields.
     bbsSession.doorInputHandler = (data: string) => {
-      // Drop SGR mouse codes — they are not consumed by the login modal's
-      // blessed widgets and were being echoed as literal '[<btn;col;row;M'
-      // text at the cursor position (2026-04-24 repro).
-      if (data && data.length > 3
-          && data.charCodeAt(0) === 0x1b
-          && data.charCodeAt(1) === 0x5b /* [ */
-          && data.charCodeAt(2) === 0x3c /* < */) {
-        return true;
-      }
       console.log('[chat-only-login] input data=%s len=%d focused=%s screen?=%s',
         JSON.stringify(data.slice(0, 20)),
         data.length,
