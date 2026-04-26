@@ -1508,10 +1508,17 @@ export class Program extends EventEmitter {
 
       // Special single bytes
       const singleByte = this._inputBuffer[0];
+      const _sbCode = singleByte.charCodeAt(0);
       if (singleByte === '\r' || singleByte === '\n' || singleByte === '\t' ||
           singleByte === ESC || singleByte === '\x7f' || singleByte === '\x08' ||
-          (singleByte.charCodeAt(0) >= 1 && singleByte.charCodeAt(0) <= 26) ||
-          (singleByte.charCodeAt(0) >= 32 && singleByte.charCodeAt(0) <= 126)) {
+          (_sbCode >= 1 && _sbCode <= 26) ||
+          // Accept ASCII printable (32-126), Latin-1 supplement
+          // (160-255: å ä ö é ü etc.) and any other Unicode codepoint
+          // above the C0/C1 control ranges. The previous bound of <=126
+          // silently discarded every typed Latin-1 character (e.g.
+          // Swedish å/ä/ö, German ä/ö/ü/ß) at the parser, so they
+          // never reached the focused widget.
+          (_sbCode >= 32 && _sbCode !== 127 && !(_sbCode >= 128 && _sbCode <= 159))) {
 
         // Handle ESC as potential start of sequence (if not followed by anything, it's Esc)
         if (singleByte === ESC && this._inputBuffer.length === 1) {

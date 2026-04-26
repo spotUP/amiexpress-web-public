@@ -1562,9 +1562,39 @@ async function createApp(session) {
         rebuildChatContent();
         screen.render();
     }
+    // updateTypingPreview is called on EVERY keystroke (locally + on every
+    // received chat:keystroke broadcast from other users). With a long
+    // chatMessages backlog (default 1000 lines), rebuilding the entire
+    // chat-panel content + .setContent() + screen.render() per keystroke
+    // is the dominant cost driving the typing lag users reported. Throttle
+    // to ~16fps with a trailing flush so the latest preview state still
+    // wins, but burst-typing doesn't trigger a render storm.
+    let _typingPreviewTimer = null;
+    let _typingPreviewLastRun = 0;
+    const _TYPING_PREVIEW_MIN_MS = 60;
     function updateTypingPreview() {
-        rebuildChatContent();
-        screen.render();
+        const now = Date.now();
+        const since = now - _typingPreviewLastRun;
+        if (since >= _TYPING_PREVIEW_MIN_MS) {
+            _typingPreviewLastRun = now;
+            if (_typingPreviewTimer) {
+                clearTimeout(_typingPreviewTimer);
+                _typingPreviewTimer = null;
+            }
+            rebuildChatContent();
+            screen.render();
+            return;
+        }
+        // Trailing edge: schedule a final rebuild so the last keystroke's
+        // state is always reflected even if it lands inside the throttle window.
+        if (_typingPreviewTimer)
+            return;
+        _typingPreviewTimer = setTimeout(() => {
+            _typingPreviewTimer = null;
+            _typingPreviewLastRun = Date.now();
+            rebuildChatContent();
+            screen.render();
+        }, _TYPING_PREVIEW_MIN_MS - since);
     }
     // Events and activity now go to chat log (use appendLineToLog for proper tracking)
     function updateEventsFeed(event) {
