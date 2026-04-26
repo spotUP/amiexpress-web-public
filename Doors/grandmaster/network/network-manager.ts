@@ -215,8 +215,13 @@ export class GrandmasterNetworkManager extends EventEmitter {
     const lobby = this.network.lobby.current;
     if (!lobby) return;
 
+    // Use localPlayerId (BBS user ID) for the local player so the lobby widget's
+    // host-check (state.players[0].id === localPlayerId) resolves correctly.
+    // SDK assigns numeric hashed IDs; translating back here keeps IDs consistent.
     const players: PlayerInfo[] = lobby.players.map(p => ({
-      id: String(p.id),
+      id: p.id === this.localPlayerNumericId && this.localPlayerId
+        ? this.localPlayerId
+        : String(p.id),
       name: p.username,
       rank: 1,
       rating: 1000,
