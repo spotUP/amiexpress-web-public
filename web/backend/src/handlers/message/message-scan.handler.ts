@@ -405,20 +405,18 @@ console.log(`[confScan] Mail scan: ${confName} / msgBase ${msgBaseId}`);
         }
       }
 
-      // express.e:28089/28099 — File scan (new files): use AquaScan if available.
-      if (hasAquaScan) {
+      // express.e:28089 - fscan:=checkFileConfScan(conf) — only scan files when enabled
+      const fscan = await checkFileConfScan(conf, user.id);
+      if (fscan) {
+        if (hasAquaScan) {
 console.log(`[confScan] File scan via AquaScan (N S U): ${confName}`);
-        // Join first message base for this conference before running AquaScan
-        const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
-        const msgBaseId = firstMsgBase ? firstMsgBase.id : 1;
-        await joinConference(socket, session, conf, msgBaseId, true);
-
-        session.newFilesPauseFlag = true;
-        await runSysCommand(socket, session, 'N', 'S U');
-        session.newFilesPauseFlag = false;
-      } else {
-        const fscan = await checkFileConfScan(conf, user.id);
-        if (fscan) {
+          const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
+          const msgBaseId = firstMsgBase ? firstMsgBase.id : 1;
+          await joinConference(socket, session, conf, msgBaseId, true);
+          session.newFilesPauseFlag = true;
+          await runSysCommand(socket, session, 'N', 'S U');
+          session.newFilesPauseFlag = false;
+        } else {
 console.log(`[confScan] Internal file scan: ${confName}`);
           session.newFilesPauseFlag = true;
           await runSysCommand(socket, session, 'N', 'S U');

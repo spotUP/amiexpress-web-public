@@ -1080,14 +1080,10 @@ console.log(`  [WALL-A4] A4+0x${off.toString(16)} = 0x${val.toString(16)}`);
       this.logDoorFile(`  Buffer ascii: ${ascii}`);
     }
 
-    // Convert Amiga/Latin-1 bytes to ASCII (fixes non-breaking space 0xA0 -> 0x20)
-    // This ensures files written by doors (like MultiTop bulletins) display correctly
-    const asciiBytes = convertAmigaBytesToAscii(bytes);
-
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
-      const dataBuffer = Buffer.from(asciiBytes);
-      const result = this.fileManager.write(handle, dataBuffer);
+      const rawBuffer = Buffer.from(bytes);
+      const result = this.fileManager.write(handle, rawBuffer);
 
     if (result.bytesWritten < 0) {
 console.error(
@@ -1102,10 +1098,12 @@ console.error(
       // FileHandle.write() should return consoleData, but as a failsafe, check the BPTR
       const isStdout = (handle === this.stdoutBptr) || (handle === 2);
 
-      // If console output, send to callback
+      // If console output, apply Amiga→ASCII conversion and send to callback
       if (result.consoleData || isStdout) {
-        const outputData = result.consoleData || dataBuffer;
-        let text = outputData.toString('latin1');
+        const outputData = result.consoleData || rawBuffer;
+        // Only convert for terminal output — binary file writes must use raw bytes
+        const convertedBytes = convertAmigaBytesToAscii([...outputData]);
+        let text = Buffer.from(convertedBytes).toString('latin1');
         // Convert bare LF to CR+LF for proper terminal display
         text = text.replace(/(?<!\r)\n/g, '\r\n');
 
@@ -1140,7 +1138,7 @@ debugLog(
       (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
-      const rawBuf = Buffer.from(asciiBytes);
+      const rawBuf = Buffer.from(convertAmigaBytesToAscii(bytes));
       let text = rawBuf.toString('latin1');
 
       // DEBUG: Log WHO2 door output
@@ -1227,9 +1225,9 @@ debugLog(
       fileHandle.buffer = newBuffer;
     }
 
-    // Write bytes to buffer
+    // Write raw bytes to buffer (no character conversion for binary file writes)
     for (let i = 0; i < length; i++) {
-      fileHandle.buffer[fileHandle.position + i] = asciiBytes[i];
+      fileHandle.buffer[fileHandle.position + i] = bytes[i];
     }
 
     // Update file position
