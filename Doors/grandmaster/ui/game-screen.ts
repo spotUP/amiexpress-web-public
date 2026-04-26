@@ -701,6 +701,13 @@ export class GameScreen {
     return `${piece}-${state.lines}-${this.shineTimer}`;
   }
 
+  private getPPS(state: any): string {
+    if (!state.startTime || state.piecesPlaced === 0) return '0.00';
+    const elapsed = (Date.now() - state.startTime) / 1000;
+    if (elapsed < 0.1) return '0.00';
+    return (state.piecesPlaced / elapsed).toFixed(2);
+  }
+
   private renderStats(state: any): void {
     const comboDisplay = this.getAnimatedComboDisplay(state.combo);
     let gravDisplay: string;
@@ -716,7 +723,8 @@ export class GameScreen {
       `  Lines: {green-fg}${state.lines}{/green-fg}\n` +
       `  Score: {white-fg}${state.score.toLocaleString()}{/white-fg}\n` +
       `  Combo: ${comboDisplay}\n` +
-      `  Grav:  ${gravDisplay}G`;
+      `  Grav:  ${gravDisplay}G\n` +
+      `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}`;
 
     if (state.lastTSpin === 'full') {
       statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;

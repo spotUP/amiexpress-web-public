@@ -76,6 +76,7 @@ export interface GameState {
   combo: number;
   backToBack: boolean;
   backToBackCount: number;  // Track chain length for B2B visual bonus
+  piecesPlaced: number;          // Total pieces locked (for PPS = piecesPlaced / elapsedSeconds)
 
   // T-Spin tracking (HeborisCE tspin_flag system)
   lastMove: 'rotate' | 'move' | 'drop' | null;

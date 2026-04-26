@@ -130,6 +130,7 @@ export class GameEngine {
       combo: 0,
       backToBack: false,
       backToBackCount: 0,
+      piecesPlaced: 0,
 
       // T-Spin tracking (HeborisCE tspin_flag system)
       lastMove: null,
@@ -737,6 +738,8 @@ export class GameEngine {
    */
   private lockPiece(): void {
     if (!this.state.currentPiece) return;
+
+    this.state.piecesPlaced++;
 
     const piece = this.state.currentPiece;
     const shape = this.pieceManager.getShape(piece.type, piece.rotation);
