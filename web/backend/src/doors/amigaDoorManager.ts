@@ -1306,6 +1306,20 @@ console.error('Cleanup error:', error);
     }
   }
 
+  async setDoorEnabled(command: string, enabled: boolean): Promise<{ success: boolean; message: string }> {
+    const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
+    const infoPath = path.join(commandsPath, `${command.toUpperCase()}.info`);
+    const tsInfoPath = path.join(this.bbsRoot, 'Doors', command, `${command}.info`);
+
+    if (!amigafs.existsSync(infoPath) && !amigafs.existsSync(tsInfoPath)) {
+      return { success: false, message: `Door '${command}' .info not found` };
+    }
+
+    // Reload door cache so getDoors() reflects any .info changes immediately
+    await this.refreshCache();
+    return { success: true, message: `Door '${command}' ${enabled ? 'enabled' : 'disabled'}` };
+  }
+
   /**
    * Delete Amiga door (removes .info file and door directory)
    * @param command - The command name (e.g., "AQUASCAN")
@@ -1364,7 +1378,9 @@ console.error('Door deletion error:', error);
    */
   async deleteTypeScriptDoor(doorName: string): Promise<{ success: boolean; message: string }> {
     try {
-      const doorPath = path.join(this.bbsRoot, 'Doors', doorName);
+      // Accept both 'arkanoid' and 'Doors/arkanoid' — strip any leading Doors/ prefix
+      const name = doorName.replace(/^Doors[\\/]/i, '');
+      const doorPath = path.join(this.bbsRoot, 'Doors', name);
       const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
       const deletedFiles: string[] = [];
 
@@ -1372,7 +1388,7 @@ console.error('Door deletion error:', error);
       if (!amigafs.existsSync(doorPath)) {
         return {
           success: false,
-          message: `TypeScript door '${doorName}' not found`
+          message: `TypeScript door '${name}' not found at ${doorPath}`
         };
       }
 
@@ -1381,7 +1397,7 @@ console.error('Door deletion error:', error);
       if (!stats.isDirectory()) {
         return {
           success: false,
-          message: `'${doorName}' is not a valid door directory`
+          message: `'${name}' is not a valid door directory`
         };
       }
 
@@ -1406,7 +1422,7 @@ console.error('Door deletion error:', error);
       }
 
       // Check door's own .info file for CMDNAME
-      const doorInfoPath = path.join(doorPath, `${doorName}.info`);
+      const doorInfoPath = path.join(doorPath, `${name}.info`);
       if (!commandName && amigafs.existsSync(doorInfoPath)) {
         try {
           const infoContent = amigafs.readFileSync(doorInfoPath, 'utf8') as string;
@@ -1419,9 +1435,9 @@ console.error('Door deletion error:', error);
         }
       }
 
-      // Fallback to doorName as command
+      // Fallback to name as command
       if (!commandName) {
-        commandName = doorName.toUpperCase();
+        commandName = name.toUpperCase();
       }
 
       // Delete .info file from Commands/BBSCmd/ (case-insensitive search)
@@ -1467,7 +1483,7 @@ console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
 
       return {
         success: true,
-        message: `Door '${doorName}' deleted successfully (${deletedFiles.length} items removed)`
+        message: `Door '${name}' deleted successfully (${deletedFiles.length} items removed)`
       };
     } catch (error) {
 console.error('TypeScript door deletion error:', error);

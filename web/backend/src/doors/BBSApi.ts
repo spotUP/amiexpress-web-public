@@ -1367,6 +1367,24 @@ console.error('[BBSApi.deleteDoor] Error:', error);
   }
 
   /**
+   * Enable or disable a door by its command name.
+   * Requires SysOp access (secLevel >= 250).
+   */
+  async setDoorEnabled(command: string, enabled: boolean): Promise<{ success: boolean; message: string }> {
+    if (this.session.user && this.session.user.secLevel < 250) {
+      return { success: false, message: 'Access denied: SysOp access required' };
+    }
+    try {
+      const { getAmigaDoorManager } = await import('./amigaDoorManager');
+      const manager = getAmigaDoorManager();
+      const result = await manager.setDoorEnabled(command, enabled);
+      return result;
+    } catch (error) {
+      return { success: false, message: `Failed: ${(error as Error).message}` };
+    }
+  }
+
+  /**
    * Emit a custom door event that will be broadcast to LiveChat and webhooks
    *
    * @param eventType - Type of event (e.g., 'project_created', 'task_completed', 'achievement_unlocked')
