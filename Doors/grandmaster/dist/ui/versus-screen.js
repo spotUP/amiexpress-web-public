@@ -97,13 +97,13 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
-        // Opponent info: name, level, grade (right of opponent board)
+        // Combined VS panel: opponent info + attack status in one box
         this.opponentInfoBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
             left: 47,
             width: 33,
-            height: 10,
+            height: 22,
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
             label: ' VS ',
@@ -113,21 +113,8 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
-        // Attack indicator (below info box)
-        this.attackIndicator = (0, blessed_helpers_1.createBox)({
-            parent: this.screen,
-            top: 11,
-            left: 47,
-            width: 33,
-            height: 5,
-            border: { type: 'line' },
-            style: { border: { fg: 'yellow' } },
-            content: '',
-            fixed: true,
-            focusable: false,
-            mouse: false,
-            clickable: false,
-        });
+        // attackIndicator is now part of opponentInfoBox — null it out
+        this.attackIndicator = null;
         // Player stats — bottom row, no border
         this.statsBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -306,25 +293,26 @@ class VersusScreen {
         // Render garbage queue (compact: show count only)
         const pending = this.attackManager.getPendingGarbage();
         this.garbageIndicator.setContent(pending > 0 ? `{red-fg}${pending}{/red-fg}` : '');
-        // Render opponent boards (1v1: full board; TODO: minimap for 3+ players)
+        // Render opponent board + combined VS info panel
         const opponents = this.opponentTracker.getAliveOpponents();
-        if (opponents.length > 0) {
-            const opp = opponents[0];
+        const opp = opponents[0] ?? null;
+        if (opp) {
             this.renderOpponentBoard(opp);
-            // Update label with opponent name
             this.opponentBoardBox.setLabel(` ${opp.name || 'CPU'} `);
-            // Info box
-            const alive = opponents.filter(o => o.alive).length;
-            this.opponentInfoBox.setContent(`{cyan-fg}${opp.name || 'CPU'}{/cyan-fg}\n` +
-                `Level: {yellow-fg}${opp.level}{/yellow-fg}\n` +
-                `Grade: {magenta-fg}${opp.grade}{/magenta-fg}\n` +
-                `Status: {${opp.alive ? 'green' : 'red'}-fg}${opp.alive ? 'ALIVE' : 'DEAD'}{/${opp.alive ? 'green' : 'red'}-fg}`);
         }
-        // Attack indicator
+        // Combined VS panel: opponent info + incoming attack status
         const attackPending = this.attackManager.getPendingGarbage();
-        this.attackIndicator.setContent(attackPending > 0
-            ? `{red-fg}INCOMING\n${attackPending} lines{/red-fg}`
-            : '{gray-fg}No attack{/gray-fg}');
+        const oppName = opp?.name || 'CPU';
+        const oppLevel = opp?.level ?? '-';
+        const oppGrade = opp?.grade ?? '-';
+        const oppAlive = opp ? opp.alive : true;
+        this.opponentInfoBox.setContent(`{cyan-fg}${oppName}{/cyan-fg}\n\n` +
+            `Level: {yellow-fg}${oppLevel}{/yellow-fg}\n` +
+            `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
+            `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
+            (attackPending > 0
+                ? `{red-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/red-fg}`
+                : `{gray-fg}No incoming attack{/gray-fg}`));
         this.screen.render();
     }
     /**

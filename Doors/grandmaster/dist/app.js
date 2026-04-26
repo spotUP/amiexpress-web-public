@@ -634,8 +634,17 @@ class GrandmasterApp {
             console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
         }
         if (result.action === 'start' && result.mode) {
-            // Start multiplayer game
-            await this.startVersusGame(result.mode);
+            // Check if bots were added to the lobby (auto-filled for solo testing)
+            const matchState = this.network?.getMatchState();
+            const hasBots = matchState?.players.some(p => p.isBot) ?? false;
+            if (hasBots) {
+                // Route to CPU battle so the bot AI is actually running
+                const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
+                await this.startCpuBattle(botDifficulty);
+            }
+            else {
+                await this.startVersusGame(result.mode);
+            }
         }
     }
     /**
