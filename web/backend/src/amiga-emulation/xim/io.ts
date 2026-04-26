@@ -1690,6 +1690,12 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
 
     let bytesSent = 0;
 
+    // If this message sets ANSI colors/attributes and ends with a newline, reset
+    // attributes at the end to prevent bleed into the next JH_SM message.
+    // Amiga doors like AquaScan set background colors for file-listing lines but
+    // don't emit a reset, causing the color to persist into the following prompt.
+    const containsAnsiSgr = /\x1b\[\d*(?:;\d+)*m/.test(normalized);
+
     for (let i = 0; i < rawLines.length; i++) {
       const line = rawLines[i];
       const isLastLine = i === rawLines.length - 1;
@@ -1706,7 +1712,9 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
         const isLastSegment = s === segments.length - 1;
         const endsInNewline = !isLastSegment || shouldAddLineBreak;
         const suffix = endsInNewline ? newlineMode.lineSuffix : '';
-        const output = `${segment}${suffix}`;
+        const ansiReset = (containsAnsiSgr && isLastLine && isLastSegment && endsInNewline)
+          ? '\x1b[0m' : '';
+        const output = `${segment}${ansiReset}${suffix}`;
 
         // Emit output BEFORE checking pause
         this.directEmit('ansi-output', output);
