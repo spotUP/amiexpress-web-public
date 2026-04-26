@@ -13,7 +13,8 @@ export declare class SettingsScreen {
     private screen;
     private state;
     private sounds;
-    constructor(screen: Screen, state: AppState, sounds: SoundEngine);
+    private bbsSession;
+    constructor(screen: Screen, state: AppState, sounds: SoundEngine, bbsSession?: any);
     /**
      * Show settings editor and wait for exit
      */
@@ -58,5 +59,32 @@ export declare class SettingsScreen {
      * Cycle floating text mode
      */
     private cycleFloatTextMode;
+    /**
+     * Key binding wizard — same UX as joypad wizard but captures keypresses.
+     * Enter=skip, Escape=done, any other key=bind and auto-advance.
+     */
+    private bindAllKeys;
+    /** Clear all key bindings. */
+    private clearKeyBindings;
+    /** Show a preset picker and apply the chosen key layout. */
+    private pickKeyPreset;
+    /** Show a preset picker and apply the chosen joypad layout. */
+    private pickGamepadPreset;
+    /**
+     * Clear all joypad bindings (resets to defaults, which are handled by the
+     * GAMEPAD_MAPPING in app.ts — storing an empty object means "use defaults").
+     */
+    private clearGamepadBindings;
+    /**
+     * Joypad binding wizard — steps through all 9 actions in order starting from
+     * startIndex. Pressing a button/dpad/axis auto-saves and advances. Enter skips,
+     * Escape exits the wizard.
+     */
+    private editAllGamepadBindings;
+    /**
+     * Edit a joypad binding — listen for the next gamepad button/axis/dpad press.
+     * Up to 3 triggers per action. Enter saves, Escape cancels, Backspace removes last.
+     */
+    private editGamepadBinding;
 }
 //# sourceMappingURL=settings-screen.d.ts.map

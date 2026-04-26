@@ -16,12 +16,13 @@ const connected_blocks_1 = require("../effects/connected-blocks");
  */
 class GameScreen {
     constructor(screen, engine, input, // Null for attract mode (AI-controlled)
-    sounds, state) {
+    sounds, state, gamepadMapper = null) {
         this.screen = screen;
         this.engine = engine;
         this.input = input;
         this.sounds = sounds;
         this.state = state;
+        this.gamepadMapper = gamepadMapper;
         this.running = false;
         this.stoppedEarly = false; // True if stopped externally (not gameover)
         this.cleanedUp = false; // Prevent double cleanup
@@ -465,17 +466,22 @@ class GameScreen {
         // Skip input setup for attract mode (AI-controlled)
         if (!this.input)
             return;
-        this.input.on('left', () => {
+        // Helper: register a callback on both keyboard and gamepad inputs
+        const on = (action, cb) => {
+            this.input.on(action, cb);
+            this.gamepadMapper?.on(action, cb);
+        };
+        on('left', () => {
             if (this.engine.move(-1)) {
                 this.sounds.playSfx('move');
             }
         });
-        this.input.on('right', () => {
+        on('right', () => {
             if (this.engine.move(1)) {
                 this.sounds.playSfx('move');
             }
         });
-        this.input.on('rotate_cw', () => {
+        on('rotate_cw', () => {
             if (this.engine.rotate(1)) {
                 this.sounds.playSfx('rotate');
             }
@@ -485,7 +491,7 @@ class GameScreen {
                 }
             }
         });
-        this.input.on('rotate_ccw', () => {
+        on('rotate_ccw', () => {
             if (this.engine.rotate(-1)) {
                 this.sounds.playSfx('rotate');
             }
@@ -495,15 +501,15 @@ class GameScreen {
                 }
             }
         });
-        this.input.on('soft_drop', () => {
+        on('soft_drop', () => {
             this.engine.softDrop();
         });
-        this.input.on('hard_drop', () => {
+        on('hard_drop', () => {
             this.addHardDropTrail();
             this.engine.hardDrop();
             this.sounds.playSfx('hard_drop');
         });
-        this.input.on('hold', () => {
+        on('hold', () => {
             if (this.engine.hold()) {
                 this.sounds.playSfx('hold');
             }
@@ -513,7 +519,7 @@ class GameScreen {
                 }
             }
         });
-        this.input.on('pause', () => {
+        on('pause', () => {
             if (this.engine.getState().status === 'playing') {
                 this.engine.pause();
                 this.showPauseMenu();

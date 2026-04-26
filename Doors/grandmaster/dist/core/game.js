@@ -295,14 +295,21 @@ class GameEngine {
         // Calculate how many rows to drop
         const dropAmount = Math.floor(this.gravityAccumulator);
         if (dropAmount > 0) {
+            let moved = false;
             // Move piece down by dropAmount
             for (let i = 0; i < dropAmount; i++) {
                 if (!(0, board_1.checkCollision)(this.state.board, shape, piece.x, piece.y + 1)) {
                     piece.y++;
+                    moved = true;
                 }
                 else {
                     break;
                 }
+            }
+            // Gravity-driven drop disqualifies T-spin (Apotris/Guideline rule)
+            if (moved) {
+                this.state.lastMove = 'drop';
+                this.state.tSpinFlag = 0;
             }
             // Subtract the integer part from accumulator
             this.gravityAccumulator -= dropAmount;

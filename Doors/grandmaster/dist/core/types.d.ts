@@ -70,6 +70,11 @@ export interface GameState {
     startTime: number | null;
     endTime: number | null;
 }
+/**
+ * Gamepad bindings stored as trigger strings: "button:a", "dpad:left", "axis:left-x:negative"
+ * Keys match GameAction names.
+ */
+export type GamepadBindings = Partial<Record<string, string[]>>;
 export interface KeyBindings {
     left: string[];
     right: string[];
@@ -93,6 +98,7 @@ export interface PlayerSettings {
     musicVolume: number;
     sfxVolume: number;
     keyBindings: KeyBindings;
+    gamepadBindings?: GamepadBindings;
     blockGlow: boolean;
     glowIntensity: number;
     clearStyle: 'inward' | 'outward' | 'instant' | 'directional';

@@ -5,7 +5,7 @@
  * Defines key mappings for game controls
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TIMING = exports.MODERN_KEYS = exports.DEFAULT_KEYS = void 0;
+exports.TIMING = exports.KEY_PRESETS = exports.DEFAULT_KEYS = void 0;
 exports.keyToAction = keyToAction;
 /**
  * Default key bindings (Modern Tetris style)
@@ -26,19 +26,49 @@ exports.DEFAULT_KEYS = {
     pause: ['p'],
 };
 /**
- * Alternative key bindings (modern Tetris)
+ * Key binding presets — named layouts the player can pick in settings.
+ * Each preset resets ALL bindings so the player starts clean.
  */
-exports.MODERN_KEYS = {
-    left: ['left', 'a'],
-    right: ['right', 'd'],
-    rotateCW: ['up', 'x'],
-    rotateCCW: ['z', 'lcontrol'],
-    rotate180: ['space'],
-    softDrop: ['down', 's'],
-    hardDrop: ['space', 'return'],
-    sonicDrop: [],
-    hold: ['c', 'lshift'],
-    pause: ['p'],
+exports.KEY_PRESETS = {
+    tgm: {
+        name: 'TGM Classic',
+        left: ['left'],
+        right: ['right'],
+        rotateCW: ['x', 'pageup'],
+        rotateCCW: ['z', 'lcontrol', 'rcontrol'],
+        rotate180: ['space'],
+        softDrop: ['down'],
+        hardDrop: ['up'],
+        sonicDrop: [],
+        hold: ['c', 'lshift'],
+        pause: ['p'],
+    },
+    wasd: {
+        name: 'WASD',
+        left: ['a'],
+        right: ['d'],
+        rotateCW: ['e', 'x'],
+        rotateCCW: ['q', 'z'],
+        rotate180: ['r'],
+        softDrop: ['s'],
+        hardDrop: ['w'],
+        sonicDrop: [],
+        hold: ['lshift', 'c'],
+        pause: ['p'],
+    },
+    modern: {
+        name: 'Modern (Jstris)',
+        left: ['left', 'a'],
+        right: ['right', 'd'],
+        rotateCW: ['up', 'x'],
+        rotateCCW: ['z', 'lcontrol'],
+        rotate180: ['space'],
+        softDrop: ['down', 's'],
+        hardDrop: ['return'],
+        sonicDrop: [],
+        hold: ['c', 'lshift'],
+        pause: ['p'],
+    },
 };
 /**
  * Map key name to game action

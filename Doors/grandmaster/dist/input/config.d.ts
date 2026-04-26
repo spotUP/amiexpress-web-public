@@ -27,9 +27,12 @@ export interface KeyConfig {
  */
 export declare const DEFAULT_KEYS: KeyConfig;
 /**
- * Alternative key bindings (modern Tetris)
+ * Key binding presets — named layouts the player can pick in settings.
+ * Each preset resets ALL bindings so the player starts clean.
  */
-export declare const MODERN_KEYS: KeyConfig;
+export declare const KEY_PRESETS: Record<string, {
+    name: string;
+} & KeyConfig>;
 /**
  * Map key name to game action
  */

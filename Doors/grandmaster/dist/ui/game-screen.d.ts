@@ -1,8 +1,9 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
-import type { AppState } from '../core/types';
+import type { AppState, GameAction } from '../core/types';
 /**
  * Main game screen
  */
@@ -12,6 +13,7 @@ export declare class GameScreen {
     private input;
     private sounds;
     private state;
+    private gamepadMapper;
     private running;
     private stoppedEarly;
     private cleanedUp;
@@ -58,7 +60,7 @@ export declare class GameScreen {
     private shineCells;
     private hardDropTrails;
     constructor(screen: Screen, engine: GameEngine, input: InputHandler | null, // Null for attract mode (AI-controlled)
-    sounds: SoundEngine, state: AppState);
+    sounds: SoundEngine, state: AppState, gamepadMapper?: GamepadActionMapper<GameAction> | null);
     /**
      * Run the game loop
      */

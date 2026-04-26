@@ -174,11 +174,15 @@ class AttractScreen {
             '  ██  ██  ██ ██   ██      ██    ██    ██      ██   ██ ',
             '  ██      ██ ██   ██ ███████    ██    ███████ ██   ██ ',
         ];
-        // Listen for keypress during entire boot sequence (logo + rainbow)
+        // Listen for keypress during entire boot sequence (logo + rainbow).
+        // setImmediate defers registration by one event-loop tick so that a key
+        // pressed to reach this screen doesn't immediately exit it.
         let titleKeyPressed = false;
         const titleHandler = () => { titleKeyPressed = true; };
-        this.screen.on('keypress', titleHandler);
-        this.screen.on('mouse', titleHandler);
+        setImmediate(() => {
+            this.screen.on('keypress', titleHandler);
+            this.screen.on('mouse', titleHandler);
+        });
         // Animate logo line by line with rainbow colors
         for (let i = 0; i < logo.length; i++) {
             if (!this.running || titleKeyPressed)
@@ -933,6 +937,7 @@ class AttractScreen {
         this.mainBox?.destroy();
         this.demoBox?.destroy();
         this.infoBox?.destroy();
+        this.screen.render(); // Clear attract screen content before next screen renders
         // Only remove our specific handler, not all keypress listeners
         if (this.exitHandler) {
             this.screen.removeListener('keypress', this.exitHandler);

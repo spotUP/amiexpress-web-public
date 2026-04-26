@@ -118,6 +118,40 @@ function buildGamepadMapping(defaults, saved) {
     }
     return result;
 }
+// Creates a menu-navigation GIM for non-game screens (menus, settings, etc.).
+// Dpad/stick → arrow keys; A/Start → Enter; B/Select → Escape.
+// Destroy the returned object when leaving the screen to restore the previous handler.
+function createMenuNav(bbsSession, screen) {
+    const gim = new bbs_door_sdk_1.GamepadInputManager(bbsSession);
+    const emit = (name, sequence) => screen.emit('keypress', sequence, { name, full: name, sequence });
+    gim.on('dpad', (dir) => {
+        if (dir === 'up')
+            emit('up', '\x1b[A');
+        if (dir === 'down')
+            emit('down', '\x1b[B');
+        if (dir === 'left')
+            emit('left', '\x1b[D');
+        if (dir === 'right')
+            emit('right', '\x1b[C');
+    });
+    gim.on('axis', (axis, value) => {
+        if (axis === 1 /* left-y */) {
+            if (value < -0.7)
+                emit('up', '\x1b[A');
+            if (value > 0.7)
+                emit('down', '\x1b[B');
+        }
+    });
+    gim.on('button:a', (p) => { if (p)
+        emit('enter', '\r'); });
+    gim.on('button:start', (p) => { if (p)
+        emit('enter', '\r'); });
+    gim.on('button:b', (p) => { if (p)
+        emit('escape', '\x1b'); });
+    gim.on('button:select', (p) => { if (p)
+        emit('escape', '\x1b'); });
+    return { destroy: () => gim.destroy() };
+}
 // D-pad and left stick handle movement; face buttons handle rotation/actions.
 const GAMEPAD_MAPPING = {
     left: [{ type: 'dpad', direction: 'left' }, { type: 'axis', axis: bbs_door_sdk_1.GamepadAxis.LEFT_STICK_X, direction: 'negative' }],
@@ -391,7 +425,9 @@ class GrandmasterApp {
         this.inputHandler.setEnabled(false);
         this.inputManager.suspend(); // Disable grabKeys so List widget receives input
         const menuScreen = new menu_1.MenuScreen(this.screen, this.state, this.sounds);
+        const nav = createMenuNav(this.session.bbsSession, this.screen);
         const selection = await menuScreen.show();
+        nav.destroy();
         this.inputManager.resume();
         this.inputHandler.setEnabled(true);
         switch (selection) {
@@ -1939,8 +1975,10 @@ class GrandmasterApp {
     async showSettings() {
         this.currentScreen = 'settings';
         this.inputManager.suspend();
+        const nav = createMenuNav(this.session.bbsSession, this.screen);
         const settingsScreen = new settings_screen_1.SettingsScreen(this.screen, this.state, this.sounds, this.session.bbsSession);
         await settingsScreen.show();
+        nav.destroy();
         this.inputManager.resume();
         // Update input handler with any changed key bindings
         this.inputHandler.updateConfig(this.state.settings.keyBindings);
@@ -1953,8 +1991,10 @@ class GrandmasterApp {
     async showStats() {
         this.currentScreen = 'stats';
         this.inputManager.suspend();
+        const nav = createMenuNav(this.session.bbsSession, this.screen);
         const leaderboardScreen = new leaderboard_screen_1.LeaderboardScreen(this.screen, this.highScores, this.sounds, this.state.playerName);
         await leaderboardScreen.show();
+        nav.destroy();
         this.inputManager.resume();
     }
     /**
