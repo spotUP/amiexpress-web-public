@@ -1813,6 +1813,7 @@ console.warn(
       } else {
         // Default sync loop — holds the JS event loop. See
         // thoughts/shared/plans/2026-04-21-aedoor-waitforreply-event-loop.md
+        const diagCmd = command; // capture for diagnostic logging below
         for (let i = 0; i < 10000; i++) {
           iterations++;
           if (this.processXIMMessageCallback && state.bbsPortAddr) {
@@ -1820,8 +1821,15 @@ console.warn(
           }
           const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
           if (msgAddr !== 0) {
+            if (i > 0) {
+              console.log(`[AEDoorLibrary] waitForReply cmd=${diagCmd} got reply after ${i+1} iters replyPort=0x${state.replyPortAddr.toString(16)}`);
+            }
             replied = true;
             break;
+          }
+          // Log on first iteration and at key checkpoints for slow/failing commands
+          if (i === 0) {
+            console.log(`[AEDoorLibrary] waitForReply cmd=${diagCmd} iter=0 bbsPort=0x${state.bbsPortAddr.toString(16)} replyPort=0x${state.replyPortAddr.toString(16)} hasCallback=${!!this.processXIMMessageCallback}`);
           }
         }
       }

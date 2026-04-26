@@ -1747,6 +1747,7 @@ debugLog(
     });
 
     this.messageParser.writeData(msg.msgAddr, data);
+    this.state.replyHandled = true;
 
     // CRITICAL FIX 2026-01-14: Use standard ReplyMsg() to send reply to door's mn_ReplyPort
     // The door calls Wait() on its reply port's signal bit (typically 0x21000), NOT on AEDoorPort (0x40000)

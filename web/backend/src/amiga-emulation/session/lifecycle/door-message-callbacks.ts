@@ -100,9 +100,13 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
     const msgAddr = execLib.getMsg(bbsPortAddr);
     const ximProtocol = getXimProtocol();
     if (!msgAddr || msgAddr === 0 || !ximProtocol) {
+      if (msgAddr && msgAddr !== 0 && !ximProtocol) {
+        console.warn(`[XIMProcessor] msgAddr=0x${msgAddr.toString(16)} but ximProtocol is null — message lost!`);
+      }
       return;
     }
     const parsed = ximProtocol.parseMessage(msgAddr);
+    console.log(`[XIMProcessor] cmd=${parsed.command} data=${parsed.data} bbsPort=0x${bbsPortAddr.toString(16)}`);
 
     // CRITICAL FIX: Pre-pause for blocking I/O commands (same as
     // doorMessageCallback). handleMessage is async, so pause() inside
@@ -500,14 +504,20 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
         );
       }
     } else {
+      // For native XIM doors: handlers call reply() themselves (wasReplyHandled=true),
+      // so replyMsg below is skipped. For AEDoor-based doors (ctop / Conftop-II):
+      // handlers like handleSendMessage do NOT call reply(), leaving wasReplyHandled=false.
+      // AEDoor's WriteStr uses a synchronous waitForReply loop that needs the reply on
+      // state.replyPortAddr — without it every WriteStr times out (10000 iters) and
+      // output is queued to the socket but never transmitted before the session closes.
+      // The mn_ReplyPort=0 guard in replyMsg makes this a no-op for native XIM messages
+      // that carry no reply port, so there is no doubled-output risk.
+      const replyHandled = ximProtocol.wasReplyHandled();
+      if (!ximProtocol.isWaitingForLineInput() && !replyHandled) {
+        execLib.replyMsg(parsed.msgAddr);
+      }
+
       handlePromise.then(() => {
-        // CRITICAL FIX 2026-01-20: DO NOT call replyMsg here - XIM
-        // handlers already reply! Calling replyMsg here causes DOUBLE
-        // REPLIES which confuses door state machines. The door receives
-        // the same message twice → wrong branch logic → infinite loops.
-        // AmigaDoorSession.ts:415-420 documents this: "DOUBLED OUTPUT"
-        // when both callback and handler reply. XIM handlers (bbs-info.ts,
-        // data-query.ts, etc.) call reply() which calls replyMsg().
         console.log(
           `[DoorLifecycleManager] doorMessageCallback: Message handled for cmd=${parsed.command} (XIM handler replied)`,
         );
