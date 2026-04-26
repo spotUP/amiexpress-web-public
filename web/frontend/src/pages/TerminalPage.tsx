@@ -53,6 +53,17 @@ export function TerminalPage(): JSX.Element {
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
 
+    // Desktop fallback: clicking anywhere on the page refocuses the terminal.
+    // Prevents the "clicked outside and lost focus" problem on desktop.
+    // capture:true so it fires before any element's own click handler.
+    const refocusOnClick = (e: MouseEvent) => {
+      // Don't interfere if a specific interactive element captured the click
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.tagName === 'A')) return;
+      terminalRef.current?.focus();
+    };
+    document.addEventListener('click', refocusOnClick, { capture: true });
+
     // Measure Mosoul's actual character width via Canvas API (no dependency on xterm
     // initialization timing) and correct fontSize so 80 cols fits the screen exactly.
     if (isPortraitMobile()) {
@@ -74,6 +85,7 @@ export function TerminalPage(): JSX.Element {
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
+      document.removeEventListener('click', refocusOnClick, { capture: true });
     };
   }, []);
 
@@ -129,7 +141,7 @@ export function TerminalPage(): JSX.Element {
       <BBSTerminal
         ref={terminalRef}
         fontSize={fontSize}
-        keepFocused={isMobile}
+        keepFocused
       />
       {isMobile && (
         <MobileBBSKeyboard

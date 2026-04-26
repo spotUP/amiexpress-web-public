@@ -470,13 +470,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     terminalInstance.current = term;
 
     // When keepFocused is set, auto-refocus whenever the terminal loses focus.
-    // Cooldown prevents a blur→focus→blur infinite loop on iOS (e.g. when inputmode=none
-    // causes iOS to immediately blur after a programmatic focus call).
+    // Cooldown prevents a blur→focus→blur infinite loop on iOS.
+    // relatedTarget===null means focus moved to browser chrome (address bar, etc.) —
+    // don't steal it back on desktop. On mobile, always refocus (iOS often returns null
+    // relatedTarget even for in-page focus changes).
+    const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     let lastRefocus = 0;
-    term.textarea?.addEventListener('blur', () => {
+    term.textarea?.addEventListener('blur', (e: FocusEvent) => {
       if (!keepFocusedRef.current) return;
+      if (!isMobileDevice && !e.relatedTarget) return; // browser chrome took focus — respect it
       const now = Date.now();
-      if (now - lastRefocus < 200) return; // max ~5 refocuses/second
+      if (now - lastRefocus < 200) return;
       lastRefocus = now;
       requestAnimationFrame(() => {
         if (document.visibilityState === 'visible' && document.activeElement !== term.textarea) {
