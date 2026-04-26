@@ -292,6 +292,8 @@ export class GrandmasterNetworkManager extends EventEmitter {
     }, mode);
 
     console.log(`[GrandmasterNetworkManager] Matchmaking result: lobby=${lobby.id}, players=${lobby.players.length}`);
+    // Initialize matchState so getState() is non-null and Ready/settings work immediately
+    this.syncMatchStateFromLobby();
   }
 
   /**
@@ -315,6 +317,8 @@ export class GrandmasterNetworkManager extends EventEmitter {
     });
 
     console.log(`[GrandmasterNetworkManager] Lobby created: ${lobby.id}, players: ${lobby.players.length}`);
+    // Initialize matchState so getState() is non-null and settings/Ready work immediately
+    this.syncMatchStateFromLobby();
     return lobby.id;
   }
 

@@ -207,6 +207,8 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
             settings: { mode, customRules: {} },
         }, mode);
         console.log(`[GrandmasterNetworkManager] Matchmaking result: lobby=${lobby.id}, players=${lobby.players.length}`);
+        // Initialize matchState so getState() is non-null and Ready/settings work immediately
+        this.syncMatchStateFromLobby();
     }
     /**
      * Leave matchmaking queue
@@ -226,6 +228,8 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
             settings: { mode, customRules: {} },
         });
         console.log(`[GrandmasterNetworkManager] Lobby created: ${lobby.id}, players: ${lobby.players.length}`);
+        // Initialize matchState so getState() is non-null and settings/Ready work immediately
+        this.syncMatchStateFromLobby();
         return lobby.id;
     }
     /**

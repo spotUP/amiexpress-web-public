@@ -257,16 +257,17 @@ function addGarbage(board, lines, holePosition) {
  */
 function addGarbageLines(board, count) {
     const { width, height, grid } = board;
+    const PIECE_TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
     // Shift existing rows up
     for (let y = 0; y < height - count; y++) {
         grid[y] = grid[y + count];
     }
-    // Fill bottom rows with garbage
+    // Fill bottom rows with garbage — each cell gets a random piece color
     for (let y = height - count; y < height; y++) {
         const hole = Math.floor(Math.random() * width);
         grid[y] = Array.from({ length: width }, (_, x) => ({
             filled: x !== hole,
-            color: 'gray',
+            color: x !== hole ? PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)] : null,
             locked: true,
         }));
     }
