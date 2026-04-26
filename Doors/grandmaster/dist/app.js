@@ -71,6 +71,7 @@ const game_rules_1 = require("./core/tetrinet/game-rules");
 const tetrinet_board_1 = require("./core/tetrinet/tetrinet-board");
 const multiplayer_server_1 = require("./server/multiplayer-server");
 const manual_1 = require("./ui/manual");
+const training_config_1 = require("./ui/training-config");
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
 // into a GamepadTrigger object. Returns null for unknown formats.
@@ -453,7 +454,7 @@ class GrandmasterApp {
                 await this.showTetriNetLobby();
                 break;
             case 'training':
-                await this.startGame('training');
+                await this.startTraining();
                 break;
             case 'settings':
                 await this.showSettings();
@@ -474,15 +475,24 @@ class GrandmasterApp {
         }
     }
     /**
+     * Show training level selector then start training game
+     */
+    async startTraining() {
+        this.inputManager.suspend();
+        const config = await (0, training_config_1.showTrainingConfig)(this.screen);
+        this.inputManager.resume();
+        await this.startGame('training', config.startLevel);
+    }
+    /**
      * Start a game in specified mode
      */
-    async startGame(mode) {
+    async startGame(mode, startLevel = 0) {
         this.currentScreen = 'game';
         this.state.currentMode = mode;
         // Disable mouse control during gameplay
         this.screen.program.disableMouse();
         // Create game engine
-        this.gameEngine = new game_1.GameEngine(mode, this.state.settings, this.sounds);
+        this.gameEngine = new game_1.GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel);
         // Start replay recording
         const userId = this.session.user?.id || 'guest';
         const username = this.session.user?.username || this.state.playerName;

@@ -70,12 +70,16 @@ export class GameEngine {
     5: 35, 6: 30, 7: 20, 8: 18, 9: 15
   };
 
+  private readonly startLevel: number;
+
   constructor(
     mode: GameMode,
     settings: PlayerSettings,
     private sounds: SoundEngine,
-    attackManager?: AttackManager
+    attackManager?: AttackManager,
+    startLevel: number = 0
   ) {
+    this.startLevel = startLevel;
     this.settings = settings;
     // Initialize with stub managers (will be set via setters)
     this.animations = new AnimationManager();
@@ -112,8 +116,8 @@ export class GameEngine {
    * Create initial game state
    */
   private createInitialState(mode: GameMode): GameState {
-    // Get initial speed parameters for level 0
-    const speedParams = getSpeedParams(0, mode);
+    // Get initial speed parameters for starting level
+    const speedParams = getSpeedParams(this.startLevel, mode);
 
     return {
       mode,
@@ -123,7 +127,7 @@ export class GameEngine {
       canHold: true,
       nextQueue: this.pieceManager.fillQueue(this.settings.previewCount),
 
-      level: 0,
+      level: this.startLevel,
       lines: 0,
       score: 0,
       grade: '9',

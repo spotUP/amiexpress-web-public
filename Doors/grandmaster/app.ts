@@ -58,6 +58,7 @@ import { createTetriNetBoard } from './core/tetrinet/tetrinet-board';
 import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
 import { showManual } from './ui/manual';
+import { showTrainingConfig } from './ui/training-config';
 
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
@@ -489,7 +490,7 @@ export class GrandmasterApp {
         await this.showTetriNetLobby();
         break;
       case 'training':
-        await this.startGame('training');
+        await this.startTraining();
         break;
       case 'settings':
         await this.showSettings();
@@ -512,9 +513,19 @@ export class GrandmasterApp {
   }
 
   /**
+   * Show training level selector then start training game
+   */
+  private async startTraining(): Promise<void> {
+    this.inputManager.suspend();
+    const config = await showTrainingConfig(this.screen);
+    this.inputManager.resume();
+    await this.startGame('training', config.startLevel);
+  }
+
+  /**
    * Start a game in specified mode
    */
-  private async startGame(mode: GameMode): Promise<void> {
+  private async startGame(mode: GameMode, startLevel: number = 0): Promise<void> {
     this.currentScreen = 'game';
     this.state.currentMode = mode;
 
@@ -522,7 +533,7 @@ export class GrandmasterApp {
     this.screen.program.disableMouse();
 
     // Create game engine
-    this.gameEngine = new GameEngine(mode, this.state.settings, this.sounds);
+    this.gameEngine = new GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel);
 
     // Start replay recording
     const userId = this.session.user?.id || 'guest';
