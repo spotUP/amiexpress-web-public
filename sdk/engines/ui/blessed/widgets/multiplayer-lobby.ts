@@ -2188,6 +2188,10 @@ export class MultiplayerLobby extends EventEmitter {
   private updateSettingsEditor(): void {
     if (!this.settingsEditorList || this.gameSettings.length === 0) return;
 
+    // Save index before setItems() — it fires 'select item' which would
+    // overwrite selectedSettingIndex with 0 (or last item).
+    const savedIndex = this.selectedSettingIndex;
+
     const items = this.gameSettings.map(setting => {
       const value = this.currentSettings[setting.key] ?? setting.default;
       let displayValue: string;
@@ -2211,7 +2215,9 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     this.settingsEditorList.setItems(items);
-    this.settingsEditorList.select(this.selectedSettingIndex);
+    // Restore index — setItems() may have fired 'select item' with 0/last
+    this.selectedSettingIndex = savedIndex;
+    this.settingsEditorList.select(savedIndex);
     this.parent.render();
   }
 
