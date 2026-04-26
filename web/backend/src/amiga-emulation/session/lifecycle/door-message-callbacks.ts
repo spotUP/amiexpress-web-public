@@ -154,7 +154,15 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
     // emit + reply land in order. Same deasync pattern AEDoorLibrary's
     // waitForReply uses in DOOR_ASYNC_WAIT mode.
     const handlePromise = ximProtocol.handleMessage(parsed);
-    if (ASYNC_OUTPUT_COMMANDS.includes(parsed.command)) {
+    if (
+      ASYNC_OUTPUT_COMMANDS.includes(parsed.command) &&
+      !ximProtocol.wasReplyHandled()
+    ) {
+      // Handler is genuinely async (slow path: MCI files, DB-backed parsing).
+      // Fast-path handlers (sync JH_SF on non-MCI files) already replied
+      // synchronously — wasReplyHandled() is true and we skip the drain to
+      // avoid deasync.loopWhile's microtask-drain issues inside C++ trap
+      // callbacks (where Node's microtask queue does not drain reliably).
       let done = false;
       let handlerError: unknown = null;
       handlePromise.then(
@@ -447,7 +455,18 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
     // line 415-420 / 2026-01-20 fix. Sync commands keep the existing
     // .then() pattern (harmless because their effects already landed).
     const handlePromise = ximProtocol.handleMessage(parsed);
-    if (ASYNC_OUTPUT_COMMANDS.includes(parsed.command)) {
+    if (
+      ASYNC_OUTPUT_COMMANDS.includes(parsed.command) &&
+      !ximProtocol.wasReplyHandled()
+    ) {
+      // Handler is genuinely async (slow path: file with MCI codes, DB-backed
+      // parseMciCodes). Drain the promise so emit lands before we return.
+      // Fast-path handlers (JH_SF on non-MCI files via xim/io.ts
+      // displayResolvedFile sync branch) already called reply() synchronously
+      // before handleMessage's promise was returned, so wasReplyHandled() is
+      // true and we skip the drain entirely — avoiding the deasync.loopWhile
+      // microtask-draining issue inside C++ trap callbacks where Node's
+      // microtask queue does not drain reliably from native bindings.
       let done = false;
       let handlerError: unknown = null;
       handlePromise.then(
