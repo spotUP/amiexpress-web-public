@@ -83,6 +83,8 @@ const voice_channel_ux_1 = require("./features/voice-channel-ux");
 // Handlers
 const room_socket_handlers_1 = require("./handlers/room-socket-handlers");
 const chat_socket_handlers_1 = require("./handlers/chat-socket-handlers");
+const dm_sidebar_handlers_1 = require("./handlers/dm-sidebar-handlers");
+const sidebar_items_builder_1 = require("./handlers/sidebar-items-builder");
 const keyboard_shortcuts_1 = require("./handlers/keyboard-shortcuts");
 const bbs_event_handler_1 = require("./handlers/bbs-event.handler");
 const thread_handlers_1 = require("./handlers/thread-handlers");
@@ -284,7 +286,11 @@ async function createApp(session) {
         style: {
             fg: 'cyan',
             bg: 'black',
-            selected: { fg: 'black', bg: 'cyan' },
+            // Selected line: white text on cyan bg. The previous black-on-cyan
+            // was unreadable on terminals that render dark fg on saturated bg
+            // identically (or where the selection bar inherited the fg from
+            // the base style and produced cyan-on-cyan).
+            selected: { fg: 'white', bg: 'cyan' },
             border: { fg: 'yellow' },
         },
         scrollbar: {
@@ -370,6 +376,14 @@ async function createApp(session) {
         commandSuggestionsVisible = true;
         // Suppress navigation keys in input so arrow keys navigate the list
         inputBox.suppressNavigationKeys = true;
+        // Belt-and-suspenders: explicitly re-focus the input. setFront() can
+        // shuffle z-order and we've seen up/down end up routed to chatLog
+        // (which extends ScrollableBox and self-registers up/down -> scroll)
+        // when focus drifted off inputBox during the open. Keeping inputBox
+        // focused ensures the keypress handler at the bottom of this file
+        // (which routes up/down into commandSuggestions.up/down when
+        // commandSuggestionsVisible) is the one that fires.
+        inputBox.focus();
         // Show ghost text for top match (Claude-style inline completion)
         if (filteredCommands.length > 0 && searchTerm.length > 0) {
             const topMatch = filteredCommands[0];
@@ -541,84 +555,22 @@ async function createApp(session) {
             memberCount: 0,
             unreadCount: 0,
         }));
-        // Build channel list with text and voice channels
-        // CRITICAL: channelItems must be built in SAME order as items for index matching
-        channelItems = [];
-        const items = [];
-        // Add TEXT CHANNELS header
-        items.push('{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}');
-        channelItems.push({ id: '', name: '', type: 'header' });
-        // Add text channels (Discord-style: joined channel auto-expands, plus
-        // any channel the user explicitly toggled into `expandedChannels`).
-        // Expanded channels render their online users indented below.
-        channelsToShow.forEach(ch => {
-            const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
-            const isActive = isCurrentChannel(ch.id, ch.name);
-            const hasUnread = ch.unreadCount && ch.unreadCount > 0;
-            // Active channel auto-expands unless the user has explicitly
-            // collapsed it (double-click toggle). Non-active channels show
-            // their users only if in `expandedChannels`.
-            const isExpanded = collapsedChannels.has(ch.id)
-                ? false
-                : (isActive || expandedChannels.has(ch.id));
-            let color;
-            let endColor;
-            if (isActive) {
-                color = '{white-fg}';
-                endColor = '{/white-fg}';
-            }
-            else if (hasUnread) {
-                color = '{green-fg}';
-                endColor = '{/green-fg}';
-            }
-            else {
-                color = '{gray-fg}';
-                endColor = '{/gray-fg}';
-            }
-            const arrow = isExpanded ? 'v' : '>';
-            items.push(color + arrow + ' # ' + ch.name + unread + endColor);
-            channelItems.push({ id: ch.id, name: ch.name, type: 'text' });
-            if (isExpanded) {
-                // Only show users for the channel we're actually in — `onlineUsers`
-                // is a global map (no per-channel filter available), so for any
-                // expanded non-current channel we just don't know who's there.
-                if (isActive) {
-                    for (const [uid, u] of onlineUsers) {
-                        const presence = presenceService.get(parseInt(uid));
-                        const status = presence?.status || u.status;
-                        const indicator = types_1.PRESENCE_INDICATORS[status] || '*';
-                        items.push(`  {gray-fg}${indicator}{/gray-fg} ${u.username.slice(0, 12)}`);
-                        channelItems.push({ id: `user-${uid}`, name: u.username, type: 'user', username: u.username });
-                    }
-                }
-            }
+        // Build sidebar rows via the pure builder. Keeps server.ts under
+        // the 2000-line limit and lets the row layout be unit-tested.
+        const built = (0, sidebar_items_builder_1.buildSidebarItems)({
+            channelsToShow,
+            state,
+            onlineUsers,
+            presenceService,
+            presenceIndicators: types_1.PRESENCE_INDICATORS,
+            isCurrentChannel,
+            expandedChannels,
+            collapsedChannels,
+            voiceChannelService: voiceChannel,
         });
-        // Add spacer
-        items.push('');
-        channelItems.push({ id: '', name: '', type: 'spacer' });
-        // Add VOICE CHANNELS header
-        items.push('{cyan-fg}{bold}VOICE CHANNELS{/bold}{/cyan-fg}');
-        channelItems.push({ id: '', name: '', type: 'header' });
-        // Add voice channels
-        const voiceChannels = voiceChannel.getVoiceChannels();
-        if (voiceChannels.length === 0) {
-            // Add default voice channel if none exist
-            const isInVoice = voiceChannel.isInVoiceChannel();
-            const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : '{gray-fg}[V]{/gray-fg}';
-            items.push(icon + ' Voice {gray-fg}(0){/gray-fg}');
-            channelItems.push({ id: 'voice-voice', name: 'Voice', type: 'voice' });
-        }
-        else {
-            voiceChannels.forEach(vc => {
-                const count = vc.participants.length;
-                const isInVoice = voiceChannel.getCurrentVoiceChannel() === vc.id;
-                const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : count > 0 ? '{cyan-fg}[V]{/cyan-fg}' : '{gray-fg}[V]{/gray-fg}';
-                items.push(icon + ' ' + vc.name + ' {gray-fg}(' + count + '){/gray-fg}');
-                channelItems.push({ id: 'voice-' + vc.id, name: vc.name, type: 'voice' });
-            });
-        }
+        channelItems = built.channelItems;
         // Debug: show what items we're setting and calculate expected width
-        channelList.setItems(items);
+        channelList.setItems(built.items);
         // CRITICAL: Force screen render before fitToContent so blessed populates internal state
         if (screen) {
             screen.render();
@@ -642,8 +594,15 @@ async function createApp(session) {
         }
         // Re-render to apply new width
         screen.render();
-        // Select current channel if in the list
-        const currentIdx = channelItems.findIndex(ch => ch.id === state.currentChannel);
+        // Select active row: prefer the DM thread when the user is in DM context,
+        // otherwise the active text channel.
+        let currentIdx = -1;
+        if (state.currentDmThread) {
+            currentIdx = channelItems.findIndex(ch => ch.type === 'dm' && ch.id === state.currentDmThread);
+        }
+        if (currentIdx < 0) {
+            currentIdx = channelItems.findIndex(ch => ch.type === 'text' && ch.id === state.currentChannel);
+        }
         if (currentIdx >= 0) {
             channelList.select(currentIdx);
         }
@@ -690,6 +649,31 @@ async function createApp(session) {
             }
             return;
         }
+        if (channel.type === 'dm') {
+            // Switch into a DM thread context.
+            // Leave any current text room (so room:message no longer routes there)
+            // and ask the server for the thread history.
+            if (state.currentDmThread === channel.id) {
+                // Already active — no-op, just keep focus on input.
+                inputBox.focus();
+                return;
+            }
+            if (state.currentChannel)
+                socket.emit('room:leave');
+            (0, state_1.setDmContext)(state, channel.id);
+            // Wipe what's on screen so the previous channel's chat doesn't leak.
+            try {
+                chatLog.setContent('');
+            }
+            catch { /* ignore */ }
+            voiceChannel.hideGrid();
+            addSystemMessage(`{cyan-fg}--- DM with ${channel.name} ---{/cyan-fg}`);
+            socket.emit('chat:dm-history', { threadId: channel.id, limit: 50 });
+            updateChannelList();
+            updateStatusBar();
+            inputBox.focus();
+            return;
+        }
         if (channel.type === 'voice') {
             // Join voice channel
             const channelId = channel.id.replace('voice-', '');
@@ -699,26 +683,36 @@ async function createApp(session) {
         }
         else if (!isCurrentChannel(channel.id, channel.name)) {
             // Join text channel — joining auto-expands the user list underneath.
+            if (state.currentDmThread)
+                (0, state_1.clearDmContext)(state);
             if (state.currentChannel)
                 socket.emit('room:leave');
             socket.emit('room:join', { roomName: channel.name });
             voiceChannel.hideGrid(); // Hide video grid when viewing text
         }
         else {
-            // Click on the channel we're already in → toggle expand/collapse.
-            // Using single-click for this (instead of dblclick) dodges the
-            // timing-based off-by-one the user hit with rapid click pairs.
-            const id = channel.id;
-            const currentlyExpanded = collapsedChannels.has(id) ? false : true;
-            if (currentlyExpanded) {
-                expandedChannels.delete(id);
-                collapsedChannels.add(id);
+            // Click on the channel we're already in. Two meaningful actions:
+            //   1. If the video grid is covering the chat (we're in voice),
+            //      hide it to return the user to the text-chat view. This is
+            //      the "click general to go back to chat" reflex.
+            //   2. Otherwise, toggle the expand/collapse state of this
+            //      channel's member list.
+            if (voiceChannel?.isGridVisible?.()) {
+                voiceChannel.hideGrid();
             }
             else {
-                collapsedChannels.delete(id);
-                expandedChannels.add(id);
+                const id = channel.id;
+                const currentlyExpanded = collapsedChannels.has(id) ? false : true;
+                if (currentlyExpanded) {
+                    expandedChannels.delete(id);
+                    collapsedChannels.add(id);
+                }
+                else {
+                    collapsedChannels.delete(id);
+                    expandedChannels.add(id);
+                }
+                updateChannelList();
             }
-            updateChannelList();
         }
         // Return focus to input after text channel selection only
         if (channel.type !== 'voice') {
@@ -1075,10 +1069,17 @@ async function createApp(session) {
     let currentRenderMode = 'halfblock';
     function updateChatHeader() {
         const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';
-        const modeSuffix = voiceChannel?.isInVoiceChannel?.()
-            ? ` [${currentRenderMode.toUpperCase()}]`
-            : '';
+        const inVoice = !!(voiceChannel && voiceChannel.isInVoiceChannel?.());
+        const modeSuffix = inVoice ? ` [${currentRenderMode.toUpperCase()}]` : '';
+        const fullLabel = ` ${channelName}${modeSuffix} `;
+        // Inner Log label (chatLog is borderless, label rarely visible).
         (0, chat_log_1.updateChatHeader)(chatLog, channelName + modeSuffix);
+        // Outer DockablePanel label — this is what the user actually sees
+        // across the top of the chat panel border.
+        if (chatPanel && chatPanel.setLabel) {
+            chatPanel.setLabel(fullLabel);
+            chatPanel.screen?.render?.();
+        }
     }
     function updateStatusBar() {
         (0, status_bar_1.updateStatusBar)(statusBar, state, presenceService, username, userId, nodeId, getChannelDisplayName, updateChatHeader);
@@ -1708,6 +1709,8 @@ async function createApp(session) {
     socket.on('chat:muted', (data) => {
         addSystemMessage(`{yellow-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/yellow-fg}`);
     });
+    // ========== DM SIDEBAR / CONTEXT EVENT LISTENERS ==========
+    (0, dm_sidebar_handlers_1.setupDmSidebarHandlers)({ socket, state, userId, screen, updateChannelList, addChatMessage });
     // ========== CONNECTION ERROR HANDLING ==========
     let reconnectAttempts = 0;
     let userCancelled = false; // Track if user clicked cancel
@@ -2187,6 +2190,8 @@ async function createApp(session) {
                 // Request room list
                 addSystemMessage('Loading rooms...');
                 socket.emit('room:list', {});
+                // Request DM thread list for the sidebar.
+                socket.emit('chat:dm-threads:list');
                 // Wait for exit
                 await new Promise((resolve) => {
                     screen.on('destroy', resolve);

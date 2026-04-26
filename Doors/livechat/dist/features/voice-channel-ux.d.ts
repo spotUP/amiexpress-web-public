@@ -149,6 +149,7 @@ export declare class EnhancedVoiceChannel {
     private startAudioStreaming;
     showGrid(): void;
     hideGrid(): void;
+    isGridVisible(): boolean;
     isInVoiceChannel(): boolean;
     getCurrentVoiceChannel(): string | undefined;
     getVoiceChannels(): VoiceChannelItem[];

@@ -63,15 +63,26 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     }
                 }
                 if (cmdName === 'create' && r.data?.name) {
-                    socket.emit('room:create', { roomName: r.data.name, topic: r.data.topic || '', isPublic: true });
+                    socket.emit('room:create', {
+                        roomName: r.data.name,
+                        topic: r.data.topic || '',
+                        isPublic: !r.data.isPrivate,
+                        isInviteOnly: r.data.isInviteOnly || r.data.isPrivate,
+                        motd: r.data.motd || null,
+                    });
                 }
                 if (cmdName === 'who' || cmdName === 'users') {
                     showUserList();
                 }
-                if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.target && r.data?.message) {
+                if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.targets && r.data?.message) {
                     const processedMsg = (0, emojis_1.replaceEmojis)(r.data.message);
-                    socket.emit('chat:dm', { to: r.data.target, message: processedMsg });
-                    addChatMessage(`{magenta-fg}[DM to ${r.data.target}]: ${processedMsg}{/magenta-fg}`, false);
+                    if (r.data.targets.length === 1) {
+                        socket.emit('chat:dm', { to: r.data.targets[0], message: processedMsg });
+                    }
+                    else {
+                        socket.emit('chat:group-dm', { participants: r.data.targets, message: processedMsg });
+                    }
+                    // local echo removed: backend echoes sent DM with direction: 'sent'
                 }
                 if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
                     const processedMsg = (0, emojis_1.replaceEmojis)(r.message);
@@ -98,6 +109,30 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     updateUserTable();
                     updateStatusBar();
                     addSystemMessage('You are now online');
+                }
+                if (cmdName === 'motd') {
+                    if (r.data?.op === 'set') {
+                        socket.emit('room:motd', { motd: r.data.motd });
+                    }
+                    else if (r.data?.op === 'show') {
+                        const cached = state.currentRoomMotd;
+                        if (cached)
+                            addSystemMessage(`{yellow-fg}[MOTD] ${cached}{/yellow-fg}`);
+                        else
+                            addSystemMessage('No MOTD set. Use /motd <text> to set, /motd --clear to clear.');
+                    }
+                    else {
+                        addSystemMessage('Use /motd <text> to set, /motd --clear to clear.');
+                    }
+                }
+                if (cmdName === 'invite' && r.data?.target) {
+                    socket.emit('room:invite', { targetUsername: r.data.target, roomName: r.data.room });
+                }
+                if (cmdName === 'uninvite' && r.data?.target) {
+                    socket.emit('room:revoke-invite', { targetUsername: r.data.target, roomName: r.data.room });
+                }
+                if (cmdName === 'mode' && r.data?.modeString) {
+                    socket.emit('room:mode', { modeString: r.data.modeString, params: r.data.params || [] });
                 }
                 if (cmdName === 'clear' || cmdName === 'cls') {
                     clearChatLog();
@@ -147,6 +182,38 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const processedMsg = (0, emojis_1.replaceEmojis)(msg);
                     socket.emit('chat:edit', { messageId: editId, newText: processedMsg });
                     addSystemMessage(`(edited) ${msg}`);
+                }
+                else if (state.currentDmThread) {
+                    // DM context: route via chat:dm (1:1) or chat:group-dm (group).
+                    // Backend echoes the canonical payload back via 'chat:dm' so
+                    // we deliberately do NOT add a local chat-log line here.
+                    const processedMsg = (0, emojis_1.replaceEmojis)(msg);
+                    const thread = (state.dmThreads || []).find((t) => t.threadId === state.currentDmThread);
+                    if (!thread) {
+                        addSystemMessage('{red-fg}DM thread not found in sidebar; refreshing...{/red-fg}');
+                        socket.emit('chat:dm-threads:list');
+                    }
+                    else if (thread.isGroup) {
+                        socket.emit('chat:group-dm', { participants: thread.participants, message: processedMsg });
+                    }
+                    else {
+                        const target = thread.participants[0];
+                        if (!target) {
+                            addSystemMessage('{red-fg}DM thread has no recipient.{/red-fg}');
+                        }
+                        else {
+                            socket.emit('chat:dm', { to: target, message: processedMsg });
+                        }
+                    }
+                    updateTypingPreview();
+                    // Belt-and-suspenders: explicitly clear the input box after a DM
+                    // send so typed text never lingers (mirrors the room-message branch
+                    // and the post-block unified clear below).
+                    inputBox.clearValue();
+                    if (inputBox.setContent)
+                        inputBox.setContent('');
+                    inputBox.focus();
+                    screen.render();
                 }
                 else {
                     // New message - generate ID and add to history

@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createInitialState = createInitialState;
 exports.setChannel = setChannel;
+exports.setDmContext = setDmContext;
+exports.clearDmContext = clearDmContext;
 exports.addMessage = addMessage;
 exports.clearInput = clearInput;
 exports.appendInput = appendInput;
@@ -30,12 +32,44 @@ function createInitialState() {
             notificationSound: true,
             mentionSound: true
         },
-        lastMessageId: null
+        lastMessageId: null,
+        currentRoomMotd: null,
+        dmThreads: [],
+        currentDmThread: null
     };
 }
 /** State mutations */
 function setChannel(state, channelId) {
     state.currentChannel = channelId;
+    // Switching into a text channel implicitly leaves any DM context so
+    // callers can't accidentally have both contexts active simultaneously.
+    state.currentDmThread = null;
+    state.messages = [];
+    state.typingBuffers.clear();
+}
+/**
+ * Switch into a DM thread context.
+ *
+ * Clears the chat log and any in-progress typing buffers. The caller is
+ * responsible for fetching `chat:dm-history` and re-rendering the sidebar
+ * to highlight the new active thread.
+ *
+ * Also clears `currentChannel` so the room:leave guard in handleChannelSelect
+ * (`if (state.currentChannel) socket.emit('room:leave')`) doesn't re-emit
+ * room:leave on subsequent DM->DM switches.
+ */
+function setDmContext(state, threadId) {
+    state.currentDmThread = threadId;
+    state.currentChannel = '';
+    state.messages = [];
+    state.typingBuffers.clear();
+}
+/**
+ * Leave any DM context and return to the channel-based view. Called when
+ * the user clicks a #channel in the sidebar after having been in a DM.
+ */
+function clearDmContext(state) {
+    state.currentDmThread = null;
     state.messages = [];
     state.typingBuffers.clear();
 }

@@ -1187,6 +1187,11 @@ export class EnhancedVoiceChannel {
     }
   }
 
+  public isGridVisible(): boolean {
+    if (!this.videoGrid) return false;
+    return !(this.videoGrid as any).hidden;
+  }
+
   public isInVoiceChannel(): boolean {
     return !!this.currentVoiceChannel;
   }

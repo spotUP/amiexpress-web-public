@@ -1014,6 +1014,11 @@ class EnhancedVoiceChannel {
             this.videoGrid.hide();
         }
     }
+    isGridVisible() {
+        if (!this.videoGrid)
+            return false;
+        return !this.videoGrid.hidden;
+    }
     isInVoiceChannel() {
         return !!this.currentVoiceChannel;
     }

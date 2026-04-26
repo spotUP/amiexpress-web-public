@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupChatHandlers = setupChatHandlers;
+const dm_render_1 = require("./dm-render");
 function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
     // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
@@ -71,18 +72,39 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         eb.emit(e);
         aud.onNotification();
     });
-    sock.on('chat:dm', (d) => {
-        // DoorSocket loops server-side outgoing emits back to server-side
-        // listeners (see door.handler.ts:95 onAnyOutgoing). Our OUTGOING DM
-        // shape is `{to, message}`; INCOMING DMs would carry `from`. If
-        // there's no `from`, this is our own outgoing echo — ignore it so
-        // we don't render "[DM from ???]".
-        if (!d || !d.from)
+    sock.on('room:motd', (d) => {
+        st.currentRoomMotd = d?.motd ?? null;
+        if (d?.motd)
+            asm(`{yellow-fg}[MOTD] ${d.motd}{/yellow-fg}`);
+        else
+            asm('{yellow-fg}[MOTD] cleared{/yellow-fg}');
+    });
+    sock.on('room:invite-received', (d) => {
+        asm(`{cyan-fg}[INVITE] ${d.from} invited you to ${d.roomName}. Use /join ${d.roomName}{/cyan-fg}`);
+    });
+    sock.on('room:invited', (d) => {
+        asm(`Invited ${d.username} to the room`);
+    });
+    sock.on('room:invite-revoked', (d) => {
+        asm(`Revoked invite for ${d.username}`);
+    });
+    sock.on('room:mode', (d) => {
+        if (!d || !d.applied)
             return;
-        const sender = d.from;
-        acm(`{magenta-fg}[DM from ${sender}]: ${d.preview || d.message || ''}{/magenta-fg}`, false);
-        aa(`{magenta-fg}DM from ${sender}{/magenta-fg}`);
-        aud.onDM();
+        asm(`{yellow-fg}[${d.by || '?'}] set mode ${d.applied}{/yellow-fg}`);
+    });
+    sock.on('chat:dm', (d) => {
+        if (!d)
+            return;
+        // Backend now persists DMs and echoes the canonical payload back to
+        // both sender and recipient. `direction` tells us which side we are.
+        // Group DMs (isGroup=true) include a `participants` array.
+        acm((0, dm_render_1.formatDmLine)(d), false);
+        if (d.direction === 'received') {
+            aa(`{cyan-fg}${d.isGroup ? 'Group DM' : 'DM'} from ${d.from}{/cyan-fg}`);
+            if (typeof aud?.onDM === 'function')
+                aud.onDM();
+        }
     });
     sock.on('chat:message', (m) => {
         if (m.channelId !== st.currentChannel)
