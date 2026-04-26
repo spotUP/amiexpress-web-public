@@ -112,16 +112,52 @@ export class GameScreen {
   }
 
   /**
+   * Show READY -> GO countdown before game starts.
+   * Renders the next queue so the player can plan ahead.
+   */
+  private async showReadyGo(): Promise<void> {
+    const state = this.engine.getState();
+
+    // Show next queue preview during countdown
+    this.renderNext(state.nextQueue);
+
+    const readyBox = createBox({
+      parent: this.screen,
+      top: 10,
+      left: 2,
+      width: 22,
+      height: 3,
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'yellow' } },
+      align: 'center',
+      content: '{bold}{yellow-fg}READY{/yellow-fg}{/bold}',
+      fixed: true,
+      tags: true,
+    });
+
+    this.screen.render();
+    await new Promise(resolve => setTimeout(resolve, 900));
+
+    readyBox.setContent('{bold}{green-fg}  GO !{/green-fg}{/bold}');
+    this.screen.render();
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    readyBox.destroy();
+    this.screen.render();
+  }
+
+  /**
    * Run the game loop
    */
   async run(): Promise<void> {
+    // Setup UI and input
+    this.setupUI();
+    this.setupInput();
+
+    // Ready-Go sequence shows next queue before pieces start falling
+    await this.showReadyGo();
+
     return new Promise<void>((resolve) => {
-      // Setup UI
-      this.setupUI();
-
-      // Setup input handlers
-      this.setupInput();
-
       // Start game
       this.engine.start();
       this.running = true;
