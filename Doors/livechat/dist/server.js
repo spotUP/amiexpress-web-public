@@ -1566,12 +1566,45 @@ async function createApp(session) {
     // received chat:keystroke broadcast from other users). With a long
     // chatMessages backlog (default 1000 lines), rebuilding the entire
     // chat-panel content + .setContent() + screen.render() per keystroke
-    // is the dominant cost driving the typing lag users reported. Throttle
-    // to ~16fps with a trailing flush so the latest preview state still
-    // wins, but burst-typing doesn't trigger a render storm.
+    // is the dominant cost driving the typing lag users reported.
+    //
+    // Two-layer optimisation:
+    //   (a) Throttle to ~30fps (33ms) with a trailing flush so the last
+    //       state always lands. Faster than the previous 60ms cap (felt
+    //       sluggish) but still cheap enough to absorb burst typing.
+    //   (b) Skip the rebuild entirely if neither typingBuffers nor the
+    //       chatMessages array has changed since the last successful run
+    //       AND no animated lines exist. The latter two cover ~all
+    //       no-op invocations driven by the cursor-blink interval and
+    //       redundant chat:keystroke broadcasts.
     let _typingPreviewTimer = null;
     let _typingPreviewLastRun = 0;
-    const _TYPING_PREVIEW_MIN_MS = 60;
+    let _lastTypingFingerprint = '';
+    let _lastChatMessageCount = -1;
+    const _TYPING_PREVIEW_MIN_MS = 33;
+    function _typingFingerprint() {
+        // Cheap hash of all active typing buffers + message count + animation
+        // count. Anything that would change the rendered chat panel touches one
+        // of these. Stringifying is fine -- typingBuffers is small (1 entry per
+        // typing user, capped at 3 displayed).
+        const parts = [];
+        for (const [uid, buf] of state.typingBuffers) {
+            parts.push(`${uid}:${buf.username}:${buf.buffer}`);
+        }
+        parts.push(`m=${chatMessages.length}`);
+        parts.push(`a=${animationManager?.getAnimatedLineCount?.() ?? 0}`);
+        return parts.join('|');
+    }
+    function _doRebuild() {
+        const fp = _typingFingerprint();
+        if (fp === _lastTypingFingerprint && chatMessages.length === _lastChatMessageCount) {
+            return; // Nothing user-visible changed -- skip the expensive setContent.
+        }
+        _lastTypingFingerprint = fp;
+        _lastChatMessageCount = chatMessages.length;
+        rebuildChatContent();
+        screen.render();
+    }
     function updateTypingPreview() {
         const now = Date.now();
         const since = now - _typingPreviewLastRun;
@@ -1581,19 +1614,15 @@ async function createApp(session) {
                 clearTimeout(_typingPreviewTimer);
                 _typingPreviewTimer = null;
             }
-            rebuildChatContent();
-            screen.render();
+            _doRebuild();
             return;
         }
-        // Trailing edge: schedule a final rebuild so the last keystroke's
-        // state is always reflected even if it lands inside the throttle window.
         if (_typingPreviewTimer)
             return;
         _typingPreviewTimer = setTimeout(() => {
             _typingPreviewTimer = null;
             _typingPreviewLastRun = Date.now();
-            rebuildChatContent();
-            screen.render();
+            _doRebuild();
         }, _TYPING_PREVIEW_MIN_MS - since);
     }
     // Events and activity now go to chat log (use appendLineToLog for proper tracking)
