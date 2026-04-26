@@ -79,14 +79,35 @@ export class AnimationManager {
       }
     }
 
+    // Pre-render the first frame so getRendered() returns a usable value
+    // before the first tick fires. Without this, callers that rebuild log
+    // content between ticks (e.g. livechat's rebuildChatContent on every
+    // typing keystroke) would see an empty string for newly-registered
+    // animated lines and the raw `~pulse~..~/pulse~` markup would leak.
+    const initialRender = renderSegments(segments, this.frameCounter);
+
     this.animatedLines.set(lineIndex, {
       lineIndex,
       originalContent: content,
       segments,
-      lastRendered: '',
+      lastRendered: initialRender,
     });
 
     return true;
+  }
+
+  /**
+   * Get the most-recently rendered version of an animated line.
+   * Returns null if the line isn't being tracked.
+   *
+   * Useful when a caller rebuilds the entire log content (e.g. on every
+   * keystroke for typing-preview redraws) and wants to keep animated
+   * lines showing their current animation frame instead of reverting
+   * to the raw `~tag~..~/tag~` markup that the line was registered with.
+   */
+  getRendered(lineIndex: number): string | null {
+    const animLine = this.animatedLines.get(lineIndex);
+    return animLine ? animLine.lastRendered : null;
   }
 
   /**

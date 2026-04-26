@@ -1519,8 +1519,19 @@ async function createApp(session) {
         else {
             stopCursorBlink();
         }
+        // For animated lines (~pulse~, ~rainbow~, etc.) the raw chatMessages
+        // entry still contains the unparsed `~tag~..~/tag~` markup. The
+        // animationManager periodically writes the rendered frame into the
+        // chatLog via setLine() — but setContent() below would overwrite that
+        // with raw markup on every typing keystroke, causing the user to see
+        // literal `~pulse~abc~/pulse~` text whenever they type. Substitute
+        // the manager's most recent rendered frame for any animated indices.
+        const renderedMessages = chatMessages.map((line, idx) => {
+            const animFrame = animationManager.getRendered?.(idx);
+            return animFrame != null && animFrame !== '' ? animFrame : line;
+        });
         // CRITICAL: Use CRLF for separation to force margin return
-        const fullContent = [...chatMessages, ...previewLines].join('\r\n');
+        const fullContent = [...renderedMessages, ...previewLines].join('\r\n');
         chatLog.setContent(fullContent);
         chatLog.setScrollPerc(100);
     }
