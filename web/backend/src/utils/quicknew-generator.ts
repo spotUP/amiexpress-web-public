@@ -4,6 +4,7 @@ import { db } from '../database';
 import { config } from '../config';
 import { loadConferenceFileAreas } from '../services/file-areas-loader';
 import { getSystemTime } from '../utils/date-time.util';
+import { AnsiUtil } from './ansi.util';
 
 interface QuickNewSection {
   title: string;
@@ -100,8 +101,8 @@ console.error('[QuickNew] Error generating QuickNew screen:', error);
   }
 
   const output: string[] = [];
-  // Clear the screen before rendering QuickNew to match classic behavior
-  output.push('\x1b[2J\x1b[H');
+  // Clear the screen before rendering QuickNew (scrollback-preserving)
+  output.push(AnsiUtil.clearScreen());
 
   if (sections.length === 0) {
     output.push('No file areas available.');

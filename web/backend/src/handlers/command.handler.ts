@@ -3665,7 +3665,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   // Clear screen before showing command output (authentic BBS behavior)
   // EXCEPTION: Don't clear when called from ~CC_ screen commands - screen is already being displayed
   if (!session.executingScreenCommand) {
-    emitText(socket, '\x1b[2J\x1b[H');
+    emitText(socket, AnsiUtil.clearScreen());
   }
 
   // Map commands to internalCommandX functions from AmiExpress

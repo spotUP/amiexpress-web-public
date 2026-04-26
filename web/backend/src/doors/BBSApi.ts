@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
+import { AnsiUtil } from '../utils/ansi.util';
 import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -147,7 +148,7 @@ export class BBSApi {
    * Clear screen
    */
   clearScreen(): void {
-    this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    this.socket.emit('ansi-output', AnsiUtil.clearScreen());
   }
 
   /**

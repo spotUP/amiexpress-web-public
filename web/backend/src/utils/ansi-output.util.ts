@@ -7,6 +7,7 @@
 
 import { Socket } from 'socket.io';
 import { ANSI } from './terminal-utils';
+import { AnsiUtil } from './ansi.util';
 
 /**
  * Hide cursor (ANSI escape code)
@@ -124,10 +125,10 @@ export class ScreenBuffer {
   }
 
   /**
-   * Clear screen
+   * Clear screen (scrollback-preserving)
    */
   clear(): this {
-    this.buffer += CLEAR_SCREEN;
+    this.buffer += AnsiUtil.clearScreen();
     return this;
   }
 

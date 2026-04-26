@@ -66,10 +66,19 @@ export class AnsiUtil {
   }
 
   /**
-   * Clear the screen
+   * Clear the screen while preserving xterm.js scrollback history.
+   *
+   * ESC[2J erases the visible viewport without pushing content to the
+   * scrollback buffer — previous output is permanently lost in xterm.js.
+   * Instead we scroll 30 lines (> one screen height) so all visible content
+   * moves into scrollback, then home the cursor. The screen appears blank
+   * from the top but users can scroll up to see prior output.
+   *
+   * For animated transitions (screen-wipe.util.ts) that intentionally want a
+   * hard clear use ANSI.CLEAR_SCREEN ('\x1b[2J\x1b[H') directly.
    */
   static clearScreen(): string {
-    return ANSI.CLEAR_SCREEN;
+    return '\r\n'.repeat(30) + '\x1b[H';
   }
 
   /**
