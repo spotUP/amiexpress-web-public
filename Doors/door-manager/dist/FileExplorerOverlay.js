@@ -115,7 +115,7 @@ class FileExplorerOverlay {
             height: 3,
             tags: true,
             content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
-            style: { fg: 'white', bg: '#111', border: { fg: '#333' } },
+            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
             focusable: false,
         });
         this.listWidget = new blessed_1.List({
