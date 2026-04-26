@@ -28,13 +28,27 @@ export function TerminalPage(): JSX.Element {
   fontSizeRef.current = fontSize;
 
   useEffect(() => {
-    const handleResize = () => {
+    // orientationchange is the reliable signal for portrait↔landscape transitions.
+    // resize fires constantly on iOS (browser chrome show/hide, address bar scroll)
+    // and can flip window.innerHeight > window.innerWidth transiently during login,
+    // causing isMobile to go false → fontSize=16 (too big). Don't use resize for
+    // mobile detection — only use it on desktop for potential window resizes.
+    const handleOrientationChange = () => {
       const mobile = isPortraitMobile();
       setIsMobile(mobile);
       setFontSize(mobile ? computeFontSize(window.innerWidth) : 16);
     };
+    const handleResize = () => {
+      if (!isPortraitMobile()) {
+        // Desktop: update font size if window is resized
+        setIsMobile(false);
+        setFontSize(16);
+      }
+      // Mobile portrait: ignore resize — screen width doesn't change,
+      // only height fluctuates with browser chrome. orientationchange handles rotation.
+    };
     window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
+    window.addEventListener('orientationchange', handleOrientationChange);
 
     // Desktop fallback: clicking anywhere on the page refocuses the terminal.
     // Prevents the "clicked outside and lost focus" problem on desktop.
@@ -67,7 +81,7 @@ export function TerminalPage(): JSX.Element {
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
       document.removeEventListener('click', refocusOnClick, { capture: true });
     };
   }, []);
