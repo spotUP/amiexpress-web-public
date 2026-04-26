@@ -78,7 +78,10 @@ class FileExplorerOverlay {
         this.screen = opts.screen;
         this.onClose = opts.onClose;
         this.projectRoot = process.cwd();
-        this.doorRoot = path.resolve(this.projectRoot, opts.doorPath);
+        // If doorPath is already absolute use it directly; otherwise resolve from cwd
+        this.doorRoot = path.isAbsolute(opts.doorPath)
+            ? opts.doorPath
+            : path.resolve(this.projectRoot, opts.doorPath);
         this.currentDir = this.doorRoot;
         this.buildUI();
         this.loadDirectory(this.doorRoot);
@@ -380,10 +383,10 @@ class FileExplorerOverlay {
             const breadcrumb = this.isGuide && this.guideCurrentNode
                 ? `${this.viewerFilename} > ${this.guideCurrentNode}`
                 : this.viewerFilename;
-            this.header.setContent(`  {cyan-fg}${breadcrumb}{/cyan-fg}{|}  {yellow-fg}B{/yellow-fg}=back  {yellow-fg}ESC{/yellow-fg}=close  `, true);
+            this.header.setContent(`  {cyan-fg}${breadcrumb}{/cyan-fg}  |  {yellow-fg}B{/yellow-fg}=back  {yellow-fg}ESC{/yellow-fg}=close  `);
         }
         else {
-            this.header.setContent(`  {cyan-fg}FILES: ${relDir}/{/cyan-fg}{|}  {yellow-fg}ESC{/yellow-fg}=close  `, true);
+            this.header.setContent(`  {cyan-fg}FILES: ${relDir}/{/cyan-fg}  |  {yellow-fg}ESC{/yellow-fg}=close  `);
         }
     }
     updateFooterBrowser() {

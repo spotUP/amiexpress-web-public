@@ -30,6 +30,7 @@ interface DoorInfo {
   size: number;
   accessLevel: number;
   location: string;
+  resolvedPath?: string;  // absolute OS path returned by backend
   enabled: boolean;
 }
 
@@ -263,7 +264,8 @@ export async function createApp(session: DoorSession): Promise<void> {
   (screen as any).key(['f', 'F'], () => {
     const door = selectedDoor();
     if (!door) return;
-    const doorPath = door.location || `Doors/${door.command.toLowerCase()}`;
+    // resolvedPath is the absolute OS path; fall back to command-based relative path
+    const doorPath = door.resolvedPath || `Doors/${door.command}`;
     new FileExplorerOverlay({
       screen,
       doorPath,

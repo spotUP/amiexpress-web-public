@@ -214,7 +214,8 @@ async function createApp(session) {
         const door = selectedDoor();
         if (!door)
             return;
-        const doorPath = door.location || `Doors/${door.command.toLowerCase()}`;
+        // resolvedPath is the absolute OS path; fall back to command-based relative path
+        const doorPath = door.resolvedPath || `Doors/${door.command}`;
         new FileExplorerOverlay_1.FileExplorerOverlay({
             screen,
             doorPath,
