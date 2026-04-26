@@ -156,8 +156,8 @@ export class SettingsScreen {
 
       // Handle item selection - wrap async handler for blessed's sync event requirement
       menu.on('select', (_item: any, index: number) => {
-        // Check for Save & Exit (last item, index 42)
-        if (index === 42) {
+        // Check for Save & Exit (last item, index 35)
+        if (index === 35) {
           this.sounds.playSfx('menu_ok');
           exitSettings();
           return;
@@ -221,15 +221,8 @@ export class SettingsScreen {
       `Pause:             {yellow-fg}${formatKeyBinding(kb.pause)}{/yellow-fg}`,
       '',
       '{cyan-fg}--- JOYPAD BINDINGS ---{/cyan-fg}',
-      `Move Left:         {yellow-fg}${formatGamepadBinding(gp['left'] ?? [])}{/yellow-fg}`,
-      `Move Right:        {yellow-fg}${formatGamepadBinding(gp['right'] ?? [])}{/yellow-fg}`,
-      `Rotate CW:         {yellow-fg}${formatGamepadBinding(gp['rotate_cw'] ?? [])}{/yellow-fg}`,
-      `Rotate CCW:        {yellow-fg}${formatGamepadBinding(gp['rotate_ccw'] ?? [])}{/yellow-fg}`,
-      `Rotate 180:        {yellow-fg}${formatGamepadBinding(gp['rotate_180'] ?? [])}{/yellow-fg}`,
-      `Soft Drop:         {yellow-fg}${formatGamepadBinding(gp['soft_drop'] ?? [])}{/yellow-fg}`,
-      `Hard Drop:         {yellow-fg}${formatGamepadBinding(gp['hard_drop'] ?? [])}{/yellow-fg}`,
-      `Hold:              {yellow-fg}${formatGamepadBinding(gp['hold'] ?? [])}{/yellow-fg}`,
-      `Pause:             {yellow-fg}${formatGamepadBinding(gp['pause'] ?? [])}{/yellow-fg}`,
+      `Bind Joypad:       {yellow-fg}[Enter to run wizard]{/yellow-fg}`,
+      `Clear Joypad:      {yellow-fg}[Enter to clear all]{/yellow-fg}`,
       '',
       '{green-fg}Save & Exit{/green-fg}',
     ];
@@ -272,15 +265,8 @@ export class SettingsScreen {
       'Press any key to rebind Pause',
       '',
       '',  // JOYPAD BINDINGS header
-      'Press a joypad button to bind Move Left',
-      'Press a joypad button to bind Move Right',
-      'Press a joypad button to bind Rotate Clockwise',
-      'Press a joypad button to bind Rotate Counter-Clockwise',
-      'Press a joypad button to bind Rotate 180',
-      'Press a joypad button to bind Soft Drop',
-      'Press a joypad button to bind Hard Drop',
-      'Press a joypad button to bind Hold',
-      'Press a joypad button to bind Pause',
+      'Open wizard to bind all joypad buttons in sequence',
+      'Clear all joypad bindings (restores defaults)',
       '',
       'Save changes and return to menu',
     ];
@@ -374,18 +360,10 @@ export class SettingsScreen {
       case 29:  // Pause
         await this.editKeyBinding('pause', 'Pause');
         break;
-      // Joypad bindings (index 31 = header, 32-40 = bindings)
-      // Selecting any binding opens the full wizard starting from that action
+      // Joypad bindings (index 31 = header, 32 = wizard, 33 = clear)
       case 32: await this.editAllGamepadBindings(0); break;
-      case 33: await this.editAllGamepadBindings(1); break;
-      case 34: await this.editAllGamepadBindings(2); break;
-      case 35: await this.editAllGamepadBindings(3); break;
-      case 36: await this.editAllGamepadBindings(4); break;
-      case 37: await this.editAllGamepadBindings(5); break;
-      case 38: await this.editAllGamepadBindings(6); break;
-      case 39: await this.editAllGamepadBindings(7); break;
-      case 40: await this.editAllGamepadBindings(8); break;
-      // Note: Save & Exit (case 42) is handled directly in menu.on('select')
+      case 33: this.clearGamepadBindings(); break;
+      // Note: Save & Exit (case 35) is handled directly in menu.on('select')
     }
 
     // Update menu items
@@ -664,6 +642,14 @@ export class SettingsScreen {
     const current = modes.indexOf(this.state.settings.floatTextMode);
     const next = (current + 1) % modes.length;
     this.state.settings.floatTextMode = modes[next];
+  }
+
+  /**
+   * Clear all joypad bindings (resets to defaults, which are handled by the
+   * GAMEPAD_MAPPING in app.ts — storing an empty object means "use defaults").
+   */
+  private clearGamepadBindings(): void {
+    this.state.settings.gamepadBindings = {};
   }
 
   /**
