@@ -1081,7 +1081,8 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           (pcAfterBatch >= 0x7f800 && pcAfterBatch < 0x80000) ||   // exec.library (expanded: -2048 to 0)
           (pcAfterBatch >= 0xaf800 && pcAfterBatch < 0xb0000) ||   // dos.library (expanded)
           (pcAfterBatch >= 0xcf800 && pcAfterBatch < 0xd0000) ||   // icon.library (expanded)
-          (pcAfterBatch >= 0xef800 && pcAfterBatch < 0xf0000)      // utility.library (expanded)
+          (pcAfterBatch >= 0xef800 && pcAfterBatch < 0xf0000) ||   // utility.library (expanded)
+          (pcAfterBatch >= 0x1ff800 && pcAfterBatch < 0x200000)    // aedoor.library (expanded: -2048 to 0)
         );
 
         if (Math.abs(jumpSize) > 0x1000 && !isJumpToLibraryTrap) { // Only track large jumps, exclude library calls
