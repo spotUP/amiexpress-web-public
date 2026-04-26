@@ -1318,8 +1318,16 @@ console.error(`[XIMIOHandler] Failed to display file ${target}:`, err);
     // `~` followed by 1+ uppercase letters/digits or `~D<char>` (terminator).
     const hasMciCodes = /~([A-Z][A-Z0-9_]*|D.)/.test(content);
     if (!hasMciCodes) {
-      const autoPause = !forceNonStop;
-      this.emitText(content, false, true, autoPause, msg);
+      // Skip the (Pause)...More prompt for short files (<= screen height).
+      // Doors like dRE!Wall use JH_SF for positional UI fragments (3-line
+      // wall design), not full-screen text — pausing mid-layout breaks the
+      // door's absolute cursor positioning AND blocks the trap-sync drain
+      // for ~5s waiting for user input that never comes. Long files keep
+      // pagination so HELP / GFILE displays still pause normally.
+      const newlineCount = (content.match(/\n/g) ?? []).length;
+      const pauseLines = this.state.pauseLines || 24;
+      const shouldAutoPause = !forceNonStop && newlineCount > pauseLines;
+      this.emitText(content, false, shouldAutoPause, shouldAutoPause, msg);
       if (!this.waitingForPause) {
         this.reply(msg, 1);
       }
