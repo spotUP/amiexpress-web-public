@@ -108,6 +108,10 @@ These are the default bindings. Rebind anything in Settings.
     Hold C/Shift while a piece spawns to immediately hold it.
     Lets you cycle pieces without losing a frame.
 
+  {white-fg}Zone Activation (Zone mode only){/white-fg}
+    Rotate 180 activates Zone when meter >= 20%.
+    If meter < 20%, it rotates the piece normally.
+
 {bold}Menu Navigation:{/bold}
   Arrow Keys to move, Enter to select, Escape / Q to go back.`;
 }
@@ -166,6 +170,23 @@ function getGameModesSection() {
 {bold}{white-fg}TRAINING{/white-fg}{/bold}
   Practice mode with adjustable settings.
   No pressure — experiment with techniques freely.
+
+{bold}{cyan-fg}ULTRA 2MIN{/cyan-fg}{/bold}
+  Score as many points as possible in 2 minutes.
+  The timer counts down in your stats panel — green
+  above 60s, yellow 30-60s, red under 30s.
+
+{bold}{red-fg}DIG MODE{/red-fg}{/bold}
+  Board starts with 10 garbage rows (each with one
+  random hole). Clear all 10 rows to win!
+  Faster completion = better performance.
+
+{bold}{cyan-fg}ZONE MODE{/cyan-fg}{/bold}
+  Clear lines to fill the ZONE meter (8% per line).
+  When meter is 20%+, press Rotate-180 to activate
+  Zone for up to 10 seconds. Lines cleared during
+  Zone buffer up -- on deactivation, earn a massive
+  triangular bonus: n*(n+1)/2 * 100 * (level+1).
 
 {bold}{magenta-fg}CPU BATTLE{/magenta-fg}{/bold}
   Battle against AI opponents of varying difficulty.
@@ -380,6 +401,8 @@ function getTipsSection() {
    The grading system rewards consistency over brilliance.
    Regular runs build muscle memory better than occasional
    marathon sessions.
+
+{gray-fg}Zone/Dig/Ultra mechanics inspired by Apotris by akouzoukos.{/gray-fg}
 
 {bold}{yellow-fg}============================================================{/yellow-fg}
                     Good luck, future GRANDMASTER!

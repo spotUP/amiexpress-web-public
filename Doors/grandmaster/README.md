@@ -183,8 +183,11 @@ Built with:
 - **TypeScript** - Type-safe development
 
 Inspired by:
-- **TGM3 (Tetris: The Grand Master 3 Terror-Instinct)** by Arika
-- **Guideline Tetris** by The Tetris Company
+- **TGM3 (Tetris: The Grand Master 3 Terror-Instinct)** by Arika — grading system, speed curves, section timing, credit roll, GM requirements
+- **HeborisCE** by hebiris — 1:1 reference implementation for TGM3 mechanics (randomizer, lock delay resets, medal system, Shirase garbage rising)
+- **gtetrinet** — TetriNET 1.x piece definitions and protocol reference
+- **Apotris** by akouzoukos (https://gitea.com/akouzoukos/apotris/) — Zone mode, Dig mode, Ready-Go next preview, gravity T-spin rule, live PPS counter, training level selector
+- **Guideline Tetris** by The Tetris Company — SRS rotation system, T-spin detection, back-to-back scoring
 
 ## License
 
