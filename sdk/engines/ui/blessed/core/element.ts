@@ -2122,6 +2122,14 @@ export class Element extends EventEmitter {
   onMouse(event: any): boolean {
     if (this.hidden || !this.visible) return false;
 
+    // Non-interactive elements silently ignore all mouse events — no hover
+    // state, no border highlight, no focus claim.  Without this guard every
+    // element under the cursor (including static headers/footers) would get
+    // _hovered=true and trigger a visual re-render showing a hover border.
+    if (!this.options.mouse && !this.options.clickable && !this.options.scrollable) {
+      return false;
+    }
+
     const coords = this._getCoords();
     if (!coords) return false;
 
