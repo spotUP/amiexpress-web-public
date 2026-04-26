@@ -66,6 +66,7 @@ export interface DoorInfo {
   toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
   description?: string;      // Description from archive
   installed: boolean;        // Whether door executable exists
+  enabled?: boolean;         // Session-only enabled/disabled state (true unless overridden)
   doorName?: string;         // Extracted door name from path
   size?: number;             // File size in bytes
 }
@@ -1307,17 +1308,22 @@ console.error('Cleanup error:', error);
   }
 
   async setDoorEnabled(command: string, enabled: boolean): Promise<{ success: boolean; message: string }> {
-    const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
-    const infoPath = path.join(commandsPath, `${command.toUpperCase()}.info`);
-    const tsInfoPath = path.join(this.bbsRoot, 'Doors', command, `${command}.info`);
-
-    if (!amigafs.existsSync(infoPath) && !amigafs.existsSync(tsInfoPath)) {
-      return { success: false, message: `Door '${command}' .info not found` };
+    // Ensure cache is populated
+    if (!this.doorCache) {
+      await this.populateCache();
     }
-
-    // Reload door cache so getDoors() reflects any .info changes immediately
-    await this.refreshCache();
-    return { success: true, message: `Door '${command}' ${enabled ? 'enabled' : 'disabled'}` };
+    const entry = (this.doorCache ?? []).find(
+      d => d.command?.toUpperCase() === command.toUpperCase()
+    );
+    if (!entry) {
+      return { success: false, message: `Door '${command}' not found in registry` };
+    }
+    // Update in-memory state (session-scoped: does not persist to .info file)
+    entry.enabled = enabled;
+    return {
+      success: true,
+      message: `Door '${command}' ${enabled ? 'enabled' : 'disabled'} (session only — edit .info ENABLED tooltype to persist)`
+    };
   }
 
   /**
