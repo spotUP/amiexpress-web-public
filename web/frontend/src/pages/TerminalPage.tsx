@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 
-// Initial font size estimate — will be corrected after font + terminal render
+// Rough initial estimate — corrected via Canvas API after font loads
 const CHAR_ASPECT = 0.6;
 const BBS_COLS = 80;
 const KEYBOARD_HEIGHT = 260;
@@ -36,23 +36,23 @@ export function TerminalPage(): JSX.Element {
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
 
-    // After fonts load, measure the actual rendered terminal width (80 cols at current
-    // fontSize) and back-compute the exact fontSize so 80 cols fills the screen exactly.
-    // This corrects any CHAR_ASPECT estimation error and the "wrong size until tilt" bug.
-    document.fonts.ready.then(() => {
-      setTimeout(() => {
-        if (!isPortraitMobile()) return;
-        const el = terminalRef.current?.getTerminal()?.element;
-        if (!el) return;
-        const actualWidth = el.offsetWidth;
-        if (actualWidth <= 0) return;
-        // Scale fontSize proportionally so 80 cols = screen width
-        const corrected = Math.floor(fontSizeRef.current * window.innerWidth / actualWidth);
+    // Measure Mosoul's actual character width via Canvas API (no dependency on xterm
+    // initialization timing) and correct fontSize so 80 cols fits the screen exactly.
+    if (isPortraitMobile()) {
+      const probe = fontSizeRef.current;
+      document.fonts.load(`${probe}px mosoul`).then(() => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.font = `${probe}px mosoul`;
+        const charWidth = ctx.measureText('W').width;
+        if (charWidth <= 0) return;
+        const corrected = Math.floor(window.innerWidth / (BBS_COLS * charWidth) * probe);
         if (corrected > 0 && corrected !== fontSizeRef.current) {
           setFontSize(corrected);
         }
-      }, 400); // give xterm time to render at initial fontSize before measuring
-    });
+      });
+    }
 
     return () => {
       window.removeEventListener('resize', handleResize);
