@@ -5,13 +5,113 @@
  * but connects with a chat-only flag that auto-launches LiveChat door.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import './chat.css';
+
+const AUTH_ERROR_PATTERNS = [
+  /session expired/i,
+  /please log in/i,
+  /invalid authentication token/i,
+  /authentication failed/i,
+];
+
+function isAuthError(message: string | undefined): boolean {
+  if (!message) return false;
+  return AUTH_ERROR_PATTERNS.some((re) => re.test(message));
+}
+
+function ChatLoginDialog({
+  initialError,
+  onSuccess,
+}: {
+  initialError?: string;
+  onSuccess: (token: string) => void;
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | undefined>(initialError);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!username || !password) {
+      setError('Username and password are required');
+      return;
+    }
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      const isDev =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const backendUrl = isDev ? 'http://localhost:3001' : window.location.origin;
+      const res = await fetch(`${backendUrl}/api/chat/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, rememberMe }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.data?.token) {
+        const msg = json?.error || json?.message || `Login failed (${res.status})`;
+        setError(msg);
+        setSubmitting(false);
+        return;
+      }
+      onSuccess(json.data.token);
+    } catch (err) {
+      setError((err as Error).message || 'Network error');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="chat-login-overlay">
+      <form className="chat-login-form" onSubmit={handleSubmit}>
+        <h2>LiveChat Login</h2>
+        {error ? <div className="chat-login-error">{error}</div> : null}
+        <label>
+          Username
+          <input
+            type="text"
+            autoComplete="username"
+            autoFocus
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            disabled={submitting}
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={submitting}
+          />
+        </label>
+        <label className="chat-login-remember">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            disabled={submitting}
+          />
+          Keep me signed in for 30 days
+        </label>
+        <button type="submit" disabled={submitting}>
+          {submitting ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+    </div>
+  );
+}
 
 const XTERM_CONFIG = {
   fontFamily: 'mosoul, "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", "Courier New", monospace',
@@ -46,8 +146,32 @@ export default function ChatTerminal() {
   const terminalInstance = useRef<Terminal | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
+  // Auth state. We start by reading any cached token from localStorage; if
+  // the socket reports an auth error, we surface the login dialog with that
+  // exact message so the user understands why they were kicked.
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    return (
+      localStorage.getItem('authToken') ||
+      localStorage.getItem('bbs_auth_token') ||
+      null
+    );
+  });
+  const [loginPrompt, setLoginPrompt] = useState<string | undefined>(() => {
+    const cached =
+      localStorage.getItem('authToken') ||
+      localStorage.getItem('bbs_auth_token');
+    return cached ? undefined : 'Sign in to access LiveChat';
+  });
+
+  function handleLoginSuccess(token: string) {
+    localStorage.setItem('authToken', token);
+    setAuthToken(token);
+    setLoginPrompt(undefined);
+  }
+
   useEffect(() => {
     if (!terminalRef.current) return;
+    if (!authToken) return; // Wait for login before initializing terminal/socket
 
     // Initialize xterm.js terminal - size will be set by FitAddon
     const term = new Terminal({
@@ -242,10 +366,11 @@ export default function ChatTerminal() {
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const backendUrl = isDevelopment ? 'http://localhost:3001' : window.location.origin;
 
-    // Check for SSO token from main BBS login
-    const ssoToken =
-      localStorage.getItem('authToken') ||
-      localStorage.getItem('bbs_auth_token');
+    // Use the token from React state (already validated as truthy by the
+    // useEffect guard above). This stays in sync with the login dialog —
+    // a fresh login triggers re-render and re-runs this effect with the
+    // new token.
+    const ssoToken = authToken!;
 
     // Connect with chatOnly flag - backend will auto-launch LiveChat after login
     // IMPORTANT: autoConnect: false to ensure handlers are registered before connection
@@ -256,7 +381,7 @@ export default function ChatTerminal() {
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       autoConnect: false,  // Don't connect until handlers are registered
-      auth: ssoToken ? { token: ssoToken } : {},
+      auth: { token: ssoToken },
       query: {
         chatOnly: 'true'  // Signal to backend this is chat-only mode
       }
@@ -273,7 +398,17 @@ export default function ChatTerminal() {
 
     socket.on('connect_error', (error) => {
       console.error('[ChatTerminal] Connection error:', error.message);
-      // Connection errors are now handled by blessed modals on the door side
+      // Auth failures (expired/invalid JWT) happen BEFORE the door starts
+      // so the door's blessed login modal never gets a chance to render.
+      // Surface a React login dialog instead and clear the cached token so
+      // the user can re-authenticate.
+      if (isAuthError(error.message)) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('bbs_auth_token');
+        setAuthToken(null);
+        setLoginPrompt(error.message);
+        socket.disconnect();
+      }
     });
 
     socket.on('disconnect', (reason) => {
@@ -406,7 +541,7 @@ export default function ChatTerminal() {
       socket.disconnect();
       term.dispose();
     };
-  }, []);
+  }, [authToken]);
 
   return (
     <div className="chat-terminal-container">
@@ -415,6 +550,12 @@ export default function ChatTerminal() {
         className="chat-terminal-wrapper"
         onClick={() => terminalInstance.current?.focus()}
       />
+      {loginPrompt !== undefined ? (
+        <ChatLoginDialog
+          initialError={loginPrompt}
+          onSuccess={handleLoginSuccess}
+        />
+      ) : null}
     </div>
   );
 }
