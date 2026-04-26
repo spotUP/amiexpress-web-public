@@ -2258,7 +2258,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
       stopGuruAnimation();
     };
-  }, [fontSize, backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
+  // fontSize intentionally omitted from deps — live changes are handled by the
+  // separate fontSize useEffect below, so font size updates never trigger reinit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 
   // Handle fontSize changes
   useEffect(() => {

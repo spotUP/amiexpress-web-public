@@ -2,8 +2,10 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 
-// Rough initial estimate — corrected via Canvas API after font loads
-const CHAR_ASPECT = 0.6;
+// Mosoul char aspect ratio (charWidth / fontSize). 0.75 gives a conservative
+// initial estimate that is close to actual — Canvas API corrects the remainder.
+// 0.6 was too optimistic (gave fontSize=8 which overflowed; actual is ~0.75).
+const CHAR_ASPECT = 0.75;
 const BBS_COLS = 80;
 const KEYBOARD_HEIGHT = 260;
 const PORTRAIT_MOBILE_MAX_WIDTH = 600;
@@ -86,11 +88,13 @@ export function TerminalPage(): JSX.Element {
     };
   }, []);
 
-  // Portrait: suppress iOS native keyboard via inputmode="none".
-  // Landscape: terminal auto-focuses on reconnect which triggers iOS keyboard —
-  // blur after rotation settles so the keyboard doesn't appear uninvited.
+  // Portrait mobile: suppress iOS native keyboard via inputmode="none".
+  // Landscape mobile: blur after rotation so iOS keyboard doesn't appear uninvited.
+  // Desktop: no action — terminal stays focused naturally via keepFocused prop.
   useEffect(() => {
-    if (!isMobile) {
+    const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile && isMobileDevice) {
+      // Landscape mobile: remove inputmode restriction and blur to prevent keyboard
       const timer = setTimeout(() => {
         const textarea = terminalRef.current?.getTerminal()?.textarea;
         if (textarea) {
@@ -100,11 +104,16 @@ export function TerminalPage(): JSX.Element {
       }, 800);
       return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => {
-      const ta = terminalRef.current?.getTerminal()?.textarea;
-      if (ta) ta.setAttribute('inputmode', 'none');
-    }, 600);
-    return () => clearTimeout(timer);
+    if (isMobile) {
+      // Portrait mobile: suppress native keyboard
+      const timer = setTimeout(() => {
+        const ta = terminalRef.current?.getTerminal()?.textarea;
+        if (ta) ta.setAttribute('inputmode', 'none');
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+    // Desktop: focus the terminal on mount/reconnect
+    terminalRef.current?.focus();
   }, [isMobile]);
 
   const handleKey = useCallback((data: string) => {
