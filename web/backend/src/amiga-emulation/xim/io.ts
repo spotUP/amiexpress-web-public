@@ -61,10 +61,10 @@ export class XIMIOHandler {
   // RTW and other doors may split ANSI sequences like ESC[34m across multiple messages
   private ansiBuffer: string = '';
 
-  // File display serialization - prevent overlapping JH_SF requests
-  // Doors may send multiple JH_SF requests in quick succession (e.g., dRE!WAll)
-  // Without serialization, outputs interleave causing display corruption
-  private fileDisplayLock: Promise<void> = Promise.resolve();
+  // Note: file display serialization formerly used a Promise chain
+  // (fileDisplayLock). The sync-fast-path in displayResolvedFile() now
+  // emits + replies before returning for non-MCI files, so back-to-back
+  // JH_SF requests are naturally serialized by the trap-sync dispatcher.
 
   constructor(
     emulator: MoiraEmulator,
@@ -1189,6 +1189,15 @@ debugLog(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
 
   /**
    * Handle JH_SG (Show GFile with ACS/language lookup)
+   *
+   * IMPORTANT: This method emits synchronously when the file contains no MCI
+   * codes (the common case — static ANSI banners like dRE!Wall, AquaScan).
+   * The `async` modifier and `Promise<void>` return type are preserved so the
+   * XIMProtocol dispatcher can `await` uniformly, but the fast path completes
+   * its emit + reply BEFORE this method returns, guaranteeing deterministic
+   * ordering against subsequent JH_WRITE calls. The async slow path (files
+   * with `~MCI` markers requiring DB lookups) is still drained by the
+   * deasync mechanism in door-message-callbacks.ts.
    */
   async handleShowGFile(msg: XIMMessage): Promise<void> {
     const partName = this.getMessageString(msg).trim();
@@ -1219,6 +1228,106 @@ console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
       return;
     }
 
+    await this.displayResolvedFile(target, forceNonStop, msg);
+  }
+
+  /**
+   * Handle JH_SF (Show File - full path)
+   *
+   * See handleShowGFile docstring for the sync-fast-path / async-slow-path
+   * contract. The emit MUST land before this method returns for non-MCI
+   * files; absolute cursor positioning in dRE!Wall depends on this ordering.
+   */
+  async handleShowFile(msg: XIMMessage): Promise<void> {
+    const targetPath = this.getMessageString(msg).trim();
+    const forceNonStop = msg.data === 1;
+
+    if (!targetPath) {
+      this.reply(msg, 0);
+      return;
+    }
+
+    const resolved = this.resolvePath(targetPath);
+    const parsed = path.parse(resolved);
+    const candidates =
+      parsed.ext && parsed.ext.length > 0
+        ? [resolved]
+        : [
+            resolved, // Try exact path first (no extension)
+            `${resolved}.txt`,
+            `${resolved}.TXT`,
+            `${resolved}.txt.gr`,
+            `${resolved}.GR1`,
+          ];
+
+    const target = this.findFirstExisting(candidates);
+    if (!target) {
+console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
+      this.reply(msg, 0);
+      return;
+    }
+
+    await this.displayResolvedFile(target, forceNonStop, msg);
+  }
+
+  /**
+   * Handle DISPLAY_FILE (non-stop file display).
+   * Sync-fast-path semantics inherited from handleShowFile.
+   */
+  async handleDisplayFileNonStop(msg: XIMMessage): Promise<void> {
+    await this.handleShowFile({ ...msg, data: 1 });
+  }
+
+  /** Handle CHECK_TO_DISPLAY (non-stop gfile/ACS search). See handleDisplayFileNonStop. */
+  async handleCheckToDisplay(msg: XIMMessage): Promise<void> {
+    await this.handleShowGFile({ ...msg, data: 1 });
+  }
+
+  /**
+   * Display a resolved file with the sync-fast-path / async-slow-path split.
+   *
+   * Fast path (no MCI codes): synchronously read file → emit → reply.
+   * The emit lands BEFORE this method returns, locking deterministic
+   * ordering against any subsequent JH_WRITE. This is what dRE!Wall,
+   * AquaScan banners, and similar static ANSI displays rely on.
+   *
+   * Slow path (file contains `~XX` MCI codes like ~ML., ~MD., ~MN. that
+   * require DB lookups): falls back to the existing async parseMciCodes
+   * pipeline. The trap-sync XIMProcessor / doorMessageCallback drain
+   * (door-message-callbacks.ts ASYNC_OUTPUT_COMMANDS + deasync.loopWhile)
+   * still covers this rare case.
+   */
+  private async displayResolvedFile(
+    target: string,
+    forceNonStop: boolean,
+    msg: XIMMessage
+  ): Promise<void> {
+    let content: string;
+    try {
+      const rawBuffer = amigafs.readFileSync(target) as Buffer;
+      content = iconv.decode(rawBuffer, 'iso-8859-1');
+    } catch (err) {
+      SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', target, err as Error);
+console.error(`[XIMIOHandler] Failed to display file ${target}:`, err);
+      this.reply(msg, 0);
+      return;
+    }
+
+    // Fast path: file has no MCI codes — emit synchronously and reply.
+    // MCI markers look like ~CD., ~ML., ~XC_..., ~D., etc. Detect any
+    // `~` followed by 1+ uppercase letters/digits or `~D<char>` (terminator).
+    const hasMciCodes = /~([A-Z][A-Z0-9_]*|D.)/.test(content);
+    if (!hasMciCodes) {
+      const autoPause = !forceNonStop;
+      this.emitText(content, false, true, autoPause, msg);
+      if (!this.waitingForPause) {
+        this.reply(msg, 1);
+      }
+      return;
+    }
+
+    // Slow path: MCI parsing requires async DB lookups. Covered by the
+    // deasync drain in door-message-callbacks.ts.
     const displayed = await this.displayTextFile(target, forceNonStop, msg);
     if (!displayed) {
       this.reply(msg, 0);
@@ -1228,74 +1337,6 @@ console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
     if (!this.waitingForPause) {
       this.reply(msg, 1);
     }
-  }
-
-  /**
-   * Handle JH_SF (Show File - full path)
-   */
-  async handleShowFile(msg: XIMMessage): Promise<void> {
-    // Serialize file display requests to prevent output interleaving
-    // Doors like dRE!WAll send multiple JH_SF requests in quick succession
-    const doDisplay = async () => {
-      const targetPath = this.getMessageString(msg).trim();
-      const forceNonStop = msg.data === 1;
-
-      if (!targetPath) {
-        this.reply(msg, 0);
-        return;
-      }
-
-      const resolved = this.resolvePath(targetPath);
-      const parsed = path.parse(resolved);
-      const candidates =
-        parsed.ext && parsed.ext.length > 0
-          ? [resolved]
-          : [
-              resolved, // Try exact path first (no extension)
-              `${resolved}.txt`,
-              `${resolved}.TXT`,
-              `${resolved}.txt.gr`,
-              `${resolved}.GR1`,
-            ];
-
-      const target = this.findFirstExisting(candidates);
-      if (!target) {
-console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
-        this.reply(msg, 0);
-        return;
-      }
-
-      const displayed = await this.displayTextFile(target, forceNonStop, msg);
-      if (!displayed) {
-        this.reply(msg, 0);
-        return;
-      }
-
-      if (!this.waitingForPause) {
-        this.reply(msg, 1);
-      }
-    };
-
-    // Chain onto the file display lock to ensure serialization
-    this.fileDisplayLock = this.fileDisplayLock.then(doDisplay).catch(err => {
-      console.error('[XIMIOHandler] JH_SF error:', err);
-      this.reply(msg, 0);
-    });
-    await this.fileDisplayLock;
-  }
-
-  /**
-   * Handle DISPLAY_FILE (non-stop file display).
-   * Returns the Promise so callers can drain before unblocking the door —
-   * fixes the trap-sync race where the next JH_WRITE landed before file bytes.
-   */
-  handleDisplayFileNonStop(msg: XIMMessage): Promise<void> {
-    return this.handleShowFile({ ...msg, data: 1 });
-  }
-
-  /** Handle CHECK_TO_DISPLAY (non-stop gfile/ACS search). See handleDisplayFileNonStop. */
-  handleCheckToDisplay(msg: XIMMessage): Promise<void> {
-    return this.handleShowGFile({ ...msg, data: 1 });
   }
 
   /**
