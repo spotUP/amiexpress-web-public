@@ -765,15 +765,22 @@ export class SettingsScreen {
         }
       };
 
-      // Button events
+      // Generic button event — catches any button regardless of mapping
+      gim.on('button', (button: number, pressed: boolean) => {
+        console.log(`[wizard] generic button event: btn=${button} pressed=${pressed}`);
+      });
+
+      // Button events (named)
       for (const btn of ['a', 'b', 'x', 'y', 'l1', 'r1', 'l2', 'r2', 'select', 'start', 'l3', 'r3', 'home']) {
         gim.on(`button:${btn}`, (pressed: boolean) => {
+          console.log(`[wizard] button:${btn} pressed=${pressed}`);
           if (pressed) bindTrigger(`button:${btn}`);
         });
       }
 
       // DPad events
       gim.on('dpad', (direction: string) => {
+        console.log(`[wizard] dpad direction=${direction}`);
         if (direction && direction !== 'none' && direction !== 'neutral') bindTrigger(`dpad:${direction}`);
       });
 

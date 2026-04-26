@@ -508,6 +508,12 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
   socket.on('gamepad-event', (event: any) => {
     const session = getSession(socket.id);
     if (!session) return;
+    // Debug: log button presses and axis movement to help trace binding issues
+    if (event.type === 'button' && event.pressed) {
+      console.log(`[gamepad] button ${event.button} pressed, handler=${!!session.gamepadHandler}`);
+    } else if (event.type === 'dpad') {
+      console.log(`[gamepad] dpad ${event.direction}, handler=${!!session.gamepadHandler}`);
+    }
     session.gamepadHandler?.(event);
   });
 

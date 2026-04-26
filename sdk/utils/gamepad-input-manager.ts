@@ -121,6 +121,7 @@ export class GamepadInputManager extends EventEmitter {
     let states = this.buttonStates.get(event.controllerId);
     if (!states) {
       // Controller was already connected before this GIM was created — auto-initialize
+      console.log(`[GIM] auto-init controller ${event.controllerId} on first button event`);
       states = new Map();
       this.buttonStates.set(event.controllerId, states);
       this.connectedControllers.add(event.controllerId);
@@ -143,6 +144,7 @@ export class GamepadInputManager extends EventEmitter {
 
     // Emit specific button events (e.g., 'button:a', 'button:start')
     const buttonName = this.getButtonName(event.button);
+    console.log(`[GIM] handleButton btn=${event.button} name=${buttonName} pressed=${event.pressed}`);
     if (buttonName) {
       /**
        * Emitted for specific button (e.g., 'button:a', 'button:start')
