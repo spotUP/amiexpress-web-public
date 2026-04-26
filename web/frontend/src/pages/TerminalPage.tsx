@@ -31,6 +31,14 @@ export function TerminalPage(): JSX.Element {
     };
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
+
+    // Mosoul font may not be loaded when xterm first measures character widths.
+    // Once all fonts are ready, fire a synthetic resize so FitAddon remeasures
+    // with correct metrics — eliminates the "wrong size until tilt" bug on mobile.
+    document.fonts.ready.then(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
