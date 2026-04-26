@@ -20,10 +20,11 @@ export const socketToNodeId = new Map<string, number>();  // Socket ID → Node 
 export const socketToUser = new Map<string, string>();  // Socket ID → User ID (for user lookups)
 export const pendingDisconnects = new Map<string, { socketId: string; nodeId: number; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
-// Connection rate limiting - track recent connections
+// Connection rate limiting for Telnet/SSH (web is gated separately in index.ts).
+// Override via env: BBS_MAX_CONNECTIONS_PER_IP / BBS_CONNECTION_WINDOW_MS.
 const recentConnections: Map<string, number[]> = new Map();
-const MAX_CONNECTIONS_PER_IP = 5; // Max 5 connections per IP
-const CONNECTION_WINDOW = 60000; // 60 second window
+const MAX_CONNECTIONS_PER_IP = parseInt(process.env.BBS_MAX_CONNECTIONS_PER_IP || '30', 10);
+const CONNECTION_WINDOW = parseInt(process.env.BBS_CONNECTION_WINDOW_MS || '60000', 10);
 
 /**
  * Check if IP address has exceeded connection rate limit

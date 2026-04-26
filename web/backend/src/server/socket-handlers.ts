@@ -20,7 +20,6 @@ import {
   deleteSession,
   createSession,
   getNextAvailableNodeId,
-  checkConnectionLimit,
   socketToUser,
   socketToNodeId,
   userSessions,
@@ -135,17 +134,6 @@ console.log(`Client connected from ${clientIp}`);
     } catch (err) {
 console.warn('[debug-mcp] failed to install ansi-output tap:', err);
     }
-  }
-
-  // Check connection rate limit
-  if (!checkConnectionLimit(clientIp)) {
-console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
-    socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[31mToo many connections from your IP.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[33mPlease wait a moment and try again.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
-    socket.disconnect();
-    return;
   }
 
   // Start tracking session output for admin log viewer
