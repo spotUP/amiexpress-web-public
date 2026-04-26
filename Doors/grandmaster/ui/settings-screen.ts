@@ -471,7 +471,8 @@ export class SettingsScreen {
         }
       };
 
-      this.screen.on('keypress', keyHandler);
+      // Defer one tick so the Enter that opened this dialog is not captured
+      setImmediate(() => this.screen.on('keypress', keyHandler));
       this.screen.render();
     });
   }
@@ -536,7 +537,8 @@ export class SettingsScreen {
         }
       };
 
-      this.screen.on('keypress', keyHandler);
+      // Defer one tick so the Enter that opened this dialog is not captured
+      setImmediate(() => this.screen.on('keypress', keyHandler));
       this.screen.render();
     });
   }
@@ -622,7 +624,8 @@ export class SettingsScreen {
         }
       };
 
-      this.screen.on('keypress', keyHandler);
+      // Defer one tick so the Enter that opened this dialog is not captured
+      setImmediate(() => this.screen.on('keypress', keyHandler));
     });
   }
 
@@ -743,7 +746,8 @@ export class SettingsScreen {
           updateDisplay();
         }
       };
-      this.screen.on('keypress', keyHandler);
+      // Defer one tick so the Enter that opened this dialog is not captured
+      setImmediate(() => this.screen.on('keypress', keyHandler));
 
       // Detect button presses
       for (const btn of ['a', 'b', 'x', 'y', 'l1', 'r1', 'l2', 'r2', 'select', 'start', 'l3', 'r3', 'home']) {
