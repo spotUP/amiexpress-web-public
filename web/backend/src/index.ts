@@ -783,10 +783,16 @@ let sshServer: SSHServerImpl | null = null;
 // NOTE: sessions, userSessions, and socketToUser are imported from session-manager module
 // This ensures both index.ts and socket-handlers.ts use the SAME storage
 
-// Connection rate limiting - track recent connections
+// Connection rate limiting - track recent connections.
+// Bumped from 5 -> 30 because legitimate sysop / tester traffic
+// (multiple tabs, hard refreshes, /chat reload after token expiry)
+// blew past the old window and started locking the user out of their
+// own BBS during debugging. 30/min still throttles connection-spam
+// abuse while leaving normal use comfortably under the cap.
+// Override via env: BBS_MAX_CONNECTIONS_PER_IP / BBS_CONNECTION_WINDOW_MS.
 const recentConnections: Map<string, number[]> = new Map();
-const MAX_CONNECTIONS_PER_IP = 5; // Max 5 connections per IP
-const CONNECTION_WINDOW = 60000; // 60 second window
+const MAX_CONNECTIONS_PER_IP = parseInt(process.env.BBS_MAX_CONNECTIONS_PER_IP || '30', 10);
+const CONNECTION_WINDOW = parseInt(process.env.BBS_CONNECTION_WINDOW_MS || '60000', 10);
 
 export const LOCALHOST_IPS = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
 
