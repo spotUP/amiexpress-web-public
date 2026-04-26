@@ -2,23 +2,6 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 
-// Map BBS raw key data to DOM KeyboardEvent.key names so synthetic events
-// go through xterm's native onKey pipeline (required for login input capture).
-function bbsDataToKeyEvent(data: string): KeyboardEventInit {
-  switch (data) {
-    case '\r':      return { key: 'Enter',      code: 'Enter' };
-    case '\x7f':    return { key: 'Backspace',   code: 'Backspace' };
-    case '\x08':    return { key: 'Backspace',   code: 'Backspace' };
-    case '\x1b':    return { key: 'Escape',      code: 'Escape' };
-    case '\x1b[A':  return { key: 'ArrowUp',     code: 'ArrowUp' };
-    case '\x1b[B':  return { key: 'ArrowDown',   code: 'ArrowDown' };
-    case '\x1b[C':  return { key: 'ArrowRight',  code: 'ArrowRight' };
-    case '\x1b[D':  return { key: 'ArrowLeft',   code: 'ArrowLeft' };
-    case ' ':       return { key: ' ',            code: 'Space' };
-    default:        return { key: data,           code: `Key${data.toUpperCase()}` };
-  }
-}
-
 // Rough initial estimate — corrected via Canvas API after font loads
 const CHAR_ASPECT = 0.6;
 const BBS_COLS = 80;
@@ -111,21 +94,7 @@ export function TerminalPage(): JSX.Element {
   }, [isMobile]);
 
   const handleKey = useCallback((data: string) => {
-    // Dispatch a synthetic keydown on the xterm textarea — goes through xterm's
-    // native key pipeline so BOTH paths work:
-    //   • term.onKey  → login handler (captures username/password locally)
-    //   • term.onData → post-login handler (sends via socket to BBS)
-    // term.input() only fires onData which is explicitly blocked during login states.
-    const textarea = terminalRef.current?.getTerminal()?.textarea;
-    if (textarea) {
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        ...bbsDataToKeyEvent(data),
-        bubbles: true,
-        cancelable: true,
-      }));
-    } else {
-      terminalRef.current?.sendCommand(data);
-    }
+    terminalRef.current?.injectInput(data);
     terminalRef.current?.focus();
   }, []);
 

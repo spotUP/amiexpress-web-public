@@ -52,6 +52,10 @@ interface BBSTerminalProps {
 export interface BBSTerminalRef {
   focus: () => void;
   sendCommand: (command: string) => void;
+  /** Feed raw BBS key data through the correct path for the current terminal state.
+   *  During login states (username/password/etc.) replicates onKey handler logic directly.
+   *  Post-login uses term.input() which fires onData → socket. */
+  injectInput: (data: string) => void;
   getSocket: () => Socket | null;
   getTerminal: () => Terminal | null;
   startDownload: (amigaPath: string) => Promise<void>;
@@ -434,6 +438,88 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (socketRef.current?.connected) {
         socketRef.current.emit('command', command);
       }
+    },
+    injectInput: (data: string) => {
+      const term = terminalInstance.current;
+      const socket = socketRef.current;
+      if (!term) return;
+
+      // During login states onData is explicitly blocked — replicate onKey logic directly.
+      if (loginState.current === 'username') {
+        if (data === '\r' || data === '\n') {
+          socket?.emit('check-username', { username: username.current });
+          loginState.current = 'checking-username';
+          term.write('\r\n');
+        } else if (data === '\x7f' || data === '\x08') {
+          if (username.current.length > 0) {
+            username.current = username.current.slice(0, -1);
+            term.write('\b \b');
+          }
+        } else if (data.length === 1 && data >= ' ') {
+          username.current += data;
+          term.write(data);
+        }
+        return;
+      }
+
+      if (loginState.current === 'password') {
+        if (data === '\r' || data === '\n') {
+          socket?.emit('login', { username: username.current, password: password.current });
+          loginState.current = 'logging-in';
+          term.write('\r\n');
+        } else if (data === '\x7f' || data === '\x08') {
+          if (password.current.length > 0) {
+            password.current = password.current.slice(0, -1);
+            term.write('\b \b');
+          }
+        } else if (data.length === 1 && data >= ' ') {
+          password.current += data;
+          term.write(passwordMode.current ? data : '*');
+        }
+        return;
+      }
+
+      if (loginState.current === 'password-reset') {
+        if (data === '\r' || data === '\n') {
+          socket?.emit('password-reset-input', { input: passwordResetInput.current });
+          term.write('\r\n');
+          passwordResetInput.current = '';
+        } else if (data === '\x7f' || data === '\x08') {
+          if (passwordResetInput.current.length > 0) {
+            passwordResetInput.current = passwordResetInput.current.slice(0, -1);
+            term.write('\b \b');
+          }
+        } else if (data.length === 1 && data >= ' ') {
+          passwordResetInput.current += data;
+          term.write(passwordMode.current ? '*' : data);
+        }
+        return;
+      }
+
+      if (loginState.current === 'new-user-prompt') {
+        const promptUser = newUserPromptUsername.current || username.current || '';
+        const sendResponse = (response: string) => {
+          socket?.emit('new-user-response', { response, username: promptUser });
+        };
+        if (data === '\r' || data === '\n') {
+          term.write('\r\n');
+          sendResponse('');
+          setTimeout(() => { loginState.current = 'registering'; }, 0);
+        } else if (data.length === 1) {
+          term.write(data + '\r\n');
+          sendResponse(data);
+          setTimeout(() => { loginState.current = 'registering'; }, 0);
+        }
+        return;
+      }
+
+      // checking-username / logging-in: BBS is processing, discard input
+      if (loginState.current === 'checking-username' || loginState.current === 'logging-in') {
+        return;
+      }
+
+      // Post-login: fire onData → socket (normal path, not blocked outside login states)
+      term.input(data, true);
     },
     getSocket: () => socketRef.current,
     getTerminal: () => terminalInstance.current,
