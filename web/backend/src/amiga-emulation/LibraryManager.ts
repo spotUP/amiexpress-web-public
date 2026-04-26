@@ -551,13 +551,22 @@ debugLog(
 
     const normalizeAnsiNewlines = (data: string) => data.replace(/\r?\n/g, "\r\n");
 
+    // Reset ANSI attributes at the end of each DOS Write() call that sets colors
+    // but doesn't end with a reset. Prevents color bleed into subsequent Write()
+    // calls from doors like 5D-Edit whose file descriptions contain ANSI codes.
+    // Matches both ESC+[ and single-byte CSI (0x9B) forms.
+    const ANSI_SGR = /(?:\x1b\[|\x9b)[\d;]*m/;
+    const ANSI_RESET_SUFFIX = /(?:\x1b\[|\x9b)0?m[\r\n\s]*$/;
+    const resetAnsiIfNeeded = (text: string): string =>
+      ANSI_SGR.test(text) && !ANSI_RESET_SUFFIX.test(text) ? text + '\x1b[0m' : text;
+
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {
         this.socket.emit('transfer-raw:echo', buf);
         return;
       }
-      const text = normalizeAnsiNewlines(buf.toString('latin1'));
+      const text = resetAnsiIfNeeded(normalizeAnsiNewlines(buf.toString('latin1')));
       this.socket.emit("ansi-output", text);
     });
     this.dosLibrary.setOutputCallback((text: string) => {
@@ -566,7 +575,7 @@ debugLog(
         this.socket.emit('transfer-raw:echo', Buffer.from(text, 'latin1'));
         return;
       }
-      this.socket.emit("ansi-output", normalizeAnsiNewlines(text));
+      this.socket.emit("ansi-output", resetAnsiIfNeeded(normalizeAnsiNewlines(text)));
     });
 debugLog("[LibraryManager] DOS.library output callback configured");
 
