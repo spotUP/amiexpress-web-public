@@ -339,7 +339,11 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'cyan',
       bg: 'black',
-      selected: { fg: 'black', bg: 'cyan' },
+      // Selected line: white text on cyan bg. The previous black-on-cyan
+      // was unreadable on terminals that render dark fg on saturated bg
+      // identically (or where the selection bar inherited the fg from
+      // the base style and produced cyan-on-cyan).
+      selected: { fg: 'white', bg: 'cyan' },
       border: { fg: 'yellow' },
     },
     scrollbar: {
@@ -437,6 +441,14 @@ export async function createApp(session: DoorSession) {
     commandSuggestionsVisible = true;
     // Suppress navigation keys in input so arrow keys navigate the list
     (inputBox as any).suppressNavigationKeys = true;
+    // Belt-and-suspenders: explicitly re-focus the input. setFront() can
+    // shuffle z-order and we've seen up/down end up routed to chatLog
+    // (which extends ScrollableBox and self-registers up/down -> scroll)
+    // when focus drifted off inputBox during the open. Keeping inputBox
+    // focused ensures the keypress handler at the bottom of this file
+    // (which routes up/down into commandSuggestions.up/down when
+    // commandSuggestionsVisible) is the one that fires.
+    inputBox.focus();
 
     // Show ghost text for top match (Claude-style inline completion)
     if (filteredCommands.length > 0 && searchTerm.length > 0) {
