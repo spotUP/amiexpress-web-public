@@ -33,6 +33,8 @@ interface DoorInfo {
   enabled: boolean;
 }
 
+const HEADER_PREFIX = `{center}{bold}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}{/bold}`;
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function formatSize(bytes: number): string {
@@ -191,14 +193,14 @@ export async function createApp(session: DoorSession): Promise<void> {
   function refreshHeader(): void {
     const ec = doors.filter(d => d.enabled).length;
     (header as any).setContent(
-      `{center}{bold}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}{/bold}` +
+      HEADER_PREFIX +
       `  {cyan-fg}■{/cyan-fg} ${doors.length} doors  {cyan-fg}■{/cyan-fg} ${ec} enabled  {cyan-fg}■{/cyan-fg} Node ${nodeId}{/center}`
     );
   }
 
   function setStatus(msg: string, color: 'green' | 'red' | 'yellow' = 'yellow', durationMs = 3000): void {
     (header as any).setContent(
-      `{center}{bold}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}{/bold}` +
+      HEADER_PREFIX +
       `  {${color}-fg}${msg}{/${color}-fg}{/center}`
     );
     screen.render();
@@ -253,6 +255,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   (doorList as any).on('select item', () => { updateInfoPane(); });
 
   (screen as any).key(['q', 'Q', 'escape'], () => {
+    if (statusTimer) clearTimeout(statusTimer);
     inputManager.disable();
     (screen as any).destroy();
   });
