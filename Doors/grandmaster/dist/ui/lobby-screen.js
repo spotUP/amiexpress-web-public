@@ -103,6 +103,11 @@ class GrandmasterLobbyAdapter extends blessed_2.EventEmitter {
             // Not the host, can't start match
             return;
         }
+        // Auto-fill with bots if starting alone so multiplayer can be tested
+        const humanCount = matchState.players.filter(p => !p.isBot).length;
+        if (humanCount < 2) {
+            await this.fillWithBots(this.botDifficulty);
+        }
         // Notify network (in case there's a real server)
         await this.network.startMatch();
         // Local fallback: emit match events directly (like TetriNET pattern)

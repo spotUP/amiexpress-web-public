@@ -135,6 +135,12 @@ class GrandmasterLobbyAdapter extends EventEmitter implements LobbyNetworkAdapte
       return;
     }
 
+    // Auto-fill with bots if starting alone so multiplayer can be tested
+    const humanCount = matchState.players.filter(p => !p.isBot).length;
+    if (humanCount < 2) {
+      await this.fillWithBots(this.botDifficulty);
+    }
+
     // Notify network (in case there's a real server)
     await this.network.startMatch();
 
