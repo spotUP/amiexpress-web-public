@@ -37,6 +37,11 @@ interface BBSTerminalProps {
   onDisconnect?: (reason: string) => void;
   /** Raw ANSI output callback */
   onAnsiOutput?: (data: string) => void;
+  /**
+   * When set, overrides server 'terminal-mode' events.
+   * Pass 'wide' on mobile so FitAddon controls columns.
+   */
+  forcedMode?: 'fixed' | 'wide';
 }
 
 export interface BBSTerminalRef {
@@ -70,10 +75,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   onConnect,
   onDisconnect,
   onAnsiOutput,
+  forcedMode,
 }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  // Always-current ref so socket handlers see the latest forcedMode without dep-array reinit
+  const forcedModeRef = useRef(forcedMode);
+  forcedModeRef.current = forcedMode;
 
   // Login state tracking
   const loginState = useRef<
@@ -563,8 +572,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     term.loadAddon(fitAddon);
 
     // Terminal mode: 'fixed' = 80 cols (for ANSI art), 'wide' = responsive width
-    // Default to 'fixed' for BBS compatibility
-    let terminalMode: 'fixed' | 'wide' = 'fixed';
+    // Default to 'fixed' for BBS compatibility; forcedModeRef overrides on mobile
+    let terminalMode: 'fixed' | 'wide' = forcedModeRef.current ?? 'fixed';
 
     // Fit terminal to container, respecting mode
     const fitTerminal = () => {
@@ -1584,15 +1593,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Terminal mode switching: 'fixed' = 80 cols, 'wide' = responsive
     socket.on('terminal-mode', (mode: 'fixed' | 'wide') => {
-      console.log(`[BBSTerminal] *** TERMINAL MODE SWITCH *** Mode: ${mode}`);
+      // forcedModeRef overrides server command (e.g. mobile forces 'wide')
+      const effectiveMode = forcedModeRef.current ?? mode;
+      console.log(`[BBSTerminal] *** TERMINAL MODE SWITCH *** server: ${mode}, effective: ${effectiveMode}`);
       console.log(`[BBSTerminal] Container size before: ${terminalRef.current?.clientWidth}x${terminalRef.current?.clientHeight}px`);
       console.log(`[BBSTerminal] Terminal size before: ${term.cols}x${term.rows}`);
 
       // Update both local variable and state (state triggers re-render to update container CSS)
-      terminalMode = mode;
-      setTerminalMode(mode);
+      terminalMode = effectiveMode;
+      setTerminalMode(effectiveMode);
 
-      if (mode === 'fixed') {
+      if (effectiveMode === 'fixed') {
         // Switching to fixed mode - resize to 80x25 immediately
         term.resize(80, 25);
         if (socketRef.current?.connected) {

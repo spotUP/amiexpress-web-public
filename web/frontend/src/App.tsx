@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Terminal from './components/terminal/Terminal';
+import { TerminalPage } from './pages/TerminalPage';
 import GamePromptWizard from './components/wizard/GamePromptWizard';
 import ImportExport from './components/admin/ImportExport';
 import SystemStatus from './components/admin/SystemStatus';
@@ -11,7 +11,7 @@ function App() {
     <div className="app-shell">
       <Router>
         <Routes>
-          <Route path="/" element={<Terminal />} />
+          <Route path="/" element={<TerminalPage />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/wizard" element={<GamePromptWizard />} />
           <Route path="/door-wizard" element={<GamePromptWizard />} />
