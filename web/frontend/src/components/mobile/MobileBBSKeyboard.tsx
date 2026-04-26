@@ -63,16 +63,31 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
     const el = containerRef.current;
     if (!el) return;
 
-    const handler = (e: TouchEvent) => {
+    let touchHandled = false;
+
+    const onTouchStart = (e: TouchEvent) => {
       const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-bbs-key]');
       if (!button) return;
       e.preventDefault(); // block scroll, double-tap zoom, and focus steal
-      const data = button.dataset.bbsKey ?? '';
-      onKey(data);
+      touchHandled = true;
+      onKey(button.dataset.bbsKey ?? '');
+      setTimeout(() => { touchHandled = false; }, 500);
     };
 
-    el.addEventListener('touchstart', handler, { passive: false });
-    return () => el.removeEventListener('touchstart', handler);
+    // Click fallback for cases where touchstart doesn't fire (some iOS scenarios)
+    const onClick = (e: MouseEvent) => {
+      if (touchHandled) return;
+      const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-bbs-key]');
+      if (!button) return;
+      onKey(button.dataset.bbsKey ?? '');
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('click', onClick);
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('click', onClick);
+    };
   }, [onKey]);
 
   return (

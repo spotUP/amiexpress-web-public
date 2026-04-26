@@ -60,13 +60,19 @@ export function TerminalPage(): JSX.Element {
     };
   }, []);
 
-  // On mobile portrait: suppress iOS native keyboard via inputmode="none".
-  // On landscape rotation: restore normal inputmode so keyboard doesn't appear.
+  // Portrait: suppress iOS native keyboard via inputmode="none".
+  // Landscape: terminal auto-focuses on reconnect which triggers iOS keyboard —
+  // blur after rotation settles so the keyboard doesn't appear uninvited.
   useEffect(() => {
-    const textarea = terminalRef.current?.getTerminal()?.textarea;
     if (!isMobile) {
-      if (textarea) textarea.removeAttribute('inputmode');
-      return;
+      const timer = setTimeout(() => {
+        const textarea = terminalRef.current?.getTerminal()?.textarea;
+        if (textarea) {
+          textarea.removeAttribute('inputmode');
+          textarea.blur();
+        }
+      }, 800);
+      return () => clearTimeout(timer);
     }
     const timer = setTimeout(() => {
       const ta = terminalRef.current?.getTerminal()?.textarea;
@@ -76,8 +82,14 @@ export function TerminalPage(): JSX.Element {
   }, [isMobile]);
 
   const handleKey = useCallback((data: string) => {
-    terminalRef.current?.sendCommand(data);
-    // Ensure terminal stays focused after every keypress (mobile & desktop)
+    // Use term.input() — same pipeline as a physical keyboard (fires onData → socket),
+    // no socket.connected guard that could silently drop keystrokes.
+    const term = terminalRef.current?.getTerminal();
+    if (term) {
+      term.input(data, true);
+    } else {
+      terminalRef.current?.sendCommand(data);
+    }
     terminalRef.current?.focus();
   }, []);
 
