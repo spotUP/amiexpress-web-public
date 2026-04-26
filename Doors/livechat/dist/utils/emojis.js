@@ -31,30 +31,39 @@ exports.EMOJIS = [
     { code: ':surprised:', display: ':o', keywords: ['wow', 'shocked'], category: 'emotions' },
     { code: ':evil:', display: '>:-)', keywords: ['devil', 'mischief'], category: 'emotions' },
     { code: ':angel:', display: 'O:-)', keywords: ['innocent', 'halo'], category: 'emotions' },
-    // Actions (9)
-    { code: ':tableflip:', display: '(╯°□°)╯︵ ┻━┻', keywords: ['rage', 'flip', 'angry'], category: 'actions' },
-    { code: ':unflip:', display: '┬─┬ノ( º _ ºノ)', keywords: ['calm', 'fix'], category: 'actions' },
-    { code: ':shrug:', display: '¯\\_(ツ)_/¯', keywords: ['dunno', 'whatever'], category: 'actions' },
-    { code: ':fight:', display: '(ง°ل͜°)ง', keywords: ['battle', 'fite'], category: 'actions' },
-    { code: ':dance:', display: '┏(-_-)┛┗(-_- )┓', keywords: ['party'], category: 'actions' },
-    { code: ':hug:', display: '(づ｡◕‿‿◕｡)づ', keywords: ['cuddle', 'embrace'], category: 'actions' },
-    { code: ':run:', display: 'ε=ε=ε=┌(;*´Д`)ノ', keywords: ['flee', 'escape'], category: 'actions' },
-    { code: ':wave:', display: '(´• ω •`)ﾉ', keywords: ['hello', 'bye'], category: 'actions' },
-    { code: ':facepalm:', display: '(－‸ლ)', keywords: ['disappointed', 'sigh'], category: 'actions' },
+    // Actions (9) -- ASCII-only kaomoji. The original Unicode kaomoji used
+    // Japanese and box-drawing chars that don't render on Amiga clients
+    // or ASCII-strict terminals. ASCII approximations below stay in the
+    // printable 0x20-0x7E range so messages render identically across
+    // every terminal type the BBS supports.
+    { code: ':tableflip:', display: '(>_<)~~ |[__]|', keywords: ['rage', 'flip', 'angry'], category: 'actions' },
+    { code: ':unflip:', display: '|---| (-_-)', keywords: ['calm', 'fix'], category: 'actions' },
+    { code: ':shrug:', display: '\\(o.O)/', keywords: ['dunno', 'whatever'], category: 'actions' },
+    { code: ':fight:', display: '(>_<)*', keywords: ['battle', 'fite'], category: 'actions' },
+    { code: ':dance:', display: '\\(^o^)/', keywords: ['party'], category: 'actions' },
+    { code: ':hug:', display: '(>^_^)<', keywords: ['cuddle', 'embrace'], category: 'actions' },
+    { code: ':run:', display: '(>_>)===>', keywords: ['flee', 'escape'], category: 'actions' },
+    { code: ':wave:', display: '(^.^)/', keywords: ['hello', 'bye'], category: 'actions' },
+    { code: ':facepalm:', display: '(>_<;)', keywords: ['disappointed', 'sigh'], category: 'actions' },
     // Symbols (13)
     { code: ':thumbsup:', display: '(Y)', keywords: ['yes', 'ok', 'good'], category: 'symbols' },
     { code: ':thumbsdown:', display: '(N)', keywords: ['no', 'bad'], category: 'symbols' },
-    { code: ':fire:', display: '🔥', keywords: ['hot', 'lit'], category: 'symbols' },
-    { code: ':star:', display: '★', keywords: ['favorite'], category: 'symbols' },
-    { code: ':check:', display: '✓', keywords: ['yes', 'done'], category: 'symbols' },
-    { code: ':x:', display: '✗', keywords: ['no', 'fail'], category: 'symbols' },
-    { code: ':skull:', display: '☠', keywords: ['death', 'pirate'], category: 'symbols' },
-    { code: ':music:', display: '♪', keywords: ['song', 'note'], category: 'symbols' },
-    { code: ':heart2:', display: '♥', keywords: ['love', 'like'], category: 'symbols' },
-    { code: ':diamond:', display: '◆', keywords: ['gem', 'shine'], category: 'symbols' },
-    { code: ':arrow:', display: '→', keywords: ['next', 'go'], category: 'symbols' },
-    { code: ':warning:', display: '⚠', keywords: ['caution', 'alert'], category: 'symbols' },
-    { code: ':lightning:', display: '⚡', keywords: ['power', 'fast'], category: 'symbols' },
+    // ASCII-only displays. Project convention (CLAUDE.md "BBS Output
+    // Conventions") forbids Unicode for content that flows through the
+    // chat log -- Amiga clients and ASCII-strict terminals can't render
+    // ★ / ✓ / 🔥 / ⚡ / ♥ etc. Use the closest ASCII equivalent so the
+    // message is identical regardless of terminal capability.
+    { code: ':fire:', display: '(*)', keywords: ['hot', 'lit'], category: 'symbols' },
+    { code: ':star:', display: '*', keywords: ['favorite'], category: 'symbols' },
+    { code: ':check:', display: '[v]', keywords: ['yes', 'done'], category: 'symbols' },
+    { code: ':x:', display: '[x]', keywords: ['no', 'fail'], category: 'symbols' },
+    { code: ':skull:', display: '8X', keywords: ['death', 'pirate'], category: 'symbols' },
+    { code: ':music:', display: '~o~', keywords: ['song', 'note'], category: 'symbols' },
+    { code: ':heart2:', display: '<3', keywords: ['love', 'like'], category: 'symbols' },
+    { code: ':diamond:', display: '<>', keywords: ['gem', 'shine'], category: 'symbols' },
+    { code: ':arrow:', display: '->', keywords: ['next', 'go'], category: 'symbols' },
+    { code: ':warning:', display: '(!)', keywords: ['caution', 'alert'], category: 'symbols' },
+    { code: ':lightning:', display: '/!\\', keywords: ['power', 'fast'], category: 'symbols' },
     // Special (3)
     { code: ':amiga:', display: '[A]', keywords: ['boing', 'retro', 'computer'], category: 'special' },
     { code: ':bbs:', display: '[BBS]', keywords: ['board', 'system'], category: 'special' },
