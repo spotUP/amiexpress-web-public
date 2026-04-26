@@ -5,7 +5,7 @@ import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 // Initial font size estimate — will be corrected after font + terminal render
 const CHAR_ASPECT = 0.6;
 const BBS_COLS = 80;
-const KEYBOARD_HEIGHT = 200;
+const KEYBOARD_HEIGHT = 260;
 const PORTRAIT_MOBILE_MAX_WIDTH = 600;
 
 function isPortraitMobile(): boolean {
@@ -82,13 +82,6 @@ export function TerminalPage(): JSX.Element {
     terminalRef.current?.sendCommand(data);
   }, []);
 
-  const handleOpenNativeKeyboard = useCallback(() => {
-    // Temporarily allow native keyboard for text entry
-    const textarea = terminalRef.current?.getTerminal()?.textarea;
-    if (textarea) textarea.setAttribute('inputmode', 'text');
-    terminalRef.current?.focus();
-  }, []);
-
   return (
     <div style={{
       width: '100%',
@@ -105,7 +98,6 @@ export function TerminalPage(): JSX.Element {
       {isMobile && (
         <MobileBBSKeyboard
           onKey={handleKey}
-          onOpenNativeKeyboard={handleOpenNativeKeyboard}
         />
       )}
     </div>

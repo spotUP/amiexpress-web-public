@@ -2,7 +2,6 @@ import './MobileBBSKeyboard.css';
 
 interface MobileBBSKeyboardProps {
   onKey: (data: string) => void;
-  onOpenNativeKeyboard: () => void;
 }
 
 interface KeyDef {
@@ -12,35 +11,48 @@ interface KeyDef {
   cls?: string;
 }
 
-// data='' means ABC (open native keyboard)
 const ROWS: KeyDef[][] = [
+  // BBS navigation row
   [
-    { label: '←', data: '\x1b[D', cls: 'mobile-bbs-keyboard__key--arrow' },
-    { label: '↑', data: '\x1b[A', cls: 'mobile-bbs-keyboard__key--arrow' },
-    { label: '↓', data: '\x1b[B', cls: 'mobile-bbs-keyboard__key--arrow' },
-    { label: '→', data: '\x1b[C', cls: 'mobile-bbs-keyboard__key--arrow' },
+    { label: '←', data: '\x1b[D', cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: '↑', data: '\x1b[A', cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: '↓', data: '\x1b[B', cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: '→', data: '\x1b[C', cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: 'ESC',   data: '\x1b',  cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: 'Ret',   data: '\r',    wide: true, cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: '⌫',     data: '\x7f', cls: 'mobile-bbs-keyboard__key--nav' },
+    { label: 'Spc',   data: ' ',    cls: 'mobile-bbs-keyboard__key--nav' },
   ],
-  [
-    { label: 'ESC',   data: '\x1b' },
-    { label: 'Enter', data: '\r', wide: true },
-    { label: 'BS',    data: '\x7f' },
-    { label: 'Spc',   data: ' ' },
-  ],
+  // Number row
   [
     { label: '1', data: '1' }, { label: '2', data: '2' }, { label: '3', data: '3' },
     { label: '4', data: '4' }, { label: '5', data: '5' }, { label: '6', data: '6' },
     { label: '7', data: '7' }, { label: '8', data: '8' }, { label: '9', data: '9' },
     { label: '0', data: '0' },
   ],
+  // QWERTY row 1
   [
-    { label: 'Y', data: 'y' }, { label: 'N', data: 'n' }, { label: 'R', data: 'r' },
-    { label: 'L', data: 'l' }, { label: 'G', data: 'g' }, { label: 'Q', data: 'q' },
-    { label: '+', data: '+' },
-    { label: 'ABC', data: '', cls: 'mobile-bbs-keyboard__key--abc' },
+    { label: 'Q', data: 'q' }, { label: 'W', data: 'w' }, { label: 'E', data: 'e' },
+    { label: 'R', data: 'r' }, { label: 'T', data: 't' }, { label: 'Y', data: 'y' },
+    { label: 'U', data: 'u' }, { label: 'I', data: 'i' }, { label: 'O', data: 'o' },
+    { label: 'P', data: 'p' },
+  ],
+  // QWERTY row 2
+  [
+    { label: 'A', data: 'a' }, { label: 'S', data: 's' }, { label: 'D', data: 'd' },
+    { label: 'F', data: 'f' }, { label: 'G', data: 'g' }, { label: 'H', data: 'h' },
+    { label: 'J', data: 'j' }, { label: 'K', data: 'k' }, { label: 'L', data: 'l' },
+  ],
+  // QWERTY row 3
+  [
+    { label: 'Z', data: 'z' }, { label: 'X', data: 'x' }, { label: 'C', data: 'c' },
+    { label: 'V', data: 'v' }, { label: 'B', data: 'b' }, { label: 'N', data: 'n' },
+    { label: 'M', data: 'm' }, { label: '.', data: '.' }, { label: ',', data: ',' },
+    { label: '⌫', data: '\x7f' },
   ],
 ];
 
-export function MobileBBSKeyboard({ onKey, onOpenNativeKeyboard }: MobileBBSKeyboardProps): JSX.Element {
+export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Element {
   return (
     <div className="mobile-bbs-keyboard">
       {ROWS.map((row, ri) => (
@@ -57,11 +69,7 @@ export function MobileBBSKeyboard({ onKey, onOpenNativeKeyboard }: MobileBBSKeyb
                 className={cls}
                 onPointerDown={(e) => {
                   e.preventDefault(); // prevent focus steal from terminal
-                  if (key.data === '') {
-                    onOpenNativeKeyboard();
-                  } else {
-                    onKey(key.data);
-                  }
+                  onKey(key.data);
                 }}
                 onClick={(e) => e.preventDefault()}
                 type="button"

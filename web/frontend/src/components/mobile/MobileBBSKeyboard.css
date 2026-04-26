@@ -3,7 +3,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 200px;
+  height: 260px;
   background: #1a1a1a;
   border-top: 2px solid #444;
   display: flex;
@@ -48,8 +48,14 @@
   box-shadow: none;
 }
 
-.mobile-bbs-keyboard__key--arrow {
-  font-size: 18px;
+.mobile-bbs-keyboard__key--nav {
+  background: #3a3a3a;
+  border-color: #666;
+  font-size: 12px;
+}
+
+.mobile-bbs-keyboard__key--nav:active {
+  background: #666;
 }
 
 .mobile-bbs-keyboard__key--wide {
