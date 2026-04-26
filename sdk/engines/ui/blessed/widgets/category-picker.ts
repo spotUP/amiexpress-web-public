@@ -139,6 +139,14 @@ export class CategoryPicker extends Box {
       vi: true,
       keys: true,
       tags: true,
+      // Disable the default scrollbar -- a CategoryPicker holds a small
+      // fixed set of category names (4 in livechat's emoji picker) so the
+      // list never needs to scroll, and the default scrollbar column +
+      // the List's `wrapWidth = width - 2` marker reservation together
+      // chewed two cells off the visible width. With a 14-wide box that
+      // dropped usable item width to 9 and " Emotions" + ">>" (11) wrapped
+      // to a second line.
+      scrollbar: false as any,
       style: {
         fg: catStyle.fg || 'white',
         bg: catStyle.bg || 'black',
