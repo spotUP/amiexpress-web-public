@@ -250,3 +250,148 @@ describe('(B) trap-sync XIMProcessor: deasync drain wired in source', () => {
     ]));
   });
 });
+
+/**
+ * (C) Path B (doorMessageCallback / direct-XIM doors). Same race as Path
+ * A but at a different boundary: dRE!Wall, Bulls, JoinCnf, RTW, MultiTop
+ * PutMsg directly to AEDoorPort via FindPort, so the trap-sync
+ * XIMProcessor never runs for them — the door's PutMsg invokes
+ * doorMessageCallback. Without the same drain, the .then() chain hadn't
+ * run by the time this callback returned, the door's emulator thread
+ * issued the next PutMsg (JH_WRITE), and that JH_WRITE landed on the
+ * socket BEFORE the JH_SF file body. dRE!Wall's wall design rendered AT
+ * TOP and was duplicated AT BOTTOM until this path got the same drain.
+ *
+ * Strategy mirrors (A): a sync-resolving stub handler proves the
+ * behavioural contract that "if handleShowFile finishes its work before
+ * its promise resolves, the .then() bookkeeping path is not what we
+ * relied on for emit ordering — the deasync drain is".
+ */
+describe('(C) Path B (doorMessageCallback): drain async-output handlers', () => {
+  jest.setTimeout(15000);
+
+  function buildPathBHarness(): {
+    wire: string[];
+    replyHandled: { value: boolean };
+    send: (cmd: number) => void;
+    portName: { value: string };
+  } {
+    const wire: string[] = [];
+    const portName = { value: 'aedoorport1' };
+    const { xim, replyHandled } = buildStubXim(wire);
+
+    let processor:
+      | ((portAddr: number, msgAddr: number) => void)
+      | null = null;
+    const aedoorLibrary = {
+      // Path A still gets installed but we won't drive it.
+      setXIMProcessor: () => {},
+    };
+
+    const execLibrary = {
+      // Path A only — unused in Path B drive but referenced at install.
+      getMsg: () => 0,
+      replyMsg: (msgAddr: number) => {
+        // Path B should NEVER call replyMsg (DOUBLED OUTPUT regression
+        // guard). If anything records here it's a real failure.
+        wire.push(`fallback-replyMsg:${msgAddr}`);
+      },
+      setDoorMessageCallback: (
+        cb: (portAddr: number, msgAddr: number) => void,
+      ) => {
+        processor = cb;
+      },
+      getPortName: (_addr: number) => portName.value,
+      getDoorPortAddress: () => 0xdead0001,
+      removeMessageFromPort: () => {},
+    };
+
+    installMessageCallbacks({
+      libraryManager: { aedoorLibrary, execLibrary } as any,
+      emulator: {
+        pause: () => {},
+        readMemory: () => 0,
+        readMemory32: () => 0,
+        writeMemory: () => {},
+      } as any,
+      executionState: {} as any,
+      getXimProtocol: () => xim as any,
+      markUsingDoorMessageCallback: () => {},
+      incrementMessagesHandled: () => {},
+    });
+
+    if (!processor) {
+      throw new Error('doorMessageCallback was not installed');
+    }
+
+    return {
+      wire,
+      replyHandled,
+      portName,
+      send(cmd: number) {
+        // msgAddr doubles as the "command" via the stub parseMessage.
+        processor!(0xdead0001, cmd);
+      },
+    };
+  }
+
+  test('JH_SF emit lands and no fallback replyMsg (drain works)', () => {
+    const h = buildPathBHarness();
+    h.send(JH_SF);
+
+    expect(h.wire).toContain(`emit:FILE_BODY:${JH_SF}`);
+    expect(h.replyHandled.value).toBe(true);
+    expect(
+      h.wire.find((e) => e.startsWith('fallback-replyMsg')),
+    ).toBeUndefined();
+  });
+
+  test('sync JH_WRITE keeps the existing .then() fast path (no fallback)', () => {
+    const h = buildPathBHarness();
+    h.send(JH_WRITE);
+
+    // JH_WRITE goes through the else-branch (.then). The synchronous
+    // handler body still ran, so the emit is recorded. The fallback
+    // replyMsg must remain unset — Path B never falls back.
+    expect(h.wire).toContain('emit:WRITE');
+    expect(h.replyHandled.value).toBe(true);
+    expect(
+      h.wire.find((e) => e.startsWith('fallback-replyMsg')),
+    ).toBeUndefined();
+  });
+});
+
+/**
+ * (D) Structural guard for Path B's drain — the source must wire
+ * deasync.loopWhile inside installDoorMessageCallback (NOT just
+ * installXIMProcessor). A regression that drops the drain from one but
+ * keeps it in the other reintroduces the dRE!Wall race only for
+ * direct-XIM doors and would otherwise sneak through structural test
+ * (B) (which only checks file-wide presence).
+ */
+describe('(D) Path B (doorMessageCallback): deasync drain wired in source', () => {
+  let src = '';
+
+  beforeAll(() => {
+    const fs = require('fs');
+    const path = require('path');
+    src = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../src/amiga-emulation/session/lifecycle/door-message-callbacks.ts',
+      ),
+      'utf8',
+    );
+  });
+
+  test('installDoorMessageCallback body contains ASYNC_OUTPUT_COMMANDS + deasync.loopWhile', () => {
+    // Slice from the function declaration to end-of-file so we don't
+    // accept a match that lives only in installXIMProcessor.
+    const idx = src.indexOf('function installDoorMessageCallback');
+    expect(idx).toBeGreaterThan(-1);
+    const tail = src.slice(idx);
+    expect(tail).toMatch(/ASYNC_OUTPUT_COMMANDS\.includes\(parsed\.command\)/);
+    expect(tail).toMatch(/deasync\.loopWhile/);
+    expect(tail).toMatch(/handleMessage\(parsed\)/);
+  });
+});

@@ -206,14 +206,21 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
 }
 
 /**
- * Path B: doorMessageCallback for direct-XIM doors (RTW, Bulls, JoinCnf)
- * that PutMsg directly without going through aedoor.library. Fires on
- * PutMsg → AEDoorPort and processes messages there.
+ * Path B: doorMessageCallback for direct-XIM doors (RTW, Bulls, JoinCnf,
+ * dRE!Wall, MultiTop) that PutMsg directly without going through
+ * aedoor.library. Fires on PutMsg → AEDoorPort and processes messages
+ * there.
  *
- * Unlike Path A, this path uses the .then() pattern and does NOT
- * fall back to replyMsg — XIM handlers already reply. Calling replyMsg
- * here produced the "DOUBLED OUTPUT" regression fixed in 2026-01-20
- * (see AmigaDoorSession.ts comment block for the post-mortem).
+ * Unlike Path A, this path does NOT fall back to replyMsg — XIM handlers
+ * already reply. Calling replyMsg here produced the "DOUBLED OUTPUT"
+ * regression fixed in 2026-01-20 (see AmigaDoorSession.ts comment block
+ * for the post-mortem).
+ *
+ * Async-output commands (JH_SF/JH_SG/JH_MCI/DISPLAY_FILE/
+ * CHECK_TO_DISPLAY) drain via deasync.loopWhile so the door's NEXT
+ * PutMsg (typically JH_WRITE) cannot land on the socket BEFORE the
+ * file body — same race Path A solves at the trap-sync XIMProcessor
+ * boundary. Sync commands keep the existing .then() pattern.
  */
 function installDoorMessageCallback(deps: MessageCallbackDeps): void {
   const {
@@ -420,27 +427,82 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
 
     // Handle message synchronously for blocking commands, async for others
     // Note: handleMessage is async but sync parts run immediately
-    ximProtocol.handleMessage(parsed).then(() => {
-      // CRITICAL FIX 2026-01-20: DO NOT call replyMsg here - XIM
-      // handlers already reply! Calling replyMsg here causes DOUBLE
-      // REPLIES which confuses door state machines. The door receives
-      // the same message twice → wrong branch logic → infinite loops.
-      // AmigaDoorSession.ts:415-420 documents this: "DOUBLED OUTPUT"
-      // when both callback and handler reply. XIM handlers (bbs-info.ts,
-      // data-query.ts, etc.) call reply() which calls replyMsg().
-      console.log(
-        `[DoorLifecycleManager] doorMessageCallback: Message handled for cmd=${parsed.command} (XIM handler replied)`,
+    //
+    // CRITICAL FIX (trap-sync race, Path B parity with installXIMProcessor):
+    // For commands whose handlers do real async work before emitting (file
+    // read for JH_SF/JH_SG/DISPLAY_FILE/CHECK_TO_DISPLAY, DB-backed
+    // parseMciCodes for JH_MCI), the .then() chain hasn't run by the time
+    // this callback returns. The door's emulator thread keeps executing
+    // and the next PutMsg (e.g. JH_WRITE) fires this callback AGAIN, runs
+    // synchronously, and emits its content to the socket BEFORE the
+    // earlier async-output's emit completes. This produced the dRE!Wall
+    // wall-design-renders-AFTER-subsequent-JH_WRITE bug. Drain the
+    // handler's promise via deasync.loopWhile so emit ordering is
+    // preserved across PutMsg's. Same deasync pattern AEDoorLibrary's
+    // waitForReply uses in DOOR_ASYNC_WAIT mode.
+    //
+    // NOTE: Unlike Path A this path does NOT fall back to replyMsg —
+    // XIM handlers already reply, and a fallback here would re-introduce
+    // the "DOUBLED OUTPUT" regression documented at AmigaDoorSession.ts
+    // line 415-420 / 2026-01-20 fix. Sync commands keep the existing
+    // .then() pattern (harmless because their effects already landed).
+    const handlePromise = ximProtocol.handleMessage(parsed);
+    if (ASYNC_OUTPUT_COMMANDS.includes(parsed.command)) {
+      let done = false;
+      let handlerError: unknown = null;
+      handlePromise.then(
+        () => {
+          done = true;
+        },
+        (err) => {
+          handlerError = err;
+          done = true;
+        }
       );
-
-      // See comment in XIMProcessor path above: JH_SHUTDOWN is a cooperative
-      // signal, not a hard stop. Let the door continue and exit via the
-      // sentinel-PC path handled by DoorExitDetector.
+      const deadline = Date.now() + ASYNC_HANDLER_DEADLINE_MS;
+      deasync.loopWhile(() => !done && Date.now() < deadline);
+      if (!done) {
+        console.warn(
+          `[DoorLifecycleManager] doorMessageCallback: async handler for cmd=${parsed.command} did not resolve within ${ASYNC_HANDLER_DEADLINE_MS}ms — falling through (door may be desynced)`,
+        );
+      } else if (handlerError) {
+        console.warn(
+          `[DoorLifecycleManager] doorMessageCallback: async handler for cmd=${parsed.command} rejected:`,
+          handlerError,
+        );
+      }
+      // Post-handler bookkeeping (JH_SHUTDOWN check) — same shape as the
+      // sync .then() path below, but executed inline now that the handler
+      // has resolved (or timed out).
       const currentXim = getXimProtocol();
       if (currentXim && currentXim.isShuttingDown()) {
         console.log(
           `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
         );
       }
-    });
+    } else {
+      handlePromise.then(() => {
+        // CRITICAL FIX 2026-01-20: DO NOT call replyMsg here - XIM
+        // handlers already reply! Calling replyMsg here causes DOUBLE
+        // REPLIES which confuses door state machines. The door receives
+        // the same message twice → wrong branch logic → infinite loops.
+        // AmigaDoorSession.ts:415-420 documents this: "DOUBLED OUTPUT"
+        // when both callback and handler reply. XIM handlers (bbs-info.ts,
+        // data-query.ts, etc.) call reply() which calls replyMsg().
+        console.log(
+          `[DoorLifecycleManager] doorMessageCallback: Message handled for cmd=${parsed.command} (XIM handler replied)`,
+        );
+
+        // See comment in XIMProcessor path above: JH_SHUTDOWN is a cooperative
+        // signal, not a hard stop. Let the door continue and exit via the
+        // sentinel-PC path handled by DoorExitDetector.
+        const currentXim = getXimProtocol();
+        if (currentXim && currentXim.isShuttingDown()) {
+          console.log(
+            `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
+          );
+        }
+      });
+    }
   });
 }
