@@ -383,14 +383,24 @@ async function createApp(session) {
         commandSuggestionsVisible = true;
         // Suppress navigation keys in input so arrow keys navigate the list
         inputBox.suppressNavigationKeys = true;
-        // Belt-and-suspenders: explicitly re-focus the input. setFront() can
-        // shuffle z-order and we've seen up/down end up routed to chatLog
-        // (which extends ScrollableBox and self-registers up/down -> scroll)
-        // when focus drifted off inputBox during the open. Keeping inputBox
-        // focused ensures the keypress handler at the bottom of this file
-        // (which routes up/down into commandSuggestions.up/down when
-        // commandSuggestionsVisible) is the one that fires.
+        // Force focus back on the input. setFront() can shuffle z-order and
+        // updateTypingPreview() (called from the same keystroke handler that
+        // triggered this code path via the chain processKeystroke ->
+        // rebuildChatContent -> chatLog.setContent) can cause blessed to
+        // re-evaluate focus. Without this users see the channelList stay
+        // focused -- arrow keys then scroll the sidebar instead of navigating
+        // the suggestions list.
         inputBox.focus();
+        // Re-focus on the next tick too. Any focus shift queued by a render
+        // pass that runs between now and the next event-loop tick gets
+        // reverted, so the suggestion-navigation keypress handler at the
+        // bottom of this file reliably fires for up/down.
+        setImmediate(() => {
+            if (commandSuggestionsVisible) {
+                inputBox.focus();
+                screen.render();
+            }
+        });
         // Show ghost text for top match (Claude-style inline completion)
         if (filteredCommands.length > 0 && searchTerm.length > 0) {
             const topMatch = filteredCommands[0];
