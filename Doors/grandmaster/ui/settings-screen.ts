@@ -375,15 +375,16 @@ export class SettingsScreen {
         await this.editKeyBinding('pause', 'Pause');
         break;
       // Joypad bindings (index 31 = header, 32-40 = bindings)
-      case 32: await this.editGamepadBinding('left', 'Move Left'); break;
-      case 33: await this.editGamepadBinding('right', 'Move Right'); break;
-      case 34: await this.editGamepadBinding('rotate_cw', 'Rotate Clockwise'); break;
-      case 35: await this.editGamepadBinding('rotate_ccw', 'Rotate Counter-Clockwise'); break;
-      case 36: await this.editGamepadBinding('rotate_180', 'Rotate 180'); break;
-      case 37: await this.editGamepadBinding('soft_drop', 'Soft Drop'); break;
-      case 38: await this.editGamepadBinding('hard_drop', 'Hard Drop'); break;
-      case 39: await this.editGamepadBinding('hold', 'Hold'); break;
-      case 40: await this.editGamepadBinding('pause', 'Pause'); break;
+      // Selecting any binding opens the full wizard starting from that action
+      case 32: await this.editAllGamepadBindings(0); break;
+      case 33: await this.editAllGamepadBindings(1); break;
+      case 34: await this.editAllGamepadBindings(2); break;
+      case 35: await this.editAllGamepadBindings(3); break;
+      case 36: await this.editAllGamepadBindings(4); break;
+      case 37: await this.editAllGamepadBindings(5); break;
+      case 38: await this.editAllGamepadBindings(6); break;
+      case 39: await this.editAllGamepadBindings(7); break;
+      case 40: await this.editAllGamepadBindings(8); break;
       // Note: Save & Exit (case 42) is handled directly in menu.on('select')
     }
 
@@ -663,6 +664,136 @@ export class SettingsScreen {
     const current = modes.indexOf(this.state.settings.floatTextMode);
     const next = (current + 1) % modes.length;
     this.state.settings.floatTextMode = modes[next];
+  }
+
+  /**
+   * Joypad binding wizard — steps through all 9 actions in order starting from
+   * startIndex. Pressing a button/dpad/axis auto-saves and advances. Enter skips,
+   * Escape exits the wizard.
+   */
+  private async editAllGamepadBindings(startIndex: number = 0): Promise<void> {
+    if (!this.bbsSession) return;
+    if (!this.state.settings.gamepadBindings) this.state.settings.gamepadBindings = {};
+    const gp = this.state.settings.gamepadBindings;
+
+    const ACTIONS = [
+      { key: 'left',       name: 'Move Left' },
+      { key: 'right',      name: 'Move Right' },
+      { key: 'rotate_cw',  name: 'Rotate CW' },
+      { key: 'rotate_ccw', name: 'Rotate CCW' },
+      { key: 'rotate_180', name: 'Rotate 180' },
+      { key: 'soft_drop',  name: 'Soft Drop' },
+      { key: 'hard_drop',  name: 'Hard Drop' },
+      { key: 'hold',       name: 'Hold' },
+      { key: 'pause',      name: 'Pause' },
+    ];
+
+    // Reorder so the chosen action is first; wrap around at the end
+    const ordered = [...ACTIONS.slice(startIndex), ...ACTIONS.slice(0, startIndex)];
+    let currentIdx = 0;
+    let waiting = false;  // Block double-binding during the 600ms auto-advance delay
+
+    const bindingBox = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 57,
+      height: 14,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      content: '',
+      fixed: true,
+      focusable: true,
+    });
+
+    const updateDisplay = (feedback?: string) => {
+      const action = ordered[currentIdx];
+      const cur = gp[action.key]?.[0];
+      const n = currentIdx + 1;
+      const total = ordered.length;
+      const bar = '#'.repeat(n) + '-'.repeat(total - n);
+      bindingBox.setContent(
+        `{cyan-fg}Joypad Wizard (${n}/${total}){/cyan-fg}\n\n` +
+        `Action:  {yellow-fg}${action.name}{/yellow-fg}\n` +
+        `Current: {white-fg}${cur ? formatTriggerStr(cur) : '(unbound)'}{/white-fg}\n\n` +
+        (feedback
+          ? `{green-fg}${feedback}{/green-fg}\n\n`
+          : `{gray-fg}Press a button/stick to bind{/gray-fg}\n` +
+            `{gray-fg}Enter=skip  Escape=done{/gray-fg}\n\n`) +
+        `{gray-fg}[${bar}] ${n}/${total}{/gray-fg}`
+      );
+      this.screen.render();
+    };
+
+    return new Promise((resolve) => {
+      const gim = new GamepadInputManager(this.bbsSession);
+
+      const done = () => {
+        this.screen.removeListener('keypress', keyHandler);
+        gim.destroy();
+        bindingBox.destroy();
+        this.screen.render();
+        resolve();
+      };
+
+      const advance = () => {
+        waiting = false;
+        currentIdx++;
+        if (currentIdx >= ordered.length) {
+          done();
+        } else {
+          updateDisplay();
+        }
+      };
+
+      const bindTrigger = (triggerStr: string) => {
+        if (waiting) return;
+        waiting = true;
+        const action = ordered[currentIdx];
+        gp[action.key] = [triggerStr];
+        updateDisplay(`Bound: ${formatTriggerStr(triggerStr)}`);
+        setTimeout(advance, 600);
+      };
+
+      const keyHandler = (_ch: any, key: any) => {
+        if (!key || waiting) return;
+        const k = key.full || key.name;
+        if (k === 'return' || k === 'enter') {
+          advance();
+        } else if (k === 'escape') {
+          done();
+        }
+      };
+
+      // Button events
+      for (const btn of ['a', 'b', 'x', 'y', 'l1', 'r1', 'l2', 'r2', 'select', 'start', 'l3', 'r3', 'home']) {
+        gim.on(`button:${btn}`, (pressed: boolean) => {
+          if (pressed) bindTrigger(`button:${btn}`);
+        });
+      }
+
+      // DPad events
+      gim.on('dpad', (direction: string) => {
+        if (direction && direction !== 'none' && direction !== 'neutral') bindTrigger(`dpad:${direction}`);
+      });
+
+      // Analog stick events — require high deflection to avoid accidental binding
+      const axisNames: Record<number, string> = {
+        [GamepadAxis.LEFT_STICK_X]: 'left-x',
+        [GamepadAxis.LEFT_STICK_Y]: 'left-y',
+        [GamepadAxis.RIGHT_STICK_X]: 'right-x',
+        [GamepadAxis.RIGHT_STICK_Y]: 'right-y',
+      };
+      gim.on('axis', (axis: GamepadAxis, value: number) => {
+        const name = axisNames[axis];
+        if (!name || Math.abs(value) < 0.85) return;
+        bindTrigger(`axis:${name}:${value > 0 ? 'positive' : 'negative'}`);
+      });
+
+      setImmediate(() => this.screen.on('keypress', keyHandler));
+      updateDisplay();
+      bindingBox.focus();
+    });
   }
 
   /**

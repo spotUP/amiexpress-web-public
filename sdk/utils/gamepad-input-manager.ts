@@ -118,8 +118,16 @@ export class GamepadInputManager extends EventEmitter {
    * Handle button press/release
    */
   private handleButton(event: GamepadButtonEvent): void {
-    const states = this.buttonStates.get(event.controllerId);
-    if (!states) return;
+    let states = this.buttonStates.get(event.controllerId);
+    if (!states) {
+      // Controller was already connected before this GIM was created — auto-initialize
+      states = new Map();
+      this.buttonStates.set(event.controllerId, states);
+      this.connectedControllers.add(event.controllerId);
+      if (!this.axisValues.has(event.controllerId)) {
+        this.axisValues.set(event.controllerId, new Map());
+      }
+    }
 
     states.set(event.button, event.pressed);
 
@@ -151,8 +159,16 @@ export class GamepadInputManager extends EventEmitter {
    * Handle analog stick movement
    */
   private handleAxis(event: GamepadAxisEvent): void {
-    const axes = this.axisValues.get(event.controllerId);
-    if (!axes) return;
+    let axes = this.axisValues.get(event.controllerId);
+    if (!axes) {
+      // Controller was already connected before this GIM was created — auto-initialize
+      axes = new Map();
+      this.axisValues.set(event.controllerId, axes);
+      this.connectedControllers.add(event.controllerId);
+      if (!this.buttonStates.has(event.controllerId)) {
+        this.buttonStates.set(event.controllerId, new Map());
+      }
+    }
 
     axes.set(event.axis, event.value);
 
