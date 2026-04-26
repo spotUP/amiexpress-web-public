@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { BBSTerminal, type BBSTerminalRef } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 
-// Mosoul char width ≈ fontSize * CHAR_ASPECT; tune if actual fit differs
+// Initial font size estimate — will be corrected after font + terminal render
 const CHAR_ASPECT = 0.6;
 const BBS_COLS = 80;
 const KEYBOARD_HEIGHT = 200;
@@ -23,6 +23,10 @@ export function TerminalPage(): JSX.Element {
     isPortraitMobile() ? computeFontSize(window.innerWidth) : 16
   );
 
+  // Ref so async callbacks always read the latest fontSize without stale closures
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
+
   useEffect(() => {
     const handleResize = () => {
       const mobile = isPortraitMobile();
@@ -32,11 +36,22 @@ export function TerminalPage(): JSX.Element {
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
 
-    // Mosoul font may not be loaded when xterm first measures character widths.
-    // Once all fonts are ready, fire a synthetic resize so FitAddon remeasures
-    // with correct metrics — eliminates the "wrong size until tilt" bug on mobile.
+    // After fonts load, measure the actual rendered terminal width (80 cols at current
+    // fontSize) and back-compute the exact fontSize so 80 cols fills the screen exactly.
+    // This corrects any CHAR_ASPECT estimation error and the "wrong size until tilt" bug.
     document.fonts.ready.then(() => {
-      window.dispatchEvent(new Event('resize'));
+      setTimeout(() => {
+        if (!isPortraitMobile()) return;
+        const el = terminalRef.current?.getTerminal()?.element;
+        if (!el) return;
+        const actualWidth = el.offsetWidth;
+        if (actualWidth <= 0) return;
+        // Scale fontSize proportionally so 80 cols = screen width
+        const corrected = Math.floor(fontSizeRef.current * window.innerWidth / actualWidth);
+        if (corrected > 0 && corrected !== fontSizeRef.current) {
+          setFontSize(corrected);
+        }
+      }, 400); // give xterm time to render at initial fontSize before measuring
     });
 
     return () => {
@@ -86,7 +101,6 @@ export function TerminalPage(): JSX.Element {
       <BBSTerminal
         ref={terminalRef}
         fontSize={fontSize}
-        forcedMode={isMobile ? 'wide' : undefined}
       />
       {isMobile && (
         <MobileBBSKeyboard
