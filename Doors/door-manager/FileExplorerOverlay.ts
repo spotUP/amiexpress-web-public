@@ -158,7 +158,7 @@ export class FileExplorerOverlay {
   }
 
   private loadDirectory(absDir: string): void {
-    if (!absDir.startsWith(this.doorRoot)) {
+    if (absDir !== this.doorRoot && !absDir.startsWith(this.doorRoot + path.sep)) {
       absDir = this.doorRoot;
     }
     this.currentDir = absDir;
@@ -235,6 +235,10 @@ export class FileExplorerOverlay {
     try {
       content = fs.readFileSync(fullPath, 'latin1');
     } catch {
+      // Show error in viewer area
+      this.viewerLines = [`Cannot read file: ${filename}`];
+      this.viewerTotalLines = 1;
+      this.renderViewer();
       return;
     }
 
@@ -410,7 +414,7 @@ export class FileExplorerOverlay {
   }
 
   private updateHeader(): void {
-    const relDir = path.relative(this.projectRoot, this.currentDir);
+    const relDir = path.relative(this.doorRoot, this.currentDir) || '.';
     if (this.viewerState === 'viewer') {
       const breadcrumb =
         this.isGuide && this.guideCurrentNode
