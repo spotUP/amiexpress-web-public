@@ -1,5 +1,5 @@
 /**
- * DOORMAN v2 — SysOp Door Management Tool
+ * DOORMAN v2 - SysOp Door Management Tool
  * Spot / Up Rough
  */
 interface DoorSession {

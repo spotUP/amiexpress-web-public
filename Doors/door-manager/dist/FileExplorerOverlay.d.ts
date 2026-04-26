@@ -1,5 +1,5 @@
 /**
- * FileExplorerOverlay — full-screen file browser + viewer
+ * FileExplorerOverlay - full-screen file browser + viewer
  * Spot / Up Rough
  */
 interface FileExplorerOptions {

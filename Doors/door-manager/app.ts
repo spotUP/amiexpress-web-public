@@ -146,7 +146,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     bottom: 0, left: 0, width: '100%', height: 3,
     tags: true,
     content: `{center}{yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[T]{/yellow-fg}est  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
-    style: { fg: 'white', bg: '#111', border: { fg: '#333' } },
+    style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
     focusable: false,
   } as any);
 
