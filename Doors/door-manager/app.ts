@@ -1,5 +1,5 @@
 /**
- * DOORMAN v2 — SysOp Door Management Tool
+ * DOORMAN v2 - SysOp Door Management Tool
  * Spot / Up Rough
  */
 
@@ -33,9 +33,9 @@ interface DoorInfo {
   enabled: boolean;
 }
 
-const HEADER_PREFIX = `{center}{bold}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}{/bold}`;
+const HEADER_PREFIX = `{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}`;
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// --- helpers -----------------------------------------------------------------
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '  0 B ';
@@ -55,7 +55,7 @@ function typeBadge(type: string): string {
 
 function formatListItem(door: DoorInfo, width: number): string {
   const badge = `[${typeBadge(door.type)}]`;
-  const status = door.enabled ? '{green-fg}●{/green-fg}' : '{red-fg}○{/red-fg}';
+  const status = door.enabled ? '{green-fg}*{/green-fg}' : '{red-fg}-{/red-fg}';
   const sz = formatSize(door.size);
   const nameWidth = Math.max(10, width - 18);
   const name = door.name.length > nameWidth
@@ -82,8 +82,8 @@ async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
 
 function buildInfoContent(door: DoorInfo): string {
   const status = door.enabled
-    ? '{green-fg}● ENABLED{/green-fg}'
-    : '{red-fg}○ DISABLED{/red-fg}';
+    ? '{green-fg}[ON] ENABLED{/green-fg}'
+    : '{red-fg}[OFF] DISABLED{/red-fg}';
   const loc = door.location.length > 30
     ? door.location.slice(0, 29) + '...'
     : door.location || '(unknown)';
@@ -100,7 +100,7 @@ function buildInfoContent(door: DoorInfo): string {
   ].join('\n');
 }
 
-// ─── main ────────────────────────────────────────────────────────────────────
+// --- main --------------------------------------------------------------------
 
 export async function createApp(session: DoorSession): Promise<void> {
   const { bbs, user } = session;
@@ -167,7 +167,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     tags: true,
     scrollbar: { ch: ' ', style: { bg: 'blue' } },
     style: {
-      selected: { bg: 'blue', fg: 'white', bold: true },
+      selected: { bg: 'blue', fg: 'white' },
       item: { fg: 'white' },
     },
   } as any);
@@ -194,7 +194,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     const ec = doors.filter(d => d.enabled).length;
     (header as any).setContent(
       HEADER_PREFIX +
-      `  {cyan-fg}■{/cyan-fg} ${doors.length} doors  {cyan-fg}■{/cyan-fg} ${ec} enabled  {cyan-fg}■{/cyan-fg} Node ${nodeId}{/center}`
+      `  * ${doors.length} doors  * ${ec} enabled  * Node ${nodeId}{/center}`
     );
   }
 
@@ -309,7 +309,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     new ConfirmModal({
       parent: screen,
       title: ' Delete Door ',
-      content: `{bold}Delete this door?{/bold}\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
+      content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
       confirmColor: 'red',

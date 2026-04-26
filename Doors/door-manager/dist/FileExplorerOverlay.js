@@ -1,6 +1,6 @@
 "use strict";
 /**
- * FileExplorerOverlay — full-screen file browser + viewer
+ * FileExplorerOverlay - full-screen file browser + viewer
  * Spot / Up Rough
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {

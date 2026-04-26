@@ -1,6 +1,6 @@
 "use strict";
 /**
- * DOORMAN v2 — SysOp Door Management Tool
+ * DOORMAN v2 - SysOp Door Management Tool
  * Spot / Up Rough
  */
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -8,8 +8,8 @@ exports.createApp = createApp;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
-const HEADER_PREFIX = `{center}{bold}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}{/bold}`;
-// ─── helpers ─────────────────────────────────────────────────────────────────
+const HEADER_PREFIX = `{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}`;
+// --- helpers -----------------------------------------------------------------
 function formatSize(bytes) {
     if (bytes === 0)
         return '  0 B ';
@@ -29,7 +29,7 @@ function typeBadge(type) {
 }
 function formatListItem(door, width) {
     const badge = `[${typeBadge(door.type)}]`;
-    const status = door.enabled ? '{green-fg}●{/green-fg}' : '{red-fg}○{/red-fg}';
+    const status = door.enabled ? '{green-fg}*{/green-fg}' : '{red-fg}-{/red-fg}';
     const sz = formatSize(door.size);
     const nameWidth = Math.max(10, width - 18);
     const name = door.name.length > nameWidth
@@ -55,8 +55,8 @@ async function fetchDoors(bbs) {
 }
 function buildInfoContent(door) {
     const status = door.enabled
-        ? '{green-fg}● ENABLED{/green-fg}'
-        : '{red-fg}○ DISABLED{/red-fg}';
+        ? '{green-fg}[ON] ENABLED{/green-fg}'
+        : '{red-fg}[OFF] DISABLED{/red-fg}';
     const loc = door.location.length > 30
         ? door.location.slice(0, 29) + '...'
         : door.location || '(unknown)';
@@ -72,7 +72,7 @@ function buildInfoContent(door) {
         `{white-fg}${door.description}{/white-fg}`,
     ].join('\n');
 }
-// ─── main ────────────────────────────────────────────────────────────────────
+// --- main --------------------------------------------------------------------
 async function createApp(session) {
     const { bbs, user } = session;
     if (!user || (user.secLevel ?? 0) < 250) {
@@ -129,7 +129,7 @@ async function createApp(session) {
         tags: true,
         scrollbar: { ch: ' ', style: { bg: 'blue' } },
         style: {
-            selected: { bg: 'blue', fg: 'white', bold: true },
+            selected: { bg: 'blue', fg: 'white' },
             item: { fg: 'white' },
         },
     });
@@ -151,7 +151,7 @@ async function createApp(session) {
     function refreshHeader() {
         const ec = doors.filter(d => d.enabled).length;
         header.setContent(HEADER_PREFIX +
-            `  {cyan-fg}■{/cyan-fg} ${doors.length} doors  {cyan-fg}■{/cyan-fg} ${ec} enabled  {cyan-fg}■{/cyan-fg} Node ${nodeId}{/center}`);
+            `  * ${doors.length} doors  * ${ec} enabled  * Node ${nodeId}{/center}`);
     }
     function setStatus(msg, color = 'yellow', durationMs = 3000) {
         header.setContent(HEADER_PREFIX +
@@ -262,7 +262,7 @@ async function createApp(session) {
         new blessed_1.ConfirmModal({
             parent: screen,
             title: ' Delete Door ',
-            content: `{bold}Delete this door?{/bold}\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
+            content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
             confirmText: 'Delete',
             cancelText: 'Cancel',
             confirmColor: 'red',
