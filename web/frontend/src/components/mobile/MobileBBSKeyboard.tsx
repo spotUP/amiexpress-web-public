@@ -1,9 +1,11 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import './MobileBBSKeyboard.css';
 
 interface MobileBBSKeyboardProps {
   onKey: (data: string) => void;
 }
+
+const SHIFT_KEY = '__SHIFT__';
 
 interface KeyDef {
   label: string;
@@ -46,15 +48,28 @@ const ROWS: KeyDef[][] = [
   ],
   // QWERTY row 3
   [
+    { label: '⇧', data: SHIFT_KEY, cls: 'mobile-bbs-keyboard__key--shift' },
     { label: 'Z', data: 'z' }, { label: 'X', data: 'x' }, { label: 'C', data: 'c' },
     { label: 'V', data: 'v' }, { label: 'B', data: 'b' }, { label: 'N', data: 'n' },
     { label: 'M', data: 'm' }, { label: '.', data: '.' }, { label: ',', data: ',' },
-    { label: '⌫', data: '\x7f' },
   ],
 ];
 
 export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState(false);
+  const shiftRef = useRef(shift);
+  shiftRef.current = shift;
+
+  const handleKey = useCallback((raw: string) => {
+    if (raw === SHIFT_KEY) {
+      setShift(s => !s);
+      return;
+    }
+    const data = shiftRef.current && raw.length === 1 ? raw.toUpperCase() : raw;
+    if (shiftRef.current) setShift(false);  // single-shot shift
+    onKey(data);
+  }, [onKey]);
 
   // Use a non-passive touchstart listener via event delegation.
   // Non-passive allows e.preventDefault() to block scroll/zoom/focus-steal on iOS.
@@ -70,7 +85,7 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
       if (!button) return;
       e.preventDefault(); // block scroll, double-tap zoom, and focus steal
       touchHandled = true;
-      onKey(button.dataset.bbsKey ?? '');
+      handleKey(button.dataset.bbsKey ?? '');
       setTimeout(() => { touchHandled = false; }, 500);
     };
 
@@ -79,7 +94,7 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
       if (touchHandled) return;
       const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-bbs-key]');
       if (!button) return;
-      onKey(button.dataset.bbsKey ?? '');
+      handleKey(button.dataset.bbsKey ?? '');
     };
 
     el.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -88,27 +103,32 @@ export function MobileBBSKeyboard({ onKey }: MobileBBSKeyboardProps): JSX.Elemen
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('click', onClick);
     };
-  }, [onKey]);
+  }, [handleKey]);
 
   return (
     <div className="mobile-bbs-keyboard" ref={containerRef}>
       {ROWS.map((row, ri) => (
         <div key={ri} className="mobile-bbs-keyboard__row">
           {row.map((key, ki) => {
+            const isShiftKey = key.data === SHIFT_KEY;
             const cls = [
               'mobile-bbs-keyboard__key',
               key.cls ?? '',
               key.wide ? 'mobile-bbs-keyboard__key--wide' : '',
+              isShiftKey && shift ? 'mobile-bbs-keyboard__key--shift-active' : '',
             ].filter(Boolean).join(' ');
+            const label = !isShiftKey && shift && key.data.length === 1
+              ? key.label.toUpperCase()
+              : key.label;
             return (
               <button
                 key={ki}
                 className={cls}
                 data-bbs-key={key.data}
                 type="button"
-                aria-label={key.label}
+                aria-label={label}
               >
-                {key.label}
+                {label}
               </button>
             );
           })}
