@@ -646,62 +646,45 @@ debugLog(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
       case XIMCommand.DT_CONFACCESS:
         // express.e:3777-3778: Uses up to 10 bytes for conferences 1-10
         // For 25 conferences (1-25), use DT_CONFACCESS2 instead!
+        //
+        // WEB_*: AquaScan v1.0 (1994) uses DT_CONFACCESS as the user's ACCESS AREA NAME
+        // (e.g. "Sysop", "Elite", "Lamer") to look up BBS:ACCESS/AREA.<name>.info.
+        // express.e:3778 stores X-flag strings in loggedOnUser.conferenceAccess, but
+        // older AmiExpress / reference-boardBBS versions stored the named area there instead.
+        // We return areaName when set (and derive it from secLevel when not), so that
+        // AquaScan CS can load the correct conference list from ACCESS/AREA.<name>.info.
+        // Doors that actually need X-flags (DT_CONFACCESS2 covers 25 conferences anyway)
+        // should use DT_CONFACCESS2 instead.
         if (isRead) {
-          let confAccess =
-            (this.bbsSession as any)?.confAccess ||
-            this.state.confAccess ||
-            '';
+          // WEB_*: Return area name if available — AquaScan CS uses this as a path component
+          const sessionAny = this.bbsSession as any;
+          const areaName: string = sessionAny?.user?.areaName || sessionAny?.areaName || '';
+          const secLevel: number = sessionAny?.user?.secLevel ?? sessionAny?.secLevel ?? 0;
 
-          // If no access string set, build one based on actual conference count
-          if (confAccess.length === 0) {
-            // Get actual number of conferences from ConfConfig.info (like handleConfAccess in bbs-info.ts)
-            let numConfs = 2; // Default to 2 conferences
-            try {
-              const path = require('path');
-              const fs = require('fs');
-              const bbsRoot = (this.bbsSession as any)?.bbsRoot || process.cwd();
-              const confConfigPath = path.join(bbsRoot, 'ConfConfig.info');
-              if (fs.existsSync(confConfigPath)) {
-                const buffer = fs.readFileSync(confConfigPath);
-                let currentString = '';
-                const extracted: string[] = [];
-                for (let i = 0; i < buffer.length; i++) {
-                  const charCode = buffer[i];
-                  if (charCode >= 32 && charCode <= 126) {
-                    currentString += String.fromCharCode(charCode);
-                  } else {
-                    if (currentString.length >= 2) extracted.push(currentString);
-                    currentString = '';
-                  }
-                }
-                for (const line of extracted) {
-                  const cleanLine = line.replace(/^[^a-zA-Z0-9+(%#']+/g, '').trim();
-                  const upperLine = cleanLine.toUpperCase();
-                  // Support both NCONFS= and NUMCONFS= formats
-                  if (upperLine.startsWith('NCONFS=')) {
-                    const val = parseInt(cleanLine.substring(7).trim(), 10);
-                    if (!isNaN(val) && val > 0) numConfs = val;
-                  } else if (upperLine.startsWith('NUMCONFS=')) {
-                    const val = parseInt(cleanLine.substring(9).trim(), 10);
-                    if (!isNaN(val) && val > 0) numConfs = val;
-                  }
-                }
-              }
-            } catch { /* use default */ }
-
-            // Build access string with X for each actual conference (up to 10)
-            const actualConfs = Math.min(numConfs, 10);
-            confAccess = 'X'.repeat(actualConfs);
-debugLog(`  [READ] DT_CONFACCESS: Built access from ConfConfig.info: numConfs=${numConfs}, actualConfs=${actualConfs}`);
+          if (areaName && areaName.trim().length > 0) {
+            // Named area is set — return it directly (AquaScan CS path component)
+            const trimmed = areaName.trim().slice(0, 10);
+            this.messageParser.writeMessageString(msg.msgAddr, trimmed);
+debugLog(`  [READ] DT_CONFACCESS (areaName): "${trimmed}"`);
+          } else {
+            // Derive area name from security level as a fallback
+            // WEB_*: thresholds match the ACCESS/ACS.*.info files present in ACCESS/
+            let derived: string;
+            if (secLevel >= 255) derived = 'Sysop';
+            else if (secLevel >= 100) derived = 'Elite';
+            else if (secLevel >= 20) derived = 'Lamer';
+            else if (secLevel > 0) derived = 'Disabled';
+            else {
+              // No sec level — fall back to X-flag string (express.e behavior)
+              let confAccess = sessionAny?.confAccess || this.state.confAccess || '';
+              if (confAccess.length === 0) confAccess = 'XX';
+              derived = confAccess.slice(0, 10);
+            }
+            this.messageParser.writeMessageString(msg.msgAddr, derived);
+debugLog(`  [READ] DT_CONFACCESS (derived from secLevel=${secLevel}): "${derived}"`);
           }
-
-          // Return only up to 10 characters (express.e uses 10 bytes max for DT_CONFACCESS)
-          const confAccess10 = confAccess.slice(0, 10);
-          // CRITICAL: Use writeMessageString to update BOTH embedded buffer AND strPtr
-          this.messageParser.writeMessageString(msg.msgAddr, confAccess10);
-debugLog(`  [READ] DT_CONFACCESS: "${confAccess10}" (${confAccess10.length} chars, confs 1-${confAccess10.length})`);
         } else {
-          // Write operation - accept up to 10 characters
+          // Write operation - accept up to 10 characters (express.e semantics)
           const newAccess = this.messageParser.readString(stringAddr, 10);
           this.state.confAccess = newAccess;
           (this.bbsSession as any).confAccess = newAccess;
