@@ -20,6 +20,7 @@ export type MenuSelection =
   | 'training'
   | 'ultra'
   | 'dig'
+  | 'zone'
   | 'settings'
   | 'stats'
   | 'manual'
@@ -136,6 +137,7 @@ export class MenuScreen {
           'TRAINING',
           '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
           '{red-fg}DIG MODE{/red-fg}',
+          '{cyan-fg}ZONE MODE{/cyan-fg}',
           '',
           'Settings',
           'High Scores',
@@ -208,6 +210,7 @@ export class MenuScreen {
           'training',
           'ultra',
           'dig',
+          'zone',
           'master',  // Separator line, default to master
           'settings',
           'stats',
@@ -232,17 +235,17 @@ export class MenuScreen {
 
       // Handle quit key
       menu.key(['q', 'Q'], () => {
-        menu.emit('select', null, 14);  // Trigger quit selection (index 14)
+        menu.emit('select', null, 15);  // Trigger quit selection (index 15)
       });
 
       // Handle ESC key - same as quit
       menu.key(['escape'], () => {
-        menu.emit('select', null, 14);  // Trigger quit selection (index 14)
+        menu.emit('select', null, 15);  // Trigger quit selection (index 15)
       });
 
       // Handle F1 key for manual
       menu.key(['f1'], () => {
-        menu.emit('select', null, 13);  // Trigger manual selection (index 13)
+        menu.emit('select', null, 14);  // Trigger manual selection (index 14)
       });
 
       // Focus and render
@@ -337,6 +340,15 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|
       'Clear them all!\n' +
       'Faster = better\n' +
       'time score.',
+
+      // ZONE MODE
+      '{bold}{cyan-fg}ZONE MODE{/cyan-fg}{/bold}\n\n' +
+      'Clear lines to\n' +
+      'fill the ZONE\n' +
+      'meter. Activate\n' +
+      'with Rotate180\n' +
+      'for a bonus!\n\n' +
+      '{gray-fg}Min 20% to fire{/gray-fg}',
 
       // Empty separator
       '',

@@ -495,6 +495,9 @@ export class GrandmasterApp {
       case 'dig':
         await this.startGame('dig');
         break;
+      case 'zone':
+        await this.startGame('zone');
+        break;
       case 'training':
         await this.startTraining();
         break;

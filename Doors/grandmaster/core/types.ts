@@ -51,6 +51,7 @@ export type GameMode =
   | 'master'
   | 'death'
   | 'zen'
+  | 'zone'          // Zone mode: fill meter, activate for massive clear bonus
   | 'training'
   | 'versus'
   | 'cpu_battle'
@@ -79,6 +80,10 @@ export interface GameState {
   piecesPlaced: number;          // Total pieces locked (for PPS = piecesPlaced / elapsedSeconds)
   ultraTimeRemaining: number;    // ms remaining for Ultra mode (0 when not ultra)
   digLinesRemaining: number;     // Garbage rows left to clear in Dig mode
+  zoneMeter: number;             // 0.0–1.0, fills as lines cleared during Zone mode
+  zoneActive: boolean;           // True while Zone is activated
+  zoneTimeRemaining: number;     // ms remaining in active Zone
+  zoneBufferedLines: number;     // Lines accumulated during active Zone (for bonus calc)
 
   // T-Spin tracking (HeborisCE tspin_flag system)
   lastMove: 'rotate' | 'move' | 'drop' | null;

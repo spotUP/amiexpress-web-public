@@ -79,6 +79,7 @@ class GameValidator {
             dig: 500000,
             classic: 1000000,
             zen: 1000000,
+            zone: 5000000, // Zone mode: triangular bonuses can compound highly
             training: 1000000,
             tetrinet: 2000000, // TetriNET multiplayer
         };
@@ -127,6 +128,7 @@ class GameValidator {
             dig: 60000,
             classic: 60000,
             zen: 60000,
+            zone: 60000, // Zone mode: no time limit, but minimum play time
             training: 30000,
             tetrinet: 30000, // TetriNET multiplayer
         };
@@ -149,6 +151,7 @@ class GameValidator {
             dig: 1800000,
             classic: 1800000,
             zen: 3600000,
+            zone: 3600000, // Zone mode: indefinite
             training: 3600000,
             tetrinet: 1800000, // TetriNET multiplayer
         };

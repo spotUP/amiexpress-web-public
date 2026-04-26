@@ -21,7 +21,7 @@ export interface Board {
     height: number;
     grid: Cell[][];
 }
-export type GameMode = 'marathon' | 'sprint' | 'dig' | 'ultra' | 'blitz' | 'combo' | 'survival' | 'classic' | 'master' | 'death' | 'zen' | 'training' | 'versus' | 'cpu_battle' | 'tetrinet';
+export type GameMode = 'marathon' | 'sprint' | 'dig' | 'ultra' | 'blitz' | 'combo' | 'survival' | 'classic' | 'master' | 'death' | 'zen' | 'zone' | 'training' | 'versus' | 'cpu_battle' | 'tetrinet';
 export interface GameState {
     mode: GameMode;
     board: Board;
@@ -39,6 +39,10 @@ export interface GameState {
     piecesPlaced: number;
     ultraTimeRemaining: number;
     digLinesRemaining: number;
+    zoneMeter: number;
+    zoneActive: boolean;
+    zoneTimeRemaining: number;
+    zoneBufferedLines: number;
     lastMove: 'rotate' | 'move' | 'drop' | null;
     lastTSpin: 'none' | 'mini' | 'full' | null;
     tSpinFlag: 0 | 1 | 2;

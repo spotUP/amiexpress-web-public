@@ -535,6 +535,20 @@ class GameScreen {
                 }
             }
         });
+        on('rotate_180', () => {
+            // In Zone mode, rotate_180 activates Zone (if meter >= 20%); otherwise rotates normally
+            if (this.state.currentMode === 'zone') {
+                if (this.engine.activateZone()) {
+                    this.sounds.playSfx('section_cool'); // Zone activation sound
+                    return;
+                }
+            }
+            // 180 = two CW rotations
+            const r1 = this.engine.rotate(1);
+            const r2 = this.engine.rotate(1);
+            if (r1 || r2)
+                this.sounds.playSfx('rotate');
+        });
         on('soft_drop', () => {
             this.engine.softDrop();
         });
@@ -664,6 +678,20 @@ class GameScreen {
         const bar = '#'.repeat(filled) + '-'.repeat(remaining);
         return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
     }
+    getZoneHud(state) {
+        if (state.mode !== 'zone')
+            return '';
+        if (state.zoneActive) {
+            const s = Math.ceil(Math.max(0, state.zoneTimeRemaining) / 1000);
+            const n = state.zoneBufferedLines ?? 0;
+            return `\n{cyan-fg}ZONE: ${s}s (${n} lines){/cyan-fg}`;
+        }
+        const pct = Math.round((state.zoneMeter ?? 0) * 100);
+        const filled = Math.round((state.zoneMeter ?? 0) * 10);
+        const bar = '#'.repeat(filled) + '-'.repeat(10 - filled);
+        const color = pct >= 100 ? 'yellow' : pct >= 20 ? 'cyan' : 'gray';
+        return `\n{${color}-fg}ZONE ${pct}%{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
+    }
     getUltraTime(state) {
         if (state.mode !== 'ultra' || state.ultraTimeRemaining === undefined)
             return '';
@@ -691,7 +719,8 @@ class GameScreen {
             `  Grav:  ${gravDisplay}G\n` +
             `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
             this.getUltraTime(state) +
-            this.getDigHud(state);
+            this.getDigHud(state) +
+            this.getZoneHud(state);
         if (state.lastTSpin === 'full') {
             statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
         }

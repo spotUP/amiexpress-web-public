@@ -202,6 +202,7 @@ export class LeaderboardScreen {
       survival: 'Survival Mode',
       classic: 'Classic Mode',
       zen: 'Zen Mode',
+      zone: 'Zone Mode',
       cpu_battle: 'CPU Battle',
       tetrinet: 'TetriNET',
     };

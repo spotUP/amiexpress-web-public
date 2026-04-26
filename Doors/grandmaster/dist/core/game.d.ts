@@ -107,6 +107,15 @@ export declare class GameEngine {
      */
     setIHS(): boolean;
     /**
+     * Activate Zone — requires meter >= 20%. Duration proportional to meter fill.
+     * Returns true if activated, false if not enough meter or already active.
+     */
+    activateZone(): boolean;
+    /**
+     * Deactivate Zone — award buffered line bonus.
+     */
+    private deactivateZone;
+    /**
      * Detect T-Spin using the 3-corner rule (HeborisCE isTSpin)
      * Returns 'full' for T-Spin, 'mini' for T-Spin Mini, or 'none'
      *

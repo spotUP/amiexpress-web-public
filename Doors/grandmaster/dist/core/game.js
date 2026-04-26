@@ -94,6 +94,10 @@ class GameEngine {
             piecesPlaced: 0,
             ultraTimeRemaining: mode === 'ultra' ? 120000 : 0,
             digLinesRemaining: mode === 'dig' ? 10 : 0,
+            zoneMeter: 0,
+            zoneActive: false,
+            zoneTimeRemaining: 0,
+            zoneBufferedLines: 0,
             // T-Spin tracking (HeborisCE tspin_flag system)
             lastMove: null,
             lastTSpin: null,
@@ -263,6 +267,13 @@ class GameEngine {
                 this.state.status = 'complete';
                 this.state.endTime = Date.now();
                 return;
+            }
+        }
+        // Zone mode: tick down active zone timer
+        if (this.state.mode === 'zone' && this.state.zoneActive) {
+            this.state.zoneTimeRemaining -= this.FRAME_TIME;
+            if (this.state.zoneTimeRemaining <= 0) {
+                this.deactivateZone();
             }
         }
         // HeborisCE: update decay every frame
@@ -523,6 +534,37 @@ class GameEngine {
             this.recorder.recordInput('ihs');
         }
         return true;
+    }
+    /**
+     * Activate Zone — requires meter >= 20%. Duration proportional to meter fill.
+     * Returns true if activated, false if not enough meter or already active.
+     */
+    activateZone() {
+        if (this.state.mode !== 'zone')
+            return false;
+        if (this.state.zoneActive)
+            return false;
+        if (this.state.zoneMeter < 0.2)
+            return false;
+        this.state.zoneActive = true;
+        this.state.zoneTimeRemaining = Math.round(this.state.zoneMeter * 10000); // up to 10s
+        this.state.zoneMeter = 0;
+        this.state.zoneBufferedLines = 0;
+        return true;
+    }
+    /**
+     * Deactivate Zone — award buffered line bonus.
+     */
+    deactivateZone() {
+        this.state.zoneActive = false;
+        this.state.zoneTimeRemaining = 0;
+        const n = this.state.zoneBufferedLines;
+        if (n > 0) {
+            // Triangular bonus: n*(n+1)/2 * 100 * (level+1)
+            const bonus = Math.floor(n * (n + 1) / 2) * 100 * (this.state.level + 1);
+            this.state.score += bonus;
+        }
+        this.state.zoneBufferedLines = 0;
     }
     /**
      * Detect T-Spin using the 3-corner rule (HeborisCE isTSpin)
@@ -822,6 +864,14 @@ class GameEngine {
                 this.gradeManager.processSectionResult(sectionResult, this.state.level);
                 this.state.grade = this.gradeManager.getGrade();
                 this.state.internalGrade = this.gradeManager.getInternalGrade();
+            }
+            // Zone mode: fill meter on line clears
+            if (this.state.mode === 'zone') {
+                this.state.zoneMeter = Math.min(1.0, this.state.zoneMeter + lineCount * 0.08);
+                if (this.state.zoneActive) {
+                    // Buffer lines cleared during zone (don't double-count for score)
+                    this.state.zoneBufferedLines += lineCount;
+                }
             }
         }
         else {
