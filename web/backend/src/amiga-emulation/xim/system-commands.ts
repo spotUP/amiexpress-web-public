@@ -157,6 +157,20 @@ debugLog(
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
+    // WEB_*: TLP2-style doors (SRH/TList/TLP2) read linesPerScreen from BSS at
+    // a4+0x3022 (disasm-confirmed: cmp.l 0x3022(a4), d0 is the pause threshold).
+    // They receive lineLen in msg.data but never copy it into BSS — it stays 0
+    // (BSS-initialized), so every line triggers a pause. Patch the BSS slot now
+    // while A4 is live and the register-reply hasn't returned yet.
+    // Only safe for doors that use this exact offset; TLP2 disasm confirms 0x3022.
+    {
+      const a4 = this.emulator.getRegister(12); // A4 = register 12 in MOIRA
+      if (a4 > 0x1000) {
+        this.emulator.writeMemory32(a4 + 0x3022, lineLen);
+        debugLog(`[XIMSystem] WEB_* TLP2 BSS patch: wrote lineLen=${lineLen} to A4(0x${a4.toString(16)})+0x3022=0x${(a4+0x3022).toString(16)}`);
+      }
+    }
+
     // express.e does not modify node/line/strptr/fillers for JH_REGISTER.
 
     // CRITICAL FIX (Dec 26 - restored Jan 8): XIM doors use BIDIRECTIONAL communication on ONE port
