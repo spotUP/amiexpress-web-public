@@ -77,7 +77,7 @@ export async function readMailStats(confNum: number, bbsDataPath: string): Promi
     throw error;
   }
 
-  // Binary format: 3 x 4-byte integers (little-endian) = 12 bytes.
+  // Binary format: 3 x 4-byte integers (big-endian) = 12 bytes.
   //
   // Historically some MailStats files were created in an older 2-int32 (8-byte)
   // format or left zeroed by stale init paths. Rather than throwing and
@@ -99,9 +99,9 @@ console.warn(
   }
 
   return {
-    lowestKey: buffer.readInt32LE(0),
-    lowestNotDel: buffer.readInt32LE(4),
-    highMsgNum: buffer.readInt32LE(8),
+    lowestKey: buffer.readInt32BE(0),
+    lowestNotDel: buffer.readInt32BE(4),
+    highMsgNum: buffer.readInt32BE(8),
   };
 }
 
@@ -120,11 +120,11 @@ export async function writeMailStats(
   // Ensure Messages directory exists
   await fs.mkdir(messagesDir, { recursive: true });
 
-  // Write binary format: 3 x 4-byte integers (little-endian)
+  // Write binary format: 3 x 4-byte integers (big-endian)
   const buffer = Buffer.alloc(12);
-  buffer.writeInt32LE(stats.lowestKey, 0);
-  buffer.writeInt32LE(stats.lowestNotDel, 4);
-  buffer.writeInt32LE(stats.highMsgNum, 8);
+  buffer.writeInt32BE(stats.lowestKey, 0);
+  buffer.writeInt32BE(stats.lowestNotDel, 4);
+  buffer.writeInt32BE(stats.highMsgNum, 8);
 
   await fs.writeFile(mailStatsPath, buffer);
 console.log(`[MailStats] Conf${confNum}: low=${stats.lowestNotDel} high=${stats.highMsgNum}`);

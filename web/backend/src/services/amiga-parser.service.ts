@@ -1041,55 +1041,55 @@ console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
     const location = this.readString(buffer, pos, 30); pos += 30;
     const phoneNumber = this.readString(buffer, pos, 13); pos += 13;
 
-    // INTs (2 bytes each, little-endian)
-    const slotNumber = buffer.readInt16LE(pos); pos += 2;
-    const secStatus = buffer.readInt16LE(pos); pos += 2;
-    const secBoard = buffer.readInt16LE(pos); pos += 2;
-    const secLibrary = buffer.readInt16LE(pos); pos += 2;
-    const secBulletin = buffer.readInt16LE(pos); pos += 2;
-    const messagesPosted = buffer.readInt16LE(pos); pos += 2;
+    // INTs (2 bytes each, big-endian)
+    const slotNumber = buffer.readInt16BE(pos); pos += 2;
+    const secStatus = buffer.readInt16BE(pos); pos += 2;
+    const secBoard = buffer.readInt16BE(pos); pos += 2;
+    const secLibrary = buffer.readInt16BE(pos); pos += 2;
+    const secBulletin = buffer.readInt16BE(pos); pos += 2;
+    const messagesPosted = buffer.readInt16BE(pos); pos += 2;
 
-    // LONGs (4 bytes each, little-endian)
-    const newSinceDate = buffer.readInt32LE(pos); pos += 4;
-    const pwdHash = buffer.readInt32LE(pos); pos += 4;
-    const confRead2 = buffer.readInt32LE(pos); pos += 4;
-    const confRead3 = buffer.readInt32LE(pos); pos += 4;
+    // LONGs (4 bytes each, big-endian)
+    const newSinceDate = buffer.readInt32BE(pos); pos += 4;
+    const pwdHash = buffer.readInt32BE(pos); pos += 4;
+    const confRead2 = buffer.readInt32BE(pos); pos += 4;
+    const confRead3 = buffer.readInt32BE(pos); pos += 4;
 
     // More INTs
-    const zoomType = buffer.readInt16LE(pos); pos += 2;
-    const unknown = buffer.readInt16LE(pos); pos += 2;
-    const unknown2 = buffer.readInt16LE(pos); pos += 2;
-    const unknown3 = buffer.readInt16LE(pos); pos += 2;
-    const xferProtocol = buffer.readInt16LE(pos); pos += 2;
-    const filler2 = buffer.readInt16LE(pos); pos += 2;
-    const lcFiles = buffer.readInt16LE(pos); pos += 2;
-    const badFiles = buffer.readInt16LE(pos); pos += 2;
+    const zoomType = buffer.readInt16BE(pos); pos += 2;
+    const unknown = buffer.readInt16BE(pos); pos += 2;
+    const unknown2 = buffer.readInt16BE(pos); pos += 2;
+    const unknown3 = buffer.readInt16BE(pos); pos += 2;
+    const xferProtocol = buffer.readInt16BE(pos); pos += 2;
+    const filler2 = buffer.readInt16BE(pos); pos += 2;
+    const lcFiles = buffer.readInt16BE(pos); pos += 2;
+    const badFiles = buffer.readInt16BE(pos); pos += 2;
 
     // More LONGs
-    const accountDate = buffer.readInt32LE(pos); pos += 4;
+    const accountDate = buffer.readInt32BE(pos); pos += 4;
 
     // More INTs
-    const screenType = buffer.readInt16LE(pos); pos += 2;
-    const editorType = buffer.readInt16LE(pos); pos += 2;
+    const screenType = buffer.readInt16BE(pos); pos += 2;
+    const editorType = buffer.readInt16BE(pos); pos += 2;
 
     // Conference access string
     const conferenceAccess = this.readString(buffer, pos, 10); pos += 10;
 
     // More INTs
-    const uploads = buffer.readInt16LE(pos); pos += 2;
-    const downloads = buffer.readInt16LE(pos); pos += 2;
-    const confRJoin = buffer.readInt16LE(pos); pos += 2;
-    const timesCalled = buffer.readInt16LE(pos); pos += 2;
+    const uploads = buffer.readInt16BE(pos); pos += 2;
+    const downloads = buffer.readInt16BE(pos); pos += 2;
+    const confRJoin = buffer.readInt16BE(pos); pos += 2;
+    const timesCalled = buffer.readInt16BE(pos); pos += 2;
 
     // LONGs
-    const timeLastOn = buffer.readInt32LE(pos); pos += 4;
-    const timeUsed = buffer.readInt32LE(pos); pos += 4;
-    const timeLimit = buffer.readInt32LE(pos); pos += 4;
-    const timeTotal = buffer.readInt32LE(pos); pos += 4;
-    const bytesDownload = buffer.readInt32LE(pos); pos += 4;
-    const bytesUpload = buffer.readInt32LE(pos); pos += 4;
-    const dailyBytesLimit = buffer.readInt32LE(pos); pos += 4;
-    const dailyBytesDld = buffer.readInt32LE(pos); pos += 4;
+    const timeLastOn = buffer.readInt32BE(pos); pos += 4;
+    const timeUsed = buffer.readInt32BE(pos); pos += 4;
+    const timeLimit = buffer.readInt32BE(pos); pos += 4;
+    const timeTotal = buffer.readInt32BE(pos); pos += 4;
+    const bytesDownload = buffer.readInt32BE(pos); pos += 4;
+    const bytesUpload = buffer.readInt32BE(pos); pos += 4;
+    const dailyBytesLimit = buffer.readInt32BE(pos); pos += 4;
+    const dailyBytesDld = buffer.readInt32BE(pos); pos += 4;
 
     // CHAR
     const expert = buffer.readUInt8(pos); pos += 1;
@@ -1098,24 +1098,24 @@ console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
     pos += 3;
 
     // More LONGs
-    const chatRemain = buffer.readInt32LE(pos); pos += 4;
-    const chatLimit = buffer.readInt32LE(pos); pos += 4;
-    const creditDays = buffer.readInt32LE(pos); pos += 4;
-    const creditAmount = buffer.readInt32LE(pos); pos += 4;
-    const creditStartDate = buffer.readInt32LE(pos); pos += 4;
-    const creditTotalToDate = buffer.readInt32LE(pos); pos += 4;
-    const creditTotalDate = buffer.readInt32LE(pos); pos += 4;
+    const chatRemain = buffer.readInt32BE(pos); pos += 4;
+    const chatLimit = buffer.readInt32BE(pos); pos += 4;
+    const creditDays = buffer.readInt32BE(pos); pos += 4;
+    const creditAmount = buffer.readInt32BE(pos); pos += 4;
+    const creditStartDate = buffer.readInt32BE(pos); pos += 4;
+    const creditTotalToDate = buffer.readInt32BE(pos); pos += 4;
+    const creditTotalDate = buffer.readInt32BE(pos); pos += 4;
 
     // CHARs
     const creditTracking = buffer.readUInt8(pos); pos += 1;
     const translatorID = buffer.readUInt8(pos); pos += 1;
 
     // INT
-    const msgBaseRJoin = buffer.readInt16LE(pos); pos += 2;
+    const msgBaseRJoin = buffer.readInt16BE(pos); pos += 2;
 
     // LONGs
-    const confYM9 = buffer.readInt32LE(pos); pos += 4;
-    const todaysBytesLimit = buffer.readInt32LE(pos); pos += 4;
+    const confYM9 = buffer.readInt32BE(pos); pos += 4;
+    const todaysBytesLimit = buffer.readInt32BE(pos); pos += 4;
 
     // CHARs
     const protocol = buffer.readUInt8(pos); pos += 1;
@@ -1179,15 +1179,15 @@ console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
     let pos = offset;
 
     const userName = this.readString(buffer, pos, 31); pos += 31;
-    const number = buffer.readInt32LE(pos); pos += 4;
+    const number = buffer.readInt32BE(pos); pos += 4;
     const newUser = buffer.readUInt8(pos); pos += 1;
-    const oldUpCPS = buffer.readInt16LE(pos); pos += 2;
-    const oldDnCPS = buffer.readInt16LE(pos); pos += 2;
-    const userFlags = buffer.readInt16LE(pos); pos += 2;
-    const baud = buffer.readInt16LE(pos); pos += 2;
-    const upCPS2 = buffer.readInt32LE(pos); pos += 4;
-    const dnCPS2 = buffer.readInt32LE(pos); pos += 4;
-    const timesOnToday = buffer.readInt16LE(pos); pos += 2;
+    const oldUpCPS = buffer.readInt16BE(pos); pos += 2;
+    const oldDnCPS = buffer.readInt16BE(pos); pos += 2;
+    const userFlags = buffer.readInt16BE(pos); pos += 2;
+    const baud = buffer.readInt16BE(pos); pos += 2;
+    const upCPS2 = buffer.readInt32BE(pos); pos += 4;
+    const dnCPS2 = buffer.readInt32BE(pos); pos += 4;
+    const timesOnToday = buffer.readInt16BE(pos); pos += 2;
 
     return {
       userNumber: number,
@@ -1214,7 +1214,7 @@ console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
     pos += 8; // uploadBytesBCD
 
     const eMail = this.readString(buffer, pos, 50); pos += 50;
-    const lastDlCPS = buffer.readInt32LE(pos); pos += 4;
+    const lastDlCPS = buffer.readInt32BE(pos); pos += 4;
 
     // Password hash (32 bytes)
     const pwdHash = this.readString(buffer, pos, 32); pos += 32;
@@ -1229,9 +1229,9 @@ console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
     const invalidAttempts = buffer.readUInt8(pos); pos += 1;
 
     // LONGs
-    const pwdLastUpdated = buffer.readInt32LE(pos); pos += 4;
-    const lastIP = buffer.readInt32LE(pos); pos += 4;
-    const ipMask = buffer.readInt32LE(pos); pos += 4;
+    const pwdLastUpdated = buffer.readInt32BE(pos); pos += 4;
+    const lastIP = buffer.readInt32BE(pos); pos += 4;
+    const ipMask = buffer.readInt32BE(pos); pos += 4;
 
     // Skip unused (86 bytes)
     pos += 86;
