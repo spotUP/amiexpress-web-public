@@ -120,11 +120,12 @@ export class MinimapRenderer {
       })
       .slice(0, maxVisible);
 
-    // Layout: scale columns to number of opponents so 1 opponent fills the space
+    // Layout: fit into the parent container width dynamically.
+    // Use up to 3 columns; each minimap is 13w (10 content + 2 border + 1 pad).
     const count = sorted.length;
-    const cols = count <= 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
-    const minimapWidth = count <= 1 ? 26 : count <= 2 ? 26 : 17;
-    const minimapHeight = this.config.compact ? 20 : 15;
+    const cols = count === 1 ? 1 : count <= 4 ? 2 : 3;
+    const minimapWidth = cols === 1 ? 26 : cols === 2 ? 20 : 13;
+    const minimapHeight = this.config.compact ? 12 : 15;
 
     // Render each minimap
     sorted.forEach((opponent, index) => {

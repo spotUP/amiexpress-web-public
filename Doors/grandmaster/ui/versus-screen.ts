@@ -310,8 +310,13 @@ export class VersusScreen {
     if (!this.network) return;
 
     const unsubUpdate = this.network.onUpdate((update: GameUpdate) => {
+      if ((update as any).alive === false) {
+        this.opponentTracker.removeOpponent(update.playerId);
+        return;
+      }
       this.opponentTracker.updateOpponent(update.playerId, {
         id: update.playerId,
+        name: (update as any).name ?? update.playerId,
         board: update.board,
         level: update.level,
         grade: update.grade,
@@ -361,15 +366,44 @@ export class VersusScreen {
         if (this.versusAI) {
           this.versusAI.update(deltaTime);
 
+          // Update tracker every ~100 ms
           if (now % 100 < deltaTime) {
-            const opponentBoards = this.versusAI.getOpponentBoards();
-            for (const opponent of opponentBoards) {
-              this.opponentTracker.updateOpponent(opponent.id, {
-                name: opponent.name,
-                board: opponent.board,
-                level: 0,
-                grade: '5',
-                alive: opponent.alive,
+            const aiOpponents = this.versusAI.getOpponents();
+
+            // Compute danger rank = sorted by stack height descending
+            // (tallest stack = closest to topping out = highest priority)
+            const withHeight = aiOpponents.map((opp: any) => {
+              const state = opp.engine?.getState?.();
+              const board = state?.board;
+              let stackHeight = 0;
+              if (board) {
+                for (let y = 0; y < board.height; y++) {
+                  if (board.grid[y]?.some((c: any) => c.filled)) {
+                    stackHeight = board.height - y;
+                    break;
+                  }
+                }
+              }
+              return { opp, state, stackHeight };
+            });
+
+            // Sort by danger descending, assign rank 1 = most dangerous
+            withHeight.sort((a: any, b: any) => b.stackHeight - a.stackHeight);
+
+            for (let i = 0; i < withHeight.length; i++) {
+              const { opp, state } = withHeight[i];
+              if (!opp.alive) {
+                // Immediately remove dead players from the grid
+                this.opponentTracker.removeOpponent(opp.id);
+                continue;
+              }
+              this.opponentTracker.updateOpponent(opp.id, {
+                name: opp.name,
+                board: opp.engine?.getState?.()?.board ?? state?.board,
+                level: state?.level ?? 0,
+                grade: state?.grade ?? '9',
+                alive: true,
+                rank: i + 1,
               });
             }
           }
