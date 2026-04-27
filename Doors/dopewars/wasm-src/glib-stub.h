@@ -6,7 +6,10 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <ctype.h>
 
+typedef unsigned long gsize;
+typedef long          gssize;
 typedef int          gboolean;
 typedef char         gchar;
 typedef int          gint;
@@ -70,10 +73,6 @@ static inline gboolean g_str_equal(const char *a, const char *b) { return strcmp
 static inline int g_ascii_strcasecmp(const char *a, const char *b) {
   while (*a && *b) { int d = tolower((unsigned char)*a) - tolower((unsigned char)*b); if (d) return d; a++; b++; } return (unsigned char)*a - (unsigned char)*b;
 }
-#include <ctype.h>
-typedef unsigned long gsize;
-typedef long gssize;
-
 /* Misc */
 #define g_new(type, n)  ((type*)malloc(sizeof(type)*(n)))
 #define g_new0(type, n) ((type*)calloc((n), sizeof(type)))
@@ -114,11 +113,26 @@ static inline void g_ptr_array_free(GPtrArray *a, gboolean free_seg) {
 }
 
 /* GScanner stubs (config file parser — unused in WASM path) */
-typedef struct { int dummy; } GScanner;
+#define G_TOKEN_EOF    0
+#define G_TOKEN_STRING 1
+#define G_TOKEN_INT    2
+#define G_TOKEN_FLOAT  3
+#define G_TOKEN_ERROR  (-1)
+
 typedef struct { int dummy; } GScannerConfig;
+typedef struct {
+  gchar    *input_name;
+  gpointer  user_data;
+  GScannerConfig *config;
+  int       token;
+  union { gchar *v_string; double v_float; long v_int; } value;
+} GScanner;
 typedef int GQuark;
 static inline GScanner* g_scanner_new(const GScannerConfig *cfg) { (void)cfg; return g_new0(GScanner, 1); }
 static inline void g_scanner_destroy(GScanner *s) { free(s); }
+static inline int  g_scanner_get_next_token(GScanner *s) { (void)s; return G_TOKEN_EOF; }
+static inline int  g_scanner_peek_next_token(GScanner *s) { (void)s; return G_TOKEN_EOF; }
+static inline void g_scanner_input_text(GScanner *s, const char *t, guint l) { (void)s;(void)t;(void)l; }
 
 /* g_slist_next macro */
 #define g_slist_next(l) ((l) ? (l)->next : NULL)

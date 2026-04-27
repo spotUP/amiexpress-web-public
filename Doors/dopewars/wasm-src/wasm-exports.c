@@ -1,4 +1,8 @@
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#else
+#define EMSCRIPTEN_KEEPALIVE
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

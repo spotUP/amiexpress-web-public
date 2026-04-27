@@ -2,6 +2,7 @@
 #define WASM_EXPORTS_H
 
 #include "dopewars.h"
+#include "message.h"
 
 /* Callback types registered by TypeScript at init */
 typedef void (*DwEventCb)   (void *userdata, int code, const char *json);
