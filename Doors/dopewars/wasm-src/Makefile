@@ -1,5 +1,6 @@
 CC = emcc
 CFLAGS = -O2 \
+         -I../../../sdk/utils/c-stubs \
          -s MODULARIZE=1 \
          -s EXPORT_NAME=DopewarsWasm \
          -s ALLOW_MEMORY_GROWTH=1 \
