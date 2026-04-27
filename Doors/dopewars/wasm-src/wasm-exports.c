@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "wasm-exports.h"
+#include "message.h"
 
 /* ─── Callback slots ─────────────────────────────────────── */
 DwEventCb    dw_on_event    = NULL;
@@ -261,4 +263,131 @@ const char* wasm_get_market(int idx) {
   snprintf(market_buf, sizeof(market_buf),
     "{\"location\":%d,\"prices\":%s}", p->IsAt, prices);
   return market_buf;
+}
+
+/* ─── Stubs for networking/messaging layer (replaced by callbacks) ─── */
+
+/*
+ * GetNextWord / GetNextInt: string-parsing utilities normally defined in
+ * message.c, which is not compiled for WASM. Implemented here so that
+ * BuyObject and other serverside.c helpers work correctly.
+ *
+ * GetNextWord: advances *Data past leading whitespace, returns a newly
+ * allocated copy of the next whitespace-delimited token, or g_strdup(Default)
+ * if none is found. *Data is left pointing to the character after the token.
+ */
+gchar *GetNextWord(gchar **Data, gchar *Default) {
+  gchar *start, *end, *ret;
+  if (!Data || !*Data) return g_strdup(Default ? Default : "");
+  start = *Data;
+  while (*start && isspace((unsigned char)*start)) start++;
+  if (!*start) { *Data = start; return g_strdup(Default ? Default : ""); }
+  end = start;
+  while (*end && !isspace((unsigned char)*end)) end++;
+  ret = g_strndup(start, end - start);
+  *Data = end;
+  return ret;
+}
+
+/*
+ * GetNextInt: parses the next integer token from *Data, returning Default
+ * if the token is absent or non-numeric.
+ */
+int GetNextInt(gchar **Data, int Default) {
+  gchar *word = GetNextWord(Data, NULL);
+  int val = Default;
+  if (word && *word) val = atoi(word);
+  g_free(word);
+  return val;
+}
+
+/*
+ * InitAbilities: sets all local abilities to TRUE so the server-side code
+ * believes it can use every protocol extension.
+ */
+void InitAbilities(Player *Play) {
+  if (!Play) return;
+  for (int i = 0; i < A_NUM; i++) {
+    Play->Abil.Local[i]  = TRUE;
+    Play->Abil.Remote[i] = TRUE;
+    Play->Abil.Shared[i] = TRUE;
+  }
+  Play->Abil.RemoteNum = A_NUM;
+}
+
+/*
+ * HaveAbility: in WASM mode we support all abilities.
+ */
+gboolean HaveAbility(Player *Play, gint Type) {
+  (void)Play; (void)Type;
+  return TRUE;
+}
+
+/*
+ * SendPlayerData: fires a C_UPDATE event so TypeScript can refresh the
+ * player state display after any state-changing serverside call.
+ */
+void SendPlayerData(Player *To) {
+  dw_fire_event(To, (int)'U' /* C_UPDATE */, "");
+}
+
+/*
+ * SendPrintMessage: delivers a text message to the target player.
+ * We encode the message text in the JSON payload.
+ */
+void SendPrintMessage(Player *From, AICode AI, Player *To, char *Data) {
+  (void)From; (void)AI;
+  if (!To || !Data) return;
+  char json[2048];
+  snprintf(json, sizeof(json), "{\"code\":%d,\"msg\":\"%s\"}", (int)C_PRINTMESSAGE, Data);
+  dw_fire_event(To, (int)C_PRINTMESSAGE, json);
+}
+
+/*
+ * SendFightMessage: fires a fight event to the attacker and/or defender.
+ */
+void SendFightMessage(Player *Attacker, Player *Defender,
+                      int BitchesKilled, FightPoint fp, price_t Loot,
+                      gboolean Broadcast, gchar *Msg) {
+  (void)Broadcast;
+  char json[512];
+  snprintf(json, sizeof(json),
+    "{\"fp\":%d,\"bitchesKilled\":%d,\"loot\":%.2f,\"msg\":\"%s\"}",
+    (int)fp, BitchesKilled, (double)Loot, Msg ? Msg : "");
+  if (Attacker) dw_fire_event(Attacker, (int)C_FIGHTPRINT, json);
+  if (Defender && Defender != Attacker)
+    dw_fire_event(Defender, (int)C_FIGHTPRINT, json);
+}
+
+/*
+ * SendFightLeave: notifies the player that a fight has ended.
+ */
+void SendFightLeave(Player *Play, gboolean FightOver) {
+  char json[64];
+  snprintf(json, sizeof(json), "{\"fightOver\":%s}", FightOver ? "true" : "false");
+  dw_fire_event(Play, (int)C_FIGHTACT, json);
+}
+
+/*
+ * BroadcastToClients: in WASM single-player mode there are no other clients,
+ * so this is a no-op.
+ */
+void BroadcastToClients(AICode AI, MsgCode Code, char *Data,
+                        Player *From, Player *Except) {
+  (void)AI; (void)Code; (void)Data; (void)From; (void)Except;
+}
+
+/*
+ * SpyPlayer: fires a spy-report event. The TypeScript layer interprets this
+ * and shows the target's stats.
+ */
+void SpyPlayer(Player *Spy, Player *Target) {
+  dw_fire_event(Spy, (int)C_SPYON, Target ? Target->Name : "");
+}
+
+/*
+ * TipPlayer: fires a tip-off event.
+ */
+void TipPlayer(Player *Tipper, Player *Target) {
+  dw_fire_event(Tipper, (int)C_TIPOFF, Target ? Target->Name : "");
 }

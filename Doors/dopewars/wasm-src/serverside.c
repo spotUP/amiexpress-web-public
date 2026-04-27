@@ -3200,7 +3200,7 @@ enum DealType {
  * Generates drug prices and drug busts etc. for player "To"
  * "Deal" is an array of size NumDrug.
  */
-static void GenerateDrugsHere(Player *To, enum DealType *Deal)
+void GenerateDrugsHere(Player *To, enum DealType *Deal)
 {
   int NumEvents, NumDrugs, NumRandom, i;
 
