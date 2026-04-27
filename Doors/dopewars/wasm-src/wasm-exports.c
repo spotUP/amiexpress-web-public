@@ -24,18 +24,37 @@ static Player* get_player(int idx) {
   return players[idx];
 }
 
+/* Escape a string for embedding in a JSON value (double-quote delimited). */
+static void json_escape(const char *src, char *dst, size_t dstlen) {
+  size_t i = 0;
+  if (!src) { if (dstlen > 0) dst[0] = '\0'; return; }
+  while (*src && i + 2 < dstlen) {
+    unsigned char c = (unsigned char)*src++;
+    if      (c == '"')  { dst[i++] = '\\'; dst[i++] = '"'; }
+    else if (c == '\\') { dst[i++] = '\\'; dst[i++] = '\\'; }
+    else if (c == '\n') { dst[i++] = '\\'; dst[i++] = 'n'; }
+    else if (c == '\r') { dst[i++] = '\\'; dst[i++] = 'r'; }
+    else if (c == '\t') { dst[i++] = '\\'; dst[i++] = 't'; }
+    else if (c < 0x20)  { /* skip other control chars */ }
+    else                { dst[i++] = (char)c; }
+  }
+  dst[i] = '\0';
+}
+
 /* ─── Helpers called by patched serverside.c ─────────────── */
 void dw_fire_event(Player *to, int code, const char *msg) {
   if (!dw_on_event || !to) return;
-  char json[2048];
-  snprintf(json, sizeof(json), "{\"code\":%d,\"msg\":\"%s\"}", code, msg ? msg : "");
+  char escaped[2048]; json_escape(msg, escaped, sizeof(escaped));
+  char json[2200];
+  snprintf(json, sizeof(json), "{\"code\":%d,\"msg\":\"%s\"}", code, escaped);
   dw_on_event(to->userdata, code, json);
 }
 
 void dw_fire_question(Player *to, int code, const char *prompt) {
   if (!dw_on_question || !to) return;
-  char json[2048];
-  snprintf(json, sizeof(json), "{\"code\":%d,\"prompt\":\"%s\"}", code, prompt ? prompt : "");
+  char escaped[2048]; json_escape(prompt, escaped, sizeof(escaped));
+  char json[2200];
+  snprintf(json, sizeof(json), "{\"code\":%d,\"prompt\":\"%s\"}", code, escaped);
   dw_on_question(to->userdata, code, json);
 }
 
