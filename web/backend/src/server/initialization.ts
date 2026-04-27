@@ -600,6 +600,39 @@ export async function initializeData(io?: SocketIOServer) {
     }
 
     process.stdout.write(`[initializeData] Loaded ${conferences.length} conferences, ${messageBases.length} bases, ${fileAreas.length} areas, ${getDoors().length} doors\n`);
+
+    // Auto-correct confaccess strings when conference count has grown.
+    // Runs on every startup — cheap, idempotent, prevents the "only N confs visible" bug
+    // that hits when conferences are added after initial deployment.
+    if (db && conferences.length > 0) {
+      try {
+        const sqlite = (db as any).db;
+        if (sqlite) {
+          const fullAccess = 'X'.repeat(conferences.length);
+          // Expand new_user_conf_access if shorter than conf count
+          const cfgRow = sqlite.prepare('SELECT new_user_conf_access FROM system_config LIMIT 1').get() as any;
+          if (cfgRow && (cfgRow.new_user_conf_access || '').length < conferences.length) {
+            sqlite.prepare('UPDATE system_config SET new_user_conf_access = ?').run(fullAccess);
+            process.stdout.write(`[initializeData] Expanded new_user_conf_access to ${conferences.length} conferences\n`);
+          }
+          // Expand each user's confaccess string, padding with X for new conferences
+          const users = sqlite.prepare('SELECT id, confaccess FROM users WHERE LENGTH(confaccess) < ?').all(conferences.length) as any[];
+          if (users.length > 0) {
+            const update = sqlite.prepare('UPDATE users SET confaccess = ? WHERE id = ?');
+            const tx = sqlite.transaction(() => {
+              for (const u of users) {
+                const current = (u.confaccess || '').padEnd(conferences.length, 'X');
+                update.run(current, u.id);
+              }
+            });
+            tx();
+            process.stdout.write(`[initializeData] Expanded confaccess for ${users.length} users to ${conferences.length} conferences\n`);
+          }
+        }
+      } catch (e) {
+        process.stderr.write(`[initializeData] confaccess migration warn: ${e}\n`);
+      }
+    }
   } catch (error) {
     // Surfacing this error: it used to be silently swallowed, which left
     // handlers with uninjected dependencies (e.g. messaging.handler _db)
