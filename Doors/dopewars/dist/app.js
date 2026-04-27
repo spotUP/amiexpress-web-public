@@ -37,6 +37,7 @@ async function createApp(ctx, server) {
         (0, market_1.renderMarket)(market, marketState, state);
         (0, inventory_1.renderInventory)(inventory, state, marketState);
         (0, actions_1.renderActionBar)(actions, mode);
+        screen.alloc(); // force full repaint — clears blessed's dirty cache
         screen.render();
         console.log('[GANJA] screen.render() done');
     }

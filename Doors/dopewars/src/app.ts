@@ -49,6 +49,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     renderMarket(market, marketState, state);
     renderInventory(inventory, state, marketState);
     renderActionBar(actions, mode);
+    (screen as any).alloc();   // force full repaint — clears blessed's dirty cache
     screen.render();
     console.log('[GANJA] screen.render() done');
   }

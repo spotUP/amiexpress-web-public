@@ -20,9 +20,8 @@ function renderActionBar(box, mode) {
         box.setContent('  Waiting for your answer...');
         return;
     }
-    box.setContent('  {bold}[B]{/}uy  {bold}[S]{/}ell  {bold}[J]{/}et  ' +
-        '{bold}[K]{/}bank  {bold}[L]{/}oan  {bold}[G]{/}uns  ' +
-        '{bold}[D]{/}oc  {bold}[A]{/}ttack  {bold}[H]{/}iscores  {bold}[Q]{/}uit');
+    box.setContent('  {bold}[B]{/}uy  {bold}[S]{/}ell  {bold}[J]{/}et  {bold}[H]{/}iscores  {bold}[Q]{/}uit' +
+        '    {grey-fg}bank/loan/guns triggered on arrival{/}');
 }
 function overlay(screen, opts) {
     return blessed_1.default.box({
