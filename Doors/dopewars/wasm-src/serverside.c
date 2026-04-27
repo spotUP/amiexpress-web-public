@@ -50,8 +50,7 @@
 #include "configfile.h"         /* For UpdateConfigFile */
 #include "dopewars.h"
 #include "log.h"
-#include "message.h"
-#include "network.h"
+#include "wasm-exports.h"
 #include "nls.h"
 #include "serverside.h"
 #include "tstring.h"
@@ -281,7 +280,7 @@ void SendPlayerDetails(Player *Play, Player *To, MsgCode Code)
   if (HaveAbility(To, A_PLAYERID)) {
     g_string_append_printf(text, "^%d", Play->ID);
   }
-  SendServerMessage(NULL, C_NONE, Code, To, text->str);
+  dw_fire_event(To, Code, text->str);
   g_string_free(text, TRUE);
 }
 
@@ -340,7 +339,7 @@ void HandleServerMessage(gchar *buf, Player *Play)
       dopelog(3, LF_SERVER, "%s->%s: %s", GetPlayerName(Play),
               GetPlayerName(To), Data);
     }
-    SendServerMessage(Play, AI, Code, To, Data);
+    dw_fire_event(To, Code, Data);
     break;
   case C_ABILITIES:
     ReceiveAbilities(Play, Data);
@@ -352,7 +351,7 @@ void HandleServerMessage(gchar *buf, Player *Play)
       if (ConnectTimeout) {
         Play->ConnectTimeout = time(NULL) + (time_t) ConnectTimeout;
       }
-      SendServerMessage(NULL, C_NONE, C_NEWNAME, Play, NULL);
+      dw_fire_event(Play, C_NEWNAME, NULL);
     } else if (strlen(GetPlayerName(Play)) == 0 && Data[0]) {
       if (CountPlayers(FirstServer) < MaxClients || !Network) {
         RemoteVersionCheck(Play);
@@ -370,7 +369,7 @@ void HandleServerMessage(gchar *buf, Player *Play)
         if (ServerMOTD && ServerMOTD[0]) {
           SendPrintMessage(NULL, C_MOTD, Play, ServerMOTD);
         }
-        SendServerMessage(NULL, C_NONE, C_ENDLIST, Play, NULL);
+        dw_fire_event(Play, C_ENDLIST, NULL);
         RegisterWithMetaServer(TRUE, FALSE, TRUE);
         Play->ConnectTimeout = 0;
 
@@ -408,7 +407,7 @@ void HandleServerMessage(gchar *buf, Player *Play)
                                    "Please try connecting again later."),
                                   MaxClients);
         }
-        SendServerMessage(NULL, C_NONE, C_PRINTMESSAGE, Play, text);
+        dw_fire_event(Play, C_PRINTMESSAGE, text);
         g_free(text);
         /* Make sure they do actually disconnect, eventually! */
         if (ConnectTimeout) {
@@ -961,7 +960,7 @@ static void HandleServerCommand(char *string, NetworkBuffer *netbuf,
       tmp = GetPlayerByName(string + 5, FirstServer);
       if (tmp) {
         g_print(_("Pushing %s\n"), GetPlayerName(tmp));
-        SendServerMessage(NULL, C_NONE, C_PUSH, tmp, NULL);
+        dw_fire_event(tmp, C_PUSH, NULL);
       } else
         g_print(_("No such user!\n"));
     } else if (g_ascii_strncasecmp(string, "kill ", 5) == 0) {
@@ -2181,7 +2180,7 @@ void SendHighScores(Player *Play, gboolean EndGame, char *Message)
       SendPrintMessage(NULL, C_NONE, Play, text->str);
     }
   }
-  SendServerMessage(NULL, C_NONE, C_STARTHISCORE, Play, NULL);
+  dw_fire_event(Play, C_STARTHISCORE, NULL);
 
   j = 0;
   for (i = 0; i < NUMHISCORE; i++) {
@@ -2193,8 +2192,7 @@ void SendHighScores(Player *Play, gboolean EndGame, char *Message)
     g_free(Score.Name);
     g_free(Score.Time);
   }
-  SendServerMessage(NULL, C_NONE, C_ENDHISCORE, Play,
-                    EndGame ? "end" : NULL);
+  dw_fire_event(Play, C_ENDHISCORE, EndGame ? "end" : NULL);
   if (!EndGame)
     SendDrugsHere(Play, FALSE);
   if (EndGame && !HighScoreWrite(ScoreFP, MultiScore, AntiqueScore)) {
@@ -2227,7 +2225,7 @@ int SendSingleHighScore(Player *Play, struct HISCORE *Score,
                          Score->Time, Score->Name,
                          Score->Dead ? _("(R.I.P.)") : "",
                          Bold ? '<' : ' ');
-  SendServerMessage(NULL, C_NONE, C_HISCORE, Play, Data);
+  dw_fire_event(Play, C_HISCORE, Data);
   g_free(prstr);
   g_free(Data);
   return 1;
@@ -2263,7 +2261,7 @@ void SendEvent(Player *To)
   while (To->EventNum < E_MAX) {
     switch (To->EventNum) {
     case E_SUBWAY:
-      SendServerMessage(NULL, C_NONE, C_SUBWAYFLASH, To, NULL);
+      dw_fire_event(To, C_SUBWAYFLASH, NULL);
       break;
     case E_OFFOBJECT:
       To->OnBehalfOf = NULL;
@@ -2351,7 +2349,7 @@ void SendEvent(Player *To)
       if (To->IsAt + 1 == LoanSharkLoc && To->Debt > 0) {
         text = dpg_strdup_printf(_("YN^Would you like to visit %tde?"),
                                  Names.LoanSharkName);
-        SendQuestion(NULL, C_ASKLOAN, To, text);
+        dw_fire_question(To, C_ASKLOAN, text);
         g_free(text);
         return;
       }
@@ -2360,7 +2358,7 @@ void SendEvent(Player *To)
       if (To->IsAt + 1 == BankLoc) {
         text = dpg_strdup_printf(_("YN^Would you like to visit %tde?"),
                                  Names.BankName);
-        SendQuestion(NULL, C_ASKBANK, To, text);
+        dw_fire_question(To, C_ASKBANK, text);
         g_free(text);
         return;
       }
@@ -2369,7 +2367,7 @@ void SendEvent(Player *To)
       if (To->IsAt + 1 == GunShopLoc && !Sanitized && NumGun > 0) {
         text = dpg_strdup_printf(_("YN^Would you like to visit %tde?"),
                                  Names.GunShopName);
-        SendQuestion(NULL, C_ASKGUNSHOP, To, text);
+        dw_fire_question(To, C_ASKGUNSHOP, text);
         g_free(text);
         return;
       }
@@ -2378,7 +2376,7 @@ void SendEvent(Player *To)
       if (To->IsAt + 1 == RoughPubLoc) {
         text = dpg_strdup_printf(_("YN^Would you like to visit %tde?"),
                                  Names.RoughPubName);
-        SendQuestion(NULL, C_ASKPUB, To, text);
+        dw_fire_question(To, C_ASKPUB, text);
         g_free(text);
         return;
       }
@@ -2390,7 +2388,7 @@ void SendEvent(Player *To)
             dpg_strdup_printf(_
                               ("YN^^Would you like to hire a %tde for %P?"),
                               Names.Bitch, To->Bitches.Price);
-        SendQuestion(NULL, C_ASKBITCH, To, text);
+        dw_fire_question(To, C_ASKBITCH, text);
         g_free(text);
         return;
       }
@@ -2409,7 +2407,7 @@ void SendEvent(Player *To)
           To->OnBehalfOf = Play;
 
           SendDrugsHere(To, TRUE);
-          SendQuestion(NULL, C_MEETPLAYER, To, text);
+          dw_fire_question(To, C_MEETPLAYER, text);
           g_free(text);
           return;
         }
@@ -3027,7 +3025,7 @@ void WithdrawFromCombat(Player *Play)
             dpg_strdup_printf(_
                               ("YN^Do you pay a doctor %P to sew you up?"),
                               Defend->DocPrice);
-        SendQuestion(NULL, C_ASKSEW, Defend, text);
+        dw_fire_question(Defend, C_ASKSEW, text);
         g_free(text);
       } else {
         WaitForFightDone(Defend);
@@ -3135,7 +3133,7 @@ int RandomOffer(Player *To)
                     _("YN^There is some weed that smells like paraquat "
                      "here!^It looks good! Will you smoke it? "));
     To->EventNum = E_WEED;
-    SendQuestion(NULL, C_NONE, To, text->str);
+    dw_fire_question(To, C_NONE, text->str);
     g_string_free(text, TRUE);
     return 1;
   } else if (NumStoppedTo > 0) {
@@ -3175,7 +3173,7 @@ int OfferObject(Player *To, gboolean ForceBitch)
                              "mere %P. Yes or no?"), Names.Drugs,
                             To->Bitches.Price);
     }
-    SendQuestion(NULL, C_ASKBITCH, To, text);
+    dw_fire_question(To, C_ASKBITCH, text);
     g_free(text);
     return 1;
   } else if (!Sanitized && NumGun > 0
@@ -3186,7 +3184,7 @@ int OfferObject(Player *To, gboolean ForceBitch)
       return 0;
     text = dpg_strdup_printf(_("YN^Would you like to buy a %tde for %P?"),
                              Gun[ObjNum].Name, To->Guns[ObjNum].Price);
-    SendQuestion(NULL, C_ASKGUN, To, text);
+    dw_fire_question(To, C_ASKGUN, text);
     g_free(text);
     return 1;
   }
@@ -3296,7 +3294,7 @@ void SendDrugsHere(Player *To, gboolean DisplayBusts)
                       (prstr = pricetostr(To->Drugs[i].Price)));
     g_free(prstr);
   }
-  SendServerMessage(NULL, C_NONE, C_DRUGHERE, To, text->str);
+  dw_fire_event(To, C_DRUGHERE, text->str);
   g_string_free(text, TRUE);
 }
 
@@ -3360,15 +3358,15 @@ void HandleAnswer(Player *From, Player *To, char *answer)
       SendEvent(From);
       break;
     case E_LOANSHARK:
-      SendServerMessage(NULL, C_NONE, C_LOANSHARK, From, NULL);
+      dw_fire_event(From, C_LOANSHARK, NULL);
       break;
     case E_BANK:
-      SendServerMessage(NULL, C_NONE, C_BANK, From, NULL);
+      dw_fire_event(From, C_BANK, NULL);
       break;
     case E_GUNSHOP:
       for (i = 0; i < NumGun; i++)
         From->Guns[i].Price = Gun[i].Price;
-      SendServerMessage(NULL, C_NONE, C_GUNSHOP, From, NULL);
+      dw_fire_event(From, C_GUNSHOP, NULL);
       break;
     case E_HIREBITCH:
       text = g_strdup_printf("bitch^0^1");
