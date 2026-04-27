@@ -565,7 +565,6 @@ debugLog(
     const initString = (msg.string || '').trim().toUpperCase();
     const isAedoorInit =
       msg.command === XIMCommand.JH_LI &&
-      msg.data === 0 &&
       initString === 'INIT';
     const isAedoorStat =
       msg.command === XIMCommand.JH_REGISTER &&
@@ -583,6 +582,11 @@ debugLog(`[XIMProtocol] AEDoor handshake detected: ${label} (no reply needed)`);
       if (replyPort === 0) {
 debugLog(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (correct behavior)`);
         return;
+      }
+      // Write XIM port into msg.command before replying — door reads this to discover
+      // which port to use for subsequent BBS communication (express.e:3447).
+      if (this.doorPort) {
+        this.messageParser.writeCommand(msg.msgAddr, this.doorPort);
       }
       // Log outgoing reply to XIM structured logger
       ximLogger.log('debug', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
