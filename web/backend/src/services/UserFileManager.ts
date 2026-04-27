@@ -182,7 +182,7 @@ console.log(`  user.misc: ${this.userMiscPath}`);
       downloads: user.downloads,
       confRJoin: user.confRJoin || user.autoRejoin || 1, // Auto-rejoin conference (default to 1)
       timesCalled: user.calls,
-      timeLastOn: Math.floor((user.lastLogin?.getTime() || 0) / 1000),
+      timeLastOn: Math.floor((user.lastLogin?.getTime() || Date.now()) / 1000),
       timeUsed: user.timeUsed,
       timeLimit: user.timeLimit,
       timeTotal: user.timeTotal,

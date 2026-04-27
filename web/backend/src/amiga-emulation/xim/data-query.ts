@@ -454,7 +454,9 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           const diskStats = (this.bbsSession as any)?.diskUserStats;
           const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
           if (isRead) {
-            const lastOn = diskStats?.timeLastOn ?? (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : 0);
+            // diskStats.timeLastOn=0 means "never logged on" (not a real zero timestamp),
+            // so use || not ?? so we fall through on zero too.
+            const lastOn = diskStats?.timeLastOn || (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : Math.floor(Date.now() / 1000));
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
 debugLog(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
