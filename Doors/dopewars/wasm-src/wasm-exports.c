@@ -165,7 +165,7 @@ void wasm_buy_drug(int idx, int drug_index, int amount) {
   extern void BuyObject(Player*, char*);
   Player *p = get_player(idx);
   if (!p) return;
-  char data[64]; snprintf(data, sizeof(data), "%d %d", drug_index, amount);
+  char data[64]; snprintf(data, sizeof(data), "drug^%d^%d", drug_index, amount);
   BuyObject(p, data);
 }
 
@@ -174,7 +174,7 @@ void wasm_sell_drug(int idx, int drug_index, int amount) {
   extern void BuyObject(Player*, char*);
   Player *p = get_player(idx);
   if (!p) return;
-  char data[64]; snprintf(data, sizeof(data), "%d -%d", drug_index, amount);
+  char data[64]; snprintf(data, sizeof(data), "drug^%d^%d", drug_index, -amount);
   BuyObject(p, data);
 }
 
@@ -340,11 +340,13 @@ gchar *GetNextWord(gchar **Data, gchar *Default) {
   gchar *start, *end, *ret;
   if (!Data || !*Data) return g_strdup(Default ? Default : "");
   start = *Data;
-  while (*start && isspace((unsigned char)*start)) start++;
+  /* The dopewars protocol uses '^' as the field separator. Skip leading ones. */
+  while (*start == '^') start++;
   if (!*start) { *Data = start; return g_strdup(Default ? Default : ""); }
   end = start;
-  while (*end && !isspace((unsigned char)*end)) end++;
+  while (*end && *end != '^') end++;
   ret = g_strndup(start, end - start);
+  if (*end == '^') end++;
   *Data = end;
   return ret;
 }

@@ -99,12 +99,14 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     } else if (!state.inCombat && mode === 'combat') {
       if (unbindCombat) { unbindCombat(); unbindCombat = null; }
       mode = 'normal';
+    } else if (!state.inCombat && result.questions.length === 0) {
+      // No combat, no pending question — reset any stale mode (e.g. after answering a question)
+      mode = 'normal';
     }
 
     if (result.questions.length > 0 && mode !== 'combat') {
       mode = 'question';
-      renderActionBar(actions, 'question');
-      screen.render();
+      fullRender();  // update all panels with current state before the overlay appears
       showQuestionOverlay(screen, result.questions[0] as GameQuestion, async (answer: string) => {
         const r = await server.handleAnswer(id, answer);
         await applyResult(r);

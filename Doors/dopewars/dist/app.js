@@ -98,10 +98,13 @@ async function createApp(ctx, server) {
             }
             mode = 'normal';
         }
+        else if (!state.inCombat && result.questions.length === 0) {
+            // No combat, no pending question — reset any stale mode (e.g. after answering a question)
+            mode = 'normal';
+        }
         if (result.questions.length > 0 && mode !== 'combat') {
             mode = 'question';
-            (0, actions_1.renderActionBar)(actions, 'question');
-            screen.render();
+            fullRender(); // update all panels with current state before the overlay appears
             (0, actions_1.showQuestionOverlay)(screen, result.questions[0], async (answer) => {
                 const r = await server.handleAnswer(id, answer);
                 await applyResult(r);
