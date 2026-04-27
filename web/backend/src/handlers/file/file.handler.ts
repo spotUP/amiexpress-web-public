@@ -901,120 +901,195 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
 // ===== Upload/Download Interfaces =====
 
 export function displayUploadInterface(socket: any, session: BBSSession, params: string) {
-console.log('displayUploadInterface called with params:', params);
-console.log('🔍 [Upload Debug] Total fileAreas:', fileAreas.length);
-console.log('🔍 [Upload Debug] session.currentConf:', session.currentConf);
-console.log('🔍 [Upload Debug] fileAreas data:', fileAreas.map(a => ({ id: a.id, name: a.name, confId: a.conferenceId })));
-
-  // Check if there are file directories to upload to (NDIRS check)
+  // express.e:25646 internalCommandU -> uploadaFile()
+  // Check NDIRS (file areas exist in this conference)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
-console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.length);
 
   if (currentFileAreas.length === 0) {
-    // express.e:25646 internalCommandU - no header
-    emitText(socket, '\r\n');
-    emitText(socket, 'No file areas available in this conference.\r\n');
-    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    emitText(socket, '\r\nNo file directories available.\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  // express.e:25646-25656 internalCommandU -> uploadaFile - no header
-  emitText(socket, '\r\n');
+  // Use first available upload area for this conference (express.e uses configured ULPATH)
+  const uploadArea = currentFileAreas[0];
 
-  // Display user stats (like displayULStats in AmiExpress)
-  const user = session.user!;
-  emitText(socket, '\x1b[32mYour Upload Statistics:\x1b[0m\r\n');
-  emitText(socket, `Files Uploaded: ${user.uploads || 0}\r\n`);
-  emitText(socket, `Bytes Uploaded: ${user.bytesUpload || 0}\r\n\r\n`);
+  // express.e:19007: StringF(buff,'\s UPLOADING....\b\n', xprTitle.item(loggedOnUser.xferProtocol))
+  // session.user.protocol is mapped from xferProtocol int via intToProtocol()
+  const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
+  emitText(socket, `\r\n${protocolTitle} UPLOADING....\r\n`);
 
-  // Display available space (simplified - in production, calculate from file system)
-  emitText(socket, '\x1b[32mAvailable Upload Space:\x1b[0m\r\n');
-  emitText(socket, '1,000,000 bytes available\r\n\r\n');
+  // express.e:19012-19014: formatSpaceValue(tFShi,tFSlo) and formatSpaceValue(fSUploadingHi,fSUploadingLo)
+  // tFShi/tFSlo = freeDiskSpace() — total free across configured drives
+  // fSUploadingHi/fSUploadingLo = rFreeSpace(nodePlaypen) — space at upload path
+  // Both resolve to the same disk in our single-filesystem web setup: the ulPath
+  const ulPath = uploadArea.ulPath || process.cwd();
+  const spaceStr = formatSpaceValue(ulPath);
+  emitText(socket, `${spaceStr} available for uploading.  ${spaceStr} at one time.\r\n`);
 
-  // express.e:19016 - "Filename lengths above 12 are not allowed."
-  emitText(socket, 'Filename lengths above 12 are not allowed.\r\n');
-  emitText(socket, '\x1b[33mYou can select multiple files for batch upload.\x1b[0m\r\n\r\n');
+  // express.e:19016
+  emitText(socket, 'Filename lengths above 12 are not allowed.\r\n\r\n');
 
-  // Display file areas for upload
-  emitText(socket, '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
-  currentFileAreas.forEach((area, index) => {
-    emitText(socket, `${index + 1}. ${area.name} - ${area.description}\r\n`);
-  });
+  // express.e:17656 cleanItUp() — nothing needed for web
+  // express.e:17657
+  emitText(socket, 'Batch UpLoading.....\r\n');
+  // express.e:17658
+  emitText(socket, '\r\nUnlimited files.  Blank Line to start transfer.\r\n');
+  // express.e:17664: StringF(str,'\b\nFileName \d: ',count)
+  emitText(socket, '\r\nFileName 1: ');
 
-  // Prompt for file area selection
-  emitText(socket, '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILES_SELECT_AREA;
-  session.tempData = { uploadMode: true, fileAreas: currentFileAreas, batchUpload: true };
+  session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+  session.tempData = {
+    uploadMode: true,
+    fileArea: uploadArea,
+    uploadBatch: [],
+    uploadCount: 1,
+    uploadStartTime: Date.now(),
+  };
+}
+
+/**
+ * Read actual free bytes at path using fs.statfsSync (Node >= 18.8) or df(1) fallback.
+ * Then format with formatSpaceValue() — 1:1 port of MiscFuncs.e:234-249.
+ */
+function formatSpaceValue(dirPath: string): string {
+  let freeBytes = 0;
+  try {
+    const fs = require('fs');
+    if (typeof fs.statfsSync === 'function') {
+      const st = fs.statfsSync(dirPath);
+      freeBytes = st.bfree * st.bsize;
+    } else {
+      // df -k: 1K blocks; column 4 is "Available"
+      const { execSync } = require('child_process');
+      const out: string = execSync(`df -k "${dirPath}"`, { encoding: 'utf-8' });
+      const line = out.trim().split('\n').pop() || '';
+      const avail = parseInt(line.trim().split(/\s+/)[3], 10);
+      if (!isNaN(avail)) freeBytes = avail * 1024;
+    }
+  } catch { /* leave freeBytes = 0 */ }
+
+  // MiscFuncs.e:234-249 formatSpaceValue(spaceInMB, spacelo, outstr)
+  // spaceInMB = freeBytes >> 20   (megabytes)
+  // spacelo   = freeBytes & 0xFFFFF  (remainder bytes within current MB)
+  const spaceInMB = Math.floor(freeBytes / (1 << 20));
+  const spacelo   = freeBytes & 0xFFFFF;
+
+  if (spaceInMB < 10240) {
+    // MiscFuncs.e: frac:=Shr(Mul((spacelo AND $FFFFF),10),20)  → "\d.\d MB"
+    const frac = (spacelo * 10) >>> 20;
+    return `${spaceInMB}.${frac} MB`;
+  } else if (spaceInMB < 1048576) {
+    // MiscFuncs.e: frac:=Shr(Mul((spaceInMB AND 1023),10),10); whole:=Shr(spaceInMB,10) → "\d.\d GB"
+    const whole = spaceInMB >>> 10;
+    const frac  = ((spaceInMB & 1023) * 10) >>> 10;
+    return `${whole}.${frac} GB`;
+  } else {
+    // MiscFuncs.e: spaceInMB:=Shr(spaceInMB,10); whole:=Shr(spaceInMB,10) → "\d.\d TB"
+    const shifted = spaceInMB >>> 10;
+    const whole   = shifted >>> 10;
+    const frac    = ((shifted & 1023) * 10) >>> 10;
+    return `${whole}.${frac} TB`;
+  }
 }
 
 export function displayDownloadInterface(socket: any, session: BBSSession, params: string) {
-  console.log('[D/DS] displayDownloadInterface called with params:', params);
+  // express.e:19960 aePuts('\b\n') — first output in downloadAFile
+  emitText(socket, '\r\n');
 
-  // Check if there are file directories to download from - express.e:19961-19964
+  // express.e:19961-19964 IF(maxDirs=0) myError(ERR_NOFILES)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
   if (currentFileAreas.length === 0) {
-    // express.e:19962-19963 - myError(5) = "Sorry, this function is not available."
-    emitText(socket, '\r\nSorry, no file directories available in this conference.\r\n');
-    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
+    // express.e:8528-8530 myError(ERR_NOFILES=5): 'No files available in this conference.\b\n\b\n'
+    emitText(socket, 'No files available in this conference.\r\n\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
   const user = session.user!;
 
-  // express.e:19981 - displayULStats(loggedOnUser, loggedOnUserMisc)
-  // Shows download/upload stats in express.e format
-  const dlBytes = user.bytesDownload || 0;
-  const ulBytes = user.bytesUpload || 0;
-  const dlKB = Math.floor(dlBytes / 1024);
-  const ulKB = Math.floor(ulBytes / 1024);
-
-  emitText(socket, `Number of Downloads      : ${user.downloads || 0} (${dlKB}k total)\r\n`);
-  emitText(socket, `Number of Uploads        : ${user.uploads || 0} (${ulKB}k total)\r\n`);
-
-  // express.e:19701-12713 - bytesADL (daily byte allowance)
-  // For web, we show "Infinite" since there's no modem speed limit
-  emitText(socket, 'Todays Bytes Available   : Infinite\r\n');
-
-  // express.e:19983-19991 - Check ratio and show files available
-  const ratio = user.secLibrary || 0; // User's file ratio setting
-  if (ratio > 0) {
-    const uploads = user.uploads || 0;
-    const downloads = user.downloads || 0;
-    const filesAvail = (ratio * (uploads + 1)) - downloads;
-    emitText(socket, `Files Avail before UL    : ${filesAvail}\r\n`);
-    if (filesAvail < 1) {
-      // express.e:19988-19990 - exceedRatio()
-      emitText(socket, '\r\nYou have exceeded your ratio, you must upload first.\r\n\r\n');
-      emitText(socket, '\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+  // express.e:19981 displayULStats(loggedOnUser,loggedOnUserMisc) — 12680-12715
+  const dlKB = Math.floor((user.bytesDownload || 0) / 1024);
+  const ulKB = Math.floor((user.bytesUpload   || 0) / 1024);
+  // express.e:12691 u.downloads AND $FFFF
+  const dlCount = (user.downloads || 0) & 0xFFFF;
+  const ulCount = (user.uploads   || 0) & 0xFFFF;
+  emitText(socket, `Number of Downloads      : ${dlCount} (${dlKB}k total)\r\n`);
+  emitText(socket, `Number of Uploads        : ${ulCount} (${ulKB}k total)\r\n`);
+  // express.e:12701-12713 bytesADL=$7fffffff and CREDITBYKB toggle
+  {
+    const { getACSConfig, ToggleFlags } = require('../../utils/acs.util');
+    const creditByKB = !!(getACSConfig().toggles as any)?.[ToggleFlags.CREDITBYKB];
+    if (creditByKB) {
+      // express.e:12703 'Todays KBytes Available  : Infinite\b\n'
+      emitText(socket, 'Todays KBytes Available  : Infinite\r\n');
+    } else {
+      // express.e:12709 'Todays Bytes Available   : Infinite\b\n'
+      emitText(socket, 'Todays Bytes Available   : Infinite\r\n');
     }
   }
 
-  emitText(socket, '\r\n');
+  // express.e:19983-20028 ratio check
+  if (!user.secLibrary) {
+    // express.e:20027 'Download to Upload Ratio : Disabled.\b\n'
+    emitText(socket, 'Download to Upload Ratio : Disabled.\r\n');
+  } else {
+    const secBoard = (user as any).secBoard || 0;
+    // express.e:19984 IF(secBoard>0) → 'Files Avail before UL : \d\b\n'
+    if (secBoard > 0) {
+      const cnt = user.secLibrary * ((user.uploads || 0) + 1) - (user.downloads || 0);
+      emitText(socket, `Files Avail before UL : ${cnt}\r\n`);
+      if (cnt < 1) {
+        // express.e:12677 exceedRatio()
+        emitText(socket, 'You have exceeded your ratio, you must upload first.\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
+    }
+    // express.e:19993 IF(secBoard<2) → bytes ratio
+    if (secBoard < 2) {
+      const { getACSConfig, ToggleFlags } = require('../../utils/acs.util');
+      const creditByKB = !!(getACSConfig().toggles as any)?.[ToggleFlags.CREDITBYKB];
+      const ulBytes = user.bytesUpload   || 0;
+      const dlBytes = user.bytesDownload || 0;
+      const avail   = Math.max(0, user.secLibrary * ulBytes - dlBytes);
+      if (creditByKB) {
+        // express.e:20015 'KBytes Avail before UL : \s\b\n'
+        emitText(socket, `KBytes Avail before UL : ${Math.floor(avail / 1024)}\r\n`);
+      } else {
+        // express.e:20017 'Bytes Avail before UL : \s\b\n'
+        emitText(socket, `Bytes Avail before UL : ${avail}\r\n`);
+      }
+      if (user.secLibrary * ulBytes - dlBytes < 1) {
+        // express.e:12677 exceedRatio()
+        emitText(socket, 'You have exceeded your ratio, you must upload first.\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
+    }
+  }
 
-  // express.e:20031-20033 - Download prompt with wildcard info
+  // express.e:20030-20035 'Space between filenames.  ' + [No ]'Wildcards permitted.\b\n'
+  // No blank line before this — express.e has no \b\n between ratio and wildcards
   emitText(socket, 'Space between filenames.  ');
   const { checkSecurity } = require('../../utils/acs.util');
   const { ACSPermission } = require('../../constants/acs-permissions');
   if (checkSecurity(user, ACSPermission.FILE_EXPANSION)) {
-    emitText(socket, 'Wildcards permitted.');
+    emitText(socket, 'Wildcards permitted.\r\n');
   } else {
-    emitText(socket, 'No wildcards permitted.');
+    // express.e: aePuts('No ') + aePuts('Wildcards permitted.\b\n')
+    emitText(socket, 'No Wildcards permitted.\r\n');
   }
-  emitText(socket, '\r\n\r\n');
 
-  // Show download prompt - express.e:19784-19788 downloadPrompt()
-  // Format: "X mins, Y bytes, Filespec(Z): "
-  const minsLeft = session.timeRemaining || 60;
-  emitText(socket, `${minsLeft} mins, Infinite bytes, Filespec(1): `);
+  // express.e:20118 '\b\n\d mins, (Ratio Disabled), Filespec(\d): ' (secLibrary=0)
+  // or downloadPrompt() '\b\n\d mins, \d bytes, Filespec(\d): ' (secLibrary>0)
+  const minsLeft = (session as any).timeRemaining || 60;
+  if (!user.secLibrary) {
+    emitText(socket, `\r\n${minsLeft} mins, (Ratio Disabled), Filespec(1): `);
+  } else {
+    emitText(socket, `\r\n${minsLeft} mins, Infinite bytes, Filespec(1): `);
+  }
 
-  // Set state to accept filename input - use FILES_DOWNLOAD_SELECT for filename entry
   session.subState = LoggedOnSubState.FILES_DOWNLOAD_SELECT;
   session.tempData = { downloadMode: true, fileAreas: currentFileAreas, fileSpec: 1 };
 }

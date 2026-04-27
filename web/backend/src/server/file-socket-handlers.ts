@@ -821,10 +821,20 @@ console.error(
     );
   }
 
-  socket.emit("ansi-output", "\r\n\x1b[32mPress any key to continue...\x1b[0m");
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // Read goodbye flag before clearUploadContext wipes tempData
+  const goodbyeAfter = !!(session.tempData?.goodbyeAfterTransfer);
   clearUploadContext(session, socket);
+
+  // express.e:25657 — IF stat=RESULT_GOODBYE THEN modemOffHook()
+  if (goodbyeAfter) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    const { handleGoodbyeCommand } = require('../handlers/commands/system-commands.handler');
+    handleGoodbyeCommand(socket, session, 'Y');
+  } else {
+    socket.emit("ansi-output", "\r\n\x1b[32mPress any key to continue...\x1b[0m");
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  }
 }
 
 /**
