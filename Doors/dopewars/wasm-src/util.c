@@ -38,7 +38,7 @@
 
 #ifdef CYGWIN
 #include <conio.h>
-#endif
+#endif /* CYGWIN */
 
 #include <string.h>
 #include "util.h"
@@ -189,6 +189,23 @@ void ReleaseLock(FILE * fp)
 {
 }
 
+#elif defined(__EMSCRIPTEN__)   /* Code for WASM build — no file locking */
+
+int ReadLock(FILE * fp)
+{
+  (void)fp; return 0;
+}
+
+int WriteLock(FILE * fp)
+{
+  (void)fp; return 0;
+}
+
+void ReleaseLock(FILE * fp)
+{
+  (void)fp;
+}
+
 #else /* Code for Unix build */
 
 #include <errno.h>
@@ -224,9 +241,9 @@ void ReleaseLock(FILE * fp)
   (void)DoLock(fp, F_UNLCK);
 }
 
-#endif /* CYGWIN */
+#endif /* CYGWIN / __EMSCRIPTEN__ / Unix */
 
-/* 
+/*
  * On systems with select, sleep for "microsec" microseconds.
  */
 void MicroSleep(int microsec)

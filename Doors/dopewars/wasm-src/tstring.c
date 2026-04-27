@@ -32,6 +32,9 @@
 #include "dopewars.h"
 #include "tstring.h"
 
+/* Forward declaration — defined in message.c (not compiled for WASM) */
+gchar *GetNextWord(gchar **Data, gchar *Default);
+
 typedef struct _FmtData {
   union {
     int IntVal;

@@ -30,6 +30,8 @@
 #include <errno.h>              /* For errno */
 #include <ctype.h>              /* For isprint */
 #include "glib-stub.h"
+#include "convert.h"            /* For Conv_New etc. */
+#include "error.h"              /* For ErrStrFromErrno */
 
 #include "configfile.h"
 #include "dopewars.h"           /* For struct GLOBALS etc. */

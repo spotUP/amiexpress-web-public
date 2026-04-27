@@ -44,6 +44,7 @@
 #include "configfile.h"
 #include "dopewars.h"
 #include "log.h"
+#include "message.h"
 #include "nls.h"
 #include "serverside.h"
 #include "tstring.h"

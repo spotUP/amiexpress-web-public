@@ -51,7 +51,7 @@ int sigaction(int sig, struct sigaction *sact, char *pt);
 void sigprocmask(int flag, int *mask, char *pt);
 int bselect(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfs,
             struct timeval *tm);
-#else /* Definitions for Unix build */
+#else /* Definitions for Unix/WASM build */
 #define bselect select
 #endif /* CYGWIN */
 

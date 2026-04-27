@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include "configfile.h"         /* For UpdateConfigFile */
 #include "dopewars.h"
+#include "error.h"              /* For ErrStrFromErrno */
 #include "log.h"
 #include "wasm-exports.h"
 #include "nls.h"

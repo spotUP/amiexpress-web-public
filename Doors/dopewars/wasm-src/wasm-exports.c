@@ -239,7 +239,7 @@ static char market_buf[4096];
 EMSCRIPTEN_KEEPALIVE
 const char* wasm_get_market(int idx) {
   extern int NumDrug;
-  extern Drug *Drugs;
+  extern struct DRUG *Drug;
   Player *p = get_player(idx);
   if (!p) return "null";
 
@@ -250,10 +250,10 @@ const char* wasm_get_market(int idx) {
     snprintf(entry, sizeof(entry),
       "%s{\"index\":%d,\"name\":\"%s\",\"price\":%.2f,\"cheap\":%s,\"expensive\":%s}",
       i > 0 ? "," : "", i,
-      Drugs[i].Name ? Drugs[i].Name : "",
+      Drug[i].Name ? Drug[i].Name : "",
       (double)(p->Drugs[i].Price),
-      Drugs[i].Cheap     ? "true" : "false",
-      Drugs[i].Expensive ? "true" : "false");
+      Drug[i].Cheap     ? "true" : "false",
+      Drug[i].Expensive ? "true" : "false");
     strncat(prices, entry, sizeof(prices)-strlen(prices)-1);
   }
   strncat(prices, "]", sizeof(prices)-strlen(prices)-1);

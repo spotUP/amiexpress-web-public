@@ -43,6 +43,7 @@
 #endif
 
 #include "glib-stub.h"
+#include "convert.h"
 #include "util.h"
 
 /* Make price_t be a long long if the type is supported by the compiler */
