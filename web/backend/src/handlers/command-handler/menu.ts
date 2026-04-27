@@ -17,6 +17,8 @@ import {
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
 import { updateTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
+import { setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 
 /**
  * Display main menu (express.e:28586)
@@ -114,6 +116,9 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   // Update time used and check if exceeded (express.e:28591-28592)
   // Note: updateTimeUsed is also called in displayMenuPrompt, but express.e calls it here too
   updateTimeUsed(socket, session);
+
+  // express.e:28596 - setEnvStat(ENV_IDLE) before menu prompt
+  setEnvStat(session, EnvStat.IDLE);
 
   // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display)
   displayMenuPrompt(socket, session);

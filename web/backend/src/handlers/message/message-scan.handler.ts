@@ -452,15 +452,11 @@ console.error(`[confScan] Conference ${conf} scan failed:`, err);
   }
 
   // express.e:28103 - currentConf:=0
+  // express.e resets currentConf to 0 and returns. SUBSTATE_DISPLAY_CONF_BULL then
+  // calls joinConf once (our AUTO_REJOIN handler). Do NOT pre-join here — that caused
+  // a double callers-log entry and spurious side effects before the real auto-rejoin.
   session.currentConference = 0;
   session.currentConf = 0;
-  
-  // express.e:28574 - Join default conference after scan finishes
-  // This restores currentConf so subsequent screens (CONF_BULL, MENU) can be found.
-  const confToJoin = user?.confRJoin || 1;
-  const msgToJoin = user?.msgBaseRJoin || 1;
-console.log(`[confScan] Scan complete. Joining default conference ${confToJoin} (base ${msgToJoin})`);
-  await joinConference(socket, session, confToJoin, msgToJoin, true);
 
   // Restore current login date
   if (user) {
