@@ -28,6 +28,7 @@ export declare class VersusScreen {
     private botPlayer;
     private versusAI;
     private boardBox;
+    private nextBox;
     private opponentBoardBox;
     private opponentInfoBox;
     private minimapContainer;
@@ -73,6 +74,12 @@ export declare class VersusScreen {
      * Render the game board
      */
     private renderBoard;
+    /**
+     * Render player's next piece queue into nextBox.
+     * Each piece is shown in its spawn orientation using 2-char blocks.
+     * Up to 5 pieces fit in the 12-row content area (2 rows each + 1 blank).
+     */
+    private renderNextQueue;
     /**
      * Render opponent board (full size, same layout as player board)
      */

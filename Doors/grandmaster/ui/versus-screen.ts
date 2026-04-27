@@ -36,6 +36,7 @@ export class VersusScreen {
 
   // UI Elements
   private boardBox: any;
+  private nextBox: any;            // Player's next queue
   private opponentBoardBox: any;   // 1v1: full opponent board
   private opponentInfoBox: any;    // 1v1: opponent name/stats
   private minimapContainer: any;   // Battle royale: minimap grid
@@ -88,12 +89,13 @@ export class VersusScreen {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
 
-    // 80×24 layout — symmetric side-by-side for 1v1:
-    //   Col  0-21 : player board
-    //   Col 22-24 : garbage/attack strip
-    //   Col 25-46 : opponent board (full size)
-    //   Col 47-79 : stats / info panels
-    //   Row 23    : one-line stats bar (no border)
+    // 80×24 layout:
+    //   Col  0-21 : player board (22)
+    //   Col 22-24 : garbage strip  (3)
+    //   Col 25-46 : opponent board (22)
+    //   Col 47-60 : player NEXT queue (14)
+    //   Col 61-79 : VS info panel  (19)  — 22+3+22+14+19 = 80
+    //   Row 23    : one-line stats bar
 
     // Player board
     this.boardBox = createBox({
@@ -139,12 +141,28 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // Combined VS panel: opponent info + attack status in one box
-    this.opponentInfoBox = createBox({
+    // Player NEXT queue
+    this.nextBox = createBox({
       parent: this.screen,
       top: 1,
       left: 47,
-      width: 33,
+      width: 14,
+      height: 22,
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'white' } },
+      label: ' NEXT ',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // VS info panel (narrower — 19 wide)
+    this.opponentInfoBox = createBox({
+      parent: this.screen,
+      top: 1,
+      left: 61,
+      width: 19,
       height: 22,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
@@ -164,7 +182,7 @@ export class VersusScreen {
       parent: this.screen,
       top: 23,
       left: 0,
-      width: 47,
+      width: 61,
       height: 1,
       border: 'none' as any,
       content: '',
@@ -355,6 +373,9 @@ export class VersusScreen {
     // Render board
     this.renderBoard(gameState);
 
+    // Render next queue
+    this.renderNextQueue(gameState.nextQueue ?? []);
+
     // Render stats
     this.statsBox.setContent(
       `Score: {yellow-fg}${gameState.score}{/yellow-fg}  ` +
@@ -471,6 +492,46 @@ export class VersusScreen {
     }
 
     this.boardBox.setContent(content);
+  }
+
+  /**
+   * Render player's next piece queue into nextBox.
+   * Each piece is shown in its spawn orientation using 2-char blocks.
+   * Up to 5 pieces fit in the 12-row content area (2 rows each + 1 blank).
+   */
+  private renderNextQueue(queue: string[]): void {
+    if (!this.nextBox) return;
+
+    // Piece shapes (spawn rotation, trimmed to their bounding box)
+    const SHAPES: Record<string, string[]> = {
+      I: ['████████'],
+      O: ['████', '████'],
+      T: ['██████', ' ██  '],
+      S: [' ████', '████ '],
+      Z: ['████ ', ' ████'],
+      J: ['██   ', '██████'],
+      L: ['   ██', '██████'],
+    };
+
+    const COLORS: Record<string, string> = {
+      I: 'cyan', O: 'yellow', T: 'magenta',
+      S: 'green', Z: 'red', J: 'blue', L: 'white',
+    };
+
+    let content = '';
+    const show = Math.min(queue.length, 5);
+    for (let i = 0; i < show; i++) {
+      const type = queue[i];
+      const rows = SHAPES[type] ?? ['??'];
+      const color = COLORS[type] ?? 'white';
+      for (const row of rows) {
+        // Replace block chars with colored version
+        content += `{${color}-fg}${row}{/${color}-fg}\n`;
+      }
+      if (i < show - 1) content += '\n';  // blank separator between pieces
+    }
+
+    this.nextBox.setContent(content);
   }
 
   /**
