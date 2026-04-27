@@ -1,7 +1,8 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 export interface Layout {
-  screen:    ReturnType<typeof blessed.screen>;
+  screen:    ReturnType<typeof createScreen>;
   header:    ReturnType<typeof blessed.box>;
   market:    ReturnType<typeof blessed.box>;
   inventory: ReturnType<typeof blessed.box>;
@@ -10,11 +11,10 @@ export interface Layout {
   actions:   ReturnType<typeof blessed.box>;
 }
 
-export function createLayout(_session: any): Layout {
-  const screen = blessed.screen({
+export function createLayout(session: any): Layout {
+  const bbs = session?.bbs ?? session;
+  const screen = createScreen(bbs, {
     smartCSR: true,
-    terminal: 'xterm-256color',
-    fullUnicode: false,
   });
 
   const header = blessed.box({

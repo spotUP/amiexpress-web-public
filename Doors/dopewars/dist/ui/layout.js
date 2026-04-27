@@ -5,11 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLayout = createLayout;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
-function createLayout(_session) {
-    const screen = blessed_1.default.screen({
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+function createLayout(session) {
+    const bbs = session?.bbs ?? session;
+    const screen = (0, blessed_helpers_1.createScreen)(bbs, {
         smartCSR: true,
-        terminal: 'xterm-256color',
-        fullUnicode: false,
     });
     const header = blessed_1.default.box({
         parent: screen, top: 0, left: 0, width: '100%', height: 1,
