@@ -687,6 +687,8 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
+        // express.e:28073 - displayScreen(SCREEN_MAILSCAN) — always shown before scan/prompt
+        await displayScreen(socket, session, 'MAILSCAN');
         // express.e:28075 - IF (checkToolTypeExists(TOOLTYPE_NODE,node,'MAILSCAN_PROMPT'))
         const nodeInfoPath = path.join(config.get('dataDir'), `Node${session.nodeId}.info`);
         let hasMailscanPrompt = false;
