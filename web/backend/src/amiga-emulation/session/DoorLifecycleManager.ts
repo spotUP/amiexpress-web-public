@@ -1614,6 +1614,7 @@ console.log(`[DoorLifecycleManager] DETECTED AEDoorPort via findPort at 0x${aePo
       if (this.ximProtocol) {
         this.ximProtocol.setXimPortAddress(aePortAddr);
       }
+
     }
 
     // CRITICAL FIX 2026-01-16: Use the ACTUAL port address from door's GetMsg calls

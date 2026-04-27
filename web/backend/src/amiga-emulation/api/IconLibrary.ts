@@ -659,25 +659,46 @@ console.log(`[icon.library]   No match found`);
         .filter(n => n > 0)
         .sort((a, b) => a - b);
       for (const confNum of confDirs) {
+        let ulpath = '';
+        let dlpath = '';
+        let ndirs = 0;
+
         const confInfoPath = path.join(this.bbsRoot, `Conf${confNum}`, 'ConfConfig.info');
         const resolved = amigafs.resolvePath(confInfoPath);
-        if (!resolved) continue;
-        const confTools = this.parseInfoFile(resolved);
-        if (!confTools) continue;
-        for (const tt of confTools) {
-          const eq = tt.indexOf('=');
-          if (eq < 0) continue;
-          const key = tt.substring(0, eq).toUpperCase();
-          const value = tt.substring(eq + 1);
-          if (key === 'UPLOADS' || key === 'ULPATH' || key === 'UPLOAD') {
-            tooltypes.push(`ULPATH.${confNum}=${value}`);
-          } else if (key === 'DOWNLOADS' || key === 'DLPATH' || key === 'DOWNLOAD') {
-            tooltypes.push(`DLPATH.${confNum}=${value}`);
-          } else if (key === 'NDIRS') {
-            const n = parseInt(value, 10);
-            if (!isNaN(n) && n > maxNdirs) maxNdirs = n;
+        if (resolved) {
+          const confTools = this.parseInfoFile(resolved);
+          if (confTools) {
+            for (const tt of confTools) {
+              const eq = tt.indexOf('=');
+              if (eq < 0) continue;
+              const key = tt.substring(0, eq).toUpperCase();
+              const value = tt.substring(eq + 1);
+              if (key === 'UPLOADS' || key === 'ULPATH' || key === 'UPLOAD') {
+                ulpath = value;
+              } else if (key === 'DOWNLOADS' || key === 'DLPATH' || key === 'DOWNLOAD') {
+                dlpath = value;
+              } else if (key === 'NDIRS') {
+                const n = parseInt(value, 10);
+                if (!isNaN(n)) ndirs = n;
+              }
+            }
           }
         }
+
+        // Fall back to conventional Upload/ directory if ConfConfig.info missing or incomplete
+        if (!ulpath) {
+          const uploadDir = path.join(this.bbsRoot, `Conf${confNum}`, 'Upload');
+          if (amigafs.existsSync(uploadDir)) {
+            ulpath = `BBS:Conf${confNum}/Upload/`;
+          }
+        }
+        if (!dlpath && ulpath) {
+          dlpath = ulpath;
+        }
+
+        if (ulpath) tooltypes.push(`ULPATH.${confNum}=${ulpath}`);
+        if (dlpath) tooltypes.push(`DLPATH.${confNum}=${dlpath}`);
+        if (ndirs > maxNdirs) maxNdirs = ndirs;
       }
       if (maxNdirs === 0) maxNdirs = 20;
       tooltypes.push(`NDIRS=${maxNdirs}`);

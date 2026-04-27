@@ -103,6 +103,27 @@ export async function sendStartupMessage(
     messageHandler.sendInitAndStatusMessages();
   }
 
+  // CRITICAL: Also deliver INIT/STAT directly to AEDoorPort so doors like
+  // AquaScan.020 that scan ExecBase's port list and call GetMsg on AEDoorPort
+  // (bypassing FindPort) see the startup message. We mark the messages as
+  // "replied" so pollXIMMessages()'s getMsg({ skipReplies: true }) skips them —
+  // only the door's own GetMsg (no skipReplies) will dequeue them.
+  if (libraryManager?.execLibrary && config.doorType === "XIM") {
+    const execLib = libraryManager.execLibrary;
+    const aePortAddr = execLib.getDoorPortAddress();
+    if (aePortAddr !== 0 && messageHandler) {
+console.log(`[DoorStartupHelper] Sending INIT/STAT to AEDoorPort 0x${aePortAddr.toString(16)} (marked as skipReplies)`);
+      messageHandler.sendStartupToAEDoorPort(aePortAddr);
+      // Mark these messages so skipReplies polling doesn't consume them.
+      const port = (execLib as any).messagePorts?.get(aePortAddr);
+      if (port && port.messages) {
+        for (const msgAddr of port.messages) {
+          execLib.markMessageAsReplied(msgAddr);
+        }
+      }
+    }
+  }
+
   if (libraryManager?.execLibrary && config.doorType === "XIM") {
     try {
       const execLib = libraryManager.execLibrary;

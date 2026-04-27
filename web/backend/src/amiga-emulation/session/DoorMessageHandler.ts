@@ -290,28 +290,39 @@ debugLog("[DoorMessageHandler] checkForPause: waiting for user input");
   // HOWEVER: Some old doors (WALL, JoinCnf) expect old protocol and don't send
   // follow-up messages. For these, we use a 500ms fallback timer to detect and
   // send INIT/STAT if needed (see processCommand JH_REGISTER case).
+  isSentInitialMessage(): boolean {
+    return this.sentInitialMessage;
+  }
+
   sendStartupMessage(): void {
 debugLog("[DoorMessageHandler] Sending INIT/STAT to door's task port (pr_MsgPort)");
-    // XIM DOOR STARTUP PROTOCOL:
-    //
-    // Doors with pr_CLI=0 (BBS mode) expect INIT/STAT on their TASK PORT (pr_MsgPort),
-    // similar to how Workbench sends startup messages to WB-launched programs.
-    //
-    // The door reads from pr_MsgPort, replies, then uses AEDoorPort1 for BBS communication.
-    // AEDoorPort1 is for door->BBS communication, NOT BBS->door!
-    //
-    // PREVIOUS BUG: We were sending INIT/STAT to AEDoorPort1, which our own polling
-    // consumed before the door could read them.
-    //
-    // See express.e:4352-4369 for the BBS side of XIM protocol.
     this.sendInitAndStatusMessages();
+  }
+
+  /**
+   * Send INIT/STAT startup messages directly to the given port address.
+   *
+   * AquaScan.020 (and doors that poll AEDoorPort before CreateComm) call GetMsg on
+   * AEDoorPort right after FindPort, expecting a BBS-presence startup message.  The
+   * previous sendStartupMessage() targeted pr_MsgPort and the door never saw it.
+   * Sending to AEDoorPort at the FindPort site avoids the pollXIMMessages() race
+   * because polling only runs after the current trap returns, which is AFTER the
+   * door's next GetMsg trap has already dequeued the message.
+   */
+  sendStartupToAEDoorPort(aePortAddr: number): void {
+console.log(`[DoorMessageHandler] sendStartupToAEDoorPort: putting INIT/STAT on 0x${aePortAddr.toString(16)}`);
+    // Don't check sentInitialMessage — startup may already have gone to pr_MsgPort.
+    // We need a SEPARATE copy on AEDoorPort for doors that poll it directly.
+    this.sentInitialMessage = false;
+    this.sendInitAndStatusMessages(aePortAddr);
+    // sendInitAndStatusMessages sets sentInitialMessage = true again.
   }
 
   /**
    * Send INIT (cmd 0) and STAT (cmd 1) messages for XIM doors, mirroring AEDoor.library
    * layout (Exec message header + command at offset 0x14/0x18).
    */
-  sendInitAndStatusMessages(): void {
+  sendInitAndStatusMessages(overrideTargetPort?: number): void {
     // NOTE: Native AEDoor.library does NOT automatically send INIT/STAT messages.
     // We must send them from the emulator regardless of native vs trapped library.
     if (this.sentInitialMessage) {
@@ -392,10 +403,10 @@ console.warn(
     const doorTaskPort = doorTaskAddr > 0 ? doorTaskAddr + 0x5c : 0; // pr_MsgPort offset in Process
 debugLog(`[DoorMessageHandler] Door task: 0x${doorTaskAddr.toString(16)}, pr_MsgPort: 0x${doorTaskPort.toString(16)}`);
 
-    // Target the door's pr_MsgPort where it reads startup messages
-    const targetPorts = Array.from(
-      new Set([doorTaskPort].filter((p) => p && p > 0))
-    );
+    // If a specific target port is given (e.g. AEDoorPort at FindPort time) use it;
+    // otherwise fall back to the door's pr_MsgPort for doors that poll there.
+    const rawTarget = overrideTargetPort ?? doorTaskPort;
+    const targetPorts = Array.from(new Set([rawTarget].filter((p) => p && p > 0)));
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
 
     // Real AEDoor disasm sends two PutMsg calls with d0=0 (INIT) then d0=1 (STAT)

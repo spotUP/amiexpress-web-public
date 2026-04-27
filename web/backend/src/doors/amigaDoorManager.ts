@@ -1442,8 +1442,38 @@ console.error('Door deletion error:', error);
       }
 
       // Fallback to name as command
-      if (!commandName) {
-        commandName = name.toUpperCase();
+      let resolvedCommand: string = commandName ?? name.toUpperCase();
+
+      // Verify the derived commandName has a matching .info in Commands/BBSCmd/.
+      // If not, scan all BBSCmd .info files for one whose LOCATION= points to Doors/<name>.
+      // This handles doors where CMDNAME / bbsCommand don't match the registered command
+      // (e.g. grandmaster has CMDNAME=grandmaster but is registered as GMASTER.info).
+      if (amigafs.existsSync(commandsPath)) {
+        const candidateInfo = path.join(commandsPath, `${resolvedCommand.toLowerCase()}.info`);
+        if (!amigafs.existsSync(candidateInfo)) {
+          try {
+            const { parseInfoFile } = require('../utils/info-file.util');
+            const files = amigafs.readdirSync(commandsPath);
+            for (const file of files) {
+              if (!(file.toLowerCase().endsWith('.info'))) continue;
+              try {
+                const parsed = parseInfoFile(path.join(commandsPath, file));
+                const locTT = parsed.tooltypes.find((t: any) => t.key === 'LOCATION');
+                if (!locTT) continue;
+                const locDir = locTT.value.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0].toLowerCase();
+                if (locDir === name.toLowerCase()) {
+                  const cmdTT = parsed.tooltypes.find((t: any) => t.key === 'BBSCMD');
+                  if (cmdTT) {
+                    resolvedCommand = cmdTT.value.toUpperCase();
+                    break;
+                  }
+                }
+              } catch { /* skip malformed .info */ }
+            }
+          } catch (e) {
+console.warn(`[deleteTypeScriptDoor] BBSCmd scan failed: ${(e as Error).message}`);
+          }
+        }
       }
 
       // Delete .info file from Commands/BBSCmd/ (case-insensitive search)
@@ -1452,8 +1482,7 @@ console.error('Door deletion error:', error);
           const files = amigafs.readdirSync(commandsPath);
           for (const file of files) {
             const lowerFile = file.toLowerCase();
-            const lowerCmd = commandName.toLowerCase();
-            if (lowerFile === `${lowerCmd}.info`) {
+            if (lowerFile === `${resolvedCommand.toLowerCase()}.info`) {
               const infoPath = path.join(commandsPath, file);
               amigafs.unlinkSync(infoPath);
               deletedFiles.push(infoPath);
@@ -1471,8 +1500,7 @@ console.warn(`Could not clean up Commands/BBSCmd: ${(e as Error).message}`);
           const files = amigafs.readdirSync(sysCmdPath);
           for (const file of files) {
             const lowerFile = file.toLowerCase();
-            const lowerCmd = commandName.toLowerCase();
-            if (lowerFile === `${lowerCmd}.info`) {
+            if (lowerFile === `${resolvedCommand.toLowerCase()}.info`) {
               const infoPath = path.join(sysCmdPath, file);
               amigafs.unlinkSync(infoPath);
               deletedFiles.push(infoPath);
