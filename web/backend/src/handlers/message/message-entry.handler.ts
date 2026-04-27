@@ -157,17 +157,28 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
 /** express.e:10374-10391 "Msg. Options: A,C,D,E,L,S,? >:" */
 function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): void {
   session.subState = LoggedOnSubState.POST_MESSAGE_OPTIONS;
+  const hasAttach = checkSecurity(session.user, ACSPermission.ATTACH_FILES);
+  const hasParent = !!(session.tempData?.messageEntry?.parentId);
   if (!helpList) {
-    // express.e:10375-10379 — no trailing space after >:
-    emitText(socket, '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mC\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mE\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mS\x1b[36m,\x1b[33m? \x1b[0m>:');
+    // express.e:10375-10379 — dynamic based on ACS; WEB_: add I, R, Q
+    let menu = '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mC\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mE\x1b[36m';
+    if (hasAttach) menu += ',\x1b[33mF\x1b[36m';
+    menu += ',\x1b[33mI\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mS\x1b[36m';
+    if (hasParent) menu += ',\x1b[33mQ\x1b[36m';
+    menu += ',\x1b[33m? \x1b[0m>:';
+    emitText(socket, menu);
   } else {
-    // express.e:10381-10390
+    // express.e:10381-10390; WEB_: add I, R, Q entries
     emitText(socket, '\r\n\x1b[33mA\x1b[32m>\x1b[36mbort\x1b[0m');
     emitText(socket, '\r\n\x1b[33mC\x1b[32m>\x1b[36montinue\x1b[0m');
     emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Lines\x1b[0m');
     emitText(socket, '\r\n\x1b[33mE\x1b[32m>\x1b[36mdit\x1b[0m');
+    if (hasAttach) emitText(socket, '\r\n\x1b[33mF\x1b[32m>\x1b[36mile Attachment\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mI\x1b[32m>\x1b[36mnsert Line\x1b[0m');
     emitText(socket, '\r\n\x1b[33mL\x1b[32m>\x1b[36mist\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mR\x1b[32m>\x1b[36meplace Text\x1b[0m');
     emitText(socket, '\r\n\x1b[33mS\x1b[32m>\x1b[36mave\x1b[0m');
+    if (hasParent) emitText(socket, '\r\n\x1b[33mQ\x1b[32m>\x1b[36muote from Reply\x1b[0m');
     // express.e:10389 helplist:=0 resets so next prompt shows short menu
     emitText(socket, '\r\n\x1b[0m >: ');
   }
@@ -260,6 +271,59 @@ export async function handleMessageOptionsInput(socket: any, session: BBSSession
   if (cmd === 'S') {
     // Save (express.e: RETURN RESULT_SUCCESS)
     await saveMessage(socket, session);
+    return;
+  }
+
+  // express.e:10376 — F: File Attachment (gated on ACS_ATTACH_FILES)
+  if (cmd === 'F') {
+    if (!checkSecurity(session.user, ACSPermission.ATTACH_FILES)) {
+      showOptionsMenu(socket, session, false);
+      return;
+    }
+    emitText(socket, "\r\nEnter path/filename to attach ('5 <DIR>'=DIR): ");
+    session.subState = LoggedOnSubState.POST_MESSAGE_ATTACH_FILE;
+    return;
+  }
+
+  // WEB_: I — Insert line at position
+  if (cmd === 'I') {
+    emitText(socket, `\r\n\x1b[36mInsert before line \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${lines.length + 1}\x1b[32m]\x1b[0m? `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_INSERT_LINE;
+    return;
+  }
+
+  // WEB_: R — Replace text throughout message
+  if (cmd === 'R') {
+    emitText(socket, '\r\n\x1b[36mSearch for: \x1b[0m');
+    session.subState = LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH;
+    return;
+  }
+
+  // WEB_: Q — Quote from parent message (only when replying)
+  if (cmd === 'Q') {
+    if (!messageData.parentId) {
+      showOptionsMenu(socket, session, false);
+      return;
+    }
+    const parentMsg = await _db.getMessage(messageData.parentId);
+    if (!parentMsg) {
+      showOptionsMenu(socket, session, false);
+      return;
+    }
+    const parentLines: string[] = parentMsg.body.split('\n');
+    emitText(socket, '\r\n');
+    parentLines.forEach((line: string, index: number) => {
+      emitLinePrompt(socket, index + 1);
+      emitText(socket, `${line}\r\n`);
+    });
+    emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
+    session.tempData.quoteData = {
+      parentMessage: parentMsg,
+      parentLines,
+      totalLines: parentLines.length,
+      appendToEnd: true  // WEB_: mid-compose quote appends rather than prepends
+    };
+    session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE;
     return;
   }
 
@@ -643,11 +707,9 @@ export async function handleMessageAttachFileInput(socket: any, session: BBSSess
   const messageData = session.tempData.messageEntry;
   const attachedFile = input.trim();
 
-  // Blank = continue without attaching
+  // Blank = cancel attachment, return to options menu
   if (attachedFile === '') {
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    showOptionsMenu(socket, session, false);
     return;
   }
 
@@ -687,9 +749,7 @@ export function handleMessageAttachDeleteConfirm(socket: any, session: BBSSessio
     messageData.attachedFiles.unshift('N');
   }
 
-  emitText(socket, '\r\n');
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  showOptionsMenu(socket, session, false);
 }
 
 /**
@@ -698,11 +758,9 @@ export function handleMessageAttachDeleteConfirm(socket: any, session: BBSSessio
 export function handleMessageReplaceSearchInput(socket: any, session: BBSSession, input: string): void {
   const searchStr = input.trim();
 
-  // Empty = cancel
+  // Empty = cancel, return to options menu
   if (searchStr === '') {
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    showOptionsMenu(socket, session, false);
     return;
   }
 
@@ -756,8 +814,7 @@ export function handleMessageReplaceWithInput(socket: any, session: BBSSession, 
   // Clean up temp data
   delete messageData.replaceData;
 
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  showOptionsMenu(socket, session, false);
 }
 
 /**
@@ -767,11 +824,9 @@ export function handleMessageInsertLineInput(socket: any, session: BBSSession, i
   const lineNumStr = input.trim();
   const messageData = session.tempData.messageEntry;
 
-  // Empty = cancel
+  // Empty = cancel, return to options menu
   if (lineNumStr === '') {
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    showOptionsMenu(socket, session, false);
     return;
   }
 
@@ -818,8 +873,7 @@ export function handleMessageInsertTextInput(socket: any, session: BBSSession, i
   // Clean up temp data
   delete messageData.insertData;
 
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  showOptionsMenu(socket, session, false);
 }
 
 /**
@@ -894,10 +948,14 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
   quotedLines.push(' ');             // express.e:10942 msgBuf.setItem(lines,' ')
   // express.e:10944 msgBuf.setItem(lines,'') — empty line is where cursor starts in BEG_IN
 
-  // In our system, body entries are the text lines; currentLine points to next empty slot
-  // We DON'T add the trailing '' to body — currentLine + 1 is the cursor position
-  messageData.body.splice(0, 0, ...quotedLines);
-  messageData.currentLine = quotedLines.length + 1;
+  // WEB_: mid-compose quote (from options menu) appends to existing body;
+  // initial reply quote (appendToEnd=false) prepends per express.e:10931-10935
+  if (quoteData.appendToEnd) {
+    messageData.body.push(...quotedLines);
+  } else {
+    messageData.body.splice(0, 0, ...quotedLines);
+  }
+  messageData.currentLine = messageData.body.length + 1;
 
   delete session.tempData.quoteData;
 
