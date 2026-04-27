@@ -454,11 +454,33 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           const diskStats = (this.bbsSession as any)?.diskUserStats;
           const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
           if (isRead) {
-            // diskStats.timeLastOn=0 means "never logged on" (not a real zero timestamp),
-            // so use || not ?? so we fall through on zero too.
-            const lastOn = diskStats?.timeLastOn || (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : Math.floor(Date.now() / 1000));
+            // AquaScan expects Amiga epoch seconds (since Jan 1, 1978).
+            // Our DB/disk stores Unix epoch seconds (since Jan 1, 1970).
+            // Offset = 252460800 s.  After AquaScan runs once it writes back
+            // a correct Amiga epoch value (from DateStamp()), so the stored
+            // value is only wrong before the very first scan.
+            //
+            // Heuristic: values > 1_300_000_000 are Unix epoch (post-2011),
+            // which no historical Amiga BBS would have; convert them.
+            // Values <= that are already Amiga epoch (imported users, or
+            // written back by AquaScan on a prior run).
+            const AMIGA_EPOCH_OFFSET = 252_460_800; // Unix seconds for 1978-01-01
+            const UNIX_EPOCH_THRESHOLD = 1_300_000_000; // safely above any Amiga date
+
+            const rawDisk = diskStats?.timeLastOn ?? 0;
+            let lastOn: number;
+            if (rawDisk > 0 && rawDisk <= UNIX_EPOCH_THRESHOLD) {
+              // Already Amiga epoch (imported user or written back by AquaScan)
+              lastOn = rawDisk;
+            } else {
+              // Zero or Unix epoch — compute from lastLogin or now
+              const unixSec = rawDisk > UNIX_EPOCH_THRESHOLD
+                ? rawDisk
+                : (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : Math.floor(Date.now() / 1000));
+              lastOn = Math.max(0, unixSec - AMIGA_EPOCH_OFFSET);
+            }
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
-debugLog(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_TIMELASTON: ${lastOn} rawDisk=${rawDisk}`);
           } else {
             const newLastOn = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLastOn)) {
