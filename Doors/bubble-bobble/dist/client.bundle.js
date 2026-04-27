@@ -3087,6 +3087,9 @@ var init_element = __esm({
       onMouse(event) {
         if (this.hidden || !this.visible)
           return false;
+        if (!this.options.mouse && !this.options.clickable && !this.options.scrollable) {
+          return false;
+        }
         const coords = this._getCoords();
         if (!coords)
           return false;
@@ -3186,36 +3189,36 @@ var init_element = __esm({
         const type = typeof this.options.border === "string" ? this.options.border : this.options.border.type || "line";
         const borders = {
           line: {
-            topLeft: "\u250C",
-            topRight: "\u2510",
-            bottomLeft: "\u2514",
-            bottomRight: "\u2518",
-            horizontal: "\u2500",
-            vertical: "\u2502"
+            topLeft: ".",
+            topRight: ".",
+            bottomLeft: "`",
+            bottomRight: "'",
+            horizontal: "-",
+            vertical: "|"
           },
           heavy: {
-            topLeft: "\u250F",
-            topRight: "\u2513",
-            bottomLeft: "\u2517",
-            bottomRight: "\u251B",
-            horizontal: "\u2501",
-            vertical: "\u2503"
+            topLeft: "+",
+            topRight: "+",
+            bottomLeft: "+",
+            bottomRight: "+",
+            horizontal: "=",
+            vertical: "|"
           },
           double: {
-            topLeft: "\u2554",
-            topRight: "\u2557",
-            bottomLeft: "\u255A",
-            bottomRight: "\u255D",
-            horizontal: "\u2550",
-            vertical: "\u2551"
+            topLeft: "+",
+            topRight: "+",
+            bottomLeft: "+",
+            bottomRight: "+",
+            horizontal: "=",
+            vertical: "|"
           },
           round: {
-            topLeft: "\u256D",
-            topRight: "\u256E",
-            bottomLeft: "\u2570",
-            bottomRight: "\u256F",
-            horizontal: "\u2500",
-            vertical: "\u2502"
+            topLeft: ".",
+            topRight: ".",
+            bottomLeft: "`",
+            bottomRight: "'",
+            horizontal: "-",
+            vertical: "|"
           },
           bg: {
             topLeft: " ",

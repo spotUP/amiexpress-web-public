@@ -152,6 +152,10 @@ async function createApp(session) {
             dockBorders: false, // Not needed for fixed panels
             title: 'Door Games & Utilities',
         });
+        screen.program.write('\x1b[2J');
+        screen.program.write('\x1b[H');
+        screen.clearRegion(0, screen.width, 0, screen.height);
+        screen.alloc();
     }
     catch (error) {
         bbs.write('\r\n\x1b[31mError creating door interface\x1b[0m\r\n');
