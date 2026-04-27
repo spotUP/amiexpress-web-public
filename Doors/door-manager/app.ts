@@ -78,6 +78,7 @@ async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
     size: d.size || 0,
     accessLevel: d.accessLevel || 0,
     location: d.location || d.path || '',
+    resolvedPath: d.resolvedPath || undefined,
     enabled: d.enabled !== false,
   }));
 }
@@ -143,14 +144,22 @@ export async function createApp(session: DoorSession): Promise<void> {
     focusable: false,
   } as any);
 
-  new Panel({
+  const footer = new Panel({
     parent: screen,
     bottom: 0, left: 0, width: '100%', height: 3,
     tags: true,
-    content: `{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
+    content: '',
     style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
     focusable: false,
   } as any);
+
+  function updateFooter(): void {
+    const door = selectedDoor();
+    const toggleLabel = (!door || door.enabled) ? 'Disable' : 'Enable';
+    (footer as any).setContent(
+      `{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}${toggleLabel}  {yellow-fg}[T]{/yellow-fg}est  {yellow-fg}[Q]{/yellow-fg}uit{/center}`
+    );
+  }
 
   const listPanel = new Panel({
     parent: screen,
@@ -250,11 +259,12 @@ export async function createApp(session: DoorSession): Promise<void> {
   refreshHeader();
   populateList(0);
   updateInfoPane();
+  updateFooter();
   applyResponsive();
   (doorList as any).focus();
 
   screen.on('resize', () => { applyResponsive(); screen.render(); });
-  (doorList as any).on('select item', () => { updateInfoPane(); });
+  (doorList as any).on('select item', () => { updateInfoPane(); updateFooter(); });
 
   (screen as any).key(['q', 'Q', 'escape'], () => {
     if (statusTimer) clearTimeout(statusTimer);
@@ -330,6 +340,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     }
     populateList(idx);
     updateInfoPane();
+    updateFooter();
   });
 
   (screen as any).key(['t', 'T'], () => {
@@ -358,8 +369,12 @@ export async function createApp(session: DoorSession): Promise<void> {
       onConfirm: async () => {
         const idx = (doorList as any).selected ?? 0;
         const isTS = ['TS', 'typescript', 'SDK'].includes(door.type);
-        const identifier = door.location
-          ? door.location.replace(/^Doors[\\/]/i, '') || door.command
+        // 68K doors: identifier = command name (matches Commands/BBSCmd/<cmd>.info)
+        // TS doors: identifier = directory name under Doors/ (first path component)
+        const identifier = isTS
+          ? (door.location
+              ? door.location.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0] || door.command
+              : door.command)
           : door.command;
         setStatus(`Deleting ${door.name}...`);
         try {

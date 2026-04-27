@@ -25,6 +25,7 @@ export declare class InfoEditorOverlay {
     private loadInfo;
     private renderList;
     private editSelected;
+    private toggleComment;
     private save;
     private updateFooter;
     private close;

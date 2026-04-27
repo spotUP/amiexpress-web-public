@@ -51,6 +51,7 @@ async function fetchDoors(bbs) {
         size: d.size || 0,
         accessLevel: d.accessLevel || 0,
         location: d.location || d.path || '',
+        resolvedPath: d.resolvedPath || undefined,
         enabled: d.enabled !== false,
     }));
 }
@@ -106,14 +107,19 @@ async function createApp(session) {
         style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
         focusable: false,
     });
-    new blessed_1.Panel({
+    const footer = new blessed_1.Panel({
         parent: screen,
         bottom: 0, left: 0, width: '100%', height: 3,
         tags: true,
-        content: `{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
+        content: '',
         style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
         focusable: false,
     });
+    function updateFooter() {
+        const door = selectedDoor();
+        const toggleLabel = (!door || door.enabled) ? 'Disable' : 'Enable';
+        footer.setContent(`{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}${toggleLabel}  {yellow-fg}[T]{/yellow-fg}est  {yellow-fg}[Q]{/yellow-fg}uit{/center}`);
+    }
     const listPanel = new blessed_1.Panel({
         parent: screen,
         top: 3, left: 0, width: '50%', height: '100%-6',
@@ -201,10 +207,11 @@ async function createApp(session) {
     refreshHeader();
     populateList(0);
     updateInfoPane();
+    updateFooter();
     applyResponsive();
     doorList.focus();
     screen.on('resize', () => { applyResponsive(); screen.render(); });
-    doorList.on('select item', () => { updateInfoPane(); });
+    doorList.on('select item', () => { updateInfoPane(); updateFooter(); });
     screen.key(['q', 'Q', 'escape'], () => {
         if (statusTimer)
             clearTimeout(statusTimer);
@@ -284,6 +291,7 @@ async function createApp(session) {
         }
         populateList(idx);
         updateInfoPane();
+        updateFooter();
     });
     screen.key(['t', 'T'], () => {
         const door = selectedDoor();
@@ -312,8 +320,12 @@ async function createApp(session) {
             onConfirm: async () => {
                 const idx = doorList.selected ?? 0;
                 const isTS = ['TS', 'typescript', 'SDK'].includes(door.type);
-                const identifier = door.location
-                    ? door.location.replace(/^Doors[\\/]/i, '') || door.command
+                // 68K doors: identifier = command name (matches Commands/BBSCmd/<cmd>.info)
+                // TS doors: identifier = directory name under Doors/ (first path component)
+                const identifier = isTS
+                    ? (door.location
+                        ? door.location.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0] || door.command
+                        : door.command)
                     : door.command;
                 setStatus(`Deleting ${door.name}...`);
                 try {
