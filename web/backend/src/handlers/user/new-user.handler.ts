@@ -1289,6 +1289,7 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       await webhookService.sendWebhook(WebhookTrigger.NEW_USER, {
         username: data.username,
         userId: newUserId,
+        gdprConsented: !!data.gdprConsentAt,
         location: data.location,
         computerType: data.computerType
       });
@@ -1321,14 +1322,9 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
       return;
     }
 
-    // DISK-BASED: Write user to user.data, user.keys, user.misc files
-    try {
-      userFileManager.writeUserFiles(newUser, newUserId);
-console.log(`[NewUser] Wrote user ${data.username} to disk files (slot ${newUserId})`);
-    } catch (error) {
-console.error('[NewUser] Error writing user to disk files:', error);
-      // Continue anyway - database has the user, sync can happen later
-    }
+    // DISK-BASED: Append to user.data/keys/misc for Amiga door compatibility.
+    // Only BBS terminal registrations reach here — web/admin/test users must NOT be written.
+    await db.appendUserToDisk(newUserId);
 
     socket.emit('ansi-output', '\x1b[32mAccount created successfully!\x1b[0m\r\n\r\n');
 

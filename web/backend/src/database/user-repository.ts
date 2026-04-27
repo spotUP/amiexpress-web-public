@@ -90,41 +90,34 @@ export class UserRepository extends BaseRepository<User> {
       userData.gdprConsentSource ?? null
     ]);
 
-    // CRITICAL: Write to disk files for Amiga door compatibility
-    // Get the full user object we just created
-    const newUser = await this.getUserById(id);
-    if (newUser) {
-      // Count existing users to assign slot number
-      const userCount = userDatabaseManager.getUserCount();
-      const slotNumber = userCount; // Next available slot
-      try {
-        // Write to node files (active session)
-        userFileManager.writeUserFiles(newUser, slotNumber);
-console.log(`[Database] Synced new user ${newUser.username} to node files (slot ${slotNumber})`);
-
-        // Write to main user database (user.data, user.keys, user.misc)
-        const userStruct = userDatabaseManager.userToStruct(newUser);
-        userStruct.slotNumber = slotNumber; // Set slot number
-        const keysStruct = userDatabaseManager.userToKeys(newUser, slotNumber);
-        const miscStruct = userDatabaseManager.userToMisc(newUser);
-
-        userDatabaseManager.appendUser(userStruct, keysStruct, miscStruct);
-console.log(`[Database] Synced new user ${newUser.username} to user.data/keys/misc`);
-      } catch (error) {
-console.error(`[Database] Failed to sync user to disk:`, error);
-        SysopDebugUtil.debug(
-          null,
-          null,
-          'Database',
-          `Failed to sync new user "${newUser.username}" to disk files (user.data/keys/misc)`,
-          { error: error instanceof Error ? error.message : String(error), slotNumber },
-          DebugSeverity.WARNING
-        );
-        // Don't throw - DB insert succeeded, file write is best-effort
-      }
-    }
-
     return id;
+  }
+
+  /**
+   * Append a newly-registered BBS user to the Amiga disk files (user.data/keys/misc).
+   * Call this ONLY from the BBS new-user registration flow after createUser() succeeds.
+   * Do NOT call from tests, admin API, or web registration — those users must not pollute
+   * the Amiga binary user database which is shared with 68K door binaries.
+   */
+  async appendUserToDisk(id: string): Promise<void> {
+    const user = await this.getUserById(id);
+    if (!user) return;
+    const slotNumber = userDatabaseManager.getUserCount();
+    try {
+      const userStruct = userDatabaseManager.userToStruct(user);
+      userStruct.slotNumber = slotNumber;
+      const keysStruct = userDatabaseManager.userToKeys(user, slotNumber);
+      const miscStruct = userDatabaseManager.userToMisc(user);
+      userDatabaseManager.appendUser(userStruct, keysStruct, miscStruct);
+console.log(`[Database] Appended BBS user ${user.username} to user.data/keys/misc (slot ${slotNumber})`);
+    } catch (error) {
+console.error(`[Database] Failed to append BBS user to disk:`, error);
+      SysopDebugUtil.debug(null, null, 'Database',
+        `Failed to append new BBS user "${user.username}" to disk files`,
+        { error: error instanceof Error ? error.message : String(error), slotNumber },
+        DebugSeverity.WARNING
+      );
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | null> {

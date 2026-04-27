@@ -2141,6 +2141,10 @@ console.error('Error creating indexes:', error);
     return this.userRepo!.createUser(...args);
   }
 
+  async appendUserToDisk(...args: Parameters<UserRepository['appendUserToDisk']>) {
+    return this.userRepo!.appendUserToDisk(...args);
+  }
+
   async getUserByUsername(...args: Parameters<UserRepository['getUserByUsername']>) {
     return this.userRepo!.getUserByUsername(...args);
   }

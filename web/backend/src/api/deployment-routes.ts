@@ -348,6 +348,64 @@ async function checkPorts() {
   };
 }
 
+/**
+ * Database Backup Endpoint
+ * POST /api/deployment/backup
+ */
+router.post('/deployment/backup', auth, sysop, async (req: Request, res: Response) => {
+  try {
+    const dbDir = process.env.DATABASE_DIR || './data';
+    const dbFile = process.env.DATABASE_FILE || 'amiexpress.db';
+    const dbPath = join(process.cwd(), dbDir, dbFile);
+    const { copyFileSync, existsSync: fsExists } = await import('fs');
+
+    if (!fsExists(dbPath)) {
+      return res.status(404).json({ error: 'Database file not found' });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupPath = dbPath.replace('.db', `-backup-${timestamp}.db`);
+    copyFileSync(dbPath, backupPath);
+
+    const { statSync: fsStat } = await import('fs');
+    const stats = fsStat(backupPath);
+    res.json({
+      success: true,
+      backupPath,
+      sizeFormatted: formatBytes(stats.size),
+      message: `Database backed up to ${backupPath}`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Backup failed', message: error.message });
+  }
+});
+
+/**
+ * Database Optimize (VACUUM) Endpoint
+ * POST /api/deployment/optimize
+ */
+router.post('/deployment/optimize', auth, sysop, async (req: Request, res: Response) => {
+  try {
+    const before = await db.query('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()', []);
+    await db.query('VACUUM', []);
+    const after = await db.query('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()', []);
+
+    const beforeSize = before.rows[0]?.size || 0;
+    const afterSize = after.rows[0]?.size || 0;
+    const saved = beforeSize - afterSize;
+
+    res.json({
+      success: true,
+      beforeSize: formatBytes(beforeSize),
+      afterSize: formatBytes(afterSize),
+      savedBytes: formatBytes(Math.max(0, saved)),
+      message: 'Database optimized successfully',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Optimize failed', message: error.message });
+  }
+});
+
 // formatBytes now imported from '../utils/byte-format.util'
 
 export const deploymentRouter = router;

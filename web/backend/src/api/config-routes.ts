@@ -209,6 +209,20 @@ console.error('Config API error:', error);
   });
 
   /**
+   * GET /api/config/conferences/health
+   * Check health of all conferences (files, directories)
+   * MUST be registered before /:conferenceId to prevent "health" being parsed as an integer
+   */
+  router.get('/conferences/health', async (req: Request, res: Response) => {
+    try {
+      const healthChecks = await conferenceSetup.checkAllConferences();
+      sendResponse(res, healthChecks, 'Conference health check complete');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
    * GET /api/config/conferences/:conferenceId
    * Get conference configuration
    */
@@ -302,19 +316,6 @@ console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError)
       }
 
       sendResponse(res, { deleted: true }, 'Conference configuration deleted');
-    } catch (error) {
-      handleError(res, error);
-    }
-  });
-
-  /**
-   * GET /api/config/conferences/health
-   * Check health of all conferences (files, directories)
-   */
-  router.get('/conferences/health', async (req: Request, res: Response) => {
-    try {
-      const healthChecks = await conferenceSetup.checkAllConferences();
-      sendResponse(res, healthChecks, 'Conference health check complete');
     } catch (error) {
       handleError(res, error);
     }

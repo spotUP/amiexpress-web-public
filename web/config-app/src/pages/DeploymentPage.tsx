@@ -72,6 +72,21 @@ interface DatabaseStats {
 
 export function DeploymentPage() {
   const [activeTab, setActiveTab] = useState<'health' | 'system' | 'database'>('health');
+  const [dbActionResult, setDbActionResult] = useState<string | null>(null);
+  const [dbActionLoading, setDbActionLoading] = useState(false);
+
+  const runDbAction = async (action: 'backup' | 'optimize') => {
+    setDbActionLoading(true);
+    setDbActionResult(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; message: string }>(`/api/deployment/${action}`);
+      setDbActionResult(res.data?.message || 'Done');
+    } catch (err: any) {
+      setDbActionResult(`Error: ${err.message}`);
+    } finally {
+      setDbActionLoading(false);
+    }
+  };
 
   const healthQuery = useQuery({
     queryKey: ['deployment-health'],
@@ -389,20 +404,27 @@ export function DeploymentPage() {
         {/* Database Actions */}
         <div className="bg-bbs-surface border border-bbs-primary rounded p-6">
           <h4 className="font-semibold mb-4">Database Operations</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button className="flex items-center justify-center space-x-2 px-4 py-3 bg-bbs-primary hover:bg-bbs-primary/80 rounded transition-colors">
-              <RefreshCw className="w-4 h-4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              onClick={() => runDbAction('backup')}
+              disabled={dbActionLoading}
+              className="flex items-center justify-center space-x-2 px-4 py-3 bg-bbs-primary hover:bg-bbs-primary/80 rounded transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${dbActionLoading ? 'animate-spin' : ''}`} />
               <span>Backup Database</span>
             </button>
-            <button className="flex items-center justify-center space-x-2 px-4 py-3 bg-bbs-primary hover:bg-bbs-primary/80 rounded transition-colors">
+            <button
+              onClick={() => runDbAction('optimize')}
+              disabled={dbActionLoading}
+              className="flex items-center justify-center space-x-2 px-4 py-3 bg-bbs-primary hover:bg-bbs-primary/80 rounded transition-colors disabled:opacity-50"
+            >
               <Database className="w-4 h-4" />
-              <span>Optimize</span>
-            </button>
-            <button className="flex items-center justify-center space-x-2 px-4 py-3 bg-bbs-primary hover:bg-bbs-primary/80 rounded transition-colors">
-              <Activity className="w-4 h-4" />
-              <span>Run Tests</span>
+              <span>Optimize (VACUUM)</span>
             </button>
           </div>
+          {dbActionResult && (
+            <p className="mt-3 text-sm text-bbs-muted">{dbActionResult}</p>
+          )}
         </div>
       </div>
     );

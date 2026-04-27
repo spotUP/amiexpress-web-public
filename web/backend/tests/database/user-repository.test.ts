@@ -130,6 +130,22 @@ describe('UserRepository', () => {
       expect(user!.gdprNoticeVersion).toBeUndefined();
       expect(user!.gdprConsentSource).toBeUndefined();
     });
+
+    it('does NOT write to disk (appendUser/writeUserFiles must not be called)', async () => {
+      // Regression: createUser() was calling userDatabaseManager.appendUser() on every
+      // user creation, polluting user.data with test users, admin API users, etc.
+      // The disk write belongs exclusively in appendUserToDisk() called from the BBS
+      // new-user registration flow.
+      const { userDatabaseManager } = require('../../src/services/UserDatabaseManager');
+      const { userFileManager } = require('../../src/services/UserFileManager');
+      (userDatabaseManager.appendUser as jest.Mock).mockClear();
+      (userFileManager.writeUserFiles as jest.Mock).mockClear();
+
+      await repo.createUser(makeUserData());
+
+      expect(userDatabaseManager.appendUser).not.toHaveBeenCalled();
+      expect(userFileManager.writeUserFiles).not.toHaveBeenCalled();
+    });
   });
 
   describe('getUserByUsername', () => {
