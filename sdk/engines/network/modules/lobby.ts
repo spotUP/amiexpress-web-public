@@ -278,7 +278,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
       socket.emit('lobby:join', { lobbyId, password }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
-          this.localPlayer = response.lobby.players.find(p => p.id === (socket as any).userId) || null;
+          this.localPlayer = response.lobby.players.find(p => p.id === ((socket as any).playerId ?? (socket as any).userId)) || null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Failed to join lobby'));
@@ -301,7 +301,7 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
       socket.emit('lobby:join_by_code', { inviteCode }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
-          this.localPlayer = response.lobby.players.find(p => p.id === (socket as any).userId) || null;
+          this.localPlayer = response.lobby.players.find(p => p.id === ((socket as any).playerId ?? (socket as any).userId)) || null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Invalid invite code'));
@@ -669,6 +669,10 @@ export class LobbySystem extends EventEmitter implements ILobbySystem {
       socket.emit('lobby:matchmake', { config, mode }, (response: { success: boolean; lobby?: Lobby; error?: string }) => {
         if (response.success && response.lobby) {
           this._current = response.lobby;
+          // BrokerClient exposes playerId (number); Socket.IO exposes userId.
+          // Try both so matchmake works with either transport.
+          const myId = (socket as any).playerId ?? (socket as any).userId;
+          this.localPlayer = response.lobby.players.find(p => p.id === myId) || null;
           resolve(response.lobby);
         } else {
           reject(new Error(response.error || 'Matchmaking failed'));

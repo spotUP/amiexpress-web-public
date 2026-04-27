@@ -395,11 +395,10 @@ export class NetworkEngine extends EventEmitter {
     // Lobby -> Game transition
     this.lobby.on('game:starting', () => {
       this.emit('game:starting');
-      // Start recording if replay enabled
-      const lobby = this.lobby.current;
-      if (lobby && !this.replay.isRecording) {
-        // Auto-start recording could be enabled here
-      }
+    });
+
+    this.lobby.on('game:start', () => {
+      this.emit('game:start');
     });
 
     // Presence auto-updates

@@ -401,14 +401,16 @@ export class GrandmasterNetworkManager extends EventEmitter {
       attacking: gameState.combo > 0,
     };
 
-    this.network.emit('game:update', update);
+    // Must emit on the broker socket, not the NetworkEngine EventEmitter.
+    // NetworkEngine.emit() is local-only; broker delivery requires socket.emit().
+    this.network.connection.getSocket()?.emit('game:update', update);
   }
 
   /**
    * Send attack to opponent(s)
    */
   sendAttack(attack: AttackPacket): void {
-    this.network.emit('game:attack', attack);
+    this.network.connection.getSocket()?.emit('game:attack', attack);
   }
 
   /**
