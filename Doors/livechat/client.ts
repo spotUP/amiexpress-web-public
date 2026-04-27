@@ -13,6 +13,7 @@
 import {
   ClientDoor,
   AudioEngine,
+  VoiceCapture,
 } from '@amiexpress/bbs-door-sdk/client';
 
 // =============================================================================
@@ -199,12 +200,9 @@ class LiveChatClient {
   private audioInitialized: boolean = false;
   private pendingSounds: Array<{ soundId: string; params?: any }> = [];
 
-  // Microphone capture state
-  private mediaStream: MediaStream | null = null;
+  // Microphone capture state (managed by VoiceCapture)
+  private voiceCapture: VoiceCapture | null = null;
   private audioContext: AudioContext | null = null;
-  private analyserNode: AnalyserNode | null = null;
-  private mediaRecorder: MediaRecorder | null = null;
-  private sourceNode: MediaStreamAudioSourceNode | null = null;
 
   // Video capture state
   private videoStream: MediaStream | null = null;
@@ -215,9 +213,8 @@ class LiveChatClient {
   // Voice state
   private isStreaming: boolean = false;
   private isMuted: boolean = false;
-  private levelInterval: ReturnType<typeof setInterval> | null = null;
-  private lastSpeakingState: boolean = false;
-  private speakingThreshold: number = 0.01;
+  private isSpeaking: boolean = false;
+  private audioLevels: AudioLevels = { input: 0, output: 0 };
 
   // Audio playback for other users (using Web Audio API for continuous streaming)
   private audioPlayers: Map<string | number, {
@@ -322,9 +319,9 @@ class LiveChatClient {
       await this.startCapture(data.options || {});
     });
 
-    this.door.on('audio:stop-streaming', async () => {
+    this.door.on('audio:stop-streaming', () => {
       console.log('[LiveChatClient] Received stop-streaming command');
-      await this.stopCapture();
+      this.stopCapture();
     });
 
     this.door.on('audio:mute', (data: { muted: boolean }) => {
@@ -536,178 +533,41 @@ class LiveChatClient {
   // Microphone Capture (Voice Channels)
   // ============================================================================
 
-  private async startCapture(options: AudioStreamOptions): Promise<void> {
-    if (this.isStreaming) {
-      console.log('[LiveChatClient] Already streaming');
-      return;
-    }
-
-    try {
-      // Initialize AudioContext if not already done
-      if (!this.audioContext) {
-        this.audioContext = new AudioContext();
-      }
-
-      // Resume context if suspended
-      if (this.audioContext.state === 'suspended') {
-        await this.audioContext.resume();
-      }
-
-      // Request microphone access
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: options.sampleRate || 48000,
-          echoCancellation: options.echoCancellation !== false,
-          noiseSuppression: options.noiseSuppression !== false,
-          autoGainControl: options.autoGainControl !== false,
-          channelCount: options.channelCount || 1,
-        },
-        video: false,
-      });
-
-      console.log('[LiveChatClient] Got media stream:', this.mediaStream.id);
-
-      // Create audio nodes for level analysis
-      this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.analyserNode = this.audioContext.createAnalyser();
-      this.analyserNode.fftSize = 256;
-      this.analyserNode.smoothingTimeConstant = 0.8;
-      this.sourceNode.connect(this.analyserNode);
-
-      // Setup MediaRecorder for audio chunks
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
-
-      this.mediaRecorder = new MediaRecorder(this.mediaStream, {
-        mimeType,
-        audioBitsPerSecond: options.bitrate || 32000,
-      });
-
-      this.mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && !this.isMuted) {
-          // Send audio chunk to server
-          event.data.arrayBuffer().then((buffer) => {
-            this.door.emit('audio:data', buffer);
-          });
-        }
-      };
-
-      // Start recording with 100ms chunks
-      this.mediaRecorder.start(100);
-      this.isStreaming = true;
-
-      // Start audio level monitoring
-      this.startLevelMonitoring();
-
-      // Notify server
-      this.door.emit('audio:started');
-
-      console.log('[LiveChatClient] Audio capture started');
-
-    } catch (error) {
-      console.error('[LiveChatClient] Failed to start capture:', error);
-      this.door.emit('audio:error', { message: (error as Error).message });
-    }
+  private async startCapture(options: AudioStreamOptions = {}): Promise<void> {
+    if (this.voiceCapture) return;
+    this.voiceCapture = new VoiceCapture(this.door, {
+      echoCancellation: options.echoCancellation !== false,
+      noiseSuppression: options.noiseSuppression !== false,
+      autoGainControl: options.autoGainControl !== false,
+      sampleRate: options.sampleRate || 48000,
+      bitrate: options.bitrate || 32000,
+    });
+    this.voiceCapture.on('speaking', (speaking: boolean) => {
+      this.isSpeaking = speaking;
+      this.door.emit('voice:speaking', { isSpeaking: speaking, audioLevel: 0 });
+    });
+    this.voiceCapture.on('level', (rms: number) => {
+      this.audioLevels = { input: rms, output: 0 };
+      this.door.emit('audio:levels', this.audioLevels);
+    });
+    this.voiceCapture.on('error', (err: Error) => {
+      console.error('[LiveChatClient] VoiceCapture error:', err);
+      this.door.emit('audio:error', { error: err.message });
+    });
+    await this.voiceCapture.start(options);
+    this.isStreaming = true;
   }
 
-  private async stopCapture(): Promise<void> {
-    if (!this.isStreaming) return;
-
-    // Stop level monitoring
-    this.stopLevelMonitoring();
-
-    // Stop MediaRecorder
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      this.mediaRecorder.stop();
-    }
-    this.mediaRecorder = null;
-
-    // Disconnect audio nodes
-    if (this.sourceNode) {
-      this.sourceNode.disconnect();
-      this.sourceNode = null;
-    }
-    this.analyserNode = null;
-
-    // Stop media stream tracks
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((track) => track.stop());
-      this.mediaStream = null;
-    }
-
+  private stopCapture(): void {
+    this.voiceCapture?.destroy();
+    this.voiceCapture = null;
     this.isStreaming = false;
-    this.isMuted = false;
-
-    // Notify server
-    this.door.emit('audio:stopped');
-
-    console.log('[LiveChatClient] Audio capture stopped');
   }
 
   private setMuted(muted: boolean): void {
     this.isMuted = muted;
-
-    // Mute the audio track if we have one
-    if (this.mediaStream) {
-      this.mediaStream.getAudioTracks().forEach((track) => {
-        track.enabled = !muted;
-      });
-    }
-
-    console.log('[LiveChatClient] Muted:', muted);
-  }
-
-  private startLevelMonitoring(): void {
-    if (this.levelInterval) return;
-
-    const dataArray = new Uint8Array(this.analyserNode?.frequencyBinCount || 128);
-
-    this.levelInterval = setInterval(() => {
-      if (!this.analyserNode || !this.isStreaming) return;
-
-      // Get frequency data
-      this.analyserNode.getByteFrequencyData(dataArray);
-
-      // Calculate RMS (root mean square) for audio level
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        const normalized = dataArray[i] / 255;
-        sum += normalized * normalized;
-      }
-      const rms = Math.sqrt(sum / dataArray.length);
-
-      // Get time domain data for waveform
-      const waveformData = new Uint8Array(this.analyserNode.fftSize);
-      this.analyserNode.getByteTimeDomainData(waveformData);
-      const waveform = Array.from(waveformData.slice(0, 30)).map((v) => (v - 128) / 128);
-
-      // Send audio levels to server
-      const levels: AudioLevels = {
-        input: rms,
-        output: 0,
-        waveform,
-      };
-      this.door.emit('audio:levels', levels);
-
-      // Detect speaking state change
-      const isSpeaking = rms > this.speakingThreshold && !this.isMuted;
-      if (isSpeaking !== this.lastSpeakingState) {
-        this.lastSpeakingState = isSpeaking;
-        this.door.emit('voice:speaking', {
-          isSpeaking,
-          audioLevel: rms,
-        });
-      }
-    }, 50); // 20 updates per second
-  }
-
-  private stopLevelMonitoring(): void {
-    if (this.levelInterval) {
-      clearInterval(this.levelInterval);
-      this.levelInterval = null;
-    }
-    this.lastSpeakingState = false;
+    if (muted) this.voiceCapture?.mute();
+    else this.voiceCapture?.unmute();
   }
 
   // ============================================================================
