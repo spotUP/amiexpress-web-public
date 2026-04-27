@@ -227,7 +227,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   const getStoredSharedToken = useCallback(() => {
     if (typeof window === 'undefined') return null;
+    // Prefer sessionStorage — each tab keeps its own token so two tabs logged in
+    // as different users don't overwrite each other's token in localStorage.
     return (
+      sessionStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
+      sessionStorage.getItem(BBS_AUTH_TOKEN_KEY) ||
       localStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
       localStorage.getItem(BBS_AUTH_TOKEN_KEY)
     );
@@ -272,6 +276,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const clearSessionState = useCallback(() => {
     if (typeof window === 'undefined') return;
     sessionStorage.removeItem(SESSION_STATE_KEY);
+    sessionStorage.removeItem(BBS_AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
     console.log('[Session Persistence] Session state cleared');
   }, []);
 
@@ -1795,6 +1801,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       reconnectPending.current = false;
 
       if (data && data.token) {
+        // Write to sessionStorage so this tab always reconnects as this user,
+        // even if another tab logs in as someone else and overwrites localStorage.
+        sessionStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
+        sessionStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
+        // Also write to localStorage for initial auto-login on new tabs.
         localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
         localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
         window.dispatchEvent(

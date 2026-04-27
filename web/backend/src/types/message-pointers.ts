@@ -98,7 +98,10 @@ export const DEFAULT_MAIL_STAT: MailStat = {
 };
 
 /**
- * Default scan flags for new conference
- * Enable mail scan and file scan by default
+ * Default scan flags for a new confBase entry.
+ * express.e:8616 — defaultmask:=0. FILE_SCAN and MAIL_SCAN are only added
+ * when the conference has DEFAULT_NEW_FILES / DEFAULT_NEWSCAN tooltypes
+ * respectively. Without those tooltypes (reference-board has neither), the mask
+ * is 0, so AquaScan does not run on every login by default.
  */
-export const DEFAULT_SCAN_FLAGS = ScanFlags.MAIL_SCAN | ScanFlags.FILE_SCAN;
+export const DEFAULT_SCAN_FLAGS = 0;

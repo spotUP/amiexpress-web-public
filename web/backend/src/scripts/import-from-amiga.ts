@@ -5,7 +5,7 @@ import { config } from '../config';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
 import { loadConfConfig } from '../services/conf-config.service';
 import { loadConferenceFileAreas } from '../services/file-areas-loader';
-import { parseDirFile } from '../utils/quicknew-generator';
+import { readDirFile } from '../utils/dir-file-reader.util';
 
 async function importAll() {
 console.log('=== Importing from Amiga Disk Config ===');
@@ -60,7 +60,7 @@ console.log(`  Adding Area: ${diskArea.name}`);
 
           // 3. Import File Entries from DIR1 (Optional)
           const dirFilePath = path.join(bbsRoot, `Conf${confId}`, `DIR${diskArea.dirNumber}`);
-          const diskFiles = parseDirFile(dirFilePath);
+          const diskFiles = await readDirFile(dirFilePath);
           if (diskFiles.length > 0) {
 console.log(`    Importing ${diskFiles.length} files for ${diskArea.name}...`);
             const existingFiles = await db.getFilesByArea(areaId);
@@ -73,7 +73,7 @@ console.log(`    Importing ${diskFiles.length} files for ${diskArea.name}...`);
               await db.createFileEntry({
                 filename: f.filename,
                 description: '',
-                size: f.size,
+                size: f.fileSize,
                 uploader: 'sysop',
                 uploadDate: f.uploadDate,
                 downloads: 0,

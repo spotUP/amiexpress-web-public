@@ -83,22 +83,122 @@ function stripAnsi(text: string): string {
 }
 
 // Helper to parse CallersLog line (duplicated from glc-updater to avoid dependency)
-function parseCallerEntry(line: string): any | null {
-  const parts = line.split('|');
-  if (parts.length < 9) return null;
+interface SessionEntry {
+  username: string;
+  location: string;
+  nodeStr: string;
+  dateOn: string;
+  timeOn: string;   // HH:MM
+  timeOff: string;  // HH:MM
+  uploadBytes: number;
+  downloadBytes: number;
+  uploadFiles: number;
+  downloadFiles: number;
+  uploadFailed: number;
+  downloadFailed: number;
+  flag1: number;
+  flag2: number;
+}
+
+/**
+ * Parse the last complete session block from the CallersLog.
+ *
+ * AmiExpress CallersLog format (written by CallersLogManager):
+ *   ******...  (64-asterisk divider, written before each session)
+ *   DD-Mon-YY HH:MM [N] username (connType) location
+ *   DD-Mon-YY HH:MM Door: X
+ *   DD-Mon-YY HH:MM Door exit: X
+ *   DD-Mon-YY HH:MM Logoff: username
+ *   ******...  (start of next session)
+ *   ...
+ *
+ * At logoff time the batch runs; the current session's events are present
+ * after the last divider but no closing divider exists yet.
+ */
+function parseLastSession(lines: string[]): SessionEntry | null {
+  // Find the last ***** divider
+  let lastDividerIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].startsWith('***')) {
+      lastDividerIdx = i;
+      break;
+    }
+  }
+  if (lastDividerIdx === -1) return null;
+
+  const sessionLines = lines.slice(lastDividerIdx + 1).filter(l => l.trim().length > 0);
+  if (sessionLines.length === 0) return null;
+
+  // Login line: DD-Mon-YY HH:MM [N] username (connType) location
+  const loginMatch = sessionLines[0].match(
+    /^(\d{2}-\w{3}-\d{2}) (\d{2}:\d{2}) \[(\d+)\] (\S+) \(([^)]+)\)\s*(.*?)\s*$/
+  );
+  if (!loginMatch) return null;
+
+  const [, dateOn, timeOn, nodeStr, username, connType, locationRaw] = loginMatch;
+  const location = locationRaw || 'Unknown';
+
+  let timeOff = timeOn;
+  let uploadBytes = 0;
+  let downloadBytes = 0;
+  let uploadFiles = 0;
+  let downloadFiles = 0;
+  let uploadFailed = 0;
+  let downloadFailed = 0;
+  let flag1 = 0;
+  let flag2 = 0;
+
+  if (connType.toUpperCase().includes('LOCAL')) flag1 |= (1 << 5); // Local
+
+  for (let i = 1; i < sessionLines.length; i++) {
+    const line = sessionLines[i];
+
+    // Keep timeOff updated to the timestamp of each event line
+    const tsMatch = line.match(/^(\d{2}-\w{3}-\d{2}) (\d{2}:\d{2}) /);
+    if (tsMatch) timeOff = tsMatch[2];
+
+    // Loss carrier
+    if (/loss carrier/i.test(line)) flag1 |= (1 << 2);
+
+    // Hack / password fail
+    if (/hack|password fail/i.test(line)) flag1 |= (1 << 1);
+
+    // Sysop page (door O = page sysop)
+    if (/door:\s+o\b/i.test(line)) flag1 |= (1 << 3);
+
+    // Sysop command (door S = sysop)
+    if (/door:\s+s\b/i.test(line)) flag1 |= (1 << 4);
+
+    // Upload with byte count: "Uploading filename SIZE bytes"
+    // (written by download-logging.util.ts when DO_CALLERSLOG ACS is enabled)
+    const upMatch = line.match(/[Uu]ploading\s+\S+\s+(\d+)\s+bytes/);
+    if (upMatch && !/fail/i.test(line)) {
+      uploadBytes += parseInt(upMatch[1], 10);
+      uploadFiles++;
+      flag2 |= (1 << 0); // Upload
+    } else if (/upload(?:ing)?\s*(?:fail|failed)/i.test(line)) {
+      uploadFailed++;
+      flag2 |= (1 << 1); // UpFail
+    }
+
+    // Download with byte count: "Downloading filename SIZE bytes"
+    const dnMatch = line.match(/[Dd]ownloading\s+\S+\s+(\d+)\s+bytes/);
+    if (dnMatch && !/fail/i.test(line)) {
+      downloadBytes += parseInt(dnMatch[1], 10);
+      downloadFiles++;
+      flag2 |= (1 << 2); // Download
+    } else if (/download(?:ing)?\s*(?:fail|failed)/i.test(line)) {
+      downloadFailed++;
+      flag2 |= (1 << 3); // DnFail
+    }
+  }
+
   return {
-    username: parts[0] || '',
-    location: parts[1] || '',
-    dateOn: parts[2] || '',
-    timeOn: parts[3] || '',
-    timeOff: parts[4] || '',
-    actions: parts[5] || '', // e.g. [-----U]L
-    upload: parseInt(parts[6]) || 0,
-    download: parseInt(parts[7]) || 0,
-    cps: parseInt(parts[8]) || 0,
-    userId: parseInt(parts[13]) || 0,
-    uploadFiles: parts[9] ? parts[9].split(',').filter(f => f.length > 0) : [],
-    downloadFiles: parts[10] ? parts[10].split(',').filter(f => f.length > 0) : []
+    username, location, nodeStr, dateOn, timeOn, timeOff,
+    uploadBytes, downloadBytes,
+    uploadFiles, downloadFiles,
+    uploadFailed, downloadFailed,
+    flag1, flag2,
   };
 }
 
@@ -125,155 +225,117 @@ console.warn(`[SamiLog] CallersLog not found for Node ${nodeId}`);
       return;
     }
 
-    const logContent = fs.readFileSync(callersLogPath, 'latin1'); // Read as binary/latin1
-    const lines = logContent.split('\n').filter(l => l.trim().length > 0);
+    const logContent = fs.readFileSync(callersLogPath, 'latin1');
+    const lines = logContent.split('\n');
     if (lines.length === 0) return;
 
-    const lastLine = lines[lines.length - 1];
-    const entry = parseCallerEntry(lastLine);
-    if (!entry) return;
+    const entry = parseLastSession(lines);
+    if (!entry) {
+console.warn('[SamiLog] Could not parse last session from CallersLog');
+      return;
+    }
 
-    // Ignore Sysop check
-    if (options.ignoreSysop && entry.userId === 1) {
+    // Ignore sysop check — sysop username is 'sysop' (case-insensitive)
+    if (options.ignoreSysop && entry.username.toLowerCase() === 'sysop') {
 console.log('[SamiLog] Ignoring Sysop call');
       return;
     }
 
-    // Prepare new User Entry
-    // Parse actions string back to flags
-    // Actions: [HCPSDU] + flags (L=Local, S=Sysop)
-    // E.g. "[-----U]L"
-    const actionStr = entry.actions;
-    let flag1 = 0;
-    let flag2 = 0;
+    const { flag1, flag2, uploadBytes, downloadBytes, uploadFiles, downloadFiles } = entry;
 
-    if (actionStr.includes('H')) flag1 |= (1 << 1); // Hack
-    if (actionStr.includes('C')) flag1 |= (1 << 2); // Carrier
-    if (actionStr.includes('P')) flag1 |= (1 << 3); // Page
-    if (actionStr.includes('S')) flag1 |= (1 << 4); // Sysop Cmd
-    if (actionStr.includes('L')) flag1 |= (1 << 5); // Local
-
-    if (actionStr.includes('U')) flag2 |= (1 << 0); // Upload
-    if (actionStr.includes('u')) flag2 |= (1 << 1); // UpFail
-    if (actionStr.includes('D')) flag2 |= (1 << 2); // Download
-    if (actionStr.includes('d')) flag2 |= (1 << 3); // DnFail
-
-    // Duration
+    // Duration: timeOn and timeOff are HH:MM
     let durationStr = '-:-- ';
     try {
-      const start = parseTime(entry.timeOn);
-      const end = parseTime(entry.timeOff);
+      const start = parseTime(entry.timeOn + ':00');
+      const end   = parseTime(entry.timeOff + ':00');
       let diffMs = end - start;
-      if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; // Handle midnight wrap approx
-      const minutes = Math.floor(diffMs / 60000);
-      const hours = Math.floor(minutes / 60);
-      const mins = minutes % 60;
+      if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; // midnight wrap
+      const totalMins = Math.floor(diffMs / 60000);
+      const hours = Math.floor(totalMins / 60);
+      const mins  = totalMins % 60;
       durationStr = `${hours}:${mins.toString().padStart(2, '0')} `;
     } catch (e) { /* ignore */ }
 
-    // Shift Entries 0-18 to 1-19
+    // Shift entries 0-18 → 1-19 in rolling 20-user list
     for (let i = USER_COUNT - 1; i > 0; i--) {
-      const srcOffset = USERS_OFFSET + (i - 1) * USER_ENTRY_BYTES;
+      const srcOffset  = USERS_OFFSET + (i - 1) * USER_ENTRY_BYTES;
       const destOffset = USERS_OFFSET + i * USER_ENTRY_BYTES;
       buffer.copy(buffer, destOffset, srcOffset, srcOffset + USER_ENTRY_BYTES);
     }
 
-    // Write New Entry at 0
-    const upFilesCount = (entry.actions.match(/U/g) || []).length;
-    const dnFilesCount = (entry.actions.match(/D/g) || []).length;
+    // onTime / offTime stored as HH:MM:SS (8 chars) + trailing space = 9 chars
+    const onTimeFmt  = entry.timeOn  + ':00 ';
+    const offTimeFmt = entry.timeOff + ':00 ';
 
     const newEntryObj = {
-      name: entry.username,
+      name:     entry.username,
       location: entry.location,
-      node: nodeId.toString(),
-      usage: durationStr,
-      upKb: entry.upload.toString(),
-      upFiles: upFilesCount.toString(),
-      dnKb: entry.download.toString(),
-      dnFiles: dnFilesCount.toString(),
-      onTime: entry.timeOn,
-      offTime: entry.timeOff,
-      avgCps: entry.cps.toString(),
-      baud: '19200', // Default hardcode as CallersLog lacks baud
+      node:     entry.nodeStr,
+      usage:    durationStr.padStart(5, ' '),
+      upKb:     formatKiloBytes(uploadBytes, false),
+      upFiles:  formatCount(uploadFiles),
+      dnKb:     formatKiloBytes(downloadBytes, true),
+      dnFiles:  formatCount(downloadFiles) + '\n',
+      onTime:   onTimeFmt,
+      offTime:  offTimeFmt,
+      avgCps:   '   0 ',
+      baud:     '19200',
       flag1,
       flag2,
-      flag3: 0
+      flag3:    0,
     };
-    
-    // Reuse existing writeEntry (we need to cast or adapt object)
-    // We can just manually write fields to offset 0 to be safe and avoid type mismatch
-    // But better to use the helper if we can match the signature
-    // writeEntry takes ReturnType<typeof buildEntry>.
-    // Let's create a compatible object.
-    const writeObj = {
-      ...newEntryObj,
-      upKb: formatKiloBytes(entry.upload, false),
-      dnKb: formatKiloBytes(entry.download, true),
-      upFiles: formatCount(upFilesCount),
-      dnFiles: formatCount(dnFilesCount) + '\n',
-      onTime: entry.timeOn + ' ', // Pad to 10? formatTimeOfDay pads.
-      offTime: entry.timeOff + ' ',
-      usage: durationStr.padStart(5, ' '), // Pad
-      baud: '19200' // 5 chars
-    };
-    // Fix padding manually to match writeEntry expectations
-    writeEntry(buffer, USERS_OFFSET, writeObj as any);
+
+    writeEntry(buffer, USERS_OFFSET, newEntryObj as any);
 
     // Update Daily Stats
     const todayAmiga = getDaysSinceAmigaEpoch();
-    const dailyOffset = VERSION_LENGTH + CLEAR_DATE_BYTES + RESERVED_BYTES;
-    const todayDateOffset = dailyOffset; // First 4 bytes of Daily[0]
-    
+    const dailyOffset    = VERSION_LENGTH + CLEAR_DATE_BYTES + RESERVED_BYTES;
+    const todayDateOffset = dailyOffset;
+
     const storeDate = buffer.readUInt32BE(todayDateOffset);
-    
+
     if (storeDate !== todayAmiga) {
-      // New Day! Shift Daily Stats
+      // New day — shift daily slots 0-6 → 1-7
       for (let i = DAILY_COUNT - 1; i > 0; i--) {
         const src = dailyOffset + (i - 1) * DAILY_ENTRY_BYTES;
         const dst = dailyOffset + i * DAILY_ENTRY_BYTES;
         buffer.copy(buffer, dst, src, src + DAILY_ENTRY_BYTES);
       }
-      // Clear Today
       buffer.fill(0, dailyOffset, dailyOffset + DAILY_ENTRY_BYTES);
       buffer.writeUInt32BE(todayAmiga, todayDateOffset);
     }
 
-    // Add to Today
-    // Struct: Date(4), Calls(2), UpK(4), UpFiles(2), UpFail(2), DnK(4), DnFiles(2), DnFail(2), Mins(4)...
+    // Struct: Date(4), Calls(2), UpK(4), UpFiles(2), UpFail(2), DnK(4), DnFiles(2), DnFail(2), Mins(4)
     const currentCalls = buffer.readUInt16BE(dailyOffset + 4);
     buffer.writeUInt16BE(currentCalls + 1, dailyOffset + 4);
 
     const currentUpK = buffer.readUInt32BE(dailyOffset + 6);
-    buffer.writeUInt32BE(currentUpK + entry.upload, dailyOffset + 6);
+    buffer.writeUInt32BE(currentUpK + Math.round(uploadBytes / 1024), dailyOffset + 6);
 
     const currentUpFiles = buffer.readUInt16BE(dailyOffset + 10);
-    buffer.writeUInt16BE(currentUpFiles + upFilesCount, dailyOffset + 10);
+    buffer.writeUInt16BE(currentUpFiles + uploadFiles, dailyOffset + 10);
 
     const currentDnK = buffer.readUInt32BE(dailyOffset + 14);
-    buffer.writeUInt32BE(currentDnK + entry.download, dailyOffset + 14);
+    buffer.writeUInt32BE(currentDnK + Math.round(downloadBytes / 1024), dailyOffset + 14);
 
     const currentDnFiles = buffer.readUInt16BE(dailyOffset + 18);
-    buffer.writeUInt16BE(currentDnFiles + dnFilesCount, dailyOffset + 18);
-    
-    // Mins calculation
+    buffer.writeUInt16BE(currentDnFiles + downloadFiles, dailyOffset + 18);
+
+    // Mins
     const minsUsed = parseInt(durationStr.split(':')[0]) * 60 + parseInt(durationStr.split(':')[1]);
     const currentMins = buffer.readUInt32BE(dailyOffset + 22);
     buffer.writeUInt32BE(currentMins + (isNaN(minsUsed) ? 0 : minsUsed), dailyOffset + 22);
 
-    // Update Records
-    // Compare Today vs Records (at RECORDS_OFFSET)
+    // Update Records (calls count)
     const recOffset = RECORDS_OFFSET;
-    // Records uses LONG for counts
-    const recCalls = buffer.readUInt32BE(recOffset + 4);
+    const recCalls  = buffer.readUInt32BE(recOffset + 4);
     if ((currentCalls + 1) > recCalls) {
       buffer.writeUInt32BE(currentCalls + 1, recOffset + 4);
-      buffer.writeUInt32BE(todayAmiga, recOffset); // Date
+      buffer.writeUInt32BE(todayAmiga, recOffset);
     }
-    // ... check other records (UpK, DnK etc) ...
-    // For 1:1 we should check all maxes. For now, Calls is key.
 
     fs.writeFileSync(storePath, buffer);
-    
+
     if (options.createMiniLog) {
       updateMiniCallersLog(newEntryObj, todayAmiga, storeDate !== todayAmiga, buffer);
     }

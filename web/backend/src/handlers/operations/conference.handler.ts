@@ -104,7 +104,7 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
  *               FORCE_MAILSCAN_SKIP (1) = skip mail scan
  *               FORCE_MAILSCAN_ALL (2) = force mail scan (MS command)
  */
-export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false, auto: boolean = false, forceMailScan: number = FORCE_MAILSCAN_NONE) {
+export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false, auto: boolean = false, forceMailScan: number = FORCE_MAILSCAN_NONE, confScan: boolean = false) {
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
     if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
@@ -123,7 +123,11 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   session.currentMsgBase = msgBaseId; // Database ID for internal queries
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
-  session.confRJoin = confId;
+  // express.e:5130 - IF (auto=FALSE) AND (confScan=FALSE): save confRJoin
+  // During confScan or auto-rejoin, confRJoin must NOT be overwritten.
+  if (!auto && !confScan) {
+    session.confRJoin = confId;
+  }
 
   // express.e:5136 - loggedOnUser.msgBaseRJoin:=msgBaseNum
   // msgBaseRJoin is stored as RELATIVE number (1-indexed), NOT database ID
@@ -134,14 +138,19 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
 
   session.msgBaseRJoin = msgBaseNum;
   if (session.user) {
-    session.user.confRJoin = confId;
-    session.user.autoRejoin = confId;
-    session.user.msgBaseRJoin = msgBaseNum; // express.e:5136 - store relative number
-    try {
-      const { db } = require('../../database');
-      await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
-    } catch (err) {
+    // express.e:5130 - only persist confRJoin on explicit user join
+    if (!auto && !confScan) {
+      session.user.confRJoin = confId;
+      session.user.autoRejoin = confId;
+      session.user.msgBaseRJoin = msgBaseNum;
+      try {
+        const { db } = require('../../database');
+        await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
+      } catch (err) {
 console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
+      }
+    } else {
+      session.user.msgBaseRJoin = msgBaseNum;
     }
   }
 

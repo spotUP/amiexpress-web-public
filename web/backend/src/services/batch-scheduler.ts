@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
-import { writeQuickNewScreen, generateQuickNewFromConfig } from '../utils/quicknew-generator';
+
 import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLogService';
 import { generateMultiTop } from '../utils/multitop-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
@@ -510,39 +510,6 @@ console.error('[BatchScheduler] GLCUpdater requires BBSNAME and CALLERSLOG param
     return;
   }
 
-  // Special-case QuickNew (TypeScript) to generate screens:quicknew.txt
-  // Command format: doors:quicknew/quicknew <config_file> <days_back> >bbs:screens/quicknew.txt
-  // Example: doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.txt
-  if (program.includes('quicknew/quicknew')) {
-    const args = resolvedArgs;
-    if (args.length >= 2) {
-      // args[0] is the config file path (e.g. "doors:quicknew/quicknew.config")
-      // It might be quoted, so strip quotes first
-      const rawConfigPath = args[0].replace(/^"|"$/g, '');
-      // Resolve Amiga assign (doors:, bbs:) to absolute filesystem path
-      const configPath = resolveAssign(rawConfigPath);
-      
-      const daysBack = parseInt(args[1], 10) || 7;
-
-      // Output path comes from stdout redirect in batch file (e.g., >bbs:screens/quicknew.txt)
-      // We extract it from the original command line using the redirect variable
-      let outputPath = 'Screens/quicknew.txt'; // Default
-      if (redirect) {
-        // Resolve the output path (e.g., bbs:screens/quicknew.txt -> /path/to/Screens/quicknew.txt)
-        const resolved = resolveAssign(redirect);
-        if (resolved) {
-          outputPath = resolved;
-        }
-      }
-
-console.log(`[BatchScheduler] Generating QuickNew from config: ${configPath} (raw: ${args[0]}), days: ${daysBack}, output: ${outputPath}`);
-      await generateQuickNewFromConfig(configPath, daysBack, outputPath);
-console.log('[BatchScheduler] QuickNew generated successfully');
-    } else {
-console.error('[BatchScheduler] QuickNew requires config file and days back arguments');
-    }
-    return;
-  }
 
   // Generate last callers bulletin using TypeScript SAmiLog implementation
   // Replaces 68K SAmiLog binary with TypeScript port (100% format compatible)
@@ -875,9 +842,7 @@ console.error(`[BatchScheduler] Failed to kill door: ${e.message}`);
     child.stdout?.on('data', (chunk: Buffer) => {
       appendOutput(chunk);
     });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      appendOutput(chunk);
-    });
+    // stderr = debug/log output from the runner — do NOT include in redirect file
 
     child.on('error', (err: any) => {
       clearTimeout(timeoutHandle);

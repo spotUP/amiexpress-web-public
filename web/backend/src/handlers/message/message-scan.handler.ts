@@ -501,8 +501,8 @@ console.warn('[advanceConferenceScan] no confScanState found');
     // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
     const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
 
-    // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...)
-    await joinConference(socket, session, conf, msgBaseId, true);
+    // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...) — confScan=TRUE, do not overwrite confRJoin
+    await joinConference(socket, session, conf, msgBaseId, true, false, 0, true);
 
     // express.e:11670: StringF(tempStr,'[32mScanning Conference[33m: [0m\s - ',currentConfName)
     socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
@@ -585,7 +585,7 @@ console.warn('[advanceConferenceScan] no confScanState found');
     const fscan = await checkFileConfScan(conf, user.id, firstMsgBaseId);
     if (fscan) {
 console.log(`[confScan] File scan: ${confName}`);
-      await joinConference(socket, session, conf, firstMsgBaseId, true);
+      await joinConference(socket, session, conf, firstMsgBaseId, true, false, 0, true);
       session.newFilesPauseFlag = true;
       await runSysCommand(socket, session, 'N', 'S U');
       session.newFilesPauseFlag = false;

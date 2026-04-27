@@ -3,12 +3,23 @@ import path from "path";
 import { EventEmitter } from "events";
 import { AmigaDoorSession } from "../amiga-emulation/AmigaDoorSession";
 
+// Redirect all debug/log output to stderr so that stdout contains ONLY the
+// door's actual ANSI output.  The batch scheduler captures stdout for the
+// redirect file (e.g. >bbs:screens/quicknew.txt); mixing debug logs into
+// that file produces garbage that gets displayed to users.
+const _write = (s: string) => process.stderr.write(s);
+console.log   = (...a) => _write(a.join(' ') + '\n');
+console.info  = (...a) => _write(a.join(' ') + '\n');
+console.warn  = (...a) => _write(a.join(' ') + '\n');
+console.error = (...a) => _write(a.join(' ') + '\n');
+console.debug = (...a) => _write(a.join(' ') + '\n');
+
 class MockSocket extends EventEmitter {
   emit(event: string, data?: any): boolean {
     if (event === "ansi-output") {
       process.stdout.write(data || "");
     } else {
-      console.log(`[SOCKET:${event}]`, data);
+      process.stderr.write(`[SOCKET:${event}] ${JSON.stringify(data)}\n`);
     }
     return super.emit(event, data);
   }
