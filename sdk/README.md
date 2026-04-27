@@ -443,7 +443,7 @@ door.onClose(async (ctx) => {
 
 See [Audio Streaming Guide](../Documentation/4-Door-Developers/AUDIO_STREAMING.md) and [API Reference](../Documentation/4-Door-Developers/AUDIO_API_REFERENCE.md) for complete documentation.
 
-**Example:** See `sdk/doors/voice-chat/` for a working multi-party voice chat implementation.
+**Example:** See `Doors/VOICECHAT/` for the voice chat door implementation.
 
 ## Documentation
 

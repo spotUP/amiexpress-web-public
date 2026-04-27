@@ -111,7 +111,7 @@ export async function createDoor(
     console.log(chalk.gray('     cp') + ' ' + chalk.cyan(`${config.name}/${commandName}.info`) + ' ' + chalk.cyan('Commands/BBSCmd/'));
     console.log('');
     console.log(chalk.gray('  3. Move door to BBS doors directory:'));
-    console.log(chalk.gray('     mv') + ' ' + chalk.cyan(config.name) + ' ' + chalk.cyan('doors/'));
+    console.log(chalk.gray('     mv') + ' ' + chalk.cyan(config.name) + ' ' + chalk.cyan('Doors/'));
     console.log('');
 
   } catch (error: any) {
@@ -385,7 +385,7 @@ function generateInfoFile(projectPath: string, config: DoorConfig): void {
   // Generate .info file content (Amiga tooltype format)
   const infoContent = `BBSCMD=${commandName}
 TYPE=${typeCode}
-LOCATION=doors/${config.name}
+LOCATION=Doors/${config.name}
 DESCRIPTION=${config.description}
 ACCESS=0
 MULTINODE=YES

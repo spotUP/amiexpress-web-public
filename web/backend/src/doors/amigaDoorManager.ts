@@ -19,6 +19,7 @@ import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
 import { loadCommands } from '../handlers/command-execution.handler';
 import { config } from '../config';
 import { parseInfoFile as parseToolTypes } from '../utils/amiga-command-parser.util';
+import { db } from '../database';
 
 /**
  * AmigaDOS Assign Definitions
@@ -843,6 +844,14 @@ console.error('Error analyzing archive:', error);
       }
 
 
+      // Derive command name for tracking (package.json bbsCommand > doorName uppercased)
+      const tsCommand = (analysis.packageJson?.bbsCommand || analysis.packageJson?.doorMetadata?.command || doorName).toUpperCase();
+      try {
+        db.trackDoorFiles(tsCommand, [
+          { filePath: path.relative(this.bbsRoot, doorInstallPath), fileType: 'dir' },
+        ]);
+      } catch { /* db may not be ready */ }
+
       return {
         success: true,
         message: `TypeScript door '${doorName}' installed successfully`,
@@ -1157,6 +1166,20 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
           }
         }
 
+        // Track installed files in DB so deletion is complete
+        const trackedEntries: Array<{ filePath: string; fileType: 'dir' | 'info' | 'library' | 'file' }> = [];
+        trackedEntries.push({ filePath: path.relative(this.bbsRoot, infoDestPath), fileType: 'info' });
+        if (doorName) {
+          const doorDestDir = path.join(this.assigns['Doors:'], doorName);
+          trackedEntries.push({ filePath: path.relative(this.bbsRoot, doorDestDir), fileType: 'dir' });
+        }
+        const libraryFiles2 = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
+        for (const lf of libraryFiles2) {
+          const destPath = path.join(this.assigns['Libs:'], path.basename(lf));
+          trackedEntries.push({ filePath: path.relative(this.bbsRoot, destPath), fileType: 'library' });
+        }
+        try { db.trackDoorFiles(commandName, trackedEntries); } catch { /* db may not be ready */ }
+
         installedCount++;
       }
 
@@ -1327,53 +1350,72 @@ console.error('Cleanup error:', error);
   }
 
   /**
+   * Delete all tracked + heuristic paths for a door command.
+   * Used by both deleteAmigaDoor and deleteTypeScriptDoor.
+   */
+  private deleteTrackedFiles(command: string, fallbackPaths: string[]): void {
+    const doorsDir = path.join(this.bbsRoot, 'Doors');
+    const commandsDir = path.join(this.bbsRoot, 'Commands');
+
+    // 1. Try DB-tracked paths
+    let tracked: Array<{ filePath: string; fileType: string }> = [];
+    try { tracked = db.getDoorFiles(command); } catch { /* db may not be ready */ }
+
+    const deletePath = (absPath: string) => {
+      try {
+        if (!amigafs.existsSync(absPath)) return;
+        const stats = amigafs.statSync(absPath);
+        if (stats.isDirectory()) {
+          amigafs.rmSync(absPath, { recursive: true, force: true });
+        } else {
+          amigafs.unlinkSync(absPath);
+        }
+      } catch { /* ignore */ }
+    };
+
+    if (tracked.length > 0) {
+      for (const entry of tracked) {
+        deletePath(path.join(this.bbsRoot, entry.filePath));
+      }
+    } else {
+      // Fallback: delete whatever we were passed
+      for (const p of fallbackPaths) {
+        // Safety: only delete inside Doors/ or Commands/
+        if (!p.startsWith(doorsDir) && !p.startsWith(commandsDir)) continue;
+        deletePath(p);
+      }
+    }
+
+    try { db.clearDoorFiles(command); } catch { /* ignore */ }
+  }
+
+  /**
    * Delete Amiga door (removes .info file and door directory)
-   * @param command - The command name (e.g., "AQUASCAN")
-   * @returns Result object with success status and message
    */
   async deleteAmigaDoor(command: string): Promise<{ success: boolean; message: string }> {
     try {
       const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
       const infoPath = path.join(commandsPath, `${command}.info`);
 
-      // Check if .info file exists
       if (!amigafs.existsSync(infoPath)) {
-        return {
-          success: false,
-          message: `Door command '${command}' not found`
-        };
+        return { success: false, message: `Door command '${command}' not found` };
       }
 
-      // Parse .info to find door location
       const metadata = this.parseInfoFile(infoPath);
-      if (!metadata || !metadata.doorName) {
-        return {
-          success: false,
-          message: `Could not parse door information for '${command}'`
-        };
+
+      // Build fallback paths from .info metadata
+      const fallbacks: string[] = [infoPath];
+      if (metadata?.resolvedPath) {
+        fallbacks.push(metadata.resolvedPath);
+        fallbacks.push(path.dirname(metadata.resolvedPath));
       }
 
-      const doorName = metadata.doorName;
-      const doorPath = path.join(this.assigns['Doors:'], doorName);
+      this.deleteTrackedFiles(command.toUpperCase(), fallbacks);
 
-      // Delete .info file
-      amigafs.unlinkSync(infoPath);
-
-      // Delete door directory if it exists
-      if (amigafs.existsSync(doorPath)) {
-        amigafs.rmSync(doorPath, { recursive: true, force: true });
-      }
-
-      return {
-        success: true,
-        message: `Door '${command}' deleted successfully`
-      };
+      return { success: true, message: `Door '${command}' deleted` };
     } catch (error) {
-console.error('Door deletion error:', error);
-      return {
-        success: false,
-        message: `Deletion failed: ${(error as Error).message}`
-      };
+      console.error('Door deletion error:', error);
+      return { success: false, message: `Deletion failed: ${(error as Error).message}` };
     }
   }
 
@@ -1511,13 +1553,25 @@ console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
         }
       }
 
-      // Delete door directory
+      // Delete door directory (also deletes any library files tracked under it)
       amigafs.rmSync(doorPath, { recursive: true, force: true });
       deletedFiles.push(doorPath);
 
+      // Delete any library files tracked separately in DB (e.g. Libs/*.library)
+      try {
+        const tracked = db.getDoorFiles(resolvedCommand);
+        for (const entry of tracked) {
+          if (entry.fileType === 'library') {
+            const absPath = path.join(this.bbsRoot, entry.filePath);
+            try { if (amigafs.existsSync(absPath)) amigafs.unlinkSync(absPath); } catch { /* ignore */ }
+          }
+        }
+        db.clearDoorFiles(resolvedCommand);
+      } catch { /* db may not be ready */ }
+
       return {
         success: true,
-        message: `Door '${name}' deleted successfully (${deletedFiles.length} items removed)`
+        message: `Door '${name}' deleted (${deletedFiles.length} items removed)`
       };
     } catch (error) {
 console.error('TypeScript door deletion error:', error);
@@ -1556,7 +1610,7 @@ console.error('TypeScript door deletion error:', error);
 
     return {
       success: false,
-      message: `Door '${identifier}' not found (checked both Amiga and TypeScript doors)`
+      message: `Door '${identifier}' has no registration — no Commands/BBSCmd/${identifier}.info and no Doors/${identifier}/ directory. Delete the files manually.`
     };
   }
 }

@@ -19,6 +19,7 @@ interface InfoEditorOptions {
 interface Tooltype {
   key: string;
   value: string;
+  commented: boolean;
 }
 
 export class InfoEditorOverlay {
@@ -65,7 +66,7 @@ export class InfoEditorOverlay {
       parent: this.overlay,
       bottom: 0, left: 0, width: '100%', height: 3,
       tags: true,
-      content: `{center}{yellow-fg}Enter{/yellow-fg}=Edit  {yellow-fg}Ctrl+S{/yellow-fg}=Save  {yellow-fg}ESC{/yellow-fg}=Cancel{/center}`,
+      content: `{center}{yellow-fg}Enter{/yellow-fg}=Edit  {yellow-fg}!{/yellow-fg}=Toggle comment  {yellow-fg}Ctrl+S{/yellow-fg}=Save  {yellow-fg}ESC{/yellow-fg}=Cancel{/center}`,
       style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
       focusable: false,
     } as any);
@@ -82,29 +83,31 @@ export class InfoEditorOverlay {
     } as any);
 
     this.listWidget.key(['enter'], () => { this.editSelected(); });
+    this.listWidget.key(['!'], () => { this.toggleComment(); });
     this.overlay.key(['C-s'], async () => { await this.save(); });
-    this.overlay.key(['escape'], () => {
-      this.close();
-    });
+    this.overlay.key(['escape'], () => { this.close(); });
 
     this.listWidget.focus();
   }
 
   private async loadInfo(): Promise<void> {
-    const content = await this.bbs.readFile(this.infoPath);
-    if (!content) {
+    const tooltypes = await this.bbs.readInfoFile(this.infoPath);
+    if (!tooltypes) {
       this.tooltypes = [];
       (this.listWidget as any).setItems(['{red-fg}Cannot read .info file{/red-fg}']);
       return;
     }
-    this.tooltypes = parseTooltypes(content as string);
+    this.tooltypes = tooltypes;
     this.renderList();
   }
 
   private renderList(): void {
-    const items = this.tooltypes.map(tt =>
-      `{yellow-fg}${tt.key.padEnd(16)}{/yellow-fg} ${tt.value}`,
-    );
+    const items = this.tooltypes.map(tt => {
+      const prefix = tt.commented ? '{#555555-fg}!' : '{yellow-fg}';
+      const suffix = tt.commented ? '{/#555555-fg}' : '{/yellow-fg}';
+      const kv = tt.value ? `${tt.key}=${tt.value}` : tt.key;
+      return `${prefix}${kv}${suffix}`;
+    });
     if (items.length === 0) items.push('{#555555-fg}(empty){/#555555-fg}');
     (this.listWidget as any).setItems(items);
   }
@@ -116,13 +119,14 @@ export class InfoEditorOverlay {
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const blessed = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+    const currentDisplay = tt.value ? `${tt.key}=${tt.value}` : tt.key;
     const input = blessed.textbox({
       parent: this.overlay,
       top: 3 + idx,
-      left: 17,
-      width: '100%-17',
+      left: 1,
+      width: '100%-2',
       height: 1,
-      value: tt.value,
+      value: currentDisplay,
       keys: true,
       mouse: true,
       inputOnFocus: true,
@@ -131,11 +135,14 @@ export class InfoEditorOverlay {
 
     input.focus();
     input.readInput(() => {
-      const newValue = (input.value as string).trim();
+      const newRaw = (input.value as string).trim();
       input.destroy();
       this.listWidget.focus();
-      if (newValue !== tt.value) {
-        this.tooltypes[idx] = { key: tt.key, value: newValue };
+      if (newRaw !== currentDisplay) {
+        const eq = newRaw.indexOf('=');
+        const newKey = eq === -1 ? newRaw : newRaw.slice(0, eq).trim();
+        const newValue = eq === -1 ? '' : newRaw.slice(eq + 1).trim();
+        this.tooltypes[idx] = { key: newKey.toUpperCase(), value: newValue, commented: tt.commented };
         this.dirty = true;
         this.renderList();
         (this.listWidget as any).select(idx);
@@ -147,9 +154,20 @@ export class InfoEditorOverlay {
     this.screen.render();
   }
 
+  private toggleComment(): void {
+    const idx: number = (this.listWidget as any).selected ?? 0;
+    const tt = this.tooltypes[idx];
+    if (!tt) return;
+    this.tooltypes[idx] = { ...tt, commented: !tt.commented };
+    this.dirty = true;
+    this.renderList();
+    (this.listWidget as any).select(idx);
+    this.updateFooter('Unsaved changes -- Ctrl+S to save');
+    this.screen.render();
+  }
+
   private async save(): Promise<void> {
-    const content = this.tooltypes.map(tt => `${tt.key}=${tt.value}`).join('\n') + '\n';
-    const ok = await this.bbs.writeFile(this.infoPath, content);
+    const ok = await this.bbs.writeInfoFile(this.infoPath, this.tooltypes);
     if (ok) {
       this.dirty = false;
       this.updateFooter('Saved', 'green');
@@ -170,16 +188,4 @@ export class InfoEditorOverlay {
     this.overlay.destroy();
     this.onClose();
   }
-}
-
-function parseTooltypes(text: string): Tooltype[] {
-  return text
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .map(l => {
-      const eq = l.indexOf('=');
-      if (eq === -1) return { key: l, value: '' };
-      return { key: l.slice(0, eq).trim(), value: l.slice(eq + 1).trim() };
-    });
 }

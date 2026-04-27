@@ -3560,34 +3560,20 @@ export async function initializeDoors() {
 console.log(`[initializeDoors] Registered door: ${door.command}  ${door.path} (type: ${doorType})`);
   }
 
-  // Hardcoded web doors (these don't have .info files)
-  const webDoors: Door[] = [
-    {
-      id: 'sal',
-      name: 'Super AmiLog',
-      description: 'Advanced callers log viewer with statistics and filtering',
-      command: 'SAL',
-      path: 'doors/POTTYSRC/PottySrc/Pot/Source/SAL/SAmiLog.s',
-      accessLevel: 10,
-      enabled: true,
-      type: 'web',
-      parameters: ['-r'] // Read-only mode for web
-    },
-    {
-      id: 'checkup',
-      name: 'CheckUP Utility',
-      description: 'File checking utility for upload directories',
-      command: 'CHECKUP',
-      path: 'doors/Y-CU04/tAJcHECKUP/CheckUP',
-      accessLevel: 1,
-      enabled: true,
-      type: 'web',
-      parameters: []
-    }
-  ];
+  // All doors come exclusively from Commands/BBSCmd/*.info LOCATION= fields.
+  // Like AmiExpress, the DOORS: assign resolves to Doors/ — every door executable
+  // must live under Doors/. No hardcoded door arrays; register via .info instead.
+  doors = bbsCmdDoors;
 
-  // Merge BBSCMD doors with hardcoded web doors
-  doors = [...bbsCmdDoors, ...webDoors];
+  // Validate: warn if any registered door resolves outside Doors/
+  const doorsDir = path.join(bbsBaseDir, 'Doors');
+  for (const door of doors) {
+    if (!door.path) continue;
+    const resolved = resolveAmigaPath(door.path);
+    if (!resolved.startsWith(doorsDir) && !resolved.startsWith(doorsDir.toLowerCase())) {
+      console.warn(`[initializeDoors] WARN: door ${door.command} LOCATION="${door.path}" resolves outside Doors/ (${resolved}) — move to Doors/ and update .info`);
+    }
+  }
 
 console.log(`[initializeDoors] Total doors registered: ${doors.length}`);
 }

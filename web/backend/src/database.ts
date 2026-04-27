@@ -1639,6 +1639,18 @@ console.error('Error running migrations:', error);
         )
       `);
 
+      // Door installed files — tracks every path written by installDoor() so deletion is complete
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS door_installed_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          door_command TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          file_type TEXT NOT NULL CHECK (file_type IN ('dir', 'info', 'library', 'file')),
+          installed_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_door_files_command ON door_installed_files(door_command)');
+
       // System Languages (Singleton - TOOLTYPE_LANGUAGES)
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS system_languages (
@@ -3173,6 +3185,31 @@ console.error('✗ Database initialization failed:', error);
       throw new Error('Operator chat repository not initialized');
     }
     return this.operatorChatRepo;
+  }
+
+  // --- Door installed-files tracking ---
+
+  trackDoorFiles(doorCommand: string, entries: Array<{ filePath: string; fileType: 'dir' | 'info' | 'library' | 'file' }>): void {
+    const insert = this.db.prepare(
+      'INSERT INTO door_installed_files (door_command, file_path, file_type) VALUES (?, ?, ?)'
+    );
+    const deleteOld = this.db.prepare('DELETE FROM door_installed_files WHERE door_command = ?');
+    const run = this.db.transaction(() => {
+      deleteOld.run(doorCommand.toUpperCase());
+      for (const e of entries) {
+        insert.run(doorCommand.toUpperCase(), e.filePath, e.fileType);
+      }
+    });
+    run();
+  }
+
+  getDoorFiles(doorCommand: string): Array<{ filePath: string; fileType: string }> {
+    const stmt = this.db.prepare('SELECT file_path, file_type FROM door_installed_files WHERE door_command = ? ORDER BY id DESC');
+    return (stmt.all(doorCommand.toUpperCase()) as any[]).map(r => ({ filePath: r.file_path, fileType: r.file_type }));
+  }
+
+  clearDoorFiles(doorCommand: string): void {
+    this.db.prepare('DELETE FROM door_installed_files WHERE door_command = ?').run(doorCommand.toUpperCase());
   }
 }
 

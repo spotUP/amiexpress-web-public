@@ -65,8 +65,8 @@ AmiExpress-Web supports **three types of doors**:
 ### 1. Create Door Directory
 
 ```bash
-mkdir -p doors/my-door
-cd doors/my-door
+mkdir -p Doors/my-door
+cd Doors/my-door
 ```
 
 ### 2. Create package.json
@@ -288,7 +288,7 @@ Create `Commands/BBSCmd/MYDOOR.info`:
 ```
 BBSCMD=MYDOOR
 TYPE=TS
-LOCATION=doors/my-door
+LOCATION=Doors/my-door
 DESCRIPTION=My awesome BBS door
 ACCESS=0
 MULTINODE=YES
@@ -300,7 +300,7 @@ PRELOADER=YES
 
 - **BBSCMD** - Command name users type (uppercase)
 - **TYPE** - Door type (TS for TypeScript, SDK for new SDK doors)
-- **LOCATION** - Path to door directory (relative to BBS root, e.g., `doors/my-door`)
+- **LOCATION** - Path to door directory (relative to BBS root, e.g., `Doors/my-door`)
 - **DESCRIPTION** - User-visible description
 - **ACCESS** - Minimum security level (0 = all users)
 - **MULTINODE** - YES/NO (whether multiple users can run simultaneously)
@@ -321,7 +321,7 @@ PRELOADER=YES
 **How it works:**
 1. User runs command (e.g., `MYDOOR`)
 2. If `PRELOADER=YES`, BBS shows animated spinner with "Loading MYDOOR..." message
-3. Spinner animates while door module is imported (`import('doors/my-door')`)
+3. Spinner animates while door module is imported (`import('Doors/my-door')`)
 4. Once import completes and `runDoor()` starts executing, spinner automatically hides
 5. Door takes over rendering
 
@@ -1683,7 +1683,7 @@ This error means the BBS is trying to read your door directory as a file, usuall
 ```
 BBSCMD=MYDOOR
 TYPE=TS
-LOCATION=sdk/doors/my-door
+LOCATION=Doors/my-door
 DESCRIPTION=My door description
 ACCESS=0
 MULTINODE=YES
@@ -1693,7 +1693,7 @@ MULTINODE=YES
 ```
 COMMAND=MYDOOR      <-- WRONG: Use BBSCMD=
 TYPE=TSDOOR         <-- WRONG: Use TYPE=TS
-LOCATION=sdk/doors/my-door
+LOCATION=Doors/my-door
 ```
 
 **Key differences:**
@@ -1956,7 +1956,7 @@ import { NetworkEngine } from '@amiexpress/bbs-door-sdk/engines/network/network-
 **How to verify your door is correct:**
 
 ```bash
-cd sdk/doors/your-door
+cd Doors/your-door
 npm run build
 
 # Check dist structure - should only contain YOUR files

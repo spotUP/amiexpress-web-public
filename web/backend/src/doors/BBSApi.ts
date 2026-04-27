@@ -1273,35 +1273,41 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     accessLevel: number;
     enabled: boolean;
     category?: string;
+    location: string;
+    resolvedPath?: string;
   }>> {
     const { getDoors } = require('../handlers/door.handler');
     const allDoors = getDoors();
     const bbsRoot = (this.session as any)?.dataDir || process.env.BBS_DATA_DIR || process.cwd();
 
     return allDoors.map((door: any) => {
+      const amigafs = require('../utils/amigafs');
+      const pathMod = require('path');
+
       let doorSize = door.size || 0;
-      if (doorSize === 0) {
-        const doorPath = door.path || door.location || '';
-        if (doorPath) {
-          try {
-            const amigafs = require('../utils/amigafs');
-            const pathMod = require('path');
-            // Try the direct path first, then common variations
-            const candidates = [
-              pathMod.join(bbsRoot, doorPath),
-              pathMod.join(bbsRoot, 'Doors', door.id || door.command),
-              pathMod.join(bbsRoot, 'Doors', (door.command || door.id || '').toLowerCase()),
-            ];
-            for (const testPath of candidates) {
-              if (amigafs.existsSync(testPath)) {
-                const stats = amigafs.statSync(testPath);
-                doorSize = stats.isDirectory() ? stats.size : stats.size;
-                break;
-              }
+      let resolvedPath: string | undefined;
+
+      const doorPath = door.path || door.location || '';
+      if (doorPath) {
+        try {
+          // Compute absolute path to the door's directory for the file explorer.
+          // door.path may point to a file (e.g. AquaScan.020) or a directory.
+          const candidates = [
+            pathMod.join(bbsRoot, doorPath),
+            pathMod.join(bbsRoot, 'Doors', door.id || door.command),
+            pathMod.join(bbsRoot, 'Doors', (door.command || door.id || '').toLowerCase()),
+          ];
+          for (const testPath of candidates) {
+            if (amigafs.existsSync(testPath)) {
+              const stats = amigafs.statSync(testPath);
+              if (doorSize === 0) doorSize = stats.size;
+              resolvedPath = stats.isDirectory() ? testPath : pathMod.dirname(testPath);
+              break;
             }
-          } catch (_) { /* ignore */ }
-        }
+          }
+        } catch (_) { /* ignore */ }
       }
+
       return {
         id: door.id || door.command,
         command: door.command || door.id,
@@ -1313,7 +1319,8 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
         accessLevel: door.accessLevel || 0,
         enabled: door.enabled !== false,
         category: door.category || undefined,
-        location: door.path || ''
+        location: doorPath,
+        resolvedPath,
       };
     });
   }

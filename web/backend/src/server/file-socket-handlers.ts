@@ -834,6 +834,21 @@ async function processFileUpload(
   config: any,
   data: { filename: string; originalname: string; size: number; path?: string }
 ) {
+  // Door archive upload must be checked BEFORE uploadContext — requestArchiveUpload()
+  // does not set uploadMode/fileArea so getUploadContext() returns null for it.
+  if (session.pendingDoorUpload) {
+    if (data.path) {
+      const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
+      fs.mkdirSync(archivesDir, { recursive: true });
+      const destPath = path.join(archivesDir, path.basename(data.filename));
+      fs.copyFileSync(data.path, destPath);
+      session.pendingDoorUploadCallback?.({ path: destPath, filename: data.filename });
+    } else {
+      session.pendingDoorUploadReject?.(new Error('Upload failed: no file path received'));
+    }
+    return;
+  }
+
   const uploadContext = getUploadContext(session, socket);
 
   if (!uploadContext) {
@@ -853,20 +868,6 @@ async function processFileUpload(
 
   // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
   const isRegularFileUpload = uploadContext.uploadMode && uploadContext.fileArea;
-
-  // Door archive upload — resolve the BBSApi.requestArchiveUpload() Promise
-  if (session.pendingDoorUpload) {
-    if (data.path) {
-      const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
-      fs.mkdirSync(archivesDir, { recursive: true });
-      const destPath = path.join(archivesDir, path.basename(data.filename));
-      fs.copyFileSync(data.path, destPath);
-      session.pendingDoorUploadCallback?.({ path: destPath, filename: data.filename });
-    } else {
-      session.pendingDoorUploadReject?.(new Error('Upload failed: no file path received'));
-    }
-    return;
-  }
 
   // Check if Door Manager is active - it has its own file-uploaded handler for door archives
   if (session.inDoorManager && !isRegularFileUpload) {
