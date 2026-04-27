@@ -701,17 +701,10 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
-        if (!toolFlags.noConfBulls) {
-          displayFlowLog('showing CONF_BULL');
-          const displayed = await displayConferenceBulletins(socket, session);
-          if (displayed && pauseDisplayFlow(socket, session)) {
-            // Keep next state queued for when pause finishes - will continue to auto-rejoin
-            session.subState = LoggedOnSubState.AUTO_REJOIN;
-            displayFlowLog('pause after CONF_BULL, will auto-rejoin');
-            return;
-          }
-        }
-        displayFlowLog('no CONF_BULL pause, proceeding to auto-rejoin');
+        // express.e:28573-28574 — SUBSTATE_DISPLAY_CONF_BULL calls joinConf() directly.
+        // CONF_BULL is shown inside joinConference (express.e:5058, when confScan=FALSE).
+        // There is no separate displayConferenceBulletins call — that was showing the wrong
+        // (global) CONF_BULL before joinConference showed the correct per-conference one.
         session.subState = LoggedOnSubState.AUTO_REJOIN;
         continue;
       }
