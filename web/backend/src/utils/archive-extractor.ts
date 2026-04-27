@@ -217,8 +217,8 @@ export async function getExtractorForFile(filepath: string): Promise<IArchiveExt
       const { TarExtractor } = await import('./extractors/tar-extractor');
       return new TarExtractor();
     case 'lzx':
-      const { LzxExtractor } = await import('./extractors/lzx-extractor');
-      return new LzxExtractor();
+      const { LzxWasmExtractor } = await import('./extractors/lzx-wasm-extractor');
+      return new LzxWasmExtractor();
     case 'dms':
       const { DmsExtractor } = await import('./extractors/dms-extractor');
       return new DmsExtractor();
