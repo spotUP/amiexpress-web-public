@@ -18,7 +18,7 @@ import {
 } from '../../utils/message-pointers.util';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
-import { getAllMessageIds, readMessageFile, readMailStats } from '../../utils/message-file.util';
+import { getAllMessageIds, readMessageFile, readMailStats, messageFileExists } from '../../utils/message-file.util';
 import { config } from '../../config';
 import { handleNewFilesCommand } from '../commands/navigation-commands.handler';
 
@@ -219,12 +219,19 @@ async function countNewMessages(
     lastScanned = pointer;
 
     if (headers.length > 0) {
-      // Use binary HeaderFile if available
+      // Use binary HeaderFile if available, but only count entries that have
+      // a readable .msg file in Messages/. HeaderFile may contain entries from
+      // an old import that were never written as Messages/*.msg files, causing
+      // a false new-message count when the reader finds nothing to show.
+      const bbsDataPath = config.get('dataDir');
       for (const header of headers) {
         if (header.msgNumb <= pointer) {
           continue;
         }
         if (header.status & MsgStatus.DELETED) {
+          continue;
+        }
+        if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) {
           continue;
         }
 
