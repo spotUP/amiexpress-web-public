@@ -496,6 +496,18 @@ export const DOS_VECTORS: LibraryVector[] = [
   },
 
   // ============================================
+  // Shell/System Execution
+  // ============================================
+  {
+    offset: -606,
+    name: "SystemTagList",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SystemTagList();
+      return emu.getRegister(0);
+    },
+  },
+
+  // ============================================
   // Date/Time Routines
   // ============================================
   // -738: CompareDates
