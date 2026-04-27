@@ -895,6 +895,20 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           return;
         }
 
+        // === STEP 3B: Arm post-shutdown forced-exit timer ===
+        // This runs for ALL door paths (A and B). pollXIMMessages() only runs
+        // for Path B (direct-XIM), so the timer check there misses Path A doors
+        // like CONFTOP that use the AEDoor.library trap-sync processor.
+        if (this.ximProtocol?.isShuttingDown() && !this.postShutdownTimer) {
+          console.log(`[DoorLifecycleManager] JH_SHUTDOWN detected in main loop — arming 2s forced-exit timer`);
+          this.postShutdownTimer = setTimeout(() => {
+            if (this.executionState.isRunning) {
+              console.log(`[DoorLifecycleManager] Post-shutdown timeout: forcing terminate`);
+              this.terminate();
+            }
+          }, 2000);
+        }
+
         // Historical dRE!WAll trace probes (PC=0x21d4 store, PC=0x2472/0x2478/0x2480
         // line-input boundary, per-instruction trace) removed 2026-04-20 — the
         // underlying bugs are fixed (commit d3dabc62c) and re-adding door-specific
@@ -1667,22 +1681,12 @@ console.log(`[DoorLifecycleManager] UPDATING to actual AEDoorPort: 0x${actualDoo
             }
 
             // JH_SHUTDOWN is a cooperative signal; the door keeps running
-            // after PutMsg+WaitPort+GetMsg (see
-            // door-message-callbacks.ts for the full rationale). Natural
-            // exit is handled by DoorExitDetector on the sentinel PC.
-            // However, some doors (e.g. CONFTOP) loop instead of calling Exit()
-            // after shutdown — arm a 2-second forced-exit timer so the session
-            // is never stuck more than ~2 s after the door says it's done.
-            if (this.ximProtocol.isShuttingDown() && !this.postShutdownTimer) {
+            // after PutMsg+WaitPort+GetMsg. The forced-exit timer is now armed
+            // in the main loop (STEP 3B) so it fires for both Path A and Path B.
+            if (this.ximProtocol.isShuttingDown()) {
               debugLog(
-                `[DoorLifecycleManager] pollXIMMessages: JH_SHUTDOWN observed - arming 2s forced-exit timer`,
+                `[DoorLifecycleManager] pollXIMMessages: JH_SHUTDOWN observed`,
               );
-              this.postShutdownTimer = setTimeout(() => {
-                if (this.executionState.isRunning) {
-                  console.log(`[DoorLifecycleManager] Post-shutdown timeout: forcing terminate after 2s`);
-                  this.terminate();
-                }
-              }, 2000);
             }
           }
         }
