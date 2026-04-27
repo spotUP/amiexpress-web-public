@@ -31,6 +31,7 @@ export class Overlay extends Box {
   private _mobileOpacity: number;
   private _overlayWidgetId: string;
   private _tapToDismiss: boolean;
+  private _exclude?: { xi: number; yi: number; xl: number; yl: number };
 
   constructor(options: OverlayOptions = {}) {
     // Extract style without bg - Overlay uses no background for ANSI
@@ -144,16 +145,26 @@ export class Overlay extends Box {
 
     // Send a special escape sequence that the frontend can intercept
     // Format: ESC ] 9999 ; overlay ; <json> BEL
-    const data = JSON.stringify({
+    const payload: Record<string, unknown> = {
       id: this._overlayWidgetId,
       show,
       opacity: this._overlayOpacity,
-      // Position info for positioned overlays (web only)
       x: pos.x,
       y: pos.y,
       width: pos.width,
       height: pos.height,
-    });
+    };
+    // If a modal is open on top of the overlay, punch it out of the CSS dim
+    // so the terminal content inside that cell region is not obscured.
+    if (this._exclude) {
+      payload.exclude = {
+        x: this._exclude.xi,
+        y: this._exclude.yi,
+        width: this._exclude.xl - this._exclude.xi,
+        height: this._exclude.yl - this._exclude.yi,
+      };
+    }
+    const data = JSON.stringify(payload);
     const osc = ESC + `]9999;overlay;${data}` + String.fromCharCode(7);
     // Use OSC (Operating System Command) format that won't display as text
     // Write directly through the screen's program which handles output
@@ -183,6 +194,18 @@ export class Overlay extends Box {
    */
   getOpacity(): number {
     return this._overlayOpacity;
+  }
+
+  /**
+   * Mark a region (in terminal cell coordinates) that should NOT be dimmed.
+   * Used by ConfirmModal so the dialog area punches through the CSS overlay.
+   * Pass undefined to clear the cutout.
+   */
+  setExclude(bounds: { xi: number; yi: number; xl: number; yl: number } | undefined): void {
+    this._exclude = bounds;
+    if (this.screen && !this.hidden) {
+      this._emitOverlayWidgetEvent(true);
+    }
   }
 
   /**

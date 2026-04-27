@@ -158,6 +158,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     y?: number;
     width?: number;
     height?: number;
+    exclude?: { x: number; y: number; width: number; height: number };
   }>>(new Map());
   const overlayBufferRef = useRef<string>('');
   const ripCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1558,6 +1559,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                 y: overlayData.y,
                 width: overlayData.width,
                 height: overlayData.height,
+                exclude: overlayData.exclude,
               });
             } else {
               next.delete(overlayData.id);
@@ -2495,29 +2497,48 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         const hasPosition = overlay.x !== undefined && overlay.y !== undefined &&
                            overlay.width !== undefined && overlay.height !== undefined;
 
+        const bg = `rgba(0, 0, 0, ${overlay.opacity})`;
+        const base: React.CSSProperties = { position: 'absolute', backgroundColor: bg, pointerEvents: 'none', zIndex: 100 };
+
+        // If a modal cutout is specified, render 4 strips around it instead of one
+        // full-screen div so the modal terminal content is not dimmed by CSS.
+        if (overlay.exclude && cellWidth > 0 && cellHeight > 0) {
+          const ex = overlay.exclude;
+          const ox = offsetLeft + ((overlay.x ?? 0) * cellWidth);
+          const oy = offsetTop  + ((overlay.y ?? 0) * cellHeight);
+          const ow = (overlay.width  ?? cols) * cellWidth;
+          const oh = (overlay.height ?? rows) * cellHeight;
+          const mx = offsetLeft + (ex.x * cellWidth);
+          const my = offsetTop  + (ex.y * cellHeight);
+          const mw = ex.width  * cellWidth;
+          const mh = ex.height * cellHeight;
+          return (
+            <React.Fragment key={id}>
+              {/* Top strip */}
+              <div style={{ ...base, left: ox, top: oy, width: ow, height: my - oy }} />
+              {/* Bottom strip */}
+              <div style={{ ...base, left: ox, top: my + mh, width: ow, height: (oy + oh) - (my + mh) }} />
+              {/* Left strip (beside modal) */}
+              <div style={{ ...base, left: ox, top: my, width: mx - ox, height: mh }} />
+              {/* Right strip (beside modal) */}
+              <div style={{ ...base, left: mx + mw, top: my, width: (ox + ow) - (mx + mw), height: mh }} />
+            </React.Fragment>
+          );
+        }
+
         const style: React.CSSProperties = hasPosition ? {
-          position: 'absolute',
+          ...base,
           left: offsetLeft + (overlay.x! * cellWidth),
           top: offsetTop + (overlay.y! * cellHeight),
           width: overlay.width! * cellWidth,
           height: overlay.height! * cellHeight,
-          backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
-          pointerEvents: 'none',
-          zIndex: 100,
         } : {
-          position: 'absolute',
+          ...base,
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
-          pointerEvents: 'none',
-          zIndex: 100,
         };
-
-        console.log('[Overlay] Rendering overlay:', id, 'opacity:', overlay.opacity,
-          'hasPosition:', hasPosition, 'pos:', { x: overlay.x, y: overlay.y, w: overlay.width, h: overlay.height },
-          'cellSize:', { cellWidth, cellHeight });
 
         return (
           <div

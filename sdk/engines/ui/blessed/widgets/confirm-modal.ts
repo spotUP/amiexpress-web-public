@@ -99,14 +99,18 @@ export class ConfirmModal extends Box {
     this._onCancel = options.onCancel;
     this._singleButton = options.singleButton || false;
 
-    // Create overlay if enabled
+    // Create overlay if enabled.
+    // The dialog is a SIBLING of the overlay (both children of originalParent),
+    // not a child of the overlay. This ensures the dialog paints on top in
+    // blessed's painter algorithm (later siblings render over earlier ones).
     if (useOverlay && originalParent) {
       this._overlay = new Overlay({
         parent: originalParent,
         opacity: options.overlayOpacity ?? 0.5,
         hidden: true,
       });
-      this._overlay.append(this);
+      // Attach the dialog to the same parent so it renders after (on top of) the overlay
+      (originalParent as any).append(this);
     }
 
     // Message box (scrollable)
@@ -279,6 +283,14 @@ export class ConfirmModal extends Box {
     this.setFront();
     this._confirmButton.focus();
     this.screen?.render();
+
+    // Tell the overlay to punch out the modal area so CSS dim doesn't cover it
+    if (this._overlay) {
+      const coords = (this as any)._getCoords?.();
+      if (coords) {
+        this._overlay.setExclude({ xi: coords.xi, yi: coords.yi, xl: coords.xl, yl: coords.yl });
+      }
+    }
   }
 
   /**
@@ -287,6 +299,7 @@ export class ConfirmModal extends Box {
   hide(): void {
     super.hide();
     if (this._overlay) {
+      this._overlay.setExclude(undefined);
       this._overlay.hide();
     }
 
