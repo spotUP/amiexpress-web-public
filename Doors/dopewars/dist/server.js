@@ -6,6 +6,10 @@ const wasm_1 = require("./wasm");
 const db_1 = require("./db");
 const notify_1 = require("./notify");
 const SERVER_KEY = Symbol.for('dopewars-server');
+const DEFAULT_LOCATION_NAMES = [
+    'Bronx', 'Ghetto', 'Central Park', 'Manhattan',
+    'Coney Island', 'Brooklyn', 'Queens', 'Staten Island',
+];
 class DopewarsServer extends events_1.EventEmitter {
     constructor() {
         super(...arguments);
@@ -49,11 +53,37 @@ class DopewarsServer extends events_1.EventEmitter {
          * and drains these synchronously around the WASM call, which is safe as long
          * as WASM callbacks fire synchronously (they do in Emscripten). */
         this.wasm.initGame(cfg.numTurns, cfg.startCash, cfg.startDebt, cfg.debtInterest, cfg.bankInterest);
+        if (cfg.theme)
+            this.applyTheme(cfg.theme);
         for (const row of (0, db_1.getActivePlayers)(this.db)) {
             const idx = this.wasm.addPlayer(0, row.bbs_handle);
             this.playerIndex.set(row.id, idx);
             this.wasm.generateDrugs(idx); // repopulate market prices after server restart
         }
+    }
+    /* ─── Theme ─────────────────────────────────────────────── */
+    applyTheme(theme) {
+        const numDrugs = this.wasm.getNumDrugs();
+        const numLocations = this.wasm.getNumLocations();
+        const drugCount = Math.min(theme.drugNames.length, numDrugs);
+        const locCount = Math.min(theme.locationNames.length, numLocations);
+        for (let i = 0; i < drugCount; i++) {
+            this.wasm.setDrugName(i, theme.drugNames[i]);
+        }
+        for (const [indexStr, str] of Object.entries(theme.drugCheapStrings)) {
+            const i = Number(indexStr);
+            if (i >= 0 && i < numDrugs && str)
+                this.wasm.setDrugCheapStr(i, str);
+        }
+        for (let i = 0; i < locCount; i++) {
+            this.wasm.setLocationName(i, theme.locationNames[i]);
+        }
+    }
+    getTitle() {
+        return this.cfg.theme?.title ?? 'DOPEWARS';
+    }
+    getLocationNames() {
+        return this.cfg.theme?.locationNames ?? DEFAULT_LOCATION_NAMES;
     }
     async shutdown() {
         this.db?.close();

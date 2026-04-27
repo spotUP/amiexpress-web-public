@@ -27,7 +27,7 @@ function createLayout(session) {
         content: '',
     });
     const inventory = blessed_1.default.box({
-        parent: screen, top: 1, left: '34%', width: '33%', height: '75%-1',
+        parent: screen, top: 1, left: '34%', width: '28%', height: '75%-1',
         border: { type: 'line' },
         tags: true,
         style: { border: { fg: 'cyan' }, fg: 'white', bg: 'black' },
@@ -35,7 +35,7 @@ function createLayout(session) {
         content: '',
     });
     const events = blessed_1.default.box({
-        parent: screen, top: 1, left: '67%', width: '33%', height: '75%-1',
+        parent: screen, top: 1, left: '62%', width: '38%', height: '75%-1',
         border: { type: 'line' },
         tags: true,
         style: { border: { fg: 'cyan' }, fg: 'white', bg: 'black' },

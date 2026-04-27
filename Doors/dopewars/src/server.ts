@@ -10,10 +10,15 @@ import {
 import { Notifier } from './notify';
 import {
   ActionResult, PlayerState, MarketState,
-  PlayerSummary, HighScore, DopewarsConfig, GameEvent, GameQuestion,
+  PlayerSummary, HighScore, DopewarsConfig, GameEvent, GameQuestion, GameTheme,
 } from './types';
 
 const SERVER_KEY = Symbol.for('dopewars-server');
+
+const DEFAULT_LOCATION_NAMES = [
+  'Bronx', 'Ghetto', 'Central Park', 'Manhattan',
+  'Coney Island', 'Brooklyn', 'Queens', 'Staten Island',
+];
 
 export class DopewarsServer extends EventEmitter {
   private wasm!: DopewarsWasmBindings;
@@ -68,11 +73,41 @@ export class DopewarsServer extends EventEmitter {
       cfg.debtInterest, cfg.bankInterest
     );
 
+    if (cfg.theme) this.applyTheme(cfg.theme);
+
     for (const row of getActivePlayers(this.db)) {
       const idx = this.wasm.addPlayer(0, row.bbs_handle);
       this.playerIndex.set(row.id, idx);
       this.wasm.generateDrugs(idx);  // repopulate market prices after server restart
     }
+  }
+
+  /* ─── Theme ─────────────────────────────────────────────── */
+
+  private applyTheme(theme: GameTheme): void {
+    const numDrugs     = this.wasm.getNumDrugs();
+    const numLocations = this.wasm.getNumLocations();
+    const drugCount    = Math.min(theme.drugNames.length, numDrugs);
+    const locCount     = Math.min(theme.locationNames.length, numLocations);
+
+    for (let i = 0; i < drugCount; i++) {
+      this.wasm.setDrugName(i, theme.drugNames[i]!);
+    }
+    for (const [indexStr, str] of Object.entries(theme.drugCheapStrings)) {
+      const i = Number(indexStr);
+      if (i >= 0 && i < numDrugs && str) this.wasm.setDrugCheapStr(i, str);
+    }
+    for (let i = 0; i < locCount; i++) {
+      this.wasm.setLocationName(i, theme.locationNames[i]!);
+    }
+  }
+
+  getTitle(): string {
+    return this.cfg.theme?.title ?? 'DOPEWARS';
+  }
+
+  getLocationNames(): string[] {
+    return this.cfg.theme?.locationNames ?? DEFAULT_LOCATION_NAMES;
   }
 
   async shutdown(): Promise<void> {

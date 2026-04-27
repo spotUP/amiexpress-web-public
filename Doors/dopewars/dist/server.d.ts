@@ -12,6 +12,9 @@ export declare class DopewarsServer extends EventEmitter {
     private initialised;
     static getInstance(): DopewarsServer;
     init(doorDir: string, cfg: DopewarsConfig): Promise<void>;
+    private applyTheme;
+    getTitle(): string;
+    getLocationNames(): string[];
     shutdown(): Promise<void>;
     joinGame(id: string, name: string): Promise<PlayerState>;
     leaveGame(id: string): Promise<void>;

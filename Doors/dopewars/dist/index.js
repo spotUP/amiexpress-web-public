@@ -38,10 +38,11 @@ const path = __importStar(require("path"));
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const server_1 = require("./server");
 const app_1 = require("./app");
+const jamaica_1 = require("./config/jamaica");
 exports.metadata = {
-    name: 'DOPEWARS',
+    name: 'GANJA WARS',
     version: '1.0.0',
-    description: 'Multiplayer drug trading game',
+    description: 'Jamaican drug trading game — buy low, sell high, survive Babylon',
     author: 'AmiExpress-Web',
     command: 'DOPE',
 };
@@ -56,6 +57,7 @@ door.onStart(async (ctx) => {
         bankInterest: 5,
         discordWebhook: process.env.DOPEWARS_DISCORD_WEBHOOK ?? '',
         notifyLivechat: true,
+        theme: jamaica_1.JAMAICA_THEME,
     };
     const server = server_1.DopewarsServer.getInstance();
     await server.init(doorDir, cfg);

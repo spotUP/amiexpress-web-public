@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderMarket = renderMarket;
 function renderMarket(box, market, state) {
-    const lines = ['{bold}Drug         Price   !{/}'];
+    const lines = ['{bold}Drug        Price    !{/}'];
     for (const p of market.prices) {
-        const name = (p.name || `Drug${p.index}`).padEnd(12);
+        const name = (p.name || `Drug${p.index}`).slice(0, 11).padEnd(11);
         const price = ('$' + Math.round(p.price).toLocaleString('en-US')).padStart(8);
         let trend = '--';
         if (p.cheap)

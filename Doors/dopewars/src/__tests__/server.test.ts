@@ -25,6 +25,11 @@ const mockWasm = {
   spyPlayer:          jest.fn(),
   tipPlayer:          jest.fn(),
   sendHighScores:     jest.fn(),
+  setDrugName:        jest.fn(),
+  setDrugCheapStr:    jest.fn(),
+  setLocationName:    jest.fn(),
+  getNumDrugs:        jest.fn().mockReturnValue(12),
+  getNumLocations:    jest.fn().mockReturnValue(8),
 };
 
 jest.mock('../wasm', () => ({
@@ -142,5 +147,30 @@ describe('DopewarsServer', () => {
     const result = await s.spy('SPOT', 'GHOST');
     expect(result.ok).toBe(false);
     expect(result.error).toContain('not in game');
+  });
+
+  it('applies theme drug and location names via WASM exports', async () => {
+    const { JAMAICA_THEME } = require('../config/jamaica');
+    const s = DopewarsServer.getInstance();
+    await s.init('/tmp', { ...cfg, theme: JAMAICA_THEME });
+    expect(mockWasm.setDrugName).toHaveBeenCalledWith(0, 'Sensimilla');
+    expect(mockWasm.setDrugName).toHaveBeenCalledWith(11, 'Collie Weed');
+    expect(mockWasm.setLocationName).toHaveBeenCalledWith(0, 'Trench Town');
+    expect(mockWasm.setLocationName).toHaveBeenCalledWith(3, 'New Kingston');
+    expect(mockWasm.setDrugCheapStr).toHaveBeenCalledWith(11, expect.stringContaining('Collie Weed'));
+  });
+
+  it('getTitle returns theme title', async () => {
+    const { JAMAICA_THEME } = require('../config/jamaica');
+    const s = DopewarsServer.getInstance();
+    await s.init('/tmp', { ...cfg, theme: JAMAICA_THEME });
+    expect(s.getTitle()).toBe('GANJA WARS');
+  });
+
+  it('getLocationNames returns theme location names', async () => {
+    const { JAMAICA_THEME } = require('../config/jamaica');
+    const s = DopewarsServer.getInstance();
+    await s.init('/tmp', { ...cfg, theme: JAMAICA_THEME });
+    expect(s.getLocationNames()[0]).toBe('Trench Town');
   });
 });

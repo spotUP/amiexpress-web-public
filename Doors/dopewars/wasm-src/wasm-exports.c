@@ -65,6 +65,42 @@ void wasm_init_game(int num_turns, double start_cash, double start_debt,
 }
 
 EMSCRIPTEN_KEEPALIVE
+void wasm_set_drug_name(int index, const char *name) {
+  extern int NumDrug;
+  extern struct DRUG *Drug;
+  if (index < 0 || index >= NumDrug || !name) return;
+  AssignName(&Drug[index].Name, (char*)name);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_drug_cheap_str(int index, const char *str) {
+  extern int NumDrug;
+  extern struct DRUG *Drug;
+  if (index < 0 || index >= NumDrug || !str) return;
+  AssignName(&Drug[index].CheapStr, (char*)str);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_location_name(int index, const char *name) {
+  extern int NumLocation;
+  extern struct LOCATION *Location;
+  if (index < 0 || index >= NumLocation || !name) return;
+  AssignName(&Location[index].Name, (char*)name);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wasm_get_num_drugs(void) {
+  extern int NumDrug;
+  return NumDrug;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wasm_get_num_locations(void) {
+  extern int NumLocation;
+  return NumLocation;
+}
+
+EMSCRIPTEN_KEEPALIVE
 int wasm_add_player(void *userdata, const char *name) {
   extern price_t StartCash, StartDebt;
   extern int NumDrug, NumGun;

@@ -14,11 +14,6 @@ import {
 } from './ui/actions';
 import { bindCombatKeys } from './ui/combat';
 
-const LOCATION_NAMES = [
-  'Brooklyn','Bronx','Ghetto','Central Park',
-  'Manhattan','Coney Island','Battery Park','Queens',
-];
-
 export async function createApp(ctx: DoorContext, server: DopewarsServer): Promise<void> {
   const user = (ctx as any).user ?? { username: 'PLAYER', id: 'player' };
   const id   = String(user.username ?? user.id);
@@ -38,9 +33,9 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   let unbindCombat: (() => void) | null = null;
 
   function updateHeader(): void {
-    const loc = LOCATION_NAMES[state.location] ?? `Loc${state.location}`;
+    const loc = server.getLocationNames()[state.location] ?? `Loc${state.location}`;
     header.setContent(
-      ` {bold}DOPEWARS{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
+      ` {bold}${server.getTitle()}{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
       ` | {cyan-fg}${loc}{/}` +
       ` | HP: {${state.health > 50 ? 'green' : 'red'}-fg}${state.health}{/}` +
       ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
@@ -144,7 +139,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
 
   screen.key(['s','S'], () => {
     if (mode !== 'normal') return;
-    showSellOverlay(screen, state,
+    showSellOverlay(screen, state, marketState,
       async (drug: number, amt: number) => {
         const r = await server.sellDrug(id, drug, amt);
         await applyResult(r);
@@ -156,7 +151,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
 
   screen.key(['j','J'], () => {
     if (mode !== 'normal') return;
-    showJetOverlay(screen, state.location,
+    showJetOverlay(screen, state.location, server.getLocationNames(),
       async (loc: number) => {
         const r = await server.jetTo(id, loc);
         updatePresenceSub(r.newState.location);
@@ -188,9 +183,9 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
 
   updatePresenceSub(state.location);
 
-  pushEvent(events, `{bold}Welcome to DOPEWARS, ${user.username ?? id}!{/}`);
+  pushEvent(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
   pushEvent(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
-  pushEvent(events, `You are in {cyan-fg}${LOCATION_NAMES[state.location] ?? 'Brooklyn'}{/}.`);
+  pushEvent(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
 
   fullRender();
 

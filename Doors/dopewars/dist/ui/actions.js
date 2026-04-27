@@ -10,14 +10,6 @@ exports.showJetOverlay = showJetOverlay;
 exports.showQuestionOverlay = showQuestionOverlay;
 exports.showHighScores = showHighScores;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
-const LOCATION_NAMES = [
-    'Brooklyn', 'Bronx', 'Ghetto', 'Central Park',
-    'Manhattan', 'Coney Island', 'Battery Park', 'Queens',
-];
-const DRUG_NAMES = [
-    'Cocaine', 'Heroin', 'Acid', 'Weed', 'Speed',
-    'Ludes', 'Shrooms', 'PCP', 'Hashish', 'Opium',
-];
 function renderActionBar(box, mode) {
     if (mode === 'combat') {
         box.setContent('  {bold}[F]{/}ight  {bold}[R]{/}un to...  {bold}[S]{/}urrender');
@@ -43,10 +35,11 @@ function centeredBox(screen, opts) {
     });
 }
 function showBuyOverlay(screen, market, state, onBuy, onCancel) {
-    const lines = market.prices.map((p, i) => `  {bold}${i + 1}.{/} ${(DRUG_NAMES[p.index] ?? `Drug${p.index}`).padEnd(12)} {green-fg}$${Math.round(p.price).toLocaleString('en-US')}{/}`).join('\n');
-    const box = centeredBox(screen, { width: 52, height: market.prices.length + 7, label: ' BUY DRUGS ' });
-    box.setContent(lines + '\n\n  Select drug number or {bold}[ESC]{/} to cancel:');
+    const lines = market.prices.map((p, i) => `  {bold}${i + 1}.{/} ${p.name.padEnd(12)} {green-fg}$${Math.round(p.price).toLocaleString('en-US')}{/}`).join('\n');
+    const box = centeredBox(screen, { width: 52, height: market.prices.length + 7, label: ' BUY ' });
+    box.setContent(lines + '\n\n  Select number or {bold}[ESC]{/}:');
     let chosen = -1;
+    let chosenName = '';
     let amtStr = '';
     const cleanup = () => { box.destroy(); screen.render(); };
     screen.key(['escape'], () => { cleanup(); onCancel(); });
@@ -55,12 +48,13 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         screen.key([key], () => {
             if (chosen < 0) {
                 chosen = market.prices[i].index;
-                box.setContent(lines + `\n\n  Buying {yellow-fg}${DRUG_NAMES[chosen]}{/}\n  Amount: ${amtStr}_`);
+                chosenName = market.prices[i].name;
+                box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
                 screen.render();
             }
             else {
                 amtStr += key;
-                box.setContent(lines + `\n\n  Buying {yellow-fg}${DRUG_NAMES[chosen]}{/}\n  Amount: ${amtStr}_`);
+                box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
                 screen.render();
             }
         });
@@ -68,14 +62,14 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
     screen.key(['0'], () => {
         if (chosen >= 0) {
             amtStr += '0';
-            box.setContent(lines + `\n\n  Amount: ${amtStr}_`);
+            box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
             screen.render();
         }
     });
     screen.key(['backspace'], () => {
         if (chosen >= 0 && amtStr) {
             amtStr = amtStr.slice(0, -1);
-            box.setContent(lines + `\n\n  Buying {yellow-fg}${DRUG_NAMES[chosen]}{/}\n  Amount: ${amtStr || '_'}`);
+            box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
             screen.render();
         }
     });
@@ -91,16 +85,18 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
     box.focus();
     screen.render();
 }
-function showSellOverlay(screen, state, onSell, onCancel) {
+function showSellOverlay(screen, state, market, onSell, onCancel) {
     const carrying = state.drugs.filter(d => d.carried > 0);
     if (carrying.length === 0) {
         onCancel();
         return;
     }
-    const lines = carrying.map((d, i) => `  {bold}${i + 1}.{/} ${(DRUG_NAMES[d.index] ?? `Drug${d.index}`).padEnd(14)} {yellow-fg}${d.carried}{/} units`).join('\n');
-    const box = centeredBox(screen, { width: 50, height: carrying.length + 7, label: ' SELL DRUGS ' });
+    const drugNameMap = new Map(market.prices.map(p => [p.index, p.name]));
+    const lines = carrying.map((d, i) => `  {bold}${i + 1}.{/} ${(drugNameMap.get(d.index) ?? `Drug${d.index}`).padEnd(12)} {yellow-fg}${d.carried}{/} units`).join('\n');
+    const box = centeredBox(screen, { width: 50, height: carrying.length + 7, label: ' SELL ' });
     box.setContent(lines + '\n\n  Select drug or {bold}[ESC]{/}:');
     let chosen = -1;
+    let chosenName = '';
     let amtStr = '';
     const cleanup = () => { box.destroy(); screen.render(); };
     screen.key(['escape'], () => { cleanup(); onCancel(); });
@@ -108,12 +104,13 @@ function showSellOverlay(screen, state, onSell, onCancel) {
         screen.key([String(i + 1)], () => {
             if (chosen < 0) {
                 chosen = carrying[i].index;
-                box.setContent(lines + `\n\n  Selling {yellow-fg}${DRUG_NAMES[chosen]}{/}\n  Amount: _`);
+                chosenName = drugNameMap.get(chosen) ?? `Drug${chosen}`;
+                box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: _`);
                 screen.render();
             }
             else {
                 amtStr += String(i + 1);
-                box.setContent(lines + `\n\n  Amount: ${amtStr}_`);
+                box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
                 screen.render();
             }
         });
@@ -130,15 +127,15 @@ function showSellOverlay(screen, state, onSell, onCancel) {
     box.focus();
     screen.render();
 }
-function showJetOverlay(screen, currentLocation, onJet, onCancel) {
-    const lines = LOCATION_NAMES.map((name, i) => `  {bold}${i + 1}.{/} ${name}${i === currentLocation ? ' {green-fg}(here){/}' : ''}`).join('\n');
+function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel) {
+    const lines = locationNames.map((name, i) => `  {bold}${i + 1}.{/} ${name}${i === currentLocation ? ' {green-fg}(here){/}' : ''}`).join('\n');
     const box = centeredBox(screen, {
-        width: 36, height: LOCATION_NAMES.length + 5, label: ' JET TO ',
+        width: 36, height: locationNames.length + 5, label: ' JET TO ',
     });
     box.setContent(lines + '\n\n  Choose or {bold}[ESC]{/}:');
     const cleanup = () => { box.destroy(); screen.render(); };
     screen.key(['escape'], () => { cleanup(); onCancel(); });
-    LOCATION_NAMES.forEach((_name, i) => {
+    locationNames.forEach((_name, i) => {
         screen.key([String(i + 1)], () => {
             if (i !== currentLocation) {
                 cleanup();

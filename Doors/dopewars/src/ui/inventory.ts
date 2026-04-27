@@ -11,7 +11,7 @@ export function renderInventory(box: any, state: PlayerState, market?: MarketSta
     if (d.carried > 0) {
       hasAny = true;
       const name = drugNameMap.get(d.index) ?? `Drug${d.index}`;
-      lines.push(`${name.padEnd(14)} {yellow-fg}${d.carried}{/} units`);
+      lines.push(`${name.slice(0, 10).padEnd(10)} {yellow-fg}${d.carried}{/} units`);
     }
   }
   if (!hasAny) lines.push('  (none)');
@@ -25,7 +25,7 @@ export function renderInventory(box: any, state: PlayerState, market?: MarketSta
   for (const g of state.guns) {
     if (g.carried > 0) {
       hasGuns = true;
-      lines.push(`${(GUN_NAMES[g.index] ?? `Gun${g.index}`).padEnd(20)} x{yellow-fg}${g.carried}{/}`);
+      lines.push(`${(GUN_NAMES[g.index] ?? `Gun${g.index}`).slice(0, 10).padEnd(10)} x{yellow-fg}${g.carried}{/}`);
     }
   }
   if (!hasGuns) lines.push('  (none)');

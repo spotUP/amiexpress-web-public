@@ -28,6 +28,11 @@ export class DopewarsWasmBindings {
     sendHighScores:     (idx: number, endGame: number) => void;
     getPlayerState:     (idx: number) => string;
     getMarket:          (idx: number) => string;
+    setDrugName:        (index: number, name: string) => void;
+    setDrugCheapStr:    (index: number, str: string)  => void;
+    setLocationName:    (index: number, name: string) => void;
+    getNumDrugs:        () => number;
+    getNumLocations:    () => number;
   };
 
   private constructor(m: WasmModule) {
@@ -56,6 +61,11 @@ export class DopewarsWasmBindings {
       sendHighScores:     w('wasm_send_high_scores',     null,     ['number','number']),
       getPlayerState:     w('wasm_get_player_state',     'string', ['number']),
       getMarket:          w('wasm_get_market',           'string', ['number']),
+      setDrugName:        w('wasm_set_drug_name',        null,     ['number','string']),
+      setDrugCheapStr:    w('wasm_set_drug_cheap_str',   null,     ['number','string']),
+      setLocationName:    w('wasm_set_location_name',    null,     ['number','string']),
+      getNumDrugs:        w('wasm_get_num_drugs',        'number', []),
+      getNumLocations:    w('wasm_get_num_locations',    'number', []),
     } as typeof this.fns;
   }
 
@@ -105,4 +115,10 @@ export class DopewarsWasmBindings {
     const json = this.fns.getMarket(idx);
     return JSON.parse(json ?? 'null');
   }
+
+  setDrugName(i: number, n: string): void      { this.fns.setDrugName(i, n); }
+  setDrugCheapStr(i: number, s: string): void  { this.fns.setDrugCheapStr(i, s); }
+  setLocationName(i: number, n: string): void  { this.fns.setLocationName(i, n); }
+  getNumDrugs(): number                         { return this.fns.getNumDrugs(); }
+  getNumLocations(): number                     { return this.fns.getNumLocations(); }
 }

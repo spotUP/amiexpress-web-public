@@ -27,6 +27,11 @@ class DopewarsWasmBindings {
             sendHighScores: w('wasm_send_high_scores', null, ['number', 'number']),
             getPlayerState: w('wasm_get_player_state', 'string', ['number']),
             getMarket: w('wasm_get_market', 'string', ['number']),
+            setDrugName: w('wasm_set_drug_name', null, ['number', 'string']),
+            setDrugCheapStr: w('wasm_set_drug_cheap_str', null, ['number', 'string']),
+            setLocationName: w('wasm_set_location_name', null, ['number', 'string']),
+            getNumDrugs: w('wasm_get_num_drugs', 'number', []),
+            getNumLocations: w('wasm_get_num_locations', 'number', []),
         };
     }
     static async load(doorDir) {
@@ -69,6 +74,11 @@ class DopewarsWasmBindings {
         const json = this.fns.getMarket(idx);
         return JSON.parse(json ?? 'null');
     }
+    setDrugName(i, n) { this.fns.setDrugName(i, n); }
+    setDrugCheapStr(i, s) { this.fns.setDrugCheapStr(i, s); }
+    setLocationName(i, n) { this.fns.setLocationName(i, n); }
+    getNumDrugs() { return this.fns.getNumDrugs(); }
+    getNumLocations() { return this.fns.getNumLocations(); }
 }
 exports.DopewarsWasmBindings = DopewarsWasmBindings;
 //# sourceMappingURL=wasm.js.map

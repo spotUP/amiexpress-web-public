@@ -9,10 +9,6 @@ const events_1 = require("./ui/events");
 const players_1 = require("./ui/players");
 const actions_1 = require("./ui/actions");
 const combat_1 = require("./ui/combat");
-const LOCATION_NAMES = [
-    'Brooklyn', 'Bronx', 'Ghetto', 'Central Park',
-    'Manhattan', 'Coney Island', 'Battery Park', 'Queens',
-];
 async function createApp(ctx, server) {
     const user = ctx.user ?? { username: 'PLAYER', id: 'player' };
     const id = String(user.username ?? user.id);
@@ -28,8 +24,8 @@ async function createApp(ctx, server) {
     let mode = 'normal';
     let unbindCombat = null;
     function updateHeader() {
-        const loc = LOCATION_NAMES[state.location] ?? `Loc${state.location}`;
-        header.setContent(` {bold}DOPEWARS{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
+        const loc = server.getLocationNames()[state.location] ?? `Loc${state.location}`;
+        header.setContent(` {bold}${server.getTitle()}{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
             ` | {cyan-fg}${loc}{/}` +
             ` | HP: {${state.health > 50 ? 'green' : 'red'}-fg}${state.health}{/}` +
             ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
@@ -137,7 +133,7 @@ async function createApp(ctx, server) {
     screen.key(['s', 'S'], () => {
         if (mode !== 'normal')
             return;
-        (0, actions_1.showSellOverlay)(screen, state, async (drug, amt) => {
+        (0, actions_1.showSellOverlay)(screen, state, marketState, async (drug, amt) => {
             const r = await server.sellDrug(id, drug, amt);
             await applyResult(r);
             fullRender();
@@ -146,7 +142,7 @@ async function createApp(ctx, server) {
     screen.key(['j', 'J'], () => {
         if (mode !== 'normal')
             return;
-        (0, actions_1.showJetOverlay)(screen, state.location, async (loc) => {
+        (0, actions_1.showJetOverlay)(screen, state.location, server.getLocationNames(), async (loc) => {
             const r = await server.jetTo(id, loc);
             updatePresenceSub(r.newState.location);
             await applyResult(r);
@@ -169,9 +165,9 @@ async function createApp(ctx, server) {
     state = { ...state, id, name: user.username ?? id };
     marketState = await server.getMarket(id);
     updatePresenceSub(state.location);
-    (0, events_1.pushEvent)(events, `{bold}Welcome to DOPEWARS, ${user.username ?? id}!{/}`);
+    (0, events_1.pushEvent)(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
     (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
-    (0, events_1.pushEvent)(events, `You are in {cyan-fg}${LOCATION_NAMES[state.location] ?? 'Brooklyn'}{/}.`);
+    (0, events_1.pushEvent)(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
     fullRender();
     await new Promise((resolve) => {
         screen.on('destroy', () => resolve());

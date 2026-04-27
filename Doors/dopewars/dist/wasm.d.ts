@@ -26,6 +26,11 @@ export declare class DopewarsWasmBindings {
     sendHighScores(idx: number, endGame: boolean): void;
     getPlayerState(idx: number): PlayerState;
     getMarket(idx: number): MarketState;
+    setDrugName(i: number, n: string): void;
+    setDrugCheapStr(i: number, s: string): void;
+    setLocationName(i: number, n: string): void;
+    getNumDrugs(): number;
+    getNumLocations(): number;
 }
 export {};
 //# sourceMappingURL=wasm.d.ts.map

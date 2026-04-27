@@ -76,6 +76,16 @@ export interface HighScore {
   achievedAt: string;
 }
 
+export interface GameTheme {
+  title: string;
+  /** Drug names in C canonical order (indices 0–11) */
+  drugNames: string[];
+  /** Sparse: only drugs with a cheap-event string override */
+  drugCheapStrings: Partial<Record<number, string>>;
+  /** Location names in C canonical order (indices 0–7) */
+  locationNames: string[];
+}
+
 export interface DopewarsConfig {
   numTurns:        number;
   startCash:       number;
@@ -84,4 +94,5 @@ export interface DopewarsConfig {
   bankInterest:    number;
   discordWebhook?: string;
   notifyLivechat:  boolean;
+  theme?:          GameTheme;
 }

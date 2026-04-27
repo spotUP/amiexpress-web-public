@@ -3,11 +3,12 @@ import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { DopewarsServer } from './server';
 import { DopewarsConfig } from './types';
 import { createApp } from './app';
+import { JAMAICA_THEME } from './config/jamaica';
 
 export const metadata = {
-  name: 'DOPEWARS',
+  name: 'GANJA WARS',
   version: '1.0.0',
-  description: 'Multiplayer drug trading game',
+  description: 'Jamaican drug trading game — buy low, sell high, survive Babylon',
   author: 'AmiExpress-Web',
   command: 'DOPE',
 };
@@ -24,6 +25,7 @@ door.onStart(async (ctx: DoorContext) => {
     bankInterest:   5,
     discordWebhook: process.env.DOPEWARS_DISCORD_WEBHOOK ?? '',
     notifyLivechat: true,
+    theme:          JAMAICA_THEME,
   };
 
   const server = DopewarsServer.getInstance();
