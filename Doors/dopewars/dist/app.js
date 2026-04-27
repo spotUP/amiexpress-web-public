@@ -15,7 +15,7 @@ async function createApp(ctx, server) {
     const layout = (0, layout_1.createLayout)(ctx);
     const { screen, header, market, inventory, events, players, actions } = layout;
     const inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
-        enableGameMode: true,
+        enableGameMode: false, // game mode intercepts keys before neo-blessed screen.key() — must be off
         enableGrabKeys: true,
         enableMouse: false,
     });

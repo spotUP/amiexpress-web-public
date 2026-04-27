@@ -14,7 +14,7 @@ export interface Layout {
 export function createLayout(session: any): Layout {
   const bbs = session?.bbs ?? session;
   const screen = createScreen(bbs, {
-    smartCSR: true,
+    smartCSR: false,
   });
 
   const header = blessed.box({

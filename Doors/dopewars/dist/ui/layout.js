@@ -9,7 +9,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 function createLayout(session) {
     const bbs = session?.bbs ?? session;
     const screen = (0, blessed_helpers_1.createScreen)(bbs, {
-        smartCSR: true,
+        smartCSR: false,
     });
     const header = blessed_1.default.box({
         parent: screen, top: 0, left: 0, width: '100%', height: 1,

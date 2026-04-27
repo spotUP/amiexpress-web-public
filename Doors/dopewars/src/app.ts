@@ -22,7 +22,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   const { screen, header, market, inventory, events, players, actions } = layout;
 
   const inputManager = new DoorInputManager(ctx as any, screen, {
-    enableGameMode: true,
+    enableGameMode: false,  // game mode intercepts keys before neo-blessed screen.key() — must be off
     enableGrabKeys: true,
     enableMouse:    false,
   });
