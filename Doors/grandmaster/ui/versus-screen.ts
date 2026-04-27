@@ -270,7 +270,7 @@ export class VersusScreen {
       mouse: false,
       clickable: false,
     });
-    // Inner container for minimap widgets
+    // Inner container — bucket/text content rendered here via setContent()
     this.minimapContainer = createBox({
       parent: this.minimapPanel,
       top: 1,
@@ -278,6 +278,7 @@ export class VersusScreen {
       width: 41,
       height: 20,
       border: 'none' as any,
+      tags: true,
       focusable: false,
       mouse: false,
       clickable: false,
@@ -786,12 +787,8 @@ export class VersusScreen {
     }
 
     if (oppCount > 1) {
-      // Battle royale — render minimap grid
-      this.minimapRenderer.renderMinimapGrid(
-        this.minimapContainer,
-        opponents,
-        12  // up to 12 opponents in the grid
-      );
+      // Battle royale — render bucket/list visualization
+      this.minimapRenderer.renderBuckets(this.minimapContainer, opponents);
     } else {
       // 1v1 — render full opponent board + VS info
       const opp = opponents[0] ?? null;

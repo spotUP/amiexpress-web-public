@@ -203,7 +203,7 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
-        // Inner container for minimap widgets
+        // Inner container — bucket/text content rendered here via setContent()
         this.minimapContainer = (0, blessed_helpers_1.createBox)({
             parent: this.minimapPanel,
             top: 1,
@@ -211,6 +211,7 @@ class VersusScreen {
             width: 41,
             height: 20,
             border: 'none',
+            tags: true,
             focusable: false,
             mouse: false,
             clickable: false,
@@ -674,9 +675,8 @@ class VersusScreen {
             }
         }
         if (oppCount > 1) {
-            // Battle royale — render minimap grid
-            this.minimapRenderer.renderMinimapGrid(this.minimapContainer, opponents, 12 // up to 12 opponents in the grid
-            );
+            // Battle royale — render bucket/list visualization
+            this.minimapRenderer.renderBuckets(this.minimapContainer, opponents);
         }
         else {
             // 1v1 — render full opponent board + VS info

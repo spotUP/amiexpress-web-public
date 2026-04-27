@@ -1,12 +1,17 @@
 /**
  * Minimap Renderer
  *
- * Compact opponent board visualization using single-character blocks
- * Optimized for Battle Royale mode (up to 99 players)
+ * Battle Royale opponent visualization.
+ * Two modes driven by opponent count:
+ *
+ *   Bucket mode  (≤ BUCKET_THRESHOLD opponents):
+ *     Each player = a narrow vertical bar that fills from the bottom as
+ *     their stack grows.  Color changes green → yellow → red by danger.
+ *
+ *   Text list mode  (> BUCKET_THRESHOLD opponents):
+ *     Ranked leaderboard showing name, level, and stack height.
  */
 import type { Board } from '../core/types';
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/widgets/box';
 /**
  * Opponent state for minimap
  */
@@ -21,7 +26,7 @@ export interface OpponentState {
     rank?: number;
 }
 /**
- * Minimap configuration
+ * Minimap configuration (kept for backward-compat; only compact flag is used)
  */
 export interface MinimapConfig {
     width: number;
@@ -32,72 +37,56 @@ export interface MinimapConfig {
     compact: boolean;
 }
 /**
- * Minimap Renderer
- *
- * Renders opponent boards in compact single-character format
+ * MinimapRenderer — renders the battle-royale opponent panel.
  */
 export declare class MinimapRenderer {
     private config;
     constructor(config?: Partial<MinimapConfig>);
     /**
-     * Render a single opponent minimap
+     * Render opponents into `container`.
+     * Switches between bucket bars and text list automatically.
      */
-    renderMinimap(opponent: OpponentState): string;
+    renderBuckets(container: any, opponents: OpponentState[]): void;
+    /** Rows the stack occupies (0 = empty board, board.height = topped out). */
+    private stackHeight;
+    /** Color string based on fill fraction (0–1). */
+    private dangerColor;
     /**
-     * Render multiple opponent minimaps in a grid layout
+     * Bucket bar mode — up to BUCKET_THRESHOLD players as vertical bars.
+     *
+     * Layout (container content, tags enabled):
+     *   Row  0     : 3-char names, space-separated
+     *   Rows 1-18  : bar fill (full blocks from bottom up)
+     *   Row 19     : level numbers
      */
-    renderMinimapGrid(parent: Screen | Box, opponents: OpponentState[], maxVisible?: number): void;
+    private buildBuckets;
     /**
-     * Render Battle Royale HUD with rank and alive count
+     * Text list mode — ranked leaderboard for large lobbies.
+     *
+     * Format (41 chars wide):
+     *   # Name       Lv Ht
+     *   ─────────────────────
+     *   1 Opponent1  05  12
+     *   ...
      */
-    renderBattleRoyaleHUD(screen: Screen, rank: number, aliveCount: number, totalPlayers: number): void;
-    /**
-     * Get ANSI color for piece type (single character display)
-     */
-    private getPieceColor;
+    private buildTextList;
     /**
      * Update minimap configuration
      */
     setConfig(config: Partial<MinimapConfig>): void;
 }
 /**
- * Opponent Tracker
- *
- * Manages opponent states for minimap display
+ * Opponent Tracker — manages live opponent states.
  */
 export declare class OpponentTracker {
     private opponents;
-    /**
-     * Add or update opponent
-     */
     updateOpponent(id: string, state: Partial<OpponentState>): void;
-    /**
-     * Remove opponent
-     */
     removeOpponent(id: string): void;
-    /**
-     * Get all opponents
-     */
     getOpponents(): OpponentState[];
-    /**
-     * Get alive opponents
-     */
     getAliveOpponents(): OpponentState[];
-    /**
-     * Get opponents targeting you
-     */
     getTargetingOpponents(): OpponentState[];
-    /**
-     * Clear all opponents
-     */
     clear(): void;
-    /**
-     * Get opponent count
-     */
     count(): number;
-    /**
-     * Get alive count
-     */
     aliveCount(): number;
 }
 //# sourceMappingURL=minimap.d.ts.map
