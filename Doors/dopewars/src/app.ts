@@ -51,6 +51,15 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     screen.render();
   }
 
+  async function runAction(fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+    } catch (err: any) {
+      pushEvent(events, `{red-fg}Error: ${err?.message ?? String(err)}{/}`);
+      fullRender();
+    }
+  }
+
   async function applyResult(result: ActionResult): Promise<void> {
     state = { ...result.newState, id, name: user.username ?? id };
     try { marketState = await server.getMarket(id); } catch { /* ignore if out of game */ }
@@ -63,25 +72,25 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     if (state.inCombat && mode !== 'combat') {
       mode = 'combat';
       unbindCombat = bindCombatKeys(screen, {
-        onFight: async () => {
+        onFight: () => runAction(async () => {
           const r = await server.fight(id);
           await applyResult(r);
           fullRender();
-        },
-        onRun: async (loc: number) => {
+        }),
+        onRun: (loc: number) => runAction(async () => {
           if (unbindCombat) { unbindCombat(); unbindCombat = null; }
           mode = 'normal';
           const r = await server.runFrom(id, loc);
           await applyResult(r);
           fullRender();
-        },
-        onSurrender: async () => {
+        }),
+        onSurrender: () => runAction(async () => {
           if (unbindCombat) { unbindCombat(); unbindCombat = null; }
           mode = 'normal';
           const r = await server.surrender(id);
           await applyResult(r);
           fullRender();
-        },
+        }),
       });
     } else if (!state.inCombat && mode === 'combat') {
       if (unbindCombat) { unbindCombat(); unbindCombat = null; }
@@ -128,11 +137,11 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   screen.key(['b','B'], () => {
     if (mode !== 'normal') return;
     showBuyOverlay(screen, marketState, state,
-      async (drug: number, amt: number) => {
+      (drug, amt) => runAction(async () => {
         const r = await server.buyDrug(id, drug, amt);
         await applyResult(r);
         fullRender();
-      },
+      }),
       () => fullRender()
     );
   });
@@ -140,11 +149,11 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   screen.key(['s','S'], () => {
     if (mode !== 'normal') return;
     showSellOverlay(screen, state, marketState,
-      async (drug: number, amt: number) => {
+      (drug, amt) => runAction(async () => {
         const r = await server.sellDrug(id, drug, amt);
         await applyResult(r);
         fullRender();
-      },
+      }),
       () => fullRender()
     );
   });
@@ -152,25 +161,29 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   screen.key(['j','J'], () => {
     if (mode !== 'normal') return;
     showJetOverlay(screen, state.location, server.getLocationNames(),
-      async (loc: number) => {
+      (loc) => runAction(async () => {
         const r = await server.jetTo(id, loc);
         updatePresenceSub(r.newState.location);
         await applyResult(r);
         fullRender();
-      },
+      }),
       () => fullRender()
     );
   });
 
-  screen.key(['h','H'], async () => {
+  screen.key(['h','H'], () => {
     if (mode !== 'normal') return;
-    showHighScores(screen, await server.getHighScores(), () => fullRender());
+    runAction(async () => {
+      showHighScores(screen, await server.getHighScores(), () => fullRender());
+    });
   });
 
-  screen.key(['q','Q'], async () => {
-    await server.leaveGame(id);
-    inputManager.disable();
-    screen.destroy();
+  screen.key(['q','Q'], () => {
+    runAction(async () => {
+      await server.leaveGame(id);
+      inputManager.disable();
+      screen.destroy();
+    });
   });
 
   /* -- Boot ------------------------------------------------------- */
@@ -184,6 +197,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   updatePresenceSub(state.location);
 
   screen.clear();
+  screen.render();
   pushEvent(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
   pushEvent(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
   pushEvent(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);

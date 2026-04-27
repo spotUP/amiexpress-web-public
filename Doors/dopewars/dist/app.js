@@ -38,6 +38,15 @@ async function createApp(ctx, server) {
         (0, actions_1.renderActionBar)(actions, mode);
         screen.render();
     }
+    async function runAction(fn) {
+        try {
+            await fn();
+        }
+        catch (err) {
+            (0, events_1.pushEvent)(events, `{red-fg}Error: ${err?.message ?? String(err)}{/}`);
+            fullRender();
+        }
+    }
     async function applyResult(result) {
         state = { ...result.newState, id, name: user.username ?? id };
         try {
@@ -51,12 +60,12 @@ async function createApp(ctx, server) {
         if (state.inCombat && mode !== 'combat') {
             mode = 'combat';
             unbindCombat = (0, combat_1.bindCombatKeys)(screen, {
-                onFight: async () => {
+                onFight: () => runAction(async () => {
                     const r = await server.fight(id);
                     await applyResult(r);
                     fullRender();
-                },
-                onRun: async (loc) => {
+                }),
+                onRun: (loc) => runAction(async () => {
                     if (unbindCombat) {
                         unbindCombat();
                         unbindCombat = null;
@@ -65,8 +74,8 @@ async function createApp(ctx, server) {
                     const r = await server.runFrom(id, loc);
                     await applyResult(r);
                     fullRender();
-                },
-                onSurrender: async () => {
+                }),
+                onSurrender: () => runAction(async () => {
                     if (unbindCombat) {
                         unbindCombat();
                         unbindCombat = null;
@@ -75,7 +84,7 @@ async function createApp(ctx, server) {
                     const r = await server.surrender(id);
                     await applyResult(r);
                     fullRender();
-                },
+                }),
             });
         }
         else if (!state.inCombat && mode === 'combat') {
@@ -124,40 +133,44 @@ async function createApp(ctx, server) {
     screen.key(['b', 'B'], () => {
         if (mode !== 'normal')
             return;
-        (0, actions_1.showBuyOverlay)(screen, marketState, state, async (drug, amt) => {
+        (0, actions_1.showBuyOverlay)(screen, marketState, state, (drug, amt) => runAction(async () => {
             const r = await server.buyDrug(id, drug, amt);
             await applyResult(r);
             fullRender();
-        }, () => fullRender());
+        }), () => fullRender());
     });
     screen.key(['s', 'S'], () => {
         if (mode !== 'normal')
             return;
-        (0, actions_1.showSellOverlay)(screen, state, marketState, async (drug, amt) => {
+        (0, actions_1.showSellOverlay)(screen, state, marketState, (drug, amt) => runAction(async () => {
             const r = await server.sellDrug(id, drug, amt);
             await applyResult(r);
             fullRender();
-        }, () => fullRender());
+        }), () => fullRender());
     });
     screen.key(['j', 'J'], () => {
         if (mode !== 'normal')
             return;
-        (0, actions_1.showJetOverlay)(screen, state.location, server.getLocationNames(), async (loc) => {
+        (0, actions_1.showJetOverlay)(screen, state.location, server.getLocationNames(), (loc) => runAction(async () => {
             const r = await server.jetTo(id, loc);
             updatePresenceSub(r.newState.location);
             await applyResult(r);
             fullRender();
-        }, () => fullRender());
+        }), () => fullRender());
     });
-    screen.key(['h', 'H'], async () => {
+    screen.key(['h', 'H'], () => {
         if (mode !== 'normal')
             return;
-        (0, actions_1.showHighScores)(screen, await server.getHighScores(), () => fullRender());
+        runAction(async () => {
+            (0, actions_1.showHighScores)(screen, await server.getHighScores(), () => fullRender());
+        });
     });
-    screen.key(['q', 'Q'], async () => {
-        await server.leaveGame(id);
-        inputManager.disable();
-        screen.destroy();
+    screen.key(['q', 'Q'], () => {
+        runAction(async () => {
+            await server.leaveGame(id);
+            inputManager.disable();
+            screen.destroy();
+        });
     });
     /* -- Boot ------------------------------------------------------- */
     inputManager.enable();
@@ -166,6 +179,7 @@ async function createApp(ctx, server) {
     marketState = await server.getMarket(id);
     updatePresenceSub(state.location);
     screen.clear();
+    screen.render();
     (0, events_1.pushEvent)(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
     (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
     (0, events_1.pushEvent)(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
