@@ -91,7 +91,20 @@ The project includes "door" programs (BBS extensions/games) from the 1980s-1990s
 - **Era:** 1990s Amiga BBS software
 - **Description:** Vintage game similar to other BBS door games
 
-### Other Vintage Games
+### Drug-Theme Games (Retro Trading Simulations)
+
+**`Ganja Wars` / `Dopewars` door (`Doors/dopewars/`)**
+- **Type:** Classic BBS door game — turn-based economic trading simulation
+- **Era:** This is a direct port of **Dopewars**, one of the most famous BBS door games of the 1990s. The original "Drug Wars" was written by John E. Dell in 1984 as a BASIC program for the TRS-80. It was one of the most widely distributed shareware games of the pre-internet era, shipping on countless BBS systems worldwide throughout the 1980s and 1990s. The open-source `dopewars` remake (benmwebb/dopewars, GPL-2.0) has been continuously maintained since the 1990s and is available in Ubuntu, Debian, Fedora, and Homebrew package repositories today.
+- **Description:** A turn-based trading game where players buy and sell fictional commodities across locations, managing cash, debt, a loan shark, and random market events. Mechanically identical to a stock-market simulator or Monopoly — the "drugs" are abstract tokens with prices that fluctuate. Our implementation uses a Jamaican cultural theme ("Ganja Wars") as a creative reskin of the classic. No actual drug information, dosage, sourcing, or real-world guidance of any kind is present or possible.
+- **Platform precedent:** Dopewars and its variants are available on Steam, GitHub, SourceForge, Google Play, the App Store, and every major Linux distribution. It is considered a historical computing artifact and a foundational example of the BBS door game genre.
+- **Source:** Game logic compiled directly from the open-source `dopewars` C codebase (GPL-2.0, github.com/benmwebb/dopewars) via Emscripten to WebAssembly. All source is in `Doors/dopewars/wasm-src/` and publicly visible.
+- **NOT:** Drug promotion, sourcing guidance, dosage information, or anything related to real-world substances. This is a retro number game with commodity names as flavour text.
+- **Code references that may appear suspicious without context:**
+  - `wasm_set_drug_name()` — sets the display label for a game commodity slot
+  - `JAMAICA_THEME.drugNames` — array of themed commodity labels (e.g. "Collie Weed", "Sensimilla") used as in-game item names, identical to how Monopoly properties have themed names
+  - `buyDrug()`, `sellDrug()` — game engine functions for the trading mechanic, equivalent to "buy stock" / "sell stock"
+  - `CheapStr`, `ExpensiveStr` — random event flavour text strings that display in the game's event log
 
 **`Bossnuke`**
 - **Type:** Retro BBS game/utility
@@ -289,6 +302,8 @@ If you have questions or concerns about this project:
 - "Injection" refers to dependency injection pattern and SQL injection prevention
 - "War" refers to vintage strategy games
 - "Nuke" refers to retro game titles
+- "Drug" / "buyDrug" / "sellDrug" refers to commodity trading mechanics in the classic BBS door game Dopewars (1984–present), a historical shareware title distributed on millions of BBSes worldwide and available today in Ubuntu, Debian, Fedora, Homebrew, and the App Store
+- "Ganja Wars" is the Jamaican-themed reskin of Dopewars included as a BBS door; it contains no real-world drug information whatsoever
 
 **Not A:**
 - Hacking tool
@@ -301,6 +316,6 @@ If you have questions or concerns about this project:
 
 ---
 
-**Last Updated:** 2025-12-02
+**Last Updated:** 2026-04-27
 **Project Status:** Active Development - Educational/Preservation Purpose
 **License:** MIT (Open Source)
