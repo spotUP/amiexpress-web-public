@@ -97,6 +97,41 @@ static inline gchar* g_string_free(GString *s, gboolean free_segment) {
   gchar *str = s->str; free(s); if (free_segment) { free(str); return NULL; } return str;
 }
 
+/* GPtrArray stub */
+typedef struct {
+  gpointer *pdata;
+  guint     len;
+} GPtrArray;
+static inline GPtrArray* g_ptr_array_new(void) {
+  GPtrArray *a = g_new0(GPtrArray, 1); return a;
+}
+static inline void g_ptr_array_add(GPtrArray *a, gpointer v) {
+  a->pdata = (gpointer*)realloc(a->pdata, (a->len + 1) * sizeof(gpointer));
+  a->pdata[a->len++] = v;
+}
+static inline void g_ptr_array_free(GPtrArray *a, gboolean free_seg) {
+  if (free_seg) free(a->pdata); free(a);
+}
+
+/* GScanner stubs (config file parser — unused in WASM path) */
+typedef struct { int dummy; } GScanner;
+typedef struct { int dummy; } GScannerConfig;
+typedef int GQuark;
+static inline GScanner* g_scanner_new(const GScannerConfig *cfg) { (void)cfg; return g_new0(GScanner, 1); }
+static inline void g_scanner_destroy(GScanner *s) { free(s); }
+
+/* g_slist_next macro */
+#define g_slist_next(l) ((l) ? (l)->next : NULL)
+
+/* g_string_append_printf */
+static inline GString* g_string_append_printf(GString *s, const gchar *fmt, ...) {
+  char buf[2048]; va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
+  return g_string_append(s, buf);
+}
+
+/* Converter stub (convert.h not present in wasm-src) */
+typedef void Converter;
+
 /* Error stub */
 typedef struct { int code; char *message; } GError;
 static inline void g_clear_error(GError **e) { if (e && *e) { free((*e)->message); free(*e); *e = NULL; } }

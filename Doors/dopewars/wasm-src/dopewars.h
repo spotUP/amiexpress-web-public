@@ -42,10 +42,7 @@
 #endif
 #endif
 
-#include <glib.h>
-#include "convert.h"
-#include "error.h"
-#include "network.h"
+#include "glib-stub.h"
 #include "util.h"
 
 /* Make price_t be a long long if the type is supported by the compiler */
@@ -304,9 +301,7 @@ struct PLAYER_T {
   price_t DocPrice;
   DopeList SpyList, TipList;
   Player *OnBehalfOf;
-#ifdef NETWORKING
-  NetworkBuffer NetBuf;
-#endif
+  void *userdata;   /* TypeScript-side opaque handle, passed back in callbacks */
   Abilities Abil;
   GPtrArray *FightArray;        /* If non-NULL, a list of players
                                  * in a fight */
