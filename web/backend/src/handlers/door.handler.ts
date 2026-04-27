@@ -1306,6 +1306,7 @@ console.log('Executing door:', door.name);
 
   const nodeId = session.nodeId || 0;
   let doorSession: DoorSession | null = null;
+  const originalSubState = session.subState;
 
   try {
     // Check if this is a client door (needs to detect runtime from manifest)
@@ -1432,7 +1433,8 @@ console.error(`Unknown door type: ${door.type}`);
     // express.e:5455-5461 - ~SP causes pauses between segments, ~CC_ commands run within segments
     if (session.screenSegments && session.screenSegments.segments.length > 0) {
 console.log(`[executeDoor] Door ${door.name} completed during segment processing - continuing segments`);
-      // Don't change state - segment processing will continue after this returns
+      // Restore subState so display flow can continue (was clobbered to DOOR_RUNNING)
+      session.subState = originalSubState;
     } else {
       // Normal door completion - return to menu (express.e behavior after doors)
       session.menuPause = false;
