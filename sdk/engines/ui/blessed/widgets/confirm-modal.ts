@@ -61,7 +61,10 @@ export class ConfirmModal extends Box {
 
   constructor(options: ConfirmModalOptions = {}) {
     const originalParent = options.parent;
-    const useOverlay = options.overlay !== false;
+    // Default overlay to false: CSS overlay dims the entire xterm canvas, which
+    // sits in front of all ANSI content and makes the dialog look invisible/dimmed.
+    // Callers can still opt in explicitly with overlay: true.
+    const useOverlay = options.overlay === true;
     const borderColor = options.borderColor || 'cyan';
     // Accept content as an alias for message so callers who pass the raw Box
     // property by mistake still get their text displayed correctly.

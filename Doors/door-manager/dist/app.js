@@ -303,7 +303,7 @@ async function createApp(session) {
         const confirmDeleteModal = new blessed_1.ConfirmModal({
             parent: screen,
             title: ' Delete Door ',
-            content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
+            content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}${door.command !== door.name ? `\n  Command: ${door.command}` : ''}\n\n{red-fg}This cannot be undone.{/red-fg}`,
             confirmText: 'Delete',
             cancelText: 'Cancel',
             confirmColor: 'red',
