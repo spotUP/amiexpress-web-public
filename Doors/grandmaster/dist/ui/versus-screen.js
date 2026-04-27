@@ -88,12 +88,12 @@ class VersusScreen {
      * Setup UI layout — 80x24 terminal
      *
      * Col  0-21 : player board  (22w, 22h, top=1)
-     * Col 22-35 : NEXT (14w,12h,top=1) + HOLD (14w,8h,top=13)
-     * Col 36-38 : garbage strip (3w, 22h, top=1)
-     * Col 39-60 : opponent board (22w, 22h, top=1)
-     * Col 61-79 : VS info panel  (19w, 22h, top=1)
+     * Col 22-33 : NEXT (12w,12h,top=1) + HOLD (12w,9h,top=13)
+     * Col 34-36 : garbage strip (3w, 22h, top=1)
+     * Col 37-58 : opponent board (22w, 22h, top=1)
+     * Col 59-79 : VS info panel  (21w, 22h, top=1)
      * Row 23    : stats bar (no border)
-     *   22 + 14 + 3 + 22 + 19 = 80 ✓
+     *   22 + 12 + 3 + 22 + 21 = 80 ✓
      */
     setupUI() {
         // Clear screen
@@ -114,7 +114,7 @@ class VersusScreen {
             parent: this.screen,
             top: 1,
             left: 22,
-            width: 14,
+            width: 12,
             height: 12,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'cyan' } },
@@ -129,8 +129,8 @@ class VersusScreen {
             parent: this.screen,
             top: 13,
             left: 22,
-            width: 14,
-            height: 8,
+            width: 12,
+            height: 9,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'magenta' } },
             label: ' HOLD ',
@@ -143,7 +143,7 @@ class VersusScreen {
         this.garbageIndicator = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: 36,
+            left: 34,
             width: 3,
             height: 22,
             border: { type: 'line' },
@@ -158,7 +158,7 @@ class VersusScreen {
         this.opponentBoardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: 39,
+            left: 37,
             width: 22,
             height: 22,
             border: { type: 'line' },
@@ -169,12 +169,12 @@ class VersusScreen {
             mouse: false,
             clickable: false,
         });
-        // VS info panel
+        // VS info panel (21w — gained 2 from narrower NEXT/HOLD)
         this.opponentInfoBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: 61,
-            width: 19,
+            left: 59,
+            width: 21,
             height: 22,
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
@@ -192,7 +192,7 @@ class VersusScreen {
             parent: this.screen,
             top: 23,
             left: 0,
-            width: 61,
+            width: 59,
             height: 1,
             border: 'none',
             content: '',

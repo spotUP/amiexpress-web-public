@@ -67,12 +67,12 @@ export declare class VersusScreen {
      * Setup UI layout — 80x24 terminal
      *
      * Col  0-21 : player board  (22w, 22h, top=1)
-     * Col 22-35 : NEXT (14w,12h,top=1) + HOLD (14w,8h,top=13)
-     * Col 36-38 : garbage strip (3w, 22h, top=1)
-     * Col 39-60 : opponent board (22w, 22h, top=1)
-     * Col 61-79 : VS info panel  (19w, 22h, top=1)
+     * Col 22-33 : NEXT (12w,12h,top=1) + HOLD (12w,9h,top=13)
+     * Col 34-36 : garbage strip (3w, 22h, top=1)
+     * Col 37-58 : opponent board (22w, 22h, top=1)
+     * Col 59-79 : VS info panel  (21w, 22h, top=1)
      * Row 23    : stats bar (no border)
-     *   22 + 14 + 3 + 22 + 19 = 80 ✓
+     *   22 + 12 + 3 + 22 + 21 = 80 ✓
      */
     private setupUI;
     /**
