@@ -183,6 +183,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
 
   updatePresenceSub(state.location);
 
+  screen.clear();
   pushEvent(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
   pushEvent(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
   pushEvent(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);

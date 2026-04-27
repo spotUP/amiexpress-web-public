@@ -165,6 +165,7 @@ async function createApp(ctx, server) {
     state = { ...state, id, name: user.username ?? id };
     marketState = await server.getMarket(id);
     updatePresenceSub(state.location);
+    screen.clear();
     (0, events_1.pushEvent)(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
     (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
     (0, events_1.pushEvent)(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
