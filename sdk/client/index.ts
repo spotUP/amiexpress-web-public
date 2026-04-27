@@ -22,9 +22,6 @@ export class ClientDoor extends EventEmitter {
   /** Door configuration */
   public readonly config: DoorConfig;
 
-  /** WebSocket connection to BBS */
-  private ws: WebSocket | null = null;
-
   /** Currently connected user */
   private user: BBSUser | null = null;
 
@@ -129,11 +126,10 @@ export class ClientDoor extends EventEmitter {
   }
 
   /**
-   * Start the door and connect to BBS
-   *
-   * @param wsUrl - WebSocket URL (default: ws://localhost:3001) - ignored if window.__BBS__ exists
+   * Start the door and connect to BBS via the existing Socket.IO connection.
+   * window.__BBS__ must be set by the frontend before this is called.
    */
-  public start(wsUrl: string = 'ws://localhost:3001'): void {
+  public start(): void {
     // Reset state if door was left in running state from a previous crash/disconnect
     // ESM modules are cached, so the same ClientDoor instance may be reused across sessions
     if (this.state !== 'idle' && this.state !== 'shutdown') {
@@ -142,15 +138,12 @@ export class ClientDoor extends EventEmitter {
       this.frameCount = 0;
       this.lastFrameTime = 0;
       this.user = null;
-      this.ws = null;
       this.rpcRequests.clear();
     }
 
     this.state = 'connecting';
     this.emit('start');
 
-    // Check if BBS connection is already available (bundled door scenario)
-    // Only check for window in browser environments
     if (typeof window !== 'undefined') {
       const bbsGlobal = (window as any).__BBS__;
       if (bbsGlobal && bbsGlobal.socket) {
@@ -160,9 +153,10 @@ export class ClientDoor extends EventEmitter {
       }
     }
 
-    // Fallback to WebSocket connection
-    console.log('[ClientDoor] Creating new WebSocket connection');
-    this.connectWebSocket(wsUrl);
+    // No BBS connection available — fail loudly rather than probing localhost.
+    console.error('[ClientDoor] window.__BBS__ not set; cannot start door.');
+    this.state = 'idle';
+    this.emit('error', new Error('BBS connection unavailable'));
   }
 
   /**
@@ -238,51 +232,6 @@ export class ClientDoor extends EventEmitter {
 
     } catch (err) {
       console.error('[ClientDoor] Failed to connect via Socket.IO:', err);
-      this.state = 'idle';
-      throw err;
-    }
-  }
-
-  /**
-   * Connect to BBS via WebSocket (standalone scenario)
-   * @private
-   */
-  private connectWebSocket(url: string): void {
-    if (typeof WebSocket === 'undefined') {
-      throw new Error('WebSocket is not available. ClientDoor requires a browser environment.');
-    }
-
-    try {
-      this.ws = new WebSocket(url);
-
-      this.ws.onopen = () => {
-        console.log('Connected to BBS');
-        this.state = 'running';
-        this.emit('ws:connected');
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          this.handleMessage(message);
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
-        }
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this.emit('ws:error', error);
-      };
-
-      this.ws.onclose = () => {
-        console.log('Disconnected from BBS');
-        this.state = 'shutdown';
-        this.emit('ws:closed');
-        this.shutdown();
-      };
-    } catch (err) {
-      console.error('Failed to connect to BBS:', err);
       this.state = 'idle';
       throw err;
     }
@@ -381,9 +330,6 @@ export class ClientDoor extends EventEmitter {
         sessionId,
         message,
       });
-    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      // Send via WebSocket (standalone scenario)
-      this.ws.send(JSON.stringify(message));
     }
   }
 
@@ -606,11 +552,6 @@ export class ClientDoor extends EventEmitter {
 
     if (this.user) {
       this.emit('disconnect', this.user);
-    }
-
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
     }
 
     this.emit('shutdown');

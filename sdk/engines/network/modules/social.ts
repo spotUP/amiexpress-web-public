@@ -54,10 +54,6 @@ export class SocialManager extends EventEmitter implements ISocialManager {
   private pendingRequests: FriendRequest[] = [];
   private pendingInvites: (PartyInvite | GameInvite)[] = [];
 
-  // WebRTC
-  private peerConnections: Map<number, RTCPeerConnection> = new Map();
-  private localStream: MediaStream | null = null;
-
   constructor(connection: ConnectionManager) {
     super();
     this.connection = connection;
@@ -181,7 +177,6 @@ export class SocialManager extends EventEmitter implements ISocialManager {
       if (this._voiceChannel) {
         this._voiceChannel.participants.push(participant);
         this.emit('voice:participant_joined', participant);
-        this.setupPeerConnection(participant.playerId);
       }
     });
 
@@ -191,25 +186,11 @@ export class SocialManager extends EventEmitter implements ISocialManager {
           p => p.playerId !== playerId
         );
         this.emit('voice:participant_left', playerId);
-        this.closePeerConnection(playerId);
       }
     });
 
     socket.on('voice:speaking', (data: { playerId: number; speaking: boolean }) => {
       this.emit('voice:speaking', data.playerId, data.speaking);
-    });
-
-    // WebRTC signaling
-    socket.on('voice:offer', async (data: { from: number; offer: RTCSessionDescriptionInit }) => {
-      await this.handleVoiceOffer(data.from, data.offer);
-    });
-
-    socket.on('voice:answer', async (data: { from: number; answer: RTCSessionDescriptionInit }) => {
-      await this.handleVoiceAnswer(data.from, data.answer);
-    });
-
-    socket.on('voice:ice', async (data: { from: number; candidate: RTCIceCandidateInit }) => {
-      await this.handleIceCandidate(data.from, data.candidate);
     });
   }
 
@@ -511,29 +492,15 @@ export class SocialManager extends EventEmitter implements ISocialManager {
   }
 
   /**
-   * Start voice chat
+   * Start voice chat (server-relay; no WebRTC/STUN)
    */
   async startVoice(channelId: string): Promise<void> {
     if (!this.voiceConfig.enabled) {
       throw new Error('Voice chat is disabled');
     }
-
-    try {
-      // Get local audio stream
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: this.voiceConfig.echoCancellation,
-          noiseSuppression: this.voiceConfig.noiseSuppression,
-          autoGainControl: this.voiceConfig.autoGainControl,
-        },
-      });
-
-      const socket = this.connection.getSocket();
-      if (socket?.connected) {
-        socket.emit('voice:join', { channelId });
-      }
-    } catch (error) {
-      throw new Error(`Failed to access microphone: ${error}`);
+    const socket = this.connection.getSocket();
+    if (socket?.connected) {
+      socket.emit('voice:join', { channelId });
     }
   }
 
@@ -541,25 +508,10 @@ export class SocialManager extends EventEmitter implements ISocialManager {
    * Stop voice chat
    */
   stopVoice(): void {
-    // Close all peer connections
-    for (const pc of this.peerConnections.values()) {
-      pc.close();
-    }
-    this.peerConnections.clear();
-
-    // Stop local stream
-    if (this.localStream) {
-      for (const track of this.localStream.getTracks()) {
-        track.stop();
-      }
-      this.localStream = null;
-    }
-
     const socket = this.connection.getSocket();
     if (socket?.connected) {
       socket.emit('voice:leave');
     }
-
     this._voiceChannel = null;
   }
 
@@ -574,12 +526,6 @@ export class SocialManager extends EventEmitter implements ISocialManager {
    * Mute/unmute self
    */
   setMuted(muted: boolean): void {
-    if (this.localStream) {
-      for (const track of this.localStream.getAudioTracks()) {
-        track.enabled = !muted;
-      }
-    }
-
     const socket = this.connection.getSocket();
     if (socket?.connected) {
       socket.emit('voice:mute', { muted });
@@ -590,140 +536,9 @@ export class SocialManager extends EventEmitter implements ISocialManager {
    * Deafen/undeafen self
    */
   setDeafened(deafened: boolean): void {
-    // Mute all incoming audio
-    for (const pc of this.peerConnections.values()) {
-      const receivers = pc.getReceivers();
-      for (const receiver of receivers) {
-        if (receiver.track) {
-          receiver.track.enabled = !deafened;
-        }
-      }
-    }
-
     const socket = this.connection.getSocket();
     if (socket?.connected) {
       socket.emit('voice:deafen', { deafened });
-    }
-  }
-
-  /**
-   * Setup WebRTC peer connection
-   */
-  private async setupPeerConnection(playerId: number): Promise<void> {
-    if (this.peerConnections.has(playerId)) return;
-
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    });
-
-    this.peerConnections.set(playerId, pc);
-
-    // Add local stream tracks
-    if (this.localStream) {
-      for (const track of this.localStream.getTracks()) {
-        pc.addTrack(track, this.localStream);
-      }
-    }
-
-    // Handle ICE candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        const socket = this.connection.getSocket();
-        if (socket?.connected) {
-          socket.emit('voice:ice', { to: playerId, candidate: event.candidate });
-        }
-      }
-    };
-
-    // Handle incoming tracks
-    pc.ontrack = (event) => {
-      const audio = new Audio();
-      audio.srcObject = event.streams[0];
-      audio.play();
-    };
-
-    // Create and send offer
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const socket = this.connection.getSocket();
-    if (socket?.connected) {
-      socket.emit('voice:offer', { to: playerId, offer });
-    }
-  }
-
-  /**
-   * Handle incoming voice offer
-   */
-  private async handleVoiceOffer(from: number, offer: RTCSessionDescriptionInit): Promise<void> {
-    let pc = this.peerConnections.get(from);
-
-    if (!pc) {
-      pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      });
-      this.peerConnections.set(from, pc);
-
-      if (this.localStream) {
-        for (const track of this.localStream.getTracks()) {
-          pc.addTrack(track, this.localStream);
-        }
-      }
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          const socket = this.connection.getSocket();
-          if (socket?.connected) {
-            socket.emit('voice:ice', { to: from, candidate: event.candidate });
-          }
-        }
-      };
-
-      pc.ontrack = (event) => {
-        const audio = new Audio();
-        audio.srcObject = event.streams[0];
-        audio.play();
-      };
-    }
-
-    await pc.setRemoteDescription(offer);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    const socket = this.connection.getSocket();
-    if (socket?.connected) {
-      socket.emit('voice:answer', { to: from, answer });
-    }
-  }
-
-  /**
-   * Handle incoming voice answer
-   */
-  private async handleVoiceAnswer(from: number, answer: RTCSessionDescriptionInit): Promise<void> {
-    const pc = this.peerConnections.get(from);
-    if (pc) {
-      await pc.setRemoteDescription(answer);
-    }
-  }
-
-  /**
-   * Handle ICE candidate
-   */
-  private async handleIceCandidate(from: number, candidate: RTCIceCandidateInit): Promise<void> {
-    const pc = this.peerConnections.get(from);
-    if (pc) {
-      await pc.addIceCandidate(candidate);
-    }
-  }
-
-  /**
-   * Close peer connection
-   */
-  private closePeerConnection(playerId: number): void {
-    const pc = this.peerConnections.get(playerId);
-    if (pc) {
-      pc.close();
-      this.peerConnections.delete(playerId);
     }
   }
 
