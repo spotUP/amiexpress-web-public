@@ -7,17 +7,15 @@
  * - Input queue management
  */
 
-import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
-import { ArrowKeyCodes, BBSSessionData, XIMCommand, XIMMessage, XIMState } from './types';
+import { BBSSessionData, XIMCommand, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { AnsiUtil } from '../../utils/ansi.util';
-import { BBSPaths } from '../../utils/bbs-paths.util';
 import { resolveAssignPath } from '../../utils/path-util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
@@ -25,10 +23,16 @@ import { wrapLine } from './line-wrap.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
-import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn, buildGFileCandidates } from './user-info-handlers';
+import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn } from './user-info-handlers';
 import { handleMCI as handleMCIFn } from './mci-handler';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const iconv = require('iconv-lite');
+import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
+import { processRawText } from './io-ansi-util';
+import {
+  handleShowGFile as handleShowGFileFn,
+  handleShowFile as handleShowFileFn,
+  handleDisplayFileNonStop as handleDisplayFileNonStopFn,
+  handleCheckToDisplay as handleCheckToDisplayFn,
+} from './io-file-display';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -674,56 +678,7 @@ debugLog(
    * @returns Single character code to return to door
    */
   private processHotkeyToken(token: string): string {
-    // Single character - convert web terminal codes to Amiga codes
-    if (token.length === 1) {
-      const code = token.charCodeAt(0);
-
-      // DEL (0x7F) -> BS (0x08): Web terminals send DEL for backspace, Amiga expects BS
-      if (code === 0x7f) {
-        debugLog(`[XIMIOHandler] Converting DEL (0x7f) to BS (0x08) for Amiga`);
-        return '\x08';
-      }
-
-      // NOTE: Do NOT convert CR to LF for hotkeys!
-      // express.e expects CR (0x0d) for Enter - see doPause() at line 5147:
-      //   UNTIL (ch=13) OR (ch=32) OR (ch<0)
-      // Converting CR to LF breaks Enter key in doors like AquaScan and Bulls.
-
-      return token;
-    }
-
-    // Check for arrow key escape sequences - ALWAYS convert to codes
-    // This matches express.e behavior where ch:=UPARROW etc regardless of rawArrow
-    const arrowMap: { [key: string]: number } = {
-      '\x1b[A': ArrowKeyCodes.UPARROW,    // 4
-      '\x1b[B': ArrowKeyCodes.DOWNARROW,  // 5
-      '\x1b[C': ArrowKeyCodes.RIGHTARROW, // 3
-      '\x1b[D': ArrowKeyCodes.LEFTARROW,  // 2
-    };
-
-    if (arrowMap[token] !== undefined) {
-      const arrowCode = arrowMap[token];
-debugLog(`[XIMIOHandler] Arrow key: ${JSON.stringify(token)} -> code ${arrowCode}`);
-      return String.fromCharCode(arrowCode);
-    }
-
-    // Ignore unrecognized escape sequences (Home, End, Insert, Delete, Page Up/Down, etc.)
-    // These would confuse 68K doors if we passed ESC or partial sequences
-    // Terminal sequences we ignore:
-    //   \x1b[H, \x1b[1~ (Home), \x1b[F, \x1b[4~ (End)
-    //   \x1b[2~ (Insert), \x1b[3~ (Delete)
-    //   \x1b[5~ (Page Up), \x1b[6~ (Page Down)
-    //   \x1bOP-\x1bOS, \x1b[15~-\x1b[24~ (Function keys - handled by BBS, not doors)
-    if (token.length > 1 && token.startsWith('\x1b')) {
-debugLog(`[XIMIOHandler] Ignoring unrecognized escape sequence: ${JSON.stringify(token)}`);
-      return '';  // Return empty to skip this input
-    }
-
-    // For other multi-char tokens (shouldn't happen), return first char
-    if (token.length > 1) {
-debugLog(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0)}`);
-    }
-    return token[0];
+    return processHotkeyTokenFn(token);
   }
 
   /**
@@ -1266,151 +1221,19 @@ debugLog(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
    * deasync mechanism in door-message-callbacks.ts.
    */
   async handleShowGFile(msg: XIMMessage): Promise<void> {
-    const partName = this.getMessageString(msg).trim();
-    const forceNonStop = msg.data === 1;
-
-    if (!partName) {
-      this.reply(msg, 0);
-      return;
-    }
-
-    const resolvedBase = this.resolvePath(partName);
-    const parsed = path.parse(resolvedBase);
-    const baseWithoutExt = path.join(parsed.dir, parsed.name);
-    const language = (this.state.language || '').trim();
-    const secLevel = this.bbsSession?.user?.secLevel ?? 0;
-
-    const candidates = buildGFileCandidates(
-      baseWithoutExt,
-      parsed.ext,
-      language,
-      secLevel
-    );
-
-    const target = this.findFirstExisting(candidates);
-    if (!target) {
-console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
-      this.reply(msg, 0);
-      return;
-    }
-
-    await this.displayResolvedFile(target, forceNonStop, msg);
+    await handleShowGFileFn(this, msg);
   }
 
-  /**
-   * Handle JH_SF (Show File - full path)
-   *
-   * See handleShowGFile docstring for the sync-fast-path / async-slow-path
-   * contract. The emit MUST land before this method returns for non-MCI
-   * files; absolute cursor positioning in dRE!Wall depends on this ordering.
-   */
   async handleShowFile(msg: XIMMessage): Promise<void> {
-    const targetPath = this.getMessageString(msg).trim();
-    const forceNonStop = msg.data === 1;
-
-    if (!targetPath) {
-      this.reply(msg, 0);
-      return;
-    }
-
-    const resolved = this.resolvePath(targetPath);
-    const parsed = path.parse(resolved);
-    const candidates =
-      parsed.ext && parsed.ext.length > 0
-        ? [resolved]
-        : [
-            resolved, // Try exact path first (no extension)
-            `${resolved}.txt`,
-            `${resolved}.TXT`,
-            `${resolved}.txt.gr`,
-            `${resolved}.GR1`,
-          ];
-
-    const target = this.findFirstExisting(candidates);
-    if (!target) {
-console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
-      this.reply(msg, 0);
-      return;
-    }
-
-    await this.displayResolvedFile(target, forceNonStop, msg);
+    await handleShowFileFn(this, msg);
   }
 
-  /**
-   * Handle DISPLAY_FILE (non-stop file display).
-   * Sync-fast-path semantics inherited from handleShowFile.
-   */
   async handleDisplayFileNonStop(msg: XIMMessage): Promise<void> {
-    await this.handleShowFile({ ...msg, data: 1 });
+    await handleDisplayFileNonStopFn(this, msg);
   }
 
-  /** Handle CHECK_TO_DISPLAY (non-stop gfile/ACS search). See handleDisplayFileNonStop. */
   async handleCheckToDisplay(msg: XIMMessage): Promise<void> {
-    await this.handleShowGFile({ ...msg, data: 1 });
-  }
-
-  /**
-   * Display a resolved file with the sync-fast-path / async-slow-path split.
-   *
-   * Fast path (no MCI codes): synchronously read file → emit → reply.
-   * The emit lands BEFORE this method returns, locking deterministic
-   * ordering against any subsequent JH_WRITE. This is what dRE!Wall,
-   * AquaScan banners, and similar static ANSI displays rely on.
-   *
-   * Slow path (file contains `~XX` MCI codes like ~ML., ~MD., ~MN. that
-   * require DB lookups): falls back to the existing async parseMciCodes
-   * pipeline. The trap-sync XIMProcessor / doorMessageCallback drain
-   * (door-message-callbacks.ts ASYNC_OUTPUT_COMMANDS + deasync.loopWhile)
-   * still covers this rare case.
-   */
-  private async displayResolvedFile(
-    target: string,
-    forceNonStop: boolean,
-    msg: XIMMessage
-  ): Promise<void> {
-    let content: string;
-    try {
-      const rawBuffer = amigafs.readFileSync(target) as Buffer;
-      content = iconv.decode(rawBuffer, 'iso-8859-1');
-    } catch (err) {
-      SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', target, err as Error);
-console.error(`[XIMIOHandler] Failed to display file ${target}:`, err);
-      this.reply(msg, 0);
-      return;
-    }
-
-    // Fast path: file has no MCI codes — emit synchronously and reply.
-    // MCI markers look like ~CD., ~ML., ~XC_..., ~D., etc. Detect any
-    // `~` followed by 1+ uppercase letters/digits or `~D<char>` (terminator).
-    const hasMciCodes = /~([A-Z][A-Z0-9_]*|D.)/.test(content);
-    if (!hasMciCodes) {
-      // Skip the (Pause)...More prompt for short files (<= screen height).
-      // Doors like dRE!Wall use JH_SF for positional UI fragments (3-line
-      // wall design), not full-screen text — pausing mid-layout breaks the
-      // door's absolute cursor positioning AND blocks the trap-sync drain
-      // for ~5s waiting for user input that never comes. Long files keep
-      // pagination so HELP / GFILE displays still pause normally.
-      const newlineCount = (content.match(/\n/g) ?? []).length;
-      const pauseLines = this.state.pauseLines || 24;
-      const shouldAutoPause = !forceNonStop && newlineCount > pauseLines;
-      this.emitText(content, false, shouldAutoPause, shouldAutoPause, msg);
-      if (!this.waitingForPause) {
-        this.reply(msg, 1);
-      }
-      return;
-    }
-
-    // Slow path: MCI parsing requires async DB lookups. Covered by the
-    // deasync drain in door-message-callbacks.ts.
-    const displayed = await this.displayTextFile(target, forceNonStop, msg);
-    if (!displayed) {
-      this.reply(msg, 0);
-      return;
-    }
-
-    if (!this.waitingForPause) {
-      this.reply(msg, 1);
-    }
+    await handleCheckToDisplayFn(this, msg);
   }
 
   /**
@@ -1461,84 +1284,12 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     autoPause: boolean = false,
     pendingMsg?: XIMMessage
   ): number {
-    // Prepend any buffered content from previous incomplete ANSI sequence
-    // RTW and other doors may split ESC[34m across multiple JH_SM calls
-    let fullText = this.ansiBuffer + text;
-    this.ansiBuffer = '';
-
-    // Convert Amiga CSI (0x9B) to standard ANSI ESC+[ (0x1B 0x5B)
-    // Amiga uses a single-byte CSI character for ANSI codes, but modern terminals
-    // expect the two-byte ESC+[ sequence. Without this conversion, colors appear
-    // as "[36m" instead of actual colored text.
-    let converted = fullText.replace(/\x9b/g, '\x1b[');
-
-    // Convert Form Feed (0x0C) to scroll-to-scrollback + home cursor.
-    // On Amiga console.device, 0x0C (FF) is "Clear screen and home cursor" — doors
-    // like dRE!WAll send \f\n\r as their first output to clear the terminal before
-    // drawing at absolute positions [5;0H, [22;0H, [23;1H.
-    //
-    // ESC[2J erases the visible viewport WITHOUT pushing content to xterm.js scrollback,
-    // so previous output is permanently lost. Instead we scroll 30 lines (> one screen)
-    // to push all visible content into scrollback history, then cursor-home.
-    // The effect is the same visually: blank screen, cursor at top — but the user can
-    // still scroll up to see what was there before.
-    converted = converted.replace(/\f/g, '\r\n'.repeat(30) + '\x1b[H');
-
-    // Filter out Amiga console.device specific codes that aren't standard ANSI:
-    // - ESC[0 p = cursor off (Amiga-specific, not valid ANSI)
-    // - ESC[1 p = cursor on (Amiga-specific, not valid ANSI)
-    // - ESC[ p = toggle cursor (Amiga-specific)
-    // These have a space before the 'p' which makes them Amiga-specific.
-    // Standard ANSI cursor codes don't have a space (e.g., [?25h, [?25l).
-    // The regex MUST include the leading ESC (\x1b) byte — stripping only
-    // "[0 p" leaves an orphaned ESC, which the incomplete-ANSI buffer at the
-    // bottom of this function captures and prepends to the NEXT JH_WRITE,
-    // corrupting sequences like ESC[5;0H into \x1b\x1b[5;0H and breaking
-    // absolute cursor positioning in doors like dRE!WAll.
-    const amigaCursorMatches = converted.match(/\x1b\[(\d*)\s+p/gi);
-    if (amigaCursorMatches) {
-console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCursorMatches)}`);
-    }
-    converted = converted.replace(/\x1b\[(\d*)\s+p/gi, '');
-
-    // Handle @READUSERKEYS directive from MultiTop and similar doors
-    // This directive should trigger a pause and wait for user keypress
-    const hasReadUserKeys = /@READUSERKEYS\s*/gi.test(converted);
-    if (hasReadUserKeys) {
-      // Strip the directive from output
-      converted = converted.replace(/@READUSERKEYS\s*/gi, '');
-      // Trigger a pause after emitting any remaining text
-      // We'll do this by setting a flag and checking after the text is emitted
-      if (pendingMsg && !this.state.nonStopText) {
-        // Queue a pause to happen after this text is fully output
-        this.readUserKeysPending = true;
-      }
-    }
-
-    // Convert bare ANSI sequences (without ESC prefix) to proper ANSI
-    // Some Amiga doors output bare "[32m" sequences without ESC prefix,
-    // relying on Amiga console.device's ability to accept these directly.
-    // For proper terminal output, we need to add the ESC prefix.
-    // Pattern: [ followed by optional ? (DEC private), params (digits/semicolons), and command letter
-    // Examples: [32m -> ESC[32m, [0m -> ESC[0m, [2J -> ESC[2J, [?25l -> ESC[?25l
-    // Only convert if not already preceded by ESC
-    // IMPORTANT: Require at least one digit (\d+) to avoid matching text like "[zOOROPA"
-    // which would incorrectly become ESC[z (eaten by terminal) + "OOROPA"
-    converted = converted.replace(/(?<!\x1b)\[([?]?\d+(?:;\d*)*[A-Za-z])/g, '\x1b[$1');
-
-    // Check for incomplete ANSI escape sequence at end of text
-    // CSI format: ESC [ (params) (letter) where letter terminates the sequence
-    // If we end mid-sequence, buffer it for the next message
-    const incompleteAnsiMatch = converted.match(/\x1b(\[[\d;?]*)?$/);
-    if (incompleteAnsiMatch) {
-      // Store the incomplete sequence and remove from current output
-      this.ansiBuffer = incompleteAnsiMatch[0];
-      converted = converted.slice(0, -this.ansiBuffer.length);
-      // If nothing left to emit after buffering, return early
-      if (converted.length === 0) {
-        return 0;
-      }
-    }
+    // Convert raw Amiga output text to web-terminal-safe ANSI (see io-ansi-util.ts).
+    const rawResult = processRawText(text, this.ansiBuffer, this.state.nonStopText, !!pendingMsg);
+    this.ansiBuffer = rawResult.ansiBuffer;
+    if (rawResult.readUserKeysPending) this.readUserKeysPending = true;
+    if (rawResult.empty) return 0;
+    let converted = rawResult.text;
 
     // DOOR_NEWLINE_STRICT: preserve bytes verbatim (see newline-mode.util).
     const newlineMode = getNewlineMode();
@@ -1626,12 +1377,6 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
   }
 
   /**
-   * Simple fixed-width wrapper for a single line (no line breaks)
-   * Properly handles:
-   * - Tab characters (expand to next 8-column tab stop)
-   * - ANSI escape sequences (don't count toward visible width)
-   */
-  /**
    * Determine XIM port code (CONSOLE_PORT=1, SERIAL_PORT=2)
    *
    * Per express.e line 28730: IF logonType=LOGON_TYPE_REMOTE THEN ximPort:=SERIAL_PORT
@@ -1665,74 +1410,6 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
   /**
    * Display a text file with optional pagination
    */
-  private async displayTextFile(
-    filePath: string,
-    forceNonStop: boolean,
-    msg: XIMMessage
-  ): Promise<boolean> {
-    try {
-      // Read file as binary buffer first to handle encoding properly
-      // Amiga files use ISO-8859-1 encoding, not UTF-8
-      const rawBuffer = amigafs.readFileSync(filePath) as Buffer;
-      // Convert from ISO-8859-1 (Amiga standard) to UTF-8 for display
-      const content = iconv.decode(rawBuffer, 'iso-8859-1');
-
-      // Process MCI codes in file contents (express.e:6790-6820)
-      try {
-        const { parseMciCodes } = await import('../../handlers/screen.handler.js');
-        const bbsSession = this.bbsSession || {};
-        const bbsName = bbsSession.bbsName || 'AmiExpress-Web';
-        const sysopName = bbsSession.sysopName || 'Sysop';
-        const location = bbsSession.user?.location || 'The Internet';
-
-        const result = await parseMciCodes(content, bbsSession as any, bbsName, sysopName, location);
-        const autoPause = !forceNonStop;
-        this.emitText(result.parsed, false, true, autoPause, msg);
-      } catch (mciError: any) {
-console.warn(`[XIMIOHandler] MCI processing failed, displaying raw: ${mciError.message}`);
-        // Fallback to raw display if MCI processing fails
-        const autoPause = !forceNonStop;
-        this.emitText(content, false, true, autoPause, msg);
-      }
-
-      return true;
-    } catch (err) {
-      SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', filePath, err as Error);
-console.error(`[XIMIOHandler] Failed to display file ${filePath}:`, err);
-      return false;
-    }
-  }
-
-  /**
-   * Resolve an Amiga-style path (BBS:, NODE#:, DOORS:) to host filesystem
-   */
-  private resolvePath(amigaPath: string): string {
-    const paths = new BBSPaths(this.getBbsRoot());
-    return paths.resolveAmigaPath(
-      amigaPath,
-      this.bbsSession?.nodeId ?? 0,
-      undefined
-    );
-  }
-
-  private getBbsRoot(): string {
-    return (
-      (this.bbsSession as any)?.dataDir ||
-      this.bbsSession?.bbsPath ||
-      process.env.BBS_DATA_DIR ||
-      path.resolve(process.cwd())
-    );
-  }
-
-  private findFirstExisting(candidates: string[]): string | null {
-    for (const candidate of candidates) {
-      if (amigafs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-    return null;
-  }
-
   /**
    * Check if a pause is required based on current line count.
    * Returns true if paused, false otherwise.
