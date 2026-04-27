@@ -180,7 +180,7 @@ console.log('[ENV] Mail - Read');
  * Display a single message with navigation options
  * From express.e:8880-8970 (displayMessage) and express.e:11000-11250 (message navigation)
  */
-async function displaySingleMessage(socket: any, session: BBSSession, messageIndex: number): Promise<void> {
+export async function displaySingleMessage(socket: any, session: BBSSession, messageIndex: number): Promise<void> {
   const messages = session.tempData.msgReaderMessages;
   const msg = messages[messageIndex];
   const msgNumber = (msg as any).msgNumber || msg.id;
@@ -804,6 +804,15 @@ async function saveMessagePointerAndExit(socket: any, session: BBSSession): Prom
 
   emitText(socket, '\r\n');
   session.menuPause = false;
+
+  // If we were reading mail during confScan, return to scan (express.e:11772+)
+  if (session.tempData?.confScanReturnAfterRead) {
+    delete session.tempData.confScanReturnAfterRead;
+    const { advanceConferenceScan } = require('../message/message-scan.handler');
+    await advanceConferenceScan(socket, session);
+    return;
+  }
+
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 

@@ -694,10 +694,16 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         displayFlowLog('CONF_SCAN: performing conference scan');
         const { performConferenceScan } = require('./message/message-scan.handler');
         await performConferenceScan(socket, session);
-        // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        continue;
+        // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL.
+        // NOTE: performConferenceScan may have yielded mid-scan (CONF_SCAN_MAIL_PROMPT),
+        // or may have already advanced to DISPLAY_CONF_BULL via finishConferenceScan.
+        // Only set DISPLAY_CONF_BULL ourselves when no yield happened.
+        if (session.subState === LoggedOnSubState.CONF_SCAN) {
+          session.menuPause = true;
+          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          continue;
+        }
+        return; // subState was changed by performConferenceScan — stop display-flow loop
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
@@ -906,10 +912,75 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
       // express.e:28082-28085 — mscan=TRUE: show "Scanning conferences..." and do scan
       const { performConferenceScan } = require('./message/message-scan.handler');
       await performConferenceScan(socket, session);
-      session.menuPause = true;
+      // performConferenceScan may have yielded mid-scan (CONF_SCAN_MAIL_PROMPT)
+      // or already advanced to DISPLAY_CONF_BULL via finishConferenceScan.
+      // Only transition ourselves when scan finished synchronously.
+      if (session.subState === LoggedOnSubState.MAILSCAN_PROMPT_INPUT ||
+          session.subState === LoggedOnSubState.CONF_SCAN) {
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        await advanceDisplayFlow(socket, session);
+      }
+      return;
     }
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     await advanceDisplayFlow(socket, session);
+    return;
+  }
+
+  // express.e:11739 - per-conference "Would you like to read it now (Y/n)?"
+  // Yielded from advanceConferenceScan when new mail is found in a conference.
+  if (session.subState === LoggedOnSubState.CONF_SCAN_MAIL_PROMPT) {
+    const ch = (data[0] || '').toUpperCase();
+    if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+      return; // loop — yesNo(1) ignores unknown chars
+    }
+    const doRead = (ch !== 'N'); // default yes
+    emitText(socket, doRead ? 'Yes\r\n' : 'No\r\n');
+
+    if (doRead && session.tempData?.confScanState?.pendingMessages?.length > 0) {
+      const state = session.tempData.confScanState;
+      const pendingConf: number = state.pendingConf;
+      const bbsDataPath = config.get('dataDir');
+      const { readMessageFile } = require('../utils/message-file.util');
+      const fullMessages: any[] = [];
+
+      for (const m of state.pendingMessages) {
+        try {
+          const msg = await readMessageFile(pendingConf, m.msgNum, bbsDataPath);
+          if (msg) {
+            fullMessages.push({
+              id: m.msgNum,
+              msgNumber: m.msgNum,
+              subject: msg.subject,
+              body: msg.body,
+              author: msg.from,
+              toUser: msg.to,
+              timestamp: new Date(msg.date),
+              isPrivate: msg.isPrivate
+            });
+          }
+        } catch (_e) { /* skip unreadable messages */ }
+      }
+
+      if (fullMessages.length > 0) {
+        session.tempData.msgReaderMessages = fullMessages;
+        session.tempData.msgReaderIndex = 0;
+        session.tempData.msgReaderHighestRead = session.lastMsgReadConf || 0;
+        session.tempData.confScanReturnAfterRead = true;
+        session.subState = LoggedOnSubState.MSG_READER_NAV;
+        const { displaySingleMessage } = require('./message/messaging.handler');
+        await displaySingleMessage(socket, session, 0);
+      } else {
+        // Headers found but no readable files — continue scan
+        const { advanceConferenceScan } = require('./message/message-scan.handler');
+        await advanceConferenceScan(socket, session);
+      }
+    } else {
+      // N pressed or no pending messages — continue scan
+      const { advanceConferenceScan } = require('./message/message-scan.handler');
+      await advanceConferenceScan(socket, session);
+    }
     return;
   }
 

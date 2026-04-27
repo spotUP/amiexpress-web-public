@@ -193,6 +193,104 @@ console.error(`[checkMailConfScan] Failed to load conf_base for user ${userId} c
 }
 
 /**
+ * A single message entry used during confScan mail display
+ * (express.e:11706 — matches toName, from, subject, msgNumb)
+ */
+export interface ScanMessage {
+  msgNum: number;
+  isPrivate: boolean;
+  from: string;
+  subject: string;
+}
+
+/**
+ * State carried across yield points in advanceConferenceScan
+ */
+export interface ConfScanState {
+  confIndex: number;          // next conference to process (0-based into _conferences)
+  mscan: boolean;             // whether mail scan is enabled (from MAILSCAN_PROMPT)
+  fileScanDone: boolean;      // true after file scan phase completes
+  pendingConf: number;        // conf number waiting for Y/N answer
+  pendingMsgBase: number;     // msgBase ID for pending conf
+  pendingMessages: ScanMessage[];
+}
+
+/**
+ * Get messages that match the searchNewMail criteria for a user
+ * express.e:11706 — toName === confMailName || 'eall' || 'all', msgNum > pointer, not deleted
+ *
+ * @param userId - User ID
+ * @param conferenceId - Conference ID
+ * @param messageBaseId - Message base ID
+ * @param username - Username (case-insensitive match)
+ * @param bbsDataPath - BBS data directory
+ * @returns Array of matching ScanMessage entries
+ */
+async function getMessagesForConfScan(
+  userId: string,
+  conferenceId: number,
+  messageBaseId: number,
+  username: string,
+  bbsDataPath: string
+): Promise<ScanMessage[]> {
+  const safeName = (username || '').toLowerCase();
+  const results: ScanMessage[] = [];
+
+  try {
+    const mailStat = messageIndexManager.readMailStats(conferenceId);
+    const headers = messageIndexManager.readHeaderFile(conferenceId);
+    const confBase = await loadMsgPointers(userId, conferenceId, messageBaseId);
+    const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
+    const pointer = validated.lastNewReadConf || 0;
+
+    if (headers.length > 0) {
+      for (const header of headers) {
+        if (header.msgNumb <= pointer) continue;
+        if (header.status & MsgStatus.DELETED) continue;
+        if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) continue;
+
+        const toLower = (header.toName || '').trim().toLowerCase();
+        const isPrivate = (header.status & MsgStatus.PRIVATE) === MsgStatus.PRIVATE;
+
+        // express.e:11706 — match toName === confMailName, 'eall', or 'all'
+        if (toLower === safeName || toLower === 'eall' || toLower === 'all') {
+          results.push({
+            msgNum: header.msgNumb,
+            isPrivate,
+            from: (header.fromName || '').trim(),
+            subject: ''  // HeaderFile doesn't carry subject; read from msg file on demand
+          });
+        }
+      }
+    } else {
+      // Disk-based fallback
+      const messageIds = await getAllMessageIds(conferenceId, bbsDataPath);
+      for (const msgNum of messageIds) {
+        if (msgNum <= pointer) continue;
+        const message = await readMessageFile(conferenceId, msgNum, bbsDataPath);
+        if (!message) continue;
+
+        const toLower = (message.to || '').trim().toLowerCase();
+        const isPrivate = message.isPrivate && toLower !== 'all' && toLower !== 'eall';
+
+        if (toLower === safeName || toLower === 'eall' || toLower === 'all') {
+          results.push({
+            msgNum,
+            isPrivate: message.isPrivate === true,
+            from: (message.from || '').trim(),
+            subject: (message.subject || '').trim()
+          });
+        }
+      }
+    }
+  } catch (error) {
+console.error(`[getMessagesForConfScan] conf ${conferenceId} msgBase ${messageBaseId}:`, error);
+  }
+
+  return results;
+}
+
+/**
  * Count new messages for a user in a specific message base
  *
  * @param userId - User ID
@@ -295,178 +393,26 @@ console.error(`Error counting messages in conf ${conferenceId} msgbase ${message
 }
 
 /**
- * Scan all conferences for new mail and files
- * 1:1 port from express.e:28066-28150 confScan()
- *
- * express.e loops through each conference, joins it, then calls runSysCommand('N','S U')
- * for file scanning. AquaScan scans only the CURRENT conference, so we must set
- * currentConf before each call.
- *
- * @param socket - Socket.io socket
- * @param session - BBS session
+ * Finish the conference scan: reset state and write AquaScan.UserData.
+ * Called after both mail and file scan phases are complete.
  */
-export async function performConferenceScan(socket: any, session: any): Promise<number> {
-  if (!session.user) {
-console.warn('confScan: No user in session');
-    return 0; // RESULT_SUCCESS
-  }
-
-  // NOTE: We use internal handler directly instead of runSysCommand('N')
-  // because n.info points to AquaScan which writes to files, not terminal
-  const { joinConference } = require('../operations/conference.handler');
-  const { checkForPause } = require('../../utils/flag-pause.util');
-
-  // express.e:28071 - setEnvStat(ENV_SCANNING)
-  session.currentStat = 9; // ENV_SCANNING
-console.log('[confScan] Starting conference scan (express.e:28066-28150)');
-
-  // Initialize line count for pause tracking during scan
-  if (!session.tempData) session.tempData = {};
-  session.tempData.lineCount = 0;
-
-  // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
-  socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
-  // Count the lines we just output for pause tracking
-  session.tempData.lineCount = (session.tempData.lineCount || 0) + 3;
-
-  // Suppress menu prompts during conference scan
-  session.inConfScan = true;
-
-  // express.e:28086-28114 - FOR conf:=1 TO cmds.numConf
-  const numConf = _conferences?.length || 0;
-  let mystat = 0; // RESULT_SUCCESS
-
+async function finishConferenceScan(socket: any, session: any): Promise<void> {
   const user = session.user;
-  const username = user?.username || 'Unknown';
-console.log(`[confScan] Starting scan for ${username}. Total conferences: ${numConf}`);
 
-  // Cache original newSinceDate to restore after scan
-  const originalNewSinceDate = user?.newSinceDate;
-  
-  // Use previous login date for 'New Since' logic during scan
-  if (user?.lastLoginBeforeUpdate) {
-    user.newSinceDate = user.lastLoginBeforeUpdate;
-console.log(`[confScan] Using previous login date for scan: ${user.newSinceDate.toISOString()}`);
-  } else {
-console.log(`[confScan] WARNING: No previous login date found for ${username}`);
-  }
-
-  // Get conference access string
-  const confAccess = user?.confAccess || user?.conferenceAccess || '';
-console.log(`[confScan] Access string: "${confAccess}" (len=${confAccess.length})`);
-
-  for (let conf = 1; conf <= numConf; conf++) {
-    const confName = _conferences[conf - 1]?.name || `Conf ${conf}`;
-    
-    // express.e:28087 - IF (checkConfAccess(conf))
-    // AmiExpress uses 'X' for access, '_' for no access
-    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
-    const hasAccess = accessChar === 'X';
-
-    if (!hasAccess) {
-      if (conf <= 14) { 
-console.log(`[confScan] Skipping ${confName} (index ${conf-1}) - char is "${accessChar}"`);
-      }
-      continue;
-    }
-
-console.log(`[confScan] -> Scanning ${confName} (${conf}/${numConf})`);
-
-    try {
-      const { runSysCommand } = require('../command-execution.handler');
-      const hasAquaScan = await checkCommandExists('N');
-
-      // express.e:28092-28098 — Mail scan ALWAYS runs, regardless of file scanner.
-      // Previous code skipped mail scanning entirely when AquaScan was installed,
-      // which meant mail notifications (including "eall" from ctop) never appeared.
-      const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
-
-      for (const msgBase of confMsgBases) {
-        const msgBaseId = msgBase.id;
-
-        // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
-        const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
-
-        // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...)
-        await joinConference(socket, session, conf, msgBaseId, true);
-
-        if (mscan) {
-console.log(`[confScan] Mail scan: ${confName} / msgBase ${msgBaseId}`);
-
-          const { newPublic, newPrivate, lastScanned } = await countNewMessages(
-            user.id,
-            conf,
-            msgBaseId,
-            username
-          );
-
-          session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
-          session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
-          session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
-
-          if (lastScanned > 0) {
-            await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
-          }
-
-          if (newPublic > 0 || newPrivate > 0) {
-            const total = newPublic + newPrivate;
-            socket.emit('ansi-output', `\x1b[32m${confName}\x1b[0m: ${total} new message${total !== 1 ? 's' : ''}\r\n`);
-            session.tempData.lineCount = (session.tempData.lineCount || 0) + 1;
-          }
-        }
-      }
-
-      // express.e:28089 - fscan:=checkFileConfScan(conf) — only scan files when enabled
-      // express.e uses msgbase=1 meaning "first base in this conf", which maps to
-      // _messageBases[0].id for this conference (not the global ID 1).
-      const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
-      const firstMsgBaseId = firstMsgBase ? firstMsgBase.id : 1;
-      const fscan = await checkFileConfScan(conf, user.id, firstMsgBaseId);
-      if (fscan) {
-        if (hasAquaScan) {
-console.log(`[confScan] File scan via AquaScan (N S U): ${confName}`);
-          await joinConference(socket, session, conf, firstMsgBaseId, true);
-          session.newFilesPauseFlag = true;
-          await runSysCommand(socket, session, 'N', 'S U');
-          session.newFilesPauseFlag = false;
-        } else {
-console.log(`[confScan] Internal file scan: ${confName}`);
-          session.newFilesPauseFlag = true;
-          await runSysCommand(socket, session, 'N', 'S U');
-          session.newFilesPauseFlag = false;
-        }
-      }
-
-      const shouldContinue = await checkForPause(socket, session);
-      if (!shouldContinue) {
-console.log(`[confScan] User stopped scan at conference ${conf}`);
-        mystat = -1;
-      }
-    } catch (err) {
-console.error(`[confScan] Conference ${conf} scan failed:`, err);
-      mystat = 0; // Continue to next conference
-    }
-
-    // express.e:28109 - EXIT mystat=RESULT_FAILURE
-    if (mystat === -1) break;
-  }
-
-  // express.e:28103 - currentConf:=0
-  // express.e resets currentConf to 0 and returns. SUBSTATE_DISPLAY_CONF_BULL then
-  // calls joinConf once (our AUTO_REJOIN handler). Do NOT pre-join here — that caused
-  // a double callers-log entry and spurious side effects before the real auto-rejoin.
-  session.currentConference = 0;
-  session.currentConf = 0;
-
-  // Restore current login date
-  if (user) {
-    user.newSinceDate = originalNewSinceDate;
+  // Restore originalNewSinceDate saved in tempData
+  if (user && session.tempData?.confScanOriginalNewSinceDate !== undefined) {
+    user.newSinceDate = session.tempData.confScanOriginalNewSinceDate;
+    delete session.tempData.confScanOriginalNewSinceDate;
   }
 
 console.log('[confScan] All conferences scanned');
 
   // Clear the confScan flag
   session.inConfScan = false;
+
+  // express.e:28103 - currentConf:=0
+  session.currentConference = 0;
+  session.currentConf = 0;
 
   // Write current DateStamp to AquaScan.UserData for this user's slot.
   // AquaScan has no Write() LVO calls — it reads UserData but the BBS must update it.
@@ -483,13 +429,236 @@ console.log('[confScan] All conferences scanned');
       const fd = fs.openSync(userDataPath, 'r+');
       fs.writeSync(fd, buf, 0, 12, slotOffset);
       fs.closeSync(fd);
-console.log(`[confScan] Updated AquaScan.UserData slot ${session.user.slotNumber} → days=${ds.days} min=${ds.minutes} tick=${ds.ticks}`);
+console.log(`[confScan] Updated AquaScan.UserData slot ${session.user.slotNumber} -> days=${ds.days} min=${ds.minutes} tick=${ds.ticks}`);
     } catch (err) {
 console.error('[confScan] Failed to update AquaScan.UserData:', err);
     }
   }
 
-  // express.e:28149 - ENDPROC RESULT_SUCCESS
+  // Clean up scan state
+  delete session.tempData.confScanState;
+
+  // Return to display flow
+  const { LoggedOnSubState: SubState } = require('../../constants/bbs-states');
+  session.menuPause = true;
+  session.subState = SubState.DISPLAY_CONF_BULL;
+  // Trigger display flow continuation from command handler
+  const { advanceDisplayFlow } = require('../command.handler');
+  if (advanceDisplayFlow) {
+    await advanceDisplayFlow(socket, session);
+  }
+}
+
+/**
+ * Advance the conference scan — processes the next pending conference.
+ * Called on entry and after each Y/N answer in CONF_SCAN_MAIL_PROMPT state.
+ * Exported so command.handler can call it after the user answers the prompt.
+ *
+ * express.e:11651-11778 searchNewMail()
+ *
+ * @param socket - Socket.io socket
+ * @param session - BBS session
+ */
+export async function advanceConferenceScan(socket: any, session: any): Promise<void> {
+  if (!session.tempData) session.tempData = {};
+  const scanState: ConfScanState = session.tempData.confScanState;
+  if (!scanState) {
+console.warn('[advanceConferenceScan] no confScanState found');
+    await finishConferenceScan(socket, session);
+    return;
+  }
+
+  const { joinConference } = require('../operations/conference.handler');
+  const { checkForPause } = require('../../utils/flag-pause.util');
+  const { LoggedOnSubState: SubState } = require('../../constants/bbs-states');
+  const bbsDataPath = config.get('dataDir');
+  const user = session.user;
+  const username = user?.username || 'Unknown';
+  const confAccess = user?.confAccess || user?.conferenceAccess || '';
+  const numConf = _conferences?.length || 0;
+
+  // ----------------------------------------------------------------
+  // Mail scan phase: iterate starting from scanState.confIndex
+  // ----------------------------------------------------------------
+  for (let confIdx = scanState.confIndex; confIdx < numConf; confIdx++) {
+    const conf = confIdx + 1; // 1-based conference number
+    const confName = _conferences[confIdx]?.name || `Conf ${conf}`;
+
+    // express.e:28087 - IF (checkConfAccess(conf))
+    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
+    if (accessChar !== 'X') {
+      continue;
+    }
+
+    // Only scan first msgbase per conference for mail (express.e:11670 per-conf)
+    const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
+    if (confMsgBases.length === 0) {
+      continue;
+    }
+    const firstMsgBase = confMsgBases[0];
+    const msgBaseId = firstMsgBase.id;
+
+    // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
+    const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
+
+    // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...)
+    await joinConference(socket, session, conf, msgBaseId, true);
+
+    // express.e:11670: StringF(tempStr,'[32mScanning Conference[33m: [0m\s - ',currentConfName)
+    socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
+
+    if (!mscan) {
+      // Skip mail scan for this conference
+      socket.emit('ansi-output', 'No mail today!\r\n');
+      continue;
+    }
+
+    // Get mail-scan messages (matching username, eall, all)
+    const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);
+
+    // Update scan counters
+    const { newPublic, newPrivate, lastScanned } = await countNewMessages(
+      user.id, conf, msgBaseId, username
+    );
+    session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
+    session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
+    session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
+    if (lastScanned > 0) {
+      await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
+    }
+
+    if (scanMsgs.length === 0) {
+      // express.e:11772 - 'No mail today!\b\n'
+      socket.emit('ansi-output', 'No mail today!\r\n');
+      continue;
+    }
+
+    // express.e:11712-11714 — blank lines + table header
+    socket.emit('ansi-output', '\r\n\r\n');
+    socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
+    socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+
+    // express.e:11720 - per-message row
+    for (const m of scanMsgs) {
+      const status = m.isPrivate ? 'Private' : 'Public ';
+      const from = (m.from || '').substring(0, 29).padEnd(29);
+      // For header-only entries we may have no subject yet; fill from disk
+      let subject = (m.subject || '').trim();
+      if (!subject) {
+        try {
+          const msg = await readMessageFile(conf, m.msgNum, bbsDataPath);
+          if (msg) subject = (msg.subject || '').trim();
+        } catch (_e) { /* ignore */ }
+      }
+      const subj = subject.substring(0, 21).padEnd(21);
+      const num = String(m.msgNum).padStart(6, '0');
+      socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
+    }
+
+    // express.e:11739 — '\b\nWould you like to read it now ' + yesNo(1) + '\b\n'
+    socket.emit('ansi-output', '\r\nWould you like to read it now \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');
+
+    // Store state and yield for user input
+    scanState.confIndex = confIdx + 1; // next conference when we resume
+    scanState.pendingConf = conf;
+    scanState.pendingMsgBase = msgBaseId;
+    scanState.pendingMessages = scanMsgs;
+    session.subState = SubState.CONF_SCAN_MAIL_PROMPT;
+    return; // yield — command handler will call back with Y/N
+  }
+
+  // ----------------------------------------------------------------
+  // All mail-scan conferences done — proceed to file scan phase
+  // ----------------------------------------------------------------
+  const { runSysCommand } = require('../command-execution.handler');
+  const hasAquaScan = await checkCommandExists('N');
+
+  for (let confIdx = 0; confIdx < numConf; confIdx++) {
+    const conf = confIdx + 1;
+    const confName = _conferences[confIdx]?.name || `Conf ${conf}`;
+    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
+    if (accessChar !== 'X') continue;
+
+    const firstMsgBaseEntry = _messageBases.find(mb => mb.conferenceId === conf);
+    const firstMsgBaseId = firstMsgBaseEntry ? firstMsgBaseEntry.id : 1;
+
+    const fscan = await checkFileConfScan(conf, user.id, firstMsgBaseId);
+    if (fscan) {
+console.log(`[confScan] File scan: ${confName}`);
+      await joinConference(socket, session, conf, firstMsgBaseId, true);
+      session.newFilesPauseFlag = true;
+      await runSysCommand(socket, session, 'N', 'S U');
+      session.newFilesPauseFlag = false;
+    }
+
+    const shouldContinue = await checkForPause(socket, session);
+    if (!shouldContinue) {
+console.log(`[confScan] User stopped scan at conference ${conf}`);
+      break;
+    }
+  }
+
+  await finishConferenceScan(socket, session);
+}
+
+/**
+ * Scan all conferences for new mail and files.
+ * Entry point: initialises confScanState and delegates to advanceConferenceScan.
+ * 1:1 port from express.e:28066-28150 confScan() + express.e:11651-11778 searchNewMail()
+ *
+ * @param socket - Socket.io socket
+ * @param session - BBS session
+ */
+export async function performConferenceScan(socket: any, session: any): Promise<number> {
+  if (!session.user) {
+console.warn('confScan: No user in session');
+    return 0; // RESULT_SUCCESS
+  }
+
+  // express.e:28071 - setEnvStat(ENV_SCANNING)
+  session.currentStat = 9; // ENV_SCANNING
+console.log('[confScan] Starting conference scan (express.e:28066-28150)');
+
+  // Initialize temp data
+  if (!session.tempData) session.tempData = {};
+  session.tempData.lineCount = 0;
+
+  // Suppress menu prompts during conference scan
+  session.inConfScan = true;
+
+  const user = session.user;
+  const username = user?.username || 'Unknown';
+console.log(`[confScan] Starting scan for ${username}. Total conferences: ${_conferences?.length || 0}`);
+
+  // Cache original newSinceDate in tempData so finishConferenceScan can restore it
+  session.tempData.confScanOriginalNewSinceDate = user?.newSinceDate;
+
+  // Use previous login date for 'New Since' logic during scan
+  if (user?.lastLoginBeforeUpdate) {
+    user.newSinceDate = user.lastLoginBeforeUpdate;
+console.log(`[confScan] Using previous login date for scan: ${user.newSinceDate.toISOString()}`);
+  } else {
+console.log(`[confScan] WARNING: No previous login date found for ${username}`);
+  }
+
+  // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
+  socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
+  session.tempData.lineCount = (session.tempData.lineCount || 0) + 3;
+
+  // Initialise confScanState if not already set (may be set by MAILSCAN_PROMPT_INPUT)
+  if (!session.tempData.confScanState) {
+    const state: ConfScanState = {
+      confIndex: 0,
+      mscan: true,
+      fileScanDone: false,
+      pendingConf: 0,
+      pendingMsgBase: 0,
+      pendingMessages: []
+    };
+    session.tempData.confScanState = state;
+  }
+
+  await advanceConferenceScan(socket, session);
   return 0; // RESULT_SUCCESS
 }
 

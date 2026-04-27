@@ -24,6 +24,7 @@ export enum LoggedOnSubState {
   DISPLAY_PAGED_SCREEN = 'display_paged_screen',
   CONF_SCAN = 'conf_scan',
   MAILSCAN_PROMPT_INPUT = 'mailscan_prompt_input',  // express.e:28075 - MAILSCAN_PROMPT tooltype: "Scan for Mail (Y/n)?"
+  CONF_SCAN_MAIL_PROMPT = 'conf_scan_mail_prompt',  // express.e:11739 - per-conference "Would you like to read it now (Y/n)?"
   DISPLAY_CONF_BULL = 'display_conf_bull',
   AUTO_REJOIN = 'auto_rejoin',  // express.e:5066-5088 - auto-rejoin with S stats
   LOGOFF = 'logoff',
