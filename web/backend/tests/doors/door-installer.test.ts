@@ -128,3 +128,59 @@ describe('DoorInstaller — TypeScript door', () => {
     expect(result.message).toContain('readme.txt');
   });
 });
+
+describe('DoorInstaller — 68K door', () => {
+  let tmpRoot: string;
+  let installer: DoorInstaller;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'door-install-68k-'));
+    installer = new DoorInstaller(tmpRoot);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('installs a 68K door from LHA entries', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 200,
+          data: Buffer.from(
+            'BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online\nACCESS=0',
+          ),
+        },
+      ],
+    });
+
+    const result = await installer.install('/fake/who.lha');
+
+    expect(result.success).toBe(true);
+    expect(result.command).toBe('WHO');
+    expect(result.type).toBe('XIM');
+    expect(fs.existsSync(path.join(tmpRoot, 'Doors', 'who', 'WHO'))).toBe(true);
+
+    const infoContent = fs.readFileSync(
+      path.join(tmpRoot, 'Commands', 'BBSCmd', 'WHO.info'),
+      'utf8',
+    );
+    expect(infoContent).toContain('BBSCMD=WHO');
+    expect(infoContent).toContain('LOCATION=Doors/who/WHO');
+  });
+
+  test('rejects archive with path traversal', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: '../escape/evil.sh', size: 10, data: Buffer.from('rm -rf /') },
+      ],
+    });
+
+    const result = await installer.install('/fake/evil.zip');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/unsafe path/i);
+  });
+});
