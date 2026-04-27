@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
+import { isSensitiveField } from '../utils/secrets-encryption.util';
 
 // Standard API response format
 interface ApiResponse<T = any> {
@@ -84,7 +85,12 @@ console.error('Config API error:', error);
   router.get('/system', async (req: Request, res: Response) => {
     try {
       const config = await configService.getSystemConfig();
-      sendResponse(res, config);
+      // Mask sensitive fields (smtp_password, reg_key, etc.) — never expose in GET response
+      const sanitized: Record<string, any> = {};
+      for (const [key, value] of Object.entries(config as any)) {
+        sanitized[key] = isSensitiveField(key) && value ? '***' : value;
+      }
+      sendResponse(res, sanitized);
     } catch (error) {
       handleError(res, error);
     }
@@ -1191,6 +1197,9 @@ console.warn('[API] user.data files not found or empty, falling back to database
         users = await database.getUsers({});
       } else {
 console.log(`[API] Loaded ${users.length} users from disk files`);
+
+        // Filter out web guest accounts (created transiently, not real BBS users)
+        users = users.filter((u: any) => !u.username?.startsWith('_gu_'));
 
         // CRITICAL: Deduplicate users by username (keep most recent by calls)
         // Disk files can have duplicate records from multiple logins/updates

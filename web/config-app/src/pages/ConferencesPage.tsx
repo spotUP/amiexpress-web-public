@@ -168,7 +168,7 @@ export function ConferencesPage() {
                   <MessageSquare className="text-bbs-accent" size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">Conference {conf.conference_id}</h3>
+                  <h3 className="text-lg font-semibold text-bbs-text">{conf.name || `Conference ${conf.conference_id}`}</h3>
                   <p className="text-xs text-bbs-muted">
                     {conf.ndirs} director{conf.ndirs === 1 ? 'y' : 'ies'} configured
                   </p>

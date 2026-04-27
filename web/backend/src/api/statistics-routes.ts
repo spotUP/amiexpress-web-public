@@ -36,10 +36,10 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
           ca.details,
           ca.timestamp,
           u.location,
-          u.phoneNumber as phone
+          u.phone
         FROM caller_activity ca
         LEFT JOIN users u ON ca.user_id = u.id
-        WHERE ca.action IN ('login', 'logout', 'connect')
+        WHERE ca.action IN ('Logged on', 'Logged off')
         ORDER BY ca.timestamp DESC
         LIMIT ?
       `, [limit]);
@@ -216,7 +216,7 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
       const callsTodayResult = await database.query(`
         SELECT COUNT(*) as count
         FROM caller_activity
-        WHERE action = 'login' AND timestamp >= ?
+        WHERE action = 'Logged on' AND timestamp >= ?
       `, [todayTimestamp]);
       const callsToday = callsTodayResult.rows[0] as { count: number };
 
@@ -224,7 +224,7 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
       const totalCallsResult = await database.query(`
         SELECT COUNT(*) as count
         FROM caller_activity
-        WHERE action = 'login'
+        WHERE action = 'Logged on'
       `);
       const totalCalls = totalCallsResult.rows[0] as { count: number };
 

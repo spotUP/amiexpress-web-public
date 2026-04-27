@@ -1114,6 +1114,7 @@ export class ConfigRepository extends BaseRepository<any> {
     return {
       id: row.id,
       conference_id: row.conference_id,
+      name: row.name || `Conference ${row.conference_id}`,
       ndirs: row.ndirs,
       dlpath_1: row.dlpath_1,
       dlpath_2: row.dlpath_2,

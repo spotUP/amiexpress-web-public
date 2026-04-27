@@ -69,9 +69,9 @@ describe('readMailStats recovery', () => {
 
   test('valid 12-byte MailStats is read verbatim', async () => {
     const buf = Buffer.alloc(12);
-    buf.writeInt32LE(5, 0);    // lowestKey
-    buf.writeInt32LE(3, 4);    // lowestNotDel
-    buf.writeInt32LE(42, 8);   // highMsgNum
+    buf.writeInt32BE(5, 0);    // lowestKey (big-endian: Amiga 68K format)
+    buf.writeInt32BE(3, 4);    // lowestNotDel
+    buf.writeInt32BE(42, 8);   // highMsgNum
     const { bbsRoot, cleanup } = setUp(96, buf);
     try {
       const stats = await readMailStats(96, bbsRoot);

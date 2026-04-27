@@ -170,6 +170,7 @@ export interface NodeConfig {
 export interface ConferenceConfig {
   id: number;
   conference_id: number;
+  name: string;
 
   // Directory Settings (1-16)
   ndirs: number;

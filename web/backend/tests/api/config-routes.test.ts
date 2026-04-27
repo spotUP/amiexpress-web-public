@@ -93,6 +93,50 @@ describe('Config Routes', () => {
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.data)).toBe(true);
     });
+
+    it('each conference object has a name field', async () => {
+      const res = await request(app).get('/api/config/conferences');
+      if (res.status === 200 && res.body.data.length > 0) {
+        for (const conf of res.body.data) {
+          expect(typeof conf.name).toBe('string');
+          expect(conf.name.length).toBeGreaterThan(0);
+        }
+      }
+    });
+  });
+
+  describe('GET /api/config/system — sensitive field masking', () => {
+    it('does not expose smtp_password in plaintext', async () => {
+      const res = await request(app).get('/api/config/system');
+      if (res.status === 200) {
+        const data = res.body.data ?? res.body;
+        // smtp_password must be absent or masked ('***'), never a real value
+        if (data.smtp_password !== undefined && data.smtp_password !== null && data.smtp_password !== '') {
+          expect(data.smtp_password).toBe('***');
+        }
+      }
+    });
+
+    it('does not expose reg_key in plaintext', async () => {
+      const res = await request(app).get('/api/config/system');
+      if (res.status === 200) {
+        const data = res.body.data ?? res.body;
+        if (data.reg_key !== undefined && data.reg_key !== null && data.reg_key !== '') {
+          expect(data.reg_key).toBe('***');
+        }
+      }
+    });
+  });
+
+  describe('GET /api/config/users — guest user filtering', () => {
+    it('does not return _gu_ guest accounts', async () => {
+      const res = await request(app).get('/api/config/users');
+      if (res.status === 200) {
+        const users: any[] = res.body.data ?? [];
+        const guestUsers = users.filter((u: any) => u.username?.startsWith('_gu_'));
+        expect(guestUsers.length).toBe(0);
+      }
+    });
   });
 
   describe('GET /api/config/doors', () => {

@@ -63,6 +63,7 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
         const config: ConferenceConfig = {
           id: i,
           conference_id: i,
+          name: confConfig.entries[i - 1]?.name || `Conference ${i}`,
           ndirs,
           dlpath_1: toolTypes.get('DLPATH.1') || '',
           dlpath_2: toolTypes.get('DLPATH.2') || '',

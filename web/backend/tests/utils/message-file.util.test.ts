@@ -76,9 +76,9 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         const buffer = await fs.readFile(statsPath);
 
         expect(buffer.length).toBe(12); // 3 x 4-byte integers
-        expect(buffer.readInt32LE(0)).toBe(1);
-        expect(buffer.readInt32LE(4)).toBe(5);
-        expect(buffer.readInt32LE(8)).toBe(100);
+        expect(buffer.readInt32BE(0)).toBe(1);
+        expect(buffer.readInt32BE(4)).toBe(5);
+        expect(buffer.readInt32BE(8)).toBe(100);
       });
 
       it('should create Messages directory if missing', async () => {
@@ -96,9 +96,9 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         await writeMailStats(1, testBbsPath, stats);
 
         const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32LE(0)).toBe(0);
-        expect(buffer.readInt32LE(4)).toBe(0);
-        expect(buffer.readInt32LE(8)).toBe(0);
+        expect(buffer.readInt32BE(0)).toBe(0);
+        expect(buffer.readInt32BE(4)).toBe(0);
+        expect(buffer.readInt32BE(8)).toBe(0);
       });
 
       it('should handle large values', async () => {
@@ -111,9 +111,9 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         await writeMailStats(1, testBbsPath, stats);
 
         const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32LE(0)).toBe(1000000);
-        expect(buffer.readInt32LE(4)).toBe(999999);
-        expect(buffer.readInt32LE(8)).toBe(1000001);
+        expect(buffer.readInt32BE(0)).toBe(1000000);
+        expect(buffer.readInt32BE(4)).toBe(999999);
+        expect(buffer.readInt32BE(8)).toBe(1000001);
       });
 
       it('should overwrite existing MailStats', async () => {
@@ -124,7 +124,7 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         await writeMailStats(1, testBbsPath, stats2);
 
         const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32LE(8)).toBe(20);
+        expect(buffer.readInt32BE(8)).toBe(20);
       });
     });
 
