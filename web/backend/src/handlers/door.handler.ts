@@ -323,9 +323,18 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
   wrappedSocket.join = socket.join?.bind(socket);
   wrappedSocket.leave = socket.leave?.bind(socket);
 
+  // Bridge server-side BBS events (score, login, etc.) into this door's
+  // socket so doors can use socket.on('bbs:event', ...) to receive them.
+  // io.emit() only reaches browser clients; super.emit() on the EventEmitter
+  // reaches these server-side listeners.
+  const { bbsEventEmitter } = require('../services/bbs-event-emitter');
+  const bbsEventBridge = (payload: any) => dispatchLocal('bbs:event', payload);
+  bbsEventEmitter.on('bbs:event', bbsEventBridge);
+
   wrappedSocket._doorCleanup = () => {
     localHandlers.clear();
     cleanupOutgoing?.();
+    bbsEventEmitter.off('bbs:event', bbsEventBridge);
   };
 
   return wrappedSocket;

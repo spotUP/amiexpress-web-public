@@ -5,6 +5,7 @@
  * Supports: user_login, user_logout, upload, download, door_activity
  */
 
+import { EventEmitter } from 'events';
 import { Server as SocketIOServer } from 'socket.io';
 
 export type BBSEventType = 'user_login' | 'user_logout' | 'upload' | 'download' | 'door_activity' | 'custom_door_event';
@@ -69,7 +70,7 @@ export interface CustomDoorEvent {
   timestamp: number;
 }
 
-class BBSEventEmitter {
+class BBSEventEmitter extends EventEmitter {
   private io: SocketIOServer | null = null;
 
   /**
@@ -85,7 +86,7 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
    * Emit user login event
    */
   emitUserLogin(data: UserLoginEvent): void {
-    this.emit('user_login', {
+    this.broadcast('user_login', {
       type: 'user_login',
       username: data.username,
       nodeId: data.nodeId,
@@ -100,7 +101,7 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
    * Emit user logout event
    */
   emitUserLogout(data: UserLogoutEvent): void {
-    this.emit('user_logout', {
+    this.broadcast('user_logout', {
       type: 'user_logout',
       username: data.username,
       nodeId: data.nodeId,
@@ -115,7 +116,7 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
    * Emit file upload event
    */
   emitUpload(data: UploadEvent): void {
-    this.emit('upload', {
+    this.broadcast('upload', {
       type: 'upload',
       username: data.username,
       nodeId: data.nodeId,
@@ -133,7 +134,7 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
    * Emit file download event
    */
   emitDownload(data: DownloadEvent): void {
-    this.emit('download', {
+    this.broadcast('download', {
       type: 'download',
       username: data.username,
       nodeId: data.nodeId,
@@ -151,7 +152,7 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
    * Emit door activity event
    */
   emitDoorActivity(data: DoorActivityEvent): void {
-    this.emit('door_activity', {
+    this.broadcast('door_activity', {
       type: 'door_activity',
       username: data.username,
       nodeId: data.nodeId,
@@ -168,7 +169,7 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
    * Allows doors to emit custom events that will be displayed in LiveChat and sent to webhooks
    */
   emitCustomDoorEvent(data: CustomDoorEvent): void {
-    this.emit('custom_door_event', {
+    this.broadcast('custom_door_event', {
       type: 'custom_door_event',
       username: data.username,
       nodeId: data.nodeId,
@@ -213,18 +214,20 @@ console.log(`[BBSEventEmitter] Import progress (${data.sessionId}): ${data.progr
   }
 
   /**
-   * Internal method to broadcast event to all LiveChat sockets
+   * Internal method to broadcast event.
+   * Emits to browser clients via Socket.IO AND to server-side subscribers
+   * (door servers, livechat backend) via Node.js EventEmitter.
    */
-  private emit(eventType: BBSEventType, payload: BBSEventPayload): void {
-    if (!this.io) {
-console.warn('[BBSEventEmitter] Cannot emit - Socket.IO not initialized');
-      return;
+  private broadcast(eventType: BBSEventType, payload: BBSEventPayload): void {
+    // Emit to browser clients
+    if (this.io) {
+      this.io.emit('bbs:event', payload);
     }
 
-    // Broadcast to all sockets listening to 'bbs:event' channel
-    this.io.emit('bbs:event', payload);
+    // Emit locally so server-side door code can also subscribe
+    super.emit('bbs:event', payload);
 
-console.log(`[BBSEventEmitter] Emitted ${eventType}: ${payload.username} (node ${payload.nodeId})`);
+    console.log(`[BBSEventEmitter] Emitted ${eventType}: ${payload.username} (node ${payload.nodeId})`);
   }
 }
 
