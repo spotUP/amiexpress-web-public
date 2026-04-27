@@ -473,14 +473,22 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
               // Already Amiga epoch (imported user or written back by AquaScan)
               lastOn = rawDisk;
             } else {
-              // Zero or Unix epoch — compute from lastLogin or now
-              const unixSec = rawDisk > UNIX_EPOCH_THRESHOLD
-                ? rawDisk
-                : (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : Math.floor(Date.now() / 1000));
+              // Zero or Unix epoch — convert to Amiga epoch (subtract 252460800 s).
+              // user.lastLogin is stored in the DB as Unix SECONDS (not ms), so
+              // use it directly — do NOT wrap in new Date() which treats it as ms.
+              let unixSec: number;
+              if (rawDisk > UNIX_EPOCH_THRESHOLD) {
+                unixSec = rawDisk;
+              } else if (user?.lastLogin) {
+                const raw = (user as any).lastLogin;
+                unixSec = typeof raw === 'number' ? raw : Math.floor(new Date(raw).getTime() / 1000);
+              } else {
+                unixSec = Math.floor(Date.now() / 1000);
+              }
               lastOn = Math.max(0, unixSec - AMIGA_EPOCH_OFFSET);
             }
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
-debugLog(`  [READ] DT_TIMELASTON: ${lastOn} rawDisk=${rawDisk}`);
+console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} lastOn=${lastOn} user.lastLogin=${(user as any)?.lastLogin}`);
           } else {
             const newLastOn = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLastOn)) {
