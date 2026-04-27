@@ -589,7 +589,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // express.e:29853-29855 - Quick logon skips bulletins
         if (session.quickFlag) {
           displayFlowLog('skip BULL (quickFlag per express.e:29853)');
-          session.subState = LoggedOnSubState.AUTO_REJOIN;
+          session.subState = LoggedOnSubState.CONF_SCAN;
           continue;
         }
         // Skip BULL if we just came from QuickNew and need to continue
