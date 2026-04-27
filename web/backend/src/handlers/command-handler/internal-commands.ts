@@ -139,8 +139,8 @@ console.log(`[InternalRouter] Overriding internal command '${command}' with exte
       await DownloadHandler.handleDownloadCommand(socket, session, params);
       return RESULT_SUCCESS;
 
-    case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
-      handleDownloadWithStatusCommand(socket, session, params);
+    case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302-28303
+      await handleDownloadWithStatusCommand(socket, session, params);
       return RESULT_SUCCESS;
 
     case 'DB': // Download Batch - Download all flagged files

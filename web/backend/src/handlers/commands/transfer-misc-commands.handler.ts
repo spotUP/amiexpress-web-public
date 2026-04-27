@@ -677,17 +677,8 @@ async function showAllVoteStatistics(socket: any, session: BBSSession): Promise<
  * In AmiExpress, DS was just an alias to D command.
  * Web version: Shows download interface (same as D command).
  */
-export function handleDownloadWithStatusCommand(socket: any, session: BBSSession, params: string = ''): void {
-  // DS is handled by same function as D in express.e
-  // The difference is DS shows download status/progress
-  // express.e:28302 maps DS -> internalCommandD
-
-console.log('[ENV] Files');
-
-  // express.e:28302 - DS maps to internalCommandD which calls beginDLF
-  // beginDLF calls downloadAFile which calls displayULStats
-  // NO header - just displays stats then prompts for filespec
-  socket.emit('ansi-output', '\r\n');
-
-  _displayDownloadInterface(socket, session, params);
+export async function handleDownloadWithStatusCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
+  // express.e:28302-28303 DS maps to internalCommandD — identical flow, no difference
+  const { DownloadHandler } = require('../file/download.handler');
+  await DownloadHandler.handleDownloadCommand(socket, session, params);
 }
