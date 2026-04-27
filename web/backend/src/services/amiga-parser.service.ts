@@ -980,10 +980,10 @@ console.log(`[AmigaParser]   Misc file: ${miscPath}`);
       const keysBuffer = await fs.readFile(keysPath);
       const miscBuffer = await fs.readFile(miscPath);
 
-      // Struct sizes from UserFileManager.ts
-      const USER_STRUCT_SIZE = 239;
-      const USERKEYS_STRUCT_SIZE = 54;
-      const USERMISC_STRUCT_SIZE = 256;
+      // Struct sizes verified against UserFileManager.ts (232/56/248)
+      const USER_STRUCT_SIZE = 232;
+      const USERKEYS_STRUCT_SIZE = 56;
+      const USERMISC_STRUCT_SIZE = 248;
 
       // Calculate number of users (should match across all three files)
       const numUsersData = Math.floor(dataBuffer.length / USER_STRUCT_SIZE);

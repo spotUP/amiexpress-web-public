@@ -49,6 +49,7 @@ export interface PlayerInfo {
  */
 export interface GameUpdate {
   playerId: string;
+  playerName?: string;
   timestamp: number;
   board: Board;
   level: number;
@@ -162,21 +163,25 @@ export class GrandmasterNetworkManager extends EventEmitter {
     // Player ready state changed
     lobby.on('player:ready', () => {
       this.syncMatchStateFromLobby();
+      // Signal adapter so lobby widget can check auto-start
+      this.emit('player:ready', { playerId: '', ready: true });
     });
 
-    // Game starting
+    // Game starting — broker fires this on ALL connected nodes
     lobby.on('game:starting', () => {
       if (this.matchState) {
         this.matchState.status = 'countdown';
       }
+      this.emit('match:starting');
     });
 
-    // Game started
+    // Game started — broker fires this on ALL connected nodes
     lobby.on('game:start', () => {
       if (this.matchState) {
         this.matchState.status = 'playing';
         this.matchState.startTime = Date.now();
       }
+      this.emit('match:started');
     });
 
     // Game update from opponent (via broker)
@@ -392,6 +397,7 @@ export class GrandmasterNetworkManager extends EventEmitter {
 
     const update: GameUpdate = {
       playerId: this.localPlayerId,
+      playerName: this.localPlayerName,
       timestamp: Date.now(),
       board: gameState.board,
       level: gameState.level,

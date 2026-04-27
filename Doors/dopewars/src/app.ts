@@ -24,7 +24,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   const inputManager = new DoorInputManager(ctx as any, screen, {
     enableGameMode: false,  // game mode intercepts keys before neo-blessed screen.key() — must be off
     enableGrabKeys: true,
-    enableMouse:    false,
+    enableMouse:    true,   // consume mouse events before they corrupt blessed's input buffer
   });
 
   let state:       PlayerState;

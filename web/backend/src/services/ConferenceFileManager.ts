@@ -75,19 +75,19 @@ export class ConferenceFileManager {
   }
 
   /**
-   * Write INT16 (2 bytes, little-endian)
+   * Write INT16 (2 bytes, big-endian — Amiga native)
    */
   private writeInt16(buffer: Buffer, offset: number, value: number): number {
     const clamped = Math.max(-32768, Math.min(32767, value));
-    buffer.writeInt16LE(clamped, offset);
+    buffer.writeInt16BE(clamped, offset);
     return offset + 2;
   }
 
   /**
-   * Write INT32 (4 bytes, little-endian)
+   * Write INT32 (4 bytes, big-endian — Amiga native)
    */
   private writeInt32(buffer: Buffer, offset: number, value: number): number {
-    buffer.writeInt32LE(value, offset);
+    buffer.writeInt32BE(value, offset);
     return offset + 4;
   }
 
@@ -327,49 +327,49 @@ console.error(`[ConferenceFileManager] Error updating conference "${conf.name}":
         buffer.copy(uploadBytesBCD, 0, readOffset, readOffset + 8);
         readOffset += 8;
 
-        const newSinceDate = buffer.readInt32LE(readOffset);
+        const newSinceDate = buffer.readInt32BE(readOffset);
         readOffset += 4;
 
-        const confRead = buffer.readInt32LE(readOffset);
+        const confRead = buffer.readInt32BE(readOffset);
         readOffset += 4;
 
-        const confYM = buffer.readInt32LE(readOffset);
+        const confYM = buffer.readInt32BE(readOffset);
         readOffset += 4;
 
-        const bytesDownload = buffer.readInt32LE(readOffset);
+        const bytesDownload = buffer.readInt32BE(readOffset);
         readOffset += 4;
 
-        const bytesUpload = buffer.readInt32LE(readOffset);
+        const bytesUpload = buffer.readInt32BE(readOffset);
         readOffset += 4;
 
-        const uploadTracking = buffer.readInt16LE(readOffset);
+        const uploadTracking = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const unused = buffer.readInt16LE(readOffset);
+        const unused = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const unused2 = buffer.readInt32LE(readOffset);
+        const unused2 = buffer.readInt32BE(readOffset);
         readOffset += 4;
 
-        const upload = buffer.readInt16LE(readOffset);
+        const upload = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const downloads = buffer.readInt16LE(readOffset);
+        const downloads = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const ratioType = buffer.readInt16LE(readOffset);
+        const ratioType = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const ratio = buffer.readInt16LE(readOffset);
+        const ratio = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const messagesPosted = buffer.readInt16LE(readOffset);
+        const messagesPosted = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const access = buffer.readInt16LE(readOffset);
+        const access = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
-        const active = buffer.readInt16LE(readOffset);
+        const active = buffer.readInt16BE(readOffset);
         readOffset += 2;
 
         return {

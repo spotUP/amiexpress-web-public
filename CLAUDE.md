@@ -35,6 +35,43 @@ Before using the debug MCP, call `GET /debug/api/sessions` and check `activeDoor
 
 ## Critical Rules
 
+### 0. Amiga Is Big-Endian — All Binary Files Use BE
+
+The Motorola 68000 is a **big-endian** CPU. Every multi-byte integer in every Amiga-native binary file is stored MSB-first. This is not optional — it is architecture.
+
+**Rule: Any code that reads or writes an Amiga binary file MUST use BE buffer methods.**
+
+```typescript
+// CORRECT — Amiga binary
+buf.readInt32BE(offset)   buf.writeInt32BE(value, offset)
+buf.readInt16BE(offset)   buf.writeInt16BE(value, offset)
+buf.readUInt32BE(offset)  buf.writeUInt32BE(value, offset)
+buf.readUInt16BE(offset)  buf.writeUInt16BE(value, offset)
+
+// WRONG — never for Amiga binary formats
+buf.readInt32LE(...)   buf.writeInt32LE(...)   // corrupts all numeric fields
+buf.readInt16LE(...)   buf.writeInt16LE(...)
+```
+
+**Amiga binary formats in this project (all must use BE):**
+- `MailStats` — message base stats (highMsgNum, lowestNotDel, lowestKey)
+- `HeaderFile` — per-message headers (msgNumb, msgDate, recv, extMsgNum)
+- `Conf.DB` — conference config (confRead, confYM, newSinceDate, all LONGs/INTs)
+- `User.data` / `User.keys` / `User.misc` — user account binary archives
+- Per-conference `Conf{N}/Conf.DB` — per-user message pointers
+- Any `DateStamp` struct (ds_Days, ds_Minute, ds_Tick — 3 × LONG)
+
+**Formats that are correctly LE (PC standards — do NOT change):**
+- QWK/REP packets — PC/DOS standard, always LE
+- LZH archives — PC standard, LE
+- SAUCE metadata — PC standard, LE
+
+**Date/time:** Amiga `DateStamp` is 3 × BE LONG: days since 1978-01-01 UTC, minutes past midnight UTC, ticks (1/50s). Use `dateTimeToDateStamp()` from `date-time.util.ts` — never roll your own with local-time `getHours()`/`getMinutes()`.
+
+**History:** Systematic LE/BE confusion caused: conf_base message pointers stored as 201326592 instead of 12; AquaScan showing 00:00:00; all file areas reporting "new" every login. Fixed 2026-04-27. If you see suspiciously large values (> 65536) in message pointer fields, suspect byte-swap.
+
+---
+
 ### 1. Always 1:1 With express.e For Existing Functionality
 
 **Existing BBS functionality is 1:1 with express.e. No exceptions without explicit user direction.**

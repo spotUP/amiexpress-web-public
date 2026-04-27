@@ -208,6 +208,9 @@ import {
   handleMessageSubjectInput,
   handleMessagePrivateInput,
   handleMessageBodyInput,
+  handleMessageOptionsInput,
+  handleMessageAbortConfirm,
+  handleMessageQuoteReplyConfirm,
   handleMessageDeleteLineInput,
   handleMessageDeleteConfirm,
   handleMessageEditLineInput,
@@ -324,19 +327,8 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_PRIVATE:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleMessagePrivateInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) {
-          session.inputBuffer = session.inputBuffer.slice(0, -1);
-          emitText(socket, '\b \b');
-        }
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data);
-      }
+      // express.e yesNo(2): single-char read, no Enter needed; default=N on CR
+      await handleMessagePrivateInput(socket, session, data);
       return;
     case LoggedOnSubState.POST_MESSAGE_BODY:
       // Line-input editor: buffer characters, echo locally, submit on Enter
@@ -359,17 +351,57 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         emitText(socket, data); // Echo printable characters
       }
       return;
+    case LoggedOnSubState.POST_MESSAGE_OPTIONS:
+      await handleMessageOptionsInput(socket, session, data.trim());
+      return;
+    case LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM:
+      await handleMessageQuoteReplyConfirm(socket, session, data.trim());
+      return;
+    case LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM:
+      await handleMessageAbortConfirm(socket, session, data.trim());
+      return;
     case LoggedOnSubState.POST_MESSAGE_DELETE_LINE:
-      await handleMessageDeleteLineInput(socket, session, data);
+      // express.e: lineInput('','',5,...) — line-buffered, user types number then Enter
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        emitText(socket, '\r\n');
+        await handleMessageDeleteLineInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
+      }
       return;
     case LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM:
+      // express.e yesNo(0): single char, no Enter needed — pass directly
       await handleMessageDeleteConfirm(socket, session, data.trim());
       return;
     case LoggedOnSubState.POST_MESSAGE_EDIT_LINE:
-      await handleMessageEditLineInput(socket, session, data);
+      // express.e: lineInput('','',5,...) — line-buffered, user types number then Enter
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        emitText(socket, '\r\n');
+        await handleMessageEditLineInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
+      }
       return;
     case LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT:
-      await handleMessageEditLineContent(socket, session, data);
+      // express.e: lineInput('\b\n    ',temp,maxLineLen,...) — full line replacement, line-buffered
+      if (data === '\r' || data === '\n') {
+        const input = session.inputBuffer || '';
+        session.inputBuffer = '';
+        emitText(socket, '\r\n');
+        await handleMessageEditLineContent(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
+      }
       return;
     case LoggedOnSubState.POST_MESSAGE_ATTACH_FILE:
       if (data === '\r' || data === '\n') {
@@ -408,10 +440,28 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_INSERT_LINE:
-      await handleMessageInsertLineInput(socket, session, data.trim());
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        emitText(socket, '\r\n');
+        await handleMessageInsertLineInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
+      }
       return;
     case LoggedOnSubState.POST_MESSAGE_INSERT_TEXT:
-      await handleMessageInsertTextInput(socket, session, data);
+      if (data === '\r' || data === '\n') {
+        const input = session.inputBuffer || '';
+        session.inputBuffer = '';
+        emitText(socket, '\r\n');
+        await handleMessageInsertTextInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
+      }
       return;
     case LoggedOnSubState.POST_MESSAGE_UPLOAD_FILE:
       if (data === '\r' || data === '\n') {
@@ -818,6 +868,9 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
     LoggedOnSubState.POST_MESSAGE_SUBJECT,
     LoggedOnSubState.POST_MESSAGE_PRIVATE,
     LoggedOnSubState.POST_MESSAGE_BODY,
+    LoggedOnSubState.POST_MESSAGE_OPTIONS,          // single-char: A/C/D/E/L/S/?
+    LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM,    // single-char yesNo(0)
+    LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM, // single-char yesNo(2)
     LoggedOnSubState.POST_MESSAGE_DELETE_LINE,
     LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM,
     LoggedOnSubState.POST_MESSAGE_EDIT_LINE,

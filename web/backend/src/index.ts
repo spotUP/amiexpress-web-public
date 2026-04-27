@@ -535,11 +535,10 @@ bbsEventEmitter.setIO(io);
 (global as any).io = io;
 
 // CRITICAL: Process-level error handlers to prevent crashes
-process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
-console.error("[CRITICAL] Unhandled Promise Rejection:", reason);
-console.error("[CRITICAL] Promise:", promise);
-console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
-  // Log to file for debugging
+
+const ERROR_LOG_MAX_BYTES = 10 * 1024 * 1024; // 10 MB hard cap
+
+function appendErrorLog(entry: string): void {
   try {
     const fs = require("fs");
     const logsDir = join(config.get("dataDir") || "./data", "logs");
@@ -547,41 +546,49 @@ console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
       fs.mkdirSync(logsDir, { recursive: true });
     }
     const logPath = join(logsDir, "unhandled-errors.log");
-    const timestamp = getSystemTime().toISOString();
-    const errorLog = `\n\n=== UNHANDLED REJECTION at ${timestamp} ===\n${
-      reason?.stack || reason
-    }\n`;
-    fs.appendFileSync(logPath, errorLog, "utf8");
+
+    // Rotate: if the file is at or above the cap, keep only the newest half.
+    try {
+      const stat = fs.statSync(logPath);
+      if (stat.size >= ERROR_LOG_MAX_BYTES) {
+        const buf = fs.readFileSync(logPath);
+        const half = Math.floor(buf.length / 2);
+        // Find the next newline after the midpoint so we don't split a line.
+        let cut = half;
+        while (cut < buf.length && buf[cut] !== 0x0a) cut++;
+        fs.writeFileSync(logPath, buf.slice(cut + 1));
+      }
+    } catch {
+      // File may not exist yet — that's fine.
+    }
+
+    fs.appendFileSync(logPath, entry, "utf8");
   } catch (logError) {
     console.error("[CRITICAL] Failed to write error log:", logError);
   }
+}
+
+process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
+  console.error("[CRITICAL] Unhandled Promise Rejection:", reason);
+  console.error("[CRITICAL] Promise:", promise);
+  console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
+  const timestamp = getSystemTime().toISOString();
+  appendErrorLog(`\n\n=== UNHANDLED REJECTION at ${timestamp} ===\n${reason?.stack || reason}\n`);
   // Don't exit - keep server running
 });
 
 process.on("uncaughtException", (error: Error) => {
-console.error("[CRITICAL] Uncaught Exception:", error);
-console.error("[CRITICAL] Stack:", error.stack);
-  // Log to file for debugging
-  try {
-    const fs = require("fs");
-    const logsDir = join(config.get("dataDir") || "./data", "logs");
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
-    const logPath = join(logsDir, "unhandled-errors.log");
-    const timestamp = getSystemTime().toISOString();
-    const errorLog = `\n\n=== UNCAUGHT EXCEPTION at ${timestamp} ===\n${error.stack}\n`;
-    fs.appendFileSync(logPath, errorLog, "utf8");
-  } catch (logError) {
-    console.error("[CRITICAL] Failed to write error log:", logError);
-  }
+  console.error("[CRITICAL] Uncaught Exception:", error);
+  console.error("[CRITICAL] Stack:", error.stack);
+  const timestamp = getSystemTime().toISOString();
+  appendErrorLog(`\n\n=== UNCAUGHT EXCEPTION at ${timestamp} ===\n${error.stack}\n`);
   // Don't exit - keep server running unless it's truly fatal.
   // EADDRINUSE is NOT fatal here: Telnet/SSH start is wrapped in try/catch
   // and will log a warning + continue. Crashing the whole backend over a busy
   // auxiliary port is wrong.
   const fatalErrors = ["EACCES", "EMFILE"];
   if (fatalErrors.some((code) => (error as any).code === code)) {
-console.error("[CRITICAL] Fatal error - shutting down");
+    console.error("[CRITICAL] Fatal error - shutting down");
     process.exit(1);
   }
 });

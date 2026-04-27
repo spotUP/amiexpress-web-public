@@ -87,6 +87,8 @@ export enum LoggedOnSubState {
   POST_MESSAGE_SUBJECT = 'post_message_subject',
   POST_MESSAGE_PRIVATE = 'post_message_private',
   POST_MESSAGE_BODY = 'post_message_body',
+  POST_MESSAGE_OPTIONS = 'post_message_options',        // "Msg. Options: A,C,D,E,L,S,? >:" — express.e post-body menu
+  POST_MESSAGE_ABORT_CONFIRM = 'post_message_abort_confirm', // "Abort message entry (y/n)?"
   POST_MESSAGE_DELETE_LINE = 'post_message_delete_line',
   POST_MESSAGE_DELETE_CONFIRM = 'post_message_delete_confirm',
   POST_MESSAGE_EDIT_LINE = 'post_message_edit_line',
@@ -94,6 +96,7 @@ export enum LoggedOnSubState {
   POST_MESSAGE_SAVE = 'post_message_save',
   POST_MESSAGE_ATTACH_FILE = 'post_message_attach_file',
   POST_MESSAGE_ATTACH_DELETE_CONFIRM = 'post_message_attach_delete_confirm',
+  POST_MESSAGE_QUOTE_REPLY_CONFIRM = 'post_message_quote_reply_confirm', // "Quote in Reply (y/N)?" — express.e:10878
   POST_MESSAGE_QUOTE_RANGE = 'post_message_quote_range',        // Quote message line range input
   POST_MESSAGE_REPLACE_SEARCH = 'post_message_replace_search',  // Replace search string input
   POST_MESSAGE_REPLACE_WITH = 'post_message_replace_with',      // Replace replacement string input

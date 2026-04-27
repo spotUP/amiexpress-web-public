@@ -237,6 +237,7 @@ console.log('Sysop accepting chat for session:', chatSession.id);
       await webhookService.sendWebhook(WebhookTrigger.SYSOP_PAGED, {
         username: session.user?.username || 'Unknown',
         userId: session.user?.id,
+        gdprConsented: !!(session.user as any)?.gdprConsentAt,
         message: 'Sysop page request via O command'
       });
     } catch (error) {

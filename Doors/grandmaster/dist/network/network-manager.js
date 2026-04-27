@@ -91,19 +91,23 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
         // Player ready state changed
         lobby.on('player:ready', () => {
             this.syncMatchStateFromLobby();
+            // Signal adapter so lobby widget can check auto-start
+            this.emit('player:ready', { playerId: '', ready: true });
         });
-        // Game starting
+        // Game starting — broker fires this on ALL connected nodes
         lobby.on('game:starting', () => {
             if (this.matchState) {
                 this.matchState.status = 'countdown';
             }
+            this.emit('match:starting');
         });
-        // Game started
+        // Game started — broker fires this on ALL connected nodes
         lobby.on('game:start', () => {
             if (this.matchState) {
                 this.matchState.status = 'playing';
                 this.matchState.startTime = Date.now();
             }
+            this.emit('match:started');
         });
         // Game update from opponent (via broker)
         const socket = this.network.connection.getSocket();
@@ -297,6 +301,7 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
             return;
         const update = {
             playerId: this.localPlayerId,
+            playerName: this.localPlayerName,
             timestamp: Date.now(),
             board: gameState.board,
             level: gameState.level,
@@ -305,13 +310,15 @@ class GrandmasterNetworkManager extends events_1.EventEmitter {
             combo: gameState.combo,
             attacking: gameState.combo > 0,
         };
-        this.network.emit('game:update', update);
+        // Must emit on the broker socket, not the NetworkEngine EventEmitter.
+        // NetworkEngine.emit() is local-only; broker delivery requires socket.emit().
+        this.network.connection.getSocket()?.emit('game:update', update);
     }
     /**
      * Send attack to opponent(s)
      */
     sendAttack(attack) {
-        this.network.emit('game:attack', attack);
+        this.network.connection.getSocket()?.emit('game:attack', attack);
     }
     /**
      * Get current opponent states

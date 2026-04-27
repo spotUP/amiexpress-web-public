@@ -1355,15 +1355,12 @@ console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
 
   private readSlotNumber(buf: Buffer): number {
     if (buf.length < 85) return 0;
-    const be = buf.readUInt16BE(83);
-    const le = buf.readUInt16LE(83);
-    return be !== 0 ? be : le;
+    return buf.readUInt16BE(83);
   }
 
   private setSlotNumber(buf: Buffer, slot: number): Buffer {
     if (buf.length >= 85) {
       buf.writeUInt16BE(slot, 83);
-      buf.writeUInt16LE(slot, 83);
     }
     return buf;
   }
@@ -1371,7 +1368,6 @@ console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
   private setUserKeysNumber(buf: Buffer, slot: number): Buffer {
     if (buf.length >= 35) {
       buf.writeInt32BE(slot, 31);
-      buf.writeInt32LE(slot, 31);
     }
     return buf;
   }
@@ -1391,9 +1387,7 @@ console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
         for (let i = 0; i < count; i++) {
           const bytes = fs.readSync(fd, buf, 0, 239, i * 239);
           if (bytes < 239) break;
-          const be = buf.readUInt16BE(83);
-          const le = buf.readUInt16LE(83);
-          if (be === 0 || le === 0) {
+          if (buf.readUInt16BE(83) === 0) {
             return i + 1;
           }
         }

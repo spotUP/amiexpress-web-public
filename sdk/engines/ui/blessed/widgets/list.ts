@@ -359,13 +359,15 @@ export class List extends Element {
       return true;
     }
 
-    // Enter/Space - select item
+    // Enter/Space - emit select/action for list.on('select') listeners, then propagate
+    // so screen.key(['enter'], fn) bindings (via bindKeys) also fire.
+    // Returning false here is intentional: list emits its events but does NOT consume
+    // the keypress, allowing doors that use screen-level Enter handlers to work correctly.
     if (key.name === 'enter' || key.name === 'space') {
       this.emit('select', this.items[this.selected], this.selected);
       this.emit('action', this.items[this.selected], this.selected);
-      // IMPORTANT: Render after emitting events so any UI changes from handlers are visible
       this.screen?.render();
-      return true;
+      return false; // propagate to screen.key() handlers
     }
 
     // Escape - cancel/blur

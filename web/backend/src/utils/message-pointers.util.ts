@@ -326,12 +326,12 @@ export async function updateReadPointer(
 ): Promise<void> {
   const sqlite = getSqliteDb();
   const stmt = sqlite.prepare(
-    `UPDATE conf_base
-     SET last_msg_read_conf = ?
-     WHERE user_id = ? AND conference_id = ? AND message_base_id = ?
-       AND last_msg_read_conf < ?`
+    `INSERT INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf, scan_flags)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, conference_id, message_base_id)
+     DO UPDATE SET last_msg_read_conf = MAX(last_msg_read_conf, excluded.last_msg_read_conf)`
   );
-  stmt.run(msgNum, userId, conferenceId, messageBaseId, msgNum);
+  stmt.run(userId, conferenceId, messageBaseId, msgNum, DEFAULT_SCAN_FLAGS);
 }
 
 /**
@@ -351,9 +351,10 @@ export async function updateScanPointer(
 ): Promise<void> {
   const sqlite = getSqliteDb();
   const stmt = sqlite.prepare(
-    `UPDATE conf_base
-     SET last_new_read_conf = ?
-     WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
+    `INSERT INTO conf_base (user_id, conference_id, message_base_id, last_new_read_conf, scan_flags)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, conference_id, message_base_id)
+     DO UPDATE SET last_new_read_conf = excluded.last_new_read_conf`
   );
-  stmt.run(msgNum, userId, conferenceId, messageBaseId);
+  stmt.run(userId, conferenceId, messageBaseId, msgNum, DEFAULT_SCAN_FLAGS);
 }

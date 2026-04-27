@@ -55,10 +55,7 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
       promptForSubject(socket, session);
     } else {
       // express.e:10814 - No permission, reject
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.errorLine('User does not exist!!'));
-      emitText(socket, '\r\n');
-      emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+      emitText(socket, '\r\nUser does not exist!!\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
     }
@@ -86,12 +83,9 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
 export function handleMessageSubjectInput(socket: any, session: BBSSession, input: string): void {
   const subject = input.trim();
 
-  // Blank = abort (express.e:10847-10849)
+  // Blank = abort (express.e:10854-10856: StrLen(subject)=0 → aePuts('\b\n') RETURN RESULT_FAILURE)
   if (subject === '') {
     emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.warningLine('Message entry aborted'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.tempData = undefined;
     return;
@@ -104,299 +98,243 @@ export function handleMessageSubjectInput(socket: any, session: BBSSession, inpu
 }
 
 /**
- * Handle Private/Public input - express.e:10851-10864
+ * Handle Private/Public input - express.e:10862 yesNo(2) — single char Y/y = private
  */
 export function handleMessagePrivateInput(socket: any, session: BBSSession, input: string): void {
-  const answer = input.trim().toUpperCase();
+  // express.e yesNo(2): single char — y/Y=yes, n/N=no, CR=no (default), else loop (ignore)
+  const ch = (input[0] || '').toUpperCase();
 
-  // Y/YES = private, anything else = public
-  session.tempData.messageEntry.isPrivate = (answer === 'Y' || answer === 'YES');
+  // Loop on anything that's not y/Y, n/N, or CR (express.e: readChar loop until valid)
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+    return; // stay in POST_MESSAGE_PRIVATE, wait for valid char
+  }
 
-  emitText(socket, '\r\n');
+  const isPrivate = (ch === 'Y');
+  session.tempData.messageEntry.isPrivate = isPrivate;
+
+  // echo "Yes\r\n" or "No\r\n" like yesNo() (express.e:2147-2155)
+  emitText(socket, isPrivate ? 'Yes\r\n' : 'No\r\n');
+
+  // express.e:10878-10884: IF(replyFlag=1) show "  Quote in Reply (y/N)?"
+  if (session.tempData.messageEntry.parentId) {
+    emitText(socket, '  \x1b[36mQuote in Reply \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM;
+    return;
+  }
+
   promptForMessageBody(socket, session);
 }
 
 /**
- * Handle message body input - express.e:10898-10909 (edit function)
+ * Handle message body input - express.e edit() body entry loop.
+ * Blank line ends body entry and shows the options menu (A/C/D/E/L/S/?).
+ * No slash-command handling here — commands are at the options menu.
  */
 export async function handleMessageBodyInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const line = input;
 
-  // Empty line = end of message entry (express.e behavior)
-  if (line.trim() === '') {
-    await saveMessage(socket, session);
+  // Blank line = end of body entry → show options menu (express.e: bkFlag=1 → REPEAT/UNTIL)
+  if (line === '') {
+    showOptionsMenu(socket, session, false);
     return;
   }
 
-  // Check for editor commands
-  if (line.startsWith('/')) {
-    const cmd = line.substring(1).toUpperCase();
-
-    // /S = Save - express.e:10909 stat:=saveNewMSG()
-    if (cmd === 'S' || cmd === 'SAVE') {
-      await saveMessage(socket, session);
-      return;
-    }
-
-    // /A = Abort
-    if (cmd === 'A' || cmd === 'ABORT') {
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.warningLine('Message entry aborted'));
-      emitText(socket, '\r\n');
-      emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-      return;
-    }
-
-    // /H = Help
-    if (cmd === 'H' || cmd === 'HELP') {
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('Editor Commands:', 'cyan') + '\r\n');
-      emitText(socket, `  ${AnsiUtil.colorize('/S', 'yellow')} - Save message\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/A', 'yellow')} - Abort message\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/C', 'yellow')} - Continue editing\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/D', 'yellow')} - Delete line\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/E', 'yellow')} - Edit line\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/F', 'yellow')} - Attach file\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/I', 'yellow')} - Insert line\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/L', 'yellow')} - List message\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/Q', 'yellow')} - Quote previous message\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/R', 'yellow')} - Replace text\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/U', 'yellow')} - Upload text file\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/X', 'yellow')} - Transfer files (save and send)\r\n`);
-      emitText(socket, `  ${AnsiUtil.colorize('/H', 'yellow')} - This help\r\n`);
-      emitText(socket, '\r\n');
-      emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-      return;
-    }
-
-    // /C - Continue editing (express.e:10543-10550)
-    if (cmd === 'C' || cmd === 'CONTINUE') {
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('Continuing...', 'cyan') + '\r\n');
-      emitText(socket, '\r\n');
-      // Display next line prompt
-      emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-      return;
-    }
-
-    // /D - Delete line (express.e:10555-10607)
-    if (cmd === 'D' || cmd === 'DELETE') {
-      const messageData = session.tempData.messageEntry;
-      if (messageData.body.length === 0) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('No lines to delete.'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      emitText(socket, '\r\n');
-      emitText(socket, `${AnsiUtil.colorize('Line number to delete ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
-      session.subState = LoggedOnSubState.POST_MESSAGE_DELETE_LINE;
-      return;
-    }
-
-    // /E - Edit line (express.e:10608-10630)
-    if (cmd === 'E' || cmd === 'EDIT') {
-      const messageData = session.tempData.messageEntry;
-      if (messageData.body.length === 0) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('No lines to edit!'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      emitText(socket, '\r\n');
-      emitText(socket, `${AnsiUtil.colorize('Line number to edit ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
-      session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE;
-      return;
-    }
-
-    // /F - File Attach (express.e:10508-10556)
-    if (cmd === 'F' || cmd === 'ATTACH') {
-      // Check security and fileattach flag
-      if (!checkSecurity(session.user!, ACSPermission.ATTACH_FILES)) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('You do not have access to attach files.'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      // Initialize attachedFiles array if not exists
-      if (!session.tempData.messageEntry.attachedFiles) {
-        session.tempData.messageEntry.attachedFiles = [];
-      }
-
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('Enter path/filename to attach ', 'cyan'));
-      emitText(socket, `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
-      session.subState = LoggedOnSubState.POST_MESSAGE_ATTACH_FILE;
-      return;
-    }
-
-    // /X - Transfer Files (express.e:10562-10566)
-    if (cmd === 'X' || cmd === 'TRANSFER') {
-      const messageData = session.tempData.messageEntry;
-
-      // Check security based on private/public
-      const hasAccess = (messageData.isPrivate && checkSecurity(session.user!, ACSPermission.PRI_MSGFILES)) ||
-                        (!messageData.isPrivate && checkSecurity(session.user!, ACSPermission.PUB_MSGFILES));
-
-      if (!hasAccess) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('You do not have access to transfer message files.'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      // Set flag to trigger file transfer after message save
-      session.tempData.messageEntry.transferFiles = true;
-
-      // Save the message and trigger transfer
-      await saveMessage(socket, session);
-      return;
-    }
-
-    // /L - List message (express.e:10631-10640)
-    if (cmd === 'L' || cmd === 'LIST') {
-      const messageData = session.tempData.messageEntry;
-      emitText(socket, '\r\n');
-      messageData.body.forEach((bodyLine: string, index: number) => {
-        const lineNum = (index + 1).toString().padStart(index >= 99 ? 3 : 2, ' ');
-        emitText(socket, `${lineNum}> ${bodyLine}\r\n`);
-      });
-      emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-      return;
-    }
-
-    // /Q - Quote Previous Message (express.e:10865-10946)
-    if (cmd === 'Q' || cmd === 'QUOTE') {
-      const messageData = session.tempData.messageEntry;
-
-      // Check if this is a reply (express.e:10878 - replyFlag=1)
-      if (!messageData.parentId) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('Quote only works when replying to a message'));
-        emitText(socket, AnsiUtil.warningLine('Use "R" command to reply to a message first'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      // Load the parent message (express.e:10888)
-      _db.getMessage(messageData.parentId)
-        .then((parentMessage: any) => {
-          if (!parentMessage) {
-            emitText(socket, '\r\n');
-            emitText(socket, AnsiUtil.errorLine('Cannot load parent message'));
-            emitText(socket, '\r\n');
-            emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-            return;
-          }
-
-          // Split message body into lines
-          const parentLines = parentMessage.body.split('\n');
-
-          // Display parent message with line numbers (express.e:10892-10900)
-          emitText(socket, '\r\n');
-          emitText(socket, AnsiUtil.colorize('Quote in Reply', 'cyan'));
-          emitText(socket, '\r\n\r\n');
-
-          parentLines.forEach((line: string, index: number) => {
-            const lineNum = (index + 1).toString().padStart(index >= 99 ? 3 : 2, ' ');
-            emitText(socket, `${lineNum}> ${line}\r\n`);
-          });
-
-          // Prompt for line range (express.e:10902)
-          emitText(socket, '\r\n');
-          emitText(socket, AnsiUtil.colorize(' Enter Startline,Endline or (*=ALL, A=Abort): ', 'yellow'));
-
-          // Store parent message info for quote processing
-          session.tempData.quoteData = {
-            parentMessage: parentMessage,
-            parentLines: parentLines,
-            totalLines: parentLines.length
-          };
-
-          session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE;
-        })
-        .catch((error: Error) => {
-console.error('[MSG] Error loading parent message for quote:', error);
-          emitText(socket, '\r\n');
-          emitText(socket, AnsiUtil.errorLine('Error loading parent message'));
-          emitText(socket, '\r\n');
-          emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        });
-      return;
-    }
-
-    // /R - Replace Text
-    if (cmd === 'R' || cmd === 'REPLACE') {
-      const messageData = session.tempData.messageEntry;
-      if (messageData.body.length === 0) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('No text to replace!'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('Search for: ', 'cyan'));
-      session.subState = LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH;
-      return;
-    }
-
-    // /I - Insert Line
-    if (cmd === 'I' || cmd === 'INSERT') {
-      const messageData = session.tempData.messageEntry;
-      if (messageData.body.length === 0) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('No lines yet! Just type to add lines.'));
-        emitText(socket, '\r\n');
-        emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-        return;
-      }
-
-      emitText(socket, '\r\n');
-      emitText(socket, `${AnsiUtil.colorize('Insert before line ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length + 1), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
-      session.subState = LoggedOnSubState.POST_MESSAGE_INSERT_LINE;
-      return;
-    }
-
-    // /U - Upload Text File
-    // Web extension: Import text file from disk into message body
-    if (cmd === 'U' || cmd === 'UPLOAD') {
-      emitText(socket, '\r\n');
-      emitText(socket, `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
-      session.subState = LoggedOnSubState.POST_MESSAGE_UPLOAD_FILE;
-      return;
-    }
-
-    // Unknown command - treat as normal text
-  }
-
-  // Add line to message body
-  session.tempData.messageEntry.body.push(line);
+  // Add line to body — truncate at 75 chars (express.e: maxLineLen=75, edit() enforces via word-wrap)
+  const truncated = line.length > 75 ? line.substring(0, 75) : line;
+  session.tempData.messageEntry.body.push(truncated);
   session.tempData.messageEntry.currentLine++;
 
-  // Limit to 200 lines (express.e typical limit)
-  if (session.tempData.messageEntry.body.length >= 200) {
+  // 800-line hard limit (express.e: maxMsgLines = 800)
+  if (session.tempData.messageEntry.body.length >= 800) {
+    showOptionsMenu(socket, session, false);
+    return;
+  }
+
+  // Next line prompt: " N> " — 2-digit for lines ≤99, 3-digit for 100+ (express.e format)
+  emitLinePrompt(socket, session.tempData.messageEntry.currentLine);
+}
+
+/** express.e:10374-10391 "Msg. Options: A,C,D,E,L,S,? >:" */
+function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): void {
+  session.subState = LoggedOnSubState.POST_MESSAGE_OPTIONS;
+  if (!helpList) {
+    // express.e:10375-10379 — no trailing space after >:
+    emitText(socket, '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mC\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mE\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mS\x1b[36m,\x1b[33m? \x1b[0m>:');
+  } else {
+    // express.e:10381-10390
+    emitText(socket, '\r\n\x1b[33mA\x1b[32m>\x1b[36mbort\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mC\x1b[32m>\x1b[36montinue\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Lines\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mE\x1b[32m>\x1b[36mdit\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mL\x1b[32m>\x1b[36mist\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mS\x1b[32m>\x1b[36mave\x1b[0m');
+    // express.e:10389 helplist:=0 resets so next prompt shows short menu
+    emitText(socket, '\r\n\x1b[0m >: ');
+  }
+}
+
+/** Line prompt exactly matching express.e: " N> " format */
+function emitLinePrompt(socket: any, lineNum: number): void {
+  const n = lineNum <= 99
+    ? String(lineNum).padStart(2)
+    : String(lineNum).padStart(3);
+  emitText(socket, `${n}> `);
+}
+
+/**
+ * Handle the "Msg. Options:" menu — express.e cont2: loop.
+ * Single-letter commands: A, C, D, E, L, S, ?
+ */
+export async function handleMessageOptionsInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // express.e:10394 messageMenuChar:=str[0] — only first char matters
+  const cmd = (input.trim()[0] || '').toUpperCase();
+  const messageData = session.tempData.messageEntry;
+  const lines: string[] = messageData.body;
+
+  if (cmd === '?') {
+    showOptionsMenu(socket, session, true);
+    return;
+  }
+
+  if (cmd === 'A') {
+    // Abort — confirm first (express.e: 'Abort message entry (y/n)?')
+    emitText(socket, '\r\nAbort message entry (y/n)? ');
+    session.subState = LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM;
+    return;
+  }
+
+  if (cmd === 'C') {
+    // express.e:10452-10466: lines--, restore last line content into space, JUMP bEG_IN
+    // BEG_IN pre-fills the edit buffer (space) so pressing Enter commits existing content.
     emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.warningLine('Maximum message length reached (200 lines)'));
+    let restoreContent = '';
+    if (messageData.body.length > 0) {
+      restoreContent = messageData.body.pop()!;
+      messageData.currentLine = messageData.body.length + 1;
+    }
+    // Pre-fill inputBuffer so pressing Enter immediately commits the restored line
+    // (express.e: space = msgBuf.item(lines); bkFlag=0; x=StrLen(space); JUMP bEG_IN)
+    session.inputBuffer = restoreContent;
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    // Show prompt + pre-filled content (express.e BEG_IN: StringF(str,'\d[2]> \s',...))
+    emitLinePrompt(socket, messageData.currentLine);
+    emitText(socket, restoreContent);
+    return;
+  }
+
+  if (cmd === 'D') {
+    // Delete line
+    if (lines.length === 0) {
+      emitText(socket, '\r\nNo lines to delete.\r\n');
+      showOptionsMenu(socket, session, false);
+      return;
+    }
+    emitText(socket, `\r\n\x1b[36mLine number to delete \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${lines.length}\x1b[32m]\x1b[0m? `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_DELETE_LINE;
+    return;
+  }
+
+  if (cmd === 'E') {
+    // Edit line
+    if (lines.length === 0) {
+      emitText(socket, '\r\nNo Lines to edit!\r\n');
+      showOptionsMenu(socket, session, false);
+      return;
+    }
+    emitText(socket, `\r\n\x1b[36mLine number to edit \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${lines.length}\x1b[32m]\x1b[0m? `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE;
+    return;
+  }
+
+  if (cmd === 'L') {
+    // List all lines (express.e: FOR j:=0 TO lines-1 … aePuts(space))
     emitText(socket, '\r\n');
+    lines.forEach((bodyLine, index) => {
+      const n = index >= 99 ? String(index + 1).padStart(3) : String(index + 1).padStart(2);
+      emitText(socket, `${n}> ${bodyLine}\r\n`);
+    });
+    showOptionsMenu(socket, session, false);
+    return;
+  }
+
+  if (cmd === 'S') {
+    // Save (express.e: RETURN RESULT_SUCCESS)
     await saveMessage(socket, session);
     return;
   }
 
-  // Display next line prompt
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  // Unknown — redisplay menu (express.e loops back to cont2:)
+  showOptionsMenu(socket, session, false);
 }
+
+/**
+ * Handle abort confirmation "Abort message entry (y/n)?"
+ * express.e:10567-10572: yesNo(0), IF stat>0 RETURN -1
+ */
+export async function handleMessageAbortConfirm(socket: any, session: BBSSession, input: string): Promise<void> {
+  // express.e yesNo(0): single char, no default — loops on CR and unknown; only Y or N exits
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N') {
+    return; // loop — stay in POST_MESSAGE_ABORT_CONFIRM (matches yesNo(0) loop on CR/unknown)
+  }
+  if (ch === 'Y') {
+    emitText(socket, 'Yes\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = undefined;
+    return;
+  }
+  emitText(socket, 'No\r\n');
+  showOptionsMenu(socket, session, false);
+}
+
+/**
+ * Handle "Quote in Reply (y/N)?" confirmation — express.e:10878-10950
+ * Called after Private prompt when replying (parentId is set).
+ */
+export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSession, input: string): Promise<void> {
+  // express.e yesNo(2): single char, loop on unknown, CR=no (default)
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+    return; // loop — stay in POST_MESSAGE_QUOTE_REPLY_CONFIRM
+  }
+  emitText(socket, ch === 'Y' ? 'Yes\r\n' : 'No\r\n');
+
+  if (ch !== 'Y') {
+    // No quote — go straight to body editor
+    promptForMessageBody(socket, session);
+    return;
+  }
+
+  // Load parent message (express.e:10887-10888: IF(stat:=loadMsg(...)))
+  const parentId = session.tempData.messageEntry.parentId;
+  const parentMsg = await _db.getMessage(parentId);
+
+  if (!parentMsg) {
+    promptForMessageBody(socket, session);
+    return;
+  }
+
+  const parentLines: string[] = parentMsg.body.split('\n');
+
+  // Display parent lines with numbers (express.e:10889-10900: aePuts('\b\n') then FOR loop)
+  emitText(socket, '\r\n');
+  parentLines.forEach((line: string, index: number) => {
+    // express.e uses \z\l\d[2]> (left-justified width 2) — web adaptation: right-justified
+    emitLinePrompt(socket, index + 1);
+    emitText(socket, `${line}\r\n`);
+  });
+
+  // express.e:10902: aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ') — plain text
+  emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
+
+  session.tempData.quoteData = {
+    parentMessage: parentMsg,
+    parentLines,
+    totalLines: parentLines.length
+  };
+  session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE;
+}
+
 
 /**
  * Save message to database - express.e:10909 saveNewMSG()
@@ -404,19 +342,8 @@ console.error('[MSG] Error loading parent message for quote:', error);
 async function saveMessage(socket: any, session: BBSSession): Promise<void> {
   const entry = session.tempData.messageEntry;
 
-  // Validate message has content
-  if (entry.body.length === 0) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('Cannot save empty message'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.tempData = undefined;
-    return;
-  }
-
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('Saving...', 'cyan'));
+  // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
+  emitText(socket, '\r\nSaving...');
 
   try {
     // Create message object
@@ -432,7 +359,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       messageBaseId: session.currentMsgBase || 1,
       isPrivate: entry.isPrivate,
       toUser: entry.toUser,
-      parentId: null,
+      parentId: entry.parentId || null,
       attachments: entry.attachedFiles || [],
       edited: false,
       editedBy: null,
@@ -454,6 +381,9 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       },
       config.get('dataDir')
     );
+
+    // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
+    emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
 
     // Save to database (for web UI, search indexing)
     const messageId = await _db.createMessage(message);
@@ -493,6 +423,8 @@ console.log('[Message] About to trigger NEW_MESSAGE webhook');
 console.log(`[Message] Calling webhook for message: subject="${entry.subject}", toUser="${entry.toUser}", isPrivate=${entry.isPrivate}`);
       await webhookService.sendWebhook(WebhookTrigger.NEW_MESSAGE, {
         username: session.user!.username,
+        userId: session.user!.id,
+        gdprConsented: !!(session.user as any)?.gdprConsentAt,
         subject: entry.subject,
         conference: conference?.name || 'Unknown',
         messageBase: messageBase?.name || 'Unknown',
@@ -506,6 +438,8 @@ console.log('[Message] Webhook call completed');
       if (entry.toUser.toLowerCase() === 'sysop') {
         await webhookService.sendWebhook(WebhookTrigger.COMMENT_POSTED, {
           username: session.user!.username,
+          userId: session.user!.id,
+          gdprConsented: !!(session.user as any)?.gdprConsentAt,
           subject: entry.subject,
           conference: conference?.name || 'Unknown'
         });
@@ -520,7 +454,7 @@ console.log('[Message] Webhook call completed');
         await mailOnSysopComment(
           session.user!.username,
           entry.subject,
-          entry.lines.join('\n')
+          entry.body.join('\n')
         );
       }
     } catch (error) {
@@ -539,9 +473,7 @@ console.error('[Webhook] Error sending new message webhook:', error);
       );
     }
 
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.successLine(`Message #${msgNum} posted successfully!`));
-    emitText(socket, '\r\n');
+    // WEB_: press-key prompt so user sees the message before menu redisplays
     emitPrompt(socket, AnsiUtil.pressKeyPrompt());
 
   } catch (error) {
@@ -559,10 +491,8 @@ console.error('[saveMessage] Error:', error);
       },
       DebugSeverity.CRITICAL
     );
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('Failed to save message'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+    // express.e:10713 aePuts('Failed!\b\n\b\n')
+    emitText(socket, 'Failed!\r\n\r\n');
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -576,30 +506,25 @@ export function handleMessageDeleteLineInput(socket: any, session: BBSSession, i
   const lineNumber = parseInt(input.trim());
   const messageData = session.tempData.messageEntry;
 
-  // Blank = abort
+  // Blank = back to options menu (express.e:10414-10416: stat=0 JUMP cont2)
   if (input.trim() === '') {
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    showOptionsMenu(socket, session, false);
     return;
   }
 
-  // Validate line number
-  if (isNaN(lineNumber) || lineNumber < 1 || lineNumber > messageData.body.length) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`Line ${input} does not exist.`));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize('Line number to delete ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+  // Validate line number — express.e:10420-10423: show "Line N does not exist."
+  const parsedNum = isNaN(lineNumber) ? 0 : lineNumber;
+  if (parsedNum < 1 || parsedNum > messageData.body.length) {
+    emitText(socket, `\r\nLine ${parsedNum} does not exist.\r\n`);
+    emitText(socket, `\r\n\x1b[36mLine number to delete \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${messageData.body.length}\x1b[32m]\x1b[0m? `);
     return;
   }
 
-  // Show the line and confirm deletion
-  const lineIndex = lineNumber - 1;
-  const lineNum = lineNumber.toString().padStart(lineNumber >= 100 ? 3 : 2, ' ');
-  emitText(socket, '\r\n');
-  emitText(socket, `${lineNum}> ${messageData.body[lineIndex]}\r\n`);
-  emitText(socket, '\r\n');
-  emitText(socket, `${AnsiUtil.colorize('Is this the correct line ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Y', 'yellow')}${AnsiUtil.colorize('/', 'green')}${AnsiUtil.colorize('N', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+  // Show the line then confirmation (no extra blank line — express.e:10431-10438)
+  const lineIndex = parsedNum - 1;
+  const lineNum = parsedNum <= 99 ? String(parsedNum).padStart(2) : String(parsedNum).padStart(3);
+  emitText(socket, `\r\n${lineNum}> ${messageData.body[lineIndex]}\r\n`);
+  emitText(socket, '\r\n\x1b[36mIs this the correct line \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mN\x1b[32m)\x1b[0m? ');
 
   // Store the line number for confirmation
   session.tempData.messageEntry.pendingDeleteLine = lineIndex;
@@ -610,24 +535,29 @@ export function handleMessageDeleteLineInput(socket: any, session: BBSSession, i
  * Handle delete confirmation - express.e:10555-10607
  */
 export function handleMessageDeleteConfirm(socket: any, session: BBSSession, input: string): void {
-  const answer = input.trim().toUpperCase();
+  // express.e yesNo(0): single char, loops on CR/unknown — only Y or N exits
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N') {
+    return; // loop — stay in POST_MESSAGE_DELETE_CONFIRM
+  }
   const messageData = session.tempData.messageEntry;
   const lineIndex = messageData.pendingDeleteLine;
+  const lineNum = lineIndex + 1;
 
-  if (answer === 'Y' || answer === 'YES') {
-    // Delete the line
+  if (ch === 'Y') {
+    emitText(socket, 'Yes\r\n');
+    // express.e:10443-10447: msgBuf.remove(stat-1); lines--; aePuts("Deleted line N.\n")
     messageData.body.splice(lineIndex, 1);
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.successLine(`Deleted line ${lineIndex + 1}.`));
-    emitText(socket, '\r\n');
+    if (messageData.currentLine > messageData.body.length + 1) {
+      messageData.currentLine = messageData.body.length + 1;
+    }
+    emitText(socket, `\r\nDeleted line ${lineNum}.\r\n`);
   } else {
-    emitText(socket, '\r\n');
+    emitText(socket, 'No\r\n');
   }
 
-  // Return to message body input
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
   delete messageData.pendingDeleteLine;
+  showOptionsMenu(socket, session, false);
 }
 
 /**
@@ -637,31 +567,30 @@ export function handleMessageEditLineInput(socket: any, session: BBSSession, inp
   const lineNumber = parseInt(input.trim());
   const messageData = session.tempData.messageEntry;
 
-  // Blank = abort
+  // Blank = back to options menu (express.e:10478: StrLen(str)=0 JUMP cont2)
   if (input.trim() === '') {
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    showOptionsMenu(socket, session, false);
     return;
   }
 
-  // Validate line number
-  if (isNaN(lineNumber) || lineNumber < 1 || lineNumber > messageData.body.length) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`Line ${input} does not exist.`));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize('Line number to edit ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+  // Validate line number — express.e:10481-10484: loops back to loopHere
+  const parsedLine = isNaN(lineNumber) ? 0 : lineNumber;
+  if (parsedLine < 1 || parsedLine > messageData.body.length) {
+    emitText(socket, `\r\nLine ${parsedLine} does not exist.\r\n`);
+    emitText(socket, `\r\n\x1b[36mLine number to edit \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${messageData.body.length}\x1b[32m]\x1b[0m? `);
     return;
   }
 
-  // Show the edit prompt with current line content
-  const lineIndex = lineNumber - 1;
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('    Edit Line', 'cyan') + '\r\n');
-  emitText(socket, AnsiUtil.colorize('   (---------------------------------------------------------------------------)', 'cyan') + '\r\n');
-  emitText(socket, AnsiUtil.colorize('    ', 'cyan'));
+  // express.e:10486-10489: lineInput('\b\n    ',temp,maxLineLen,...) — pre-fills with current content
+  const lineIndex = parsedLine - 1;
+  const currentContent = messageData.body[lineIndex];
+  emitText(socket, '\r\n    Edit Line');
+  emitText(socket, '\r\n   (---------------------------------------------------------------------------)\r\n    ');
+  emitText(socket, currentContent);
+  // Pre-fill inputBuffer so pressing Enter immediately commits existing content unchanged
+  // (matches express.e lineInput pre-fill: Enter = keep, typing = replace)
+  session.inputBuffer = currentContent;
 
-  // Store the line index for editing
   messageData.pendingEditLine = lineIndex;
   session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT;
 }
@@ -673,20 +602,19 @@ export function handleMessageEditLineContent(socket: any, session: BBSSession, i
   const messageData = session.tempData.messageEntry;
   const lineIndex = messageData.pendingEditLine;
 
-  // Update the line
+  // express.e:10491 msgBuf.setItem(x-1,temp) — update with whatever user submitted
+  // inputBuffer was pre-filled; Enter immediately = original content; typing replaces it
   messageData.body[lineIndex] = input;
-
-  emitText(socket, '\r\n');
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
   delete messageData.pendingEditLine;
+  showOptionsMenu(socket, session, false);
 }
 
 /**
  * Helper: Prompt for message subject - express.e:10839-10849
  */
 function promptForSubject(socket: any, session: BBSSession): void {
-  emitText(socket, `${AnsiUtil.colorize('Subject:', 'cyan')} ${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Blank', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('abort', 'yellow')}${AnsiUtil.colorize('?', 'green')} `);
+  // express.e:10847: '[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m '
+  emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
   session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
 }
 
@@ -703,8 +631,8 @@ function promptForPrivate(socket: any, session: BBSSession): void {
     return;
   }
 
-  emitText(socket, `         ${AnsiUtil.colorize('Private', 'cyan')} `);
-  emitText(socket, `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Y', 'yellow')}${AnsiUtil.colorize('/', 'green')}${AnsiUtil.colorize('N', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+  // express.e:10861 aePuts('         [36mPrivate ') then yesNo(2) → '[32m([33my[32m/[33mN[32m)[32m?[0m '
+  emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
   session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
 }
 
@@ -899,115 +827,113 @@ export function handleMessageInsertTextInput(socket: any, session: BBSSession, i
  * express.e:10902-10944
  */
 export function handleQuoteRangeInput(socket: any, session: BBSSession, input: string): void {
-  const range = input.trim().toUpperCase();
   const quoteData = session.tempData.quoteData;
   const messageData = session.tempData.messageEntry;
+  const raw = input.trim();
+  // express.e:10908 firstCharValue(str) — use first char for A/* checks
+  const firstChar = (raw[0] || '').toUpperCase();
 
   if (!quoteData) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('Quote data not found'));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    promptForMessageBody(socket, session);
     return;
   }
 
-  // Handle abort (express.e:10909-10913)
-  if (range === 'A' || range === 'ABORT') {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.warningLine('Quote aborted'));
-    emitText(socket, '\r\n');
+  // express.e:10909-10913: IF firstChar='A' → abort (i:=-1, lines:=0, exit:=TRUE)
+  // express.e silently clears msgBuf and goes to edit() with empty body (no "Quote aborted" msg)
+  if (firstChar === 'A') {
     delete session.tempData.quoteData;
-    emitText(socket, `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    messageData.body = [];
+    messageData.currentLine = 1;
+    promptForMessageBody(socket, session);
     return;
   }
 
-  let startLine = 1;
-  let endLine = quoteData.totalLines;
+  let startLine = 0;
+  let endLine = 0;
 
-  // Handle * for all lines (express.e:10916-10918)
-  if (range === '*') {
+  // express.e:10916-10918: stat='*' → i=1, i2=lines (all)
+  if (firstChar === '*') {
     startLine = 1;
     endLine = quoteData.totalLines;
   } else {
-    // Parse "start,end" format (express.e:10920-10927)
-    const parts = range.split(',');
-    if (parts.length === 2) {
-      startLine = parseInt(parts[0], 10);
-      endLine = parseInt(parts[1], 10);
-    } else {
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.errorLine('Invalid range format. Use: start,end or * for all'));
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize(' Enter Startline,Endline or (*=ALL, A=Abort): ', 'yellow'));
-      return;
+    // express.e:10920-10924: IF(i:=InStr(str,','))<>-1 → parse start,end
+    const commaIdx = raw.indexOf(',');
+    if (commaIdx !== -1) {
+      startLine = parseInt(raw.substring(0, commaIdx), 10) || 0;
+      endLine = parseInt(raw.substring(commaIdx + 1), 10) || 0;
     }
+    // If no comma found, i and i2 stay 0 → EXIT condition fails → re-prompt (express.e loops)
   }
 
-  // Validate range (express.e:10927)
-  if (isNaN(startLine) || isNaN(endLine) ||
-      startLine < 1 || startLine > quoteData.totalLines ||
-      endLine < 1 || endLine > quoteData.totalLines ||
-      startLine > endLine) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`Invalid range. Must be 1-${quoteData.totalLines}`));
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize(' Enter Startline,Endline or (*=ALL, A=Abort): ', 'yellow'));
-    return;
+  // express.e:10927: EXIT (i>0 AND i<=lines AND i2>0 AND i2<=lines AND i<=i2)
+  const valid = startLine > 0 && startLine <= quoteData.totalLines &&
+                endLine > 0 && endLine <= quoteData.totalLines &&
+                startLine <= endLine;
+
+  if (!valid) {
+    // express.e loops back to LOOP label and re-shows prompt — no error message
+    emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
+    return; // subState stays POST_MESSAGE_QUOTE_RANGE
   }
 
-  // Insert quoted lines (express.e:10931-10944)
+  // express.e:10931-10944: copy selected lines, then append separator, ' ', ''
+  // ORDER: selected lines → separator → blank → empty cursor line
   const quotedLines: string[] = [];
 
-  // Add separator line with author and date (express.e:10936-10939)
-  const parentMsg = quoteData.parentMessage;
-  const msgDate = new Date(parentMsg.createdAt || parentMsg.created_at).toLocaleString();
-  const separator = ` -----[ ${parentMsg.fromUser} ]--[ ${msgDate} ]----------------------------------------------------------------------`.substring(0, 70);
-  quotedLines.push(separator);
-  quotedLines.push(' ');
-
-  // Copy selected lines (express.e:10931-10935)
+  // Copy selected lines into start of buffer (express.e:10931-10935)
   for (let i = startLine - 1; i < endLine; i++) {
     quotedLines.push(quoteData.parentLines[i]);
   }
 
-  quotedLines.push('');
+  // Separator (express.e:10936-10939: formatLongDateTime + SetStr(str,70))
+  const parentMsg = quoteData.parentMessage;
+  const authorName = parentMsg.author || parentMsg.fromUser || parentMsg.fromName || 'Unknown';
+  const msgDate = new Date(parentMsg.createdAt || parentMsg.created_at || Date.now()).toLocaleString();
+  const separator = ` -----[ ${authorName} ]--[ ${msgDate} ]----------------------------------------------------------------------`.substring(0, 70);
+  quotedLines.push(separator);       // express.e:10939
+  quotedLines.push(' ');             // express.e:10942 msgBuf.setItem(lines,' ')
+  // express.e:10944 msgBuf.setItem(lines,'') — empty line is where cursor starts in BEG_IN
 
-  // Insert at current position in message body
-  const currentIndex = messageData.currentLine - 1;
-  messageData.body.splice(currentIndex, 0, ...quotedLines);
-  messageData.currentLine += quotedLines.length;
+  // In our system, body entries are the text lines; currentLine points to next empty slot
+  // We DON'T add the trailing '' to body — currentLine + 1 is the cursor position
+  messageData.body.splice(0, 0, ...quotedLines);
+  messageData.currentLine = quotedLines.length + 1;
 
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize(`Quoted ${endLine - startLine + 1} lines`, 'green'));
-  emitText(socket, '\r\n');
-
-  // Clean up
   delete session.tempData.quoteData;
 
-  emitText(socket, `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  // express.e falls through to edit() which shows header+ruler+pre-existing lines
+  promptForMessageBody(socket, session);
 }
 
 /**
  * Helper: Prompt for message body - express.e:10898-10909
  */
 function promptForMessageBody(socket: any, session: BBSSession): void {
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('Enter message (', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('/S', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(' to save, ', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('/A', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(' to abort, ', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('/H', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(' for help):', 'cyan'));
-  emitText(socket, '\r\n\r\n');
+  // express.e: aePuts("   Enter your text. (Enter) alone to end. (75 chars/line)\n")
+  emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');
+  // express.e:10150-10152: StrCopy(str,'|-------...');SetStr(str,75);StringF(tempstr,'   (\s)\b\n',str)
+  // SetStr to 75: 9 full |-------| groups (72 chars) + |-- (3 chars) = 75
+  emitText(socket, '   (|-------|-------|-------|-------|-------|-------|-------|-------|-------|--)\r\n');
 
-  session.tempData.messageEntry.body = [];
-  session.tempData.messageEntry.currentLine = 1;
+  const entry = session.tempData.messageEntry;
 
-  emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  // If body already has content (quoting/forwarding), show existing lines first
+  if (!entry.body) {
+    entry.body = [];
+  }
+  if (!entry.currentLine) {
+    entry.currentLine = entry.body.length + 1;
+  }
+
+  // Show any pre-existing lines (e.g. quote preamble inserted before editor)
+  if (entry.body.length > 0) {
+    entry.body.forEach((bodyLine: string, index: number) => {
+      emitLinePrompt(socket, index + 1);
+      emitText(socket, `${bodyLine}\r\n`);
+    });
+  }
+
+  emitLinePrompt(socket, entry.currentLine);
   session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
 }
 
@@ -1026,7 +952,7 @@ export async function handleForwardMessageToInput(socket: any, session: BBSSessi
   const user = await _db.getUserByUsername(recipient.toUpperCase());
   if (!user && recipient.toUpperCase() !== 'ALL') {
     emitText(socket, '\r\nUser not found.\r\n');
-    emitPrompt(socket, '     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m\'[33mALL[32m\'[32m?[0m ');
+    emitPrompt(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
     return; // Stay in same state
   }
 
@@ -1035,7 +961,7 @@ export async function handleForwardMessageToInput(socket: any, session: BBSSessi
   emitText(socket, '\r\n');
 
   // Prompt for subject (express.e:9825-9830)
-  emitText(socket, `[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m `);
+  emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
   session.subState = LoggedOnSubState.FORWARD_MESSAGE_SUBJECT;
 }
 
@@ -1061,7 +987,7 @@ export async function handleForwardMessageSubjectInput(socket: any, session: BBS
   session.tempData.forwardData.subject = input;
 
   // Prompt for privacy (express.e:9837-9851)
-  emitText(socket, '         [36mPrivate ');
+  emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
   session.subState = LoggedOnSubState.FORWARD_MESSAGE_PRIVATE;
 }
 

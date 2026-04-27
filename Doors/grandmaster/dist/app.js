@@ -541,6 +541,7 @@ class GrandmasterApp {
         }
         this.inputHandler.setEnabled(false);
         this.inputManager.suspend(); // Disable grabKeys so List widgets can receive input
+        const nav = createMenuNav(this.session.bbsSession, this.screen);
         // Check if network is available
         if (!this.network) {
             const errorBox = (0, blessed_helpers_1.createBox)({
@@ -560,6 +561,7 @@ class GrandmasterApp {
             this.screen.render();
             await this.waitForKey();
             errorBox.destroy();
+            nav.destroy();
             return;
         }
         // Show mode selection first
@@ -613,6 +615,7 @@ class GrandmasterApp {
         modeBox.destroy();
         modePanel.destroy();
         if (modeSelection === 3) {
+            nav.destroy();
             return; // Back to menu
         }
         // Map selection to mode
@@ -627,6 +630,7 @@ class GrandmasterApp {
         // 'custom' would make every player create their own private lobby (each sees only themselves).
         const result = await lobbyScreen.show('matchmaking', selectedMode);
         // Re-enable game mode and input handler after lobby
+        nav.destroy();
         this.inputHandler.setEnabled(true);
         this.inputManager.resume(); // Re-enable grabKeys
         if (this.session.bbs?.enableGameMode) {
@@ -1842,6 +1846,7 @@ class GrandmasterApp {
         this.currentScreen = 'lobby';
         // Disable grabKeys so List widgets can receive keyboard input
         this.inputManager.suspend();
+        const nav = createMenuNav(this.session.bbsSession, this.screen);
         // Show difficulty selection
         const difficultyPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -1896,6 +1901,7 @@ class GrandmasterApp {
         });
         difficultyBox.destroy();
         difficultyPanel.destroy();
+        nav.destroy();
         if (selection === 6 || selection === 7) {
             this.inputManager.resume();
             return; // Back to menu

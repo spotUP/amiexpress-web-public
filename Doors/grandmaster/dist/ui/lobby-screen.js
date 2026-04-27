@@ -93,29 +93,22 @@ class GrandmasterLobbyAdapter extends blessed_2.EventEmitter {
         await this.network.setReady(ready);
     }
     async startMatch() {
-        // Check if local player is the host
         const state = this.getState();
         const matchState = this.network.getMatchState();
         if (!state || !matchState)
             return;
         const localPlayerId = matchState.players.find(p => !p.isBot)?.id;
-        if (state.hostId && localPlayerId !== state.hostId) {
-            // Not the host, can't start match
-            return;
-        }
-        // Auto-fill with bots if starting alone so multiplayer can be tested
+        const isHost = !state.hostId || localPlayerId === state.hostId;
+        if (!isHost)
+            return; // Non-host never initiates — waits for broker game:start
+        // Auto-fill with bots if not enough humans
         const humanCount = matchState.players.filter(p => !p.isBot).length;
         if (humanCount < 2) {
             await this.fillWithBots(this.botDifficulty);
         }
-        // Notify network (in case there's a real server)
+        // Host triggers countdown via broker — fires game:starting + game:start on ALL nodes,
+        // which the network manager re-emits as match:starting + match:started for every lobby.
         await this.network.startMatch();
-        // Local fallback: emit match events directly (like TetriNET pattern)
-        // This ensures the game starts even without server acknowledgment
-        this.emit('match:starting');
-        setTimeout(() => {
-            this.emit('match:started');
-        }, 500);
     }
     /**
      * Fill lobby with bots to meet minimum player count
@@ -184,7 +177,9 @@ class LobbyScreen {
                 settingsEditor: true,
                 chat: true,
                 leaderboard: true,
+                readyFlow: false,
             },
+            autoStartTimeout: 60,
             gameSettings: [
                 {
                     key: 'startingLevel',
@@ -247,15 +242,12 @@ class LobbyScreen {
                 }
             },
             formatPlayer: (player, isLocal, isHost) => {
-                const readyStatus = player.ready
-                    ? '{green-fg}[READY]{/green-fg}'
-                    : '{gray-fg}[NOT READY]{/gray-fg}';
                 const hostBadge = isHost ? '{yellow-fg}[HOST]{/yellow-fg} ' : '';
                 const youBadge = isLocal ? '{cyan-fg}(You){/cyan-fg} ' : '';
                 const botBadge = player.isBot
                     ? `{magenta-fg}[CPU-${player.botDifficulty}]{/magenta-fg} `
                     : '';
-                return `${hostBadge}${youBadge}${botBadge}{white-fg}${player.name}{/white-fg} ${readyStatus}`;
+                return `${hostBadge}${youBadge}${botBadge}{white-fg}${player.name}{/white-fg}`;
             },
         });
         // Convert lobby mode to entry mode

@@ -188,6 +188,8 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
         const { webhookService, WebhookTrigger } = require('./webhook.service');
         webhookService.sendWebhook(WebhookTrigger.DOOR_SCORE, {
           username: data.username,
+          userId: (data as any).userId,
+          gdprConsented: !!(data as any).gdprConsented,
           door: data.doorName,
           message: data.message,
           ...data.data,

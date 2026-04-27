@@ -153,8 +153,8 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
     buffer.writeUInt8(header.status, offset);
     offset += 1;
 
-    // msgNumb: LONG (4 bytes, little-endian)
-    buffer.writeInt32LE(header.msgNumb, offset);
+    // msgNumb: LONG (4 bytes, big-endian)
+    buffer.writeInt32BE(header.msgNumb, offset);
     offset += 4;
 
     // toName[31]: ARRAY OF CHAR (31 bytes, null-padded)
@@ -175,16 +175,16 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
     subject.copy(buffer, offset);
     offset += 31;
 
-    // msgDate: LONG (4 bytes, little-endian)
-    buffer.writeInt32LE(header.msgDate, offset);
+    // msgDate: LONG (4 bytes, big-endian)
+    buffer.writeInt32BE(header.msgDate, offset);
     offset += 4;
 
-    // recv: LONG (4 bytes, little-endian)
-    buffer.writeInt32LE(header.recv, offset);
+    // recv: LONG (4 bytes, big-endian)
+    buffer.writeInt32BE(header.recv, offset);
     offset += 4;
 
-    // extMsgNum: INT (2 bytes, little-endian)
-    buffer.writeInt16LE(header.extMsgNum, offset);
+    // extMsgNum: INT (2 bytes, big-endian)
+    buffer.writeInt16BE(header.extMsgNum, offset);
     offset += 2;
 
     // Padding to 110 bytes (offset should be 108, need 2 more bytes)
@@ -202,7 +202,7 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
     const status = buffer.readUInt8(pos);
     pos += 1;
 
-    const msgNumb = buffer.readInt32LE(pos);
+    const msgNumb = buffer.readInt32BE(pos);
     pos += 4;
 
     const toName = buffer.toString('ascii', pos, pos + 31).replace(/\0/g, '');
@@ -214,13 +214,13 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
     const subject = buffer.toString('ascii', pos, pos + 31).replace(/\0/g, '');
     pos += 31;
 
-    const msgDate = buffer.readInt32LE(pos);
+    const msgDate = buffer.readInt32BE(pos);
     pos += 4;
 
-    const recv = buffer.readInt32LE(pos);
+    const recv = buffer.readInt32BE(pos);
     pos += 4;
 
-    const extMsgNum = buffer.readInt16LE(pos);
+    const extMsgNum = buffer.readInt16BE(pos);
     pos += 2;
 
     return {
@@ -323,15 +323,15 @@ console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in Header
     let offset = 0;
 
     // lowestKey: LONG (4 bytes)
-    buffer.writeInt32LE(stats.lowestKey, offset);
+    buffer.writeInt32BE(stats.lowestKey, offset);
     offset += 4;
 
     // highMsgNum: LONG (4 bytes)
-    buffer.writeInt32LE(stats.highMsgNum, offset);
+    buffer.writeInt32BE(stats.highMsgNum, offset);
     offset += 4;
 
     // lowestNotDel: LONG (4 bytes)
-    buffer.writeInt32LE(stats.lowestNotDel, offset);
+    buffer.writeInt32BE(stats.lowestNotDel, offset);
     offset += 4;
 
     // pad[6]: ARRAY OF CHAR (6 bytes)
@@ -346,13 +346,13 @@ console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in Header
   private deserializeMailStat(buffer: Buffer): MailStat {
     let offset = 0;
 
-    const lowestKey = buffer.readInt32LE(offset);
+    const lowestKey = buffer.readInt32BE(offset);
     offset += 4;
 
-    const highMsgNum = buffer.readInt32LE(offset);
+    const highMsgNum = buffer.readInt32BE(offset);
     offset += 4;
 
-    const lowestNotDel = buffer.readInt32LE(offset);
+    const lowestNotDel = buffer.readInt32BE(offset);
     offset += 4;
 
     const pad = Buffer.alloc(6);

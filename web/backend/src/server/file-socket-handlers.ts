@@ -677,6 +677,8 @@ console.error("[BBSEvent] Error emitting upload event:", error);
 
         await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, {
           username: session.user!.username,
+          userId: session.user!.id,
+          gdprConsented: !!(session.user as any)?.gdprConsentAt,
           filename: currentFile.filename,
           filesize: data.size,
           conference: conference?.name || "Unknown",
@@ -810,7 +812,8 @@ console.log("[Upload] No upload context for batch complete");
       session.user!.location || "Unknown",
       config.get("bbsName") || "AmiExpress BBS",
       undefined, // webhookService
-      session.nodeId || 1 // nodeId for EXECUTE_ON_UPLOAD
+      session.nodeId || 1, // nodeId for EXECUTE_ON_UPLOAD
+      !!(session.user as any)?.gdprConsentAt
     );
   } catch (error: any) {
 console.error(
@@ -1215,6 +1218,8 @@ console.error("[Download] Error writing user disk files:", diskErr);
 
           await webhookService.sendWebhook(WebhookTrigger.FILE_DOWNLOADED, {
             username: session.user.username,
+            userId: session.user.id,
+            gdprConsented: !!(session.user as any)?.gdprConsentAt,
             filename: fileEntry.filename,
             filesize: fileEntry.size,
             conference: conference?.name || "Unknown",

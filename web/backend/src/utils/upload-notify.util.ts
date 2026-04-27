@@ -115,7 +115,8 @@ export async function doUploadNotify(
   location: string,
   bbsName: string,
   webhookService?: any,
-  nodeId: number = 1
+  nodeId: number = 1,
+  gdprConsented?: boolean
 ): Promise<void> {
   try {
     // Express.e:6692 - runExecuteOn('UPLOAD')
@@ -134,6 +135,7 @@ console.log(`[UploadNotify] Upload event triggered for ${username}`);
         await webhookService.sendWebhook('new_upload', {
           username,
           location,
+          gdprConsented,
           timestamp: getSystemTime().toISOString(),
         });
 console.log(`[UploadNotify] NEW_UPLOAD webhook triggered`);

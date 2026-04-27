@@ -1506,11 +1506,18 @@ export function bindKeys(
   screen: any,
   bindings: Array<[string | string[], () => void]>
 ): () => void {
-  for (const [keys, fn] of bindings) {
+  // Wrap each callback to return true so the screen marks the key as handled.
+  // Without this, after the screen handler runs the focused element (e.g. a
+  // list) ALSO processes the same key — causing double-actions (e.g. left/right
+  // both adjusting amount AND jumping the list selection by 10 items).
+  const wrappedBindings: Array<[string | string[], () => true]> = bindings.map(
+    ([keys, fn]) => [keys, () => { fn(); return true; }]
+  );
+  for (const [keys, fn] of wrappedBindings) {
     screen.key(Array.isArray(keys) ? keys : [keys], fn);
   }
   return function unbind() {
-    for (const [keys, fn] of bindings) {
+    for (const [keys, fn] of wrappedBindings) {
       screen.unkey(Array.isArray(keys) ? keys : [keys], fn);
     }
   };

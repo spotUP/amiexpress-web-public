@@ -37,6 +37,10 @@ export interface WebhookEventData {
   data: {
     username?: string;
     userId?: string;
+    /** Pass true when the user has accepted the GDPR notice — their real
+     *  username will then appear in webhook payloads even when the system-wide
+     *  webhook_include_pii flag is off. */
+    gdprConsented?: boolean;
     filename?: string;
     filesize?: number;
     message?: string;
@@ -65,6 +69,10 @@ export interface WebhookEventData {
  * invoke it implicitly.
  */
 export function applyPiiPolicy(data: WebhookEventData['data'], overrideIncludePii?: boolean): WebhookEventData['data'] {
+  // Per-user consent overrides the system-wide flag: a user who accepted the
+  // GDPR notice has explicitly agreed to their handle appearing in activity logs.
+  if (data.gdprConsented === true) return data;
+
   let includePii = false;
   if (typeof overrideIncludePii === 'boolean') {
     includePii = overrideIncludePii;

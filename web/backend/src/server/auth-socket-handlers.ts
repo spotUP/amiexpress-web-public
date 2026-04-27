@@ -645,6 +645,7 @@ console.error('[SystemStats] Error tracking login:', error);
           await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
             username: user.username,
             userId: user.id,
+            gdprConsented: !!user.gdprConsentAt,
             secLevel: user.secLevel,
             calls: user.calls + 1
           });

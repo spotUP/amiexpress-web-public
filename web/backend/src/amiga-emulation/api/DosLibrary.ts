@@ -9,7 +9,7 @@ import { ximDebugLogger } from "../xim/debug-logger";
 import { EnvironmentManager } from "../session/EnvironmentManager";
 import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
-import { getSystemTime } from '../../utils/date-time.util';
+import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
@@ -801,9 +801,11 @@ debugLog(
       // Console output is already flushed via Write(), just close the handle
     } else {
       // Regular file - flush buffer to disk if it was opened for writing
+      // MODE_OLDFILE is read+write in AmigaDOS, so flush it too if the buffer was modified
       if (
         fileHandle.mode === MODE_NEWFILE ||
-        fileHandle.mode === MODE_READWRITE
+        fileHandle.mode === MODE_READWRITE ||
+        fileHandle.mode === MODE_OLDFILE
       ) {
         if (fileHandle.realPath && fileHandle.buffer) {
           try {
@@ -1192,9 +1194,12 @@ console.error(`[dos.library] Write: Invalid handle ${handle}`);
     }
 
     // Check if file is writable
+    // AmigaDOS: MODE_OLDFILE (1005) opens for read+write, MODE_NEWFILE (1006) creates for write,
+    // MODE_READWRITE (1004) opens/creates for read+write.  All three allow Write().
     if (
       fileHandle.mode !== MODE_NEWFILE &&
-      fileHandle.mode !== MODE_READWRITE
+      fileHandle.mode !== MODE_READWRITE &&
+      fileHandle.mode !== MODE_OLDFILE
     ) {
 console.error(
         `[dos.library] Write: File not opened for writing (mode=${fileHandle.mode})`
@@ -1415,31 +1420,15 @@ debugLog(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
   DateStamp(): number {
     const dateStampPtr = this.emulator.getRegister(CPURegister.D1);
 
-    // Get current local time
-    const now = getSystemTime();
-
-    // Calculate days since Jan 1, 1978 (Local)
-    const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const epoch = new Date(1978, 0, 1);
-    const daysSinceEpoch = Math.round(
-      (nowMidnight.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    // Calculate minutes past midnight (Local)
-    const minutesPastMidnight = now.getHours() * 60 + now.getMinutes();
-
-    // Calculate ticks past minute (50 ticks/sec)
-    const ticksPastMinute =
-      now.getSeconds() * 50 + Math.floor(now.getMilliseconds() / 20);
+    const { days, minutes, ticks } = dateTimeToDateStamp(getSystemTime());
 
 debugLog(
-      `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`
+      `[dos.library] DateStamp() days=${days}, minutes=${minutes}, ticks=${ticks}`
     );
 
-    // Write DateStamp structure (3 x 32-bit longs, big-endian)
-    this.writeLong(dateStampPtr, daysSinceEpoch);
-    this.writeLong(dateStampPtr + 4, minutesPastMidnight);
-    this.writeLong(dateStampPtr + 8, ticksPastMinute);
+    this.writeLong(dateStampPtr, days);
+    this.writeLong(dateStampPtr + 4, minutes);
+    this.writeLong(dateStampPtr + 8, ticks);
 
     return dateStampPtr;
   }
@@ -2418,18 +2407,11 @@ debugLog(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) ->
       this.emulator.writeMemory32(fibPtr + 128, 0);
 
       // fib_Date (12 bytes DateStamp)
-      const mtime = stats.mtime;
-      const mtimeMidnight = new Date(mtime.getFullYear(), mtime.getMonth(), mtime.getDate());
-      const epoch = new Date(1978, 0, 1);
-      const days = Math.round(
-        (mtimeMidnight.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      const minutes = mtime.getHours() * 60 + mtime.getMinutes();
-      const ticks = mtime.getSeconds() * 50;
+      const { days: eDays, minutes: eMinutes, ticks: eTicks } = dateTimeToDateStamp(stats.mtime);
 
-      this.emulator.writeMemory32(fibPtr + 132, days);
-      this.emulator.writeMemory32(fibPtr + 136, minutes);
-      this.emulator.writeMemory32(fibPtr + 140, ticks);
+      this.emulator.writeMemory32(fibPtr + 132, eDays);
+      this.emulator.writeMemory32(fibPtr + 136, eMinutes);
+      this.emulator.writeMemory32(fibPtr + 140, eTicks);
 
       // fib_Comment (80 bytes BCPL string)
       this.writeBCPLString(fibPtr + 144, "", 79);
@@ -2600,18 +2582,11 @@ debugLog(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) ->
       this.emulator.writeMemory32(fibPtr + 128, 0);
 
       // fib_Date (12 bytes DateStamp)
-      const mtime = stats.mtime;
-      const mtimeMidnight = new Date(mtime.getFullYear(), mtime.getMonth(), mtime.getDate());
-      const epoch = new Date(1978, 0, 1);
-      const days = Math.round(
-        (mtimeMidnight.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      const minutes = mtime.getHours() * 60 + mtime.getMinutes();
-      const ticks = mtime.getSeconds() * 50;
+      const { days: xnDays, minutes: xnMinutes, ticks: xnTicks } = dateTimeToDateStamp(stats.mtime);
 
-      this.emulator.writeMemory32(fibPtr + 132, days);
-      this.emulator.writeMemory32(fibPtr + 136, minutes);
-      this.emulator.writeMemory32(fibPtr + 140, ticks);
+      this.emulator.writeMemory32(fibPtr + 132, xnDays);
+      this.emulator.writeMemory32(fibPtr + 136, xnMinutes);
+      this.emulator.writeMemory32(fibPtr + 140, xnTicks);
 
       // fib_Comment (80 bytes BCPL string)
       this.writeBCPLString(fibPtr + 144, "", 79);
@@ -5718,14 +5693,14 @@ debugLog(
       `[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`
     );
 
-    // Convert Amiga days (since 1978-01-01) to JavaScript Date (Local)
-    const epoch = new Date(1978, 0, 1);
+    // Convert Amiga days (since 1978-01-01 UTC) to JavaScript Date
+    const epoch = new Date('1978-01-01T00:00:00Z');
     const dateMs = epoch.getTime() + ds_Days * 24 * 60 * 60 * 1000;
     const date = new Date(dateMs);
 
-    const year = date.getFullYear() % 100; // 2-digit year
-    const month = date.getMonth() + 1; // 1-12
-    const day = date.getDate(); // 1-31
+    const year = date.getUTCFullYear() % 100;
+    const month = date.getUTCMonth() + 1;
+    const day = date.getUTCDate();
 
     const hours = Math.floor(ds_Minute / 60);
     const minutes = ds_Minute % 60;

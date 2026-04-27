@@ -178,6 +178,12 @@ export interface LobbyFeatures {
   filters?: boolean;
   /** Enable observe mode (watch without playing) */
   observe?: boolean;
+  /**
+   * Disable the ready/start split — shows a single "Start" button for all
+   * players and skips the "all players ready" gate. Default: true (ready flow on).
+   * Set to false for single-player-vs-bot scenarios where the ready dance is noise.
+   */
+  readyFlow?: boolean;
 }
 
 /**
@@ -295,6 +301,11 @@ export interface MultiplayerLobbyOptions extends ElementOptions {
   showTableAge?: boolean;
   /** Browser mode: Validate before join (returns error message or null if valid) */
   validateJoin?: (table: LobbyTableEntry, localPlayerId: string) => string | null;
+  /**
+   * Seconds to wait for all players to press Start before bot-filling and
+   * auto-launching. Only used when readyFlow is false. Default: 60.
+   */
+  autoStartTimeout?: number;
 }
 
 // ============================================================================
@@ -322,6 +333,11 @@ export class MultiplayerLobby extends EventEmitter {
   private botDifficulty: number;
   private currentSettings: Record<string, unknown> = {};
   private chatMessages: LobbyChatMessage[] = [];
+
+  // Auto-start countdown (readyFlow: false)
+  private autoStartTimer: NodeJS.Timeout | null = null;
+  private autoStartCountdown: number = 60;
+  private forceStartButton: Button | null = null;
 
   // Browser mode state
   private browserMode: boolean = false;
@@ -823,11 +839,12 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     // ============ BUTTONS ROW ============
+    const hasReadyFlow = this.features.readyFlow !== false;
     const buttonTop = screenHeight - 3;
     let buttonLeft = 2;
     console.log('[MultiplayerLobby] Creating buttons at row', buttonTop, 'screenHeight=', screenHeight);
 
-    // Ready button
+    // Ready button — hidden permanently when readyFlow is disabled
     this.readyButton = new Button({
       parent: this.container,
       top: buttonTop,
@@ -842,11 +859,12 @@ export class MultiplayerLobby extends EventEmitter {
       },
       border: 'none',
       mouse: true,
+      hidden: !hasReadyFlow,
       tags: true,
     } as any);
-    buttonLeft += 12;
+    if (hasReadyFlow) buttonLeft += 12;
 
-    // Start button (host only) - starts visible, hidden by setAsHost(false) if not host
+    // Start button — always visible when readyFlow is disabled; host-only otherwise
     this.startButton = new Button({
       parent: this.container,
       top: buttonTop,
@@ -861,7 +879,7 @@ export class MultiplayerLobby extends EventEmitter {
       },
       border: 'none',
       mouse: true,
-      hidden: false,  // Start visible - setAsHost handles hiding for non-hosts
+      hidden: hasReadyFlow,  // setAsHost() will un-hide for host when readyFlow is on
       tags: true,
     } as any);
     buttonLeft += 12;
@@ -908,6 +926,28 @@ export class MultiplayerLobby extends EventEmitter {
       this.fillBotsButton.on('press', () => this.toggleBots());
     }
 
+    // Force Start button (readyFlow:false, host only, shown after host presses Start)
+    if (!hasReadyFlow) {
+      this.forceStartButton = new Button({
+        parent: this.container,
+        top: buttonTop,
+        left: buttonLeft,
+        width: 14,
+        height: 1,
+        content: ' Force Start ',
+        style: {
+          bg: 'red',
+          fg: 'white',
+          focus: { bg: 'blue' },
+        },
+        border: 'none',
+        mouse: true,
+        hidden: true,
+        tags: true,
+      } as any);
+      this.forceStartButton.on('press', () => void this.forceStart());
+    }
+
     // Setup button handlers
     this.readyButton.on('press', () => void this.toggleReady());
     this.startButton.on('press', () => void this.startMatch());
@@ -927,10 +967,12 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     // Keyboard shortcuts (only trigger if no input widget has focus)
-    this.parent.key(['r'], () => {
-      console.log('[MultiplayerLobby] R key handler triggered');
-      if (!this.widgetHasFocus()) void this.toggleReady();
-    });
+    if (hasReadyFlow) {
+      this.parent.key(['r'], () => {
+        console.log('[MultiplayerLobby] R key handler triggered');
+        if (!this.widgetHasFocus()) void this.toggleReady();
+      });
+    }
     this.parent.key(['s'], () => {
       console.log('[MultiplayerLobby] S key handler triggered');
       if (!this.widgetHasFocus()) void this.startMatch();
@@ -961,7 +1003,7 @@ export class MultiplayerLobby extends EventEmitter {
       this.playerList,
       this.teamSelector,
       this.settingsEditorList,
-      this.readyButton,
+      hasReadyFlow ? this.readyButton : null,
       this.startButton,
       this.leaveButton,
     ].filter(Boolean) as any[];
@@ -1652,11 +1694,19 @@ export class MultiplayerLobby extends EventEmitter {
       this.playSound('leave');
       this.updatePlayerList();
       this.updateStatus('A player left the lobby');
+      // Host only: a disconnect may leave all remaining humans ready — launch if so
+      if (this.features.readyFlow === false && this.isHost && this.localReady && this.autoStartTimer && this.checkAllHumansReady()) {
+        void this.launchMatch();
+      }
     });
 
     // Player ready state changed
     this.adapter.on('player:ready', (_data: { playerId: string; ready: boolean }) => {
       this.updatePlayerList();
+      // Host only: check if all humans are now ready and launch
+      if (this.features.readyFlow === false && this.isHost && this.localReady && this.autoStartTimer && this.checkAllHumansReady()) {
+        void this.launchMatch();
+      }
     });
 
     // Player team changed
@@ -1712,6 +1762,11 @@ export class MultiplayerLobby extends EventEmitter {
         if (state.leaderboard) {
           this.updateLeaderboard(state.leaderboard);
         }
+      }
+      // Host only: state:updated fires when player:ready propagates via lobby:updated —
+      // use it as a fallback trigger for the auto-start check
+      if (this.features.readyFlow === false && this.isHost && this.localReady && this.autoStartTimer && this.checkAllHumansReady()) {
+        void this.launchMatch();
       }
     });
 
@@ -1820,14 +1875,22 @@ export class MultiplayerLobby extends EventEmitter {
     console.log('[MultiplayerLobby] setAsHost called with:', isHost);
     this.isHost = isHost;
 
-    // Only ONE of Ready / Start is visible at a time:
-    //   - Host is implicitly ready, so Ready is hidden for host and Start is shown.
-    //   - Non-host can never start, so Start is hidden and Ready is shown.
-    this.readyButton.hidden = isHost;
-    this.startButton.hidden = !isHost;
+    const hasReadyFlow = this.features.readyFlow !== false;
+
+    if (hasReadyFlow) {
+      // Only ONE of Ready / Start is visible at a time:
+      //   - Host is implicitly ready, so Ready is hidden for host and Start is shown.
+      //   - Non-host can never start, so Start is hidden and Ready is shown.
+      this.readyButton.hidden = isHost;
+      this.startButton.hidden = !isHost;
+    } else {
+      // Single Start button visible to all — no ready dance.
+      this.readyButton.hidden = true;
+      this.startButton.hidden = false;
+    }
 
     // Reposition so Leave sits flush next to the active action button (no gap).
-    const actionButton = isHost ? this.startButton : this.readyButton;
+    const actionButton = (!hasReadyFlow || isHost) ? this.startButton : this.readyButton;
     (actionButton as any).left = 2;
     (this.leaveButton as any).left = 14;
     let nextLeft = 26;
@@ -1877,6 +1940,53 @@ export class MultiplayerLobby extends EventEmitter {
    */
   private async startMatch(): Promise<void> {
     console.log('[MultiplayerLobby] startMatch called, isHost=', this.isHost);
+    const hasReadyFlow = this.features.readyFlow !== false;
+
+    // ── readyFlow: false path ──────────────────────────────────────────────
+    // Pressing Start marks the local player as ready.
+    // Only the HOST drives launchMatch() — the broker fires match:started on
+    // all nodes so non-host players transition via the network event, not locally.
+    if (!hasReadyFlow) {
+      if (this.localReady) return; // already waiting — ignore repeat presses
+
+      this.localReady = true;
+      try {
+        await this.adapter.setReady(true);
+      } catch (err) {
+        this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        this.localReady = false;
+        return;
+      }
+
+      this.startButton.setContent(' Ready! ');
+      this.startButton.style.bg = 'blue';
+      this.parent.render();
+      this.playSound('select');
+
+      if (!this.isHost) {
+        // Non-host: just wait — host's broker countdown will fire match:started here
+        this.updateStatus('Waiting for host to start...');
+        return;
+      }
+
+      // HOST only from here ─────────────────────────────────────────────────
+      if (this.forceStartButton) {
+        this.forceStartButton.hidden = false;
+        this.parent.render();
+      }
+
+      // All humans already ready — launch immediately without countdown
+      if (this.checkAllHumansReady()) {
+        await this.launchMatch();
+        return;
+      }
+
+      // Start countdown — fires forceStart() on expiry
+      this.startAutoStartCountdown();
+      return;
+    }
+
+    // ── original readyFlow: true path ─────────────────────────────────────
     if (!this.isHost) {
       this.updateStatus('Only the host can start the match');
       console.log('[MultiplayerLobby] Not host, returning');
@@ -1890,7 +2000,6 @@ export class MultiplayerLobby extends EventEmitter {
       return;
     }
 
-    // Check if all players are ready
     const allReady = state.players.every(p => p.ready || p.id === this.localPlayerId);
     console.log('[MultiplayerLobby] allReady=', allReady, 'localPlayerId=', this.localPlayerId);
     if (!allReady) {
@@ -1899,29 +2008,93 @@ export class MultiplayerLobby extends EventEmitter {
       return;
     }
 
-    // Check minimum players
+    await this.launchMatch();
+  }
+
+  /**
+   * Returns true when every non-bot human in the lobby has set ready=true,
+   * treating the local player as ready if they just pressed Start.
+   */
+  private checkAllHumansReady(): boolean {
+    const state = this.adapter.getState();
+    if (!state) return false;
+    const humans = state.players.filter(p => !p.isBot);
+    return humans.every(p => p.ready || p.id === this.localPlayerId);
+  }
+
+  /**
+   * Start the auto-start countdown (readyFlow: false only).
+   */
+  private startAutoStartCountdown(): void {
+    if (this.autoStartTimer) return; // already running
+
+    this.autoStartCountdown = this.options.autoStartTimeout ?? 60;
+    this.updateStatus(`Waiting for other players... (${this.autoStartCountdown}s)`);
+
+    this.autoStartTimer = setInterval(() => {
+      this.autoStartCountdown--;
+
+      if (this.autoStartCountdown <= 0) {
+        void this.forceStart();
+        return;
+      }
+
+      // Update Start button label with remaining seconds
+      this.startButton.setContent(` Ready! ${this.autoStartCountdown}s `);
+      this.updateStatus(`Waiting for other players... (${this.autoStartCountdown}s)`);
+      this.parent.render();
+    }, 1000);
+  }
+
+  /**
+   * Stop the auto-start countdown without launching.
+   */
+  private stopAutoStartCountdown(): void {
+    if (this.autoStartTimer) {
+      clearInterval(this.autoStartTimer);
+      this.autoStartTimer = null;
+    }
+  }
+
+  /**
+   * Force-start: bot-fill any unready/missing players and launch immediately.
+   * Used by the host "Force Start" button and the countdown expiry.
+   */
+  private async forceStart(): Promise<void> {
+    this.stopAutoStartCountdown();
+    this.updateStatus('Force starting...');
+    await this.launchMatch();
+  }
+
+  /**
+   * Shared final launch: bot-fill minimum slots if needed, then start match.
+   */
+  private async launchMatch(): Promise<void> {
+    this.stopAutoStartCountdown();
+
+    const state = this.adapter.getState();
+    if (!state) {
+      this.updateStatus('No active lobby');
+      return;
+    }
+
     const modeConfig = this.modes[state.mode];
     const minPlayers = modeConfig?.minPlayers ?? 2;
-    if (state.players.length < minPlayers) {
-      // Auto-fill with bots if available and not enough players
-      if (this.features.bots !== false && this.adapter.fillWithBots) {
+
+    // Bot-fill unready human slots and any missing slots
+    if (this.features.bots !== false && this.adapter.fillWithBots) {
+      const humanCount = state.players.filter(p => !p.isBot).length;
+      if (humanCount < minPlayers || state.players.length < minPlayers) {
         this.updateStatus(`Adding bots to fill ${minPlayers - state.players.length} slot(s)...`);
         await this.adapter.fillWithBots(this.botDifficulty);
         this.hasBots = true;
         this.updatePlayerList();
         this.parent.render();
-        // Re-check after adding bots
-        const newState = this.adapter.getState();
-        if (!newState || newState.players.length < minPlayers) {
-          this.updateStatus(`Still need ${minPlayers - (newState?.players.length || 0)} players`);
-          this.playSound('error');
-          return;
-        }
-      } else {
-        this.updateStatus(`Need at least ${minPlayers} players`);
-        this.playSound('error');
-        return;
       }
+    } else if (state.players.length < minPlayers) {
+      this.updateStatus(`Need at least ${minPlayers} players`);
+      this.playSound('error');
+      return;
     }
 
     this.updateStatus('Starting match...');
@@ -2144,11 +2317,13 @@ export class MultiplayerLobby extends EventEmitter {
     // Name
     parts.push(`{white-fg}${player.name}{/white-fg}`);
 
-    // Ready status
-    const readyStatus = player.ready
-      ? '{green-fg}[READY]{/green-fg}'
-      : '{gray-fg}[NOT READY]{/gray-fg}';
-    parts.push(readyStatus);
+    // Ready status (hidden when readyFlow is disabled)
+    if (this.features.readyFlow !== false) {
+      const readyStatus = player.ready
+        ? '{green-fg}[READY]{/green-fg}'
+        : '{gray-fg}[NOT READY]{/gray-fg}';
+      parts.push(readyStatus);
+    }
 
     return parts.join(' ');
   }
@@ -2397,7 +2572,8 @@ export class MultiplayerLobby extends EventEmitter {
   }
 
   private cleanup(): void {
-    // Clear auto-refresh timer
+    // Clear timers
+    this.stopAutoStartCountdown();
     if (this.browserAutoRefreshTimer) {
       clearInterval(this.browserAutoRefreshTimer);
       this.browserAutoRefreshTimer = null;

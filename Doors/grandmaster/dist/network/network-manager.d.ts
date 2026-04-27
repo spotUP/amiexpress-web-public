@@ -41,6 +41,7 @@ export interface PlayerInfo {
  */
 export interface GameUpdate {
     playerId: string;
+    playerName?: string;
     timestamp: number;
     board: Board;
     level: number;

@@ -149,7 +149,7 @@ export class VersusScreen {
    * Setup UI layout — 80x24 terminal
    *
    * Col  0-21 : player board  (22w, 22h, top=1)
-   * Col 22-33 : NEXT (12w,12h,top=1) + HOLD (12w,9h,top=13)
+   * Col 22-33 : NEXT (12w,12h,top=1) + HOLD (12w,10h,top=13)
    * Col 34-36 : garbage strip (3w, 22h, top=1)
    * Col 37-58 : opponent board (22w, 22h, top=1)
    * Col 59-79 : VS info panel  (21w, 22h, top=1)
@@ -194,7 +194,7 @@ export class VersusScreen {
       top: 13,
       left: 22,
       width: 12,
-      height: 9,
+      height: 10,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'magenta' } },
       label: ' HOLD ',
@@ -317,7 +317,7 @@ export class VersusScreen {
       }
       this.opponentTracker.updateOpponent(update.playerId, {
         id: update.playerId,
-        name: (update as any).name ?? update.playerId,
+        name: update.playerName ?? (update as any).name ?? update.playerId,
         board: update.board,
         level: update.level,
         grade: update.grade,

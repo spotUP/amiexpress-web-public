@@ -563,22 +563,28 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // R - Reply - express.e:11201-11209
+  // R - Reply - express.e:10762-10763 replyFlag=1 → JUMP skipBegin (skips To: and Subject: prompts)
   if (command === 'R') {
     const msg = messages[currentIndex];
-    // Start reply workflow - express.e has no header, goes directly to reply input
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('To: ', 'green'));
-    emitText(socket, `${msg.author}\r\n`);
-    emitText(socket, AnsiUtil.colorize('Re: ', 'green'));
-    emitText(socket, `${msg.subject}\r\n`);
-    emitText(socket, '\r\n');
-    emitText(socket, 'Enter your reply (or press Enter to cancel):\r\n');
-    emitText(socket, AnsiUtil.colorize('Subject: ', 'green'));
+    // express.e pre-fills toName/subject from original; skipBegin goes straight to Private prompt
+    const replySubject = msg.subject.startsWith('Re: ') ? msg.subject : `Re: ${msg.subject}`;
 
     session.inputBuffer = '';
-    session.tempData.replyToMsg = msg;
-    session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
+    session.tempData.messageEntry = {
+      toUser: msg.author,
+      subject: replySubject,
+      body: [],
+      currentLine: 1,
+      parentId: msg.id,
+    };
+
+    // WEB_: show informational header (not in express.e but improves UX)
+    emitText(socket, `\r\n\x1b[36mTo\x1b[33m: \x1b[0m${msg.author}\r\n`);
+    emitText(socket, `\x1b[36mSubject\x1b[33m: \x1b[0m${replySubject}\r\n`);
+
+    // express.e:10859-10875 skipBegin → Private prompt (aFlag=0 for non-ALL/EALL)
+    emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
     return;
   }
 
@@ -826,13 +832,9 @@ export function handleEnterMessageFullCommand(
 
 console.log('[ENV] Mail');
 
-  // express.e:24860-24872 internalCommandE - no header, goes to mail entry
-  // enterMSG function prompts directly
-  emitText(socket, '\r\n');
-  emitText(socket, `Conference: ${session.currentConfName}\r\n`);
-  emitText(socket, '\r\n');
-  emitText(socket, 'Enter recipient username (or press Enter to abort):\r\n');
-  emitText(socket, AnsiUtil.colorize('To: ', 'green'));
+  // express.e msgToHeader():9998-10001
+  emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+  emitText(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
 
   // Clear input buffer and set up for line-based input
   session.inputBuffer = '';
