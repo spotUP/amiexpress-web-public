@@ -28,9 +28,8 @@
 #include <config.h>
 #endif
 
-#include <glib.h>
+#include "glib-stub.h"
 #include "dopewars.h"
-#include "message.h"
 #include "tstring.h"
 
 typedef struct _FmtData {

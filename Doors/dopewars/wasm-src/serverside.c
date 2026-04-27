@@ -46,7 +46,6 @@
 #include <signal.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <glib.h>
 #include "configfile.h"         /* For UpdateConfigFile */
 #include "dopewars.h"
 #include "log.h"

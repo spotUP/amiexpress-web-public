@@ -29,13 +29,11 @@
 #include <stdlib.h>             /* For atoi */
 #include <errno.h>              /* For errno */
 #include <ctype.h>              /* For isprint */
-#include <glib.h>
+#include "glib-stub.h"
 
 #include "configfile.h"
-#include "convert.h"            /* For Converter */
 #include "dopewars.h"           /* For struct GLOBALS etc. */
 #include "nls.h"                /* For _ function */
-#include "error.h"              /* For ErrStrFromErrno */
 
 gchar *LocalCfgEncoding = NULL;
 

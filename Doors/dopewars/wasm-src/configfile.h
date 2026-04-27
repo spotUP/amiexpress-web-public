@@ -23,7 +23,7 @@
 #ifndef __DP_CONFIGFILE_H__
 #define __DP_CONFIGFILE_H__
 
-#include <glib.h>
+#include "glib-stub.h"
 
 extern gchar *LocalCfgEncoding;
 gboolean UpdateConfigFile(const gchar *cfgfile, gboolean ForceUTF8);

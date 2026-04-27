@@ -38,22 +38,16 @@
 #endif
 #include <string.h>
 #include <errno.h>
-#include <glib.h>
+#include "glib-stub.h"
 #include <stdarg.h>
 
 #include "configfile.h"
-#include "convert.h"
 #include "dopewars.h"
-#include "admin.h"
 #include "log.h"
-#include "message.h"
 #include "nls.h"
 #include "serverside.h"
-#include "sound.h"
 #include "tstring.h"
-#include "AIPlayer.h"
 #include "util.h"
-#include "winmain.h"
 
 #ifdef CURSES_CLIENT
 #include "curses_client/curses_client.h"

@@ -27,10 +27,8 @@
 #include <config.h>
 #endif
 
-#include <glib.h>
-#include "error.h"
+#include "glib-stub.h"
 #include "dopewars.h"
-#include "network.h"
 
 typedef enum {
   C_PRINTMESSAGE = 'A',

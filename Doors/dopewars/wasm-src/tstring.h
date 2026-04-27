@@ -27,7 +27,7 @@
 #include <config.h>
 #endif
 
-#include <glib.h>
+#include "glib-stub.h"
 
 void dpg_print(gchar *format, ...);
 gchar *dpg_strdup_printf(gchar *format, ...);
