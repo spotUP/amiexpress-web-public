@@ -1,7 +1,8 @@
 /**
  * Versus Screen
  *
- * Multiplayer game screen with opponent minimaps and attack indicators
+ * Multiplayer game screen with opponent board, garbage strip, hold box,
+ * and full visual-effect parity with game-screen.ts.
  */
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { GameEngine } from '../core/game';
@@ -13,7 +14,9 @@ import type { AttackManager } from '../network/attack-system';
 /**
  * Versus Screen
  *
- * Extends game screen with multiplayer features (online or CPU battle)
+ * Extends game screen with multiplayer features (online or CPU battle).
+ * Full visual-effect parity with GameScreen (particles, shake, board overlay,
+ * lock flash, grade-up, combo, section COOL/REGRET, hold piece).
  */
 export declare class VersusScreen {
     private screen;
@@ -29,27 +32,53 @@ export declare class VersusScreen {
     private versusAI;
     private boardBox;
     private nextBox;
+    private holdBox;
     private opponentBoardBox;
     private opponentInfoBox;
     private minimapContainer;
     private garbageIndicator;
     private attackIndicator;
     private statsBox;
+    private boardOverlay;
     private running;
     private unsubscribers;
+    private shaker;
+    private particles;
+    private animations;
+    private glowManager;
+    private clearAnimation;
+    private lastGrade;
+    private lastLines;
+    private lastLevel;
+    private lastSection;
+    private lastPieceExists;
+    private lastScore;
+    private lastCombo;
+    private lastHold;
+    private lastBoardHash;
+    private gradeAnimProgress;
+    private gradeAnimDirection;
+    private lastComboMilestone;
+    private twentyGFlashTimer;
+    private rainbowTimer;
+    private lastRainbowUpdate;
     constructor(screen: Screen, engine: GameEngine, inputHandler: InputHandler, sounds: SoundEngine, state: AppState, network: GrandmasterNetworkManager | null, attackManager: AttackManager, botOrAI?: number | any);
     /**
-     * Setup UI layout
+     * Setup UI layout — 80x24 terminal
+     *
+     * Col  0-21 : player board  (22w, 22h, top=1)
+     * Col 22-35 : NEXT (14w,12h,top=1) + HOLD (14w,8h,top=13)
+     * Col 36-38 : garbage strip (3w, 22h, top=1)
+     * Col 39-60 : opponent board (22w, 22h, top=1)
+     * Col 61-79 : VS info panel  (19w, 22h, top=1)
+     * Row 23    : stats bar (no border)
+     *   22 + 14 + 3 + 22 + 19 = 80 ✓
      */
     private setupUI;
     /**
      * Setup network event listeners
      */
     private setupNetworkListeners;
-    /**
-     * Show attack flash animation
-     */
-    private showAttackFlash;
     /**
      * Run game loop
      */
@@ -59,35 +88,87 @@ export declare class VersusScreen {
      */
     private setupInput;
     /**
-     * Show countdown
+     * Show countdown (3, 2, 1, GO!)
      */
     private showCountdown;
     /**
-     * Render game state
+     * Check for game events and trigger visual effects
+     * Ported directly from game-screen.ts checkGameEvents().
      */
-    private render;
+    private checkGameEvents;
+    /**
+     * Trigger medal award animation
+     */
+    private triggerMedalAnimation;
+    /**
+     * Get spawn sound for piece type
+     */
+    private getSpawnSfx;
+    /**
+     * Trigger lock flash effect
+     */
+    private triggerLockFlash;
+    /**
+     * Trigger combo animation for milestone achievements
+     */
+    private triggerComboAnimation;
+    /**
+     * Handle section completion
+     */
+    private handleSectionComplete;
+    /**
+     * Update grade display pulse animation
+     */
+    private updateGradeAnimation;
     /**
      * Toggle pause
      */
     private togglePause;
     /**
-     * Render the game board
+     * Render game state — all effects applied inline
+     */
+    private render;
+    /**
+     * Build board overlay grid from all active effects
+     * Z-order (highest priority first):
+     *   1. Text announcements (gradeUp, cool/regret, combo, tSpin)
+     *   2. Floating text
+     *   3. Particles
+     *   4. Lock glow (lowest)
+     */
+    private buildBoardOverlay;
+    /**
+     * Overlay text centered on the board at a given visible row offset
+     */
+    private overlayTextOnBoard;
+    /**
+     * Render game board with ghost, glow, line-clear fade, and overlay effects
      */
     private renderBoard;
     /**
-     * Render player's next piece queue into nextBox.
-     * Each piece is shown in its spawn orientation using 2-char blocks.
-     * Up to 5 pieces fit in the 12-row content area (2 rows each + 1 blank).
+     * Render player's next piece queue
      */
     private renderNextQueue;
     /**
-     * Render opponent board (full size, same layout as player board)
+     * Render hold piece
+     */
+    private renderHold;
+    /**
+     * Render garbage strip — stacked red blocks showing pending count
+     */
+    private renderGarbage;
+    /**
+     * Render opponent board (full size)
      */
     private renderOpponentBoard;
     /**
      * Get colored block character for piece type
      */
     private getBlockChar;
+    /**
+     * Apply glow effect to block character
+     */
+    private applyGlow;
     /**
      * Cleanup
      */
