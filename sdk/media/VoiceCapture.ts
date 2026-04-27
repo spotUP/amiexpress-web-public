@@ -109,6 +109,10 @@ export class VoiceCapture extends EventEmitter {
         }
       };
       this.mediaRecorder.start(o.chunkIntervalMs);
+      this.mediaRecorder.onerror = (ev: Event) => {
+        const msg = (ev as any)?.error?.message ?? 'MediaRecorder error';
+        this.emit('error', new Error(msg));
+      };
       this.startLevelMonitor();
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
@@ -168,7 +172,9 @@ export class VoiceCapture extends EventEmitter {
   }
 
   private async playChunk(userId: string | number, chunk: ArrayBuffer): Promise<void> {
-    if (!this.audioContext) return;
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+    }
     try {
       let p = this.audioPlayers.get(userId);
       if (!p) {
