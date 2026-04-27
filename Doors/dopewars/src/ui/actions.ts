@@ -1,5 +1,5 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { bindKeys } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createList, bindKeys } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { MarketState, PlayerState, GameQuestion, HighScore } from '../types';
 
 export type ActionBarMode = 'normal' | 'combat' | 'question';
@@ -20,16 +20,92 @@ export function renderActionBar(box: any, mode: ActionBarMode): void {
   );
 }
 
-function centeredBox(screen: any, opts: any): any {
+function overlay(screen: any, opts: any): any {
   return blessed.box({
     parent: screen,
     top: 'center', left: 'center',
     border: { type: 'line' },
     tags: true,
     style: { border: { fg: 'yellow' }, fg: 'white', bg: 'black' },
-    keys: true,
     ...opts,
   });
+}
+
+/* ─── Amount input ─────────────────────────────────────────
+ * Shows current amount, left/right to adjust by 1,
+ * up/down by 10, digits to type directly, backspace to delete.
+ * Returns the chosen amount via Promise (0 = cancelled).
+ */
+function showAmountInput(
+  screen: any,
+  label: string,
+  max: number,
+  onConfirm: (amount: number) => void,
+  onBack: () => void
+): void {
+  let amount = 1;
+  let typing = false;  // once user types a digit, replace rather than adjust
+
+  const box = overlay(screen, {
+    width: 44, height: 7,
+    label: ` ${label} `,
+  });
+
+  function render(): void {
+    const canAfford = max > 0 ? `  (max ${max})` : '';
+    box.setContent(
+      `\n  Amount: {bold}{yellow-fg}${amount}{/}{/}${canAfford}\n\n` +
+      `  {bold}←/→{/} ±1   {bold}↑/↓{/} ±10   digits to type\n` +
+      `  {bold}[Enter]{/} confirm   {bold}[ESC]{/} back`
+    );
+    screen.render();
+  }
+
+  let unbind: () => void;
+
+  const leftFn  = () => { amount = Math.max(1, amount - 1);  typing = false; render(); };
+  const rightFn = () => { amount = Math.min(max || 9999, amount + 1); typing = false; render(); };
+  const upFn    = () => { amount = Math.min(max || 9999, amount + 10); typing = false; render(); };
+  const downFn  = () => { amount = Math.max(1, amount - 10); typing = false; render(); };
+
+  const backspaceFn = () => {
+    const s = String(amount).slice(0, -1);
+    amount = s.length ? parseInt(s, 10) : 1;
+    render();
+  };
+
+  const enterFn = () => {
+    if (amount >= 1) { unbind(); box.destroy(); screen.render(); onConfirm(amount); }
+  };
+
+  const escapeFn = () => { unbind(); box.destroy(); screen.render(); onBack(); };
+
+  const digitBindings: Array<[string[], () => void]> = [];
+  for (let d = 0; d <= 9; d++) {
+    const digit = String(d);
+    const fn = () => {
+      if (!typing) { amount = d; typing = true; }
+      else { const n = parseInt(String(amount) + digit, 10); amount = n; }
+      if (max > 0 && amount > max) amount = max;
+      if (amount < 1 && digit !== '0') amount = d;
+      render();
+    };
+    digitBindings.push([[digit], fn]);
+  }
+
+  unbind = bindKeys(screen, [
+    [['left'],      leftFn],
+    [['right'],     rightFn],
+    [['up'],        upFn],
+    [['down'],      downFn],
+    [['backspace'], backspaceFn],
+    [['enter'],     enterFn],
+    [['escape'],    escapeFn],
+    ...digitBindings,
+  ]);
+
+  box.focus();
+  render();
 }
 
 /* ─── Buy overlay ──────────────────────────────────────── */
@@ -41,69 +117,48 @@ export function showBuyOverlay(
   onBuy: (drugIndex: number, amount: number) => void,
   onCancel: () => void
 ): void {
-  const lines = market.prices.map((p, i) =>
-    `  {bold}${i + 1}.{/} ${p.name.padEnd(12)} {green-fg}$${Math.round(p.price).toLocaleString('en-US')}{/}`
-  ).join('\n');
+  const items = market.prices.map(p =>
+    `${p.name.padEnd(12)} $${Math.round(p.price).toLocaleString('en-US')}`
+  );
 
-  const box = centeredBox(screen, { width: 52, height: market.prices.length + 7, label: ' BUY ' });
-  box.setContent(lines + '\n\n  Select number or {bold}[ESC]{/}:');
+  const listBox = overlay(screen, {
+    width: 40, height: Math.min(items.length + 4, 18), label: ' BUY — ↑↓ navigate, Enter select ',
+  });
 
-  let chosen     = -1;
-  let chosenName = '';
-  let amtStr     = '';
+  const list = createList({
+    parent: listBox,
+    top: 0, left: 0,
+    width: '100%-2', height: '100%-2',
+    style: { selected: { bg: 'blue', fg: 'white' } },
+    keys: true, vi: true, mouse: true,
+    items,
+  });
 
-  let unbind: () => void;
-  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
+  let unbindEsc: () => void;
 
-  const escapeFn    = () => { cleanup(); onCancel(); };
-  const enterFn     = () => {
-    if (chosen >= 0 && amtStr) {
-      const amt = parseInt(amtStr, 10);
-      if (amt > 0) { cleanup(); onBuy(chosen, amt); }
-    }
-  };
-  const backspaceFn = () => {
-    if (chosen >= 0 && amtStr) {
-      amtStr = amtStr.slice(0, -1);
-      box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
-      screen.render();
-    }
-  };
-  const zeroFn = () => {
-    if (chosen >= 0) {
-      amtStr += '0';
-      box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
-      screen.render();
-    }
-  };
-
-  const numBindings: Array<[string[], () => void]> = [];
-  for (let i = 0; i < Math.min(market.prices.length, 9); i++) {
-    const digit = String(i + 1);
-    const fn = () => {
-      if (chosen < 0) {
-        chosen     = market.prices[i]!.index;
-        chosenName = market.prices[i]!.name;
-        box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: _`);
-        screen.render();
-      } else {
-        amtStr += digit;
-        box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
-        screen.render();
-      }
-    };
-    numBindings.push([[digit], fn]);
+  function cleanup(): void {
+    unbindEsc();
+    list.removeAllListeners('select');
+    listBox.destroy();
+    screen.render();
   }
 
-  unbind = bindKeys(screen, [
-    [['escape'],    escapeFn],
-    [['enter'],     enterFn],
-    [['backspace'], backspaceFn],
-    [['0'],         zeroFn],
-    ...numBindings,
-  ]);
+  const escapeFn = () => { cleanup(); onCancel(); };
+  unbindEsc = bindKeys(screen, [[['escape'], escapeFn]]);
 
-  box.focus();
+  list.on('select', (_item: any, index: number) => {
+    const p = market.prices[index];
+    if (!p) return;
+    cleanup();
+    const coatFree = state.coatSize - state.drugs.reduce((s, d) => s + d.carried, 0);
+    const maxAmt   = Math.min(coatFree, Math.floor(state.cash / p.price)) || 0;
+    showAmountInput(screen, `Buy ${p.name}`, maxAmt,
+      (amount) => onBuy(p.index, amount),
+      () => showBuyOverlay(screen, market, state, onBuy, onCancel)
+    );
+  });
+
+  list.focus();
   screen.render();
 }
 
@@ -120,69 +175,47 @@ export function showSellOverlay(
   if (carrying.length === 0) { onCancel(); return; }
 
   const drugNameMap = new Map(market.prices.map(p => [p.index, p.name]));
-  const lines = carrying.map((d, i) =>
-    `  {bold}${i + 1}.{/} ${(drugNameMap.get(d.index) ?? `Drug${d.index}`).padEnd(12)} {yellow-fg}${d.carried}{/} units`
-  ).join('\n');
+  const items = carrying.map(d =>
+    `${(drugNameMap.get(d.index) ?? `Drug${d.index}`).padEnd(12)} ${d.carried} units`
+  );
 
-  const box = centeredBox(screen, { width: 50, height: carrying.length + 7, label: ' SELL ' });
-  box.setContent(lines + '\n\n  Select drug or {bold}[ESC]{/}:');
+  const listBox = overlay(screen, {
+    width: 40, height: Math.min(items.length + 4, 18), label: ' SELL — ↑↓ navigate, Enter select ',
+  });
 
-  let chosen     = -1;
-  let chosenName = '';
-  let amtStr     = '';
+  const list = createList({
+    parent: listBox,
+    top: 0, left: 0,
+    width: '100%-2', height: '100%-2',
+    style: { selected: { bg: 'blue', fg: 'white' } },
+    keys: true, vi: true, mouse: true,
+    items,
+  });
 
-  let unbind: () => void;
-  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
+  let unbindEsc: () => void;
 
-  const escapeFn    = () => { cleanup(); onCancel(); };
-  const enterFn     = () => {
-    if (chosen >= 0 && amtStr) {
-      const amt = parseInt(amtStr, 10);
-      if (amt > 0) { cleanup(); onSell(chosen, amt); }
-    }
-  };
-  const backspaceFn = () => {
-    if (chosen >= 0 && amtStr) {
-      amtStr = amtStr.slice(0, -1);
-      box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
-      screen.render();
-    }
-  };
-  const zeroFn = () => {
-    if (chosen >= 0) {
-      amtStr += '0';
-      box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
-      screen.render();
-    }
-  };
-
-  const numBindings: Array<[string[], () => void]> = [];
-  for (let i = 0; i < Math.min(carrying.length, 9); i++) {
-    const digit = String(i + 1);
-    const fn = () => {
-      if (chosen < 0) {
-        chosen     = carrying[i]!.index;
-        chosenName = drugNameMap.get(chosen) ?? `Drug${chosen}`;
-        box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: _`);
-        screen.render();
-      } else {
-        amtStr += digit;
-        box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
-        screen.render();
-      }
-    };
-    numBindings.push([[digit], fn]);
+  function cleanup(): void {
+    unbindEsc();
+    list.removeAllListeners('select');
+    listBox.destroy();
+    screen.render();
   }
 
-  unbind = bindKeys(screen, [
-    [['escape'],    escapeFn],
-    [['enter'],     enterFn],
-    [['backspace'], backspaceFn],
-    [['0'],         zeroFn],
-    ...numBindings,
-  ]);
+  const escapeFn = () => { cleanup(); onCancel(); };
+  unbindEsc = bindKeys(screen, [[['escape'], escapeFn]]);
 
-  box.focus();
+  list.on('select', (_item: any, index: number) => {
+    const d = carrying[index];
+    if (!d) return;
+    cleanup();
+    const name = drugNameMap.get(d.index) ?? `Drug${d.index}`;
+    showAmountInput(screen, `Sell ${name}`, d.carried,
+      (amount) => onSell(d.index, amount),
+      () => showSellOverlay(screen, state, market, onSell, onCancel)
+    );
+  });
+
+  list.focus();
   screen.render();
 }
 
@@ -195,33 +228,45 @@ export function showJetOverlay(
   onJet: (location: number) => void,
   onCancel: () => void
 ): void {
-  const lines = locationNames.map((name, i) =>
-    `  {bold}${i + 1}.{/} ${name}${i === currentLocation ? ' {green-fg}(here){/}' : ''}`
-  ).join('\n');
+  const items = locationNames.map((name, i) =>
+    i === currentLocation ? `${name} (here)` : name
+  );
 
-  const box = centeredBox(screen, {
-    width: 36, height: locationNames.length + 5, label: ' JET TO ',
+  const listBox = overlay(screen, {
+    width: 36, height: Math.min(items.length + 4, 16), label: ' JET TO — ↑↓ navigate, Enter select ',
   });
-  box.setContent(lines + '\n\n  Choose or {bold}[ESC]{/}:');
 
-  let unbind: () => void;
-  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
+  const list = createList({
+    parent: listBox,
+    top: 0, left: 0,
+    width: '100%-2', height: '100%-2',
+    style: { selected: { bg: 'blue', fg: 'white' } },
+    keys: true, vi: true, mouse: true,
+    items,
+  });
+
+  // Pre-select current location
+  list.select(currentLocation);
+
+  let unbindEsc: () => void;
+
+  function cleanup(): void {
+    unbindEsc();
+    list.removeAllListeners('select');
+    listBox.destroy();
+    screen.render();
+  }
 
   const escapeFn = () => { cleanup(); onCancel(); };
+  unbindEsc = bindKeys(screen, [[['escape'], escapeFn]]);
 
-  const locBindings: Array<[string[], () => void]> = locationNames.map((_name, i) => {
-    const fn = () => {
-      if (i !== currentLocation) { cleanup(); onJet(i); }
-    };
-    return [[String(i + 1)], fn];
+  list.on('select', (_item: any, index: number) => {
+    if (index === currentLocation) return;
+    cleanup();
+    onJet(index);
   });
 
-  unbind = bindKeys(screen, [
-    [['escape'], escapeFn],
-    ...locBindings,
-  ]);
-
-  box.focus();
+  list.focus();
   screen.render();
 }
 
@@ -232,11 +277,11 @@ export function showQuestionOverlay(
   question: GameQuestion,
   onAnswer: (answer: string) => void
 ): void {
-  // Dopewars prompts carry a "YN^" or similar protocol prefix before "^" — strip it
+  // Dopewars prefixes prompts with protocol info before "^" — strip it
   const raw = question.prompt || 'Continue?';
   const displayPrompt = raw.includes('^') ? raw.split('^').slice(1).join('^').trim() : raw.trim();
 
-  const box = centeredBox(screen, { width: 62, height: 7, label: ' ACTION REQUIRED ' });
+  const box = overlay(screen, { width: 62, height: 7, label: ' ACTION REQUIRED ' });
   box.setContent('\n  ' + displayPrompt + '\n\n  {bold}[Y]{/}es  {bold}[N]{/}o  {bold}[ESC]{/} = No');
 
   let unbind: () => void;
@@ -264,10 +309,10 @@ export function showHighScores(
   const rows = scores.length === 0
     ? ['  No scores yet.']
     : scores.map((s, i) =>
-        `  {bold}${String(i + 1).padStart(2)}.{/} ${s.bbsHandle.padEnd(16)} {green-fg}$${Math.round(s.score).toLocaleString('en-US').padStart(12)}{/}  (${s.turns} turns)`
+        `  {bold}${String(i + 1).padStart(2)}.{/} ${s.bbsHandle.padEnd(16)} $${Math.round(s.score).toLocaleString('en-US').padStart(12)}  (${s.turns} turns)`
       );
 
-  const box = centeredBox(screen, {
+  const box = overlay(screen, {
     width: 62, height: Math.min(rows.length + 5, 22), label: ' HIGH SCORES ',
   });
   box.setContent(rows.join('\n') + '\n\n  {bold}[ESC]{/} or {bold}[Q]{/} to close');
@@ -276,10 +321,7 @@ export function showHighScores(
   function cleanup(): void { unbind(); box.destroy(); screen.render(); }
 
   const closeFn = () => { cleanup(); onClose(); };
-
-  unbind = bindKeys(screen, [
-    [['escape', 'q', 'Q'], closeFn],
-  ]);
+  unbind = bindKeys(screen, [[['escape', 'q', 'Q'], closeFn]]);
 
   box.focus();
   screen.render();
