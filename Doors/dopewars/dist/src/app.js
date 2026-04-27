@@ -1,0 +1,180 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createApp = createApp;
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const layout_1 = require("./ui/layout");
+const market_1 = require("./ui/market");
+const inventory_1 = require("./ui/inventory");
+const events_1 = require("./ui/events");
+const players_1 = require("./ui/players");
+const actions_1 = require("./ui/actions");
+const combat_1 = require("./ui/combat");
+const LOCATION_NAMES = [
+    'Brooklyn', 'Bronx', 'Ghetto', 'Central Park',
+    'Manhattan', 'Coney Island', 'Battery Park', 'Queens',
+];
+async function createApp(ctx, server) {
+    const user = ctx.user ?? { handle: 'PLAYER', id: 'player' };
+    const id = String(user.handle ?? user.id);
+    const layout = (0, layout_1.createLayout)(ctx);
+    const { screen, header, market, inventory, events, players, actions } = layout;
+    const inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
+        enableGameMode: true,
+        enableGrabKeys: true,
+        enableMouse: false,
+    });
+    let state;
+    let marketState;
+    let mode = 'normal';
+    let unbindCombat = null;
+    function updateHeader() {
+        const loc = LOCATION_NAMES[state.location] ?? `Loc${state.location}`;
+        header.setContent(` {bold}DOPEWARS{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
+            ` | {cyan-fg}${loc}{/}` +
+            ` | HP: {${state.health > 50 ? 'green' : 'red'}-fg}${state.health}{/}` +
+            ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString()}{/}` +
+            ` | Debt: {red-fg}$${Math.round(state.debt).toLocaleString()}{/}`);
+    }
+    function fullRender() {
+        updateHeader();
+        (0, market_1.renderMarket)(market, marketState, state);
+        (0, inventory_1.renderInventory)(inventory, state);
+        (0, actions_1.renderActionBar)(actions, mode);
+        screen.render();
+    }
+    async function applyResult(result) {
+        state = { ...result.newState, id, name: user.handle ?? id };
+        try {
+            marketState = await server.getMarket(id);
+        }
+        catch { /* ignore if out of game */ }
+        for (const ev of result.events) {
+            (0, events_1.pushEvent)(events, ev.msg || `Event #${ev.code}`);
+        }
+        if (state.inCombat && mode !== 'combat') {
+            mode = 'combat';
+            unbindCombat = (0, combat_1.bindCombatKeys)(screen, {
+                onFight: async () => {
+                    const r = await server.fight(id);
+                    await applyResult(r);
+                    fullRender();
+                },
+                onRun: async (loc) => {
+                    if (unbindCombat) {
+                        unbindCombat();
+                        unbindCombat = null;
+                    }
+                    mode = 'normal';
+                    const r = await server.runFrom(id, loc);
+                    await applyResult(r);
+                    fullRender();
+                },
+                onSurrender: async () => {
+                    if (unbindCombat) {
+                        unbindCombat();
+                        unbindCombat = null;
+                    }
+                    mode = 'normal';
+                    const r = await server.surrender(id);
+                    await applyResult(r);
+                    fullRender();
+                },
+            });
+        }
+        else if (!state.inCombat && mode === 'combat') {
+            if (unbindCombat) {
+                unbindCombat();
+                unbindCombat = null;
+            }
+            mode = 'normal';
+        }
+        if (result.questions.length > 0 && mode !== 'combat') {
+            mode = 'question';
+            (0, actions_1.renderActionBar)(actions, 'question');
+            screen.render();
+            (0, actions_1.showQuestionOverlay)(screen, result.questions[0], async (answer) => {
+                const r = await server.handleAnswer(id, answer);
+                await applyResult(r);
+                fullRender();
+            });
+            return;
+        }
+        fullRender();
+    }
+    /* -- Server event subscriptions --------------------------------- */
+    server.on('state:' + id, async (newState) => {
+        state = { ...newState, id, name: user.handle ?? id };
+        try {
+            marketState = await server.getMarket(id);
+        }
+        catch { /* ignore */ }
+        fullRender();
+    });
+    /* -- Update presence subscription when location changes --------- */
+    let lastLocation = -1;
+    function updatePresenceSub(location) {
+        if (location === lastLocation)
+            return;
+        if (lastLocation >= 0)
+            server.removeAllListeners('presence:' + lastLocation);
+        server.on('presence:' + location, (ps) => {
+            (0, players_1.renderPlayers)(players, ps, id);
+            screen.render();
+        });
+        lastLocation = location;
+    }
+    /* -- Keyboard bindings ------------------------------------------ */
+    screen.key(['b', 'B'], () => {
+        if (mode !== 'normal')
+            return;
+        (0, actions_1.showBuyOverlay)(screen, marketState, state, async (drug, amt) => {
+            const r = await server.buyDrug(id, drug, amt);
+            await applyResult(r);
+            fullRender();
+        }, () => fullRender());
+    });
+    screen.key(['s', 'S'], () => {
+        if (mode !== 'normal')
+            return;
+        (0, actions_1.showSellOverlay)(screen, state, async (drug, amt) => {
+            const r = await server.sellDrug(id, drug, amt);
+            await applyResult(r);
+            fullRender();
+        }, () => fullRender());
+    });
+    screen.key(['j', 'J'], () => {
+        if (mode !== 'normal')
+            return;
+        (0, actions_1.showJetOverlay)(screen, state.location, async (loc) => {
+            const r = await server.jetTo(id, loc);
+            updatePresenceSub(r.newState.location);
+            await applyResult(r);
+            fullRender();
+        }, () => fullRender());
+    });
+    screen.key(['h', 'H'], async () => {
+        if (mode !== 'normal')
+            return;
+        (0, actions_1.showHighScores)(screen, await server.getHighScores(), () => fullRender());
+    });
+    screen.key(['q', 'Q'], async () => {
+        await server.leaveGame(id);
+        inputManager.disable();
+        screen.destroy();
+    });
+    /* -- Boot ------------------------------------------------------- */
+    inputManager.enable();
+    state = await server.joinGame(id, user.handle ?? id);
+    state = { ...state, id, name: user.handle ?? id };
+    marketState = await server.getMarket(id);
+    updatePresenceSub(state.location);
+    (0, events_1.pushEvent)(events, `{bold}Welcome to DOPEWARS, ${user.handle ?? id}!{/}`);
+    (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString()}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
+    (0, events_1.pushEvent)(events, `You are in {cyan-fg}${LOCATION_NAMES[state.location] ?? 'Brooklyn'}{/}.`);
+    fullRender();
+    await new Promise((resolve) => {
+        screen.key(['q', 'Q'], () => resolve());
+        screen.on('destroy', () => resolve());
+    });
+}
+//# sourceMappingURL=app.js.map

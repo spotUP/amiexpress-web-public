@@ -1,0 +1,1 @@
+{"version":3,"file":"combat.d.ts","sourceRoot":"","sources":["../../../src/ui/combat.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,cAAc;IAC7B,OAAO,EAAM,MAAM,IAAI,CAAC;IACxB,KAAK,EAAQ,CAAC,QAAQ,EAAE,MAAM,KAAK,IAAI,CAAC;IACxC,WAAW,EAAE,MAAM,IAAI,CAAC;CACzB;AAOD,wBAAgB,cAAc,CAAC,MAAM,EAAE,GAAG,EAAE,QAAQ,EAAE,cAAc,GAAG,MAAM,IAAI,CAmChF"}

@@ -1,0 +1,37 @@
+import { EventEmitter } from 'events';
+import { ActionResult, PlayerState, MarketState, PlayerSummary, HighScore, DopewarsConfig } from './types';
+export declare class DopewarsServer extends EventEmitter {
+    private wasm;
+    private db;
+    private notifier;
+    private cfg;
+    private doorDir;
+    private playerIndex;
+    private pendingEvents;
+    private pendingQuestions;
+    private initialised;
+    static getInstance(): DopewarsServer;
+    init(doorDir: string, cfg: DopewarsConfig): Promise<void>;
+    shutdown(): Promise<void>;
+    joinGame(id: string, name: string): Promise<PlayerState>;
+    leaveGame(id: string): Promise<void>;
+    getActivePlayers(): Promise<PlayerSummary[]>;
+    getPlayersAt(location: number): Promise<PlayerSummary[]>;
+    getHighScores(): Promise<HighScore[]>;
+    private getIdx;
+    private beginAction;
+    private finishAction;
+    buyDrug(id: string, drugIndex: number, amount: number): Promise<ActionResult>;
+    sellDrug(id: string, drugIndex: number, amount: number): Promise<ActionResult>;
+    jetTo(id: string, location: number): Promise<ActionResult>;
+    handleAnswer(id: string, answer: string): Promise<ActionResult>;
+    spy(id: string, targetId: string): Promise<ActionResult>;
+    sendTip(id: string, targetId: string): Promise<ActionResult>;
+    fight(id: string): Promise<ActionResult>;
+    runFrom(id: string, toLocation: number): Promise<ActionResult>;
+    surrender(id: string): Promise<ActionResult>;
+    endGame(id: string): Promise<ActionResult>;
+    getPlayerState(id: string): Promise<PlayerState>;
+    getMarket(id: string): Promise<MarketState>;
+}
+//# sourceMappingURL=server.d.ts.map
