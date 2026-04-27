@@ -97,5 +97,6 @@ AFL_BM1.LHA  N  14485  01-21-26       ____________________________
                                  |         PRESENTS A NEW /X-TOOL           |
                                  |    BYTE MONKEY v0.1 - (W) BY ZERO/AFL    |
                                  +------------------------------------------+
-AFL_BOOT.LHA N  24212  01-21-26  fail
+AFL_BOOT.LHA N  24212  01-21-26  test
+                                  
                                  [44;39m<<         sysop:nuke this shit!         >>[0mBK
