@@ -26,6 +26,7 @@ export class VoiceCapture extends EventEmitter {
   private mediaStream: MediaStream | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private audioContext: AudioContext | null = null;
+  private playbackContext: AudioContext | null = null;
   private analyserNode: AnalyserNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private levelInterval: ReturnType<typeof setInterval> | null = null;
@@ -108,11 +109,11 @@ export class VoiceCapture extends EventEmitter {
           void ev.data.arrayBuffer().then((buf) => this.door.emit('audio:data', buf));
         }
       };
-      this.mediaRecorder.start(o.chunkIntervalMs);
       this.mediaRecorder.onerror = (ev: Event) => {
         const msg = (ev as any)?.error?.message ?? 'MediaRecorder error';
         this.emit('error', new Error(msg));
       };
+      this.mediaRecorder.start(o.chunkIntervalMs);
       this.startLevelMonitor();
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
@@ -121,14 +122,24 @@ export class VoiceCapture extends EventEmitter {
 
   stop(): void {
     if (this.levelInterval) { clearInterval(this.levelInterval); this.levelInterval = null; }
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') this.mediaRecorder.stop();
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.ondataavailable = null;
+      this.mediaRecorder.stop();
+    }
     this.mediaRecorder = null;
+    this.sourceNode?.disconnect();
+    this.sourceNode = null;
     this.mediaStream?.getTracks().forEach(t => t.stop());
     this.mediaStream = null;
-    if (this.audioContext) { void this.audioContext.close(); this.audioContext = null; }
-    this.analyserNode = null;
-    this.sourceNode = null;
+    for (const { gainNode, source } of this.audioPlayers.values()) {
+      try { source?.stop(); } catch { /* already stopped */ }
+      gainNode.disconnect();
+    }
     this.audioPlayers.clear();
+    if (this.audioContext) { void this.audioContext.close(); this.audioContext = null; }
+    if (this.playbackContext) { void this.playbackContext.close(); this.playbackContext = null; }
+    this.analyserNode = null;
+    this.lastSpeaking = false;
   }
 
   mute(): void {
@@ -172,20 +183,20 @@ export class VoiceCapture extends EventEmitter {
   }
 
   private async playChunk(userId: string | number, chunk: ArrayBuffer): Promise<void> {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
+    if (!this.playbackContext) {
+      this.playbackContext = new AudioContext();
     }
     try {
       let p = this.audioPlayers.get(userId);
       if (!p) {
-        const gainNode = this.audioContext.createGain();
+        const gainNode = this.playbackContext.createGain();
         gainNode.gain.value = 0.8;
-        gainNode.connect(this.audioContext.destination);
+        gainNode.connect(this.playbackContext.destination);
         p = { gainNode, source: null };
         this.audioPlayers.set(userId, p);
       }
-      const decoded = await this.audioContext.decodeAudioData(chunk.slice(0));
-      const src = this.audioContext.createBufferSource();
+      const decoded = await this.playbackContext.decodeAudioData(chunk.slice(0)); // slice(0) prevents neutering of original buffer
+      const src = this.playbackContext.createBufferSource();
       src.buffer = decoded;
       src.connect(p.gainNode);
       src.start(0);
