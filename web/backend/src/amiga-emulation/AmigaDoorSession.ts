@@ -731,29 +731,17 @@ debugLog(
           );
           this.sharedState.libraryTraps.installAEDoorVectors();
 
-          // CRITICAL: AEDoorPort<N> is created dynamically by createDynamicAEDoorPort
-          // just before this handler fires (on the door's own OpenLibrary call, openCount>1).
-          // AquaScan.020 scans ExecBase's port list directly and calls GetMsg(AEDoorPort)
-          // right after OpenLibrary, expecting a BBS-presence startup message. We send
-          // INIT/STAT to the actual port here (not just pr_MsgPort) and mark the messages
-          // as "replied" so pollXIMMessages()'s skipReplies polling won't consume them.
-          if (this.messageHandler && this.sharedState.execLibrary && this.emulator) {
-            const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
-            const portName = `AEDoorPort${nodeId}`;
-            const tempAddr = 0x600;
-            this.emulator!.writeString(tempAddr, portName);
-            const aePortAddr = this.sharedState.execLibrary.findPort(tempAddr);
-            if (aePortAddr !== 0) {
-console.log(`[AmigaDoorSession] AEDoor.library opened, sending INIT/STAT to ${portName} at 0x${aePortAddr.toString(16)}`);
-              this.messageHandler.sendStartupToAEDoorPort(aePortAddr);
-              // Mark messages as "replied" so skipReplies polling skips them
-              const port = (this.sharedState.execLibrary as any).messagePorts?.get(aePortAddr);
-              if (port && port.messages) {
-                for (const msgAddr of port.messages) {
-                  this.sharedState.execLibrary.markMessageAsReplied(msgAddr);
-                }
-              }
-            }
+          // CRITICAL: Send INIT/STAT to door's pr_MsgPort when library opens
+          // AquaScan (and similar doors) do WaitPort on pr_MsgPort BEFORE calling CreateComm,
+          // expecting startup messages to determine BBS vs CLI mode.
+          // Previously we sent these proactively on first poll (too early) or in CreateComm (too late).
+          // express.e:4352-4369 shows BBS waits for door to send JH_REGISTER, but doors like
+          // AquaScan use pr_MsgPort messages for BBS mode detection before sending JH_REGISTER.
+          if (this.messageHandler && !this.sharedState.sentInitialMessage) {
+debugLog(
+              "[AmigaDoorSession] Sending INIT/STAT messages after AEDoor.library open"
+            );
+            this.sendStartupMessage();
           }
         }
         if (name.toLowerCase() === "icon.library") {

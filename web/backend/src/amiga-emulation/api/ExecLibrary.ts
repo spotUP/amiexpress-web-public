@@ -162,12 +162,6 @@ export class ExecLibrary {
   private lastWaitPortReturnAddr: number = 0;
   private waitPortReturnCallback: ((addr: number) => void) | null = null;
 
-  // Callback fired the FIRST time FindPort("AEDoorPort<N>") succeeds.
-  // AmigaDoorSession uses this to place startup messages on the port before
-  // pollXIMMessages() has a chance to consume them.
-  private onAEDoorPortFoundCallback: ((portAddr: number) => void) | null = null;
-  private aeDoorPortFoundFired: boolean = false;
-
   // Library loader for real native libraries
   private libraryLoader: any = null;
   private useNativeLibraries: boolean = false;
@@ -417,11 +411,6 @@ debugLog(
 
   setWaitPortReturnCallback(callback: (addr: number) => void): void {
     this.waitPortReturnCallback = callback;
-  }
-
-  setOnAEDoorPortFoundCallback(callback: (portAddr: number) => void): void {
-    this.onAEDoorPortFoundCallback = callback;
-    this.aeDoorPortFoundFired = false;
   }
 
   setDoorPortAddress(addr: number): void {
@@ -1800,18 +1789,6 @@ debugLog(
         );
         const portResult = this.findPort(portNameAddr);
         this.emulator.setRegister(0, portResult);
-        // CRITICAL: Fire once when door first finds AEDoorPort<N>.
-        // AmigaDoorSession puts startup INIT/STAT messages on the port HERE so the
-        // door's immediate next GetMsg call sees them before pollXIMMessages() runs.
-        if (
-          portResult !== 0 &&
-          !this.aeDoorPortFoundFired &&
-          portNameStr.toLowerCase().startsWith('aedoorport') &&
-          this.onAEDoorPortFoundCallback
-        ) {
-          this.aeDoorPortFoundFired = true;
-          this.onAEDoorPortFoundCallback(portResult);
-        }
         return true;
 
       case -300: // _LVOSetTaskPri - CORRECTED from -282 (off by 18!)
