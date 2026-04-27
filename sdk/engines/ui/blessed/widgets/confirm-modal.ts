@@ -63,6 +63,11 @@ export class ConfirmModal extends Box {
     const originalParent = options.parent;
     const useOverlay = options.overlay !== false;
     const borderColor = options.borderColor || 'cyan';
+    // Accept content as an alias for message so callers who pass the raw Box
+    // property by mistake still get their text displayed correctly.
+    if (!options.message && typeof (options as any).content === 'string') {
+      options = { ...options, message: (options as any).content, content: undefined };
+    }
 
     super({
       ...options,
