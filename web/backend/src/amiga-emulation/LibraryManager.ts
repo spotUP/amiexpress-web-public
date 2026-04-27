@@ -643,6 +643,12 @@ debugLog("[LibraryManager] Installing library call traps...");
     // The allocator continues forward naturally from where ports left off
 
     this.libraryTraps.installExecVectors();
+    // CRITICAL: Sync exec trap addresses to MOIRA immediately after installation.
+    // Exec traps (AllocMem, FindTask, etc.) fire in the SAS/C startup before
+    // dos.library is opened, so they must be in MOIRA's WASM trap set from the start.
+    // Previously syncTrapAddressesToMoira() was only called on dos.library open,
+    // causing the WASM batch to run straight through exec traps and hit ROM handlers.
+    this.libraryTraps.syncTrapAddressesToMoira();
 
     this.libraryTraps.setDOSLibrary(this.dosLibrary);
     this.libraryTraps.setAEDoorLibrary(this.aedoorLibrary);

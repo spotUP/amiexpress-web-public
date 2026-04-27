@@ -574,16 +574,13 @@ console.warn(`[DoorLoader] Segment types: ${hunkFile.segments.map((s: any) => s.
         a4Value = codeSegment.address + 0x7FFE;
 debugLog(`[DoorLoader] Single hunk: setting A4 relative to CODE segment: 0x${a4Value.toString(16)}`);
 
-        // Allocate BSS after CODE segment
-        // SAS/C programs typically need 64KB-128KB for BSS (globals, static data, heap)
-        const bssSize = 0x20000; // 128KB - generous allocation for safety
-        const bssBase = codeSegment.address + codeSegment.size;
-
-        // Clear BSS to zero (critical for uninitialized globals)
-debugLog(`[DoorLoader] Allocating BSS: base=0x${bssBase.toString(16)}, size=0x${bssSize.toString(16)} (${bssSize} bytes)`);
-        for (let i = 0; i < bssSize; i++) {
-          this.emulator.writeMemory(bssBase + i, 0);
-        }
+        // NOTE: Do NOT pre-zero a synthetic BSS here.
+        // SAS/C startup allocates its own BSS via AllocMem(size, MEMF_CLEAR) at runtime.
+        // Pre-zeroing 128KB after the code segment overlaps with the task struct
+        // (which allocateDoorTask places at code_end + 0x1000 + alignment), zeroing
+        // pr_CLI and other fields that DoorLoader already set up correctly above.
+        // The task struct fields written by allocateDoorTask/writeTaskToMemory and
+        // DoorLoader.setupCpuRegisters must survive intact until the CPU starts.
       } else {
 console.error(`[DoorLoader] ERROR: No CODE segment found! Cannot allocate BSS.`);
         a4Value = 0;
