@@ -44,7 +44,7 @@ exports.metadata = {
     version: '1.0.0',
     description: 'Jamaican drug trading game — buy low, sell high, survive Babylon',
     author: 'AmiExpress-Web',
-    command: 'DOPE',
+    command: 'GANJA',
 };
 const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
 door.onStart(async (ctx) => {

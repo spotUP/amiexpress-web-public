@@ -1,0 +1,8 @@
+BBSCMD=GANJA
+TYPE=TS
+LOCATION=Doors/dopewars
+DESCRIPTION=Jamaican drug trading game - buy low, sell high, survive Babylon
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games
