@@ -120,8 +120,9 @@ async function checkFileConfScan(conf: number, userId: string, msgBaseId: number
     // express.e:604 - IF (cb.handle[0] AND FILE_SCAN_MASK)<>0 THEN res:=TRUE ELSE res:=FALSE
     return (scanFlags & FILE_SCAN_MASK) !== 0;
   } catch (err) {
-    // express.e:606 - ELSE res:=TRUE (default to TRUE if no confBase)
-    return true;
+    // express.e:606 - ELSE res:=TRUE when confBase missing, but we default FALSE
+    // WEB_: safer default — only scan files when explicitly enabled (SHOW_NEW_FILES or FILE_SCAN_MASK set)
+    return false;
   }
 }
 

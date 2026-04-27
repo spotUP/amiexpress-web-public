@@ -687,6 +687,22 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
+        // express.e:28075 - IF (checkToolTypeExists(TOOLTYPE_NODE,node,'MAILSCAN_PROMPT'))
+        const nodeInfoPath = path.join(config.get('dataDir'), `Node${session.nodeId}.info`);
+        let hasMailscanPrompt = false;
+        try {
+          const tooltypes = parseInfoFile(nodeInfoPath);
+          hasMailscanPrompt = tooltypes.has('MAILSCAN_PROMPT');
+        } catch (_e) {
+          // no node info file — no prompt
+        }
+        if (hasMailscanPrompt) {
+          displayFlowLog('CONF_SCAN: MAILSCAN_PROMPT tooltype found, showing prompt');
+          // express.e:28076 aePuts('\b\n[0mScan for Mail ') then yesNo(1) → (Y/n)?
+          emitText(socket, '\r\n\x1b[0mScan for Mail \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');
+          session.subState = LoggedOnSubState.MAILSCAN_PROMPT_INPUT;
+          return;
+        }
         displayFlowLog('CONF_SCAN: performing conference scan');
         const { performConferenceScan } = require('./message/message-scan.handler');
         await performConferenceScan(socket, session);
@@ -886,7 +902,33 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   ]);
 
   if (messageSubStates.has(session.subState as string)) {
+    const prevMessageSubState = session.subState;
     await handleMessageEntryInput(socket, session, data);
+    // express.e yesNo()/abort/save all return to the menu immediately — no extra keypress needed.
+    // If the handler left us in a display-flow state (e.g. DISPLAY_MENU after abort Y or save),
+    // advance now so the menu appears without requiring the user to press an extra key.
+    if (prevMessageSubState !== session.subState && isDisplayFlowState(session.subState)) {
+      await advanceDisplayFlow(socket, session);
+    }
+    return;
+  }
+
+  // express.e:28075-28080 - MAILSCAN_PROMPT yesNo(1): Y/Enter=yes (scan), N=no (skip), loop on unknown
+  if (session.subState === LoggedOnSubState.MAILSCAN_PROMPT_INPUT) {
+    const ch = (data[0] || '').toUpperCase();
+    if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+      return; // loop — yesNo(1) ignores unknown chars
+    }
+    const doScan = (ch !== 'N'); // default yes: Y or Enter = scan
+    emitText(socket, doScan ? 'Yes\r\n' : 'No\r\n');
+    if (doScan) {
+      // express.e:28082-28085 — mscan=TRUE: show "Scanning conferences..." and do scan
+      const { performConferenceScan } = require('./message/message-scan.handler');
+      await performConferenceScan(socket, session);
+      session.menuPause = true;
+    }
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    await advanceDisplayFlow(socket, session);
     return;
   }
 
@@ -2203,32 +2245,14 @@ console.log(' In file area selection state');
       return;
     }
 
-    // Blank line - start transfer (express.e:17673)
+    // Blank line — exit filename loop (express.e:17673-17675)
+    // express.e: brk=(StrLen(str)=0); IF(brk) THEN aePuts('\b\n'); EXIT brk
+    // Then after ENDLOOP: aePuts('\b\n') — blank line before Okay prompt (line 17762)
     if (input === '') {
-      emitText(socket, '\r\n');
-
-      // Check if any files were queued
-      if (!session.tempData?.uploadBatch || session.tempData.uploadBatch.length === 0) {
-        emitText(socket, 'No files queued for upload.\r\n');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-        return;
-      }
-
-      // Start transferring first file
-      session.tempData.currentUploadIndex = 0;
-      const firstFile = session.tempData.uploadBatch[0];
-
-      socket.emit('show-file-upload', {
-        accept: '*/*',
-        maxSize: 10 * 1024 * 1024, // 10MB max
-        uploadUrl: '/api/upload',
-        fieldName: 'file',
-        expectedFilename: firstFile.filename
-      });
-
-      session.subState = LoggedOnSubState.FILES_UPLOAD;
+      emitText(socket, '\r\n');  // echo of blank line (express.e:17674)
+      // express.e:17762-17769: blank line then Okay prompt (single-char read)
+      emitText(socket, '\r\nOkay:   (Enter) to Start, (G)oodbye after transfer, (A)bort? ');
+      session.subState = LoggedOnSubState.UPLOAD_OKAY_CONFIRM;
       return;
     }
 
@@ -2391,6 +2415,28 @@ console.log(' In file upload state - canceling upload');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
+    return;
+  }
+
+  // Handle upload "Okay:" confirm — express.e:17763-17796 (single-char read)
+  // Options: Enter=start transfer, G=goodbye after, A=abort; loop on anything else
+  if (session.subState === LoggedOnSubState.UPLOAD_OKAY_CONFIRM) {
+    const ch = data[0] || '';
+    if (ch === 'A' || ch === 'a') {
+      // express.e:17781-17783: aePuts('Abort!\b\n\b\n'); RETURN RESULT_FAILURE
+      emitText(socket, 'Abort!\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+    } else if (ch === 'G' || ch === 'g') {
+      // express.e:17791-17793: aePuts('Goodbye!\b\n\b\n'); RETURN 2 (goodbye after transfer)
+      emitText(socket, 'Goodbye!\r\n\r\n');
+      startBatchUploadTransfer(socket, session, true);
+    } else if (ch === '\r' || ch === '\n' || ch === '') {
+      // express.e:17794-17796: aePuts('\b\n\b\n') then fall through to transfer
+      emitText(socket, '\r\n\r\n');
+      startBatchUploadTransfer(socket, session, false);
+    }
+    // All other chars: loop (express.e REPEAT...UNTIL)
     return;
   }
 
@@ -3632,6 +3678,36 @@ console.log('=== handleCommand end ===\n');
     }
   }
 console.log('=== handleCommand end ===\n');
+}
+
+// express.e:17794+ — start the actual batch upload transfer after Okay confirm
+function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter: boolean): void {
+  const batch = session.tempData?.uploadBatch || [];
+  if (batch.length === 0) {
+    // Nothing queued — start Zmodem receive with no expected files (user can send any file)
+    socket.emit('show-file-upload', {
+      accept: '*/*',
+      maxSize: 100 * 1024 * 1024,
+      uploadUrl: '/api/upload',
+      fieldName: 'file',
+      multiple: true,
+      goodbyeAfter,
+    });
+    session.subState = LoggedOnSubState.FILES_UPLOAD;
+    return;
+  }
+  session.tempData.currentUploadIndex = 0;
+  session.tempData.goodbyeAfterTransfer = goodbyeAfter;
+  socket.emit('show-file-upload', {
+    accept: '*/*',
+    maxSize: 100 * 1024 * 1024,
+    uploadUrl: '/api/upload',
+    fieldName: 'file',
+    multiple: true,
+    expectedFilenames: batch.map((f: any) => f.filename),
+    goodbyeAfter,
+  });
+  session.subState = LoggedOnSubState.FILES_UPLOAD;
 }
 
 // Command Priority System - Express.e:28228-28282

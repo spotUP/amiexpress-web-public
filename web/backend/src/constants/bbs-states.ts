@@ -23,6 +23,7 @@ export enum LoggedOnSubState {
   EXEC_QUICKNEW = 'exec_quicknew',
   DISPLAY_PAGED_SCREEN = 'display_paged_screen',
   CONF_SCAN = 'conf_scan',
+  MAILSCAN_PROMPT_INPUT = 'mailscan_prompt_input',  // express.e:28075 - MAILSCAN_PROMPT tooltype: "Scan for Mail (Y/n)?"
   DISPLAY_CONF_BULL = 'display_conf_bull',
   AUTO_REJOIN = 'auto_rejoin',  // express.e:5066-5088 - auto-rejoin with S stats
   LOGOFF = 'logoff',
@@ -46,6 +47,7 @@ export enum LoggedOnSubState {
   FILES_UPLOAD = 'files_upload',
   UPLOAD_FILENAME_INPUT = 'upload_filename_input',
   UPLOAD_DESC_INPUT = 'upload_desc_input',
+  UPLOAD_OKAY_CONFIRM = 'upload_okay_confirm',    // express.e:17763-17796 "Okay: (Enter)/G/A"
   FILE_LIST_DIR_INPUT = 'file_list_dir_input',  // F command directory input
   FLAG_INPUT = 'flag_input',                    // A command flag input
   FLAG_CLEAR_INPUT = 'flag_clear_input',        // A command clear flag input
