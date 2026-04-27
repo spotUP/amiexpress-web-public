@@ -75,4 +75,14 @@ void ReleaseLock(FILE *fp);
 #define WIFEXITED(stat_val) (((stat_val) & 255) == 0)
 #endif
 
+/* WASM build stubs for features not compiled into the WASM module */
+#ifdef __EMSCRIPTEN__
+#include "glib-stub.h"
+static inline void WantUTF8Errors(gboolean want) { (void)want; }
+static inline void SoundInit(void) {}
+static inline void SoundClose(void) {}
+struct CMDLINE;
+static inline void AIPlayerLoop(struct CMDLINE *cmdline) { (void)cmdline; }
+#endif /* __EMSCRIPTEN__ */
+
 #endif /* __DP_UTIL_H__ */

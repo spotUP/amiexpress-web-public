@@ -303,6 +303,89 @@ static inline void g_scanner_unexp_token(GScanner *s, GTokenType t,
 /* g_slist_next macro */
 #define g_slist_next(l) ((l) ? (l)->next : NULL)
 
+/* g_date_free / g_date_new */
+static inline void g_date_free(GDate *d) { free(d); }
+static inline GDate* g_date_new(void) { return (GDate*)calloc(1, sizeof(GDate)); }
+
+/* g_string_prepend_c / g_string_prepend */
+static inline GString* g_string_prepend_c(GString *s, gchar c) {
+  gsize newlen = s->len + 1;
+  gchar *newstr = (gchar*)malloc(newlen + 1);
+  newstr[0] = c;
+  memcpy(newstr + 1, s->str, s->len + 1);
+  free(s->str);
+  s->str = newstr;
+  s->len = newlen;
+  s->allocated_len = newlen + 1;
+  return s;
+}
+static inline GString* g_string_prepend(GString *s, const gchar *val) {
+  gsize vlen = strlen(val);
+  gsize newlen = s->len + vlen;
+  gchar *newstr = (gchar*)malloc(newlen + 1);
+  memcpy(newstr, val, vlen);
+  memcpy(newstr + vlen, s->str, s->len + 1);
+  free(s->str);
+  s->str = newstr;
+  s->len = newlen;
+  s->allocated_len = newlen + 1;
+  return s;
+}
+
+/* g_string_printf — assign formatted string to GString */
+static inline GString* g_string_printf(GString *s, const gchar *fmt, ...) {
+  char buf[4096]; va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
+  free(s->str); s->str = strdup(buf); s->len = strlen(buf); s->allocated_len = s->len + 1; return s;
+}
+
+/* g_string_erase — remove len bytes starting at pos */
+static inline GString* g_string_erase(GString *s, gssize pos, gssize len) {
+  if (pos < 0 || (gsize)pos >= s->len) return s;
+  if (len < 0 || (gsize)(pos + len) > s->len) len = (gssize)(s->len - (gsize)pos);
+  memmove(s->str + pos, s->str + pos + len, s->len - (gsize)pos - (gsize)len + 1);
+  s->len -= (gsize)len;
+  return s;
+}
+
+/* g_string_insert — insert val at position pos */
+static inline GString* g_string_insert(GString *s, gssize pos, const gchar *val) {
+  gsize vlen = strlen(val);
+  gsize ipos = (pos < 0 || (gsize)pos > s->len) ? s->len : (gsize)pos;
+  gchar *newstr = (gchar*)malloc(s->len + vlen + 1);
+  memcpy(newstr, s->str, ipos);
+  memcpy(newstr + ipos, val, vlen);
+  memcpy(newstr + ipos + vlen, s->str + ipos, s->len - ipos + 1);
+  free(s->str);
+  s->str = newstr;
+  s->len += vlen;
+  s->allocated_len = s->len + 1;
+  return s;
+}
+
+/* g_scanner_warn */
+static inline void g_scanner_warn(GScanner *s, const gchar *fmt, ...) { (void)s; (void)fmt; }
+
+/* g_message */
+static inline void g_message(const gchar *fmt, ...) {
+  va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap); fprintf(stderr, "\n");
+}
+
+/* g_ptr_array_index macro */
+#define g_ptr_array_index(arr, i) ((arr)->pdata[i])
+
+/* g_ptr_array_remove — remove first occurrence of val */
+static inline gboolean g_ptr_array_remove(GPtrArray *a, gpointer val) {
+  guint i;
+  for (i = 0; i < a->len; i++) {
+    if (a->pdata[i] == val) {
+      memmove(&a->pdata[i], &a->pdata[i+1], (a->len - i - 1) * sizeof(gpointer));
+      a->len--;
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 /* g_string_append_printf */
 static inline GString* g_string_append_printf(GString *s, const gchar *fmt, ...) {
   char buf[2048]; va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
