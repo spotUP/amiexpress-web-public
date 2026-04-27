@@ -300,7 +300,7 @@ async function createApp(session) {
         const door = selectedDoor();
         if (!door)
             return;
-        new blessed_1.ConfirmModal({
+        const confirmDeleteModal = new blessed_1.ConfirmModal({
             parent: screen,
             title: ' Delete Door ',
             content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
@@ -335,7 +335,7 @@ async function createApp(session) {
             },
             onCancel: () => { doorList.focus(); screen.render(); },
         });
-        screen.render();
+        confirmDeleteModal.display();
     });
     await new Promise(resolve => { screen.on('destroy', resolve); });
 }

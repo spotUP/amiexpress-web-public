@@ -346,7 +346,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     const door = selectedDoor();
     if (!door) return;
 
-    new ConfirmModal({
+    const confirmDeleteModal = new ConfirmModal({
       parent: screen,
       title: ' Delete Door ',
       content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}\n  ${door.command}\n\n{red-fg}This cannot be undone.{/red-fg}`,
@@ -379,8 +379,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       },
       onCancel: () => { (doorList as any).focus(); screen.render(); },
     } as any);
-
-    screen.render();
+    confirmDeleteModal.display();
   });
 
   await new Promise<void>(resolve => { screen.on('destroy', resolve); });
