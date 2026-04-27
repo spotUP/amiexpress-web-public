@@ -57,7 +57,7 @@ export function showBuyOverlay(
     width: '100%-2',
     height: Math.min(market.prices.length, 12),
     style: { selected: { bg: 'blue', fg: 'white' } },
-    keys: true, vi: true, mouse: true,
+    keys: true, mouse: true,
     items: market.prices.map(p =>
       `${p.name.padEnd(13)} ${('$' + Math.round(p.price).toLocaleString('en-US')).padStart(9)}`
     ),
@@ -185,7 +185,7 @@ export function showSellOverlay(
     width: '100%-2',
     height: Math.min(carrying.length, 12),
     style: { selected: { bg: 'blue', fg: 'white' } },
-    keys: true, vi: true, mouse: true,
+    keys: true, mouse: true,
     items: carrying.map(d => {
       const name = drugNameMap.get(d.index) ?? `Drug${d.index}`;
       return `${name.padEnd(13)} ${String(d.carried).padStart(4)} units`;
@@ -301,7 +301,7 @@ export function showJetOverlay(
     width: '100%-2',
     height: Math.min(items.length, 12),
     style: { selected: { bg: 'blue', fg: 'white' } },
-    keys: true, vi: true, mouse: true,
+    keys: true, mouse: true,
     items,
   });
 
