@@ -2328,6 +2328,7 @@ export class GrandmasterApp {
     // Clean up AI
     versusAI.destroy();
     versusScreen.cleanup();
+    this.stopVoice();
     this.gameEngine = null;
     this.attackManager = null;
     this.state.currentMode = null;
