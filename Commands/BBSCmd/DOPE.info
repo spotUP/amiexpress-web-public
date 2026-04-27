@@ -1,0 +1,8 @@
+BBSCMD=DOPE
+TYPE=TS
+LOCATION=Doors/dopewars
+DESCRIPTION=Multiplayer drug trading game - buy low, sell high, survive the cops
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games
