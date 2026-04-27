@@ -1178,7 +1178,13 @@ console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', sessio
         const spacePos = commandStr.indexOf(' ');
         const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
         const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
+        // Save subState so any door launched here (68K or TS) can't clobber it.
+        // Door executors set DOOR_RUNNING and may not restore it on early exit.
+        const subStateBeforeInlineCmd = session.subState;
         const result = await processCommand(socket, session, cmdCode, cmdParams);
+        if (session.subState !== subStateBeforeInlineCmd) {
+          session.subState = subStateBeforeInlineCmd;
+        }
 console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
       } else if (code.startsWith('SS_') || code.startsWith('2S')) {
         // express.e:5496-5504 - displayFile()
