@@ -168,6 +168,8 @@ export class GrandmasterApp {
   private attackManager: AttackManager | null = null;
   private multiplayerServer: MultiplayerServer;
   private currentScreen: 'menu' | 'game' | 'lobby' | 'settings' | 'stats' = 'menu';
+  private _voiceRoom: string | null = null;
+  private _voiceSocketHandlers: Array<[string, (...args: any[]) => void]> = [];
 
   constructor(session: DoorSession) {
     this.session = session;
@@ -450,6 +452,58 @@ export class GrandmasterApp {
   }
 
   /**
+   * Start voice relay for a VS lobby / game session.
+   * Joins the socket to a named room and relays audio:data / voice:speaking
+   * events between all peers in that room.
+   */
+  private startVoice(matchId: string): void {
+    const socket = (this.session as any).bbsSession?.socket;
+    if (!socket) return;
+
+    const roomName = `voice:${matchId}`;
+    this._voiceRoom = roomName;
+    socket.join(roomName);
+
+    const onAudioData = (chunk: ArrayBuffer) => {
+      socket.to(roomName).emit('audio:data', {
+        userId: this.session.user?.id ?? 'unknown',
+        chunk,
+      });
+    };
+    const onSpeaking = (data: { speaking: boolean }) => {
+      socket.to(roomName).emit('voice:speaking', {
+        userId: this.session.user?.id ?? 'unknown',
+        speaking: data.speaking,
+      });
+    };
+
+    socket.on('audio:data', onAudioData);
+    socket.on('voice:speaking', onSpeaking);
+    this._voiceSocketHandlers = [
+      ['audio:data', onAudioData],
+      ['voice:speaking', onSpeaking],
+    ];
+
+    // Tell the browser to start the mic
+    void (this.session as any).bbsSession?.audio?.startStreaming?.();
+  }
+
+  /**
+   * Stop voice relay and release mic.
+   */
+  private stopVoice(): void {
+    const socket = (this.session as any).bbsSession?.socket;
+    if (socket && this._voiceRoom) {
+      for (const [ev, fn] of this._voiceSocketHandlers) socket.off(ev, fn);
+      socket.leave(this._voiceRoom);
+    }
+    this._voiceRoom = null;
+    this._voiceSocketHandlers = [];
+    // Tell the browser to release the mic
+    void (this.session as any).bbsSession?.audio?.stopStreaming?.();
+  }
+
+  /**
    * Show main menu
    */
   private async showMainMenu(): Promise<void> {
@@ -601,6 +655,11 @@ export class GrandmasterApp {
     this.inputManager.suspend();  // Disable grabKeys so List widgets can receive input
     const nav = createMenuNav(this.session.bbsSession, this.screen);
 
+    // Start voice for the lobby + any subsequent VS game in this session
+    const voiceMatchId = this.network?.getMatchState()?.matchId
+      ?? `lobby-${this.session.user?.id ?? Date.now()}`;
+    this.startVoice(voiceMatchId);
+
     // Check if network is available
     if (!this.network) {
       const errorBox = createBox({
@@ -621,6 +680,7 @@ export class GrandmasterApp {
       await this.waitForKey();
       errorBox.destroy();
       nav.destroy();
+      this.stopVoice();
       return;
     }
 
@@ -680,6 +740,7 @@ export class GrandmasterApp {
 
     if (modeSelection === 3) {
       nav.destroy();
+      this.stopVoice();
       return;  // Back to menu
     }
 
@@ -712,18 +773,21 @@ export class GrandmasterApp {
       console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
     }
 
-    if (result.action === 'start' && result.mode) {
-      // Check if bots were added to the lobby (auto-filled for solo testing)
-      const matchState = this.network?.getMatchState();
-      const hasBots = matchState?.players.some(p => p.isBot) ?? false;
+    if (result.action !== 'start' || !result.mode) {
+      this.stopVoice();
+      return;
+    }
 
-      if (hasBots) {
-        // Route to CPU battle so the bot AI is actually running
-        const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
-        await this.startCpuBattle(botDifficulty as number);
-      } else {
-        await this.startVersusGame(result.mode);
-      }
+    // Check if bots were added to the lobby (auto-filled for solo testing)
+    const matchState = this.network?.getMatchState();
+    const hasBots = matchState?.players.some(p => p.isBot) ?? false;
+
+    if (hasBots) {
+      // Route to CPU battle so the bot AI is actually running
+      const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
+      await this.startCpuBattle(botDifficulty as number);
+    } else {
+      await this.startVersusGame(result.mode);
     }
   }
 
@@ -2184,6 +2248,7 @@ export class GrandmasterApp {
 
     // Clean up
     versusScreen.cleanup();
+    this.stopVoice();
     this.gameEngine = null;
     this.attackManager = null;
     this.state.currentMode = null;
