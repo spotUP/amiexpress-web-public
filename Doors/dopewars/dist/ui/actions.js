@@ -17,7 +17,7 @@ function renderActionBar(box, mode) {
         return;
     }
     if (mode === 'question') {
-        box.setContent('  {yellow-fg}? Answer required — press {bold}[Y]{/}es, {bold}[N]{/}o, or {bold}[ESC]{/}{/}');
+        box.setContent('  Waiting for your answer...');
         return;
     }
     box.setContent('  {bold}[B]{/}uy  {bold}[S]{/}ell  {bold}[J]{/}et  ' +
@@ -196,19 +196,8 @@ function showQuestionOverlay(screen, question, onAnswer) {
     // Dopewars prompts carry a "YN^" or similar protocol prefix before "^" — strip it
     const raw = question.prompt || 'Continue?';
     const displayPrompt = raw.includes('^') ? raw.split('^').slice(1).join('^').trim() : raw.trim();
-    const box = blessed_1.default.box({
-        parent: screen,
-        top: 'center', left: 'center',
-        width: 64, height: 9,
-        border: { type: 'line' },
-        tags: true,
-        style: { border: { fg: 'white' }, fg: 'white', bg: 'blue' },
-        label: ' {bold}? ACTION REQUIRED ?{/} ',
-        keys: true,
-    });
-    box.setContent('\n  {bold}' + displayPrompt + '{/}\n\n' +
-        '  {bold}{green-fg}[Y]{/}{/}es   {bold}{red-fg}[N]{/}{/}o   {bold}[ESC]{/} = No\n\n' +
-        '  {yellow-fg}(answer required before continuing){/}');
+    const box = centeredBox(screen, { width: 62, height: 7, label: ' ACTION REQUIRED ' });
+    box.setContent('\n  ' + displayPrompt + '\n\n  {bold}[Y]{/}es  {bold}[N]{/}o  {bold}[ESC]{/} = No');
     let unbind;
     function cleanup() { unbind(); box.destroy(); screen.render(); }
     const yesFn = () => { cleanup(); onAnswer('y'); };

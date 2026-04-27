@@ -10,7 +10,7 @@ export function renderActionBar(box: any, mode: ActionBarMode): void {
     return;
   }
   if (mode === 'question') {
-    box.setContent('  {yellow-fg}? Answer required — press {bold}[Y]{/}es, {bold}[N]{/}o, or {bold}[ESC]{/}{/}');
+    box.setContent('  Waiting for your answer...');
     return;
   }
   box.setContent(
@@ -236,21 +236,8 @@ export function showQuestionOverlay(
   const raw = question.prompt || 'Continue?';
   const displayPrompt = raw.includes('^') ? raw.split('^').slice(1).join('^').trim() : raw.trim();
 
-  const box = blessed.box({
-    parent: screen,
-    top: 'center', left: 'center',
-    width: 64, height: 9,
-    border: { type: 'line' },
-    tags: true,
-    style: { border: { fg: 'white' }, fg: 'white', bg: 'blue' },
-    label: ' {bold}? ACTION REQUIRED ?{/} ',
-    keys: true,
-  });
-  box.setContent(
-    '\n  {bold}' + displayPrompt + '{/}\n\n' +
-    '  {bold}{green-fg}[Y]{/}{/}es   {bold}{red-fg}[N]{/}{/}o   {bold}[ESC]{/} = No\n\n' +
-    '  {yellow-fg}(answer required before continuing){/}'
-  );
+  const box = centeredBox(screen, { width: 62, height: 7, label: ' ACTION REQUIRED ' });
+  box.setContent('\n  ' + displayPrompt + '\n\n  {bold}[Y]{/}es  {bold}[N]{/}o  {bold}[ESC]{/} = No');
 
   let unbind: () => void;
   function cleanup(): void { unbind(); box.destroy(); screen.render(); }
