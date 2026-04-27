@@ -78,10 +78,16 @@ class FileExplorerOverlay {
         this.screen = opts.screen;
         this.onClose = opts.onClose;
         this.projectRoot = process.cwd();
-        // If doorPath is already absolute use it directly; otherwise resolve from cwd
-        this.doorRoot = path.isAbsolute(opts.doorPath)
+        // Resolve to absolute path, then if it points to a file (e.g. 68K executable) use parent dir
+        const resolved = path.isAbsolute(opts.doorPath)
             ? opts.doorPath
             : path.resolve(this.projectRoot, opts.doorPath);
+        try {
+            this.doorRoot = fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
+        }
+        catch {
+            this.doorRoot = resolved;
+        }
         this.currentDir = this.doorRoot;
         this.buildUI();
         this.loadDirectory(this.doorRoot);

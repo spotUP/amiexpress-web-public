@@ -12,6 +12,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { FileExplorerOverlay } from './FileExplorerOverlay';
+import { InfoEditorOverlay } from './InfoEditorOverlay';
 
 interface DoorSession {
   socket: any;
@@ -146,7 +147,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     parent: screen,
     bottom: 0, left: 0, width: '100%', height: 3,
     tags: true,
-    content: `{center}{yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[T]{/yellow-fg}est  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
+    content: `{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
     style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
     focusable: false,
   } as any);
@@ -264,13 +265,50 @@ export async function createApp(session: DoorSession): Promise<void> {
   (screen as any).key(['f', 'F'], () => {
     const door = selectedDoor();
     if (!door) return;
-    // resolvedPath is the absolute OS path; fall back to command-based relative path
-    const doorPath = door.resolvedPath || `Doors/${door.command}`;
+    // resolvedPath (absolute) > location (relative from LOCATION= tooltype) > fallback
+    const doorPath = door.resolvedPath || door.location || `Doors/${door.command}`;
     new FileExplorerOverlay({
       screen,
       doorPath,
       onClose: () => { (doorList as any).focus(); screen.render(); },
     });
+  });
+
+  (screen as any).key(['i', 'I'], () => {
+    const door = selectedDoor();
+    if (!door) return;
+    new InfoEditorOverlay({
+      screen,
+      command: door.command,
+      bbs,
+      onClose: () => { (doorList as any).focus(); screen.render(); },
+    });
+    screen.render();
+  });
+
+  (screen as any).key(['u', 'U'], async () => {
+    setStatus('Waiting for file selection...');
+    let uploadResult: { path: string; filename: string };
+    try {
+      uploadResult = await (bbs as any).requestArchiveUpload();
+    } catch (err) {
+      setStatus(`Upload cancelled: ${(err as Error).message}`, 'yellow');
+      return;
+    }
+    setStatus(`Installing ${uploadResult.filename}...`);
+    try {
+      const result = await (bbs as any).installDoor(uploadResult.path);
+      if (result.success) {
+        setStatus(`Installed: ${result.command} (${result.type})`, 'green');
+        doors = await fetchDoors(bbs);
+        populateList(0);
+        updateInfoPane();
+      } else {
+        setStatus(`Install failed: ${result.message}`, 'red');
+      }
+    } catch (err) {
+      setStatus(`Error: ${(err as Error).message}`, 'red');
+    }
   });
 
   (screen as any).key(['e', 'E'], async () => {

@@ -8,6 +8,7 @@ exports.createApp = createApp;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
+const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
 const HEADER_PREFIX = `{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}`;
 // --- helpers -----------------------------------------------------------------
 function formatSize(bytes) {
@@ -109,7 +110,7 @@ async function createApp(session) {
         parent: screen,
         bottom: 0, left: 0, width: '100%', height: 3,
         tags: true,
-        content: `{center}{yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[T]{/yellow-fg}est  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
+        content: `{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}nable  {yellow-fg}[Q]{/yellow-fg}uit{/center}`,
         style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
         focusable: false,
     });
@@ -214,13 +215,52 @@ async function createApp(session) {
         const door = selectedDoor();
         if (!door)
             return;
-        // resolvedPath is the absolute OS path; fall back to command-based relative path
-        const doorPath = door.resolvedPath || `Doors/${door.command}`;
+        // resolvedPath (absolute) > location (relative from LOCATION= tooltype) > fallback
+        const doorPath = door.resolvedPath || door.location || `Doors/${door.command}`;
         new FileExplorerOverlay_1.FileExplorerOverlay({
             screen,
             doorPath,
             onClose: () => { doorList.focus(); screen.render(); },
         });
+    });
+    screen.key(['i', 'I'], () => {
+        const door = selectedDoor();
+        if (!door)
+            return;
+        new InfoEditorOverlay_1.InfoEditorOverlay({
+            screen,
+            command: door.command,
+            bbs,
+            onClose: () => { doorList.focus(); screen.render(); },
+        });
+        screen.render();
+    });
+    screen.key(['u', 'U'], async () => {
+        setStatus('Waiting for file selection...');
+        let uploadResult;
+        try {
+            uploadResult = await bbs.requestArchiveUpload();
+        }
+        catch (err) {
+            setStatus(`Upload cancelled: ${err.message}`, 'yellow');
+            return;
+        }
+        setStatus(`Installing ${uploadResult.filename}...`);
+        try {
+            const result = await bbs.installDoor(uploadResult.path);
+            if (result.success) {
+                setStatus(`Installed: ${result.command} (${result.type})`, 'green');
+                doors = await fetchDoors(bbs);
+                populateList(0);
+                updateInfoPane();
+            }
+            else {
+                setStatus(`Install failed: ${result.message}`, 'red');
+            }
+        }
+        catch (err) {
+            setStatus(`Error: ${err.message}`, 'red');
+        }
     });
     screen.key(['e', 'E'], async () => {
         const door = selectedDoor();
