@@ -5,6 +5,7 @@
  */
 
 import { ClientDoor } from '@amiexpress/bbs-door-sdk/client';
+import { VoiceCapture } from '@amiexpress/bbs-door-sdk/client';
 import * as Tone from 'tone';
 
 interface SfxPayload {
@@ -22,6 +23,7 @@ interface MusicPayload {
 
 class GrandmasterAudioClient {
   private door: ClientDoor;
+  private voiceCapture: VoiceCapture | null = null;
   private sfxVolume = 1;
   private musicVolume = 0.8;
   private currentMusic: HTMLAudioElement | null = null;
@@ -81,6 +83,21 @@ class GrandmasterAudioClient {
       }
     };
     on('door-active', doorActiveHandler);
+
+    // Voice chat: VoiceCapture reacts to audio:start-streaming/stop-streaming
+    // automatically via door events. Forward speaking/level state to server.
+    const vc = new VoiceCapture(this.door);
+    this.voiceCapture = vc;
+
+    vc.on('speaking', (speaking: boolean) => {
+      this.door.emit('voice:speaking', { speaking });
+    });
+    vc.on('level', (level: number) => {
+      this.door.emit('voice:level', { level });
+    });
+    vc.on('error', (err: Error) => {
+      console.warn('[GrandmasterAudioClient] Mic error:', err.message);
+    });
   }
 
   cleanup(): void {
@@ -98,6 +115,8 @@ class GrandmasterAudioClient {
     }
     this.tonePlayers.clear();
     this.toneLoads.clear();
+    this.voiceCapture?.destroy();
+    this.voiceCapture = null;
   }
 
   private playSfx(data: SfxPayload): void {
