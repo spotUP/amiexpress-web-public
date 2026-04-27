@@ -44,11 +44,13 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   }
 
   function fullRender(): void {
+    console.log(`[GANJA] fullRender loc=${state?.location} turn=${state?.turn} mode=${mode}`);
     updateHeader();
     renderMarket(market, marketState, state);
     renderInventory(inventory, state, marketState);
     renderActionBar(actions, mode);
     screen.render();
+    console.log('[GANJA] screen.render() done');
   }
 
   async function runAction(fn: () => Promise<void>): Promise<void> {
@@ -61,6 +63,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   }
 
   async function applyResult(result: ActionResult): Promise<void> {
+    console.log(`[GANJA] applyResult ok=${result.ok} events=${result.events.length} questions=${result.questions.length} newLoc=${result.newState?.location}`);
     state = { ...result.newState, id, name: user.username ?? id };
     try { marketState = await server.getMarket(id); } catch { /* ignore if out of game */ }
     updatePresenceSub(state.location);

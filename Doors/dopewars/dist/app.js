@@ -32,11 +32,13 @@ async function createApp(ctx, server) {
             ` | Debt: {red-fg}$${Math.round(state.debt).toLocaleString('en-US')}{/}`);
     }
     function fullRender() {
+        console.log(`[GANJA] fullRender loc=${state?.location} turn=${state?.turn} mode=${mode}`);
         updateHeader();
         (0, market_1.renderMarket)(market, marketState, state);
         (0, inventory_1.renderInventory)(inventory, state, marketState);
         (0, actions_1.renderActionBar)(actions, mode);
         screen.render();
+        console.log('[GANJA] screen.render() done');
     }
     async function runAction(fn) {
         try {
@@ -48,6 +50,7 @@ async function createApp(ctx, server) {
         }
     }
     async function applyResult(result) {
+        console.log(`[GANJA] applyResult ok=${result.ok} events=${result.events.length} questions=${result.questions.length} newLoc=${result.newState?.location}`);
         state = { ...result.newState, id, name: user.username ?? id };
         try {
             marketState = await server.getMarket(id);
