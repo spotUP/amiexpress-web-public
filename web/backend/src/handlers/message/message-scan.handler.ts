@@ -21,6 +21,9 @@ import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { getAllMessageIds, readMessageFile, readMailStats, messageFileExists } from '../../utils/message-file.util';
 import { config } from '../../config';
 import { handleNewFilesCommand } from '../commands/navigation-commands.handler';
+import * as fs from 'fs';
+import * as path from 'path';
+import { dateTimeToDateStamp } from '../../utils/date-time.util';
 
 // Dependencies injected from index.ts
 let _db: any = null;
@@ -468,6 +471,27 @@ console.log('[confScan] All conferences scanned');
 
   // Clear the confScan flag
   session.inConfScan = false;
+
+  // Write current DateStamp to AquaScan.UserData for this user's slot.
+  // AquaScan has no Write() LVO calls — it reads UserData but the BBS must update it.
+  // Slot = (slotNumber - 1) * 16, format = 3 × BE UINT32 (days, minutes, ticks) + 4 pad bytes.
+  if (session.user?.slotNumber && session.user.slotNumber > 0) {
+    try {
+      const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
+      const ds = dateTimeToDateStamp(new Date());
+      const slotOffset = (session.user.slotNumber - 1) * 16;
+      const buf = Buffer.alloc(12);
+      buf.writeUInt32BE(ds.days, 0);
+      buf.writeUInt32BE(ds.minutes, 4);
+      buf.writeUInt32BE(ds.ticks, 8);
+      const fd = fs.openSync(userDataPath, 'r+');
+      fs.writeSync(fd, buf, 0, 12, slotOffset);
+      fs.closeSync(fd);
+console.log(`[confScan] Updated AquaScan.UserData slot ${session.user.slotNumber} → days=${ds.days} min=${ds.minutes} tick=${ds.ticks}`);
+    } catch (err) {
+console.error('[confScan] Failed to update AquaScan.UserData:', err);
+    }
+  }
 
   // express.e:28149 - ENDPROC RESULT_SUCCESS
   return 0; // RESULT_SUCCESS
