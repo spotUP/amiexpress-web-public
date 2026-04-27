@@ -3856,8 +3856,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       await DownloadHandler.handleDownloadCommand(socket, session, params);
       return;
 
-    case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
-      handleDownloadWithStatusCommand(socket, session, params);
+    case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302-28303
+      await handleDownloadWithStatusCommand(socket, session, params);
       return;
 
     case 'DB': // Download Batch - Download all flagged files
