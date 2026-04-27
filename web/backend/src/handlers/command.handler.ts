@@ -636,23 +636,15 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       const toolFlags = getConferenceToolFlags(confNumber);
 
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
-        // express.e:29853-29855 - Quick logon skips bulletins
-        if (session.quickFlag) {
-          displayFlowLog('skip BULL (quickFlag per express.e:29853)');
-          session.subState = LoggedOnSubState.CONF_SCAN;
-          continue;
+        // express.e:28556 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
+        // Note: quickFlag does NOT skip BULL — it only skips LOGON (express.e:29853)
+        displayFlowLog('showing BULL');
+        const shown = await displayScreen(socket, session, 'BULL');
+        if (shown && pauseDisplayFlow(socket, session)) {
+          session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
+          displayFlowLog('pause after BULL');
+          return;
         }
-        // Skip BULL if we just came from QuickNew and need to continue
-        if (!toolFlags.noBulls) {
-          displayFlowLog('showing BULL');
-          const shown = await displayScreen(socket, session, 'BULL');
-          if (shown && pauseDisplayFlow(socket, session)) {
-            session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
-            displayFlowLog('pause after BULL');
-            return;
-          }
-        }
-        displayFlowLog('skip BULL (toolFlags or not shown)');
         session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
         continue;
       }
@@ -668,20 +660,14 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
         // express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
         // SCREEN_NODE_BULL looks in NodeN/Screens/ for BULL.TXT (express.e:6551-6553)
-        if (!toolFlags.noBulls) {
-          displayFlowLog('showing NODE_BULL');
-          // NODE_BULL is optional — a missing file is normal ("no per-node
-          // bulletin configured"), not an error. Silence the sysop alert
-          // that fired after new-user registration completion on 2026-04-24.
-          const shown = await displayScreen(socket, session, 'NODE_BULL', true, /* silent */ true);
-          if (shown && pauseDisplayFlow(socket, session)) {
-            // Advance to next state so we don't loop back to displaying this screen
-            session.subState = LoggedOnSubState.CONF_SCAN;
-            displayFlowLog('pause after NODE_BULL');
-            return;
-          }
+        // Optional — a missing file is normal, silence the sysop alert.
+        displayFlowLog('showing NODE_BULL');
+        const shown = await displayScreen(socket, session, 'NODE_BULL', true, /* silent */ true);
+        if (shown && pauseDisplayFlow(socket, session)) {
+          session.subState = LoggedOnSubState.CONF_SCAN;
+          displayFlowLog('pause after NODE_BULL');
+          return;
         }
-        displayFlowLog('skip NODE_BULL (toolFlags or not shown)');
         session.subState = LoggedOnSubState.CONF_SCAN;
         continue;
       }
