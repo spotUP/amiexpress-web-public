@@ -851,18 +851,20 @@ async function processFileUpload(
     return;
   }
 
-console.log("[processFileUpload] Processing:", data);
-
   // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
   const isRegularFileUpload = uploadContext.uploadMode && uploadContext.fileArea;
 
   // Door archive upload — resolve the BBSApi.requestArchiveUpload() Promise
-  if (session.pendingDoorUpload && data.path) {
-    const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
-    fs.mkdirSync(archivesDir, { recursive: true });
-    const destPath = path.join(archivesDir, path.basename(data.filename));
-    fs.copyFileSync(data.path, destPath);
-    session.pendingDoorUploadCallback?.({ path: destPath, filename: data.filename });
+  if (session.pendingDoorUpload) {
+    if (data.path) {
+      const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
+      fs.mkdirSync(archivesDir, { recursive: true });
+      const destPath = path.join(archivesDir, path.basename(data.filename));
+      fs.copyFileSync(data.path, destPath);
+      session.pendingDoorUploadCallback?.({ path: destPath, filename: data.filename });
+    } else {
+      session.pendingDoorUploadReject?.(new Error('Upload failed: no file path received'));
+    }
     return;
   }
 

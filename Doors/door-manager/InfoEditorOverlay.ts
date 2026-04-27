@@ -83,12 +83,8 @@ export class InfoEditorOverlay {
 
     this.listWidget.key(['enter'], () => { this.editSelected(); });
     this.overlay.key(['C-s'], async () => { await this.save(); });
-    this.overlay.key(['escape'], async () => {
-      if (this.dirty) {
-        await this.save();
-      } else {
-        this.close();
-      }
+    this.overlay.key(['escape'], () => {
+      this.close();
     });
 
     this.listWidget.focus();

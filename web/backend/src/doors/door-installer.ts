@@ -144,6 +144,10 @@ export class DoorInstaller {
       tooltypes.find(t => t.key.toUpperCase() === key)?.value ?? '';
 
     const cmdName = (get('BBSCMD') || get('CMDNAME') || path.basename(infoEntryName, '.info')).toUpperCase();
+    if (!/^[A-Z0-9\-_]{1,20}$/.test(cmdName)) {
+      fs.rmSync(doorDir, { recursive: true, force: true });
+      return { success: false, message: `Invalid command name in archive .info: '${cmdName}'` };
+    }
     const rawLocation = get('LOCATION') || '';
     const execName = rawLocation
       ? rawLocation.replace(/^DOORS:/i, '').replace(/:/g, '/').split('/').pop() || doorName
