@@ -88,6 +88,7 @@ export class ClientDoor extends EventEmitter {
     'audio:data',
     // Voice activity detection
     'voice:speaking',
+    'voice:level',
     // Video streaming events
     'video:started',
     'video:stopped',
@@ -223,6 +224,10 @@ export class ClientDoor extends EventEmitter {
         // Audio data from other users (for voice chat playback)
         socket.on('audio:data', (data: any) => {
           this.emit('audio:data', data);
+        });
+        // Voice speaking state from peers (server -> client browser)
+        socket.on('voice:speaking', (data: any) => {
+          this.emit('voice:speaking', data);
         });
       }
 
@@ -706,6 +711,7 @@ export { UIEngine } from '../engines/ui/ui-engine';
 export { GraphicsEngine } from '../engines/graphics/graphics-engine';
 export { PhysicsEngine } from '../engines/physics/physics-engine';
 export { AudioEngine } from '../engines/audio/audio-engine';
+export { VoiceCapture, type VoiceCaptureOptions } from '../media/VoiceCapture';
 export { NetworkEngine } from '../engines/network/network-engine';
 export { AIEngine } from '../engines/ai/ai-engine';
 export { InputEngine } from '../engines/input/input-engine';

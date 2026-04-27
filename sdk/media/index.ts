@@ -5,6 +5,7 @@
  */
 
 export { Audio } from './Audio';
+export { VoiceCapture, type VoiceCaptureOptions } from './VoiceCapture';
 export { Video } from './Video';
 
 export {
