@@ -3749,6 +3749,54 @@ debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command executio
   }
 
   /**
+   * SystemTagList - V36+ Execute() replacement with tag list (LVO -606)
+   * D1 = command string pointer
+   * D2 = tag list pointer (ignored - we accept NULL)
+   * Returns: D0 = RC of executed command (0 = NORMAL/success, 5 = WARN, 10 = ERROR)
+   *
+   * zOOsTAT uses this on exec version >= 36 to run "delete RAM:T/ZOOSTAT.TMP".
+   * Returns 0 on success so the caller's TST.L/BEQ skips the "NOT deleted" message.
+   */
+  SystemTagList(): void {
+    const namePtr = this.emulator.getRegister(CPURegister.D1);
+    const name = this.readString(namePtr);
+    console.log(`[dos.library] SystemTagList("${name}")`);
+
+    const upperName = name.toUpperCase().trim();
+
+    if (upperName.startsWith('DELETE ') || upperName.startsWith('C:DELETE ')) {
+      const parts = name.trim().split(/\s+/);
+      const targetFile = parts.length > 1 ? parts.slice(1).join(' ') : '';
+      if (targetFile) {
+        const sysPath = this.pathManager?.amiToSysPath(targetFile, process.cwd()) || this.pathResolver.resolve(targetFile);
+        console.log(`[dos.library] SystemTagList DELETE: "${targetFile}" -> "${sysPath}"`);
+        if (sysPath && amigafs.existsSync(sysPath)) {
+          try {
+            amigafs.unlinkSync(sysPath);
+            console.log(`[dos.library] SystemTagList DELETE: deleted "${sysPath}"`);
+            this.emulator.setRegister(CPURegister.D0, 0); // RC=0 = NORMAL
+            this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+            return;
+          } catch (err: any) {
+            console.error(`[dos.library] SystemTagList DELETE: failed:`, err.message || err);
+          }
+        } else {
+          console.warn(`[dos.library] SystemTagList DELETE: not found: "${sysPath}"`);
+        }
+      }
+      this.emulator.setRegister(CPURegister.D0, 10); // RC=10 = ERROR
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    // Delegate unknown commands to Execute logic for other simple shell commands
+    this.Execute();
+    // Convert DOSTRUE/DOSFALSE to RC convention: DOSTRUE(-1) -> 0, DOSFALSE(0) -> 10
+    const execResult = this.emulator.getRegister(CPURegister.D0);
+    this.emulator.setRegister(CPURegister.D0, execResult !== 0 ? 0 : 10);
+  }
+
+  /**
    * Cli - Get current CLI structure (V36+)
    * Returns: D0 = BPTR to CommandLineInterface (0 if none)
    */
@@ -6372,6 +6420,10 @@ debugLog(
       case -222: // Execute
         console.log(`[DosLibrary] handleCall -222: Execute() called`);
         this.Execute();
+        return true;
+
+      case -606: // SystemTagList (V36+ Execute-with-tags)
+        this.SystemTagList();
         return true;
 
       // V36+ DOS object allocation
