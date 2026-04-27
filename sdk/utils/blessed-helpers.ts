@@ -1481,3 +1481,37 @@ export function createPanel(options: any): any {
 
 // Export DoorInputManager for centralized input state management
 export { DoorInputManager, type DoorInputOptions } from './door-input-manager';
+
+/**
+ * Bind keys on a blessed screen and return an `unbind` function that removes
+ * all of them. This prevents the common bug where `screen.key()` handlers
+ * accumulate across dialog/overlay opens because they are never cleaned up.
+ *
+ * Always call `unbind()` inside the dialog's cleanup before `box.destroy()`.
+ *
+ * @example
+ * const unbind = bindKeys(screen, [
+ *   [['escape'],      () => { cleanup(); onCancel(); }],
+ *   [['enter'],       () => { cleanup(); onConfirm(); }],
+ *   [['y', 'Y'],      () => { cleanup(); onYes(); }],
+ * ]);
+ *
+ * function cleanup() {
+ *   unbind();
+ *   box.destroy();
+ *   screen.render();
+ * }
+ */
+export function bindKeys(
+  screen: any,
+  bindings: Array<[string | string[], () => void]>
+): () => void {
+  for (const [keys, fn] of bindings) {
+    screen.key(Array.isArray(keys) ? keys : [keys], fn);
+  }
+  return function unbind() {
+    for (const [keys, fn] of bindings) {
+      screen.unkey(Array.isArray(keys) ? keys : [keys], fn);
+    }
+  };
+}

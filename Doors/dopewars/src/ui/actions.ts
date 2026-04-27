@@ -1,4 +1,5 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { bindKeys } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { MarketState, PlayerState, GameQuestion, HighScore } from '../types';
 
 export type ActionBarMode = 'normal' | 'combat' | 'question';
@@ -31,6 +32,8 @@ function centeredBox(screen: any, opts: any): any {
   });
 }
 
+/* ─── Buy overlay ──────────────────────────────────────── */
+
 export function showBuyOverlay(
   screen: any,
   market: MarketState,
@@ -49,52 +52,62 @@ export function showBuyOverlay(
   let chosenName = '';
   let amtStr     = '';
 
-  const cleanup = () => { box.destroy(); screen.render(); };
+  let unbind: () => void;
+  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
 
-  screen.key(['escape'], () => { cleanup(); onCancel(); });
-
-  for (let i = 0; i < Math.min(market.prices.length, 9); i++) {
-    const key = String(i + 1);
-    screen.key([key], () => {
-      if (chosen < 0) {
-        chosen     = market.prices[i]!.index;
-        chosenName = market.prices[i]!.name;
-        box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
-        screen.render();
-      } else {
-        amtStr += key;
-        box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
-        screen.render();
-      }
-    });
-  }
-
-  screen.key(['0'], () => {
-    if (chosen >= 0) {
-      amtStr += '0';
-      box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
-      screen.render();
+  const escapeFn    = () => { cleanup(); onCancel(); };
+  const enterFn     = () => {
+    if (chosen >= 0 && amtStr) {
+      const amt = parseInt(amtStr, 10);
+      if (amt > 0) { cleanup(); onBuy(chosen, amt); }
     }
-  });
-
-  screen.key(['backspace'], () => {
+  };
+  const backspaceFn = () => {
     if (chosen >= 0 && amtStr) {
       amtStr = amtStr.slice(0, -1);
       box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
       screen.render();
     }
-  });
-
-  screen.key(['enter'], () => {
-    if (chosen >= 0 && amtStr) {
-      const amt = parseInt(amtStr, 10);
-      if (amt > 0) { cleanup(); onBuy(chosen, amt); }
+  };
+  const zeroFn = () => {
+    if (chosen >= 0) {
+      amtStr += '0';
+      box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
+      screen.render();
     }
-  });
+  };
+
+  const numBindings: Array<[string[], () => void]> = [];
+  for (let i = 0; i < Math.min(market.prices.length, 9); i++) {
+    const digit = String(i + 1);
+    const fn = () => {
+      if (chosen < 0) {
+        chosen     = market.prices[i]!.index;
+        chosenName = market.prices[i]!.name;
+        box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: _`);
+        screen.render();
+      } else {
+        amtStr += digit;
+        box.setContent(lines + `\n\n  Buying {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
+        screen.render();
+      }
+    };
+    numBindings.push([[digit], fn]);
+  }
+
+  unbind = bindKeys(screen, [
+    [['escape'],    escapeFn],
+    [['enter'],     enterFn],
+    [['backspace'], backspaceFn],
+    [['0'],         zeroFn],
+    ...numBindings,
+  ]);
 
   box.focus();
   screen.render();
 }
+
+/* ─── Sell overlay ─────────────────────────────────────── */
 
 export function showSellOverlay(
   screen: any,
@@ -107,7 +120,6 @@ export function showSellOverlay(
   if (carrying.length === 0) { onCancel(); return; }
 
   const drugNameMap = new Map(market.prices.map(p => [p.index, p.name]));
-
   const lines = carrying.map((d, i) =>
     `  {bold}${i + 1}.{/} ${(drugNameMap.get(d.index) ?? `Drug${d.index}`).padEnd(12)} {yellow-fg}${d.carried}{/} units`
   ).join('\n');
@@ -118,35 +130,63 @@ export function showSellOverlay(
   let chosen     = -1;
   let chosenName = '';
   let amtStr     = '';
-  const cleanup = () => { box.destroy(); screen.render(); };
 
-  screen.key(['escape'], () => { cleanup(); onCancel(); });
+  let unbind: () => void;
+  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
 
+  const escapeFn    = () => { cleanup(); onCancel(); };
+  const enterFn     = () => {
+    if (chosen >= 0 && amtStr) {
+      const amt = parseInt(amtStr, 10);
+      if (amt > 0) { cleanup(); onSell(chosen, amt); }
+    }
+  };
+  const backspaceFn = () => {
+    if (chosen >= 0 && amtStr) {
+      amtStr = amtStr.slice(0, -1);
+      box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr || '_'}`);
+      screen.render();
+    }
+  };
+  const zeroFn = () => {
+    if (chosen >= 0) {
+      amtStr += '0';
+      box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
+      screen.render();
+    }
+  };
+
+  const numBindings: Array<[string[], () => void]> = [];
   for (let i = 0; i < Math.min(carrying.length, 9); i++) {
-    screen.key([String(i + 1)], () => {
+    const digit = String(i + 1);
+    const fn = () => {
       if (chosen < 0) {
         chosen     = carrying[i]!.index;
         chosenName = drugNameMap.get(chosen) ?? `Drug${chosen}`;
         box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: _`);
         screen.render();
       } else {
-        amtStr += String(i + 1);
+        amtStr += digit;
         box.setContent(lines + `\n\n  Selling {yellow-fg}${chosenName}{/}\n  Amount: ${amtStr}_`);
         screen.render();
       }
-    });
+    };
+    numBindings.push([[digit], fn]);
   }
 
-  screen.key(['enter'], () => {
-    if (chosen >= 0 && amtStr) {
-      const amt = parseInt(amtStr, 10);
-      if (amt > 0) { cleanup(); onSell(chosen, amt); }
-    }
-  });
+  unbind = bindKeys(screen, [
+    [['escape'],    escapeFn],
+    [['enter'],     enterFn],
+    [['backspace'], backspaceFn],
+    [['0'],         zeroFn],
+    ...numBindings,
+  ]);
 
   box.focus();
   screen.render();
 }
+
+/* ─── Jet overlay ──────────────────────────────────────── */
 
 export function showJetOverlay(
   screen: any,
@@ -164,18 +204,28 @@ export function showJetOverlay(
   });
   box.setContent(lines + '\n\n  Choose or {bold}[ESC]{/}:');
 
-  const cleanup = () => { box.destroy(); screen.render(); };
-  screen.key(['escape'], () => { cleanup(); onCancel(); });
+  let unbind: () => void;
+  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
 
-  locationNames.forEach((_name, i) => {
-    screen.key([String(i + 1)], () => {
+  const escapeFn = () => { cleanup(); onCancel(); };
+
+  const locBindings: Array<[string[], () => void]> = locationNames.map((_name, i) => {
+    const fn = () => {
       if (i !== currentLocation) { cleanup(); onJet(i); }
-    });
+    };
+    return [[String(i + 1)], fn];
   });
+
+  unbind = bindKeys(screen, [
+    [['escape'], escapeFn],
+    ...locBindings,
+  ]);
 
   box.focus();
   screen.render();
 }
+
+/* ─── Question overlay ─────────────────────────────────── */
 
 export function showQuestionOverlay(
   screen: any,
@@ -185,13 +235,22 @@ export function showQuestionOverlay(
   const box = centeredBox(screen, { width: 62, height: 8, label: ' ACTION REQUIRED ' });
   box.setContent('\n  ' + question.prompt + '\n\n  {bold}[Y]{/}es  {bold}[N]{/}o  {bold}[ESC]{/} = No');
 
-  const cleanup = () => { box.destroy(); screen.render(); };
-  screen.key(['y','Y'], () => { cleanup(); onAnswer('y'); });
-  screen.key(['n','N','escape'], () => { cleanup(); onAnswer('n'); });
+  let unbind: () => void;
+  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
+
+  const yesFn = () => { cleanup(); onAnswer('y'); };
+  const noFn  = () => { cleanup(); onAnswer('n'); };
+
+  unbind = bindKeys(screen, [
+    [['y', 'Y'],           yesFn],
+    [['n', 'N', 'escape'], noFn],
+  ]);
 
   box.focus();
   screen.render();
 }
+
+/* ─── High scores overlay ──────────────────────────────── */
 
 export function showHighScores(
   screen: any,
@@ -209,8 +268,14 @@ export function showHighScores(
   });
   box.setContent(rows.join('\n') + '\n\n  {bold}[ESC]{/} or {bold}[Q]{/} to close');
 
-  const cleanup = () => { box.destroy(); screen.render(); };
-  screen.key(['escape','q','Q'], () => { cleanup(); onClose(); });
+  let unbind: () => void;
+  function cleanup(): void { unbind(); box.destroy(); screen.render(); }
+
+  const closeFn = () => { cleanup(); onClose(); };
+
+  unbind = bindKeys(screen, [
+    [['escape', 'q', 'Q'], closeFn],
+  ]);
 
   box.focus();
   screen.render();
