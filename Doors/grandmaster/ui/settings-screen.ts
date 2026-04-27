@@ -328,34 +328,6 @@ export class SettingsScreen {
       case 18:  // Connected Blocks
         s.connectedBlocks = !s.connectedBlocks;
         break;
-      // Key bindings (index 20 = header, 21-29 = bindings)
-      case 21:  // Move Left
-        await this.editKeyBinding('left', 'Move Left');
-        break;
-      case 22:  // Move Right
-        await this.editKeyBinding('right', 'Move Right');
-        break;
-      case 23:  // Rotate CW
-        await this.editKeyBinding('rotateCW', 'Rotate Clockwise');
-        break;
-      case 24:  // Rotate CCW
-        await this.editKeyBinding('rotateCCW', 'Rotate Counter-Clockwise');
-        break;
-      case 25:  // Rotate 180
-        await this.editKeyBinding('rotate180', 'Rotate 180');
-        break;
-      case 26:  // Soft Drop
-        await this.editKeyBinding('softDrop', 'Soft Drop');
-        break;
-      case 27:  // Hard Drop
-        await this.editKeyBinding('hardDrop', 'Hard Drop');
-        break;
-      case 28:  // Hold
-        await this.editKeyBinding('hold', 'Hold');
-        break;
-      case 29:  // Pause
-        await this.editKeyBinding('pause', 'Pause');
-        break;
       // Key bindings (index 20 = header, 21 = wizard, 22 = preset, 23 = clear)
       case 21: await this.bindAllKeys(); break;
       case 22: await this.pickKeyPreset(); break;
@@ -776,8 +748,9 @@ export class SettingsScreen {
         resolve();
       };
 
-      list.key(['enter', 'return'], () => done((list as any).selected ?? 0));
-      list.key(['escape', 'q'], () => done(null));
+      // 'select' fires when Enter is pressed on a focused List (idiomatic blessed)
+      (list as any).on('select', (_item: any, index: number) => done(index));
+      (list as any).key(['escape', 'q'], () => done(null));
       this.screen.render();
     });
   }
@@ -855,8 +828,8 @@ export class SettingsScreen {
         resolve();
       };
 
-      list.key(['enter', 'return'], () => done((list as any).selected ?? 0));
-      list.key(['escape', 'q'], () => done(null));
+      (list as any).on('select', (_item: any, index: number) => done(index));
+      (list as any).key(['escape', 'q'], () => done(null));
       this.screen.render();
     });
   }
