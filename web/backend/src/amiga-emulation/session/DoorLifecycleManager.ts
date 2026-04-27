@@ -98,6 +98,11 @@ export class DoorLifecycleManager {
   private logger: DoorLogger | null = null;
   private debugMonitor: DebugMonitor | null = null;
 
+  // Forced-exit timer after JH_SHUTDOWN. Arms once when isShuttingDown() first
+  // becomes true; if the door hasn't reached the sentinel PC within 2 s we
+  // call terminate() ourselves. Prevents the 18-second stuck-loop wait.
+  private postShutdownTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Execution state
   private executionState: ExecutionState;
   /**
@@ -1665,10 +1670,19 @@ console.log(`[DoorLifecycleManager] UPDATING to actual AEDoorPort: 0x${actualDoo
             // after PutMsg+WaitPort+GetMsg (see
             // door-message-callbacks.ts for the full rationale). Natural
             // exit is handled by DoorExitDetector on the sentinel PC.
-            if (this.ximProtocol.isShuttingDown()) {
+            // However, some doors (e.g. CONFTOP) loop instead of calling Exit()
+            // after shutdown — arm a 2-second forced-exit timer so the session
+            // is never stuck more than ~2 s after the door says it's done.
+            if (this.ximProtocol.isShuttingDown() && !this.postShutdownTimer) {
               debugLog(
-                `[DoorLifecycleManager] pollXIMMessages: JH_SHUTDOWN observed - continuing execution until natural exit`,
+                `[DoorLifecycleManager] pollXIMMessages: JH_SHUTDOWN observed - arming 2s forced-exit timer`,
               );
+              this.postShutdownTimer = setTimeout(() => {
+                if (this.executionState.isRunning) {
+                  console.log(`[DoorLifecycleManager] Post-shutdown timeout: forcing terminate after 2s`);
+                  this.terminate();
+                }
+              }, 2000);
             }
           }
         }
@@ -1936,6 +1950,10 @@ debugLog("[DoorLifecycleManager] Terminating door lifecycle");
     if (this.executionTimer) {
       clearTimeout(this.executionTimer);
       this.executionTimer = null;
+    }
+    if (this.postShutdownTimer) {
+      clearTimeout(this.postShutdownTimer);
+      this.postShutdownTimer = null;
     }
 
 debugLog("[DoorLifecycleManager] 🚪 Emitting door:status = terminated");
