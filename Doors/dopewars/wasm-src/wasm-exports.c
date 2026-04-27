@@ -52,6 +52,9 @@ void wasm_init_game(int num_turns, double start_cash, double start_debt,
                     int debt_interest, int bank_interest) {
   extern int NumTurns, DebtInterest, BankInterest;
   extern price_t StartCash, StartDebt;
+  /* Initialise drug/location/gun arrays with dopewars defaults */
+  extern void SetupParameters(GSList *extraconfigs, gboolean antique);
+  SetupParameters(NULL, FALSE);
   NumTurns      = num_turns;
   StartCash     = (price_t)start_cash;
   StartDebt     = (price_t)start_debt;

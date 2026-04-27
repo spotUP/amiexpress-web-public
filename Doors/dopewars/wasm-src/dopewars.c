@@ -2404,7 +2404,7 @@ gchar *GetLocalConfigFile(void)
  * hard-coded internal values, and then processes the global and
  * user-specific configuration files.
  */
-static void SetupParameters(GSList *extraconfigs, gboolean antique)
+void SetupParameters(GSList *extraconfigs, gboolean antique)
 {
   gchar *conf;
   GSList *list;

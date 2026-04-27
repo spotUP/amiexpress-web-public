@@ -14,8 +14,8 @@ const LOCATION_NAMES = [
     'Manhattan', 'Coney Island', 'Battery Park', 'Queens',
 ];
 async function createApp(ctx, server) {
-    const user = ctx.user ?? { handle: 'PLAYER', id: 'player' };
-    const id = String(user.handle ?? user.id);
+    const user = ctx.user ?? { username: 'PLAYER', id: 'player' };
+    const id = String(user.username ?? user.id);
     const layout = (0, layout_1.createLayout)(ctx);
     const { screen, header, market, inventory, events, players, actions } = layout;
     const inputManager = new blessed_helpers_1.DoorInputManager(ctx, screen, {
@@ -43,7 +43,7 @@ async function createApp(ctx, server) {
         screen.render();
     }
     async function applyResult(result) {
-        state = { ...result.newState, id, name: user.handle ?? id };
+        state = { ...result.newState, id, name: user.username ?? id };
         try {
             marketState = await server.getMarket(id);
         }
@@ -103,7 +103,7 @@ async function createApp(ctx, server) {
     }
     /* -- Server event subscriptions --------------------------------- */
     server.on('state:' + id, async (newState) => {
-        state = { ...newState, id, name: user.handle ?? id };
+        state = { ...newState, id, name: user.username ?? id };
         try {
             marketState = await server.getMarket(id);
         }
@@ -164,11 +164,11 @@ async function createApp(ctx, server) {
     });
     /* -- Boot ------------------------------------------------------- */
     inputManager.enable();
-    state = await server.joinGame(id, user.handle ?? id);
-    state = { ...state, id, name: user.handle ?? id };
+    state = await server.joinGame(id, user.username ?? id);
+    state = { ...state, id, name: user.username ?? id };
     marketState = await server.getMarket(id);
     updatePresenceSub(state.location);
-    (0, events_1.pushEvent)(events, `{bold}Welcome to DOPEWARS, ${user.handle ?? id}!{/}`);
+    (0, events_1.pushEvent)(events, `{bold}Welcome to DOPEWARS, ${user.username ?? id}!{/}`);
     (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString()}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
     (0, events_1.pushEvent)(events, `You are in {cyan-fg}${LOCATION_NAMES[state.location] ?? 'Brooklyn'}{/}.`);
     fullRender();

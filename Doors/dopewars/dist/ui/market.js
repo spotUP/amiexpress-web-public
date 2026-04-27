@@ -6,7 +6,7 @@ const DRUG_NAMES = [
     'Ludes', 'Shrooms', 'PCP', 'Hashish', 'Opium',
 ];
 function renderMarket(box, market, state) {
-    const lines = ['{bold}Drug           Price    Evt{/}'];
+    const lines = ['{bold}Drug         Price   !{/}'];
     for (const p of market.prices) {
         const name = (DRUG_NAMES[p.index] ?? `Drug${p.index}`).padEnd(12);
         const price = ('$' + Math.round(p.price).toLocaleString()).padStart(8);

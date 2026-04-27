@@ -6,7 +6,7 @@ const DRUG_NAMES = [
 ];
 
 export function renderMarket(box: any, market: MarketState, state: PlayerState): void {
-  const lines: string[] = ['{bold}Drug           Price    Evt{/}'];
+  const lines: string[] = ['{bold}Drug         Price   !{/}'];
   for (const p of market.prices) {
     const name    = (DRUG_NAMES[p.index] ?? `Drug${p.index}`).padEnd(12);
     const price   = ('$' + Math.round(p.price).toLocaleString()).padStart(8);

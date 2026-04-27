@@ -20,8 +20,8 @@ const LOCATION_NAMES = [
 ];
 
 export async function createApp(ctx: DoorContext, server: DopewarsServer): Promise<void> {
-  const user = (ctx as any).user ?? { handle: 'PLAYER', id: 'player' };
-  const id   = String(user.handle ?? user.id);
+  const user = (ctx as any).user ?? { username: 'PLAYER', id: 'player' };
+  const id   = String(user.username ?? user.id);
 
   const layout = createLayout(ctx);
   const { screen, header, market, inventory, events, players, actions } = layout;
@@ -57,7 +57,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   }
 
   async function applyResult(result: ActionResult): Promise<void> {
-    state = { ...result.newState, id, name: user.handle ?? id };
+    state = { ...result.newState, id, name: user.username ?? id };
     try { marketState = await server.getMarket(id); } catch { /* ignore if out of game */ }
 
     for (const ev of result.events) {
@@ -110,7 +110,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   /* -- Server event subscriptions --------------------------------- */
 
   server.on('state:' + id, async (newState: PlayerState) => {
-    state = { ...newState, id, name: user.handle ?? id };
+    state = { ...newState, id, name: user.username ?? id };
     try { marketState = await server.getMarket(id); } catch { /* ignore */ }
     fullRender();
   });
@@ -181,13 +181,13 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
 
   inputManager.enable();
 
-  state = await server.joinGame(id, user.handle ?? id);
-  state = { ...state, id, name: user.handle ?? id };
+  state = await server.joinGame(id, user.username ?? id);
+  state = { ...state, id, name: user.username ?? id };
   marketState = await server.getMarket(id);
 
   updatePresenceSub(state.location);
 
-  pushEvent(events, `{bold}Welcome to DOPEWARS, ${user.handle ?? id}!{/}`);
+  pushEvent(events, `{bold}Welcome to DOPEWARS, ${user.username ?? id}!{/}`);
   pushEvent(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString()}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
   pushEvent(events, `You are in {cyan-fg}${LOCATION_NAMES[state.location] ?? 'Brooklyn'}{/}.`);
 
