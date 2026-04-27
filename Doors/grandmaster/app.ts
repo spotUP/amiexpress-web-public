@@ -744,50 +744,127 @@ export class GrandmasterApp {
       return;  // Back to menu
     }
 
-    // Map selection to mode
+    // ── Mode-selection + lobby loop ────────────────────────────────────────
+    // Stays in this loop (and keeps voice active) until the player starts a
+    // game or explicitly goes Back to the main menu.
     const modes = ['versus_1v1', 'team_2v2', 'battle_royale'] as const;
-    const selectedMode = modes[modeSelection];
+    type LobbyMode = typeof modes[number];
+    let selectedMode: LobbyMode = modes[modeSelection]!;
+    let changingMode = false;
 
-    // Create lobby screen
-    const localPlayerId = this.session.user?.id || this.state.playerName;
-    const lobbyScreen = new LobbyScreen(
-      this.screen,
-      this.state,
-      this.sounds,
-      this.network,
-      localPlayerId
-    );
+    while (true) {
+      if (changingMode) {
+        // Re-show mode selection overlay
+        changingMode = false;
 
-    // Show lobby and wait for result.
-    // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
-    // waiting lobby with the same mode, or creates one the next player will join.
-    // 'custom' would make every player create their own private lobby (each sees only themselves).
-    const result = await lobbyScreen.show('matchmaking', selectedMode);
+        const rePanel = createBox({
+          parent: this.screen,
+          top: 'center',
+          left: 'center',
+          width: 50,
+          height: 12,
+          border: { type: 'line' },
+          label: ' Change Mode ',
+          style: { border: { fg: 'cyan' } },
+          fixed: true,
+        });
+        const reList = createList({
+          parent: rePanel,
+          top: 1,
+          left: 1,
+          width: 48,
+          height: 10,
+          style: { selected: { bg: 'blue', fg: 'white' } },
+          keys: true,
+          vi: true,
+          mouse: true,
+          items: ['1v1 Versus', '2v2 Team Battle', 'Battle Royale (99)', 'Back to Menu'],
+        });
+        reList.focus();
+        this.screen.render();
 
-    // Re-enable game mode and input handler after lobby
-    nav.destroy();
-    this.inputHandler.setEnabled(true);
-    this.inputManager.resume();  // Re-enable grabKeys
-    if (this.session.bbs?.enableGameMode) {
-      this.session.bbs.enableGameMode();
-      console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
-    }
+        const newModeIdx = await new Promise<number>((resolve) => {
+          const onSel = (_item: any, index: number) => { this.screen.unkey(['escape'], onEsc); resolve(index); };
+          const onEsc = () => { reList.removeListener('select', onSel); this.screen.unkey(['escape'], onEsc); resolve(3); };
+          reList.on('select', onSel);
+          this.screen.key(['escape'], onEsc);
+        });
 
-    if (result.action !== 'start' || !result.mode) {
-      this.stopVoice();
-      return;
-    }
+        reList.destroy();
+        rePanel.destroy();
 
-    // Check if bots were added to the lobby (auto-filled for solo testing)
-    const matchState = this.network?.getMatchState();
-    const hasBots = matchState?.players.some(p => p.isBot) ?? false;
+        if (newModeIdx === 3) {
+          // Back to main menu — stop voice and exit
+          nav.destroy();
+          this.stopVoice();
+          this.inputHandler.setEnabled(true);
+          this.inputManager.resume();
+          if (this.session.bbs?.enableGameMode) {
+            this.session.bbs.enableGameMode();
+          }
+          return;
+        }
+        selectedMode = modes[newModeIdx]!;
+      }
 
-    if (hasBots) {
-      // Route to CPU battle so the bot AI is actually running
-      const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
-      await this.startCpuBattle(botDifficulty as number);
-    } else {
-      await this.startVersusGame(result.mode);
+      // Create lobby screen
+      // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
+      // waiting lobby with the same mode, or creates one the next player will join.
+      // 'custom' would make every player create their own private lobby (each sees only themselves).
+      const localPlayerId = this.session.user?.id || this.state.playerName;
+      const lobbyScreen = new LobbyScreen(
+        this.screen,
+        this.state,
+        this.sounds,
+        this.network,
+        localPlayerId
+      );
+
+      // Register C key inside lobby to trigger mode change (without leaving voice)
+      const onChangeMode = () => { changingMode = true; };
+      this.screen.key(['c', 'C'], onChangeMode);
+
+      const result = await lobbyScreen.show('matchmaking', selectedMode);
+
+      this.screen.unkey(['c', 'C'], onChangeMode);
+
+      if (result.action === 'start' && result.mode) {
+        // Game starting — re-enable input and route to the appropriate game
+        nav.destroy();
+        this.inputHandler.setEnabled(true);
+        this.inputManager.resume();
+        if (this.session.bbs?.enableGameMode) {
+          this.session.bbs.enableGameMode();
+          console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
+        }
+
+        const matchState = this.network?.getMatchState();
+        const hasBots = matchState?.players.some(p => p.isBot) ?? false;
+
+        if (hasBots) {
+          const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
+          await this.startCpuBattle(botDifficulty as number);
+        } else {
+          await this.startVersusGame(result.mode);
+        }
+        return;
+
+      } else if (changingMode) {
+        // C was pressed during lobby — loop back to mode selection overlay
+        continue;
+
+      } else {
+        // Player pressed Leave/Back in lobby without requesting a mode change
+        nav.destroy();
+        this.stopVoice();
+        this.inputHandler.setEnabled(true);
+        this.inputManager.resume();
+        if (this.session.bbs?.enableGameMode) {
+          this.session.bbs.enableGameMode();
+          console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
+        }
+        return;
+      }
     }
   }
 
