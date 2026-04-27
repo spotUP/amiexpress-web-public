@@ -232,10 +232,12 @@ const char* wasm_get_player_state(int idx) {
   snprintf(state_buf, sizeof(state_buf),
     "{\"location\":%d,\"cash\":%.2f,\"debt\":%.2f,\"bank\":%.2f,"
     "\"health\":%d,\"coatSize\":%d,\"turn\":%d,\"totalTurns\":%d,"
-    "\"eventNum\":%d,\"flags\":%d,\"inCombat\":false,\"drugs\":%s,\"guns\":%s}",
+    "\"eventNum\":%d,\"flags\":%d,\"inCombat\":%s,\"drugs\":%s,\"guns\":%s}",
     p->IsAt, (double)p->Cash, (double)p->Debt, (double)p->Bank,
     p->Health, p->CoatSize, p->Turn, NumTurns,
-    p->EventNum, (int)p->Flags, drugs, guns);
+    p->EventNum, (int)p->Flags,
+    (p->EventNum == E_FIGHT || p->EventNum == E_FIGHTASK || (p->Flags & FIGHTING)) ? "true" : "false",
+    drugs, guns);
   return state_buf;
 }
 

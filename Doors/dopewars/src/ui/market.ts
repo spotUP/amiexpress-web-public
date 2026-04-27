@@ -1,15 +1,10 @@
 import { MarketState, PlayerState } from '../types';
 
-const DRUG_NAMES = [
-  'Cocaine','Heroin','Acid','Weed','Speed',
-  'Ludes','Shrooms','PCP','Hashish','Opium',
-];
-
 export function renderMarket(box: any, market: MarketState, state: PlayerState): void {
   const lines: string[] = ['{bold}Drug         Price   !{/}'];
   for (const p of market.prices) {
-    const name    = (DRUG_NAMES[p.index] ?? `Drug${p.index}`).padEnd(12);
-    const price   = ('$' + Math.round(p.price).toLocaleString()).padStart(8);
+    const name    = (p.name || `Drug${p.index}`).padEnd(12);
+    const price   = ('$' + Math.round(p.price).toLocaleString('en-US')).padStart(8);
     let   trend   = '--';
     if (p.cheap)     trend = '{green-fg}!!{/}';
     if (p.expensive) trend = '{red-fg}**{/}';

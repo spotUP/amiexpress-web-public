@@ -43,7 +43,7 @@ function centeredBox(screen, opts) {
     });
 }
 function showBuyOverlay(screen, market, state, onBuy, onCancel) {
-    const lines = market.prices.map((p, i) => `  {bold}${i + 1}.{/} ${(DRUG_NAMES[p.index] ?? `Drug${p.index}`).padEnd(12)} {green-fg}$${Math.round(p.price).toLocaleString()}{/}`).join('\n');
+    const lines = market.prices.map((p, i) => `  {bold}${i + 1}.{/} ${(DRUG_NAMES[p.index] ?? `Drug${p.index}`).padEnd(12)} {green-fg}$${Math.round(p.price).toLocaleString('en-US')}{/}`).join('\n');
     const box = centeredBox(screen, { width: 52, height: market.prices.length + 7, label: ' BUY DRUGS ' });
     box.setContent(lines + '\n\n  Select drug number or {bold}[ESC]{/} to cancel:');
     let chosen = -1;
@@ -161,7 +161,7 @@ function showQuestionOverlay(screen, question, onAnswer) {
 function showHighScores(screen, scores, onClose) {
     const rows = scores.length === 0
         ? ['  No scores yet.']
-        : scores.map((s, i) => `  {bold}${String(i + 1).padStart(2)}.{/} ${s.bbsHandle.padEnd(16)} {green-fg}$${Math.round(s.score).toLocaleString().padStart(12)}{/}  (${s.turns} turns)`);
+        : scores.map((s, i) => `  {bold}${String(i + 1).padStart(2)}.{/} ${s.bbsHandle.padEnd(16)} {green-fg}$${Math.round(s.score).toLocaleString('en-US').padStart(12)}{/}  (${s.turns} turns)`);
     const box = centeredBox(screen, {
         width: 62, height: Math.min(rows.length + 5, 22), label: ' HIGH SCORES ',
     });

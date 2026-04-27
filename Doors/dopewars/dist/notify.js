@@ -47,9 +47,9 @@ function formatMessage(ev) {
         case 'attack':
             return `[DOPEWARS] ${ev.attacker} attacked ${ev.target} in ${ev.location}!`;
         case 'high_score':
-            return `[DOPEWARS] ${ev.handle} retired with $${ev.score.toLocaleString()} in ${ev.turns} turns — NEW HIGH SCORE!`;
+            return `[DOPEWARS] ${ev.handle} retired with $${ev.score.toLocaleString('en-US')} in ${ev.turns} turns — NEW HIGH SCORE!`;
         case 'deal':
-            return `[DOPEWARS] ${ev.handle} ${ev.action === 'buy' ? 'bought' : 'sold'} ${ev.amount} ${ev.drug} @ $${ev.price.toLocaleString()}`;
+            return `[DOPEWARS] ${ev.handle} ${ev.action === 'buy' ? 'bought' : 'sold'} ${ev.amount} ${ev.drug} @ $${ev.price.toLocaleString('en-US')}`;
         case 'price_spike':
             return `[DOPEWARS] ${ev.cheap ? 'Cheap' : 'Expensive'} ${ev.drug} spotted in ${ev.location}!`;
     }

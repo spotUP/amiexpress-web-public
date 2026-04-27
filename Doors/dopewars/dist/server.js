@@ -43,10 +43,16 @@ class DopewarsServer extends events_1.EventEmitter {
             }
             catch { /* ignore */ }
         });
+        /* Note: pendingEvents/pendingQuestions are cleared in beginAction() before each
+         * WASM call. WASM is single-threaded so calls are serialised — no true race —
+         * but concurrent async JS actions could interleave. Each action method clears
+         * and drains these synchronously around the WASM call, which is safe as long
+         * as WASM callbacks fire synchronously (they do in Emscripten). */
         this.wasm.initGame(cfg.numTurns, cfg.startCash, cfg.startDebt, cfg.debtInterest, cfg.bankInterest);
         for (const row of (0, db_1.getActivePlayers)(this.db)) {
             const idx = this.wasm.addPlayer(0, row.bbs_handle);
             this.playerIndex.set(row.id, idx);
+            this.wasm.generateDrugs(idx); // repopulate market prices after server restart
         }
     }
     async shutdown() {
@@ -64,7 +70,7 @@ class DopewarsServer extends events_1.EventEmitter {
         this.wasm.generateDrugs(idx);
         this.notifier.send({ type: 'join', handle: name });
         this.emit('presence:' + state.location, await this.getPlayersAt(state.location));
-        return state;
+        return { ...state, id, name };
     }
     async leaveGame(id) {
         const idx = this.playerIndex.get(id);
@@ -193,7 +199,9 @@ class DopewarsServer extends events_1.EventEmitter {
         return this.finishAction(id);
     }
     async getPlayerState(id) {
-        return this.wasm.getPlayerState(this.getIdx(id));
+        const row = (0, db_1.getPlayerById)(this.db, id);
+        const state = this.wasm.getPlayerState(this.getIdx(id));
+        return { ...state, id, name: row?.bbs_handle ?? id };
     }
     async getMarket(id) {
         return this.wasm.getMarket(this.getIdx(id));

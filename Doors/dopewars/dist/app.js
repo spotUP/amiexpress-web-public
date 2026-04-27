@@ -32,13 +32,13 @@ async function createApp(ctx, server) {
         header.setContent(` {bold}DOPEWARS{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
             ` | {cyan-fg}${loc}{/}` +
             ` | HP: {${state.health > 50 ? 'green' : 'red'}-fg}${state.health}{/}` +
-            ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString()}{/}` +
-            ` | Debt: {red-fg}$${Math.round(state.debt).toLocaleString()}{/}`);
+            ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
+            ` | Debt: {red-fg}$${Math.round(state.debt).toLocaleString('en-US')}{/}`);
     }
     function fullRender() {
         updateHeader();
         (0, market_1.renderMarket)(market, marketState, state);
-        (0, inventory_1.renderInventory)(inventory, state);
+        (0, inventory_1.renderInventory)(inventory, state, marketState);
         (0, actions_1.renderActionBar)(actions, mode);
         screen.render();
     }
@@ -48,6 +48,7 @@ async function createApp(ctx, server) {
             marketState = await server.getMarket(id);
         }
         catch { /* ignore if out of game */ }
+        updatePresenceSub(state.location);
         for (const ev of result.events) {
             (0, events_1.pushEvent)(events, ev.msg || `Event #${ev.code}`);
         }
@@ -169,11 +170,10 @@ async function createApp(ctx, server) {
     marketState = await server.getMarket(id);
     updatePresenceSub(state.location);
     (0, events_1.pushEvent)(events, `{bold}Welcome to DOPEWARS, ${user.username ?? id}!{/}`);
-    (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString()}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
+    (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
     (0, events_1.pushEvent)(events, `You are in {cyan-fg}${LOCATION_NAMES[state.location] ?? 'Brooklyn'}{/}.`);
     fullRender();
     await new Promise((resolve) => {
-        screen.key(['q', 'Q'], () => resolve());
         screen.on('destroy', () => resolve());
     });
 }
