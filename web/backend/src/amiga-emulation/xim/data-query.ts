@@ -454,7 +454,7 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           const diskStats = (this.bbsSession as any)?.diskUserStats;
           const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
           if (isRead) {
-            const lastOn = diskStats?.timeLastOn ?? (user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0);
+            const lastOn = diskStats?.timeLastOn ?? (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : 0);
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
 debugLog(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
@@ -1030,7 +1030,7 @@ debugLog(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
             // Implement getTodaysCalls() logic from express.e:28425-28432
             const currTime = Math.floor(Date.now() / 1000);
             const currDay = Math.floor((currTime - 21600) / 86400); // -21600 = 6 hour offset
-            const timeLastOn = user?.timeLastOn || (user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0);
+            const timeLastOn = user?.timeLastOn || (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : 0);
             const lastDay = Math.floor((timeLastOn - 21600) / 86400);
 
             // If different day, return 0; otherwise return timesOnToday

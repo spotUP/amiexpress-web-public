@@ -579,6 +579,7 @@ export class UserDatabaseManager {
     timeTotal: number;
     bytesDownload: number;
     bytesUpload: number;
+    timeLastOn: number;
   } | null {
     const data = this.readUserFromDisk(slotNumber);
     if (!data) return null;
@@ -592,6 +593,7 @@ export class UserDatabaseManager {
       timeTotal: data.user.timeTotal,
       bytesDownload: data.user.bytesDownload,
       bytesUpload: data.user.bytesUpload,
+      timeLastOn: data.user.timeLastOn,
     };
   }
 
