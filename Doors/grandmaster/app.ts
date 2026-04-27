@@ -2228,7 +2228,9 @@ export class GrandmasterApp {
       this.sounds,
       this.state,
       this.network,
-      this.attackManager
+      this.attackManager,
+      undefined,        // botOrAI
+      this.session,     // sessionRef for voice chat
     );
 
     // Run game loop
@@ -2307,7 +2309,8 @@ export class GrandmasterApp {
       this.state,
       null,  // No network for CPU battle
       this.attackManager,
-      versusAI  // Pass AI controller instead of botDifficulty
+      versusAI,         // Pass AI controller instead of botDifficulty
+      this.session,     // sessionRef for voice chat
     );
 
     // Run game loop
