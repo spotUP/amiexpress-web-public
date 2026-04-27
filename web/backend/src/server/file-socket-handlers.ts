@@ -3,6 +3,8 @@
  * Handles file upload completion and download tracking events
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import { Socket } from "socket.io";
 import { BBSSession, UploadSessionContext } from "../index";
 import { LoggedOnSubState } from "../constants/bbs-states";
@@ -854,6 +856,16 @@ console.log("[processFileUpload] Processing:", data);
   // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
   const isRegularFileUpload = uploadContext.uploadMode && uploadContext.fileArea;
 
+  // Door archive upload — resolve the BBSApi.requestArchiveUpload() Promise
+  if (session.pendingDoorUpload && data.path) {
+    const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
+    fs.mkdirSync(archivesDir, { recursive: true });
+    const destPath = path.join(archivesDir, path.basename(data.filename));
+    fs.copyFileSync(data.path, destPath);
+    session.pendingDoorUploadCallback?.({ path: destPath, filename: data.filename });
+    return;
+  }
+
   // Check if Door Manager is active - it has its own file-uploaded handler for door archives
   if (session.inDoorManager && !isRegularFileUpload) {
 console.log(
@@ -1091,6 +1103,13 @@ console.log("File uploaded event received:", data);
       await processFileUpload(socket, session, config, data);
     }
   );
+
+  // Handle upload cancellation — reject any pending door archive upload Promise
+  socket.on('upload-cancelled', () => {
+    if (session.pendingDoorUpload) {
+      session.pendingDoorUploadReject?.(new Error('Upload cancelled by user'));
+    }
+  });
 
   // Handle file download started - express.e:9475+ (logUDFile for downloads)
   socket.on(
