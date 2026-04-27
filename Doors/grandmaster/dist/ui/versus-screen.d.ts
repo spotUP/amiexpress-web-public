@@ -35,10 +35,12 @@ export declare class VersusScreen {
     private holdBox;
     private opponentBoardBox;
     private opponentInfoBox;
+    private minimapPanel;
     private minimapContainer;
     private garbageIndicator;
     private attackIndicator;
     private statsBox;
+    private lastOpponentCount;
     private boardOverlay;
     private running;
     private unsubscribers;

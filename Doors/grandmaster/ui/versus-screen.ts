@@ -42,22 +42,25 @@ export class VersusScreen {
   private botPlayer: BotPlayer | null = null;
   private versusAI: any | null = null;  // VersusAI controller for CPU Battle mode
 
-  // UI Elements
-  // Col  0-21 : player board      (22w, 22h, top=1)
-  // Col 22-33 : NEXT (12w, 12h)  + HOLD (12w, 9h, top=13)
-  // Col 34-36 : garbage strip     (3w,  22h, top=1)
-  // Col 37-58 : opponent board    (22w, 22h, top=1)
-  // Col 59-79 : VS info panel     (21w, 22h, top=1)  — 22+12+3+22+21 = 80 ✓
-  // Row 23    : stats bar         (no border)
+  // UI Elements — left side is always the same:
+  //   Col  0-21 : player board   (22w, 22h, top=1)
+  //   Col 22-33 : NEXT+HOLD      (12w each)
+  //   Col 34-36 : garbage strip  (3w,  22h)
+  //
+  // Right side is mode-dependent (toggled per-render):
+  //   1v1   (≤1 opp): Col 37-58 opp board (22w) + Col 59-79 VS info (21w)
+  //   Multi (>1 opp): Col 37-79 minimap grid (43w)
   private boardBox: any;
   private nextBox: any;
   private holdBox: any;
-  private opponentBoardBox: any;
-  private opponentInfoBox: any;
-  private minimapContainer: any;
+  private opponentBoardBox: any;   // 1v1 full opponent board
+  private opponentInfoBox: any;    // 1v1 VS info / attack panel
+  private minimapPanel: any;       // battle-royale minimap panel
+  private minimapContainer: any;   // inner container for minimap widgets
   private garbageIndicator: any;
   private attackIndicator: any;
   private statsBox: any;
+  private lastOpponentCount: number = -1;  // tracks layout switch
 
   // Board overlay compositor for inline effects (same as game-screen)
   private boardOverlay: (string | null)[][] = [];
@@ -108,7 +111,7 @@ export class VersusScreen {
     this.state = state;
     this.network = network;
     this.attackManager = attackManager;
-    this.minimapRenderer = new MinimapRenderer({ height: 18, compact: true });
+    this.minimapRenderer = new MinimapRenderer({ height: 10, compact: true });
     this.opponentTracker = new OpponentTracker();
 
     // Check if AI controller was passed (new implementation)
@@ -233,7 +236,8 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // VS info panel (21w — gained 2 from narrower NEXT/HOLD)
+    // ── 1v1 right side (visible when ≤1 opponent) ──────────────────────────
+    // VS info panel (21w)
     this.opponentInfoBox = createBox({
       parent: this.screen,
       top: 1,
@@ -250,10 +254,38 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // attackIndicator is now part of opponentInfoBox content — null it out
+    // ── Battle-royale right side (visible when >1 opponent) ──────────────
+    // Minimap panel fills all remaining columns (43w: cols 37-79)
+    this.minimapPanel = createBox({
+      parent: this.screen,
+      top: 1,
+      left: 37,
+      width: 43,
+      height: 22,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      label: ' Opponents ',
+      fixed: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+    // Inner container for minimap widgets
+    this.minimapContainer = createBox({
+      parent: this.minimapPanel,
+      top: 1,
+      left: 1,
+      width: 41,
+      height: 20,
+      border: 'none' as any,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
     this.attackIndicator = null;
 
-    // Player stats — bottom row, no border
+    // Player stats — bottom row
     this.statsBox = createBox({
       parent: this.screen,
       top: 23,
@@ -267,8 +299,8 @@ export class VersusScreen {
       clickable: false,
     });
 
-    // minimapContainer not used in 1v1
-    this.minimapContainer = null;
+    // Start in 1v1 mode (hidden minimap panel); render() will switch as needed
+    this.minimapPanel.hide();
   }
 
   /**
@@ -699,30 +731,54 @@ export class VersusScreen {
     const pending = this.attackManager.getPendingGarbage();
     this.renderGarbage(pending);
 
-    // Render opponent board + VS info panel
+    // Switch right-side layout based on opponent count
     const opponents = this.opponentTracker.getAliveOpponents();
-    const opp = opponents[0] ?? null;
-
-    if (opp) {
-      this.renderOpponentBoard(opp);
-      (this.opponentBoardBox as any).setLabel(` ${opp.name || 'CPU'} `);
-    }
-
-    const oppName = opp?.name || 'CPU';
-    const oppLevel = opp?.level ?? '-';
-    const oppGrade = opp?.grade ?? '-';
-    const oppAlive = opp ? opp.alive : true;
+    const oppCount = opponents.length;
     const attackPending = this.attackManager.getPendingGarbage();
 
-    this.opponentInfoBox.setContent(
-      `{cyan-fg}${oppName}{/cyan-fg}\n\n` +
-      `Level: {yellow-fg}${oppLevel}{/yellow-fg}\n` +
-      `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
-      `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
-      (attackPending > 0
-        ? `{red-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/red-fg}`
-        : `{gray-fg}No incoming attack{/gray-fg}`)
-    );
+    if (oppCount !== this.lastOpponentCount) {
+      this.lastOpponentCount = oppCount;
+      if (oppCount > 1) {
+        // Battle royale: hide 1v1 boxes, show minimap panel
+        this.opponentBoardBox?.hide();
+        this.opponentInfoBox?.hide();
+        this.minimapPanel?.show();
+      } else {
+        // 1v1: show full board + VS info, hide minimap panel
+        this.opponentBoardBox?.show();
+        this.opponentInfoBox?.show();
+        this.minimapPanel?.hide();
+      }
+    }
+
+    if (oppCount > 1) {
+      // Battle royale — render minimap grid
+      this.minimapRenderer.renderMinimapGrid(
+        this.minimapContainer,
+        opponents,
+        12  // up to 12 opponents in the grid
+      );
+    } else {
+      // 1v1 — render full opponent board + VS info
+      const opp = opponents[0] ?? null;
+      if (opp) {
+        this.renderOpponentBoard(opp);
+        (this.opponentBoardBox as any).setLabel(` ${opp.name || 'CPU'} `);
+      }
+      const oppName = opp?.name || 'CPU';
+      const oppLevel = opp?.level ?? '-';
+      const oppGrade = opp?.grade ?? '-';
+      const oppAlive = opp ? opp.alive : true;
+      this.opponentInfoBox.setContent(
+        `{cyan-fg}${oppName}{/cyan-fg}\n\n` +
+        `Level: {yellow-fg}${oppLevel}{/yellow-fg}\n` +
+        `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
+        `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
+        (attackPending > 0
+          ? `{red-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/red-fg}`
+          : `{gray-fg}No incoming attack{/gray-fg}`)
+      );
+    }
 
     // Stats bar
     const combo = gameState.combo;
