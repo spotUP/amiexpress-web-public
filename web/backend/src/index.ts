@@ -333,6 +333,9 @@ export interface BBSSession {
   transferManager?: any; // Active transfer manager (e.g., ZMODEM)
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
+  pendingDoorUpload?: boolean;        // requestArchiveUpload() is waiting for file-upload event
+  pendingDoorUploadCallback?: ((result: { path: string; filename: string }) => void) | null;
+  pendingDoorUploadReject?: ((reason: Error) => void) | null;
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
   clientDoorActive?: boolean; // Client (browser) door session active; suppress command handler input
   doorKeyStateHandler?:

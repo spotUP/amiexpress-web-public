@@ -1418,6 +1418,60 @@ console.error('[BBSApi.deleteDoor] Error:', error);
       // Don't throw - event emission failures should not crash the door
     }
   }
+
+  /**
+   * Request the user to upload a door archive via the browser file picker.
+   * Resolves with the local path once upload completes; rejects after 5 min or on cancel.
+   */
+  requestArchiveUpload(): Promise<{ path: string; filename: string }> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.session.pendingDoorUpload = false;
+        this.session.pendingDoorUploadCallback = null;
+        this.session.pendingDoorUploadReject = null;
+        reject(new Error('Upload timed out after 5 minutes'));
+      }, 5 * 60 * 1000);
+
+      this.session.pendingDoorUpload = true;
+      this.session.pendingDoorUploadCallback = (result) => {
+        clearTimeout(timeout);
+        this.session.pendingDoorUpload = false;
+        this.session.pendingDoorUploadCallback = null;
+        this.session.pendingDoorUploadReject = null;
+        resolve(result);
+      };
+      this.session.pendingDoorUploadReject = (err) => {
+        clearTimeout(timeout);
+        this.session.pendingDoorUpload = false;
+        this.session.pendingDoorUploadCallback = null;
+        this.session.pendingDoorUploadReject = null;
+        reject(err);
+      };
+
+      this.socket.emit('show-file-upload', {
+        accept: '.zip,.lha,.lzh,.lzx',
+        maxSize: 100 * 1024 * 1024,
+        multiple: false,
+      });
+    });
+  }
+
+  /**
+   * Install a door archive at the given path.
+   * Extracts, auto-detects type, places in Doors/, creates registration .info.
+   */
+  async installDoor(archivePath: string): Promise<{
+    success: boolean;
+    message: string;
+    doorName?: string;
+    command?: string;
+    type?: string;
+  }> {
+    const { config } = require('../config');
+    const { DoorInstaller } = require('./door-installer');
+    const installer = new DoorInstaller(config.get('dataDir'));
+    return installer.install(archivePath);
+  }
 }
 
 /**
