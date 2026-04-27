@@ -36,7 +36,8 @@ export async function getConferenceScanFlags(
     `SELECT scan_flags FROM conf_base WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
   );
   const row = stmt.get(userId, conferenceId, messageBaseId);
-  return row ? row.scan_flags || 0 : 0;
+  // No row = new user/conf: default to scanning enabled (matches express.e DEFAULT_NEWSCAN behaviour)
+  return row ? (row.scan_flags ?? DEFAULT_SCAN_FLAGS) : DEFAULT_SCAN_FLAGS;
 }
 
 /**

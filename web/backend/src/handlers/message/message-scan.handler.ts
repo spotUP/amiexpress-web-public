@@ -99,7 +99,7 @@ console.log(`[checkCommandExists] Command ${commandName} not found or error:`, e
  * @param userId - User ID for checking scan flags
  * @returns True if should scan files
  */
-async function checkFileConfScan(conf: number, userId: string): Promise<boolean> {
+async function checkFileConfScan(conf: number, userId: string, msgBaseId: number = 1): Promise<boolean> {
   const flags = getConferenceToolFlags(conf);
 
   // express.e:595-596 - IF((checkToolTypeExists(TOOLTYPE_CONF,conf,'SHOW_NEW_FILES')))
@@ -115,7 +115,7 @@ async function checkFileConfScan(conf: number, userId: string): Promise<boolean>
   // express.e:601-607 - cb:=confBases.item(getConfIndex(conf,1))
   // Get first message base for this conference and check FILE_SCAN_MASK
   try {
-    const scanFlags = await getConferenceScanFlags(userId, conf, 1);
+    const scanFlags = await getConferenceScanFlags(userId, conf, msgBaseId);
     const FILE_SCAN_MASK = 8; // express.e FILE_SCAN_MASK
     // express.e:604 - IF (cb.handle[0] AND FILE_SCAN_MASK)<>0 THEN res:=TRUE ELSE res:=FALSE
     return (scanFlags & FILE_SCAN_MASK) !== 0;
@@ -406,13 +406,15 @@ console.log(`[confScan] Mail scan: ${confName} / msgBase ${msgBaseId}`);
       }
 
       // express.e:28089 - fscan:=checkFileConfScan(conf) — only scan files when enabled
-      const fscan = await checkFileConfScan(conf, user.id);
+      // express.e uses msgbase=1 meaning "first base in this conf", which maps to
+      // _messageBases[0].id for this conference (not the global ID 1).
+      const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
+      const firstMsgBaseId = firstMsgBase ? firstMsgBase.id : 1;
+      const fscan = await checkFileConfScan(conf, user.id, firstMsgBaseId);
       if (fscan) {
         if (hasAquaScan) {
 console.log(`[confScan] File scan via AquaScan (N S U): ${confName}`);
-          const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
-          const msgBaseId = firstMsgBase ? firstMsgBase.id : 1;
-          await joinConference(socket, session, conf, msgBaseId, true);
+          await joinConference(socket, session, conf, firstMsgBaseId, true);
           session.newFilesPauseFlag = true;
           await runSysCommand(socket, session, 'N', 'S U');
           session.newFilesPauseFlag = false;
