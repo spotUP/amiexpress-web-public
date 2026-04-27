@@ -69,6 +69,10 @@
       "require": "./dist/engines/ui/ansi-editor/index.js",
       "default": "./dist/engines/ui/ansi-editor/index.js"
     },
+    "./utils/wasm-loader": {
+      "types": "./dist/utils/wasm-loader.d.ts",
+      "default": "./dist/utils/wasm-loader.js"
+    },
     "./utils/blessed-helpers": {
       "types": "./dist/utils/blessed-helpers.d.ts",
       "default": "./dist/utils/blessed-helpers.js"
