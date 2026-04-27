@@ -13,14 +13,19 @@ exports.keyToAction = keyToAction;
  * - Up for hard drop
  * - Z/X for rotation (CCW/CW)
  */
+// Default: TGM-influenced layout.
+// Space = rotate 180 (big key, easy to hit).
+// Up = hard drop (modern addition; TGM3 has sonic drop, not hard drop, but
+// we expose hard drop as a feature so map it to the natural key).
+// X/Z = rotate CW/CCW (TGM standard).
 exports.DEFAULT_KEYS = {
     left: ['left', 'a'],
     right: ['right', 'd'],
-    rotateCW: ['x', 'pageup'], // X = rotate clockwise
-    rotateCCW: ['z', 'lcontrol', 'rcontrol'], // Z = rotate counter-clockwise
+    rotateCW: ['x', 'pageup'],
+    rotateCCW: ['z', 'lcontrol', 'rcontrol'],
     rotate180: ['space'],
     softDrop: ['down', 's'],
-    hardDrop: ['up', 'return', 'enter'], // Up arrow = hard drop
+    hardDrop: ['up', 'return', 'enter'],
     sonicDrop: [],
     hold: ['c', 'lshift', 'rshift'],
     pause: ['p'],
@@ -57,17 +62,19 @@ exports.KEY_PRESETS = {
         pause: ['p'],
     },
     modern: {
-        name: 'Modern (Jstris)',
+        // Jstris/TETR.IO style: Space=hard drop, Up=rotate CW, Z=rotate CCW.
+        // Rotate 180 is left unbound (not a Jstris default — user can bind manually).
+        name: 'Modern (Jstris/TETR.IO)',
         left: ['left', 'a'],
         right: ['right', 'd'],
-        rotateCW: ['up', 'x'],
+        rotateCW: ['up', 'x'], // Up arrow = rotate CW (Jstris standard)
         rotateCCW: ['z', 'lcontrol'],
-        rotate180: ['space'],
+        rotate180: [], // Not bound by default in Jstris
         softDrop: ['down', 's'],
-        hardDrop: ['return'],
+        hardDrop: ['space'], // Space = hard drop (Jstris standard)
         sonicDrop: [],
         hold: ['c', 'lshift'],
-        pause: ['p'],
+        pause: ['p', 'escape'],
     },
 };
 /**

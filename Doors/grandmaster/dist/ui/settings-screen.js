@@ -42,7 +42,12 @@ function formatKeyBinding(keys) {
 function formatTriggerStr(t) {
     if (t.startsWith('button:')) {
         const btn = t.slice(7).toUpperCase();
-        const names = { L1: 'L1', R1: 'R1', L2: 'L2', R2: 'R2', L3: 'L3', R3: 'R3', SELECT: 'Sel', START: 'Start', HOME: 'Home' };
+        const names = {
+            A: 'A', B: 'B', X: 'X', Y: 'Y',
+            L1: 'L1', R1: 'R1', L2: 'L2', R2: 'R2',
+            L3: 'L3', R3: 'R3',
+            SELECT: 'Sel', START: 'Start', HOME: 'Home',
+        };
         return names[btn] ?? `Btn-${btn}`;
     }
     if (t.startsWith('dpad:')) {
@@ -743,30 +748,35 @@ class SettingsScreen {
     async pickGamepadPreset() {
         const GAMEPAD_PRESETS = {
             standard: {
-                name: 'Standard (dpad + face buttons)',
+                // Matches GAMEPAD_MAPPING defaults in app.ts exactly.
+                // Dpad + left stick for movement; face buttons for rotation.
+                name: 'Standard (dpad + left stick)',
                 bindings: {
-                    left: ['dpad:left'],
-                    right: ['dpad:right'],
-                    soft_drop: ['dpad:down'],
-                    hard_drop: ['dpad:up', 'button:a'],
-                    rotate_cw: ['button:b', 'button:r1'],
-                    rotate_ccw: ['button:x', 'button:l1'],
-                    rotate_180: ['button:y'],
-                    hold: ['button:l2', 'button:select'],
+                    left: ['dpad:left', 'axis:left-x:negative'],
+                    right: ['dpad:right', 'axis:left-x:positive'],
+                    soft_drop: ['dpad:down', 'axis:left-y:positive'],
+                    hard_drop: ['dpad:up', 'button:a'], // up = instant drop (Guideline)
+                    rotate_cw: ['button:b', 'button:r1'], // B = right face, R1 = right shoulder
+                    rotate_ccw: ['button:x', 'button:l1'], // X = left face,  L1 = left shoulder
+                    rotate_180: ['button:y'], // Y = top face
+                    hold: ['button:l2', 'button:r2'], // Both triggers = hold
                     pause: ['button:start'],
                 },
             },
             stick: {
+                // Arcade / fighting-stick layout.
+                // Stick/dpad for movement; button rows map to rotations.
+                // No shoulder buttons for primary actions (sticks often lack them).
                 name: 'Arcade Stick / Fighting',
                 bindings: {
                     left: ['axis:left-x:negative', 'dpad:left'],
                     right: ['axis:left-x:positive', 'dpad:right'],
                     soft_drop: ['axis:left-y:positive', 'dpad:down'],
-                    hard_drop: ['button:a', 'button:r1'],
-                    rotate_cw: ['button:b', 'button:y'],
-                    rotate_ccw: ['button:x', 'button:l1'],
-                    rotate_180: ['button:r2'],
-                    hold: ['button:l2', 'button:select'],
+                    hard_drop: ['dpad:up', 'button:a'], // up-lever or A = drop
+                    rotate_cw: ['button:b', 'button:r1'], // B / R1
+                    rotate_ccw: ['button:x', 'button:l1'], // X / L1
+                    rotate_180: ['button:y'], // Y (top face, NOT r2/l2)
+                    hold: ['button:l2', 'button:r2', 'button:select'],
                     pause: ['button:start'],
                 },
             },
