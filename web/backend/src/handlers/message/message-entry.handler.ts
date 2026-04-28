@@ -83,11 +83,24 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
 export function handleMessageSubjectInput(socket: any, session: BBSSession, input: string): void {
   const subject = input.trim();
 
-  // Blank = abort (express.e:10854-10856: StrLen(subject)=0 → aePuts('\b\n') RETURN RESULT_FAILURE)
+  // Blank = abort:
+  // - replyToMSG:9890: RETURN RESULT_SUCCESS → back to reader
+  // - enterMSG:10854: RETURN RESULT_FAILURE → back to menu
   if (subject === '') {
     emitText(socket, '\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.tempData = undefined;
+    if (session.tempData?.messageEntry?.parentId) {
+      // Reply context: return to message reader (express.e:9890 RESULT_SUCCESS)
+      const msgReaderMessages = session.tempData.msgReaderMessages;
+      const msgReaderIndex = session.tempData.msgReaderIndex || 0;
+      const msgReaderHighest = session.tempData.msgReaderHighestRead;
+      session.tempData = { msgReaderMessages, msgReaderIndex, msgReaderHighestRead: msgReaderHighest };
+      session.subState = LoggedOnSubState.MSG_READER_NAV;
+      const { displaySingleMessage } = require('./messaging.handler');
+      (async () => { await displaySingleMessage(socket, session, msgReaderIndex); })();
+    } else {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+    }
     return;
   }
 

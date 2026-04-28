@@ -545,28 +545,30 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // R - Reply - express.e:10762-10763 replyFlag=1 → JUMP skipBegin (skips To: and Subject: prompts)
+  // R - Reply - express.e:9874-9907 replyToMSG()
   if (command === 'R') {
     const msg = messages[currentIndex];
-    // express.e pre-fills toName/subject from original; skipBegin goes straight to Private prompt
-    const replySubject = msg.subject.startsWith('Re: ') ? msg.subject : `Re: ${msg.subject}`;
 
-    session.inputBuffer = '';
+    // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
+    emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${msg.author}\r\n`);
+
+    // express.e:9886-9890: Subject prompt pre-filled with original subject (no "Re: " prefix)
+    // blank = abort (RETURN RESULT_SUCCESS = return to reading)
+    emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
+    emitText(socket, msg.subject);
+
+    session.inputBuffer = msg.subject; // pre-fill for line editing
     session.tempData.messageEntry = {
       toUser: msg.author,
-      subject: replySubject,
+      subject: msg.subject,
       body: [],
       currentLine: 1,
       parentId: msg.id,
     };
-
-    // WEB_: show informational header (not in express.e but improves UX)
-    emitText(socket, `\r\n\x1b[36mTo\x1b[33m: \x1b[0m${msg.author}\r\n`);
-    emitText(socket, `\x1b[36mSubject\x1b[33m: \x1b[0m${replySubject}\r\n`);
-
-    // express.e:10859-10875 skipBegin → Private prompt (aFlag=0 for non-ALL/EALL)
-    emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
-    session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
+    // express.e:9894 replyFlag=1 → enterMSG skips To:/Subject: and jumps to skipBegin
+    // We go to POST_MESSAGE_SUBJECT to capture any subject edit; handler will proceed to Private
+    session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
     return;
   }
 
