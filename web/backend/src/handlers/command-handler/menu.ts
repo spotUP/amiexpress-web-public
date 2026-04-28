@@ -213,16 +213,13 @@ console.log('  - timeRemaining:', session.timeRemaining);
 console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
 console.log('  - currentMsgBase found:', !!currentMsgBase);
 
+  // express.e:28417-28420: [0m[35m{bbsName} [0m[[36m{confNum}[34m:[36m{confName}[0m] Menu ([33m{time}[0m mins. left):
   if (msgBasesInConf.length > 1 && currentMsgBase) {
-    // Multiple message bases: show "ConfName - MsgBaseName"
     const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
-    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
-console.log(' Sending multi-msgbase prompt:', prompt);
+    const prompt = `\x1b[0m\x1b[35m${bbsName} \x1b[0m[\x1b[36m${session.relConfNum}\x1b[34m:\x1b[36m${displayName}\x1b[0m] Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
     emitPrompt(socket, prompt);
   } else {
-    // Single message base: just show conference name
-    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
-console.log(' Sending single-msgbase prompt:', prompt);
+    const prompt = `\x1b[0m\x1b[35m${bbsName} \x1b[0m[\x1b[36m${session.relConfNum}\x1b[34m:\x1b[36m${session.currentConfName}\x1b[0m] Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
     emitPrompt(socket, prompt);
   }
 
