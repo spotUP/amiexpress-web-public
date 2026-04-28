@@ -43,6 +43,7 @@ export function setSysopCommandsDependencies(deps: {
  * In the original AmiExpress, this gave sysops AmigaDOS shell access.
  * Web version: Not applicable, stubbed with explanation.
  */
+// WEB_: express.e:24424-24451 — AmigaShell (remoteShell) not available in web environment; stubbed with informational message
 export function handleRemoteShellCommand(socket: any, session: BBSSession): void {
   // Check security - express.e:24428
   if (!checkSecurity(session.user, ACSPermission.REMOTE_SHELL)) {
@@ -192,6 +193,7 @@ console.log('[ENV] Sysop');
  * In AmiExpress, this edited the file directory database files.
  * Web version: Not applicable, stubbed with explanation.
  */
+// WEB_: express.e:24511-24515 — editDirFile (MicroEmacs) not applicable; web uses database-backed file management
 export function handleEditDirectoryFilesCommand(socket: any, session: BBSSession, params: string = ''): void {
   // Set environment status - express.e:24512
   _setEnvStat(session, EnvStat.EMACS);
@@ -245,6 +247,7 @@ console.log('[ENV] Emacs');
  * In AmiExpress, this provided full filesystem editing access.
  * Web version: Not applicable, stubbed with explanation.
  */
+// WEB_: express.e:24517-24521 — editAnyFile (MicroEmacs) not applicable; blocked for security in web environment
 export function handleEditAnyFileCommand(socket: any, session: BBSSession, params: string = ''): void {
   // Set environment status - express.e:24518
   _setEnvStat(session, EnvStat.EMACS);
@@ -298,6 +301,7 @@ console.log('[ENV] Emacs');
  * In AmiExpress, this was "myDirAnyWhere" - full AmigaDOS navigation.
  * Web version: Not applicable, stubbed with explanation.
  */
+// WEB_: express.e:24523-24527 — myDirAnyWhere (AmigaDOS navigation) not applicable; blocked for security in web environment
 export function handleChangeDirectoryCommand(socket: any, session: BBSSession, params: string = ''): void {
   // Set environment status - express.e:24524
   _setEnvStat(session, EnvStat.SYSOP);

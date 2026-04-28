@@ -34,8 +34,7 @@ console.log('[menu] displayMainMenu SKIPPED (in confScan)');
     return;
   }
 
-  // Debounce: prevent duplicate menu displays within 500ms
-  // This handles race conditions between door completion and display flow advancement
+  // WEB_: MODERN_* — 500ms debounce prevents duplicate menu display on rapid door-completion/state-transition races; no express.e equivalent
   const now = Date.now();
   const lastMenuTime = (session as any)._lastMainMenuTime || 0;
   if (now - lastMenuTime < 500 && !forceMenuDisplay) {
@@ -153,8 +152,7 @@ console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
     return;
   }
 
-  // Debounce: prevent duplicate prompts within 500ms
-  // This handles race conditions between door completion and display flow advancement
+  // WEB_: MODERN_* — 500ms debounce prevents duplicate menu prompts on rapid state-transition races; no express.e equivalent
   const now = Date.now();
   const lastPromptTime = (session as any)._lastMenuPromptTime || 0;
   if (now - lastPromptTime < 500) {

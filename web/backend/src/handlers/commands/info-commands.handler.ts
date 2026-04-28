@@ -62,7 +62,7 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   emitText(socket, '  (C)1992-95 Joe Hodge, LightSpeed Technologies Inc.\r\n');
   emitText(socket, '\r\n');
 
-  // Web implementation details
+  // WEB_: MODERN_* — additional web platform version info not present in express.e:25688-25699 (VER shows only version string + copyright + reg key)
   emitText(socket, AnsiUtil.colorize('Built with:', 'yellow'));
   emitText(socket, '\r\n');
   emitText(socket, '  - Node.js/TypeScript backend\r\n');
@@ -481,7 +481,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, AnsiUtil.colorize('NO', 'white'));
   emitText(socket, '\r\n');
 
-  // Option 17: Modem Emulation Speed (web extension)
+  // WEB_: MODERN_* — option 17: modem emulation speed throttle, no express.e counterpart; web terminal setting
   emitText(socket, AnsiUtil.colorize('[', 'blue'));
   emitText(socket, ' 17');
   emitText(socket, AnsiUtil.colorize('] ', 'blue'));
@@ -489,7 +489,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, AnsiUtil.colorize(modemLabel, 'yellow'));
   emitText(socket, '\r\n');
 
-  // Option 18: Terminal Font (web extension)
+  // WEB_: MODERN_* — option 18: terminal font selection, no express.e counterpart; web terminal setting
   const userFont = currentUser.fontPreference || 'TopazPlus_a1200';
   emitText(socket, AnsiUtil.colorize('[', 'blue'));
   emitText(socket, ' 18');
@@ -733,7 +733,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       _displayWCommandMenu(socket, session);
       break;
 
-    case 17: // Modem emulation speed (web extension)
+    case 17: // WEB_: MODERN_* — modem emulation speed; no express.e:25712-26092 counterpart
       emitText(socket, '\r\nSelect Modem Speed:\r\n');
       MODEM_OPTIONS.forEach((opt, idx) => {
         emitText(socket, `[${idx}] ${opt.label}\r\n`);
@@ -742,7 +742,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       session.subState = LoggedOnSubState.W_EDIT_MODEM_SPEED;
       break;
 
-    case 18: // Terminal font (web extension)
+    case 18: // WEB_: MODERN_* — terminal font selection; no express.e:25712-26092 counterpart
       emitText(socket, '\r\nSelect Terminal Font:\r\n');
       emitText(socket, '\r\n');
       emitText(socket, AnsiUtil.colorize('[1] ', 'blue') + 'TopazPlus_a1200  - Classic Amiga Topaz (1200)\r\n');
@@ -1240,7 +1240,7 @@ export async function handleWEditTranslatorInput(socket: any, session: BBSSessio
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
 
-// Handle modem speed selection (web extension)
+// WEB_: MODERN_* — modem emulation speed input handler; no express.e counterpart
 export async function handleWEditModemSpeedInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const trimmed = input.trim();
   if (trimmed === '') {
@@ -1292,7 +1292,7 @@ console.log(`[W Command] modem-speed event emitted`);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
 
-// Handle font selection (web extension)
+// WEB_: MODERN_* — terminal font selection input handler; no express.e counterpart
 export async function handleWEditFontInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const trimmed = input.trim();
   if (trimmed === '') {

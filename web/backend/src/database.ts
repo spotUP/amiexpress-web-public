@@ -2559,6 +2559,7 @@ console.log(`[${level.toUpperCase()}] ${message}`, context);
   }
 
   // Utility methods
+  // WEB_: MODERN_* — bcrypt used instead of express.e's proprietary pwdhash for security; express.e stores a simple XOR/shift hash in user.data
   async hashPassword(password: string): Promise<string> {
     const saltRounds = 10;
     return await bcrypt.hash(password, saltRounds);
