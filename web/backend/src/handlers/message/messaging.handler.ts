@@ -139,23 +139,17 @@ console.log('[ENV] Mail - Read');
       continue; // Skip corrupted/missing files
     }
 
-    // Filter by privacy: show public messages and private messages to/from this user
-    if (!message.isPrivate) {
-      // Public message - show to everyone
-      messages.push({
-        id: msgNum,
-        msgNumber: msgNum,
-        subject: message.subject,
-        body: message.body,
-        author: message.from,
-        toUser: message.to,
-        timestamp: new Date(message.date), // Parse DD-MMM-YY HH:MM:SS format
-        isPrivate: false
-      });
-    } else if (username &&
-               (message.to.toLowerCase() === username ||
-                message.from.toLowerCase() === username)) {
-      // Private message to or from this user
+    // express.e:12344-12349 — privateFlag logic:
+    // Private if: status R/p AND no SYSOP_READ AND toName≠user AND toName≠eall/all AND fromName≠user
+    const toL   = (message.to || '').toLowerCase();
+    const fromL = (message.from || '').toLowerCase();
+    const isSysop = checkSecurity(session.user, ACSPermission.SYSOP_READ);
+    const canRead = !message.isPrivate ||
+                    isSysop ||
+                    (username && (toL === username || fromL === username)) ||
+                    toL === 'eall' ||
+                    toL === 'all';
+    if (canRead) {
       messages.push({
         id: msgNum,
         msgNumber: msgNum,
@@ -164,7 +158,7 @@ console.log('[ENV] Mail - Read');
         author: message.from,
         toUser: message.to,
         timestamp: new Date(message.date),
-        isPrivate: true
+        isPrivate: message.isPrivate
       });
     }
   }

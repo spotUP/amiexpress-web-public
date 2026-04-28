@@ -35,7 +35,8 @@ export function setMessageEntryDependencies(deps: {
  * Handle recipient (To:) input - express.e:10771-10838
  */
 export function handleMessageToInput(socket: any, session: BBSSession, input: string): void {
-  const recipient = input.trim();
+  // express.e:10762,10779 — lineInput max 30 chars; truncate silently if longer
+  const recipient = input.trim().substring(0, 30);
 
   // Blank = ALL (express.e:10793-10795)
   if (recipient === '') {
