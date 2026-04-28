@@ -299,6 +299,7 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
     case LoggedOnSubState.POST_MESSAGE_TO:
+      // express.e:10779 — lineInput('','',30,...) caps at 30 chars; reject extra keystrokes silently
       if (data === '\r' || data === '\n') {
         const input = (session.inputBuffer || '').trim();
         session.inputBuffer = '';
@@ -309,11 +310,14 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
           emitText(socket, '\b \b');
         }
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data);
+        if ((session.inputBuffer || '').length < 30) {
+          session.inputBuffer = (session.inputBuffer || '') + data;
+          emitText(socket, data);
+        }
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_SUBJECT:
+      // express.e:10847 — lineInput('','',30,...) caps subject at 30 chars
       if (data === '\r' || data === '\n') {
         const input = (session.inputBuffer || '').trim();
         session.inputBuffer = '';
@@ -324,8 +328,10 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
           emitText(socket, '\b \b');
         }
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data);
+        if ((session.inputBuffer || '').length < 30) {
+          session.inputBuffer = (session.inputBuffer || '') + data;
+          emitText(socket, data);
+        }
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_PRIVATE:

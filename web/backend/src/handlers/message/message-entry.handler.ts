@@ -214,6 +214,11 @@ function emitLinePrompt(socket: any, lineNum: number): void {
 export async function handleMessageOptionsInput(socket: any, session: BBSSession, input: string): Promise<void> {
   // express.e:10394 messageMenuChar:=str[0] — only first char matters
   const cmd = (input.trim()[0] || '').toUpperCase();
+  // Bare CR/empty input arriving while a previous async command (e.g. S=save) is still
+  // running would race with the subState transition and re-emit "Msg. Options:" before
+  // the BBS menu prompt. Express.e's lineInput is synchronous; ours is not, so swallow
+  // empty inputs at this prompt instead of looping back.
+  if (!cmd) return;
   const messageData = session.tempData.messageEntry;
   const lines: string[] = messageData.body;
 
