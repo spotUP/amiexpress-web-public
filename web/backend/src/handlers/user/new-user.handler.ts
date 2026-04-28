@@ -427,9 +427,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
  * Prompt for location - express.e:30172
  */
 function promptForLocation(socket: Socket, session: any) {
-  // WEB_: label changed from "City, State" to "Group Affiliation" for scene BBS context.
-  // Backend field remains `location` to preserve door compatibility.
-  socket.emit('ansi-output', '\r\nGroup Affiliation: ');
+  // express.e:30194: aePuts('City, State: ')
+  socket.emit('ansi-output', 'City, State: ');
   session.inputBuffer = '';
 }
 
@@ -441,7 +440,7 @@ export async function handleLocationInput(socket: Socket, session: any, input: s
   const location = input.trim();
 
   if (location === '') {
-    socket.emit('ansi-output', '\r\nGroup Affiliation is required.\r\n');
+    // express.e:30198-30200: blank → go back (JUMP iJLoop); WEB_ re-prompts instead
     promptForLocation(socket, session);
     return;
   }
@@ -455,7 +454,8 @@ export async function handleLocationInput(socket: Socket, session: any, input: s
  * Prompt for phone - express.e:30181
  */
 function promptForPhone(socket: Socket, session: any) {
-  socket.emit('ansi-output', '\r\nPhone Number (Enter to skip): ');
+  // express.e:30204: aePuts('Phone Number: ')
+  socket.emit('ansi-output', 'Phone Number: ');
   session.inputBuffer = '';
 }
 
