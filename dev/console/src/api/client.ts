@@ -35,7 +35,7 @@ export async function login(username: string, password: string) {
   if (process.env['TMUX']) {
     const { execSync } = await import('child_process');
     try {
-      execSync(`tmux set-environment -t amiexpress AMIEXPRESS_CONSOLE_TOKEN ${res.token}`);
+      execSync(`tmux set-environment -t amiexpress AMIEXPRESS_CONSOLE_TOKEN "${res.token}"`);
     } catch {
       // non-fatal: strip just retries until env is set
     }
@@ -60,8 +60,8 @@ export async function chatNode(nodeId: number, message: string) {
 }
 
 export async function getUsers() {
-  const res = await request<import('./types.js').UserRecord[] | { success: boolean; data: import('./types.js').UserRecord[] }>('/api/config/users');
-  return Array.isArray(res) ? res : ((res as any).data ?? []);
+  const res = await request<{ success: boolean; data: import('./types.js').UserRecord[] }>('/api/config/users');
+  return res.data ?? [];
 }
 
 export async function updateUser(id: string, updates: Partial<import('./types.js').UserRecord>) {
@@ -76,8 +76,8 @@ export async function deleteUser(id: string) {
 }
 
 export async function getConferences() {
-  const res = await request<import('./types.js').ConferenceConfig[] | { success: boolean; data: import('./types.js').ConferenceConfig[] }>('/api/config/conferences');
-  return Array.isArray(res) ? res : ((res as any).data ?? []);
+  const res = await request<{ success: boolean; data: import('./types.js').ConferenceConfig[] }>('/api/config/conferences');
+  return res.data ?? [];
 }
 
 export async function getLastCallers(limit = 50) {
