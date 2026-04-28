@@ -27,6 +27,10 @@ import { DoorInstallPage } from './components/tabs/DoorInstallPage.js';
 import { ImportExportPage } from './components/tabs/ImportExportPage.js';
 import { BatchEditorPage } from './components/tabs/BatchEditorPage.js';
 import { GlobalWallPage } from './components/tabs/GlobalWallPage.js';
+import { DeploymentPage } from './components/tabs/DeploymentPage.js';
+import { InfoFilesPage } from './components/tabs/InfoFilesPage.js';
+import { AmiXnetPage } from './components/tabs/AmiXnetPage.js';
+import { OpChatSettingsPage } from './components/tabs/OpChatSettingsPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
@@ -66,6 +70,11 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   'import-export': ImportExportPage,
   'batch-editor':  BatchEditorPage,
   'global-wall':   GlobalWallPage,
+  // Phase E
+  deployment:       DeploymentPage,
+  'info-files':     InfoFilesPage,
+  amixnet:          AmiXnetPage,
+  'op-chat-settings': OpChatSettingsPage,
 };
 
 export function App({ username }: Props) {

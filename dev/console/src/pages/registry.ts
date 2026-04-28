@@ -282,7 +282,17 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-  { id: 'deployment',     label: 'Deployment',      category: 'System', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
+  {
+    id: 'deployment',
+    label: 'Deployment',
+    category: 'System',
+    footerHint: '[r]efresh now  auto-refresh 30s',
+    helpKeys: [
+      ['r', 'Refresh deployment status now'],
+      ['—', 'Shows health, system info, and database statistics'],
+    ],
+    implemented: true,
+  },
   {
     id: 'system',
     label: 'System (legacy)',
@@ -366,8 +376,33 @@ export const PAGES: PageMeta[] = [
   },
 
   // ─── Comms ─────────────────────────────────────────────────────
-  { id: 'amixnet',           label: 'AmiXnet',          category: 'Comms', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
-  { id: 'op-chat-settings',  label: 'Op Chat Settings', category: 'Comms', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
+  {
+    id: 'amixnet',
+    label: 'AmiXnet',
+    category: 'Comms',
+    footerHint: '[e]dit value  [s]ave  [r]efresh  [↑↓] select',
+    helpKeys: [
+      ['↑↓', 'Select a setting'],
+      ['e', 'Edit the selected setting value'],
+      ['s', 'Save all changes'],
+      ['r', 'Refresh from server'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'op-chat-settings',
+    label: 'Op Chat Settings',
+    category: 'Comms',
+    footerHint: '[e]dit  [s]ave  [r]efresh  [R]revert  [↑↓] select',
+    helpKeys: [
+      ['↑↓', 'Select a field'],
+      ['e', 'Edit the selected field'],
+      ['s', 'Save all pending changes'],
+      ['R', 'Revert all pending changes'],
+      ['r', 'Refresh from server (discards pending)'],
+    ],
+    implemented: true,
+  },
   {
     id: 'batch-editor',
     label: 'Batch Editor',
@@ -385,7 +420,21 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-  { id: 'info-files',        label: 'Info Files',       category: 'Comms', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
+  {
+    id: 'info-files',
+    label: 'Info Files',
+    category: 'Comms',
+    footerHint: '[enter] edit  [↑↓] select  [e]dit value  [t]oggle comment  [s]ave  [esc] back',
+    helpKeys: [
+      ['↑↓', 'Select a file (list) or tooltype (edit)'],
+      ['enter', 'Open the selected file for editing'],
+      ['e', 'Edit the selected tooltype value'],
+      ['t', 'Toggle comment on the selected tooltype'],
+      ['s', 'Save all changes to the file'],
+      ['esc', 'Back to file list (from edit mode)'],
+    ],
+    implemented: true,
+  },
 ];
 
 export const CATEGORIES: CategoryName[] = ['Live', 'Users', 'Content', 'Files', 'System', 'Comms'];

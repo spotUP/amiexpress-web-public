@@ -493,3 +493,64 @@ export async function updateGlobalWallComment(id: string, patch: Partial<GlobalW
 export async function deleteGlobalWallComment(id: string) {
   return request<{ success: boolean }>(`/api/globalwall/comments/${id}`, { method: 'DELETE' });
 }
+
+// ───── Phase E: Deployment, Info Files, AmiXnet, Op Chat Settings ──
+
+// Deployment monitoring (read-only)
+export async function getDeploymentHealth() {
+  return request<{ success?: boolean; data?: unknown; [k: string]: unknown }>('/api/deployment/health');
+}
+
+export async function getDeploymentSystemInfo() {
+  return request<{ data?: unknown; [k: string]: unknown }>('/api/deployment/system-info');
+}
+
+export async function getDeploymentDatabaseStats() {
+  return request<{ data?: unknown; [k: string]: unknown }>('/api/deployment/database-stats');
+}
+
+// Info Editor (.info file tooltypes)
+export interface InfoFileEntry {
+  path: string;
+  name?: string;
+  size?: number;
+  modified?: string;
+}
+
+export interface InfoTooltype {
+  key: string;
+  value?: string;
+  commented?: boolean;
+}
+
+export async function getInfoFiles() {
+  const res = await request<{ success: boolean; data: InfoFileEntry[] }>('/api/info-editor/files');
+  return res.data ?? [];
+}
+
+export async function getInfoFile(relativePath: string) {
+  const res = await request<{ success: boolean; data: { path: string; tooltypes: InfoTooltype[] } }>(`/api/info-editor/file?path=${encodeURIComponent(relativePath)}`);
+  return res.data;
+}
+
+export async function updateInfoFile(relativePath: string, tooltypes: InfoTooltype[]) {
+  return request<{ success: boolean }>('/api/info-editor/file', {
+    method: 'PUT',
+    body: JSON.stringify({ path: relativePath, tooltypes }),
+  });
+}
+
+export async function toggleTooltypeComment(relativePath: string, key: string) {
+  return request<{ success: boolean }>('/api/info-editor/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ path: relativePath, key }),
+  });
+}
+
+// Operator chat settings
+export async function updateOperatorChatConfig(config: Record<string, unknown>) {
+  return request<{ success: boolean }>('/api/config/operator-chat', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
