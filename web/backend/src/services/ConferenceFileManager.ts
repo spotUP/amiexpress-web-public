@@ -5,11 +5,11 @@
  * - BBS:Conf.DB
  *
  * File format:
- * - Binary array of confBase structs (64 bytes each)
+ * - Binary array of confBase structs (74 bytes each)
  * - Each conference is a fixed-size record
  *
  * References:
- * - axobjects.e:136-155 - confBase struct definition (64 bytes)
+ * - axobjects.e:136-155 - confBase struct definition (74 bytes)
  * - express.e:31931 - StrCopy(confDBName,'Conf.DB')
  * - express.e:2088-2111 - setConfLocation(), loads/saves conf data
  */
@@ -47,7 +47,7 @@ interface ConfBaseStruct {
 }
 
 export class ConferenceFileManager {
-  private readonly CONFBASE_SIZE = 64;
+  private readonly CONFBASE_SIZE = 74;
   private bbsRoot: string;
   private confDBPath: string;
   private readonly suppressConfDbErrors: boolean;
@@ -118,7 +118,7 @@ export class ConferenceFileManager {
   }
 
   /**
-   * Serialize confBase struct to binary buffer (64 bytes)
+   * Serialize confBase struct to binary buffer (74 bytes)
    */
   private serializeConfBaseStruct(struct: ConfBaseStruct): Buffer {
     const buffer = Buffer.alloc(this.CONFBASE_SIZE);
