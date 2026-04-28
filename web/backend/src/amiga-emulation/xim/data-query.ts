@@ -489,6 +489,11 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
             }
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
 console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} lastOn=${lastOn} user.lastLogin=${(user as any)?.lastLogin}`);
+            try {
+              require('fs').appendFileSync('/tmp/aquascan-debug.log',
+                `[${new Date().toISOString()}] DT_TIMELASTON_READ rawDisk=${rawDisk} lastOn=${lastOn} user.lastLogin=${(user as any)?.lastLogin} userSlot=${userSlot}\n`
+              );
+            } catch (_) {}
           } else {
             const newLastOn = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLastOn)) {
@@ -634,15 +639,22 @@ debugLog(`  [READ] DT_HOSTIP: "${hostip}"`);
           // express.e:3769 formatCDateTime(loggedOnUser.timeLastOn,tempstring)
           // 24-char field: WarOLM and other doors embed the result in a
           // %-24.24s slot. Format: "Wkd DD-Mmm-YYYY HH:MM:SS".
+          let amigaDate = 'Thu 01-Jan-1970 00:00:00';
           if (user?.lastLogin || user?.timeLastOn) {
-            const amigaDate = formatCDateTime(new Date(user.lastLogin || user.timeLastOn!));
-            this.messageParser.writeString(stringAddr, amigaDate, 200);
-debugLog(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
-          } else {
-            // 1970-01-01 00:00:00 UTC was a Thursday.
-            this.messageParser.writeString(stringAddr, 'Thu 01-Jan-1970 00:00:00', 200);
-debugLog(`  [READ] DT_STAMP_LASTON: "Thu 01-Jan-1970 00:00:00" (never logged in)`);
+            const raw = user.lastLogin || user.timeLastOn;
+            // user.lastLogin is Unix SECONDS in our DB; new Date() expects ms
+            const d = typeof raw === 'number'
+              ? new Date(raw * 1000)
+              : new Date(raw as any);
+            amigaDate = formatCDateTime(d);
           }
+          this.messageParser.writeString(stringAddr, amigaDate, 200);
+debugLog(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
+          try {
+            require('fs').appendFileSync('/tmp/aquascan-debug.log',
+              `[${new Date().toISOString()}] DT_STAMP_LASTON_READ "${amigaDate}" user.lastLogin=${(user as any)?.lastLogin} user.timeLastOn=${(user as any)?.timeLastOn}\n`
+            );
+          } catch (_) {}
         }
         break;
 
