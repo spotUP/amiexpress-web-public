@@ -242,10 +242,8 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
     _displayScreen(socket, session, helpScreenPath);
 
   } else {
-    // express.e:25087 - Help unavailable message
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Sorry Help is unavailable at this time.'));
-    socket.emit('ansi-output', '\r\n');
+    // express.e:25083: '\b\n\b\nSorry Help is unavailable at this time.\b\n\b\n'
+    socket.emit('ansi-output', '\r\n\r\nSorry Help is unavailable at this time.\r\n\r\n');
   }
 
   finalizeCommand(socket, session, 'Help information displayed');

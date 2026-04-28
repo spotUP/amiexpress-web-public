@@ -120,12 +120,8 @@ export function handleViewFileCommand(socket: any, session: BBSSession, params: 
     return;
   }
 
-  // Prompt for filename - express.e uses viewAFile() which prompts
-  socket.emit('ansi-output', AnsiUtil.complexPrompt([
-    { text: 'Enter filename to view ', color: 'white' },
-    { text: '(or press Enter to cancel)', color: 'cyan' },
-    { text: ': ', color: 'white' }
-  ]));
+  // express.e:20413: 'Enter filename of file to view? ' — plain text
+  socket.emit('ansi-output', 'Enter filename of file to view? ');
 
   session.subState = LoggedOnSubState.VIEW_FILE_INPUT;
   session.tempData = { viewFileCommand: true };
@@ -166,10 +162,12 @@ function _viewFile(socket: any, session: BBSSession, filename: string): void {
       socket.emit('ansi-output', content);
       socket.emit('ansi-output', '\r\n');
     } catch (error) {
-      socket.emit('ansi-output', AnsiUtil.errorLine(`Error reading file: ${filename}`));
+      // express.e:20429: 'File N not found.\b\n\b\n'
+      socket.emit('ansi-output', `File ${filename} not found.\r\n\r\n`);
     }
   } else {
-    socket.emit('ansi-output', AnsiUtil.errorLine(`File not found: ${filename}`));
+    // express.e:20429: 'File \s not found.\b\n\b\n'
+    socket.emit('ansi-output', `File ${filename} not found.\r\n\r\n`);
   }
 
   socket.emit('ansi-output', '\r\n');
