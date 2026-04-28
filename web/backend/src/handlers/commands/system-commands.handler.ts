@@ -285,17 +285,18 @@ console.log('[ENV] Mail - Enter');
     }
   };
 
-  // Start message entry flow - express.e:10768-10788 (recipient prompt)
-  // express.e:24860-24870 internalCommandE - no header, calls mail functions
-  socket.emit('ansi-output', '\r\n');
+  // Start message entry flow - express.e:10749+ enterMSG()
+  // express.e:9998-10000 msgToHeader(): separator box + To: (Enter)='ALL'? prompt
+  const msgToHeader = '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n'
+                    + '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ';
 
-  // If recipient was provided in params, skip to subject
+  // If recipient was provided in params (express.e:10765-10772)
   if (session.tempData.messageEntry.toUser && session.tempData.messageEntry.toUser.length > 0) {
-    socket.emit('ansi-output', `${AnsiUtil.colorize('To:', 'cyan')} ${session.tempData.messageEntry.toUser}\r\n`);
+    socket.emit('ansi-output', msgToHeader + session.tempData.messageEntry.toUser + '\r\n');
     promptForSubject(socket, session);
   } else {
-    // Prompt for recipient - express.e:10771
-    socket.emit('ansi-output', `${AnsiUtil.colorize('To:', 'cyan')} ${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Blank', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('ALL', 'yellow')}${AnsiUtil.colorize('?', 'green')} `);
+    // Prompt for recipient - express.e:10778-10783
+    socket.emit('ansi-output', msgToHeader);
     session.subState = LoggedOnSubState.POST_MESSAGE_TO;
   }
 }
