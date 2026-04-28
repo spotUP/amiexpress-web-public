@@ -991,7 +991,42 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
     return;
   }
 
-  // Passwords match - hash and save (express.e:25958-25970: setNewPassword())
+  // express.e:26013-26024: checkPasswordStrength before saving
+  let minLen = 0, minStrength = 0;
+  try {
+    const sysConf = db.getConfigRepository?.()?.getSystemConfig?.() || {};
+    minLen = (sysConf as any).min_password_length ?? 0;
+    minStrength = (sysConf as any).min_password_strength ?? 0;
+  } catch (_) { /* use defaults */ }
+
+  if (minLen > 0 && trimmed.length < minLen) {
+    // express.e:26016: "Password length must be at least N chars, changes not saved"
+    emitText(socket, `\r\nPassword length must be at least ${minLen} chars, changes not saved\r\n`);
+    _displayWCommandMenu(socket, session);
+    session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    session.tempData = {};
+    return;
+  }
+  if (minStrength > 0) {
+    let lower = 0, upper = 0, num = 0, sym = 0;
+    for (const c of trimmed) {
+      const code = c.charCodeAt(0);
+      if (code >= 48 && code <= 57) num = 1;
+      else if (code >= 65 && code <= 90) upper = 1;
+      else if (code >= 97 && code <= 122) lower = 1;
+      else sym = 1;
+    }
+    if (lower + upper + num + sym < Math.min(minStrength, 4)) {
+      // express.e:26021: "Password must have at least N of these:\n  upper case,lower case, numeric and symbols"
+      emitText(socket, `\r\nPassword must have at least ${minStrength} of these:\r\n  upper case,lower case, numeric and symbols - changes not saved\r\n`);
+      _displayWCommandMenu(socket, session);
+      session.subState = LoggedOnSubState.W_OPTION_SELECT;
+      session.tempData = {};
+      return;
+    }
+  }
+
+  // Passwords match and meet strength requirements — hash and save (express.e:26025: setNewPassword())
   const hashedPassword = await bcrypt.hash(trimmed, 10);
   session.user.password = hashedPassword;
   await db.updateUser(session.user.id, { passwordHash: hashedPassword });

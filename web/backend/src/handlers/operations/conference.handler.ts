@@ -299,7 +299,7 @@ console.warn('[joinConference] saveMsgPointers error:', err);
       const autoReJoinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
         ? `Conference ${confId}: ${conference.name} [${messageBase.name}] Auto-ReJoined`
         : `Conference ${confId}: ${conference.name} Auto-ReJoined`;
-      socket.emit('ansi-output', autoReJoinMsg);
+      socket.emit('ansi-output', autoReJoinMsg + '\r\n');
 
       // express.e:5092-5113 - Display message stats (only when quietJoin=FALSE)
       // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
