@@ -599,10 +599,8 @@ console.log('[ENV] Bulletins');
   const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
   const bullHelpPath = path.join(confScreenDir, 'Bulletins', 'BullHelp.txt');
   if (!amigafs.existsSync(bullHelpPath)) {
-    // express.e:24619 - myError(ERR_NO_BULLS)
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Sorry, there are no bulletins available\r\n');
-    socket.emit('ansi-output', '\r\n');
+    // express.e:8544-8545 myError(ERR_NO_BULLS): '\b\nNo bulletins are available in this conference!\b\n\b\n'
+    socket.emit('ansi-output', '\r\nNo bulletins are available in this conference!\r\n\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -643,13 +641,8 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
     _displayScreen(socket, session, helpScreen);
   }
 
-  // Prompt for bulletin number
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.complexPrompt([
-    { text: 'Which Bulletin ', color: 'white' },
-    { text: '(?)=List, (Enter)=none', color: 'cyan' },
-    { text: '? ', color: 'white' }
-  ]));
+  // express.e:24634: 'Which Bulletin (?)=List, (Enter)=none? ' — plain text, no ANSI
+  socket.emit('ansi-output', 'Which Bulletin (?)=List, (Enter)=none? ');
 
   session.subState = LoggedOnSubState.BULLETIN_INPUT;
   session.bulletinContext = { showedHelp: true, nonStopDisplay: false };
@@ -676,16 +669,13 @@ function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number,
       socket.emit('ansi-output', '\r\n');
     }
   } else {
-    socket.emit('ansi-output', AnsiUtil.errorLine(`Sorry there is no bulletin #${bulletinNum}`));
-    socket.emit('ansi-output', '\r\n');
+    // express.e:24652-24653: '\b\nSorry there is no bulletin #\d\b\n\b\n'
+    socket.emit('ansi-output', `\r\nSorry there is no bulletin #${bulletinNum}\r\n\r\n`);
   }
 
-  // Prompt for next bulletin
-  socket.emit('ansi-output', AnsiUtil.complexPrompt([
-    { text: 'Which Bulletin ', color: 'white' },
-    { text: '(?)=List, (Enter)=none', color: 'cyan' },
-    { text: '? ', color: 'white' }
-  ]));
+  // express.e:24655 JUMP inputAgain — re-show prompt
+  // express.e:24634: plain text prompt
+  socket.emit('ansi-output', 'Which Bulletin (?)=List, (Enter)=none? ');
 }
 
 /**
