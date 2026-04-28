@@ -288,38 +288,29 @@ async function displayMessagesNonStop(socket: any, session: BBSSession, startInd
     const msg = messages[i];
     const msgNumber = (msg as any).msgNumber || msg.id;
 
-    // Update current index
     session.tempData.msgReaderIndex = i;
     if (!session.tempData.msgReaderHighestRead || msgNumber > session.tempData.msgReaderHighestRead) {
       session.tempData.msgReaderHighestRead = msgNumber;
     }
 
-    // Display message header (simplified for non-stop) - express.e:8954-8958
-    const isNew = msgNumber > (session.lastNewReadConf || 0);
-    const newIndicator = isNew ? AnsiUtil.colorize('[NEW] ', 'yellow') : '';
-    const privateIndicator = msg.isPrivate ? AnsiUtil.colorize('[PRIVATE] ', 'red') : '';
+    // express.e:8897-8951: same header as normal displayMessage (nonStopMail only skips pause)
+    const SCRNCLR_FLAG = 8;
+    if ((session.user?.userFlags || 0) & SCRNCLR_FLAG) {
+      socket.emit('ansi-output', '\x0c');
+    } else {
+      emitText(socket, '\r\n');
+    }
+    const dateStr = formatLongDateTime(msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp));
+    emitText(socket, `\x1b[32mDate   \x1b[33m: \x1b[0m${dateStr.padEnd(30)}   \x1b[32mNumber\x1b[33m: \x1b[0m${msgNumber}\r\n`);
+    const toDisplay = formatRecipientDisplay(msg, session).padEnd(30);
+    const recvd = (msg.toUser || '').toUpperCase() === 'ALL' ? 'N/A' : 'No';
+    emitText(socket, `\x1b[32mTo     \x1b[33m: \x1b[0m${toDisplay}  \x1b[32mRecv\x27d\x1b[33m: \x1b[0m${recvd}\r\n`);
+    const statusStr = msg.isPrivate ? 'Private Message' : 'Public Message';
+    emitText(socket, `\x1b[32mFrom   \x1b[33m: \x1b[0m${(msg.author || '').padEnd(30)}   \x1b[32mStatus\x1b[33m: \x1b[0m${statusStr}\r\n`);
+    emitText(socket, `\x1b[32mSubject\x1b[33m: \x1b[0m${msg.subject}\r\n\r\n`);
 
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize(`--- Message ${msg.id} `, 'cyan'));
-    emitText(socket, `${newIndicator}${privateIndicator}`);
-    emitText(socket, AnsiUtil.colorize('---', 'cyan'));
-    emitText(socket, '\r\n');
-
-    emitText(socket, AnsiUtil.colorize(`From: `, 'green'));
-    emitText(socket, `${msg.author}  `);
-    emitText(socket, AnsiUtil.colorize(`To: `, 'green'));
-    emitText(socket, `${formatRecipientDisplay(msg, session)}\r\n`);
-
-    emitText(socket, AnsiUtil.colorize(`Subject: `, 'green'));
-    emitText(socket, `${msg.subject}\r\n`);
-    emitText(socket, '\r\n');
-
-    // Display message body
-    emitText(socket, `${msg.body}\r\n`);
-    emitText(socket, '\r\n');
-
-    // Small delay to allow output to be sent (and user to potentially interrupt)
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Body — express.e:8954-8958: nonStopMail=TRUE → displayFile with checkForPause=FALSE
+    emitText(socket, `${msg.body}\r\n\r\n`);
   }
 
   // End of messages - save pointer and exit
