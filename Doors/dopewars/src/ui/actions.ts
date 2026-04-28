@@ -1,13 +1,16 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { bindKeys } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
-// Local list factory — same as createList but without forced scrollable/alwaysScroll
-// which adds a scroll-indicator bar inside overlays even when all items fit.
+// Local list factory — same as createList but with scrolling explicitly OFF.
+// createList forces scrollable+alwaysScroll=true which renders a
+// '------------------------------' indicator bar even when all items fit.
 function overlayList(opts: any): any {
   return blessed.list({
     tags: true,
     keys: true,
     mouse: true,
+    scrollable: false,
+    alwaysScroll: false,
     style: { selected: { bg: 'blue', fg: 'white' } },
     ...opts,
   });
