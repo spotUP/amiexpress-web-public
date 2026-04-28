@@ -1599,18 +1599,33 @@ console.error(`[LOGIN] Error writing node files:`, error);
           // Initialize AquaScan.UserData slot if zero, seeding with newSinceDate.
           // AquaScan has no Write() LVO calls — the BBS owns this file.
           // Without seeding, first-time users see "00:00:00" (Amiga epoch) and get all files.
+          {
+            const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
+            const udExists = fs.existsSync(userDataPath);
+            const udSize   = udExists ? fs.statSync(userDataPath).size : 0;
+            const slotNum  = user.slotNumber ?? 0;
+            fs.appendFileSync('/tmp/aquascan-debug.log',
+              `[${new Date().toISOString()}] LOGIN user="${user.username}" slotNum=${slotNum} newSinceDate=${user.newSinceDate?.toISOString?.()} lastLogin=${user.lastLogin?.toISOString?.()} udExists=${udExists} udSize=${udSize}\n`
+            );
+          }
           if (user.slotNumber && user.slotNumber > 0) {
             try {
               const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
               if (fs.existsSync(userDataPath)) {
                 const slotOffset = (user.slotNumber - 1) * 16;
                 const stat = fs.statSync(userDataPath);
+                fs.appendFileSync('/tmp/aquascan-debug.log',
+                  `[${new Date().toISOString()}] LOGIN_SEED_CHECK slot=${user.slotNumber} offset=${slotOffset} fileSize=${stat.size} fits=${slotOffset + 12 <= stat.size}\n`
+                );
                 if (slotOffset + 12 <= stat.size) {
                   const slotBuf = Buffer.alloc(12);
                   const fdRead = fs.openSync(userDataPath, 'r');
                   fs.readSync(fdRead, slotBuf, 0, 12, slotOffset);
                   fs.closeSync(fdRead);
                   const isZero = slotBuf.readUInt32BE(0) === 0 && slotBuf.readUInt32BE(4) === 0;
+                  fs.appendFileSync('/tmp/aquascan-debug.log',
+                    `[${new Date().toISOString()}] LOGIN_SLOT_READ days=${slotBuf.readUInt32BE(0)} min=${slotBuf.readUInt32BE(4)} ticks=${slotBuf.readUInt32BE(8)} isZero=${isZero}\n`
+                  );
                   if (isZero) {
                     const seedDate = user.newSinceDate || user.lastLogin || getSystemTime();
                     const ds = dateTimeToDateStamp(seedDate);
@@ -1621,11 +1636,15 @@ console.error(`[LOGIN] Error writing node files:`, error);
                     const fdWrite = fs.openSync(userDataPath, 'r+');
                     fs.writeSync(fdWrite, writeBuf, 0, 12, slotOffset);
                     fs.closeSync(fdWrite);
+                    fs.appendFileSync('/tmp/aquascan-debug.log',
+                      `[${new Date().toISOString()}] LOGIN_SEEDED slot=${user.slotNumber} days=${ds.days} min=${ds.minutes}\n`
+                    );
 console.log(`[LOGIN] Seeded AquaScan.UserData slot ${user.slotNumber} -> days=${ds.days} min=${ds.minutes}`);
                   }
                 }
               }
             } catch (err) {
+              fs.appendFileSync('/tmp/aquascan-debug.log', `[${new Date().toISOString()}] LOGIN_SEED_ERROR ${err}\n`);
 console.error('[LOGIN] Failed to seed AquaScan.UserData:', err);
             }
           }

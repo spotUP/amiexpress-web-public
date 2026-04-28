@@ -2575,21 +2575,49 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     // AquaScan has no Write() LVO calls; the BBS must own this file.
     // (Login seeds the slot from newSinceDate; here we advance it post-scan
     //  so subsequent N-command runs show only files added since this scan.)
-    if (/aquascan/i.test(doorPath) && session.user?.slotNumber && session.user.slotNumber > 0) {
+    {
+      // --- AQUASCAN DEBUG ---
+      const slotNum = session.user?.slotNumber ?? 0;
+      const isAquaScan = /aquascan/i.test(doorPath);
+      const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
+      let beforeHex = '(unreadable)';
       try {
-        const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
-        const ds = dateTimeToDateStamp(new Date());
-        const slotOffset = (session.user.slotNumber - 1) * 16;
-        const buf = Buffer.alloc(12);
-        buf.writeUInt32BE(ds.days, 0);
-        buf.writeUInt32BE(ds.minutes, 4);
-        buf.writeUInt32BE(ds.ticks, 8);
-        const fdUs = fs.openSync(userDataPath, 'r+');
-        fs.writeSync(fdUs, buf, 0, 12, slotOffset);
-        fs.closeSync(fdUs);
-console.log(`[executeAmigaDoor] Advanced AquaScan.UserData slot ${session.user.slotNumber} -> days=${ds.days} min=${ds.minutes}`);
-      } catch (err) {
-console.error('[executeAmigaDoor] Failed to advance AquaScan.UserData:', err);
+        if (fs.existsSync(userDataPath) && slotNum > 0) {
+          const fd2 = fs.openSync(userDataPath, 'r');
+          const pre = Buffer.alloc(12);
+          fs.readSync(fd2, pre, 0, 12, (slotNum - 1) * 16);
+          fs.closeSync(fd2);
+          beforeHex = `days=${pre.readUInt32BE(0)} min=${pre.readUInt32BE(4)} ticks=${pre.readUInt32BE(8)}`;
+        }
+      } catch (_) {}
+      fs.appendFileSync('/tmp/aquascan-debug.log',
+        `[${new Date().toISOString()}] DOOR_EXIT door="${doorPath}" isAquaScan=${isAquaScan} user="${session.user?.username}" slotNum=${slotNum} udPath_exists=${fs.existsSync(userDataPath)} slot_before=[${beforeHex}]\n`
+      );
+      // --- END DEBUG ---
+
+      if (isAquaScan && slotNum > 0) {
+        try {
+          const ds = dateTimeToDateStamp(new Date());
+          const slotOffset = (slotNum - 1) * 16;
+          const buf = Buffer.alloc(12);
+          buf.writeUInt32BE(ds.days, 0);
+          buf.writeUInt32BE(ds.minutes, 4);
+          buf.writeUInt32BE(ds.ticks, 8);
+          const fdUs = fs.openSync(userDataPath, 'r+');
+          fs.writeSync(fdUs, buf, 0, 12, slotOffset);
+          fs.closeSync(fdUs);
+          fs.appendFileSync('/tmp/aquascan-debug.log',
+            `[${new Date().toISOString()}] WROTE slot ${slotNum} -> days=${ds.days} min=${ds.minutes} ticks=${ds.ticks}\n`
+          );
+console.log(`[AquaScan] Wrote UserData slot ${slotNum}: days=${ds.days} min=${ds.minutes}`);
+        } catch (err) {
+          fs.appendFileSync('/tmp/aquascan-debug.log', `[${new Date().toISOString()}] WRITE_ERROR ${err}\n`);
+console.error('[AquaScan] Failed to advance UserData:', err);
+        }
+      } else {
+        fs.appendFileSync('/tmp/aquascan-debug.log',
+          `[${new Date().toISOString()}] SKIPPED write: isAquaScan=${isAquaScan} slotNum=${slotNum}\n`
+        );
       }
     }
 
