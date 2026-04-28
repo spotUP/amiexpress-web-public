@@ -235,8 +235,12 @@ class DopewarsServer extends events_1.EventEmitter {
     }
     async getMarket(id) {
         const raw = this.wasm.getMarket(this.getIdx(id));
+        // Capture all drug names before filtering (so inventory/sell work cross-location)
+        const drugNames = {};
+        for (const p of raw.prices)
+            drugNames[p.index] = p.name;
         // Only expose drugs available at this location (price > 0)
-        return { ...raw, prices: raw.prices.filter(p => p.price > 0) };
+        return { ...raw, prices: raw.prices.filter(p => p.price > 0), drugNames };
     }
 }
 exports.DopewarsServer = DopewarsServer;

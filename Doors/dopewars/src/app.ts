@@ -95,7 +95,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
           await applyResult(r);
           fullRender();
         }),
-      });
+      }, { currentLocation: state.location, locationNames: server.getLocationNames() });
     } else if (!state.inCombat && mode === 'combat') {
       if (unbindCombat) { unbindCombat(); unbindCombat = null; }
       mode = 'normal';

@@ -89,7 +89,7 @@ async function createApp(ctx, server) {
                     await applyResult(r);
                     fullRender();
                 }),
-            });
+            }, { currentLocation: state.location, locationNames: server.getLocationNames() });
         }
         else if (!state.inCombat && mode === 'combat') {
             if (unbindCombat) {

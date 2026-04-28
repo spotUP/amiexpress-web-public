@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderInventory = renderInventory;
 const GUN_NAMES = ['.38 Revolver', '.44 Magnum', 'Sawn-off Shotgun', 'Uzi'];
 function renderInventory(box, state, market) {
-    const drugNameMap = new Map(market?.prices.map(p => [p.index, p.name]) ?? []);
+    const drugNameMap = new Map(Object.entries(market?.drugNames ?? {}).map(([k, v]) => [Number(k), v]));
     const lines = ['{bold}DRUGS{/}'];
     let hasAny = false;
     for (const d of state.drugs) {

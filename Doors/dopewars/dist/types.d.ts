@@ -34,6 +34,7 @@ export interface PlayerState {
 export interface MarketState {
     location: number;
     prices: DrugPrice[];
+    drugNames: Record<number, string>;
 }
 export interface GameEvent {
     code: number;

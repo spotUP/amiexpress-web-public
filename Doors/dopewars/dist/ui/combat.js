@@ -1,32 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bindCombatKeys = bindCombatKeys;
-const LOCATION_NAMES = [
-    'Brooklyn', 'Bronx', 'Ghetto', 'Central Park',
-    'Manhattan', 'Coney Island', 'Battery Park', 'Queens',
-];
-function bindCombatKeys(screen, handlers) {
-    let awaitingRunDest = false;
-    const fightFn = () => { if (!awaitingRunDest)
-        handlers.onFight(); };
-    const surrenderFn = () => { if (!awaitingRunDest)
-        handlers.onSurrender(); };
+const actions_1 = require("./actions");
+function bindCombatKeys(screen, handlers, ctx) {
+    const fightFn = () => handlers.onFight();
+    const surrenderFn = () => handlers.onSurrender();
     const runFn = () => {
-        awaitingRunDest = true;
-        // location keys 1-8 become active for destination selection
+        (0, actions_1.showJetOverlay)(screen, ctx.currentLocation, ctx.locationNames, (loc) => { unbind(); handlers.onRun(loc); }, () => { } // cancel: stay in combat, keep keys bound
+        );
     };
-    const locFns = [];
-    LOCATION_NAMES.forEach((_name, i) => {
-        const fn = () => {
-            if (awaitingRunDest) {
-                awaitingRunDest = false;
-                unbind();
-                handlers.onRun(i);
-            }
-        };
-        locFns.push(fn);
-        screen.key([String(i + 1)], fn);
-    });
     screen.key(['f', 'F'], fightFn);
     screen.key(['s', 'S'], surrenderFn);
     screen.key(['r', 'R'], runFn);
@@ -34,7 +16,6 @@ function bindCombatKeys(screen, handlers) {
         screen.unkey(['f', 'F'], fightFn);
         screen.unkey(['s', 'S'], surrenderFn);
         screen.unkey(['r', 'R'], runFn);
-        LOCATION_NAMES.forEach((_name, i) => screen.unkey([String(i + 1)], locFns[i]));
     }
     return unbind;
 }

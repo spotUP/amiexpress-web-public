@@ -3,5 +3,9 @@ export interface CombatHandlers {
     onRun: (location: number) => void;
     onSurrender: () => void;
 }
-export declare function bindCombatKeys(screen: any, handlers: CombatHandlers): () => void;
+export interface CombatContext {
+    currentLocation: number;
+    locationNames: string[];
+}
+export declare function bindCombatKeys(screen: any, handlers: CombatHandlers, ctx: CombatContext): () => void;
 //# sourceMappingURL=combat.d.ts.map

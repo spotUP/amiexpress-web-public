@@ -172,7 +172,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
         onCancel();
         return;
     }
-    const drugNameMap = new Map(market.prices.map(p => [p.index, p.name]));
+    const drugNameMap = new Map(Object.entries(market.drugNames).map(([k, v]) => [Number(k), v]));
     const box = overlay(screen, {
         width: 50,
         height: Math.min(carrying.length, 12) + 6,
@@ -262,6 +262,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
     }
     list.select(0);
     list.focus();
+    clampAmount();
     renderStatus();
     unbindOther = (0, blessed_helpers_1.bindKeys)(screen, [
         [['escape'], () => { cleanup(); onCancel(); }],

@@ -36,8 +36,9 @@ export interface PlayerState {
 }
 
 export interface MarketState {
-  location: number;
-  prices:   DrugPrice[];
+  location:   number;
+  prices:     DrugPrice[];  // only drugs available here (price > 0)
+  drugNames:  Record<number, string>;  // all drug names regardless of location
 }
 
 export interface GameEvent {

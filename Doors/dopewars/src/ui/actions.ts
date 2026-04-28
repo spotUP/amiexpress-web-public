@@ -193,7 +193,9 @@ export function showSellOverlay(
   const carrying = state.drugs.filter(d => d.carried > 0);
   if (carrying.length === 0) { onCancel(); return; }
 
-  const drugNameMap = new Map(market.prices.map(p => [p.index, p.name]));
+  const drugNameMap = new Map<number, string>(
+    Object.entries(market.drugNames).map(([k, v]) => [Number(k), v])
+  );
 
   const box = overlay(screen, {
     width: 50,
@@ -289,6 +291,7 @@ export function showSellOverlay(
 
   list.select(0);
   list.focus();
+  clampAmount();
   renderStatus();
 
   unbindOther = bindKeys(screen, [

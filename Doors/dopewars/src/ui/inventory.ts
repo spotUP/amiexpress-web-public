@@ -3,7 +3,9 @@ import { PlayerState, MarketState } from '../types';
 const GUN_NAMES = ['.38 Revolver','.44 Magnum','Sawn-off Shotgun','Uzi'];
 
 export function renderInventory(box: any, state: PlayerState, market?: MarketState): void {
-  const drugNameMap = new Map(market?.prices.map(p => [p.index, p.name]) ?? []);
+  const drugNameMap = new Map<number, string>(
+    Object.entries(market?.drugNames ?? {}).map(([k, v]) => [Number(k), v])
+  );
 
   const lines: string[] = ['{bold}DRUGS{/}'];
   let hasAny = false;
