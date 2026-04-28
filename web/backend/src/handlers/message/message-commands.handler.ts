@@ -127,11 +127,8 @@ console.log('[ENV] Join');
   const currentConfBases = _messageBases.filter(mb => mb.conferenceId === session.currentConf);
 
   if (currentConfBases.length === 0) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('This conference does not contain multiple message bases'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
+    // express.e:25213: '\b\nThis conference does not contain multiple message bases\b\n\b\n'
+    emitText(socket, '\r\nThis conference does not contain multiple message bases\r\n\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -159,12 +156,8 @@ console.log('[ENV] Join');
       emitText(socket, `${num}. ${mb.name}${currentIndicator}\r\n`);
     });
 
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.complexPrompt([
-      { text: 'Message Base Number ', color: 'white' },
-      { text: `(1-${msgBaseCount})`, color: 'cyan' },
-      { text: ': ', color: 'white' }
-    ]));
+    // express.e:25224: 'Message Base Number (1-N): ' — plain text
+    emitText(socket, `Message Base Number (1-${msgBaseCount}): `);
 
     // Wait for input
     session.subState = LoggedOnSubState.JM_INPUT;

@@ -526,12 +526,8 @@ console.log('[ENV] Join Conference');
     session.paginatedScreen = undefined;
     session.lastScreenHadPause = false;
 
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.complexPrompt([
-      { text: 'Conference Number ', color: 'white' },
-      { text: `(1-${_conferences.length})`, color: 'cyan' },
-      { text: ': ', color: 'white' }
-    ]));
+    // express.e:25144: 'Conference Number (1-N): ' — plain text
+    socket.emit('ansi-output', `Conference Number (1-${_conferences.length}): `);
 
     // Set state to wait for conference number input
     // Disable MENU.keys single-key mode so numeric entry is not treated as shortcuts.
@@ -546,10 +542,8 @@ console.log('[ENV] Join Conference');
 
   // express.e:25154-25160 - Check conference access
   if (!_checkConfAccess(session.user, newConf)) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to the requested conference'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    // express.e:25157-25158: '\b\nYou do not have access to the requested conference\b\n\b\n' + RETURN FAILURE
+    socket.emit('ansi-output', '\r\nYou do not have access to the requested conference\r\n\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -569,12 +563,8 @@ console.log('[ENV] Join Conference');
     session.paginatedScreen = undefined;
     session.lastScreenHadPause = false;
 
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.complexPrompt([
-      { text: 'Message Base Number ', color: 'white' },
-      { text: `(1-${msgBaseCount})`, color: 'cyan' },
-      { text: ': ', color: 'white' }
-    ]));
+    // express.e:25173: 'Message Base Number (1-N): ' — plain text
+    socket.emit('ansi-output', `Message Base Number (1-${msgBaseCount}): `);
 
     // Set state to wait for input (express.e:25169-25179)
     session.subState = LoggedOnSubState.READ_COMMAND;
