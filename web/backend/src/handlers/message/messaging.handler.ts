@@ -1197,31 +1197,39 @@ export async function handleMsgEditHeaderSubject(socket: any, session: BBSSessio
     session.tempData.editHeader.subject = trimmed;
   }
 
-  // Prompt for Private - express.e:11636-11640
-  emitText(socket, `         ${AnsiUtil.colorize('Private', 'cyan')} `);
-  session.subState = LoggedOnSubState.MSG_EDIT_HEADER_PRIVATE;
+  // express.e:11636-11640: Private prompt — only shown if aFlag=FALSE (not ALL recipient)
+  const editTo = (session.tempData.editHeader.to || '').toUpperCase();
+  if (editTo !== 'ALL' && editTo !== 'EALL') {
+    emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    session.subState = LoggedOnSubState.MSG_EDIT_HEADER_PRIVATE;
+  } else {
+    // ALL/EALL recipients can't be private — skip to save
+    session.tempData.editHeader.isPrivate = false;
+    await saveEditedHeader(socket, session);
+  }
 }
 
 /**
- * Handle Edit Header: Private Y/N input
+ * Handle Edit Header: Private Y/N input — express.e:11638 yesNo(2), single char, CR=No
  * From express.e:11636-11648
  */
 export async function handleMsgEditHeaderPrivate(socket: any, session: BBSSession, input: string): Promise<void> {
-  const command = input.trim().toUpperCase();
+  const ch = (input[0] || '').toUpperCase();
+  // yesNo(2): Y/y = yes, N/n/CR/empty = no, anything else = loop
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') return;
 
-  // Update private status
-  if (command === 'Y' || command === 'YES') {
-    session.tempData.editHeader.isPrivate = true;
-  } else if (command === 'N' || command === 'NO') {
-    session.tempData.editHeader.isPrivate = false;
-  }
-  // Empty keeps current
+  const isPrivate = ch === 'Y';
+  emitText(socket, isPrivate ? 'Yes\r\n' : 'No\r\n');
+  session.tempData.editHeader.isPrivate = isPrivate;
+  await saveEditedHeader(socket, session);
+}
 
+async function saveEditedHeader(socket: any, session: BBSSession): Promise<void> {
   const msg = session.tempData.editMessage;
   const editHeader = session.tempData.editHeader;
+  const currentIndex = session.tempData.editMessageIndex;
 
   try {
-    // Save the updated header
     await _db.updateMessage(msg.id, {
       author: editHeader.from,
       toUser: editHeader.to,
@@ -1229,9 +1237,7 @@ export async function handleMsgEditHeaderPrivate(socket: any, session: BBSSessio
       isPrivate: editHeader.isPrivate
     });
 
-    // Update the message in the reader's list
     const messages = session.tempData.msgReaderMessages;
-    const currentIndex = session.tempData.editMessageIndex;
     if (messages[currentIndex]) {
       messages[currentIndex].author = editHeader.from;
       messages[currentIndex].toUser = editHeader.to;
@@ -1239,21 +1245,14 @@ export async function handleMsgEditHeaderPrivate(socket: any, session: BBSSessio
       messages[currentIndex].isPrivate = editHeader.isPrivate;
     }
 
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.successLine('Message header updated'));
-    emitText(socket, '\r\n');
-
-    // Clean up edit temp data
     delete session.tempData.editMessage;
     delete session.tempData.editMessageIndex;
     delete session.tempData.editHeader;
 
-    // Redisplay the message
+    // express.e:11150: displayMessage + JUMP nextMenu (re-display then nav prompt)
     await displaySingleMessage(socket, session, currentIndex);
   } catch (err) {
     console.error('[MSG_EDIT] Error updating message header:', err);
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('Error updating message header'));
     await returnToMessageReader(socket, session);
   }
 }
