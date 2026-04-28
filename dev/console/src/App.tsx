@@ -16,6 +16,13 @@ import { HealthCheckPage } from './components/tabs/HealthCheckPage.js';
 import { AuditLogPage } from './components/tabs/AuditLogPage.js';
 import { SessionLogsPage } from './components/tabs/SessionLogsPage.js';
 import { OperatorChatPage } from './components/tabs/OperatorChatPage.js';
+import { LanguagesPage } from './components/tabs/LanguagesPage.js';
+import { ProtocolsPage } from './components/tabs/ProtocolsPage.js';
+import { ComputersPage } from './components/tabs/ComputersPage.js';
+import { ScreenTypesPage } from './components/tabs/ScreenTypesPage.js';
+import { DrivesPage } from './components/tabs/DrivesPage.js';
+import { FileCheckersPage } from './components/tabs/FileCheckersPage.js';
+import { SecurityPage } from './components/tabs/SecurityPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
@@ -42,6 +49,14 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   audit:           AuditLogPage,
   sessions:        SessionLogsPage,
   'op-chat':       OperatorChatPage,
+  // Phase C
+  languages:       LanguagesPage,
+  protocols:       ProtocolsPage,
+  computers:       ComputersPage,
+  'screen-types':  ScreenTypesPage,
+  drives:          DrivesPage,
+  'file-checkers': FileCheckersPage,
+  security:        SecurityPage,
 };
 
 export function App({ username }: Props) {

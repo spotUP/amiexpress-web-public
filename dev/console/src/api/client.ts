@@ -235,3 +235,159 @@ export async function getOperatorChatConfig() {
   const res = await request<{ success: boolean; data: OperatorChatConfig }>('/api/config/operator-chat');
   return res.data;
 }
+
+// ───── Phase C: CRUD pages ──────────────────────────────────────────
+
+// Languages
+export async function getLanguages() {
+  const res = await request<{ success: boolean; data: import('./types.js').LanguageRow[] }>('/api/config/languages');
+  return res.data ?? [];
+}
+
+export async function createLanguage(row: Partial<import('./types.js').LanguageRow>) {
+  return request<{ success: boolean; data: import('./types.js').LanguageRow }>('/api/config/languages', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateLanguage(id: number, patch: Partial<import('./types.js').LanguageRow>) {
+  return request<{ success: boolean; data: import('./types.js').LanguageRow }>(`/api/config/languages/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteLanguage(id: number) {
+  return request<{ success: boolean }>(`/api/config/languages/${id}`, { method: 'DELETE' });
+}
+
+// Protocols
+export async function getProtocols() {
+  const res = await request<{ success: boolean; data: import('./types.js').ProtocolRow[] }>('/api/config/protocols');
+  return res.data ?? [];
+}
+
+export async function createProtocol(row: Partial<import('./types.js').ProtocolRow>) {
+  return request<{ success: boolean; data: import('./types.js').ProtocolRow }>('/api/config/protocols', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateProtocol(id: number, patch: Partial<import('./types.js').ProtocolRow>) {
+  return request<{ success: boolean; data: import('./types.js').ProtocolRow }>(`/api/config/protocols/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteProtocol(id: number) {
+  return request<{ success: boolean }>(`/api/config/protocols/${id}`, { method: 'DELETE' });
+}
+
+// Computers
+export async function getComputers() {
+  const res = await request<{ success: boolean; data: import('./types.js').ComputerRow[] }>('/api/config/computers');
+  return res.data ?? [];
+}
+
+export async function createComputer(row: Partial<import('./types.js').ComputerRow>) {
+  return request<{ success: boolean; data: import('./types.js').ComputerRow }>('/api/config/computers', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateComputer(id: number, patch: Partial<import('./types.js').ComputerRow>) {
+  return request<{ success: boolean; data: import('./types.js').ComputerRow }>(`/api/config/computers/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteComputer(id: number) {
+  return request<{ success: boolean }>(`/api/config/computers/${id}`, { method: 'DELETE' });
+}
+
+// Screen Types
+export async function getScreenTypes() {
+  const res = await request<{ success: boolean; data: import('./types.js').ScreenTypeRow[] }>('/api/config/screen-types');
+  return res.data ?? [];
+}
+
+export async function createScreenType(row: Partial<import('./types.js').ScreenTypeRow>) {
+  return request<{ success: boolean; data: import('./types.js').ScreenTypeRow }>('/api/config/screen-types', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateScreenType(id: number, patch: Partial<import('./types.js').ScreenTypeRow>) {
+  return request<{ success: boolean; data: import('./types.js').ScreenTypeRow }>(`/api/config/screen-types/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteScreenType(id: number) {
+  return request<{ success: boolean }>(`/api/config/screen-types/${id}`, { method: 'DELETE' });
+}
+
+// Drives
+export async function getDrives() {
+  const res = await request<{ success: boolean; data: import('./types.js').DriveRow[] }>('/api/config/drives');
+  return res.data ?? [];
+}
+
+export async function createDrive(row: Partial<import('./types.js').DriveRow>) {
+  return request<{ success: boolean; data: import('./types.js').DriveRow }>('/api/config/drives', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateDrive(id: number, patch: Partial<import('./types.js').DriveRow>) {
+  return request<{ success: boolean; data: import('./types.js').DriveRow }>(`/api/config/drives/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteDrive(id: number) {
+  return request<{ success: boolean }>(`/api/config/drives/${id}`, { method: 'DELETE' });
+}
+
+// File Checkers
+export async function getFileCheckers() {
+  const res = await request<{ success: boolean; data: import('./types.js').FileCheckerRow[] }>('/api/config/file-checkers');
+  return res.data ?? [];
+}
+
+export async function createFileChecker(row: Partial<import('./types.js').FileCheckerRow>) {
+  return request<{ success: boolean; data: import('./types.js').FileCheckerRow }>('/api/config/file-checkers', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateFileChecker(id: number, patch: Partial<import('./types.js').FileCheckerRow>) {
+  return request<{ success: boolean; data: import('./types.js').FileCheckerRow }>(`/api/config/file-checkers/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteFileChecker(id: number) {
+  return request<{ success: boolean }>(`/api/config/file-checkers/${id}`, { method: 'DELETE' });
+}
+
+// Security
+export async function getSecurity(level: number) {
+  const res = await request<{ success: boolean; data: import('./types.js').SecurityRow[] }>(`/api/config/security/${level}`);
+  return res.data ?? [];
+}
+
+export async function createSecurity(row: Partial<import('./types.js').SecurityRow>) {
+  return request<{ success: boolean; data: import('./types.js').SecurityRow }>('/api/config/security', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateSecurity(id: number, patch: Partial<import('./types.js').SecurityRow>) {
+  return request<{ success: boolean; data: import('./types.js').SecurityRow }>(`/api/config/security/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteSecurity(id: number) {
+  return request<{ success: boolean }>(`/api/config/security/${id}`, { method: 'DELETE' });
+}

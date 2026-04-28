@@ -104,3 +104,12 @@ export interface SystemConfig {
   ssh_port?: number;
   [key: string]: unknown;
 }
+
+// Phase C: CRUD pages
+export interface LanguageRow { id: number; name: string; code?: string; enabled: boolean; }
+export interface ProtocolRow { id: number; name: string; command?: string; enabled: boolean; default_for?: string; }
+export interface ComputerRow { id: number; name: string; }
+export interface ScreenTypeRow { id: number; name: string; title?: string; }
+export interface DriveRow { id: number; path: string; label?: string; }
+export interface FileCheckerRow { id: number; name: string; command?: string; enabled: boolean; }
+export interface SecurityRow { id: number; level: number; flag: string; granted: boolean; }
