@@ -454,16 +454,29 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // CR/Enter - Next message - express.e:12082-12085 JUMP goNextMsg
+  // CR/Enter - Next message in current direction - express.e:12082-12085, 12238-12261
+  // After "N+" or "N-" or "+"/"-", the direction is sticky for subsequent CR navigation.
   if (command === '' || command === 'N') {
-    if (currentIndex < messages.length - 1) {
-      await displaySingleMessage(socket, session, currentIndex + 1);
+    const fwdDir = session.tempData.msgReaderFwdDir ?? 1;
+    if (fwdDir < 0) {
+      // backward
+      if (currentIndex > 0) {
+        await displaySingleMessage(socket, session, currentIndex - 1);
+      } else {
+        const lowestNum = (messages[0] as any).msgNumber || messages[0].id;
+        emitText(socket, `\r\nThe first message in this conference is ${lowestNum}\r\n`);
+        await saveMessagePointerAndExit(socket, session);
+      }
     } else {
-      // express.e noMorePlus():12299-12309: "The last message in this conference is N\r\n"
-      const lastMsg = messages[messages.length - 1];
-      const lastMsgNum = (lastMsg as any).msgNumber || lastMsg.id;
-      emitText(socket, `\r\nThe last message in this conference is ${lastMsgNum}\r\n`);
-      await saveMessagePointerAndExit(socket, session);
+      // forward (default)
+      if (currentIndex < messages.length - 1) {
+        await displaySingleMessage(socket, session, currentIndex + 1);
+      } else {
+        const lastMsg = messages[messages.length - 1];
+        const lastMsgNum = (lastMsg as any).msgNumber || lastMsg.id;
+        emitText(socket, `\r\nThe last message in this conference is ${lastMsgNum}\r\n`);
+        await saveMessagePointerAndExit(socket, session);
+      }
     }
     return;
   }
@@ -705,27 +718,45 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   }
 
   // Number input — express.e:12264-12268: isDigit → msgNum:=Val(str) → goNextMsg
-  // Jump to the message with that number
-  if (/^\d+$/.test(command)) {
-    const targetNum = parseInt(command, 10);
+  // Express.e:12238-12261: a trailing "+" or "-" sets fwdDir for subsequent CR nav.
+  // "N+" jumps to N forward-direction; "N-" jumps to N backward-direction; bare "+"/"-" with no digits steps in that direction.
+  // Pure digits: "5" → jump to msg 5.
+  // "5+" or "5-": jump to msg 5 and update fwdDir.
+  // "+" or "-" alone: step forward/backward.
+  const numWithDir = command.match(/^(\d+)([+-])?$/);
+  if (numWithDir) {
+    const targetNum = parseInt(numWithDir[1], 10);
+    if (numWithDir[2] === '-') session.tempData.msgReaderFwdDir = -1;
+    else if (numWithDir[2] === '+') session.tempData.msgReaderFwdDir = 1;
     const targetIdx = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) === targetNum);
     if (targetIdx >= 0) {
       await displaySingleMessage(socket, session, targetIdx);
     } else {
-      // express.e: readit would hit "That message has been deleted." or skip past range
       emitText(socket, '\r\n');
       displayMessageNavigationPrompt(socket, session);
     }
     return;
   }
 
-  // + — advance forward (already handled by CR; express.e:12238 fwdFlag:=1)
-  // - — go backward; find previous message
-  if (command === '-' || command.endsWith('-')) {
+  // + alone — express.e:12238: same as CR (next message)
+  if (command === '+') {
+    session.tempData.msgReaderFwdDir = 1;
+    if (currentIndex < messages.length - 1) {
+      await displaySingleMessage(socket, session, currentIndex + 1);
+    } else {
+      const lastMsgNum = (messages[messages.length - 1] as any).msgNumber || messages[messages.length - 1].id;
+      emitText(socket, `\r\nThe last message in this conference is ${lastMsgNum}\r\n`);
+      displayMessageNavigationPrompt(socket, session);
+    }
+    return;
+  }
+
+  // - alone — express.e:12249: previous message
+  if (command === '-') {
+    session.tempData.msgReaderFwdDir = -1;
     if (currentIndex > 0) {
       await displaySingleMessage(socket, session, currentIndex - 1);
     } else {
-      // express.e noMoreMinus(): "The first message in this conference is N\r\n"
       const lowestNum = (messages[0] as any).msgNumber || messages[0].id;
       emitText(socket, `\r\nThe first message in this conference is ${lowestNum}\r\n`);
       displayMessageNavigationPrompt(socket, session);
