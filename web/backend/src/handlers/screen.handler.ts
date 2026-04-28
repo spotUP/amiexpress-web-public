@@ -2677,7 +2677,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           pageSize: 1,
           eventName,
           commands,
-          kind: 'bbs',
+          kind: 'doPause',
         };
         if (commands.length > 0) {
           session.queuedScreenCommands = commands;
@@ -2801,7 +2801,7 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         pageSize: 1,
         eventName,
         commands,
-        kind: 'bbs',
+        kind: 'doPause',
       };
       // Queue commands for execution after pause is dismissed
       if (commands.length > 0) {
@@ -2984,8 +2984,13 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   const no = key === 'N';
   const noStop = key === 'NS';
 
-  // express.e:5199 aePuts('[1A[K') — cursor up + erase line to clear the More prompt
-  socket.emit(paged.eventName, '\x1b[1A\x1b[K');
+  // express.e:5199 aePuts('[1A[K') — only for checkForPause (More prompt)
+  // express.e:5149 doPause(): aePuts('\b\n') — just newline, no cursor-up erase
+  if (paged.kind !== 'doPause') {
+    // More prompt (checkForPause): cursor up + erase to clear the '(Pause)...More(y/n/ns)?' line
+    socket.emit(paged.eventName, '\x1b[1A\x1b[K');
+  }
+  // doPause: the lines[0] = '\r\n' will be emitted by emitPage below, matching express.e:5149
 
   const lines = paged.lines;
   const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
@@ -3112,7 +3117,7 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
       pageSize: 1,
       eventName: segState.eventName,
       commands: [],
-      kind: 'bbs',
+      kind: 'doPause',
     };
     session.lastScreenHadPause = true;
     emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
@@ -3209,17 +3214,16 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
   // After ANSI art that positions cursor anywhere, \r ensures we start at column 0.
   emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
 
-  // Install a minimal pagination gate so the next keypress is required before
-  // the display flow continues (matches express.e pause semantics).
-  // '\r\x1b[K' = CR + erase-to-EOL: visually clears the pause prompt when Space is pressed.
+  // Install a minimal pagination gate so the next keypress is required.
+  // express.e:5149 doPause() response: lineCount:=0; aePuts('\b\n') — just a newline.
   session.paginatedScreen = {
-    lines: ['\r\x1b[K'],
+    lines: ['\r\n'],
     nextIndex: 0,
     pageSize: 1,
     eventName: 'ansi-output',
     commands: [],
     onComplete,
-    kind: 'bbs',
+    kind: 'doPause',
   };
   session.lastScreenHadPause = true;
 }

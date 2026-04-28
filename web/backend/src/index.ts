@@ -407,7 +407,7 @@ export interface BBSSession {
     eventName: "ansi-output" | "petscii-output";
     commands?: string[];
     onComplete?: () => void;
-    kind?: 'bbs' | 'door'; // 'bbs' = BBS display flow pause, 'door' = door-owned pause
+    kind?: 'bbs' | 'door' | 'doPause'; // 'bbs' = More prompt, 'doPause' = Pause/Space prompt, 'door' = door-owned
   };
   // Screen segment state for ~SP (soft pause) handling
   // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
