@@ -106,10 +106,10 @@ console.log('[FM] Starting file maintenance');
     const maxDirs = await getMaxDirs(session.currentConf || 1, bbsDataPath);
 
     if (maxDirs === 0) {
-      socket.emit('ansi-output', AnsiUtil.errorLine('No file directories available in this conference'));
-      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // express.e:24911-24913: '\b\n' + myError(5) = 'No files available in this conference.\b\n\b\n'
+      socket.emit('ansi-output', '\r\nNo files available in this conference.\r\n\r\n');
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
 
