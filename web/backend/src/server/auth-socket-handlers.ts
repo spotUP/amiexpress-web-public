@@ -326,7 +326,7 @@ console.log('User not found, prompting for new user creation');
             username: safeUsername,
             prompt: safeUsername.toUpperCase() === 'NEW'
               ? '[C]ontinue as a new user? '
-              : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
+              : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user? `
           });
           if (!handleFailure()) return;
           return;
@@ -1012,7 +1012,7 @@ console.log('User not found, prompting for new user creation');
         const prompt =
           safeUsername.toUpperCase() === 'NEW'
             ? '[C]ontinue as a new user? '
-            : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user?\r\n\r\n`;
+            : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user? `;
         socket.emit('user-not-found', {
           username: safeUsername,
           prompt

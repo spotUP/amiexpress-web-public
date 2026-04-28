@@ -522,7 +522,8 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
     socket.emit('ansi-output', '\r\n\x1b[31mInvalid Password\x1b[0m\r\n');
 
     if (session.newUserData.accessPasswordTries > 2) {
-      await abortNewUser(socket, session, '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+      // express.e:29634: '\b\nToo Many Errors, Goodbye!\b\n' — plain text, no color
+      await abortNewUser(socket, session, '\r\nToo Many Errors, Goodbye!\r\n');
       return;
     }
 
