@@ -1,5 +1,6 @@
 // Load environment variables FIRST
-require('dotenv').config({ override: true });
+// quiet: true suppresses the dotenv 17.x "injecting env" console.log output
+require('dotenv').config({ override: true, quiet: true });
 
 import BetterSqlite3 from 'better-sqlite3';
 import * as crypto from 'crypto';
