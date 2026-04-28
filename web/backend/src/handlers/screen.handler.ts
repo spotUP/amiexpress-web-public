@@ -25,6 +25,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime, formatLongDate, formatLongTime, formatLongDateTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
+import { checkConfAccess } from './message/message-scan.handler';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
@@ -119,10 +120,18 @@ const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
   'UPLOADMSG': ScreenDirType.CONF,
   'NOUPLOADS': ScreenDirType.CONF,
 
-  // cmds.bbsLoc screens (express.e:6548-6550, 6637-6640)
+  // cmds.bbsLoc screens (express.e:6548-6550, 6637-6640, 6615-6653)
   'BULL': ScreenDirType.GLOBAL,  // SCREEN_BULL uses cmds.bbsLoc + 'BULL'
   'ONENODE': ScreenDirType.GLOBAL,
   'LOGON24': ScreenDirType.GLOBAL,
+  // express.e:6615-6653 - additional global screens
+  'NONEWATBAUD': ScreenDirType.NODE,    // SCREEN_NONEWATBAUD: nodeScreenDir + 'NONEWAT' + baud
+  'NOTTIME': ScreenDirType.NODE,        // SCREEN_NOT_TIME: nodeScreenDir + 'NOTTIME' + baud
+  'NOCALLERSAT': ScreenDirType.NODE,    // SCREEN_NOCALLERSATBAUD: nodeScreenDir + 'NOCALLERSAT' + baud
+  'LANGUAGES': ScreenDirType.GLOBAL,   // SCREEN_LANGUAGES: cmds.bbsLoc + 'Languages'
+  'INTERNETNAMES': ScreenDirType.GLOBAL, // SCREEN_INTERNETNAMES: cmds.bbsLoc + 'InternetNames'
+  'REALNAMES': ScreenDirType.GLOBAL,   // SCREEN_REALNAMES: cmds.bbsLoc + 'RealNames'
+  'MAILSCAN': ScreenDirType.GLOBAL,    // SCREEN_MAILSCAN: cmds.bbsLoc + 'MailScan'
 };
 
 /**
@@ -763,20 +772,37 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
 
   // Conference/Message Board Lists (express.e:5588-5620)
   if (parsed.includes('~CL.')) {
+    // express.e:5588-5607 - ~CL: vertical list, one conf per row, filtered by access.
+    // Format: "                     [32m<num>[3][33m) [35m<name padEnd 30>[36m[0m\r\n"
+    // Only include conferences the user has access to (checkConfAccess per entry).
     let confList = '';
     let num = 0;
     for (let i = 0; i < conferences.length; i++) {
+      const confId = conferences[i].id;
+      if (!checkConfAccess(session.user, confId)) continue;
       num++;
       const confName = conferences[i].name.padEnd(30, ' ');
-      confList += `                     \x1b[32m${num}\x1b[33m) \x1b[35m${confName}\x1b[36m\x1b[0m\r\n`;
+      confList += `                     \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${confName}\x1b[36m\x1b[0m\r\n`;
     }
     parsed = parsed.replace(/~CL\./g, confList);
   }
 
   if (parsed.includes('~CD.')) {
-    // ~CD. - Conference Description (express.e:5606-5620)
-    const confDesc = conferences[session.currentConf || 0]?.name || 'Unknown';
-    parsed = parsed.replace(/~CD\./g, confDesc);
+    // express.e:5608-5620 - ~CD: 2-column numbered list, filtered by access.
+    // Format: "   [34m[[0m<num right-padded 3>[34m] [0m<name padEnd 30>" then \r\n every 2 entries.
+    let confDir = '';
+    let num = 0;
+    for (let i = 0; i < conferences.length; i++) {
+      const confId = conferences[i].id;
+      if (!checkConfAccess(session.user, confId)) continue;
+      num++;
+      const confName = conferences[i].name.padEnd(30, ' ');
+      confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3)}\x1b[34m] \x1b[0m${confName}`;
+      if (num % 2 === 0) confDir += '\r\n';
+    }
+    // Add final newline if odd number of entries
+    if (num % 2 !== 0) confDir += '\r\n';
+    parsed = parsed.replace(/~CD\./g, confDir);
   }
 
   if (parsed.includes('~ML.')) {
@@ -2218,11 +2244,28 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
       console.log(`[WIPE-EARLY] Detected wipe ${earlyWipeResult.wipeType} in ${screenName}, disabled inline mode`);
     }
 
+    // === MCI Guard: allowMCI check (express.e:6800-6806) ===
+    // MCI processing is only enabled when the file's first line starts with '~'.
+    // Files that don't start with '~' are displayed as raw text with no MCI substitution.
+    const firstNewline = contentForMci.indexOf('\n');
+    const firstLine = firstNewline >= 0 ? contentForMci.slice(0, firstNewline) : contentForMci;
+    const allowMCI = firstLine.trimEnd().length > 0 && firstLine[0] === '~';
+
+    // eventName is used throughout the display path after MCI processing
+    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+
+    if (!allowMCI) {
+      // Raw display: no MCI processing. Return content directly as parsed output.
+      screenDebug(`[displayScreen] allowMCI=FALSE for ${screenName} (first line does not start with '~'), skipping MCI`);
+      parsed = contentForMci;
+      commands = [];
+      session.lastScreenHadPause = false;
+    } else {
+
     // === ~SP (Soft Pause) Segment Processing ===
     // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
     // Split content at ~SP boundaries and process one segment at a time
     // Each segment contains content up to (but not including) the ~SP code
-    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
 
     // Check if raw content has ~SP codes (before parsing removes them)
     // express.e:5455-5461 - ~SP causes immediate pause when followed by terminator
@@ -2292,7 +2335,6 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} byt
 
         // express.e:5455-5461 - Handle pendingInlineContent from ~SP in inline mode
         if (result.pendingInlineContent && result.pendingInlineContent.length > 0) {
-          const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
           session.screenSegments = {
             segments: [result.pendingInlineContent],
             currentIndex: 0,
@@ -2329,7 +2371,6 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes,
       // When ~SP is found during inline MCI processing, remaining content is returned here
       // Store it in screenSegments for processing after pause is dismissed
       if (result.pendingInlineContent && result.pendingInlineContent.length > 0) {
-        const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
         session.screenSegments = {
           segments: [result.pendingInlineContent],
           currentIndex: 0,
@@ -2346,6 +2387,8 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes,
       const parsedNormalCRLF = (parsed.match(/\r\n/g) || []).length;
 console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes NORMAL: ${parsed.length} bytes, ${parsedNormalNewlines} \\n, ${parsedNormalCRLF} \\r\\n`);
     }
+
+    } // end else (allowMCI) — express.e:6800-6806
 
     // Log MCI parsing results
     if (commands.length > 0) {
