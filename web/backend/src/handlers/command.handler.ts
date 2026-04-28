@@ -687,6 +687,22 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         }
         if (hasMailscanPrompt) {
           displayFlowLog('CONF_SCAN: MAILSCAN_PROMPT tooltype found, showing prompt');
+          // Pre-init confScanState with promptShown=TRUE so advanceConferenceScan
+          // knows to skip per-conf checkMailConfScan() when user answers Y.
+          if (!session.tempData) session.tempData = {};
+          if (!session.tempData.confScanState) {
+            session.tempData.confScanState = {
+              confIndex: 0,
+              mscan: true,
+              promptShown: true,   // express.e:28075 prompt=TRUE
+              fileScanDone: false,
+              pendingConf: 0,
+              pendingMsgBase: 0,
+              pendingMessages: []
+            };
+          } else {
+            session.tempData.confScanState.promptShown = true;
+          }
           // express.e:28076 aePuts('\b\n[0mScan for Mail ') then yesNo(1) → (Y/n)?
           emitText(socket, '\r\n\x1b[0mScan for Mail \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');
           session.subState = LoggedOnSubState.MAILSCAN_PROMPT_INPUT;
@@ -909,6 +925,15 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
     }
     const doScan = (ch !== 'N'); // default yes: Y or Enter = scan
     emitText(socket, doScan ? 'Yes\r\n' : 'No\r\n');
+
+    // express.e:28079 - mscan:=(mystat=1)
+    // Propagate the Y/N answer into confScanState so advanceConferenceScan can
+    // gate the file scan phase (express.e:28082 IF (prompt=FALSE) OR (mscan=TRUE)).
+    if (!session.tempData) session.tempData = {};
+    if (session.tempData.confScanState) {
+      session.tempData.confScanState.mscan = doScan;
+    }
+
     if (doScan) {
       // express.e:28082-28085 — mscan=TRUE: show "Scanning conferences..." and do scan
       const { performConferenceScan } = require('./message/message-scan.handler');
@@ -924,6 +949,7 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
       }
       return;
     }
+    // express.e:28082 - (prompt=TRUE AND mscan=FALSE): skip entire scan block
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     await advanceDisplayFlow(socket, session);
     return;
@@ -3326,43 +3352,15 @@ console.log(' Conference number entered:', input);
         return;
       }
 
-      // Process conference number
-      const confNum = parseInt(input);
-      if (isNaN(confNum) || confNum < 1 || confNum > getConferences().length) {
-        // express.e:25142-25150 - Redisplay JOINCONF and prompt again (no error message)
-        await displayScreen(socket, session, 'JOINCONF');
-        // Clear pagination state so next input goes to conference prompt (express.e:25143-25145)
-        session.paginatedScreen = undefined;
-        session.lastScreenHadPause = false;
-        emitText(socket, '\r\n');
-        emitPrompt(socket, AnsiUtil.complexPrompt([
-          { text: 'Conference Number ', color: 'white' },
-          { text: `(1-${getConferences().length})`, color: 'cyan' },
-          { text: ': ', color: 'white' }
-        ]));
-        session.inputBuffer = '';
-        // Stay in JOIN_CONF_INPUT state to accept new input
-        return;
-      }
-
-      // Get conference and join it
-      const selectedConf = getConferences()[confNum - 1];
-      const confId = selectedConf.id;
-      const confMessageBases = getMessageBases().filter(mb => mb.conferenceId === confId);
-
-      if (confMessageBases.length === 0) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.errorLine('No message bases in this conference'));
-        emitText(socket, '\r\n');
-        emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+      // express.e:25150 - newConf:=getInverse(Val(newStr))
+      // Delegate to handleJoinConferenceCommand which applies getInverse, validates access,
+      // and handles the JOINCONF re-prompt loop identically to express.e:25140-25183.
+      const { handleJoinConferenceCommand: joinCmd } = require('./commands/user-commands.handler');
+      await joinCmd(socket, session, input);
+      if (!isDisplayFlowState(session.subState)) {
+        session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
       }
-
-      const firstMsgBaseId = confMessageBases[0].id;
-      await joinConference(socket, session, confId, firstMsgBaseId);
-      session.menuPause = true;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);

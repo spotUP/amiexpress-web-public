@@ -24,6 +24,7 @@ import { handleNewFilesCommand } from '../commands/navigation-commands.handler';
 import * as fs from 'fs';
 import * as path from 'path';
 import { dateTimeToDateStamp } from '../../utils/date-time.util';
+import { getConferenceDir } from '../../utils/file-hold.util';
 
 // Dependencies injected from index.ts
 let _db: any = null;
@@ -208,7 +209,11 @@ export interface ScanMessage {
  */
 export interface ConfScanState {
   confIndex: number;          // next conference to process (0-based into _conferences)
-  mscan: boolean;             // whether mail scan is enabled (from MAILSCAN_PROMPT)
+  mscan: boolean;             // whether mail scan is enabled (from MAILSCAN_PROMPT answer or default)
+  // express.e:28075 - prompt=TRUE when MAILSCAN_PROMPT tooltype present
+  // When prompt=TRUE AND mscan=TRUE (user said Y): skip per-conf checkMailConfScan (scan all)
+  // When prompt=FALSE: mscan starts TRUE, but per-conf checkMailConfScan() is called each time
+  promptShown: boolean;       // whether MAILSCAN_PROMPT was displayed to the user
   fileScanDone: boolean;      // true after file scan phase completes
   pendingConf: number;        // conf number waiting for Y/N answer
   pendingMsgBase: number;     // msgBase ID for pending conf
@@ -513,6 +518,102 @@ export async function performSingleConfMailScan(socket: any, session: any, conf:
 }
 
 /**
+ * Check all conferences for partial uploads belonging to this user.
+ * 1:1 port from express.e:28117-28147 — the partial upload check phase of confScan().
+ *
+ * express.e uses partUploadOK(1) which:
+ *   - Opens <currentConfDir>PartUpload/ directory
+ *   - Scans filenames for the user's slot number suffix (@<slot>)
+ *   - If found, calls uploadaFile(0,'URG',FALSE) to let user resume/abandon
+ *
+ * We mirror this: scan each conf's PartUpload/ directory for files ending with
+ * '@<slotNumber>', prompt to resume via upload handler when found.
+ *
+ * @param socket  - Socket
+ * @param session - BBS session
+ * @param numConf - Total number of conferences
+ * @param confAccess - User confAccess string
+ * @param user    - User object
+ */
+async function performPartialUploadCheck(
+  socket: any,
+  session: any,
+  numConf: number,
+  confAccess: string,
+  user: any
+): Promise<void> {
+  const { joinConference } = require('../operations/conference.handler');
+  const { FORCE_MAILSCAN_SKIP } = require('../operations/conference.handler');
+  const bbsDataPath = config.get('dataDir');
+  const slotNumber = user.slotNumber ?? 0;
+
+  // express.e:28117 - IF checkSecurity(ACS_UPLOAD) (already checked by caller)
+  // express.e:28119 - FOR conf:=1 TO cmds.numConf
+  for (let confIdx = 0; confIdx < numConf; confIdx++) {
+    const conf = confIdx + 1;
+    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
+    if (accessChar !== 'X') continue;
+
+    // express.e:28121 - mystat:=joinConf(conf,1,TRUE,FALSE,FORCE_MAILSCAN_SKIP)
+    const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
+    const firstMsgBaseId = confMsgBases.length > 0 ? confMsgBases[0].id : 1;
+    await joinConference(socket, session, conf, firstMsgBaseId, true, false, FORCE_MAILSCAN_SKIP, true);
+
+    // express.e:28124 - mystat:=partUploadOK(1)
+    // partUploadOK(1): scan PartUpload/ for files with this user's slot suffix
+    const confDir = getConferenceDir(conf, bbsDataPath);
+    const partUploadDir = path.join(confDir, 'PartUpload');
+
+    let partialFiles: string[] = [];
+    try {
+      if (fs.existsSync(partUploadDir)) {
+        const entries = fs.readdirSync(partUploadDir);
+        // express.e:17584 - getUN(str) extracts @<slotNumber> from filename
+        // Match files ending with @<slotNumber>
+        const suffix = `@${slotNumber}`;
+        partialFiles = entries.filter(f => f.endsWith(suffix) && f.trim().length > 0);
+      }
+    } catch (_e) {
+      // express.e:17542-17544 - can't access dir: "Tell sysop bbs can't access..."
+      // For web, silently skip inaccessible directories
+      continue;
+    }
+
+    if (partialFiles.length === 0) continue;
+
+    // express.e:28125 - IF(mystat=RESULT_FAILURE) - partials found for this user
+    // express.e:28127 - setEnvStat(ENV_UPLOADING)
+    session.currentConf = conf;
+
+    // express.e:28130 - bgFileCheck tooltype check (web: always FALSE for remote)
+    // express.e:28134 - mystat:=uploadaFile(0,'URG',FALSE)
+    // Display partial upload notice and trigger upload handler
+    socket.emit('ansi-output', '\r\nThere are some incompleted uploads of yours\r\n');
+    socket.emit('ansi-output', `View them \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m `);
+
+    // For web version, we show the notice but cannot block here waiting for input.
+    // Partial upload resume via 'URG' mode is triggered via the upload handler.
+    // express.e:17634 rts_stat:=RESULT_FAILURE (view=yes) -> uploadaFile(0,'URG',FALSE)
+    // WEB_: defer to upload handler; log the partial files for sysop visibility.
+console.log(`[confScan] Partial uploads for slot ${slotNumber} in Conf${conf}:`, partialFiles);
+
+    // express.e:28135 - IF mystat=RESULT_GOODBYE THEN modemOffHook() — not applicable for web
+    // express.e:28137 - ELSEIF(mystat=RESULT_ABORT) aePuts('\b\n') — user answered N
+    socket.emit('ansi-output', '\r\n');
+
+    // express.e:28142 - EXIT mystat=RESULT_FAILURE
+    // express.e:28143 - IF timeout/no_carrier/goodbye THEN RETURN mystat
+    // (no carrier/timeout checking needed for web sessions)
+  }
+
+  // express.e:28145 - mystat:=doPause()
+  // express.e:28146 - IF(mystat<0) THEN RETURN mystat
+  // doPause only runs if partial upload check actually ran (ACS_UPLOAD was true).
+  // For web version, emit a blank line separator instead of a full doPause.
+  socket.emit('ansi-output', '\r\n');
+}
+
+/**
  * Advance the conference scan — processes the next pending conference.
  * Called on entry and after each Y/N answer in CONF_SCAN_MAIL_PROMPT state.
  * Exported so command.handler can call it after the user answers the prompt.
@@ -542,6 +643,7 @@ console.warn('[advanceConferenceScan] no confScanState found');
 
   // ----------------------------------------------------------------
   // Mail scan phase: iterate starting from scanState.confIndex
+  // express.e:28086-28114 - FOR conf:=1 TO cmds.numConf ... FOR msgbase:=1 TO n
   // ----------------------------------------------------------------
   for (let confIdx = scanState.confIndex; confIdx < numConf; confIdx++) {
     const conf = confIdx + 1; // 1-based conference number
@@ -553,110 +655,145 @@ console.warn('[advanceConferenceScan] no confScanState found');
       continue;
     }
 
-    // Only scan first msgbase per conference for mail (express.e:11670 per-conf)
+    // express.e:28089 - fscan:=checkFileConfScan(conf)
+    // Computed here so the file scan phase below can use it per-conference.
+    // Store in scanState so we can resume after a yield without recomputing.
     const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
     if (confMsgBases.length === 0) {
       continue;
     }
-    const firstMsgBase = confMsgBases[0];
-    const msgBaseId = firstMsgBase.id;
+    const firstMsgBaseId = confMsgBases[0].id;
 
-    // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...) always called
-    await joinConference(socket, session, conf, msgBaseId, true, false, 0, true);
+    // express.e:28092-28098 - FOR msgbase:=1 TO n (iterate ALL message bases)
+    for (let mbIdx = 0; mbIdx < confMsgBases.length; mbIdx++) {
+      const msgBase = confMsgBases[mbIdx];
+      const msgBaseId = msgBase.id;
 
-    // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
-    const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
+      // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...) always called
+      await joinConference(socket, session, conf, msgBaseId, true, false, 0, true);
 
-    // express.e:28099 - IF (mscan) THEN searchNewMail()
-    // If mscan=FALSE, conf is skipped silently (no output)
-    if (!mscan) continue;
-
-    // express.e:11670: inside searchNewMail, print header when currentConf=0 and msgBaseNum=1
-    socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
-
-    // Get mail-scan messages (matching username, eall, all)
-    const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);
-
-    // Update scan counters
-    const { newPublic, newPrivate, lastScanned } = await countNewMessages(
-      user.id, conf, msgBaseId, username
-    );
-    session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
-    session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
-    session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
-    if (lastScanned > 0) {
-      await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
-    }
-
-    if (scanMsgs.length === 0) {
-      // express.e:11772 - 'No mail today!\b\n'
-      socket.emit('ansi-output', 'No mail today!\r\n');
-      continue;
-    }
-
-    // express.e:11712-11715 — blank lines + table header + reset
-    socket.emit('ansi-output', '\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
-    socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
-    socket.emit('ansi-output', '\x1b[0m');
-
-    // express.e:11720 - per-message row
-    for (const m of scanMsgs) {
-      const status = m.isPrivate ? 'Private' : 'Public ';
-      const from = (m.from || '').substring(0, 29).padEnd(29);
-      // For header-only entries we may have no subject yet; fill from disk
-      let subject = (m.subject || '').trim();
-      if (!subject) {
-        try {
-          const msg = await readMessageFile(conf, m.msgNum, bbsDataPath);
-          if (msg) subject = (msg.subject || '').trim();
-        } catch (_e) { /* ignore */ }
+      // express.e:28094-28096:
+      //   IF prompt=FALSE THEN mscan:=checkMailConfScan(conf,msgbase)
+      // When MAILSCAN_PROMPT was NOT shown (promptShown=FALSE):
+      //   mscan is overridden per-conf by checkMailConfScan().
+      // When MAILSCAN_PROMPT was shown and user answered Y (promptShown=TRUE, mscan=TRUE):
+      //   skip per-conf check — scan all conferences unconditionally.
+      // When MAILSCAN_PROMPT was shown and user answered N (mscan=FALSE):
+      //   entire block skipped before we get here (guarded above).
+      let mscan: boolean;
+      if (!scanState.promptShown) {
+        // prompt=FALSE path: per-conf check determines scan
+        mscan = await checkMailConfScan(conf, msgBaseId, user.id);
+      } else {
+        // prompt=TRUE, mscan=TRUE (user said Y): scan all
+        mscan = scanState.mscan;
       }
-      const subj = subject.substring(0, 21).padEnd(21);
-      const num = String(m.msgNum).padStart(6, '0');
-      socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
+
+      // express.e:28097 - joinConf called with FORCE_MAILSCAN_SKIP when mscan=FALSE
+      if (!mscan) continue;
+
+      // express.e:11670: inside searchNewMail, print header per conf
+      socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
+
+      // Get mail-scan messages (matching username, eall, all)
+      const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);
+
+      // Update scan counters
+      const { newPublic, newPrivate, lastScanned } = await countNewMessages(
+        user.id, conf, msgBaseId, username
+      );
+      session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
+      session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
+      session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
+      if (lastScanned > 0) {
+        await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
+      }
+
+      if (scanMsgs.length === 0) {
+        // express.e:11772 - 'No mail today!\b\n'
+        socket.emit('ansi-output', 'No mail today!\r\n');
+        continue;
+      }
+
+      // express.e:11712-11715 — blank lines + table header + reset
+      socket.emit('ansi-output', '\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
+      socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+      socket.emit('ansi-output', '\x1b[0m');
+
+      // express.e:11720 - per-message row
+      for (const m of scanMsgs) {
+        const status = m.isPrivate ? 'Private' : 'Public ';
+        const from = (m.from || '').substring(0, 29).padEnd(29);
+        // For header-only entries we may have no subject yet; fill from disk
+        let subject = (m.subject || '').trim();
+        if (!subject) {
+          try {
+            const msg = await readMessageFile(conf, m.msgNum, bbsDataPath);
+            if (msg) subject = (msg.subject || '').trim();
+          } catch (_e) { /* ignore */ }
+        }
+        const subj = subject.substring(0, 21).padEnd(21);
+        const num = String(m.msgNum).padStart(6, '0');
+        socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
+      }
+
+      // express.e:11739 — '\b\nWould you like to read it now ' + yesNo(1) + '\b\n'
+      socket.emit('ansi-output', '\r\nWould you like to read it now \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');
+
+      // Store state and yield for user input
+      // confIndex resumes at this conf; after resuming we advance mbIdx via pendingMsgBase
+      scanState.confIndex = confIdx;
+      scanState.pendingConf = conf;
+      scanState.pendingMsgBase = msgBaseId;
+      scanState.pendingMessages = scanMsgs;
+      session.subState = SubState.CONF_SCAN_MAIL_PROMPT;
+      return; // yield — command handler will call back with Y/N
     }
-
-    // express.e:11739 — '\b\nWould you like to read it now ' + yesNo(1) + '\b\n'
-    socket.emit('ansi-output', '\r\nWould you like to read it now \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');
-
-    // Store state and yield for user input
-    scanState.confIndex = confIdx + 1; // next conference when we resume
-    scanState.pendingConf = conf;
-    scanState.pendingMsgBase = msgBaseId;
-    scanState.pendingMessages = scanMsgs;
-    session.subState = SubState.CONF_SCAN_MAIL_PROMPT;
-    return; // yield — command handler will call back with Y/N
   }
 
   // ----------------------------------------------------------------
-  // All mail-scan conferences done — proceed to file scan phase
+  // All mail-scan conferences done — proceed to file scan phase.
+  // express.e:28082 - the entire block (mail + file) is gated by
+  //   IF (prompt=FALSE) OR (mscan=TRUE)
+  // scanState.mscan=FALSE means user answered "N" to MAILSCAN_PROMPT,
+  // so we skip the file scan entirely.
   // ----------------------------------------------------------------
-  const { runSysCommand } = require('../command-execution.handler');
-  const hasAquaScan = await checkCommandExists('N');
+  if (scanState.mscan) {
+    const { runSysCommand } = require('../command-execution.handler');
 
-  for (let confIdx = 0; confIdx < numConf; confIdx++) {
-    const conf = confIdx + 1;
-    const confName = _conferences[confIdx]?.name || `Conf ${conf}`;
-    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
-    if (accessChar !== 'X') continue;
+    for (let confIdx = 0; confIdx < numConf; confIdx++) {
+      const conf = confIdx + 1;
+      const confName = _conferences[confIdx]?.name || `Conf ${conf}`;
+      const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
+      if (accessChar !== 'X') continue;
 
-    const firstMsgBaseEntry = _messageBases.find(mb => mb.conferenceId === conf);
-    const firstMsgBaseId = firstMsgBaseEntry ? firstMsgBaseEntry.id : 1;
+      const firstMsgBaseEntry = _messageBases.find(mb => mb.conferenceId === conf);
+      const firstMsgBaseId = firstMsgBaseEntry ? firstMsgBaseEntry.id : 1;
 
-    const fscan = await checkFileConfScan(conf, user.id, firstMsgBaseId);
-    if (fscan) {
+      // express.e:28089 - fscan:=checkFileConfScan(conf)
+      const fscan = await checkFileConfScan(conf, user.id, firstMsgBaseId);
+      // express.e:28099-28107 - IF (mystat=RESULT_SUCCESS) AND (fscan) THEN runSysCommand('N','S U')
+      if (fscan) {
 console.log(`[confScan] File scan: ${confName}`);
-      await joinConference(socket, session, conf, firstMsgBaseId, true, false, 0, true);
-      session.newFilesPauseFlag = true;
-      await runSysCommand(socket, session, 'N', 'S U');
-      session.newFilesPauseFlag = false;
+        await joinConference(socket, session, conf, firstMsgBaseId, true, false, 0, true);
+        session.newFilesPauseFlag = true;
+        await runSysCommand(socket, session, 'N', 'S U');
+        session.newFilesPauseFlag = false;
+      }
+
+      const shouldContinue = await checkForPause(socket, session);
+      if (!shouldContinue) {
+console.log(`[confScan] User stopped scan at conference ${conf}`);
+        break;
+      }
     }
 
-    const shouldContinue = await checkForPause(socket, session);
-    if (!shouldContinue) {
-console.log(`[confScan] User stopped scan at conference ${conf}`);
-      break;
+    // express.e:28117-28147 - IF checkSecurity(ACS_UPLOAD)
+    //   Check for partial uploads in each conference's PartUpload/ directory.
+    //   partUploadOK(1) returns RESULT_FAILURE when partials belong to this user.
+    if (checkSecurity(user, ACSPermission.UPLOAD)) {
+      await performPartialUploadCheck(socket, session, numConf, confAccess, user);
     }
   }
 
@@ -712,6 +849,9 @@ console.log(`[confScan] WARNING: No previous login date found for ${username}`);
     const state: ConfScanState = {
       confIndex: 0,
       mscan: true,
+      // promptShown=FALSE means no MAILSCAN_PROMPT tooltype was present;
+      // per-conf checkMailConfScan() will gate each conference.
+      promptShown: false,
       fileScanDone: false,
       pendingConf: 0,
       pendingMsgBase: 0,

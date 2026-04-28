@@ -363,6 +363,78 @@ console.log('[ENV] User Statistics');
 }
 
 /**
+ * Convert a user-relative conference number to an absolute (internal) conference number.
+ * 1:1 port from express.e:8568-8581 getInverse()
+ *
+ * When sopt.toggles[TOGGLES_CONFRELATIVE]=TRUE, conference numbers shown to the user
+ * are sequential across only the conferences they have access to. So user types "1"
+ * meaning "first accessible conference", not conference ID 1.
+ *
+ * When CONFRELATIVE=FALSE (default), cn is returned unchanged (absolute numbering).
+ *
+ * express.e:8568  PROC getInverse(cn,force=FALSE)
+ *   IF(cn<1) THEN RETURN 0
+ *   IF (force=FALSE) AND (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE) THEN RETURN cn
+ *   WHILE(i<cn)
+ *     IF(j<cmds.numConf)
+ *       IF(checkConfAccess(j+1)) THEN i++
+ *     ELSE
+ *       RETURN 0
+ *     ENDIF
+ *     j++
+ *   ENDWHILE
+ *   RETURN j
+ *
+ * @param cn            - User-visible (relative) conference number (1-based)
+ * @param user          - User object (for checkConfAccess)
+ * @param confRelative  - Value of sopt.toggles[TOGGLES_CONFRELATIVE]
+ * @returns Absolute conference number, or 0 if out of range
+ */
+function getInverse(cn: number, user: any, confRelative: boolean): number {
+  // express.e:8571 - IF(cn<1) THEN RETURN 0
+  if (cn < 1) return 0;
+  // express.e:8572 - IF (force=FALSE) AND (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE) THEN RETURN cn
+  if (!confRelative) return cn;
+
+  // Relative mode: walk accessible conferences until we've counted cn of them
+  let i = 0; // count of accessible conferences visited so far
+  let j = 0; // absolute conference index (0-based; j+1 = 1-based conf number)
+  while (i < cn) {
+    if (j < _conferences.length) {
+      // express.e:8575 - IF(checkConfAccess(j+1)) THEN i++
+      if (_checkConfAccess(user, j + 1)) {
+        i++;
+      }
+    } else {
+      // express.e:8577 - RETURN 0 (ran out of conferences)
+      return 0;
+    }
+    j++;
+  }
+  // express.e:8581 - ENDPROC j (return absolute 1-based conf number)
+  return j;
+}
+
+/**
+ * Read the CONFRELATIVE toggle from bbsConfig.info.
+ * In express.e this is sopt.toggles[TOGGLES_CONFRELATIVE] set by ACP.
+ * We store it as the CONFRELATIVE tooltype in bbsConfig.info.
+ * Returns false if not found (default = absolute numbering).
+ */
+function getConfRelativeToggle(session: BBSSession): boolean {
+  try {
+    const { config } = require('../../config');
+    const { parseInfoFile } = require('../../utils/amiga-command-parser.util');
+    const bbsRoot = (session as any).bbsPath || config.get('dataDir') || process.cwd();
+    const bbsConfigPath = require('path').join(bbsRoot, 'bbsConfig.info');
+    const tooltypes = parseInfoFile(bbsConfigPath);
+    return tooltypes.has('CONFRELATIVE');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Handle J command - Join conference
  * 1:1 port from express.e:25113-25183 internalCommandJ()
  */
@@ -408,8 +480,10 @@ console.log('[ENV] Join Conference');
     }
   }
 
-  // express.e:25138 - getInverse (for inverse conference numbering)
-  // For now, we use absolute numbering (not inverse)
+  // express.e:25140 - newConf:=getInverse(newConf)
+  // Converts user-relative conf number to absolute when CONFRELATIVE toggle is set.
+  const confRelative = getConfRelativeToggle(session);
+  newConf = getInverse(newConf, session.user, confRelative);
 
   // express.e:25140-25150 - Prompt for conference number if invalid
   const normalizedNameParam = normalizeForComparison(params);
