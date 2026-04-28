@@ -17,7 +17,7 @@ import * as amigafs from '../utils/amigafs';
 
 // Import from other handlers
 import { displayScreen, doPause } from './screen.handler';
-import { displayConferenceBulletins, joinConference } from './operations/conference.handler';
+import { displayConferenceBulletins, joinConference, FORCE_MAILSCAN_SKIP } from './operations/conference.handler';
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { displayDoorMenu, executeDoor } from './door.handler';
@@ -735,8 +735,8 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         displayFlowLog(`AUTO_REJOIN: confId=${confId}, msgBaseNum=${msgBaseNum}, msgBaseId=${msgBaseId}`);
 
         // express.e:28574 - joinConf(loggedOnUser.confRJoin, loggedOnUser.msgBaseRJoin, FALSE, FORCE_MAILSCAN_SKIP)
-        // The auto=true parameter triggers S command and Auto-ReJoined message display
-        const joinSuccess = await joinConference(socket, session, confId, msgBaseId, false, true);
+        // auto=FALSE per express.e:28574; auto=TRUE would trigger S command and Auto-ReJoined display which does NOT happen here
+        const joinSuccess = await joinConference(socket, session, confId, msgBaseId, false, false, FORCE_MAILSCAN_SKIP);
 
         session.blockOLM = false;
 

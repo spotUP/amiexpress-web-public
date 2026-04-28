@@ -7,9 +7,10 @@
 
 import { displayScreen, doPause } from '../screen.handler';
 import { displayMainMenu } from '../command-handler/menu';
-import { getMailStatFile, loadMsgPointers, validatePointers } from '../../utils/message-pointers.util';
+import { getMailStatFile, loadMsgPointers, saveMsgPointers, validatePointers } from '../../utils/message-pointers.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
+import { checkConfAccess, checkMailConfScan } from '../message/message-scan.handler';
 
 import type { BBSSession } from '../../index';
 
@@ -105,11 +106,44 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
  *               FORCE_MAILSCAN_ALL (2) = force mail scan (MS command)
  */
 export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false, auto: boolean = false, forceMailScan: number = FORCE_MAILSCAN_NONE, confScan: boolean = false) {
+  // express.e:4982-4993 - ACS forward-walk fallback
+  // If user cannot access requested conf, start from 1 and walk forward to first accessible conf.
+  // If no accessible conf found at all, display error and disconnect.
+  const numConf = conferences.length;
+  if (!session.user || !checkConfAccess(session.user, confId)) {
+    confId = 1;
+  }
+  if (confId < 1 || confId > numConf) {
+    confId = 1;
+  }
+  while (confId <= numConf && !checkConfAccess(session.user, confId)) {
+    confId++;
+  }
+  if (confId > numConf) {
+    // express.e:4989-4992 - no accessible conference: display error and logoff
+    socket.emit('ansi-output', '\r\nYou do not have access to any conferences on this BBS\r\n');
+    socket.emit('ansi-output', 'Disconnecting..\r\n');
+    const { LoggedOnSubState: SubState } = require('../../constants/bbs-states');
+    session.subState = SubState.DISCONNECTING;
+    return false;
+  }
+
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
+    // Should not happen after forward-walk, but guard anyway
     if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
     return false;
   }
+
+  // express.e:4995 - IF (msgBaseNum<1) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
+  // msgBaseId here is a database ID; resolve relative number from it, then re-resolve to DB ID after clamping
+  const confMsgBasesAll = messageBases.filter(mb => mb.conferenceId === confId);
+  const msgBaseIndexCheck = confMsgBasesAll.findIndex(mb => mb.id === msgBaseId);
+  let msgBaseNumResolved = msgBaseIndexCheck >= 0 ? msgBaseIndexCheck + 1 : 1; // 1-indexed
+  if (msgBaseNumResolved < 1 || msgBaseNumResolved > confMsgBasesAll.length) {
+    msgBaseNumResolved = 1;
+  }
+  msgBaseId = confMsgBasesAll.length > 0 ? (confMsgBasesAll[msgBaseNumResolved - 1]?.id ?? confMsgBasesAll[0].id) : msgBaseId;
 
   const messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
   if (!messageBase) {
@@ -131,8 +165,8 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
 
   // express.e:5136 - loggedOnUser.msgBaseRJoin:=msgBaseNum
   // msgBaseRJoin is stored as RELATIVE number (1-indexed), NOT database ID
-  // Calculate relative msgBaseNum from database msgBaseId
-  const confMsgBases = messageBases.filter(mb => mb.conferenceId === confId);
+  // confMsgBasesAll was computed during the ACS forward-walk above (reuse it)
+  const confMsgBases = confMsgBasesAll;
   const msgBaseIndex = confMsgBases.findIndex(mb => mb.id === msgBaseId);
   const msgBaseNum = msgBaseIndex >= 0 ? msgBaseIndex + 1 : 1; // 1-indexed
 
@@ -180,25 +214,39 @@ console.warn('[joinConference] Failed to sync node user file:', err);
     }
   }
 
-  // express.e:5119-5124 - Mail scan logic
-  // Runs when: not auto-rejoin AND not skipping AND (forced OR checkMailConfScan)
-  if (!auto && forceMailScan !== FORCE_MAILSCAN_SKIP) {
-    const shouldScan = forceMailScan === FORCE_MAILSCAN_ALL; // TODO: || checkMailConfScan(confId, msgBaseNum)
-    if (shouldScan && session.user) {
+  // express.e:5119-5128 - Mail scan logic
+  // Runs when: auto=FALSE AND forceMailScan != FORCE_MAILSCAN_SKIP
+  // Then scans if: FORCE_MAILSCAN_ALL OR checkMailConfScan() returns true
+  // After scan: saveMsgPointers() persists updated read pointers to disk
+  if (!auto && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
+    let shouldScan = forceMailScan === FORCE_MAILSCAN_ALL;
+    if (!shouldScan) {
+      // express.e:5120 - checkMailConfScan(conf, msgBaseNum)
       try {
-        const { db } = require('../../database');
-        // Count new messages addressed to this user in this conference/msgbase
-        const newMessages = await db.getNewMessagesForUser(
-          session.user.username,
-          confId,
-          msgBaseId,
-          session.lastNewReadConf || 0
-        );
-        if (newMessages && newMessages.length > 0) {
-          socket.emit('ansi-output', `\r\n\x1b[33m${conference.name}\x1b[0m: ${newMessages.length} new message(s)\r\n`);
+        shouldScan = await checkMailConfScan(confId, msgBaseId, session.user.id);
+      } catch (err) {
+console.warn('[joinConference] checkMailConfScan error:', err);
+      }
+    }
+    if (shouldScan) {
+      try {
+        // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
+        // In our implementation this is the per-conference mail scan (display new message list)
+        const { performSingleConfMailScan } = require('../message/message-scan.handler');
+        if (performSingleConfMailScan) {
+          await performSingleConfMailScan(socket, session, confId, msgBaseId);
         }
       } catch (err) {
 console.warn('[joinConference] Mail scan error:', err);
+      }
+      // express.e:5126 - saveMsgPointers(conf, msgBaseNum)
+      try {
+        const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
+        confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
+        confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
+        await saveMsgPointers(confBase);
+      } catch (err) {
+console.warn('[joinConference] saveMsgPointers error:', err);
       }
     }
   }

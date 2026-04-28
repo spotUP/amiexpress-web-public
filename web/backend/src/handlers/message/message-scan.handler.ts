@@ -173,7 +173,7 @@ export function checkConfAccess(user: any, conferenceId: number): boolean {
  */
 const MAIL_SCAN_MASK = 4; // Bit flag for mail scan (matches AmiExpress MAIL_SCAN_MASK)
 
-async function checkMailConfScan(conferenceId: number, messageBaseId: number, userId: string): Promise<boolean> {
+export async function checkMailConfScan(conferenceId: number, messageBaseId: number, userId: string): Promise<boolean> {
   const flags = getConferenceToolFlags(conferenceId);
   if (flags.forceNewscan) {
     return true;
@@ -446,6 +446,66 @@ console.error('[confScan] Failed to update AquaScan.UserData:', err);
   const { advanceDisplayFlow } = require('../command.handler');
   if (advanceDisplayFlow) {
     await advanceDisplayFlow(socket, session);
+  }
+}
+
+/**
+ * Perform mail scan for a single conference — the per-join equivalent of confScan mail scan.
+ * Called from joinConference when auto=FALSE and checkMailConfScan() returns true.
+ * Mirrors the per-conference body of advanceConferenceScan (express.e:5122 callMsgFuncs(MAIL_SCAN,...)).
+ *
+ * express.e:11651-11778 searchNewMail() (single-conf invocation)
+ *
+ * @param socket - Socket.io socket
+ * @param session - BBS session
+ * @param conf - Conference ID (1-based)
+ * @param msgBaseId - Message base database ID
+ */
+export async function performSingleConfMailScan(socket: any, session: any, conf: number, msgBaseId: number): Promise<void> {
+  const user = session.user;
+  if (!user) return;
+
+  const confName = _conferences.find((c: any) => c.id === conf)?.name || `Conf ${conf}`;
+  const username = user.username || '';
+  const bbsDataPath = config.get('dataDir');
+
+  const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);
+
+  const { newPublic, newPrivate, lastScanned } = await countNewMessages(user.id, conf, msgBaseId, username);
+  session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
+  session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
+  session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
+
+  if (lastScanned > 0) {
+    await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
+    // Keep session pointers in sync so saveMsgPointers() in joinConference gets the right values
+    session.lastNewReadConf = lastScanned;
+  }
+
+  if (scanMsgs.length === 0) {
+    // No mail for this conference — nothing to display (express.e:11772 - 'No mail today!')
+    return;
+  }
+
+  // express.e:11712-11715 — header + table
+  socket.emit('ansi-output', '\r\n\r\n');
+  socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
+  socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+  socket.emit('ansi-output', '\x1b[0m');
+
+  for (const m of scanMsgs) {
+    const status = m.isPrivate ? 'Private' : 'Public ';
+    const from = (m.from || '').substring(0, 29).padEnd(29);
+    let subject = (m.subject || '').trim();
+    if (!subject) {
+      try {
+        const msg = await readMessageFile(conf, m.msgNum, bbsDataPath);
+        if (msg) subject = (msg.subject || '').trim();
+      } catch (_e) { /* ignore */ }
+    }
+    const subj = subject.substring(0, 21).padEnd(21);
+    const num = String(m.msgNum).padStart(6, '0');
+    socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
   }
 }
 
