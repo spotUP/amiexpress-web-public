@@ -221,11 +221,12 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
 
   // express.e:8902-8910: EALL → "confName (ALL)", else toName
   const toDisplay = formatRecipientDisplay(msg, session).padEnd(30);
-  // express.e:8915-8926: Recv'd date, N/A for ALL, No for private not yet received
+  // express.e:8915-8926: if recv set → date; if toName='ALL' → N/A; else → No
+  // Note: EALL check at 8922 is stringCompare(toName,'ALL') only — EALL shows 'No'
   let recvd: string;
   if (msg.receivedAt) {
     recvd = formatLongDateTime(msg.receivedAt instanceof Date ? msg.receivedAt : new Date(msg.receivedAt));
-  } else if (!msg.isPrivate || msg.toUser?.toUpperCase() === 'ALL' || msg.toUser?.toUpperCase() === 'EALL') {
+  } else if ((msg.toUser || '').toUpperCase() === 'ALL') {
     recvd = 'N/A';
   } else {
     recvd = 'No';
@@ -534,12 +535,15 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // CR/Enter - Next message - express.e:11062
+  // CR/Enter - Next message - express.e:12082-12085 JUMP goNextMsg
   if (command === '' || command === 'N') {
     if (currentIndex < messages.length - 1) {
       await displaySingleMessage(socket, session, currentIndex + 1);
     } else {
-      // End of messages - save pointer and exit - express.e:11985
+      // express.e noMorePlus():12299-12309: "The last message in this conference is N\r\n"
+      const lastMsg = messages[messages.length - 1];
+      const lastMsgNum = (lastMsg as any).msgNumber || lastMsg.id;
+      emitText(socket, `\r\nThe last message in this conference is ${lastMsgNum}\r\n`);
       await saveMessagePointerAndExit(socket, session);
     }
     return;
