@@ -201,8 +201,14 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
     session.tempData.msgReaderHighestRead = msgNumber;
   }
 
-  // Clear screen - express.e:8891
-  emitText(socket, '\x1b[2J\x1b[H');
+  // express.e:8889 checkScreenClear() — only clears if USER_SCRNCLR flag set
+  // If flag not set, just emit \r\n to separate from previous content
+  const SCRNCLR_FLAG = 8; // UserFlags.SCRNCLR
+  if ((session.user?.userFlags || 0) & SCRNCLR_FLAG) {
+    socket.emit('ansi-output', '\x0c'); // sendCLS() = ASCII 12 (form feed)
+  } else {
+    emitText(socket, '\r\n');
+  }
 
   // Display message header - express.e:8898-8936
   // express.e format: [32mField[33m: [0mvalue (green field, yellow colon, reset value)
