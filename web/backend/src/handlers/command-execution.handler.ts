@@ -237,8 +237,9 @@ async function runCommand(
     // Only show error message if NOT a screen-initiated command
     // Screen commands (from ~CC_, ~XC_, ~XI MCI codes) should fail silently
     // because the user didn't explicitly type them
+    // express.e:3037-3039 higherAccess() — exact string match
     if (!session.executingScreenCommand) {
-      socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to that command.'));
+      socket.emit('ansi-output', '\r\nCommand requires higher access.\r\n');
     }
     return RESULT_NOT_ALLOWED;
   }

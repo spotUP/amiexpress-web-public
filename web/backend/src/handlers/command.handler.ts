@@ -1219,8 +1219,31 @@ console.log(' PETSCII mode enabled: 40x25 terminal');
 
 console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ansiEnabled ? 'ANSI/RIP' : 'None');
 
-        // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
+        // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE
+        // Web connections never carry the STEALTH_MODE node tooltype, so we always run the
+        // Not(STEALTH_MODE) branch: gate fires after ANSI prompt, before BBSTITLE display.
         session.tempData.inputBuffer = ''; // Clear buffer
+        {
+          const { loadBBSConfig } = require('../services/bbs-config-file.service');
+          const path = require('path');
+          const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..');
+          let diskCfg: any = {};
+          try { diskCfg = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
+          const sysPass = (diskCfg.system_password || '').trim();
+          if (sysPass.length > 0) {
+            // System password configured — enter gate (express.e:29329-29356)
+            session.tempData.systemPasswordAttempts = 0;
+            session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
+            emitText(socket, '\r\n');
+            const { displayScreen: ds } = require('./screen.handler');
+            await ds(socket, session, 'PRIVATE'); // express.e:29336 — optional PRIVATE screen
+            emitText(socket, '>: ');              // express.e:29332 — default SYS_PWRD_PROMPT
+            socket.emit('mask-input', true);
+            return;
+          }
+        }
+
+        // No system password — display BBSTITLE then transition to login (express.e:29552)
         const { displayScreen } = require('./screen.handler');
         await displayScreen(socket, session, 'BBSTITLE');
 
@@ -1250,6 +1273,82 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ans
         return;
       }
       // Ignore other control characters
+      return;
+    }
+
+    // express.e:29329-29356 doSystemPassword() gate — masked line input, up to 3 attempts
+    if (session.subState === LoggedOnSubState.SYSTEM_PASSWORD_INPUT) {
+      // Initialize password buffer if needed
+      if (!session.tempData) session.tempData = { inputBuffer: '' };
+      if (session.tempData.inputBuffer === undefined) session.tempData.inputBuffer = '';
+
+      // Telnet: strip NUL bytes from telnet line-mode delivery
+      const spData = data.replace(/\0/g, '');
+
+      if (spData === '\r' || spData === '\n') {
+        socket.emit('mask-input', false);
+        const entered = (session.tempData.inputBuffer || '') as string;
+        session.tempData.inputBuffer = '';
+        emitText(socket, '\r\n');
+
+        // Read system password fresh on each attempt
+        const { loadBBSConfig } = require('../services/bbs-config-file.service');
+        const path = require('path');
+        const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..');
+        let diskCfg2: any = {};
+        try { diskCfg2 = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
+        const sysPass2 = (diskCfg2.system_password || '').trim();
+
+        if (entered === sysPass2) {
+          // express.e:29355 — aePuts('\b\n') then proceed to BBSTITLE
+          emitText(socket, '\r\n');
+          const { displayScreen: dsBBSTITLE } = require('./screen.handler');
+          await dsBBSTITLE(socket, session, 'BBSTITLE');
+          session.paginatedScreen = undefined;
+          session.lastScreenHadPause = false;
+          session.state = BBSState.LOGON;
+          session.subState = undefined;
+          session.tempData = session.tempData || {};
+          session.tempData.loginPhase = 'username';
+          emitPrompt(socket, '\r\n\r\nUsername: ');
+          socket.emit('prompt-login');
+          return;
+        }
+
+        // Wrong password — express.e:29343-29346
+        const spAttempts = ((session.tempData.systemPasswordAttempts as number) || 0) + 1;
+        session.tempData.systemPasswordAttempts = spAttempts;
+        emitText(socket, 'Invalid PassWord\r\n');
+console.log(`[SYSTEM_PASSWORD] Failed attempt ${spAttempts}/3`);
+
+        if (spAttempts >= 3) {
+          // express.e:29349-29353 — SYSPWDFAIL syscmd + disconnect
+console.log('[SYSTEM_PASSWORD] 3 failures — disconnecting (express.e:29349-29353)');
+          try {
+            const { runSysCommand: spRunSys } = require('./command-execution.handler');
+            await spRunSys(socket, session, 'SYSPWDFAIL', '');
+          } catch { /* syscmd optional */ }
+          socket.disconnect();
+          return;
+        }
+
+        // Prompt again (express.e:29336 displayScreen(SCREEN_PRIVATE) each attempt)
+        const { displayScreen: dsPrivate } = require('./screen.handler');
+        await dsPrivate(socket, session, 'PRIVATE');
+        emitText(socket, '>: ');
+        socket.emit('mask-input', true);
+        return;
+      } else if (spData === '\x7f' || spData === '\b') {
+        if (session.tempData.inputBuffer && (session.tempData.inputBuffer as string).length > 0) {
+          session.tempData.inputBuffer = (session.tempData.inputBuffer as string).slice(0, -1);
+          emitText(socket, '\b \b');
+        }
+        return;
+      } else if (spData.length === 1 && spData >= ' ') {
+        session.tempData.inputBuffer = ((session.tempData.inputBuffer as string) || '') + spData;
+        // No echo — password masking is active
+        return;
+      }
       return;
     }
 

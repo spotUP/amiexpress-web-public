@@ -13,6 +13,7 @@ export enum LoggedOnSubState {
   // Pre-login connection flow
   DISPLAY_CONNECT = 'display_connect',  // AWAITSCREEN - node list and system info
   ANSI_PROMPT = 'ansi_prompt',          // Prompt user for ANSI support (Y/N)
+  SYSTEM_PASSWORD_INPUT = 'system_password_input', // express.e:29329-29356 doSystemPassword() gate
   DISPLAY_BBSTITLE = 'display_bbstitle',  // BBSTITLE screen before login
 
   // Post-login flow

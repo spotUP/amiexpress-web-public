@@ -32,6 +32,7 @@ export interface BBSConfigData {
   strict_password_policy?: boolean;
   auto_validate?: boolean;
   confirm_deletions?: boolean;
+  system_password?: string;        // express.e:29329 — cmds.sysPass — ACP.e:2630 SYSTEM_PASSWORD tooltype
 
   // Session Settings
   default_time_limit?: number;
@@ -134,6 +135,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'STRICT_PASSWORD_POLICY': 'strict_password_policy',
   'AUTO_VALIDATE': 'auto_validate',
   'CONFIRM_DELETIONS': 'confirm_deletions',
+  'SYSTEM_PASSWORD': 'system_password',             // express.e:29329 ACP.e:2630 cmds.sysPass
 
   // Session
   'DEFAULT_TIME_LIMIT': 'default_time_limit',

@@ -146,9 +146,10 @@ export class ErrorHandler {
     action: string,
     options: ErrorHandlingOptions = {}
   ): void {
+    // express.e:3037-3039 higherAccess() + express.e:28646-28648 — always return to DISPLAY_MENU
     this.sendError(socket, `You do not have permission to ${action}.`, {
       showPrompt: true,
-      nextState: LoggedOnSubState.DISPLAY_CONF_BULL,
+      nextState: LoggedOnSubState.DISPLAY_MENU,
       ...options
     });
   }

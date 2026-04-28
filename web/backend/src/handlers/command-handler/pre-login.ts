@@ -1,9 +1,10 @@
 /**
  * Pre-Login Flow Handler
- * Handles connection screen, ANSI prompt, and BBSTITLE display
- * Based on express.e:29528-29551
+ * Handles connection screen, ANSI prompt, SYSTEM_PASSWORD gate, and BBSTITLE display
+ * Based on express.e:29477-29551
  */
 
+import * as path from 'path';
 import { BBSSession } from '../../index';
 import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
@@ -14,6 +15,24 @@ import { displayScreen } from '../screen.handler';
  */
 function getOutputEvent(session: BBSSession): 'ansi-output' | 'petscii-output' {
   return session.terminalType === 'c64' ? 'petscii-output' : 'ansi-output';
+}
+
+/**
+ * Read the system password from bbsConfig.info.
+ * express.e:29329 — cmds.sysPass; ACP.e:2630 — SYSTEM_PASSWORD tooltype.
+ * Returns empty string if not configured (no gate active).
+ */
+function getSystemPassword(): string {
+  try {
+    const { loadBBSConfig } = require('../../services/bbs-config-file.service');
+    // BBS root: from env or calculated relative to this compiled file's location
+    // web/backend/dist/handlers/command-handler/ → ../../../../.. = project root
+    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../../..');
+    const diskConfig = loadBBSConfig(bbsRoot);
+    return (diskConfig.system_password || '').trim();
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -39,15 +58,24 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
       session.screenWidth = 40;
       session.screenHeight = 25;
 
-      // Skip graphics prompt, go straight to BBSTITLE
+      // Skip graphics prompt — but still honour the system password gate
+      // express.e:29548-29550 Not(STEALTH_MODE) path fires before BBSTITLE
       session.tempData = { inputBuffer: '' };
-      await displayScreen(socket, session, 'BBSTITLE');
-
-      // Transition to login
-      session.state = BBSState.LOGON;
-      session.subState = undefined;
-      socket.emit('petscii-output', '\r\n\r\n');
-      socket.emit('prompt-login');
+      const sysPassC64 = getSystemPassword();
+      if (sysPassC64.length > 0) {
+        session.tempData.systemPasswordAttempts = 0;
+        session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
+        socket.emit('petscii-output', '\r\n');
+        await displayScreen(socket, session, 'PRIVATE');
+        socket.emit('petscii-output', '>: ');
+        socket.emit('mask-input', true);
+      } else {
+        await displayScreen(socket, session, 'BBSTITLE');
+        session.state = BBSState.LOGON;
+        session.subState = undefined;
+        socket.emit('petscii-output', '\r\n\r\n');
+        socket.emit('prompt-login');
+      }
       return true;
     }
 
@@ -63,6 +91,11 @@ console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
   // Handle ANSI prompt input
   if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
     return await handleAnsiPromptInput(socket, session, data);
+  }
+
+  // Handle system password gate (express.e:29329-29356 doSystemPassword)
+  if (session.subState === LoggedOnSubState.SYSTEM_PASSWORD_INPUT) {
+    return await handleSystemPasswordInput(socket, session, data);
   }
 
   // Handle BBSTITLE screen keypress
@@ -140,27 +173,27 @@ console.log('[QUICK] Quick logon enabled - will skip bulletins per express.e:295
     else if (session.ansiEnabled) graphicsMode = 'ANSI';
 console.log('[GRAPHICS] Mode set:', graphicsMode);
 
-    // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
+    // express.e:29548-29550 — Not(STEALTH_MODE) branch: doSystemPassword() before BBSTITLE
+    // Web connections never have STEALTH_MODE (no node .info file), so we always follow
+    // the Not(STEALTH_MODE) path: gate fires here, after ANSI prompt, before BBSTITLE.
     session.tempData.inputBuffer = ''; // Clear buffer
-    await displayScreen(socket, session, 'BBSTITLE');
-    if (session.pendingScreenCommand) {
-      session.pendingScreenCommand.then(() => {
-        if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-          socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
-        }
-      }).catch((error: any) => {
-console.error('[handlePreLogin] Pending screen command rejected:', error);
-        socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
-      });
+    const sysPass = getSystemPassword();
+    if (sysPass.length > 0) {
+      // System password is configured — enter password gate (express.e:29329-29356)
+      session.tempData.systemPasswordAttempts = 0;
+      session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
+      socket.emit('ansi-output', '\r\n');
+      // express.e:29336 — displayScreen(SCREEN_PRIVATE) (optional screen, silently skip if absent)
+      await displayScreen(socket, session, 'PRIVATE');
+      // express.e:29332 — SYS_PWRD_PROMPT node tooltype, default '>: '
+      // We have no node tooltype system for web; use the default prompt.
+      socket.emit('ansi-output', '>: ');
+      socket.emit('mask-input', true);
+      return true;
     }
 
-    // Immediately transition to login state (no key press required)
-    session.state = BBSState.LOGON;
-    session.subState = undefined;
-    // Use proper output event based on selected graphics mode
-    const outputEvent = getOutputEvent(session);
-    socket.emit(outputEvent, '\r\n\r\n');
-    socket.emit('prompt-login'); // Tell frontend to show login form
+    // No system password — go straight to BBSTITLE (express.e:29552)
+    await transitionToBBSTitle(socket, session);
     return true;
   } else if (data === '\x7f' || data === '\b') {
     // Backspace - remove last character from buffer
@@ -177,5 +210,89 @@ console.error('[handlePreLogin] Pending screen command rejected:', error);
   }
 
   // Ignore other control characters
+  return true;
+}
+
+/**
+ * Transition to BBSTITLE display then immediately to LOGON state.
+ * express.e:29552 — displayScreen(SCREEN_BBSTITLE) then logon loop begins.
+ * Extracted so both the no-password path and successful password path can share it.
+ */
+async function transitionToBBSTitle(socket: any, session: BBSSession): Promise<void> {
+  await displayScreen(socket, session, 'BBSTITLE');
+  // Immediately transition to login state (no key press required)
+  session.state = BBSState.LOGON;
+  session.subState = undefined;
+  const outputEvent = getOutputEvent(session);
+  socket.emit(outputEvent, '\r\n\r\n');
+  socket.emit('prompt-login'); // Tell frontend to show login form
+}
+
+/**
+ * Handle system password gate input (express.e:29329-29356 doSystemPassword).
+ * Called when session.subState === SYSTEM_PASSWORD_INPUT.
+ * Collects masked line input; compares against SYSTEM_PASSWORD tooltype.
+ * Up to 3 tries; on failure disconnects the caller.
+ */
+async function handleSystemPasswordInput(socket: any, session: BBSSession, data: string): Promise<boolean> {
+  // Initialize password buffer if needed
+  if (!session.tempData) session.tempData = { inputBuffer: '' };
+  if (session.tempData.inputBuffer === undefined) session.tempData.inputBuffer = '';
+
+  if (data === '\r') {
+    // Enter pressed — compare against configured password
+    socket.emit('mask-input', false);
+    const entered = (session.tempData.inputBuffer || '') as string;
+    session.tempData.inputBuffer = '';
+    socket.emit('ansi-output', '\r\n');
+
+    const sysPass = getSystemPassword();
+    // express.e:29337 getPass2() does a case-sensitive exact match
+    if (entered === sysPass) {
+      // express.e:29355 aePuts('\b\n') then fall through to BBSTITLE
+      socket.emit('ansi-output', '\r\n');
+      await transitionToBBSTitle(socket, session);
+      return true;
+    }
+
+    // Wrong password
+    const attempts = ((session.tempData.systemPasswordAttempts as number) || 0) + 1;
+    session.tempData.systemPasswordAttempts = attempts;
+
+    // express.e:29343-29346 — 'Invalid PassWord\b\n' + log + increment
+    socket.emit('ansi-output', 'Invalid PassWord\r\n');
+console.log(`[SYSTEM_PASSWORD] Failed attempt ${attempts}/3`);
+
+    if (attempts >= 3) {
+      // express.e:29349-29353 — after 3 fails: log + SYSPWDFAIL syscmd + disconnect
+console.log('[SYSTEM_PASSWORD] 3 failures — disconnecting caller (express.e:29349-29353)');
+      // Run SYSPWDFAIL syscmd (optional, ignore if not found)
+      try {
+        const { runSysCommand } = require('../command-execution.handler');
+        await runSysCommand(socket, session, 'SYSPWDFAIL', '');
+      } catch { /* syscmd is optional */ }
+      socket.disconnect();
+      return true;
+    }
+
+    // Prompt again (express.e:29336 — displayScreen(SCREEN_PRIVATE) each attempt)
+    await displayScreen(socket, session, 'PRIVATE');
+    socket.emit('ansi-output', '>: ');
+    socket.emit('mask-input', true);
+    return true;
+  } else if (data === '\x7f' || data === '\b') {
+    // Backspace
+    if (session.tempData.inputBuffer && (session.tempData.inputBuffer as string).length > 0) {
+      session.tempData.inputBuffer = (session.tempData.inputBuffer as string).slice(0, -1);
+      // No echo for masked input — just move cursor back
+      socket.emit('ansi-output', '\b \b');
+    }
+    return true;
+  } else if (data.length === 1 && data >= ' ') {
+    // Printable character — add to buffer, no echo (password masking)
+    session.tempData.inputBuffer = ((session.tempData.inputBuffer as string) || '') + data;
+    return true;
+  }
+
   return true;
 }

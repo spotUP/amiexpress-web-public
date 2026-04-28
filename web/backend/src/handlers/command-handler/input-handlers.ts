@@ -616,9 +616,13 @@ console.log(
       const { processCommand } = require("./core");
       const result = await processCommand(socket, session, commandText, "");
 
+      // express.e:28646-28648 — after processCommand(), always menuPause:=TRUE and
+      // subState:=SUBSTATE_DISPLAY_MENU, regardless of result.
+      // higherAccess() (the "Command requires higher access." message) is emitted
+      // inside processInternalCommand/runBbsCommand before returning NOT_ALLOWED.
       if (result === "NOT_ALLOWED") {
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
       }
     } catch (error) {
@@ -627,12 +631,9 @@ console.error("Error processing command:", error);
         "ansi-output",
         "\r\n\x1b[31mError processing command.\x1b[0m\r\n"
       );
-      socket.emit(
-        "ansi-output",
-        "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-      );
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // express.e:28646-28648 — even on error, go to DISPLAY_MENU with menuPause=true
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
   }
