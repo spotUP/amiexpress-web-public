@@ -13,6 +13,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
 import * as path from 'path';
+import { formatLongDateTime } from '../../utils/date-time.util';
 
 // Dependencies (injected)
 let _setEnvStat: any;
@@ -196,14 +197,10 @@ console.log('[ENV] Uploading');
 export function handleNodeUptimeCommand(socket: any, session: BBSSession): void {
   console.log('[ENV] Stats');
 
-  // express.e:25667-25672 internalCommandUP format:
-  // StringF(tempStr,'\b\nNode \d was started at \s.\b\n',node,tempStr2)
+  // express.e:25667-25672: '\b\nNode \d was started at \s.\b\n' with formatLongDateTime(nodeStart)
   const nodeStartTime = session.nodeStartTime || Date.now();
-  const startTime = new Date(nodeStartTime).toLocaleString();
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', `Node ${session.nodeId || 1} was started at ${startTime}.\r\n`);
-  socket.emit('ansi-output', '\r\n');
+  const startTime = formatLongDateTime(new Date(nodeStartTime));
+  socket.emit('ansi-output', `\r\nNode ${session.nodeId || 1} was started at ${startTime}.\r\n`);
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
   session.menuPause = false;
