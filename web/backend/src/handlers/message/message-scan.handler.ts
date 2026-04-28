@@ -831,7 +831,7 @@ console.log(`[confScan] WARNING: No previous login date found for ${username}`);
   }
 
   // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
-  socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
+  socket.emit('ansi-output', '\r\nScanning conferences for mail...\r\n\r\n');
   session.tempData.lineCount = (session.tempData.lineCount || 0) + 3;
 
   // Initialise confScanState if not already set (may be set by MAILSCAN_PROMPT_INPUT)
