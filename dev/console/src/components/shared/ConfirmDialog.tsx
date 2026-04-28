@@ -9,13 +9,18 @@ interface Props {
 
 export function ConfirmDialog({ message, onConfirm, onCancel }: Props) {
   const [selected, setSelected] = useState<'yes' | 'no'>('no');
+  const fired = React.useRef(false);
 
   useInput((input, key) => {
+    if (fired.current) return;
     if (key.leftArrow || input === 'h') setSelected('yes');
     if (key.rightArrow || input === 'l') setSelected('no');
-    if (key.return) selected === 'yes' ? onConfirm() : onCancel();
-    if (input === 'y') onConfirm();
-    if (input === 'n' || key.escape) onCancel();
+    if (key.return) {
+      fired.current = true;
+      selected === 'yes' ? onConfirm() : onCancel();
+    }
+    if (input === 'y') { fired.current = true; onConfirm(); }
+    if (input === 'n' || key.escape) { fired.current = true; onCancel(); }
   });
 
   return (
