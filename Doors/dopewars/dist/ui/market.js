@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderMarket = renderMarket;
-function renderMarket(box, market, state) {
+function renderMarket(box, market) {
     const header = '{bold}' + 'Drug'.padEnd(11) + ' ' + 'Price'.padStart(8) + '  !{/}';
     const lines = [header];
     for (const p of market.prices) {
@@ -12,9 +12,7 @@ function renderMarket(box, market, state) {
             trend = '{green-fg}!!{/}';
         if (p.expensive)
             trend = '{red-fg}**{/}';
-        const carried = state.drugs[p.index]?.carried ?? 0;
-        const ownStr = carried > 0 ? ` {yellow-fg}(${carried}){/}` : '';
-        lines.push(`${name} ${price}  ${trend}${ownStr}`);
+        lines.push(`${name} ${price}  ${trend}`);
     }
     box.setContent(lines.join('\n'));
 }

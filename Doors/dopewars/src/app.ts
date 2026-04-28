@@ -49,7 +49,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
 
   function fullRender(): void {
     updateHeader();
-    renderMarket(market, marketState, state);
+    renderMarket(market, marketState);
     renderInventory(inventory, state, marketState);
     renderActionBar(actions, mode);
     (screen as any).alloc();
@@ -90,7 +90,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     updatePresenceSub(state.location);
 
     for (const ev of result.events) {
-      pushEvent(events, ev.msg || `Event #${ev.code}`);
+      if (ev.msg) pushEvent(events, ev.msg);
     }
 
     // Game-over detection — E_FINISH is set by FinishGame() in the C engine

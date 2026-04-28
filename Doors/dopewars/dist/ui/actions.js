@@ -307,10 +307,9 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
     // Pre-select first destination that isn't current location
     const firstDest = items.findIndex((_, i) => i !== currentLocation);
     list.select(firstDest >= 0 ? firstDest : currentLocation);
-    let unbindEnter = () => { };
     let unbindOther = () => { };
     let closed = false;
-    function unbind() { unbindOther(); unbindEnter(); }
+    function unbind() { unbindOther(); }
     function cleanup() {
         closed = true;
         unbind();
@@ -336,16 +335,13 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
     });
     list.focus();
     screen.render();
+    // Enter bound immediately — J key has no Enter side-effect so no ghost-Enter risk
     unbindOther = (0, blessed_helpers_1.bindKeys)(screen, [
         [['escape'], () => { cleanup(); onCancel(); }],
         [['up'], () => { list.up(1); screen.render(); }],
         [['down'], () => { list.down(1); screen.render(); }],
+        [['enter'], () => jetTo(list.selected ?? currentLocation)],
     ]);
-    setImmediate(() => {
-        if (closed)
-            return;
-        unbindEnter = (0, blessed_helpers_1.bindKeys)(screen, [[['enter'], () => jetTo(list.selected ?? currentLocation)]]);
-    });
 }
 /* ─── Question overlay ─────────────────────────────────── */
 function showQuestionOverlay(screen, question, onAnswer) {

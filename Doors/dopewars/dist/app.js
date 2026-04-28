@@ -36,7 +36,7 @@ async function createApp(ctx, server) {
     }
     function fullRender() {
         updateHeader();
-        (0, market_1.renderMarket)(market, marketState, state);
+        (0, market_1.renderMarket)(market, marketState);
         (0, inventory_1.renderInventory)(inventory, state, marketState);
         (0, actions_1.renderActionBar)(actions, mode);
         screen.alloc();
@@ -82,7 +82,8 @@ async function createApp(ctx, server) {
         catch { /* ignore if out of game */ }
         updatePresenceSub(state.location);
         for (const ev of result.events) {
-            (0, events_1.pushEvent)(events, ev.msg || `Event #${ev.code}`);
+            if (ev.msg)
+                (0, events_1.pushEvent)(events, ev.msg);
         }
         // Game-over detection — E_FINISH is set by FinishGame() in the C engine
         if (state.eventNum === E_FINISH) {
