@@ -2160,6 +2160,13 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Express.e:6567  MENU resets cmdShortcuts/shortcuts before checking for .keys
     session.lastScreenFilePath = filePath;
 
+    // Clear screen BEFORE any processing (including inline MCI that sets inlineEmitted=true).
+    // Must be early — the frame-buffer path also prepends the clear, but inlineEmitted screens
+    // (CONF_BULL with ~CC_ dRE!WAll etc.) bypass that path entirely, leaving old door content visible.
+    if (shouldClear) {
+      socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    }
+
     // [NEWLINE-DEBUG] Log raw content newlines
     const rawNewlines = (content.match(/\n/g) || []).length;
     const rawCRLF = (content.match(/\r\n/g) || []).length;
@@ -2499,7 +2506,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
     const emitPage = async (startIdx: number, endIdx: number, prompt: boolean) => {
       const chunk = lines.slice(startIdx, endIdx).join('\r\n');
       const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)? ' : '';
-      const prefix = shouldClear && startIdx === 0 ? '\x1b[2J\x1b[H' : '';
+      const prefix = ''; // shouldClear already sent early before MCI processing
       await emitWithModem(prefix + chunk + promptLine);
     };
 
@@ -2604,7 +2611,8 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
       // Pad with a final newline so the last rendered line scrolls offscreen for a cleaner edge
       const streamText = text + '\r\n';
       const buffer = Buffer.from(
-        (shouldClear ? '\x1b[2J\x1b[H' : '') + HIDE_CURSOR + '\x1b[H' + streamText + '\x1b[0m' + SHOW_CURSOR,
+        // shouldClear already sent early — no double-clear here
+        HIDE_CURSOR + '\x1b[H' + streamText + '\x1b[0m' + SHOW_CURSOR,
         'utf-8'
       );
       let offset = 0;
@@ -2752,7 +2760,7 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         socket.emit(eventName, '\x1b[0m');
       } else {
         const frameBuffer =
-          (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
+          // shouldClear already sent early (before MCI) so no double-clear needed here
           HIDE_CURSOR +      // Hide cursor
           '\x1b[H' +         // Move cursor to home (1,1)
           parsed +           // Screen content
