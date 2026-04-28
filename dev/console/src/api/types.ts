@@ -76,3 +76,31 @@ export interface AuthResponse {
   token: string;
   user: { id: string; username: string; secLevel: number };
 }
+
+export interface DoorInfo {
+  id: string | number;
+  door_name: string;
+  door_command?: string;
+  door_type: string;
+  door_path?: string;
+  enabled: boolean;
+  description?: string;
+}
+
+export interface ConferenceHealth {
+  conferenceId: number;
+  name: string;
+  healthy: boolean;
+  issues: string[];
+  fixable: boolean;
+}
+
+export interface SystemConfig {
+  bbs_name: string;
+  sysop_name: string;
+  max_nodes: number;
+  new_user_sec_level: number;
+  telnet_port: number;
+  ssh_port?: number;
+  [key: string]: unknown;
+}

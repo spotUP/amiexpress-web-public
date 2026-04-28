@@ -96,3 +96,60 @@ export async function getLogs(type: 'backend' | 'frontend' | 'door68k', lines = 
   const res = await request<{ lines: string[]; totalLines: number }>(`/api/config/logs?${params}`);
   return res;
 }
+
+export async function updateConference(id: number, updates: Record<string, unknown>) {
+  return request<{ success: boolean }>(`/api/config/conferences/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function getConferenceHealth(id: number) {
+  const res = await request<{ success: boolean; data: import('./types.js').ConferenceHealth }>(`/api/config/conferences/${id}/health`);
+  return res.data;
+}
+
+export async function fixConference(id: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/conferences/${id}/auto-fix`, {
+    method: 'POST',
+  });
+}
+
+export async function getDoors() {
+  const res = await request<{ success: boolean; data: import('./types.js').DoorInfo[] }>('/api/config/doors');
+  return res.data ?? [];
+}
+
+export async function reloadDoors() {
+  return request<{ success: boolean; message?: string }>('/api/config/doors/reload', {
+    method: 'POST',
+  });
+}
+
+export async function getSystemConfig() {
+  const res = await request<{ success: boolean; data: import('./types.js').SystemConfig }>('/api/config/system');
+  return res.data;
+}
+
+export async function startNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/start`, { method: 'POST' });
+}
+
+export async function exitNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/exit`, { method: 'POST' });
+}
+
+export async function reserveNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/reserve`, { method: 'POST' });
+}
+
+export async function sysopLoginNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/sysop-login`, { method: 'POST' });
+}
+
+export async function setQuietMode(enabled: boolean) {
+  return request<{ success: boolean }>('/api/nodes/quiet-mode', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+}
