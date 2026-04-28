@@ -107,7 +107,8 @@ export async function checkDownloadRatios(
   if (dailyLimit > 0 && totalRequestedBytes > bytesADL) {
     return {
       canDownload: false,
-      errorMessage: 'Not enough daily byte allowance for requested downloads.'
+      // express.e:19854 — no trailing period in original
+      errorMessage: 'Not enough daily byte allowance for requested downloads'
     };
   }
 
