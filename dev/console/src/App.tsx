@@ -23,6 +23,10 @@ import { ScreenTypesPage } from './components/tabs/ScreenTypesPage.js';
 import { DrivesPage } from './components/tabs/DrivesPage.js';
 import { FileCheckersPage } from './components/tabs/FileCheckersPage.js';
 import { SecurityPage } from './components/tabs/SecurityPage.js';
+import { DoorInstallPage } from './components/tabs/DoorInstallPage.js';
+import { ImportExportPage } from './components/tabs/ImportExportPage.js';
+import { BatchEditorPage } from './components/tabs/BatchEditorPage.js';
+import { GlobalWallPage } from './components/tabs/GlobalWallPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
@@ -57,6 +61,11 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   drives:          DrivesPage,
   'file-checkers': FileCheckersPage,
   security:        SecurityPage,
+  // Phase D
+  'door-install':  DoorInstallPage,
+  'import-export': ImportExportPage,
+  'batch-editor':  BatchEditorPage,
+  'global-wall':   GlobalWallPage,
 };
 
 export function App({ username }: Props) {

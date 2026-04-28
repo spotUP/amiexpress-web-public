@@ -391,3 +391,105 @@ export async function updateSecurity(id: number, patch: Partial<import('./types.
 export async function deleteSecurity(id: number) {
   return request<{ success: boolean }>(`/api/config/security/${id}`, { method: 'DELETE' });
 }
+
+// ───── Phase D: Door install, Import/Export, Batch editor, Global wall ──
+
+export async function installDoorArchive(archive: { filename?: string; path?: string }) {
+  return request<{ success: boolean; message?: string }>('/api/config/doors/install-archive', {
+    method: 'POST',
+    body: JSON.stringify(archive),
+  });
+}
+
+export interface ImportSession {
+  id: string;
+  filename?: string;
+  status?: string;
+  createdAt?: string;
+  conflicts?: number;
+  totalRows?: number;
+}
+
+export async function getImportSessions() {
+  const res = await request<{ success: boolean; data: ImportSession[] }>('/api/import/sessions');
+  return res.data ?? [];
+}
+
+export async function getImportSession(id: string) {
+  const res = await request<{ success: boolean; data: unknown }>(`/api/import/session/${id}`);
+  return res.data;
+}
+
+export async function validateImport(id: string) {
+  return request<{ success: boolean; data?: unknown }>(`/api/import/validate/${id}`, { method: 'POST' });
+}
+
+export async function executeImport(id: string) {
+  return request<{ success: boolean; message?: string }>(`/api/import/execute/${id}`, { method: 'POST' });
+}
+
+export async function cancelImport(id: string) {
+  return request<{ success: boolean }>(`/api/import/cancel/${id}`, { method: 'POST' });
+}
+
+export async function deleteImport(id: string) {
+  return request<{ success: boolean }>(`/api/import/session/${id}`, { method: 'DELETE' });
+}
+
+export async function createExport(opts: { format?: string; includeUsers?: boolean; includeMessages?: boolean; includeFiles?: boolean } = {}) {
+  return request<{ success: boolean; data?: { filename?: string } }>('/api/import/export/create', {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  });
+}
+
+export async function listExports() {
+  const res = await request<{ success: boolean; data: Array<{ filename: string; size?: number; createdAt?: string }> }>('/api/import/export/list');
+  return res.data ?? [];
+}
+
+export async function listBatches() {
+  return request<{ batches: string[] }>('/api/batches');
+}
+
+export async function getBatch(name: string) {
+  return request<{ name: string; content: string }>(`/api/batches/${name}`);
+}
+
+export async function saveBatch(name: string, content: string) {
+  return request<{ name: string; saved: boolean }>(`/api/batches/${name}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function validateBatch(name: string, content: string) {
+  return request<{ valid?: boolean; errors?: string[] }>('/api/batches/validate', {
+    method: 'POST',
+    body: JSON.stringify({ name, content }),
+  });
+}
+
+export interface GlobalWallComment {
+  id: string;
+  username?: string;
+  message: string;
+  timestamp?: string;
+  hidden?: boolean;
+}
+
+export async function getGlobalWallComments(page = 1, limit = 50) {
+  const res = await request<{ success: boolean; data: GlobalWallComment[] }>(`/api/globalwall/comments?page=${page}&limit=${limit}`);
+  return res.data ?? [];
+}
+
+export async function updateGlobalWallComment(id: string, patch: Partial<GlobalWallComment>) {
+  return request<{ success: boolean }>(`/api/globalwall/comments/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteGlobalWallComment(id: string) {
+  return request<{ success: boolean }>(`/api/globalwall/comments/${id}`, { method: 'DELETE' });
+}

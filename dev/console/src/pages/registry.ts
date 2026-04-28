@@ -171,7 +171,34 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-  { id: 'global-wall', label: 'Global Wall', category: 'Content', footerHint: '(coming in phase D)', helpKeys: [], implemented: false },
+  {
+    id: 'door-install',
+    label: 'Door Install',
+    category: 'Content',
+    footerHint: '[i]nstall path  [r]efresh',
+    helpKeys: [
+      ['i', 'Enter install mode — paste archive path'],
+      ['enter', 'Submit path and install archive'],
+      ['esc', 'Cancel install'],
+      ['r', 'Refresh door list'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'global-wall',
+    label: 'Global Wall',
+    category: 'Content',
+    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
+    helpKeys: [
+      ['↑↓', 'Scroll comments'],
+      ['e', 'Edit the selected comment'],
+      ['d', 'Delete the selected comment (confirms)'],
+      ['/', 'Search by message text'],
+      ['r', 'Refresh from server'],
+      ['click', 'Click a row to select it'],
+    ],
+    implemented: true,
+  },
 
   // ─── Files ─────────────────────────────────────────────────────
   {
@@ -206,7 +233,26 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-  { id: 'import-export',  label: 'Import / Export', category: 'Files', footerHint: '(coming in phase D)', helpKeys: [], implemented: false },
+  {
+    id: 'import-export',
+    label: 'Import / Export',
+    category: 'Files',
+    footerHint: '[1]mport  [2]xport  [v/x/c/d] (import)  [u/m/f/n] (export)',
+    helpKeys: [
+      ['1', 'Switch to Import tab'],
+      ['2', 'Switch to Export tab'],
+      ['↑↓', 'Select a session (import) or toggle checkboxes (export)'],
+      ['v', 'Validate import session'],
+      ['x', 'Execute import'],
+      ['c', 'Cancel import'],
+      ['d', 'Delete import session'],
+      ['u', 'Toggle Users checkbox (export)'],
+      ['m', 'Toggle Messages checkbox (export)'],
+      ['f', 'Toggle Files checkbox (export)'],
+      ['n', 'Create new export'],
+    ],
+    implemented: true,
+  },
 
   // ─── System ────────────────────────────────────────────────────
   {
@@ -322,7 +368,23 @@ export const PAGES: PageMeta[] = [
   // ─── Comms ─────────────────────────────────────────────────────
   { id: 'amixnet',           label: 'AmiXnet',          category: 'Comms', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
   { id: 'op-chat-settings',  label: 'Op Chat Settings', category: 'Comms', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
-  { id: 'batch-editor',      label: 'Batch Editor',     category: 'Comms', footerHint: '(coming in phase D)', helpKeys: [], implemented: false },
+  {
+    id: 'batch-editor',
+    label: 'Batch Editor',
+    category: 'Comms',
+    footerHint: '[enter] load  [e]dit  [a]ppend  [d]elete  [s]ave  [v]alidate  [esc] back',
+    helpKeys: [
+      ['↑↓', 'Select a batch file or scroll lines'],
+      ['enter', 'Load the selected batch file'],
+      ['e', 'Edit the selected line'],
+      ['a', 'Append a new line after current'],
+      ['d', 'Delete the current line'],
+      ['s', 'Save all changes'],
+      ['v', 'Validate batch syntax'],
+      ['esc', 'Return to batch list or cancel edit'],
+    ],
+    implemented: true,
+  },
   { id: 'info-files',        label: 'Info Files',       category: 'Comms', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
 ];
 
