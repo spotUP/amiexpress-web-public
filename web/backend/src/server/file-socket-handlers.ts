@@ -231,14 +231,14 @@ function promptForDescription(
   const dateStr = formatUploadDate(getSystemTime());
   const filename13 = data.originalname.substring(0, 13).padEnd(13);
 
-  socket.emit("ansi-output", "\r\n");
+  // express.e:17720: '\b\nPlease enter a description, you only have \d lines.'
   socket.emit(
     "ansi-output",
-    `Enter a description, you only have ${maxDescLines} lines.\r\n`
+    `\r\nPlease enter a description, you only have ${maxDescLines} lines.`
   );
   socket.emit(
     "ansi-output",
-    "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n"
+    "\r\nPress return alone to end.  Begin  with (/) to make upload 'Private' to Sysop.\r\n"
   );
   socket.emit(
     "ansi-output",
