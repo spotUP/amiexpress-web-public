@@ -642,15 +642,20 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   if (command === 'D' && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     const msg = messages[currentIndex];
 
-    // Check if user can delete: public message OR message addressed to user
-    // Like express.e: (privateFlag=0) OR (toName matches username)
-    if (!msg.isPrivate || msg.toUser === session.user.username || msg.toUser === 'ALL') {
+    // express.e deleteMSG:11917-11921: secStatus<210 requires fromName=user OR toName=user
+    // (sysop secStatus≥210 bypasses check)
+    const username = session.user.username.toLowerCase();
+    const canDelete = (checkSecurity(session.user, ACSPermission.SYSOP_READ)) ||
+      !msg.isPrivate ||
+      (msg.author || '').toLowerCase() === username ||
+      (msg.toUser || '').toLowerCase() === username;
+    if (canDelete) {
       // Delete the message
+      const msgNum = (msg as any).msgNumber || msg.id;
       await _deleteMessage(msg.id);
 
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.successLine('Message deleted'));
-      emitText(socket, '\r\n');
+      // express.e:11936: '\b\nMessage N deleted...\b\n'
+      emitText(socket, `\r\nMessage ${msgNum} deleted...\r\n`);
 
       // Remove from reader's message list
       messages.splice(currentIndex, 1);
@@ -862,7 +867,6 @@ export function handleEnterMessageFullCommand(
   session: BBSSession,
   params: string = ''
 ): void {
-  // Check security permission - express.e:24861
   if (!checkSecurity(session.user, ACSPermission.ENTER_MESSAGE)) {
     ErrorHandler.permissionDenied(socket, 'post messages', {
       nextState: LoggedOnSubState.DISPLAY_CONF_BULL
@@ -870,20 +874,27 @@ export function handleEnterMessageFullCommand(
     return;
   }
 
-  // Set environment status - express.e:24862
   _setEnvStat(session, EnvStat.MAIL);
-
-console.log('[ENV] Mail');
 
   // express.e msgToHeader():9998-10001
   emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
-  emitText(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
 
-  // Clear input buffer and set up for line-based input
   session.inputBuffer = '';
   session.tempData = { isPrivate: true, messageEntry: {} };
-  // IMPORTANT: Set state to POST_MESSAGE_TO (recipient input), NOT POST_MESSAGE_SUBJECT
-  session.subState = LoggedOnSubState.POST_MESSAGE_TO;
+
+  const firstParam = params.trim();
+  if (firstParam && firstParam.length <= 30) {
+    // express.e:10762-10774: parsedParams[0] ≤ 30 chars → pre-fill To:, JUMP skipEntry
+    session.tempData.messageEntry.toUser = firstParam;
+    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${firstParam}\r\n`);
+    // Skip To: prompt — go straight to Subject (skipEntry → line 10785)
+    emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
+    session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
+  } else {
+    // No params — show To: prompt (express.e:10778-10780)
+    emitText(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
+    session.subState = LoggedOnSubState.POST_MESSAGE_TO;
+  }
 }
 
 // ============================================================================
