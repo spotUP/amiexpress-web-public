@@ -868,8 +868,8 @@ export async function handleMsgListStartInput(socket: any, session: BBSSession, 
     const msgNum = (msg as any).msgNumber || msg.id;
 
     if (!wroteHeader) {
-      // express.e:8857-8859: header lines
-      emitText(socket, '\r\n\x1b[32mMsg    Type     From                           Subject              \r\n');
+      // express.e:8856-8858: '\b\n\b\n' then header
+      emitText(socket, '\r\n\r\n\x1b[32mMsg    Type     From                           Subject              \r\n');
       emitText(socket, '\x1b[33m------ -------  -----------------------------  ---------------------\r\n');
       emitText(socket, '\x1b[0m');
       wroteHeader = true;
@@ -878,15 +878,13 @@ export async function handleMsgListStartInput(socket: any, session: BBSSession, 
     // express.e:8863: P/p = Public, else Private
     const typeStr = msg.isPrivate ? 'Private' : 'Public ';
     // express.e:8864: \z\r\d[6] \s  \l\s[29]  \l\s[21]
-    const msgNumStr = String(msgNum).padStart(6);
+    const msgNumStr = String(msgNum).padStart(6, '0');  // express.e \z\r\d[6] = zero-fill
     const fromPad = (msg.author || '').substring(0, 29).padEnd(29);
     const subjPad = (msg.subject || '').substring(0, 21).padEnd(21);
     emitText(socket, `${msgNumStr} ${typeStr}  ${fromPad}  ${subjPad}\x1b[0m\r\n`);
   }
 
-  if (!wroteHeader) {
-    emitText(socket, 'No messages found.\r\n');
-  }
+  // express.e:8876-8877: no 'No messages found.' message — just exits if nothing matched
 
   emitText(socket, '\r\n');
   // Return to current message
