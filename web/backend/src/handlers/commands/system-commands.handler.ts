@@ -64,20 +64,11 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
       : (session.flaggedFiles ? session.flaggedFiles.length : 0);
 
     if (flaggedCount > 0) {
+      // express.e:12670-12672: '\r\nYou have flagged files still not downloaded.\r\nDo you leave without them? '
+      // then yesNo(2) — Y=yes leave (proceed logoff), N/CR=no cancel logoff
       session.tempData = session.tempData || {};
       session.tempData.pendingGoodbye = true;
-       // Reuse batch download confirmation state machine
-      session.tempData.waitingForBatchConfirm = true;
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine(`You have ${flaggedCount} flagged file(s) for download.`));
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.complexPrompt([
-        { text: 'Download them now? ', color: 'white' },
-        { text: '(Y/N)', color: 'cyan' },
-        { text: ': ', color: 'white' }
-      ]));
-
-      // Set state to wait for flagged download confirmation
+      socket.emit('ansi-output', '\r\nYou have flagged files still not downloaded.\r\nDo you leave without them? \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
       session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
       return;
     }
