@@ -195,8 +195,17 @@ console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
       mailStat = await getMailStatFile(confId, msgBaseId);
       const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
       const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
-      session.lastMsgReadConf = validated.lastMsgReadConf || 0;
-      session.lastNewReadConf = validated.lastNewReadConf || 0;
+      let lastMsgReadConf = validated.lastMsgReadConf || 0;
+      let lastNewReadConf = validated.lastNewReadConf || 0;
+      // express.e:5037-5038 - clamp read pointers up to lowestNotDel
+      // IF(lastMsgReadConf<mailStat.lowestNotDel) THEN lastMsgReadConf:=mailStat.lowestNotDel
+      // IF(lastNewReadConf<mailStat.lowestNotDel) THEN lastNewReadConf:=mailStat.lowestNotDel
+      if (mailStat && mailStat.lowestNotDel > 0) {
+        if (lastMsgReadConf < mailStat.lowestNotDel) lastMsgReadConf = mailStat.lowestNotDel;
+        if (lastNewReadConf < mailStat.lowestNotDel) lastNewReadConf = mailStat.lowestNotDel;
+      }
+      session.lastMsgReadConf = lastMsgReadConf;
+      session.lastNewReadConf = lastNewReadConf;
     } catch (err) {
 console.error('[joinConference] Failed to load/validate message pointers:', err);
       session.lastMsgReadConf = 0;
@@ -204,8 +213,9 @@ console.error('[joinConference] Failed to load/validate message pointers:', err)
     }
   }
 
-  // Sync node files so doors (like AquaScan) see the new conference
-  if (session.user && session.nodeId !== undefined) {
+  // express.e:5130-5138 - createNodeUserFiles() only runs when !auto AND !confScan
+  // (interactive conference joins only, not auto-rejoin at login or confScan passes)
+  if (!auto && !confScan && session.user && session.nodeId !== undefined) {
     try {
       const { nodeFileManager } = require('../../services/NodeFileManager');
       nodeFileManager.writeNodeUserFile(session.nodeId, session.user);
