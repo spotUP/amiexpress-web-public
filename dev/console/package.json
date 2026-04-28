@@ -1,0 +1,26 @@
+{
+  "name": "@amiexpress/console",
+  "version": "1.0.0",
+  "description": "AmiExpress-Web sysop TUI console",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/src/index.js",
+    "start:strip": "node dist/strip/strip.js",
+    "dev": "tsx src/index.tsx"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "ink": "^4.4.1",
+    "ink-gradient": "^3.0.0",
+    "ink-spinner": "^5.0.0",
+    "react": "^18.2.0",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.79",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}
