@@ -303,7 +303,9 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         style: { fg: 'white', bg: 'black' },
         content: '  [Enter] jet   [ESC] cancel',
     });
-    list.select(currentLocation);
+    // Pre-select first destination that isn't current location
+    const firstDest = items.findIndex((_, i) => i !== currentLocation);
+    list.select(firstDest >= 0 ? firstDest : currentLocation);
     let unbindEnter = () => { };
     let unbindOther = () => { };
     let closed = false;
