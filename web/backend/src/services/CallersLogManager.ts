@@ -20,7 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { getSystemTime } from '../utils/date-time.util';
+import { getSystemTime, formatLongDate, formatLongTime } from '../utils/date-time.util';
 
 export class CallersLogManager {
   private bbsRoot: string;
@@ -69,14 +69,14 @@ console.log(`[CallersLog] Created directory: Node${nodeId}/`);
   }
 
   /**
-   * Append entry to CallersLog
+   * Append entry to CallersLog with auto-timestamp prefix
+   * @param rawEntry If true, entry already contains the timestamp (skip prefix)
    */
-  private appendLog(nodeId: number, entry: string): void {
+  private appendLog(nodeId: number, entry: string, rawEntry: boolean = false): void {
     try {
       this.ensureNodeDir(nodeId);
       const logPath = this.getLogPath(nodeId);
-      const timestamp = this.formatTimestamp();
-      const logLine = `${timestamp} ${entry}\n`;
+      const logLine = rawEntry ? `${entry}\n` : `${this.formatTimestamp()} ${entry}\n`;
 
       fs.appendFileSync(logPath, logLine, 'utf8');
 console.log(`[CallersLog] Node${nodeId}: ${entry}`);
@@ -122,10 +122,18 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
   }
 
   /**
-   * Log user logoff
+   * Log user logoff — express.e:9457-9473 logoffLog()
+   * Format: 'MM-DD-YY (HH:MM:SS) username Off Normally'
+   * @param stat Logoff reason: 'N'=Normal, 'L'=Loss Carrier, etc.
    */
-  logLogoff(nodeId: number, username: string): void {
-    this.appendLog(nodeId, `Logoff: ${username}`);
+  logLogoff(nodeId: number, username: string, stat: string = 'N'): void {
+    const now = getSystemTime();
+    const dateStr = formatLongDate(now);  // MM-DD-YY (FORMAT_USA)
+    const timeStr = formatLongTime(now);  // HH:MM:SS
+    const reason = stat[0] === 'N' ? 'Off Normally' : `Off ${stat}`;
+    // express.e:9467-9472: '\s (\s) \s Off Normally' or '\s (\s) \s Off \s'
+    // Pass rawEntry=true since the entry already contains the timestamp
+    this.appendLog(nodeId, `${dateStr} (${timeStr}) ${username} ${reason}`, true);
   }
 
   /**
