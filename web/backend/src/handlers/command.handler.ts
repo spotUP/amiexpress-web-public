@@ -227,7 +227,8 @@ import {
   handleForwardMessageToInput,
   handleForwardMessageSubjectInput,
   handleForwardMessagePrivateInput,
-  handleForwardMessageDeleteOriginalInput
+  handleForwardMessageDeleteOriginalInput,
+  handleReplyDeleteOriginalInput
 } from './message/message-entry.handler';
 
 import { finalizeCommand } from '../utils/command-response.util';
@@ -555,6 +556,9 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       return;
     case LoggedOnSubState.FORWARD_MESSAGE_DELETE_ORIGINAL:
       await handleForwardMessageDeleteOriginalInput(socket, session, data.toUpperCase());
+      return;
+    case LoggedOnSubState.REPLY_DELETE_ORIGINAL:
+      await handleReplyDeleteOriginalInput(socket, session, data.toUpperCase());
       return;
 
     default:

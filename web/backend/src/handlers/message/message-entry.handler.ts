@@ -550,6 +550,20 @@ console.error('[Webhook] Error sending new message webhook:', error);
       );
     }
 
+    // express.e:9898-9903 (replyToMSG): after saving, prompt "Delete original message (y/N)?"
+    // only if user has DELETE permission AND original message was addressed to current user.
+    const replyOriginalToUser: string = entry.replyOriginalToUser || '';
+    if (
+      replyOriginalToUser &&
+      replyOriginalToUser.toLowerCase() === (session.user?.username || '').toLowerCase() &&
+      checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
+    ) {
+      emitText(socket, 'Delete original message \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+      session.tempData.replyDeleteParentId = entry.parentId;
+      session.subState = LoggedOnSubState.REPLY_DELETE_ORIGINAL;
+      return; // state machine continues; DISPLAY_MENU set after delete confirm
+    }
+
     // express.e saves message and returns to main loop; main loop sets menuPause:=TRUE
     session.menuPause = true;
 
@@ -1118,6 +1132,33 @@ export async function handleForwardMessageDeleteOriginalInput(socket: any, sessi
 
   // Save forwarded message and optionally delete original
   await saveForwardedMessage(socket, session, deleteOriginal);
+}
+
+/**
+ * Handle delete-original confirmation after a Reply is saved — express.e:9898-9903.
+ * yesNo(2): loop on CR/unknown; Y=yes, N/Enter=no.
+ */
+export async function handleReplyDeleteOriginalInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+    return; // loop
+  }
+  emitText(socket, ch === 'Y' ? 'Yes\r\n' : 'No\r\n');
+
+  if (ch === 'Y') {
+    const parentId = session.tempData.replyDeleteParentId;
+    if (parentId) {
+      try {
+        await _db.deleteMessage(parentId);
+      } catch (_) { /* ignore */ }
+    }
+  }
+
+  // express.e:9907 ENDPROC RESULT_SUCCESS → returns to main loop → menuPause=true
+  session.menuPause = true;
+  delete session.tempData?.replyDeleteParentId;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  session.tempData = undefined;
 }
 
 /**

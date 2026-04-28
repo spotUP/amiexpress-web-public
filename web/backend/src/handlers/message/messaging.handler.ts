@@ -584,6 +584,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       body: [],
       currentLine: 1,
       parentId: msg.id,
+      // express.e:9880: frm = mailHeader.toName; used for delete-original eligibility (9898-9903)
+      replyOriginalToUser: msg.toUser,
     };
     // express.e:9894 replyFlag=1 → enterMSG skips To:/Subject: and jumps to skipBegin
     // We go to POST_MESSAGE_SUBJECT to capture any subject edit; handler will proceed to Private
@@ -603,17 +605,24 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // K - Keep (mark unread) and quit - express.e:11124-11136, 12094-12101
-  // 1. mailHeader.recv:=0; saveOverHeader(gfh) — clear recv flag on disk
-  // 2. IF lastNewReadConf>=msgNumb THEN lastNewReadConf--  (express.e:11128)
-  // 3. IF mailStat.lowestNotDel>=msgNumb THEN lastNewReadConf:=lowestNotDel  (express.e:11129)
-  // 4. kMsgFlag:=TRUE → RETURN RESULT_SUCCESS (exits reader, not JUMP goNextMsg in nav path)
+  // K - Keep (mark unread) - express.e:11124-11136
+  // Clears recv flag and exits the message reader (RETURN RESULT_SUCCESS).
+  // Only valid on public messages or messages addressed to the current user.
   if (command === 'K') {
     const msg = messages[currentIndex];
     const msgNum = (msg as any).msgNumber || msg.id;
+    const username = (session.user?.username || '').toLowerCase();
+
+    // express.e:11125: IF((privateFlag=0) OR (stringCompare(mailHeader.toName,confMailName)=SUCCESS))
+    const authorised = !msg.isPrivate || (msg.toUser || '').toLowerCase() === username;
+    if (!authorised) {
+      // express.e:11134: aePuts('Not your message.\b\n') then JUMP contloop
+      emitText(socket, '\r\nNot your message.\r\n');
+      displayMessageNavigationPrompt(socket, session);
+      return;
+    }
 
     // express.e:11126: mailHeader.recv:=0; saveOverHeader(gfh)
-    // Delete the .recv companion file so confScan sees this message as unread again
     const confId: number = session.tempData.msgReaderConfId || session.currentConf || 1;
     const bbsDataPath: string = config.get('dataDir');
     await unmarkMessageReceived(confId, msgNum, bbsDataPath);
@@ -624,7 +633,6 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     }
 
     // express.e:11129: IF mailStat.lowestNotDel>=mailHeader.msgNumb THEN lastNewReadConf:=lowestNotDel
-    // lowestNotDel = lowest message number still in the reader list
     const lowestNotDel = messages.length > 0
       ? ((messages[0] as any).msgNumber || messages[0].id)
       : 0;
@@ -637,12 +645,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       session.tempData.msgReaderHighestRead = Math.max(msgNum - 1, 0);
     }
 
-    // Advance to next message (express.e falls through to JUMP goNextMsg)
-    if (currentIndex < messages.length - 1) {
-      await displaySingleMessage(socket, session, currentIndex + 1);
-    } else {
-      await saveMessagePointerAndExit(socket, session);
-    }
+    // express.e:11131-11132: kMsgFlag:=TRUE; RETURN RESULT_SUCCESS — exit reader entirely
+    await saveMessagePointerAndExit(socket, session);
     return;
   }
 
