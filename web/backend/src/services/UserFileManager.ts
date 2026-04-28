@@ -128,10 +128,12 @@ export class UserFileManager {
   private readonly USERMISC_STRUCT_SIZE = 248; // mtop reads 248 bytes per userMisc
 
   constructor() {
-    // BBS: logical assignment points to project root
-    // __dirname when compiled is /dist/services, so go 4 levels up: dist -> backend -> web -> amiexpress-web
-    // But with tsx it's /src/services, so also 4 levels up: src -> backend -> web -> amiexpress-web
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    // BBS: logical assignment points to project root.
+    // Production (Docker) sets BBS_DATA_DIR pointing at the persistent volume;
+    // legacy installs may set BBS_ROOT; dev falls back to the calculated path.
+    // __dirname when compiled is /dist/services and with tsx it's /src/services,
+    // so go 4 levels up either way: dist|src -> backend -> web -> amiexpress-web.
+    this.bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
     this.userDataPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.data'));
     this.userKeysPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.keys'));
     this.userMiscPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.misc'));

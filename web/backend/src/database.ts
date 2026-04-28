@@ -416,6 +416,33 @@ console.log('✓ Added deleted_at column (GDPR soft-delete)');
 console.log('✓ Added erased_at column (GDPR erasure timestamp)');
       }
 
+      if (!columnNames.includes('slotnumber')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN slotnumber INTEGER DEFAULT 0');
+console.log('✓ Added slotnumber column');
+      }
+
+      // Populate slotnumber for any user where it is 0 or NULL.
+      // express.e:29624 — slotNumber is the permanent 1-indexed user.data slot.
+      // After the migration above, existing rows are 0; assign sequential slots
+      // by `created` time so the order is stable.
+      const usersWithoutSlot = this.db
+        .prepare('SELECT id, username, created FROM users WHERE slotnumber IS NULL OR slotnumber = 0 ORDER BY created ASC')
+        .all() as { id: string; username: string; created: number }[];
+
+      if (usersWithoutSlot.length > 0) {
+        const maxSlotRow = this.db
+          .prepare('SELECT COALESCE(MAX(slotnumber), 0) AS maxSlot FROM users')
+          .get() as { maxSlot: number };
+        let nextSlot = (maxSlotRow.maxSlot || 0) + 1;
+        const update = this.db.prepare('UPDATE users SET slotnumber = ? WHERE id = ?');
+        for (const u of usersWithoutSlot) {
+          update.run(nextSlot, u.id);
+console.log(`✓ Assigned slotnumber=${nextSlot} to ${u.username}`);
+          nextSlot++;
+        }
+console.log(`✓ Backfilled slotnumber for ${usersWithoutSlot.length} user(s)`);
+      }
+
       // Check and add missing columns to system_config table
 console.log('Checking for missing columns in system_config table...');
       const systemConfigInfo = this.db.prepare('PRAGMA table_info(system_config)').all() as any[];
