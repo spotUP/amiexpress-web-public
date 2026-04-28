@@ -16,6 +16,8 @@ export interface ConferenceToolFlags {
   noBulls: boolean;
   noConfBulls: boolean;
   freeDownloads: boolean;
+  // express.e:5013 / express.e:15269 — MENU_PROMPT tooltype overrides the standard menu prompt
+  menuPrompt: string;
 }
 
 const defaultFlags: ConferenceToolFlags = {
@@ -28,6 +30,7 @@ const defaultFlags: ConferenceToolFlags = {
   noBulls: false,
   noConfBulls: false,
   freeDownloads: false,
+  menuPrompt: '',
 };
 
 const conferenceTooltypeCache = new Map<number, ConferenceToolFlags>();
@@ -92,7 +95,9 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     }
 
     const buffer = fs.readFileSync(iconPath);
+    // flagSet holds boolean keys; tooltypeMap holds key=value pairs for string tooltypes
     const flagSet = new Set<string>();
+    const tooltypeMap = new Map<string, string>();
     let currentString = '';
 
     for (let i = 0; i < buffer.length; i++) {
@@ -108,8 +113,18 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
             if (token.startsWith('#') || token.startsWith('+') || token.startsWith("'")) {
               token = token.substring(1);
             }
-            const key = token.split('=')[0]?.trim().toUpperCase();
-            if (key) flagSet.add(key);
+            const eqIdx = token.indexOf('=');
+            if (eqIdx > 0) {
+              const key = token.substring(0, eqIdx).trim().toUpperCase();
+              const val = token.substring(eqIdx + 1);
+              if (key) {
+                flagSet.add(key);
+                tooltypeMap.set(key, val);
+              }
+            } else {
+              const key = token.trim().toUpperCase();
+              if (key) flagSet.add(key);
+            }
           }
         }
         currentString = '';
@@ -140,6 +155,10 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     }
     if (flagSet.has('FREEDOWNLOADS')) {
       result.freeDownloads = true;
+    }
+    // express.e:5013 / express.e:15269 — MENU_PROMPT=<string> overrides the standard menu prompt
+    if (tooltypeMap.has('MENU_PROMPT')) {
+      result.menuPrompt = tooltypeMap.get('MENU_PROMPT')!;
     }
 
     return result;

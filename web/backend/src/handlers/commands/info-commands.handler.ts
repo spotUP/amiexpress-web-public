@@ -126,6 +126,9 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   emitText(socket, '\x1b[0;34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
 
   // Get all online users - express.e:24231-24377
+  // WEB_: express.e reads from a shared AmigaOS node list in global memory; on the web
+  // platform multi-node session state lives in the Node.js sessions Map, so we enumerate
+  // that instead. Displayed columns and row format are 1:1 with express.e:24370-24375.
   const allOnlineUsers = Array.from(_sessions.values())
     .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
     .map(sess => ({
@@ -184,9 +187,12 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 
   console.log('[ENV] Doors');
 
-  // express.e:24239-24250 - who(1) is debug mode showing memory pointers
-  // WEB_WHD: Extended web version showing more user details
-  // Uses same table format as WHO for consistency
+  // express.e:24239-24250 - who(1) is debug mode that prints raw memory pointers
+  // WEB_: express.e WHD passes flag=1 to who(), which dumps struct addresses — meaningless
+  // on the web platform where there is no shared Amiga memory space. We show a richer
+  // per-session detail table instead, preserving the intent (operator visibility) without
+  // exposing meaningless pointer values. Multi-node session state lives in the Node.js
+  // sessions Map, not in a shared Amiga memory region.
   emitText(socket, '\r\n');
   emitText(socket, '\r\n');
   emitText(socket, '\x1b[0;34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');

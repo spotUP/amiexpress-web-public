@@ -582,9 +582,14 @@ console.log("🔥 In READ_SHORTCUTS state, processing single key");
   try {
     const translated = translateShortcut(session, data);
     if (translated && translated.length > 0) {
+      // express.e:28617-28618 — translateShortcut(temp,string); processMci(string)
+      // processMci must run on the translated value before command dispatch so that
+      // shortcuts containing MCI codes like ~CC_ or ~XC_ are expanded correctly.
+      const { parseMciCodes } = require("../screen.handler");
+      const mciResult = await parseMciCodes(translated, session);
+      const mciExpanded: string = mciResult.parsed;
       const { processCommand } = require("./core");
-      // Like express.e: translateShortcut + processMci + processCommand
-      await processCommand(socket, session, translated, "");
+      await processCommand(socket, session, mciExpanded, "");
     }
   } catch (error) {
 console.error("Error in shortcut processing:", error);

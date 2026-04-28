@@ -560,7 +560,9 @@ console.log(
 
       // No matching door - unknown command
 console.log(`[Command Handler] No matching door found for: ${command}`);
-      socket.emit("ansi-output", `\r\nUnknown command: ${command}\r\n`);
+      // express.e:28397 — aePuts('\b\nNo such command!!  Use ''?'' for command list.\b\n\b\n')
+      // (\b\n = \r\n in express.e E language)
+      socket.emit("ansi-output", `\r\nNo such command!!  Use '?' for command list.\r\n\r\n`);
 
       // Sysop debug message (appears after "Unknown command" and before "Press any key")
 console.log('>>> ABOUT TO CALL SysopDebugUtil.debug()');

@@ -14,6 +14,7 @@ import {
   getProcessOlmMessageQueue,
   getScreenMenu
 } from './dependency-injection';
+import { parseMciCodes } from '../screen.handler';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
 import { updateTimeUsed, checkTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
@@ -188,6 +189,20 @@ console.log('  - timeRemaining:', session.timeRemaining);
     processOlmQueue(socket, session);
   }
 
+  // express.e:28409-28412 — if conference has MENU_PROMPT tooltype, display it through
+  // the MCI engine instead of the standard prompt (aePuts('[0m'); processMci(menuPrompt); aePuts(' '))
+  const confToolFlags = getConferenceToolFlags(session.relConfNum || 1);
+  if (confToolFlags.menuPrompt && confToolFlags.menuPrompt.length > 0) {
+    emitText(socket, '\x1b[0m');
+    // parseMciCodes is async; resolve the parsed string and append ' ' (express.e:28412)
+    parseMciCodes(confToolFlags.menuPrompt, session).then((result) => {
+      emitPrompt(socket, result.parsed + ' ');
+    }).catch(() => {
+      emitPrompt(socket, confToolFlags.menuPrompt + ' ');
+    });
+    return;
+  }
+
   // Like AmiExpress: Use BBS name, relative conference number, conference name
   const bbsName = config.get('bbsName');
   // Calculate time remaining in minutes (express.e:28417,28419)
@@ -203,12 +218,12 @@ console.log('  - currentMsgBase found:', !!currentMsgBase);
   if (msgBasesInConf.length > 1 && currentMsgBase) {
     // Multiple message bases: show "ConfName - MsgBaseName"
     const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
-    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
+    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
 console.log(' Sending multi-msgbase prompt:', prompt);
     emitPrompt(socket, prompt);
   } else {
     // Single message base: just show conference name
-    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
+    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins. left): `;
 console.log(' Sending single-msgbase prompt:', prompt);
     emitPrompt(socket, prompt);
   }
