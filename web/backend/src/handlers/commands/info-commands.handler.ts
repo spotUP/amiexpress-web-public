@@ -44,53 +44,16 @@ export function setInfoCommandsDependencies(deps: {
  * @param session - Current BBS session
  */
 export function handleVersionCommand(socket: any, session: BBSSession): void {
-  emitText(socket, '\x1b[2J\x1b[H');
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.headerBox('AmiExpress Web Version Information'));
-  emitText(socket, '\r\n');
-
-  // Version string (like express.e:25691)
-  emitText(socket, AnsiUtil.colorize('AmiExpress Web v5.6.0', 'cyan'));
-  emitText(socket, ' (2025-10-23)\r\n');
-  emitText(socket, 'Modern web implementation of the classic AmiExpress BBS\r\n');
-  emitText(socket, '\r\n');
-
-  // Original version attribution (like express.e:25693-25694)
-  emitText(socket, AnsiUtil.colorize('Original Version:', 'yellow'));
-  emitText(socket, '\r\n');
+  // express.e:25688-25698 internalCommandVER()
+  // StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright \xa22018-2023 Darren Coles\b\n\b\n',expressVer,expressDate)
+  emitText(socket, '\r\nAmiExpress-Web 5.6.0 (2025-10-23) Copyright \xa92018-2023 Darren Coles\r\n\r\n');
+  // express.e:25692-25694
+  emitText(socket, 'Original Version:\r\n');
   emitText(socket, '  (C)1989-91 Mike Thomas, Synthetic Technologies\r\n');
-  emitText(socket, '  (C)1992-95 Joe Hodge, LightSpeed Technologies Inc.\r\n');
-  emitText(socket, '\r\n');
-
-  // WEB_: MODERN_* — additional web platform version info not present in express.e:25688-25699 (VER shows only version string + copyright + reg key)
-  emitText(socket, AnsiUtil.colorize('Built with:', 'yellow'));
-  emitText(socket, '\r\n');
-  emitText(socket, '  - Node.js/TypeScript backend\r\n');
-  emitText(socket, '  - React frontend\r\n');
-  emitText(socket, '  - SQLite database\r\n');
-  emitText(socket, '  - Socket.io real-time communication\r\n');
-  emitText(socket, '  - xterm.js terminal emulation\r\n');
-  emitText(socket, '\r\n');
-
-  // Features
-  emitText(socket, AnsiUtil.colorize('Features:', 'yellow'));
-  emitText(socket, '\r\n');
-  emitText(socket, '  - Compatible with AmiExpress v5.6.0 commands\r\n');
-  emitText(socket, '  - WebSocket-based file transfers\r\n');
-  emitText(socket, '  - Real-time chat and messaging\r\n');
-  emitText(socket, '  - QWK/FTN mail support\r\n');
-  emitText(socket, '\r\n');
-
-  // Registration (like express.e:25697)
-  emitText(socket, AnsiUtil.colorize('Registered to: Open Source Community', 'green'));
-  emitText(socket, '\r\n');
-  emitText(socket, '\r\n');
-
-  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-  // Return to menu without an extra pause; the next keypress should redraw the menu once.
-  session.menuPause = false;
-  session.paginatedScreen = undefined;
-  session.lastScreenHadPause = false;
+  emitText(socket, '  (C)1992-95 Joe Hodge, LightSpeed Technologies Inc.\r\n\r\n');
+  // express.e:25696-25697 'Registered to \s.\b\n'
+  emitText(socket, 'Registered to Open Source Community.\r\n');
+  // express.e:25698 ENDPROC RESULT_SUCCESS — no press-key, just return
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
@@ -286,7 +249,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 0: Login Name - express.e:25724-25728
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_NAME)) {
-    emitText(socket, AnsiUtil.colorize('[  0] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  0\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  0');
@@ -298,7 +261,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 1: Email - express.e:25729-25733
   if (!checkSecurity(session.user, ACSPermission.EDIT_EMAIL)) {
-    emitText(socket, AnsiUtil.colorize('[  1] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  1\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  1');
@@ -310,7 +273,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 2: Real Name - express.e:25734-25738
   if (!checkSecurity(session.user, ACSPermission.EDIT_REAL_NAME)) {
-    emitText(socket, AnsiUtil.colorize('[  2] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  2\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  2');
@@ -322,7 +285,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 3: Internet Name - express.e:25739-25743
   if (!checkSecurity(session.user, ACSPermission.EDIT_INTERNET_NAME)) {
-    emitText(socket, AnsiUtil.colorize('[  3] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  3\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  3');
@@ -334,7 +297,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 4: Location - express.e:25744-25748
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_LOCATION)) {
-    emitText(socket, AnsiUtil.colorize('[  4] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  4\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  4');
@@ -346,7 +309,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 5: Phone - express.e:25749-25753
   if (!checkSecurity(session.user, ACSPermission.EDIT_PHONE_NUMBER)) {
-    emitText(socket, AnsiUtil.colorize('[  5] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  5\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  5');
@@ -358,7 +321,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 6: Password - express.e:25754-25758
   if (!checkSecurity(session.user, ACSPermission.EDIT_PASSWORD)) {
-    emitText(socket, AnsiUtil.colorize('[  6] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m  6\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, '  6');
@@ -398,12 +361,14 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, ' 10');
   emitText(socket, AnsiUtil.colorize('] ', 'blue'));
   emitText(socket, AnsiUtil.colorize('SCREEN CLEAR............ ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize(currentUser.ansi ? 'YES' : 'NO', currentUser.ansi ? 'green' : 'white'));
+  // express.e:25808-25812 — checks userFlags AND USER_SCRNCLR (bit 8), [32m=YES, [37m=NO
+  { const scrnClr = (currentUser.userFlags || 0) & 8;
+    emitText(socket, scrnClr ? '\x1b[32mYES\x1b[0m' : '\x1b[37mNO\x1b[0m'); }
   emitText(socket, '\r\n');
 
   // Option 11: Transfer Protocol - express.e:25780-25790
   if (!checkSecurity(session.user, ACSPermission.XPR_SEND) && !checkSecurity(session.user, ACSPermission.XPR_RECEIVE)) {
-    emitText(socket, AnsiUtil.colorize('[ 11] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m 11\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
     const userProtocol = currentUser.protocol || 'zmodem';
@@ -418,7 +383,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 12: Editor Type - express.e:25791-25800
   if (!checkSecurity(session.user, ACSPermission.FULL_EDIT)) {
-    emitText(socket, AnsiUtil.colorize('[ 12] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m 12\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     const editorType = currentUser.editorType || 0;
     let editorName = 'PROMPT';
@@ -435,7 +400,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 13: Zoom Type - express.e:25801-25808
   if (!checkSecurity(session.user, ACSPermission.ZOOM_MAIL)) {
-    emitText(socket, AnsiUtil.colorize('[ 13] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m 13\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     const zoomType = currentUser.zoomType || 0;
     const zoomName = zoomType === 1 ? 'ASCII' : 'QWK';
@@ -450,7 +415,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 14: Available for Chat/OLM - express.e:25809-25816
   if (!checkSecurity(session.user, ACSPermission.OLM)) {
-    emitText(socket, AnsiUtil.colorize('[ 14] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m 14\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, ' 14');
@@ -462,7 +427,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // Option 15: Translator - express.e:25817-25820
   if (!checkSecurity(session.user, ACSPermission.TRANSLATION)) {
-    emitText(socket, AnsiUtil.colorize('[ 15] [DISABLED]\r\n', 'red'));
+    emitText(socket, '\x1b[34m[\x1b[0m 15\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     emitText(socket, AnsiUtil.colorize('[', 'blue'));
     emitText(socket, ' 15');
@@ -973,18 +938,17 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   const trimmed = input.trim();
   const originalPassword = session.tempData?.newPassword || '';
 
-  // Empty = cancel
+  // express.e:26009-26010: IF(StrLen(str2)=0) THEN JUMP cant — silent cancel, no message
   if (trimmed === '') {
-    emitText(socket, '\r\nPasswords do not match, changes not saved\r\n');
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     session.tempData = {};
     return;
   }
 
-  // Check if passwords match (express.e:25957)
+  // express.e:26012-26029: IF StrCmp(str,str2) ... ELSE '\b\nPasswords do not match, changes not saved' Delay(60)
   if (trimmed !== originalPassword) {
-    emitText(socket, '\r\nPasswords do not match, changes not saved\r\n');
+    emitText(socket, '\r\nPasswords do not match, changes not saved');
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     session.tempData = {};
@@ -1000,8 +964,8 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   } catch (_) { /* use defaults */ }
 
   if (minLen > 0 && trimmed.length < minLen) {
-    // express.e:26016: "Password length must be at least N chars, changes not saved"
-    emitText(socket, `\r\nPassword length must be at least ${minLen} chars, changes not saved\r\n`);
+    // express.e:26016: '\b\nPassword length must be at least \d chars, changes not saved' (no trailing \n)
+    emitText(socket, `\r\nPassword length must be at least ${minLen} chars, changes not saved`);
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     session.tempData = {};
@@ -1017,8 +981,8 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
       else sym = 1;
     }
     if (lower + upper + num + sym < Math.min(minStrength, 4)) {
-      // express.e:26021: "Password must have at least N of these:\n  upper case,lower case, numeric and symbols"
-      emitText(socket, `\r\nPassword must have at least ${minStrength} of these:\r\n  upper case,lower case, numeric and symbols - changes not saved\r\n`);
+      // express.e:26021: '\b\nPassword must have at least \d of these:\b\n  upper case,lower case, numeric and symbols - changes not saved' (no trailing \n)
+      emitText(socket, `\r\nPassword must have at least ${minStrength} of these:\r\n  upper case,lower case, numeric and symbols - changes not saved`);
       _displayWCommandMenu(socket, session);
       session.subState = LoggedOnSubState.W_OPTION_SELECT;
       session.tempData = {};
@@ -1026,12 +990,11 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
     }
   }
 
-  // Passwords match and meet strength requirements — hash and save (express.e:26025: setNewPassword())
+  // express.e:26025-26026: setNewPassword() + pwdLastUpdated:=getSystemTime() — no "success" message
   const hashedPassword = await bcrypt.hash(trimmed, 10);
   session.user.password = hashedPassword;
   await db.updateUser(session.user.id, { passwordHash: hashedPassword });
 
-  emitText(socket, '\r\nPassword updated successfully.\r\n');
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
   session.tempData = {};

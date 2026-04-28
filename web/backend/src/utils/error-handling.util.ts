@@ -143,15 +143,18 @@ export class ErrorHandler {
    */
   static permissionDenied(
     socket: Socket,
-    action: string,
+    _action: string,
     options: ErrorHandlingOptions = {}
   ): void {
-    // express.e:3037-3039 higherAccess() + express.e:28646-28648 — always return to DISPLAY_MENU
-    this.sendError(socket, `You do not have permission to ${action}.`, {
-      showPrompt: true,
-      nextState: LoggedOnSubState.DISPLAY_MENU,
-      ...options
-    });
+    // express.e:3037-3039 higherAccess() — no separator, no press-key, just the message
+    socket.emit('ansi-output', '\r\nCommand requires higher access.\r\n');
+    const { nextState, clearMenuPause, clearTempData } = options;
+    const session = (socket as any).session;
+    if (session) {
+      if (clearMenuPause) session.menuPause = false;
+      if (clearTempData) session.tempData = undefined;
+      if (nextState) session.subState = nextState;
+    }
   }
 
   /**

@@ -95,16 +95,13 @@ export async function handleExpertModeCommand(socket: any, session: BBSSession):
   // express.e:26113-26122 - Toggle expert mode flag
   const before = session.user.expert === 'X';
 
+  // express.e:26113-26121 — '\b\nExpert mode disabled\b\n' or '\b\nExpert mode enabled\b\n'
   if (before) {
     session.user.expert = 'N';
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Expert mode disabled\r\n');
-    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\r\nExpert mode disabled\r\n');
   } else {
     session.user.expert = 'X';
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Expert mode enabled\r\n');
-    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\r\nExpert mode enabled\r\n');
   }
 
   // Save expert mode preference to database

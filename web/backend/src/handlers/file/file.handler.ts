@@ -1017,16 +1017,21 @@ export function displayDownloadInterface(socket: any, session: BBSSession, param
   const ulCount = (user.uploads   || 0) & 0xFFFF;
   emitText(socket, `Number of Downloads      : ${dlCount} (${dlKB}k total)\r\n`);
   emitText(socket, `Number of Uploads        : ${ulCount} (${ulKB}k total)\r\n`);
-  // express.e:12701-12713 bytesADL=$7fffffff and CREDITBYKB toggle
+  // express.e:12701-12713 — bytesADL=$7fffffff means Infinite, else show value
   {
     const { getACSConfig, ToggleFlags } = require('../../utils/acs.util');
     const creditByKB = !!(getACSConfig().toggles as any)?.[ToggleFlags.CREDITBYKB];
+    const bytesADL = user.bytesAvailableForDownload ?? 0x7fffffff;
     if (creditByKB) {
-      // express.e:12703 'Todays KBytes Available  : Infinite\b\n'
-      emitText(socket, 'Todays KBytes Available  : Infinite\r\n');
+      // express.e:12703 'Todays KBytes Available  : Infinite\b\n' or '\d\b\n'
+      emitText(socket, bytesADL === 0x7fffffff
+        ? 'Todays KBytes Available  : Infinite\r\n'
+        : `Todays KBytes Available  : ${bytesADL}\r\n`);
     } else {
-      // express.e:12709 'Todays Bytes Available   : Infinite\b\n'
-      emitText(socket, 'Todays Bytes Available   : Infinite\r\n');
+      // express.e:12709 'Todays Bytes Available   : Infinite\b\n' or '\d\b\n'
+      emitText(socket, bytesADL === 0x7fffffff
+        ? 'Todays Bytes Available   : Infinite\r\n'
+        : `Todays Bytes Available   : ${bytesADL}\r\n`);
     }
   }
 

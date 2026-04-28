@@ -3789,7 +3789,9 @@ console.log(' In PROCESS_COMMAND state, executing command:', session.commandText
         // Express.e:28244-28256 - Command priority: SysCommand  BbsCommand  InternalCommand
         const result = await processCommand(socket, session, command, params);
         if (result === 'NOT_ALLOWED') {
-          // Permission denied - already handled
+          // express.e:28644-28648 higherAccess() — emitted here for sys/bbs commands;
+          // internal commands call ErrorHandler.permissionDenied directly and don't reach this path
+          socket.emit('ansi-output', '\r\nCommand requires higher access.\r\n');
           session.menuPause = false;
           session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
           return;

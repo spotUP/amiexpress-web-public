@@ -658,13 +658,23 @@ export class DownloadHandler {
     socket.emit('ansi-output', `Number of Downloads      : ${dlCount} (${dlKb}k total)\r\n`);
     // express.e:12699 'Number of Uploads        : \d (\sk total)\b\n'
     socket.emit('ansi-output', `Number of Uploads        : ${ulCount} (${ulKb}k total)\r\n`);
-    // express.e:12709 'Todays Bytes Available   : Infinite\b\n'  (bytesADL=$7fffffff)
+    // express.e:12701-12714 — bytesADL=$7fffffff means Infinite, else show value
     const toggles = getACSConfig().toggles;
+    const bytesADL = user.bytesAvailableForDownload ?? 0x7fffffff;
     if (toggles && (toggles as any)[ToggleFlags.CREDITBYKB]) {
-      // express.e:12703 'Todays KBytes Available  : Infinite\b\n'
-      socket.emit('ansi-output', 'Todays KBytes Available  : Infinite\r\n');
+      // express.e:12703 'Todays KBytes Available  : Infinite\b\n' or '\d\b\n'
+      if (bytesADL === 0x7fffffff) {
+        socket.emit('ansi-output', 'Todays KBytes Available  : Infinite\r\n');
+      } else {
+        socket.emit('ansi-output', `Todays KBytes Available  : ${bytesADL}\r\n`);
+      }
     } else {
-      socket.emit('ansi-output', 'Todays Bytes Available   : Infinite\r\n');
+      // express.e:12709 'Todays Bytes Available   : Infinite\b\n' or '\d\b\n'
+      if (bytesADL === 0x7fffffff) {
+        socket.emit('ansi-output', 'Todays Bytes Available   : Infinite\r\n');
+      } else {
+        socket.emit('ansi-output', `Todays Bytes Available   : ${bytesADL}\r\n`);
+      }
     }
   }
 

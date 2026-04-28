@@ -70,9 +70,8 @@ export function setAdvancedCommandsDependencies(deps: {
  * This is a nostalgic easter egg command.
  */
 export function handleGreetingsCommand(socket: any, session: BBSSession): void {
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('In memory of those who came before us...', 'cyan'));
-  socket.emit('ansi-output', '\r\n\r\n');
+  // express.e:24412 aePuts('\b\nIn memory of those who came before us...\b\n\b\n') — no color
+  socket.emit('ansi-output', '\r\nIn memory of those who came before us...\r\n\r\n');
 
   // Amiga demo scene groups (exactly as in express.e)
   socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));

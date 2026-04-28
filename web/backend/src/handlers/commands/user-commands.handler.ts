@@ -264,16 +264,16 @@ console.log('[ENV] User Statistics');
   const secLevel = user.secLevel || 0;
   socket.emit('ansi-output', `\x1b[32mSecurity Lv\x1b[33m:\x1b[0m ${secLevel}\r\n`);
 
-  // Times Called (express.e:25565)
-  const timesCalled = user.timesCalled || 0;
+  // Times Called (express.e:25565) — timesCalled AND $FFFF
+  const timesCalled = (user.timesCalled || 0) & 0xFFFF;
   socket.emit('ansi-output', `\x1b[32m# Times On \x1b[33m:\x1b[0m ${timesCalled}\r\n`);
 
   // Times Today (express.e:25567)
   const timesToday = user.timesToday || 0;
   socket.emit('ansi-output', `\x1b[32mTimes Today\x1b[33m:\x1b[0m ${timesToday}\r\n`);
 
-  // Messages Posted (express.e:25569)
-  const msgsPosted = user.messagesPosted || 0;
+  // Messages Posted (express.e:25569) — messagesPosted AND $FFFF
+  const msgsPosted = (user.messagesPosted || 0) & 0xFFFF;
   socket.emit('ansi-output', `\x1b[32mMsgs Posted\x1b[33m:\x1b[0m ${msgsPosted}\r\n`);
 
   // Online Baud (express.e:25571) - web connections use high speed
@@ -288,8 +288,8 @@ console.log('[ENV] User Statistics');
   const dnCPS = user.dnCPS || 0;
   socket.emit('ansi-output', `\x1b[32mRate CPS DN\x1b[33m:\x1b[0m ${dnCPS}\r\n`);
 
-  // Screen Clear (express.e:25580)
-  const screenClr = user.screenClr ? 'YES' : 'NO';
+  // Screen Clear (express.e:25580) — IF loggedOnUserKeys.userFlags AND USER_SCRNCLR (bit 8)
+  const screenClr = ((user.userFlags || 0) & 8) ? 'YES' : 'NO';
   socket.emit('ansi-output', `\x1b[32mScreen  Clr\x1b[33m:\x1b[0m ${screenClr}\r\n`);
 
   // Protocol (express.e:25583)
