@@ -332,28 +332,31 @@ console.log('[ENV] User Statistics');
   socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\r\n');
 
-  // Display current conference stats - express.e:24164-24186
+  // express.e:24164-24186 fileStatus(opt=1) — current conference only
+  // Row format: [33m{conf4}[0m> [33m{ul7}  {bytesup14} {dl7}  {bytesdown14}   {avail9}   {ratio}[0m:[33m1
   const confNum = session.currentConf || 1;
-  const fileUploads = user.uploads || 0;
-  const fileDownloads = user.downloads || 0;
-  const bytesUploaded = user.bytesUploaded || 0;
-  const bytesDownloaded = user.bytesDownloaded || 0;
-  const bytesLimit = user.byteLimit || 0;
-  const bytesAvail = bytesLimit > 0 ? Math.max(0, bytesLimit - (user.dailyBytesDownloaded || 0)) : -1;
-  const ratio = user.ratio || 0;
+  const fileUploads = (user.uploads || 0) & 0xFFFF;       // AND $FFFF like express.e
+  const fileDownloads = (user.downloads || 0) & 0xFFFF;
+  const bytesUploaded = user.bytesUpload || user.bytesUploaded || 0;
+  const bytesDownloaded = user.bytesDownload || user.bytesDownloaded || 0;
+  const bytesLimit = user.byteLimit || user.dailyBytesLimit || 0;
+  const bytesAvail = bytesLimit > 0 ? Math.max(0, bytesLimit - (user.dailyBytesDld || 0)) : -1;
+  // express.e uses formatBCD() = comma-separated decimal (1,234,567)
+  const fmtBCD = (n: number): string => n.toLocaleString('en-US');
+  const bytesUpStr = fmtBCD(bytesUploaded);
+  const bytesDnStr = fmtBCD(bytesDownloaded);
+  const bytesAvailStr = bytesAvail >= 0 ? fmtBCD(bytesAvail) : 'Infinite';
+  const secLibrary = user.ratio || 0; // secLibrary = ratio divisor
 
-  // Format bytes for display
-  const formatBytes = (bytes: number): string => {
-    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)}G`;
-    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)}M`;
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}K`;
-    return bytes.toString();
-  };
-
-  const bytesAvailStr = bytesAvail >= 0 ? formatBytes(bytesAvail) : 'Infinite';
-  const ratioStr = ratio > 0 ? `1:${ratio}` : 'DSBL';
-
-  socket.emit('ansi-output', `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[0;36m${fileUploads.toString().padStart(7)}  ${formatBytes(bytesUploaded).padStart(14)} ${fileDownloads.toString().padStart(7)}  ${formatBytes(bytesDownloaded).padStart(14)}   ${bytesAvailStr.padStart(9)}  ${ratioStr}\x1b[0m\r\n`);
+  if (secLibrary > 0) {
+    // express.e:24179: {ratio}[0m:[33m1 = "N:1" format
+    socket.emit('ansi-output',
+      `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[33m${fileUploads.toString().padStart(7)}  ${bytesUpStr.padStart(14)} ${fileDownloads.toString().padStart(7)}  ${bytesDnStr.padStart(14)}   ${bytesAvailStr.padStart(9)}   ${secLibrary}\x1b[0m:\x1b[33m1\x1b[0m\r\n`);
+  } else {
+    // express.e:24181: [31mDSBLD — disabled ratio
+    socket.emit('ansi-output',
+      `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[33m${fileUploads.toString().padStart(7)}  ${bytesUpStr.padStart(14)} ${fileDownloads.toString().padStart(7)}  ${bytesDnStr.padStart(14)}   ${bytesAvailStr.padStart(9)}  \x1b[31mDSBLD\x1b[0m\r\n`);
+  }
   socket.emit('ansi-output', '\x1b[0m\r\n');
 
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());

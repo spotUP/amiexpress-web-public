@@ -121,9 +121,9 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   // express.e:24217-24224 - Table header (exact format from who() function)
   emitText(socket, '\r\n');
   emitText(socket, '\r\n');
-  emitText(socket, '\x1b[0;34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
-  emitText(socket, '\x1b[0;34m|\x1b[0;33mNd#\x1b[0;34m|\x1b[0;36m Name/Handle         \x1b[0;34m|\x1b[0;36m Location            \x1b[0;34m|\x1b[0;36m Action              \x1b[0;34m|\x1b[0;36mChat\x1b[0m\x1b[0;34m|\x1b[0m\r\n');
-  emitText(socket, '\x1b[0;34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m|\x1b[33mNd#\x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Location            \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36mChat\x1b[0m\x1b[34m|\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
 
   // Get all online users - express.e:24231-24377
   // WEB_: express.e reads from a shared AmigaOS node list in global memory; on the web
@@ -145,15 +145,15 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
     const nameStr = userInfo.username.substring(0, 19).padEnd(19);
     const locStr = userInfo.location.substring(0, 19).padEnd(19);
     const actionStr = userInfo.action.substring(0, 19).padEnd(19);
-    const chatStr = userInfo.chatEnabled ? '\x1b[0;32mYES' : '\x1b[0;31mNO ';
+    const chatStr = userInfo.chatEnabled ? '\x1b[32mYES' : '\x1b[31mNO ';
 
     // express.e:24370-24375 - Row format
-    emitText(socket, `\x1b[0;34m| \x1b[0m${nodeStr}\x1b[0;34m| \x1b[0;33m${nameStr} \x1b[0;34m|\x1b[0;35m ${locStr} \x1b[0;34m|\x1b[0m ${actionStr} \x1b[0;34m|${chatStr}\x1b[0;34m|\x1b[0m\r\n`);
+    emitText(socket, `\x1b[34m| \x1b[0m${nodeStr}\x1b[34m| \x1b[33m${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actionStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m\r\n`);
   });
 
   // express.e:24381-24382 - Table footer
-  emitText(socket, '\x1b[0;34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
-  emitText(socket, '\x1b[0;34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
   emitText(socket, '\r\n');
 
   emitPrompt(socket, AnsiUtil.pressKeyPrompt());
@@ -195,9 +195,9 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
   // sessions Map, not in a shared Amiga memory region.
   emitText(socket, '\r\n');
   emitText(socket, '\r\n');
-  emitText(socket, '\x1b[0;34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
-  emitText(socket, '\x1b[0;34m|\x1b[0;33mNd#\x1b[0;34m|\x1b[0;36m Name/Handle         \x1b[0;34m|\x1b[0;36m Location            \x1b[0;34m|\x1b[0;36m Action              \x1b[0;34m|\x1b[0;36mChat\x1b[0m\x1b[0;34m|\x1b[0m\r\n');
-  emitText(socket, '\x1b[0;34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m|\x1b[33mNd#\x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Location            \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36mChat\x1b[0m\x1b[34m|\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
 
   // Get all online users with detailed status
   const detailedOnlineUsers = Array.from(_sessions.values())
@@ -216,14 +216,14 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
     const nameStr = userInfo.username.substring(0, 19).padEnd(19);
     const locStr = userInfo.location.substring(0, 19).padEnd(19);
     const actionStr = userInfo.activity.substring(0, 19).padEnd(19);
-    const chatStr = userInfo.chatEnabled ? '\x1b[0;32mYES' : '\x1b[0;31mNO ';
+    const chatStr = userInfo.chatEnabled ? '\x1b[32mYES' : '\x1b[31mNO ';
 
-    emitText(socket, `\x1b[0;34m| \x1b[0m${nodeStr}\x1b[0;34m| \x1b[0;33m${nameStr} \x1b[0;34m|\x1b[0;35m ${locStr} \x1b[0;34m|\x1b[0m ${actionStr} \x1b[0;34m|${chatStr}\x1b[0;34m|\x1b[0m\r\n`);
+    emitText(socket, `\x1b[34m| \x1b[0m${nodeStr}\x1b[34m| \x1b[33m${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actionStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m\r\n`);
   });
 
   // Table footer
-  emitText(socket, '\x1b[0;34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
-  emitText(socket, '\x1b[0;34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
+  emitText(socket, '\x1b[34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
   emitText(socket, '\r\n');
 
   emitPrompt(socket, AnsiUtil.pressKeyPrompt());
@@ -281,7 +281,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // express.e:25730-25732 - exact format with colored asterisks
   emitText(socket, '\r\n');
-  emitText(socket, '                       \x1b[0;34m*\x1b[0m--\x1b[0;33mUSER CONFIGURATION\x1b[0m--\x1b[0;34m*\x1b[0m\r\n');
+  emitText(socket, '                       \x1b[34m*\x1b[0m--\x1b[33mUSER CONFIGURATION\x1b[0m--\x1b[34m*\x1b[0m\r\n');
   emitText(socket, '\r\n');
 
   // Option 0: Login Name - express.e:25724-25728
