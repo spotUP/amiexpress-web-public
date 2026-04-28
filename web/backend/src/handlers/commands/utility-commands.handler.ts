@@ -424,51 +424,35 @@ console.error('[ZOOM] QWK generation error:', error);
  * @param params - Help topic to search for
  */
 export function handleHelpFilesCommand(socket: any, session: BBSSession, params: string = ''): void {
-  // express.e:25089-25110 internalCommandUpHat - no header, searches help/ directory
-  socket.emit('ansi-output', '\r\n');
-
-  // express.e:25106-25108: empty params → RETURN RESULT_SUCCESS (no output)
+  // express.e:25089-25111 internalCommandUpHat
+  // express.e:25106-25108: empty params → RETURN RESULT_SUCCESS (no output at all)
   if (!params.trim()) {
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  // Progressive search - express.e:25091-25109
+  // Progressive search — express.e:25094-25109: try BBS:help/{params}, strip last char, repeat
   let searchTerm = params.trim();
   let foundFile: string | null = null;
 
-  // Try to find help file - keeps removing last character until found
   while (searchTerm.length > 0) {
     const helpBasePath = path.join('help', searchTerm);
     foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode);
-
-    if (foundFile) {
-      break;
-    }
-
-    // Remove last character and try again - express.e:25106
+    if (foundFile) break;
     searchTerm = searchTerm.slice(0, -1);
   }
 
   if (foundFile) {
-    // Display the help file - express.e:25098-25100
-    socket.emit('ansi-output', AnsiUtil.colorize(`Help topic: `, 'cyan'));
-    socket.emit('ansi-output', `${searchTerm}\r\n\r\n`);
-
+    // express.e:25096-25101: displayFile(screen); doPause(); '\b\n'; RETURN RESULT_SUCCESS
     _displayScreen(socket, session, foundFile);
-
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    // doPause equivalent — main loop handles via menuPause=true
+    session.menuPause = true;
   } else {
-    socket.emit('ansi-output', AnsiUtil.errorLine(`No help available for: ${params}`));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Try a different topic or use H for general help.\r\n');
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    // express.e:25107-25108: StrLen(params)=0 path → RETURN RESULT_SUCCESS (silent)
+    // No output when not found
   }
 
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 // === UTILITY FUNCTIONS ===
