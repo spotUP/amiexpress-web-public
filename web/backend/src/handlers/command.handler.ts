@@ -1466,6 +1466,28 @@ console.error('[LOGIN] Batch scheduler failed:', err);
 console.error('[SystemStats] Error tracking login:', error);
           }
 
+          // express.e:29768-29773 — secStatus <= 1 lockout check
+          // Must run before bulletin flow; secStatus 0 = LOCKOUT0, 1 = LOCKOUT1.
+          if (user.secLevel <= 1) {
+            const lockScreen = user.secLevel === 0 ? 'LOCKOUT0' : 'LOCKOUT1';
+            await displayScreen(socket, session, lockScreen, false);
+            session.state = BBSState.AWAIT; // prevent further BBS processing
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+
+          // express.e:29775-29782 — accountLocked check
+          // Show message, offer comment to sysop, then disconnect.
+          if (user.accountLocked) {
+            emitText(socket, '\r\nYour account is locked out (possibly due to repeated password failures)\r\n\r\n');
+            emitText(socket, 'Leave a comment for the sysop...\r\n\r\n');
+            await processCommand(socket, session, 'C', '');
+            emitText(socket, '\r\nThanks you will now be disconnected...\r\n\r\n');
+            session.state = BBSState.AWAIT; // prevent further BBS processing
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+
           // Welcome message
           emitText(socket, '\r\n\x1b[32mLogin successful.\x1b[0m\r\n');
 
