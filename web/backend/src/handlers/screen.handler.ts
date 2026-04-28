@@ -1144,8 +1144,8 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     const { processCommand } = require('./command.handler');
 
     // Regex to find inline MCI codes that need immediate execution
-    // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
-    const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
+    // ~f, ~SP (pause), ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
+    const inlineMciRegex = /~([fF]|SP(?:\.|[\s|]|$)|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
 
     // Regex to find ~SP codes - express.e:5455-5461
     // ~SP followed by . (SP.), | (mciterminator), whitespace, or end of string
@@ -1223,6 +1223,12 @@ console.error('[parseMciCodes] Error getting message base name:', error);
         // express.e:5469-5471 - sendCLS()
         emitText(socket, '\x1b[2J\x1b[H');
         screenDebug('[MCI] Sequential: ~f sendCLS()');
+      } else if (code.startsWith('SP')) {
+        // express.e:5455-5461 - doPause() — stop and wait for Space key
+        // Mark hasPause so displayScreen triggers the pagination state machine.
+        // Do NOT emit the ~SP text — it must be silently consumed.
+        hasPause = true;
+        screenDebug('[MCI] Sequential: ~SP doPause()');
       } else if (code.startsWith('CC_')) {
         // express.e:5555-5563 - processSysCommand()
         const commandStr = code.substring(3).replace(/\|+$/, '').trim();
