@@ -253,7 +253,8 @@ async function getMessagesForConfScan(
         const isPrivate = (header.status & MsgStatus.PRIVATE) === MsgStatus.PRIVATE;
 
         // express.e:11706 — match toName === confMailName, 'eall', or 'all'
-        if (toLower === safeName || toLower === 'eall' || toLower === 'all') {
+        // AND (mailHeader.recv=0) — exclude messages already marked received
+        if ((toLower === safeName || toLower === 'eall' || toLower === 'all') && header.recv === 0) {
           results.push({
             msgNum: header.msgNumb,
             isPrivate,
@@ -273,7 +274,9 @@ async function getMessagesForConfScan(
         const toLower = (message.to || '').trim().toLowerCase();
         const isPrivate = message.isPrivate && toLower !== 'all' && toLower !== 'eall';
 
-        if (toLower === safeName || toLower === 'eall' || toLower === 'all') {
+        // express.e:11706 AND (mailHeader.recv=0) — skip already-received messages
+        // receivedAt undefined <=> recv=0 (not yet marked received)
+        if ((toLower === safeName || toLower === 'eall' || toLower === 'all') && !message.receivedAt) {
           results.push({
             msgNum,
             isPrivate: message.isPrivate === true,
@@ -558,20 +561,18 @@ console.warn('[advanceConferenceScan] no confScanState found');
     const firstMsgBase = confMsgBases[0];
     const msgBaseId = firstMsgBase.id;
 
+    // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...) always called
+    await joinConference(socket, session, conf, msgBaseId, true, false, 0, true);
+
     // express.e:28095 - mscan:=checkMailConfScan(conf,msgbase)
     const mscan = await checkMailConfScan(conf, msgBaseId, user.id);
 
-    // express.e:28097 - joinConf(conf,msgbase,TRUE,FALSE,...) — confScan=TRUE, do not overwrite confRJoin
-    await joinConference(socket, session, conf, msgBaseId, true, false, 0, true);
+    // express.e:28099 - IF (mscan) THEN searchNewMail()
+    // If mscan=FALSE, conf is skipped silently (no output)
+    if (!mscan) continue;
 
-    // express.e:11670: StringF(tempStr,'[32mScanning Conference[33m: [0m\s - ',currentConfName)
+    // express.e:11670: inside searchNewMail, print header when currentConf=0 and msgBaseNum=1
     socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
-
-    if (!mscan) {
-      // Skip mail scan for this conference
-      socket.emit('ansi-output', 'No mail today!\r\n');
-      continue;
-    }
 
     // Get mail-scan messages (matching username, eall, all)
     const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);

@@ -2431,9 +2431,11 @@ console.log(' In file area selection state');
     }
 
     // Validate filename (express.e:17680-17684, 19212-19231)
+    // express.e:17681 aePuts('Files longer than 12 characters are not allowed.\b\n')
+    // No leading \b\n — message is emitted directly, then loop re-prompts with \b\nFileName \d:
     const validation = validateFilename(input);
     if (!validation.valid) {
-      emitText(socket, `\r\n${validation.error}\r\n`);
+      emitText(socket, `${validation.error}\r\n`);
       emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
       return;
     }

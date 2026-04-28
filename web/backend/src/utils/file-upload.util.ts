@@ -121,9 +121,9 @@ export function validateFilename(filename: string): { valid: boolean; error?: st
     }
   }
 
-  // Check filename length (already checked elsewhere but good to validate)
+  // Check filename length (express.e:17680-17681)
   if (filename.length > 12) {
-    return { valid: false, error: 'Files longer than 12 characters are not allowed' };
+    return { valid: false, error: 'Files longer than 12 characters are not allowed.' };
   }
 
   if (filename.length === 0) {
