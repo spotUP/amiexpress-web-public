@@ -8,13 +8,13 @@ export function DrivesPage() {
     <CrudList<DriveRow>
       title="DRIVES"
       columns={[
-        { label: 'ID',    render: r => String(r.id), width: 6 },
-        { label: 'PATH',  render: r => r.path,       width: 32 },
-        { label: 'LABEL', render: r => r.label ?? '—', width: 20 },
+        { label: '#',       render: r => String(r.drive_number),     width: 5 },
+        { label: 'PATH',    render: r => r.drive_path,               width: 32 },
+        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no',   width: 8 },
       ]}
       editFields={[
-        { key: 'path',  label: 'Path',  type: 'string' },
-        { key: 'label', label: 'Label', type: 'string' },
+        { key: 'drive_path', label: 'Path',    type: 'string' },
+        { key: 'enabled',    label: 'Enabled', type: 'bool'   },
       ]}
       getAll={getDrives}
       create={createDrive}

@@ -8,15 +8,18 @@ export function FileCheckersPage() {
     <CrudList<FileCheckerRow>
       title="FILE CHECKERS"
       columns={[
-        { label: 'ID',      render: r => String(r.id),           width: 6 },
-        { label: 'NAME',    render: r => r.name,                 width: 24 },
-        { label: 'COMMAND', render: r => r.command ?? '—',       width: 28 },
-        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no', width: 8 },
+        { label: 'ID',      render: r => String(r.id),               width: 5 },
+        { label: 'NAME',    render: r => r.checker_name,             width: 16 },
+        { label: 'PATH',    render: r => r.checker_path ?? '—',      width: 28 },
+        { label: 'OPTS',    render: r => r.options ?? '—',           width: 8 },
+        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no',   width: 8 },
       ]}
       editFields={[
-        { key: 'name',    label: 'Name',    type: 'string' },
-        { key: 'command', label: 'Command', type: 'string' },
-        { key: 'enabled', label: 'Enabled', type: 'bool'   },
+        { key: 'checker_name', label: 'Name',     type: 'string' },
+        { key: 'checker_path', label: 'Path',     type: 'string' },
+        { key: 'options',      label: 'Options',  type: 'string' },
+        { key: 'priority',     label: 'Priority', type: 'number' },
+        { key: 'enabled',      label: 'Enabled',  type: 'bool'   },
       ]}
       getAll={getFileCheckers}
       create={createFileChecker}

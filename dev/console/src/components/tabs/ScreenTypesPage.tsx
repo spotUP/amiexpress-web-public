@@ -8,13 +8,15 @@ export function ScreenTypesPage() {
     <CrudList<ScreenTypeRow>
       title="SCREEN TYPES"
       columns={[
-        { label: 'ID',    render: r => String(r.id), width: 6 },
-        { label: 'NAME',  render: r => r.name,       width: 24 },
-        { label: 'TITLE', render: r => r.title ?? '—', width: 28 },
+        { label: '#',       render: r => String(r.screen_number),    width: 5 },
+        { label: 'TYPE',    render: r => r.screen_type,              width: 16 },
+        { label: 'TITLE',   render: r => r.screen_title ?? '—',      width: 24 },
+        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no',   width: 8 },
       ]}
       editFields={[
-        { key: 'name',  label: 'Name',  type: 'string' },
-        { key: 'title', label: 'Title', type: 'string' },
+        { key: 'screen_type',  label: 'Type',    type: 'string' },
+        { key: 'screen_title', label: 'Title',   type: 'string' },
+        { key: 'enabled',      label: 'Enabled', type: 'bool'   },
       ]}
       getAll={getScreenTypes}
       create={createScreenType}

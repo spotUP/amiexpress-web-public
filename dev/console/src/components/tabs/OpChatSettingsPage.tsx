@@ -12,12 +12,13 @@ interface Field {
   type: 'string' | 'number';
 }
 
+// Backend uses camelCase fields nested under data.
 const FIELDS: Field[] = [
-  { key: 'page_timeout_seconds', label: 'Page Timeout (s)', type: 'number' },
-  { key: 'cooldown_seconds', label: 'Cooldown (s)', type: 'number' },
-  { key: 'quiet_hours_start', label: 'Quiet Hours Start', type: 'string' },
-  { key: 'quiet_hours_end', label: 'Quiet Hours End', type: 'string' },
-  { key: 'discord_webhook_url', label: 'Discord Webhook URL', type: 'string' },
+  { key: 'pageTimeout',      label: 'Page Timeout (s)',  type: 'number' },
+  { key: 'pageCooldown',     label: 'Cooldown (s)',      type: 'number' },
+  { key: 'maxActivePages',   label: 'Max Active Pages',  type: 'number' },
+  { key: 'discordWebhook',   label: 'Discord Webhook',   type: 'string' },
+  { key: 'discordUserId',    label: 'Discord User ID',   type: 'string' },
 ];
 
 type Mode = 'list' | 'edit';

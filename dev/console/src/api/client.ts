@@ -25,6 +25,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Backend lists are inconsistent: some endpoints return a bare array,
+// others wrap in { success, data: [...] }. This helper handles both.
+async function requestList<T>(path: string): Promise<T[]> {
+  const res = await request<T[] | { success?: boolean; data?: T[] }>(path);
+  if (Array.isArray(res)) return res;
+  return res.data ?? [];
+}
+
 export async function login(username: string, password: string) {
   const res = await request<{ accessToken: string; refreshToken?: string; user: { id: string; username: string; secLevel: number } }>(
     '/auth/login',
@@ -165,15 +173,79 @@ export async function updateSystemConfig(updates: Record<string, unknown>) {
 
 export interface HealthIssue {
   category?: string;
-  severity?: 'ok' | 'warning' | 'error' | string;
+  severity?: 'ok' | 'warning' | 'error' | 'info' | string;
   message: string;
   fixable?: boolean;
   details?: string;
 }
 
+interface RawHealthIssue {
+  severity?: string;
+  category?: string;
+  description?: string;
+  message?: string;
+  path?: string;
+  autoFixable?: boolean;
+  fixable?: boolean;
+  details?: string;
+}
+
+interface RawHealthCategory {
+  category: string;
+  passed?: boolean;
+  issues?: RawHealthIssue[];
+  errorCount?: number;
+  warningCount?: number;
+}
+
 export async function getHealthCheck() {
-  const res = await request<{ success: boolean; data: { issues?: HealthIssue[]; healthy?: boolean; [k: string]: unknown } }>('/api/config/health');
-  return res.data;
+  // Backend response shape:
+  //   { success: true, data: { overallStatus, totalIssues, autoFixableIssues,
+  //                            categories: [{ category, issues: [...] }] } }
+  // Flatten the nested issues into a flat list and normalise field names so
+  // the page doesn't have to know about the nesting.
+  const res = await request<{
+    success?: boolean;
+    data?: {
+      overallStatus?: string;
+      totalIssues?: number;
+      autoFixableIssues?: number;
+      categories?: RawHealthCategory[];
+      issues?: RawHealthIssue[];
+    };
+  }>('/api/config/health');
+  const d = res.data ?? {};
+  const flat: HealthIssue[] = [];
+  if (Array.isArray(d.categories)) {
+    for (const cat of d.categories) {
+      for (const it of cat.issues ?? []) {
+        flat.push({
+          category: it.category ?? cat.category,
+          severity: it.severity,
+          message: it.description ?? it.message ?? '',
+          fixable: it.autoFixable ?? it.fixable,
+          details: it.path ?? it.details,
+        });
+      }
+    }
+  } else if (Array.isArray(d.issues)) {
+    for (const it of d.issues) {
+      flat.push({
+        category: it.category,
+        severity: it.severity,
+        message: it.description ?? it.message ?? '',
+        fixable: it.autoFixable ?? it.fixable,
+        details: it.path ?? it.details,
+      });
+    }
+  }
+  return {
+    issues: flat,
+    healthy: d.overallStatus === 'healthy' || d.overallStatus === 'ok' || (d.totalIssues ?? 0) === 0,
+    overallStatus: d.overallStatus,
+    totalIssues: d.totalIssues ?? flat.length,
+    autoFixableIssues: d.autoFixableIssues ?? flat.filter(i => i.fixable).length,
+  };
 }
 
 export async function autoFixHealth() {
@@ -212,13 +284,28 @@ export interface SessionInfo {
 }
 
 export async function getSessions() {
-  const res = await request<{ success: boolean; data: SessionInfo[] }>('/api/sessions');
-  return res.data ?? [];
+  // Backend returns { sessions: [...] } at /api/sessions (NOT { success, data }).
+  // Each entry shape: { sessionId, startTime, lastActivity, lineCount }.
+  const res = await request<{ sessions?: Array<Record<string, unknown>>; data?: SessionInfo[] }>('/api/sessions');
+  const list = (res.sessions ?? res.data ?? []) as Array<Record<string, unknown>>;
+  return list.map((s): SessionInfo => ({
+    id: String(s['sessionId'] ?? s['id'] ?? ''),
+    username: typeof s['username'] === 'string' ? s['username'] as string : undefined,
+    nodeId: typeof s['nodeId'] === 'number' ? s['nodeId'] as number : undefined,
+    startedAt: typeof s['startTime'] === 'string' ? s['startTime'] as string
+      : typeof s['startedAt'] === 'string' ? s['startedAt'] as string : undefined,
+    endedAt: typeof s['endedAt'] === 'string' ? s['endedAt'] as string : null,
+    active: s['endedAt'] == null,
+  }));
 }
 
 export async function getSessionLog(sessionId: string) {
-  const res = await request<{ success: boolean; data: { lines?: string[]; entries?: unknown[]; [k: string]: unknown } }>(`/api/sessions/${sessionId}/log`);
-  return res.data;
+  // Backend returns either { success, data: {...} } or the bare object — accept both.
+  const res = await request<{ success?: boolean; data?: unknown; lines?: string[]; entries?: unknown[]; [k: string]: unknown }>(`/api/sessions/${sessionId}/log`);
+  if (res && typeof res === 'object' && 'data' in res && res.data && typeof res.data === 'object') {
+    return res.data as { lines?: string[]; entries?: unknown[]; [k: string]: unknown };
+  }
+  return res as { lines?: string[]; entries?: unknown[]; [k: string]: unknown };
 }
 
 export interface OperatorChatConfig {
@@ -240,8 +327,7 @@ export async function getOperatorChatConfig() {
 
 // Languages
 export async function getLanguages() {
-  const res = await request<{ success: boolean; data: import('./types.js').LanguageRow[] }>('/api/config/languages');
-  return res.data ?? [];
+  return requestList<import('./types.js').LanguageRow>('/api/config/languages');
 }
 
 export async function createLanguage(row: Partial<import('./types.js').LanguageRow>) {
@@ -262,8 +348,7 @@ export async function deleteLanguage(id: number) {
 
 // Protocols
 export async function getProtocols() {
-  const res = await request<{ success: boolean; data: import('./types.js').ProtocolRow[] }>('/api/config/protocols');
-  return res.data ?? [];
+  return requestList<import('./types.js').ProtocolRow>('/api/config/protocols');
 }
 
 export async function createProtocol(row: Partial<import('./types.js').ProtocolRow>) {
@@ -284,8 +369,7 @@ export async function deleteProtocol(id: number) {
 
 // Computers
 export async function getComputers() {
-  const res = await request<{ success: boolean; data: import('./types.js').ComputerRow[] }>('/api/config/computers');
-  return res.data ?? [];
+  return requestList<import('./types.js').ComputerRow>('/api/config/computers');
 }
 
 export async function createComputer(row: Partial<import('./types.js').ComputerRow>) {
@@ -306,8 +390,7 @@ export async function deleteComputer(id: number) {
 
 // Screen Types
 export async function getScreenTypes() {
-  const res = await request<{ success: boolean; data: import('./types.js').ScreenTypeRow[] }>('/api/config/screen-types');
-  return res.data ?? [];
+  return requestList<import('./types.js').ScreenTypeRow>('/api/config/screen-types');
 }
 
 export async function createScreenType(row: Partial<import('./types.js').ScreenTypeRow>) {
@@ -328,8 +411,7 @@ export async function deleteScreenType(id: number) {
 
 // Drives
 export async function getDrives() {
-  const res = await request<{ success: boolean; data: import('./types.js').DriveRow[] }>('/api/config/drives');
-  return res.data ?? [];
+  return requestList<import('./types.js').DriveRow>('/api/config/drives');
 }
 
 export async function createDrive(row: Partial<import('./types.js').DriveRow>) {
@@ -350,8 +432,7 @@ export async function deleteDrive(id: number) {
 
 // File Checkers
 export async function getFileCheckers() {
-  const res = await request<{ success: boolean; data: import('./types.js').FileCheckerRow[] }>('/api/config/file-checkers');
-  return res.data ?? [];
+  return requestList<import('./types.js').FileCheckerRow>('/api/config/file-checkers');
 }
 
 export async function createFileChecker(row: Partial<import('./types.js').FileCheckerRow>) {
@@ -372,8 +453,7 @@ export async function deleteFileChecker(id: number) {
 
 // Security
 export async function getSecurity(level: number) {
-  const res = await request<{ success: boolean; data: import('./types.js').SecurityRow[] }>(`/api/config/security/${level}`);
-  return res.data ?? [];
+  return requestList<import('./types.js').SecurityRow>(`/api/config/security/${level}`);
 }
 
 export async function createSecurity(row: Partial<import('./types.js').SecurityRow>) {
@@ -411,8 +491,9 @@ export interface ImportSession {
 }
 
 export async function getImportSessions() {
-  const res = await request<{ success: boolean; data: ImportSession[] }>('/api/import/sessions');
-  return res.data ?? [];
+  // Backend returns { success: true, sessions: [...] } — NOT data.
+  const res = await request<{ success: boolean; sessions?: ImportSession[]; data?: ImportSession[] }>('/api/import/sessions');
+  return res.sessions ?? res.data ?? [];
 }
 
 export async function getImportSession(id: string) {
@@ -444,8 +525,9 @@ export async function createExport(opts: { format?: string; includeUsers?: boole
 }
 
 export async function listExports() {
-  const res = await request<{ success: boolean; data: Array<{ filename: string; size?: number; createdAt?: string }> }>('/api/import/export/list');
-  return res.data ?? [];
+  // Backend returns { success: true, exports: [...] } — NOT data.
+  const res = await request<{ success: boolean; exports?: Array<{ filename: string; size?: number; createdAt?: string }>; data?: Array<{ filename: string; size?: number; createdAt?: string }> }>('/api/import/export/list');
+  return res.exports ?? res.data ?? [];
 }
 
 export async function listBatches() {
@@ -471,16 +553,22 @@ export async function validateBatch(name: string, content: string) {
 }
 
 export interface GlobalWallComment {
-  id: string;
-  username?: string;
-  message: string;
-  timestamp?: string;
+  id: string | number;
+  username?: string;       // canonical
+  userName?: string;       // backend uses this
+  message: string;         // canonical
+  comment?: string;        // backend uses this
+  timestamp?: string;      // canonical
+  createdDate?: string;    // backend uses this
+  source?: string;
+  bbsshortcode?: string;
   hidden?: boolean;
 }
 
 export async function getGlobalWallComments(page = 1, limit = 50) {
-  const res = await request<{ success: boolean; data: GlobalWallComment[] }>(`/api/globalwall/comments?page=${page}&limit=${limit}`);
-  return res.data ?? [];
+  // Backend returns a bare array for this endpoint, not { success, data }.
+  const res = await request<GlobalWallComment[] | { success: boolean; data: GlobalWallComment[] }>(`/api/globalwall/comments?page=${page}&limit=${limit}`);
+  return Array.isArray(res) ? res : (res.data ?? []);
 }
 
 export async function updateGlobalWallComment(id: string, patch: Partial<GlobalWallComment>) {
@@ -513,8 +601,12 @@ export async function getDeploymentDatabaseStats() {
 export interface InfoFileEntry {
   path: string;
   name?: string;
+  basename?: string;
+  relativePath?: string;
   size?: number;
   modified?: string;
+  type?: string;
+  tooltypes?: InfoTooltype[];
 }
 
 export interface InfoTooltype {
@@ -524,13 +616,16 @@ export interface InfoTooltype {
 }
 
 export async function getInfoFiles() {
-  const res = await request<{ success: boolean; data: InfoFileEntry[] }>('/api/info-editor/files');
-  return res.data ?? [];
+  // Backend returns { files: [...] } — NOT { data: [...] }.
+  const res = await request<{ files?: InfoFileEntry[]; data?: InfoFileEntry[] }>('/api/info-editor/files');
+  return res.files ?? res.data ?? [];
 }
 
 export async function getInfoFile(relativePath: string) {
-  const res = await request<{ success: boolean; data: { path: string; tooltypes: InfoTooltype[] } }>(`/api/info-editor/file?path=${encodeURIComponent(relativePath)}`);
-  return res.data;
+  // Backend returns the file object directly (not wrapped).
+  const res = await request<{ data?: { path: string; tooltypes: InfoTooltype[] }; path?: string; tooltypes?: InfoTooltype[]; [k: string]: unknown }>(`/api/info-editor/file?path=${encodeURIComponent(relativePath)}`);
+  if (res && typeof res === 'object' && 'data' in res && res.data) return res.data;
+  return res as unknown as { path: string; tooltypes: InfoTooltype[] };
 }
 
 export async function updateInfoFile(relativePath: string, tooltypes: InfoTooltype[]) {

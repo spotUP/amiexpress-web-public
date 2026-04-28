@@ -8,11 +8,13 @@ export function ComputersPage() {
     <CrudList<ComputerRow>
       title="COMPUTERS"
       columns={[
-        { label: 'ID',   render: r => String(r.id), width: 6 },
-        { label: 'NAME', render: r => r.name,       width: 40 },
+        { label: '#',       render: r => String(r.computer_number),  width: 5 },
+        { label: 'NAME',    render: r => r.computer_name,            width: 32 },
+        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no',   width: 8 },
       ]}
       editFields={[
-        { key: 'name', label: 'Name', type: 'string' },
+        { key: 'computer_name', label: 'Name',    type: 'string' },
+        { key: 'enabled',       label: 'Enabled', type: 'bool'   },
       ]}
       getAll={getComputers}
       create={createComputer}

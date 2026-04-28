@@ -8,15 +8,16 @@ export function LanguagesPage() {
     <CrudList<LanguageRow>
       title="LANGUAGES"
       columns={[
-        { label: 'ID',      render: r => String(r.id),           width: 6 },
-        { label: 'NAME',    render: r => r.name,                 width: 24 },
-        { label: 'CODE',    render: r => r.code ?? '—',          width: 8 },
-        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no', width: 8 },
+        { label: '#',       render: r => String(r.language_number),   width: 4 },
+        { label: 'TITLE',   render: r => r.title ?? '—',              width: 28 },
+        { label: 'CODE',    render: r => r.language_code ?? '—',      width: 6 },
+        { label: 'ENABLED', render: r => r.enabled ? 'yes' : 'no',    width: 8 },
       ]}
       editFields={[
-        { key: 'name',    label: 'Name',    type: 'string' },
-        { key: 'code',    label: 'Code',    type: 'string' },
-        { key: 'enabled', label: 'Enabled', type: 'bool'   },
+        { key: 'title',         label: 'Title',         type: 'string' },
+        { key: 'language_code', label: 'Code',          type: 'string' },
+        { key: 'file_path',     label: 'File path',     type: 'string' },
+        { key: 'enabled',       label: 'Enabled',       type: 'bool'   },
       ]}
       getAll={getLanguages}
       create={createLanguage}

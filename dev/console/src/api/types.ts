@@ -105,11 +105,61 @@ export interface SystemConfig {
   [key: string]: unknown;
 }
 
-// Phase C: CRUD pages
-export interface LanguageRow { id: number; name: string; code?: string; enabled: boolean; }
-export interface ProtocolRow { id: number; name: string; command?: string; enabled: boolean; default_for?: string; }
-export interface ComputerRow { id: number; name: string; }
-export interface ScreenTypeRow { id: number; name: string; title?: string; }
-export interface DriveRow { id: number; path: string; label?: string; }
-export interface FileCheckerRow { id: number; name: string; command?: string; enabled: boolean; }
-export interface SecurityRow { id: number; level: number; flag: string; granted: boolean; }
+// Phase C: CRUD pages — types mirror the backend SQL columns directly.
+export interface LanguageRow {
+  id: number;
+  language_number: number;
+  title: string;
+  language_code?: string;
+  file_path?: string;
+  enabled: boolean;
+}
+export interface ProtocolRow {
+  id: number;
+  protocol_name: string;
+  protocol_code?: string;
+  command?: string;
+  upload_command?: string;
+  download_command?: string;
+  batch_upload?: boolean;
+  batch_download?: boolean;
+  bidirectional?: boolean;
+  enabled: boolean;
+  is_default?: boolean;
+}
+export interface ComputerRow {
+  id: number;
+  computer_number: number;
+  computer_name: string;
+  enabled: boolean;
+}
+export interface ScreenTypeRow {
+  id: number;
+  screen_number: number;
+  screen_type: string;
+  screen_title?: string;
+  enabled: boolean;
+}
+export interface DriveRow {
+  id: number;
+  drive_number: number;
+  drive_path: string;
+  enabled: boolean;
+}
+export interface FileCheckerRow {
+  id: number;
+  checker_name: string;
+  checker_path?: string;
+  options?: string;
+  stack_size?: number;
+  priority?: number;
+  script_path?: string;
+  enabled: boolean;
+}
+export interface SecurityRow {
+  id: number;
+  security_level: number;
+  acs_flag: string;
+  enabled: boolean;
+  description?: string;
+}
