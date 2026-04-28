@@ -239,11 +239,11 @@ async function getMessagesForConfScan(
     if (headers.length > 0) {
       for (const header of headers) {
         if (header.msgNumb <= pointer) continue;
-        if (header.status & MsgStatus.DELETED) continue;
+        if (header.status === MsgStatus.DELETED) continue;
         if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) continue;
 
         const toLower = (header.toName || '').trim().toLowerCase();
-        const isPrivate = (header.status & MsgStatus.PRIVATE) === MsgStatus.PRIVATE;
+        const isPrivate = header.status === MsgStatus.PRIVATE;
 
         // express.e:11706 — match toName === confMailName, 'eall', or 'all'
         // AND (mailHeader.recv=0) — exclude messages already marked received
@@ -328,7 +328,7 @@ async function countNewMessages(
         if (header.msgNumb <= pointer) {
           continue;
         }
-        if (header.status & MsgStatus.DELETED) {
+        if (header.status === MsgStatus.DELETED) {
           continue;
         }
         if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) {
@@ -339,7 +339,7 @@ async function countNewMessages(
 
         const toLower = (header.toName || '').trim().toLowerCase();
         const fromLower = (header.fromName || '').trim().toLowerCase();
-        const isPrivate = (header.status & MsgStatus.PRIVATE) === MsgStatus.PRIVATE;
+        const isPrivate = header.status === MsgStatus.PRIVATE;
 
         if (isPrivate) {
           if (safeName && (toLower === safeName || fromLower === safeName)) {

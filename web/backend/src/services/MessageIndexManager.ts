@@ -44,18 +44,20 @@ export interface MailStat {
 }
 
 /**
- * Message status flags (from express.e analysis)
+ * Message status — express.e mailHeader.status is a single ASCII CHAR.
+ * Values are mutually exclusive (a message is exactly one of these), not bitflags.
+ *  - 'P' (0x50) public uncensored — express.e:10793
+ *  - 'p' (0x70) public censored (ACS_CENSORED) — express.e:10791
+ *  - 'R' (0x52) private — express.e:10868, 8792
+ *  - 'D' (0x44) deleted — express.e:11930
+ *
+ * Use equality comparisons (===), NOT bitwise AND.
  */
 export enum MsgStatus {
-  NORMAL = 0x00,
-  DELETED = 0x01,
-  PRIVATE = 0x02,
-  RECEIVED = 0x04,
-  REPLIED = 0x08,
-  FORWARDED = 0x10,
-  LOCKED = 0x20,
-  URGENT = 0x40,
-  CRASH = 0x80
+  NORMAL = 0x50,    // 'P'
+  CENSORED = 0x70,  // 'p'
+  PRIVATE = 0x52,   // 'R'
+  DELETED = 0x44,   // 'D'
 }
 
 export class MessageIndexManager {
@@ -442,7 +444,7 @@ console.log(`[MessageIndexManager] Updated MailStats: high=${stats.highMsgNum}, 
     // Find lowest non-deleted message
     let lowestNotDel = 0;
     for (const header of headers) {
-      if (!(header.status & MsgStatus.DELETED)) {
+      if (header.status !== MsgStatus.DELETED) {
         if (lowestNotDel === 0 || header.msgNumb < lowestNotDel) {
           lowestNotDel = header.msgNumb;
         }
