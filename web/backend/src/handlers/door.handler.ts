@@ -26,6 +26,7 @@ import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
+import { dateTimeToDateStamp } from '../utils/date-time.util';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -2569,6 +2570,28 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
 
     // Log door exit to Node{N}/DoorLog
     logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
+
+    // After AquaScan exits, advance the user's UserData slot to now.
+    // AquaScan has no Write() LVO calls; the BBS must own this file.
+    // (Login seeds the slot from newSinceDate; here we advance it post-scan
+    //  so subsequent N-command runs show only files added since this scan.)
+    if (/aquascan/i.test(doorPath) && session.user?.slotNumber && session.user.slotNumber > 0) {
+      try {
+        const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
+        const ds = dateTimeToDateStamp(new Date());
+        const slotOffset = (session.user.slotNumber - 1) * 16;
+        const buf = Buffer.alloc(12);
+        buf.writeUInt32BE(ds.days, 0);
+        buf.writeUInt32BE(ds.minutes, 4);
+        buf.writeUInt32BE(ds.ticks, 8);
+        const fdUs = fs.openSync(userDataPath, 'r+');
+        fs.writeSync(fdUs, buf, 0, 12, slotOffset);
+        fs.closeSync(fdUs);
+console.log(`[executeAmigaDoor] Advanced AquaScan.UserData slot ${session.user.slotNumber} -> days=${ds.days} min=${ds.minutes}`);
+      } catch (err) {
+console.error('[executeAmigaDoor] Failed to advance AquaScan.UserData:', err);
+      }
+    }
 
 console.log(`[executeAmigaDoor] Door execution completed`);
 
