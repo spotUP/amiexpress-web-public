@@ -1628,11 +1628,20 @@ console.log(`[executeTypeScriptDoor] Resolved path: ${doorPath}`);
 
 console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
-    // CRITICAL: ESM module cache busting for development mode
-    // In development, append timestamp query parameter to force fresh imports every time
-    // This prevents stale code issues when doors are rebuilt without server restart
-    // In production, use stable paths for better performance and caching
+    // CRITICAL: Clear the CommonJS require() cache for the door's entire dist directory.
+    // The ESM timestamp cache-buster on index.js only busts that one file; all transitive
+    // require('./ui/actions') calls inside it still hit the stale require.cache entries.
+    // Clearing the door's dist tree ensures every require() reloads from disk on each launch.
     const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev) {
+      const doorDistDir = path.dirname(resolvedDoorPath);
+      for (const key of Object.keys(require.cache)) {
+        if (key.startsWith(doorDistDir)) {
+          delete require.cache[key];
+        }
+      }
+    }
+
     const cacheBuster = isDev ? `?t=${Date.now()}` : '';
     const importPath = `file://${resolvedDoorPath}${cacheBuster}`;
 console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${isDev ? 'enabled' : 'disabled'})`);
