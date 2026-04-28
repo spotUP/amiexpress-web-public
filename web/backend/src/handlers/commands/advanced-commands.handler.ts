@@ -296,15 +296,12 @@ export async function handleConferenceFlagsCommand(socket: any, session: BBSSess
  * express.e:24687-24733
  */
 async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Promise<void> {
-  // express.e:24688 - Clear screen
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
-  socket.emit('ansi-output', '\r\n');
+  // express.e:24688 sendCLS() = form-feed char + '\b\n'
+  socket.emit('ansi-output', '\x0c\r\n');
 
-  // express.e:24689-24690 - Header
-  socket.emit('ansi-output', AnsiUtil.colorize('        M A F Z Conference                      M A F Z Conference', 'green'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('        ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~         ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~', 'yellow'));
-  socket.emit('ansi-output', '\r\n\r\n');
+  // express.e:24691-24692 exact ANSI: [32m ... [0m and [33m ... [0m
+  socket.emit('ansi-output', '\x1b[32m        M A F Z Conference                      M A F Z Conference\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[33m        ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~         ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~\x1b[0m\r\n\r\n');
 
   // express.e:24692-24731 - List all accessible conferences with flags
   const { db } = require('../database');
@@ -379,12 +376,8 @@ async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Pro
     }
   }
 
-  // express.e:24735-24737 - Prompt for flag type to edit
-  socket.emit('ansi-output', '\r\n\r\nEdit which flags ');
-  socket.emit('ansi-output', AnsiUtil.colorize('[M]', 'green') + 'ailScan, ');
-  socket.emit('ansi-output', AnsiUtil.colorize('[A]', 'green') + 'll Messages, ');
-  socket.emit('ansi-output', AnsiUtil.colorize('[F]', 'green') + 'ileScan, ');
-  socket.emit('ansi-output', AnsiUtil.colorize('[Z]', 'green') + 'oom >: ');
+  // express.e:24749 '\b\n\b\nEdit which flags [M]ailScan, [A]ll Messages, [F]ileScan, [Z]oom >: '
+  socket.emit('ansi-output', '\r\n\r\nEdit which flags [M]ailScan, [A]ll Messages, [F]ileScan, [Z]oom >: ');
 
   // Store context for input
   session.subState = LoggedOnSubState.CF_FLAG_SELECT_INPUT;
@@ -417,11 +410,8 @@ export async function handleCFFlagSelectInput(socket: any, session: BBSSession, 
 
   socket.emit('ansi-output', ch + '\r\n');
 
-  // express.e:24753-24754 - Prompt for conference numbers
-  socket.emit('ansi-output', "Enter Conference Numbers, ");
-  socket.emit('ansi-output', AnsiUtil.colorize('*', 'yellow') + " toggle all, ");
-  socket.emit('ansi-output', AnsiUtil.colorize('-', 'yellow') + " All off, ");
-  socket.emit('ansi-output', AnsiUtil.colorize('+', 'yellow') + " All on >: ");
+  // express.e:24769 "Enter Conference Numbers,'*' toggle all,'-' All off,'+' All on >: "
+  socket.emit('ansi-output', "Enter Conference Numbers,'*' toggle all,'-' All off,'+' All on >: ");
 
   session.tempData.cfEditMask = editMask;
   session.subState = LoggedOnSubState.CF_CONF_SELECT_INPUT;

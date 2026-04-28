@@ -165,8 +165,8 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   // Normal logout - express.e:8284-8289
   session.state = BBSState.AWAIT;
 
-  // express.e logoff message - show modem disconnect message
-  socket.emit('ansi-output', '\r\n\r\nClick...NO CARRIER\r\n');
+  // express.e:8191 aePuts('\b\nClick...') — no trailing newline, no "NO CARRIER"
+  socket.emit('ansi-output', '\r\nClick...');
 
   // Emit disconnect event to close connection (give time for screen to display and door to run)
   setTimeout(() => {

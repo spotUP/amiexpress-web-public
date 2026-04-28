@@ -2498,7 +2498,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
 
     const emitPage = async (startIdx: number, endIdx: number, prompt: boolean) => {
       const chunk = lines.slice(startIdx, endIdx).join('\r\n');
-      const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
+      const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)? ' : '';
       const prefix = shouldClear && startIdx === 0 ? '\x1b[2J\x1b[H' : '';
       await emitWithModem(prefix + chunk + promptLine);
     };
@@ -2662,7 +2662,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           session.queuedScreenCommands = commands;
           screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
         }
-        emitPrompt(socket, '\r\n(Pause)...Space To Resume: ');
+        emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
         restoreModemState(socket, session);
         return true;
       }
@@ -2787,7 +2787,7 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         session.queuedScreenCommands = commands;
         screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
       }
-      emitPrompt(socket, '\r\n(Pause)...Space To Resume: ');
+      emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
       await emitWithModem(''); // ensure promise chain consistent
       return true;
     }
@@ -2942,7 +2942,7 @@ export function startPagination(
     kind: 'bbs',
   };
   const chunk = lines.slice(0, pageSize).join('\r\n');
-  socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)?');
+  socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)? ');
   session.lastScreenHadPause = true;
 }
 
@@ -2962,6 +2962,9 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   const yes = key === '' || key === 'Y' || key === '\r' || key === '\n';
   const no = key === 'N';
   const noStop = key === 'NS';
+
+  // express.e:5199 aePuts('[1A[K') — cursor up + erase line to clear the More prompt
+  socket.emit(paged.eventName, '\x1b[1A\x1b[K');
 
   const lines = paged.lines;
   const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
