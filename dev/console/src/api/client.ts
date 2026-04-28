@@ -26,21 +26,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export async function login(username: string, password: string) {
-  const res = await request<{ token: string; user: { id: string; username: string; secLevel: number } }>(
+  const res = await request<{ accessToken: string; refreshToken?: string; user: { id: string; username: string; secLevel: number } }>(
     '/auth/login',
     { method: 'POST', body: JSON.stringify({ username, password }) }
   );
-  setToken(res.token);
+  setToken(res.accessToken);
   // Propagate token to tmux session env so the status strip picks it up
   if (process.env['TMUX']) {
     const { execSync } = await import('child_process');
     try {
-      execSync(`tmux set-environment -t amiexpress AMIEXPRESS_CONSOLE_TOKEN "${res.token}"`);
+      execSync(`tmux set-environment -t amiexpress AMIEXPRESS_CONSOLE_TOKEN "${res.accessToken}"`);
     } catch {
       // non-fatal: strip just retries until env is set
     }
   }
-  return res;
+  return { token: res.accessToken, user: res.user };
 }
 
 export async function getNodes() {
