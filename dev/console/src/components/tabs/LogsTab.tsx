@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getLogs } from '../../api/client.js';
+import { useMouse, type MouseClick } from '../../hooks/useMouse.js';
 
 type LogSource = 'backend' | 'frontend' | 'door68k';
 
@@ -10,6 +11,15 @@ const SOURCE_LABELS: Record<LogSource, string> = {
   frontend: 'Preview',
   door68k: '68K Door',
 };
+
+// Switcher row: tab content starts at row 8.
+// Labels: "Backend"(7) + gap(3) + "Preview"(7) + gap(3) + "68K Door"(8) starting at col 1.
+const SWITCHER_ROW = 8;
+const SWITCHER_RANGES: Array<{ from: number; to: number; src: LogSource }> = [
+  { from: 1, to: 7, src: 'backend' },     // "Backend"  cols 1-7
+  { from: 11, to: 17, src: 'frontend' },  // "Preview"  cols 11-17 (after gap=3)
+  { from: 21, to: 28, src: 'door68k' },   // "68K Door" cols 21-28
+];
 
 export function LogsTab() {
   const [source, setSource] = useState<LogSource>('backend');
@@ -52,6 +62,14 @@ export function LogsTab() {
     if (input === 'p') setSource('frontend');
     if (input === '6') setSource('door68k');
   });
+
+  const onSwitcherClick = useCallback((e: MouseClick) => {
+    if (e.button !== 0 || e.row !== SWITCHER_ROW) return;
+    for (const r of SWITCHER_RANGES) {
+      if (e.col >= r.from && e.col <= r.to) { setSource(r.src); return; }
+    }
+  }, []);
+  useMouse(onSwitcherClick);
 
   const display = lines.slice(-30);
 

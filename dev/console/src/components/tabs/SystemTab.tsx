@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import {
@@ -6,11 +6,18 @@ import {
   getSystemConfig,
   startNode, exitNode, reserveNode, sysopLoginNode, setQuietMode,
 } from '../../api/client.js';
+import { useMouse, type MouseClick } from '../../hooks/useMouse.js';
+import { useRowClick } from '../../hooks/useRowClick.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { SystemConfig, NodeStatus } from '../../api/types.js';
 
 type Panel = 'nodes' | 'config';
 type NodeAction = 'start' | 'exit' | 'reserve' | 'sysop';
+
+// Panel switcher row (top of tab content area).
+const SWITCHER_ROW = 8;
+// Nodes-panel item rows: switcher (8) + spacer (9) + sub-header (10) + spacer (11) → items at 12+.
+const NODES_ITEMS_START_ROW = 12;
 
 export function SystemTab() {
   const [panel, setPanel] = useState<Panel>('nodes');
@@ -36,6 +43,19 @@ export function SystemTab() {
   }, []);
 
   const selected = nodes[selectedIdx];
+
+  // Click on the panel switcher row to switch panels. The labels render as
+  // "[n] Nodes", "[c] Config", separated by gap=3, starting at col 1.
+  // Approximate ranges: cols 1-9 = Nodes, cols 13-22 = Config.
+  const onSwitcherClick = useCallback((e: MouseClick) => {
+    if (e.button !== 0 || e.row !== SWITCHER_ROW || pendingAction) return;
+    if (e.col >= 1 && e.col <= 9) setPanel('nodes');
+    else if (e.col >= 13 && e.col <= 22) setPanel('config');
+  }, [pendingAction]);
+  useMouse(onSwitcherClick);
+
+  // Click a node row in the nodes panel to select it.
+  useRowClick(nodes.length, NODES_ITEMS_START_ROW, setSelectedIdx, panel === 'nodes' && !pendingAction);
 
   useInput((input, key) => {
     if (pendingAction) return;

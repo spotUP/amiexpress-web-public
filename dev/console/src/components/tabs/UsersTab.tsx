@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getUsers, updateUser, deleteUser } from '../../api/client.js';
+import { useRowClick } from '../../hooks/useRowClick.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { UserRecord } from '../../api/types.js';
 
 type Mode = 'list' | 'edit-sl' | 'confirm-ban' | 'confirm-delete';
+
+const ITEMS_START_ROW = 10;
 
 function getSecLevel(u: UserRecord): number {
   return u.secLevel ?? u.seclevel ?? 0;
@@ -44,6 +47,11 @@ export function UsersTab() {
 
   const visibleUsers = filtered.slice(pageStart, pageStart + PAGE);
   const selected = visibleUsers[selectedIdx];
+
+  // Click a user row to select it (within the current page).
+  useRowClick(visibleUsers.length, ITEMS_START_ROW, (idx) => {
+    setSelectedIdx(idx);
+  }, mode === 'list' && !searching);
 
   useInput((input, key) => {
     if (searching) {

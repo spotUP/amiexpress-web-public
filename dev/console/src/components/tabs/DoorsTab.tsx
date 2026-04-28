@@ -1,9 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
 import { getDoors, reloadDoors } from '../../api/client.js';
+import { useGridClick } from '../../hooks/useRowClick.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { DoorInfo } from '../../api/types.js';
+
+const ITEM_WIDTH = 32; // command(4) + type(8) + name(18) + padding(2)
+const ITEMS_START_ROW = 10;
+const ITEMS_START_COL = 2; // App.tsx wraps content in paddingX={1}
+
+function formatItem(d: DoorInfo, isSelected: boolean): string {
+  const cursor = isSelected ? '▶ ' : '  ';
+  const cmd = (d.door_command ?? String(d.id)).slice(0, 4).padEnd(5);
+  const type = `(${(d.door_type ?? '—').slice(0, 5).padEnd(5)})`;
+  const name = d.door_name.slice(0, 16).padEnd(17);
+  return `${cursor}${cmd}${type} ${name}`;
+}
 
 export function DoorsTab() {
   const [doors, setDoors] = useState<DoorInfo[]>([]);
@@ -13,6 +26,10 @@ export function DoorsTab() {
   const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+
+  const { stdout } = useStdout();
+  const termWidth = stdout?.columns ?? 80;
+  const cols = Math.max(1, Math.min(4, Math.floor(termWidth / ITEM_WIDTH)));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -28,10 +45,36 @@ export function DoorsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  const rowsPerCol = Math.ceil(doors.length / cols);
+
+  useGridClick(
+    ITEMS_START_ROW,
+    ITEMS_START_COL,
+    ITEM_WIDTH,
+    rowsPerCol,
+    doors.length,
+    setSelectedIdx,
+    !confirming,
+  );
+
   useInput((input, key) => {
     if (confirming) return;
-    if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
-    if (key.downArrow) setSelectedIdx(i => Math.min(doors.length - 1, i + 1));
+    if (key.upArrow) {
+      setSelectedIdx(i => (i % rowsPerCol === 0 ? i : i - 1));
+    }
+    if (key.downArrow) {
+      setSelectedIdx(i => {
+        if (i + 1 >= doors.length) return i;
+        if ((i + 1) % rowsPerCol === 0) return i;
+        return i + 1;
+      });
+    }
+    if (key.leftArrow) {
+      setSelectedIdx(i => Math.max(0, i - rowsPerCol));
+    }
+    if (key.rightArrow) {
+      setSelectedIdx(i => Math.min(doors.length - 1, i + rowsPerCol));
+    }
     if (input === 'R') setConfirming(true);
     if (input === 'r') load();
   });
@@ -44,21 +87,28 @@ export function DoorsTab() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">
-          {'  COMMAND'.padEnd(20)}{'TYPE'.padEnd(10)}{'NAME'.padEnd(30)}{'STATUS'}
-        </Text>
-        <Text dimColor>  ({enabledCount}/{doors.length} enabled)</Text>
+        <Text bold color="cyan">DOORS</Text>
+        <Text dimColor>  ({enabledCount}/{doors.length} enabled, {cols} cols)</Text>
       </Box>
 
-      {doors.map((d, i) => (
-        <Box key={String(d.id)}>
-          <Text color={i === selectedIdx ? 'cyan' : d.enabled ? 'white' : 'gray'} bold={i === selectedIdx}>
-            {i === selectedIdx ? '▶ ' : '  '}
-            {(d.door_command ?? String(d.id)).slice(0, 17).padEnd(18)}
-            {(d.door_type ?? '—').slice(0, 8).padEnd(10)}
-            {d.door_name.slice(0, 28).padEnd(30)}
-            {d.enabled ? '' : '(disabled)'}
-          </Text>
+      {Array.from({ length: rowsPerCol }, (_, rowIdx) => (
+        <Box key={rowIdx}>
+          {Array.from({ length: cols }, (_, colIdx) => {
+            const idx = colIdx * rowsPerCol + rowIdx;
+            const door = doors[idx];
+            if (!door) return <Box key={colIdx} width={ITEM_WIDTH}><Text> </Text></Box>;
+            const isSelected = idx === selectedIdx;
+            return (
+              <Box key={colIdx} width={ITEM_WIDTH}>
+                <Text
+                  color={isSelected ? 'cyan' : door.enabled ? 'white' : 'gray'}
+                  bold={isSelected}
+                >
+                  {formatItem(door, isSelected)}
+                </Text>
+              </Box>
+            );
+          })}
         </Box>
       ))}
 

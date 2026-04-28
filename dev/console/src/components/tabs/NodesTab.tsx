@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { useNodes } from '../../hooks/useNodes.js';
+import { useRowClick } from '../../hooks/useRowClick.js';
 import { kickNode, chatNode } from '../../api/client.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { NodeStatus } from '../../api/types.js';
+
+const ITEMS_START_ROW = 10;
 
 type Mode = 'list' | 'confirm-kick' | 'chat-input';
 
@@ -44,6 +47,15 @@ export function NodesTab() {
   const onlineNodes = nodes.filter(n => n.online);
   const selected = onlineNodes[selectedIdx];
 
+  // Click a node row to select it. Rows render in `nodes` order (online+offline);
+  // clicks on offline rows are ignored. Only active in list mode.
+  useRowClick(nodes.length, ITEMS_START_ROW, (idx) => {
+    const node = nodes[idx];
+    if (!node || !node.online) return;
+    const onlineIdx = onlineNodes.findIndex(n => n.nodeId === node.nodeId);
+    if (onlineIdx >= 0) setSelectedIdx(onlineIdx);
+  }, mode === 'list');
+
   useInput((input, key) => {
     if (mode === 'list') {
       if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
@@ -78,8 +90,8 @@ export function NodesTab() {
           <Text> Connecting...</Text>
         </Box>
       ) : (
-        nodes.map((node, i) => (
-          <NodeRow key={node.nodeId} node={node} selected={i === selectedIdx} />
+        nodes.map((node) => (
+          <NodeRow key={node.nodeId} node={node} selected={selected?.nodeId === node.nodeId} />
         ))
       )}
 

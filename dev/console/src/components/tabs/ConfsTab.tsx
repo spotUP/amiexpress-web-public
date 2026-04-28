@@ -2,9 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getConferences, updateConference, getConferenceHealth, fixConference } from '../../api/client.js';
+import { useRowClick } from '../../hooks/useRowClick.js';
 import type { ConferenceConfig, ConferenceHealth } from '../../api/types.js';
 
 type Mode = 'list' | 'health-result' | 'fix-result';
+
+const ITEMS_START_ROW = 10;
 
 export function ConfsTab() {
   const [confs, setConfs] = useState<ConferenceConfig[]>([]);
@@ -32,6 +35,8 @@ export function ConfsTab() {
   useEffect(() => { load(); }, [load]);
 
   const selected = confs[selectedIdx];
+
+  useRowClick(confs.length, ITEMS_START_ROW, setSelectedIdx, mode === 'list');
 
   useInput((input, key) => {
     if (mode !== 'list') {
