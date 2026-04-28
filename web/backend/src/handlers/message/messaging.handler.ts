@@ -584,18 +584,26 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // K - Keep and quit - express.e:12094-12101
-  // Marks current message as unread (recv=0) and quits
+  // K - Keep (mark unread) and advance to next message - express.e:12094-12101
+  // Sets kMsgFlag=TRUE, marks recv=0, decrements lastNewReadConf, then falls through
+  // to passItIN: → JUMP goNextMsg (continues to next message, does NOT exit reader)
   if (command === 'K') {
     const msg = messages[currentIndex];
-    // Don't update the highest read pointer - keep current message as "unread"
-    // This differs from Q which saves the highest read pointer
-    session.tempData.msgReaderHighestRead = Math.max(0, (msg.id || 0) - 1);
-
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('Keeping current message as unread', 'yellow'));
-    emitText(socket, '\r\n');
-    await saveMessagePointerAndExit(socket, session);
+    const msgNum = (msg as any).msgNumber || msg.id;
+    // Undo read marking: back up lastNewReadConf so this message shows as unread again
+    if ((session.lastNewReadConf || 0) >= msgNum) {
+      session.lastNewReadConf = Math.max(msgNum - 1, 0);
+    }
+    // Back up highest-read pointer so the pointer save won't re-mark it read
+    if ((session.tempData.msgReaderHighestRead || 0) >= msgNum) {
+      session.tempData.msgReaderHighestRead = Math.max(msgNum - 1, 0);
+    }
+    // Advance to next message (express.e falls through to JUMP goNextMsg)
+    if (currentIndex < messages.length - 1) {
+      await displaySingleMessage(socket, session, currentIndex + 1);
+    } else {
+      await saveMessagePointerAndExit(socket, session);
+    }
     return;
   }
 
@@ -616,16 +624,16 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
         canDeleteOriginal: msg.toUser === session.user.username && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
       };
 
-      // Prompt for recipient (express.e:9816-9821)
-      emitText(socket, '\r\n');
-      emitText(socket, '                       [32m([33m------------------------------[32m)[0m\r\n');
-      emitPrompt(socket, '     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m\'[33mALL[32m\'[32m?[0m ');
+      // Prompt for recipient (express.e:9816: msgToHeader())
+      emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+      emitPrompt(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
 
       session.subState = LoggedOnSubState.FORWARD_MESSAGE_TO;
     } else {
+      // express.e:11186 JUMP contloop — nav prompt only, no message re-render
       emitText(socket, '\r\n');
       emitText(socket, 'Not your message.\r\n');
-      await displaySingleMessage(socket, session, currentIndex);
+      displayMessageNavigationPrompt(socket, session);
     }
     return;
   }
@@ -659,10 +667,10 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       const nextIndex = currentIndex < messages.length ? currentIndex : currentIndex - 1;
       await displaySingleMessage(socket, session, nextIndex);
     } else {
-      // Not your message
+      // express.e:11118-11119 JUMP contloop — nav prompt only
       emitText(socket, '\r\n');
       emitText(socket, 'Not your message.\r\n');
-      await displaySingleMessage(socket, session, currentIndex);
+      displayMessageNavigationPrompt(socket, session);
     }
     return;
   }
@@ -712,23 +720,17 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   }
 
   // E or EM - Edit message body (sysop only) - express.e:11142-11148
-  // In web version, we don't have Emacs editor, so both E and EM show the body for inline editing
+  // WEB_: no Emacs editor; re-display message then nav prompt (express.e:11150 displayMessage + JUMP nextMenu)
   if ((command === 'E' || command === 'EM') && checkSecurity(session.user, ACSPermission.MESSAGE_EDIT)) {
-    const msg = messages[currentIndex];
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('Edit Message Body', 'green'));
-    emitText(socket, '\r\n\r\n');
-    emitText(socket, 'Web version note: Full message editing not yet implemented.\r\n');
-    emitText(socket, 'Use EH to edit message header (From/To/Subject).\r\n');
-    emitText(socket, '\r\n');
     await displaySingleMessage(socket, session, currentIndex);
     return;
   }
 
-  // Invalid command
+  // Invalid command — express.e:11213 aePuts('No such command!!\b\n') then JUMP contloop
+  // contloop shows the nav prompt again without re-rendering the message
   emitText(socket, '\r\n');
   emitText(socket, 'No such command!!\r\n');
-  await displaySingleMessage(socket, session, currentIndex);
+  displayMessageNavigationPrompt(socket, session);
 }
 
 /**
