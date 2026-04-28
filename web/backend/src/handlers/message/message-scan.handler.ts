@@ -102,7 +102,7 @@ console.log(`[checkCommandExists] Command ${commandName} not found or error:`, e
  * @param userId - User ID for checking scan flags
  * @returns True if should scan files
  */
-async function checkFileConfScan(conf: number, userId: string, msgBaseId: number = 1): Promise<boolean> {
+async function checkFileConfScan(conf: number, userId: string, _msgBaseId: number = 1): Promise<boolean> {
   const flags = getConferenceToolFlags(conf);
 
   // express.e:595-596 - IF((checkToolTypeExists(TOOLTYPE_CONF,conf,'SHOW_NEW_FILES')))
@@ -111,22 +111,11 @@ async function checkFileConfScan(conf: number, userId: string, msgBaseId: number
   }
 
   // express.e:597-598 - ELSEIF (checkToolTypeExists(TOOLTYPE_CONF,conf,'NO_NEW_FILES'))
-  if (flags.noNewFiles) {
-    return false;
-  }
-
-  // express.e:601-607 - cb:=confBases.item(getConfIndex(conf,1))
-  // Get first message base for this conference and check FILE_SCAN_MASK
-  try {
-    const scanFlags = await getConferenceScanFlags(userId, conf, msgBaseId);
-    const FILE_SCAN_MASK = 8; // express.e FILE_SCAN_MASK
-    // express.e:604 - IF (cb.handle[0] AND FILE_SCAN_MASK)<>0 THEN res:=TRUE ELSE res:=FALSE
-    return (scanFlags & FILE_SCAN_MASK) !== 0;
-  } catch (err) {
-    // express.e:606 - ELSE res:=TRUE when confBase missing, but we default FALSE
-    // WEB_: safer default — only scan files when explicitly enabled (SHOW_NEW_FILES or FILE_SCAN_MASK set)
-    return false;
-  }
+  // WEB_: express.e:601-607 — DB FILE_SCAN_MASK check omitted; this BBS uses QuickNew for
+  // new-file listings. File scan only runs when SHOW_NEW_FILES is set in a conference .info.
+  // express.e's DB flag path would auto-enable scanning for every new user, which triggers
+  // AquaScan at every login. Sysops who want per-conference file scanning should set SHOW_NEW_FILES.
+  return false;
 }
 
 /**
