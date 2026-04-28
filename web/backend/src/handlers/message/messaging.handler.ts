@@ -15,6 +15,7 @@ import { finalizeCommand } from '../../utils/command-response.util';
 import { messageIndexManager } from '../../services/MessageIndexManager';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { getAllMessageIds, readMessageFile, markMessageReceived } from '../../utils/message-file.util';
+import { formatLongDateTime } from '../../utils/date-time.util';
 import { config } from '../../config';
 import { translationService, TranslatorMode } from '../../services/TranslationService';
 import { ACSPermission as ACSPerm } from '../../constants/acs-permissions';
@@ -158,22 +159,31 @@ console.log('[ENV] Mail - Read');
     }
   }
 
+  emitText(socket, '\r\n');
+
   if (messages.length === 0) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('No messages in this area.', 'yellow'));
-    emitText(socket, '\r\n\r\n');
-    finalizeCommand(socket, session, 'No messages to read');
+    // express.e:11993 - "No new messages.\r\n\r\n" when no messages exist
+    emitText(socket, 'No new messages.\r\n\r\n');
+    finalizeCommand(socket, session, '');
     return;
+  }
+
+  // express.e:11984: msgNum:=lastMsgReadConf+1 — start from first unread
+  const lastRead = session.lastMsgReadConf || 0;
+  let startIndex = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) > lastRead);
+  if (startIndex < 0) {
+    // All messages already read — start from beginning (express.e allows backwards nav)
+    startIndex = 0;
   }
 
   // Initialize message reader state
   session.tempData = session.tempData || {};
   session.tempData.msgReaderMessages = messages;
-  session.tempData.msgReaderIndex = 0;
-    session.tempData.msgReaderHighestRead = session.lastMsgReadConf || 0;
+  session.tempData.msgReaderIndex = startIndex;
+  session.tempData.msgReaderHighestRead = lastRead;
 
-  // Display first message
-  await displaySingleMessage(socket, session, 0);
+  // Display first (unread) message
+  await displaySingleMessage(socket, session, startIndex);
 }
 
 /**
@@ -195,35 +205,34 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   emitText(socket, '\x1b[2J\x1b[H');
 
   // Display message header - express.e:8898-8936
-  const isNew = msgNumber > (session.lastNewReadConf || 0);
-  const newIndicator = isNew ? AnsiUtil.colorize('[NEW] ', 'yellow') : '';
-  const privateIndicator = msg.isPrivate ? AnsiUtil.colorize('[PRIVATE] ', 'red') : '';
-  const replyIndicator = msg.parentId ? AnsiUtil.colorize('[REPLY] ', 'magenta') : '';
+  // express.e format: [32mField[33m: [0mvalue (green field, yellow colon, reset value)
+  // Column widths: field padded to 30 chars (\l\s[30])
+  const dateStr = formatLongDateTime(msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp));
+  const datePadded = dateStr.padEnd(30);
 
-  emitText(socket, AnsiUtil.colorize(`Date   : `, 'green'));
-  emitText(socket, `${msg.timestamp.toLocaleString()}   `);
-  emitText(socket, AnsiUtil.colorize(`Number: `, 'green'));
-  emitText(socket, `${msg.id}\r\n`);
+  // express.e:8900: Date   : <date padded 30>   Number: <msgNumb>
+  emitText(socket, `\x1b[32mDate   \x1b[33m: \x1b[0m${datePadded}   \x1b[32mNumber\x1b[33m: \x1b[0m${msgNumber}\r\n`);
 
-  emitText(socket, AnsiUtil.colorize(`To     : `, 'green'));
-  emitText(socket, `${formatRecipientDisplay(msg, session)}  `);
-  emitText(socket, AnsiUtil.colorize(`Recv'd: `, 'green'));
-  // express.e:8915-8926 - Show received date if set, otherwise "N/A" for ALL or "No" for private
+  // express.e:8902-8910: EALL → "confName (ALL)", else toName
+  const toDisplay = formatRecipientDisplay(msg, session).padEnd(30);
+  // express.e:8915-8926: Recv'd date, N/A for ALL, No for private not yet received
+  let recvd: string;
   if (msg.receivedAt) {
-    emitText(socket, `${msg.receivedAt.toLocaleString()}\r\n`);
+    recvd = formatLongDateTime(msg.receivedAt instanceof Date ? msg.receivedAt : new Date(msg.receivedAt));
   } else if (!msg.isPrivate || msg.toUser?.toUpperCase() === 'ALL' || msg.toUser?.toUpperCase() === 'EALL') {
-    emitText(socket, 'N/A\r\n');
+    recvd = 'N/A';
   } else {
-    emitText(socket, 'No\r\n');
+    recvd = 'No';
   }
+  emitText(socket, `\x1b[32mTo     \x1b[33m: \x1b[0m${toDisplay}  \x1b[32mRecv\x27d\x1b[33m: \x1b[0m${recvd}\r\n`);
 
-  emitText(socket, AnsiUtil.colorize(`From   : `, 'green'));
-  emitText(socket, `${msg.author}   `);
-  emitText(socket, AnsiUtil.colorize(`Status: `, 'green'));
-  emitText(socket, `${msg.isPrivate ? 'Private Message' : 'Public Message'}\r\n`);
+  // express.e:8929-8935: status P/p = Public, R = Private
+  const statusStr = (msg.isPrivate) ? 'Private Message' : 'Public Message';
+  const fromPadded = (msg.author || '').padEnd(30);
+  emitText(socket, `\x1b[32mFrom   \x1b[33m: \x1b[0m${fromPadded}   \x1b[32mStatus\x1b[33m: \x1b[0m${statusStr}\r\n`);
 
-  emitText(socket, AnsiUtil.colorize(`Subject: `, 'green'));
-  emitText(socket, `${newIndicator}${privateIndicator}${replyIndicator}${msg.subject}\r\n`);
+  // express.e:8937: Subject: <subject>
+  emitText(socket, `\x1b[32mSubject\x1b[33m: \x1b[0m${msg.subject}\r\n`);
   emitText(socket, '\r\n');
 
   // Display message body - express.e:8965-8969
@@ -321,7 +330,7 @@ async function displayMessagesNonStop(socket: any, session: BBSSession, startInd
 function displayShortHelp(socket: any, session: BBSSession): void {
   const messages = session.tempData.msgReaderMessages;
   const currentIndex = session.tempData.msgReaderIndex;
-  const nextMsgNum = currentIndex < messages.length - 1 ? messages[currentIndex + 1].id : 'End';
+  const navStr = getMsgNavStr(messages, currentIndex);
 
   emitText(socket, AnsiUtil.colorize('A', 'yellow'));
   emitText(socket, AnsiUtil.colorize('>', 'green'));
@@ -363,13 +372,8 @@ function displayShortHelp(socket: any, session: BBSSession): void {
   emitText(socket, AnsiUtil.colorize('uit', 'cyan'));
   emitText(socket, '\r\n');
 
-  emitText(socket, AnsiUtil.colorize('<CR>', 'green'));
-  emitText(socket, AnsiUtil.colorize('=', 'white'));
-  emitText(socket, AnsiUtil.colorize('Next ', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('( ', 'green'));
-  emitText(socket, `${nextMsgNum}`);
-  emitText(socket, AnsiUtil.colorize(' )', 'green'));
-  emitText(socket, ' >: ');
+  // express.e:12031: \b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m str[32m )[0m?
+  emitText(socket, '\r\n\x1b[32m<\x1b[33mCR\x1b[32m>\x1b[0m=\x1b[33mNext \x1b[32m(\x1b[0m ' + navStr + '\x1b[32m )\x1b[0m? ');
 
   session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
@@ -381,7 +385,7 @@ function displayShortHelp(socket: any, session: BBSSession): void {
 function displayFullHelp(socket: any, session: BBSSession): void {
   const messages = session.tempData.msgReaderMessages;
   const currentIndex = session.tempData.msgReaderIndex;
-  const nextMsgNum = currentIndex < messages.length - 1 ? messages[currentIndex + 1].id : 'End';
+  const navStr = getMsgNavStr(messages, currentIndex);
 
   emitText(socket, AnsiUtil.colorize('A', 'yellow'));
   emitText(socket, AnsiUtil.colorize('>', 'green'));
@@ -449,68 +453,46 @@ function displayFullHelp(socket: any, session: BBSSession): void {
   emitText(socket, AnsiUtil.colorize('uit', 'cyan'));
   emitText(socket, '\r\n');
 
-  emitText(socket, AnsiUtil.colorize('<CR>', 'green'));
-  emitText(socket, AnsiUtil.colorize('=', 'white'));
-  emitText(socket, AnsiUtil.colorize('Next ', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('( ', 'green'));
-  emitText(socket, `${nextMsgNum}`);
-  emitText(socket, AnsiUtil.colorize(' )', 'green'));
-  emitText(socket, ' >: ');
+  // express.e:12059: \b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m str[32m )[0m?
+  emitText(socket, '\r\n\x1b[32m<\x1b[33mCR\x1b[32m>\x1b[0m=\x1b[33mNext \x1b[32m(\x1b[0m ' + navStr + '\x1b[32m )\x1b[0m? ');
 
   session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
 
+/** express.e:12010 — nav hint string: "N+MAX" or "QUIT" */
+function getMsgNavStr(messages: any[], currentIndex: number): string {
+  const nextIndex = currentIndex + 1;
+  if (nextIndex >= messages.length) return 'QUIT';
+  const maxMsgNum = (messages[messages.length - 1] as any).msgNumber || messages[messages.length - 1].id;
+  const nextMsgNum = (messages[nextIndex] as any).msgNumber || messages[nextIndex].id;
+  return `${nextMsgNum}+${maxMsgNum}`;
+}
+
 /**
  * Display message navigation prompt
- * From express.e:10992-11036
+ * From express.e:12008-12022 (readMSG loop), 12023-12062 (help variants)
  * Default is compact format (helplist=0), use ? for short help, ?? for full help
  */
 function displayMessageNavigationPrompt(socket: any, session: BBSSession): void {
   const messages = session.tempData.msgReaderMessages;
   const currentIndex = session.tempData.msgReaderIndex;
-  const currentMsg = messages[currentIndex];
-  const nextMsgNum = currentIndex < messages.length - 1 ? messages[currentIndex + 1].id : 'End';
+  // express.e:12010: ( N+MAX ) — next msg + max msg, shown pre-message in express.e
+  // We show post-message; navStr refers to the next message to display
+  const navStr = getMsgNavStr(messages, currentIndex);
 
-  // Like express.e:10993-11000 - Compact format (helplist=0) is the DEFAULT
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('Msg. Options: ', 'green'));
-  emitText(socket, AnsiUtil.colorize('A', 'yellow'));
+  // express.e:12016-12020: [32mMsg. Options: [33mA[36m[,D][,M][36m,[33mF...[32m([0m str[32m )>:
+  emitText(socket, '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m');
 
   if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
-    emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-    emitText(socket, AnsiUtil.colorize('D', 'yellow'));
+    emitText(socket, ',\x1b[33mD\x1b[36m');
   }
 
-  // M - Move (sysop only) - express.e:10996
   if (checkSecurity(session.user, ACSPermission.SYSOP_READ)) {
-    emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-    emitText(socket, AnsiUtil.colorize('M', 'yellow'));
+    emitText(socket, ',\x1b[33mM\x1b[36m');
   }
 
-  // Always show F,R,L,Q
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('F', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('R', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('L', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('Q', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('?', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('??', 'yellow'));
-  emitText(socket, AnsiUtil.colorize(',', 'cyan'));
-  emitText(socket, AnsiUtil.colorize('<', 'green'));
-  emitText(socket, AnsiUtil.colorize('CR', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, ' ');
-  emitText(socket, AnsiUtil.colorize('( ', 'green'));
-  emitText(socket, `${nextMsgNum}`);
-  emitText(socket, AnsiUtil.colorize(' )', 'green'));
-  emitText(socket, ' >: ');
+  emitText(socket, ',\x1b[33mF\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mQ\x1b[36m,\x1b[33m?\x1b[36m,\x1b[33m??\x1b[36m,\x1b[32m<\x1b[33mCR\x1b[32m> \x1b[32m(\x1b[0m ' + navStr + '\x1b[32m )\x1b[0m>: ');
 
-  // Set state for input
   session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
 
@@ -748,32 +730,80 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 }
 
 /**
- * List all messages in current message base
- * From express.e:11197-11199 (calls listMSGs)
+ * Initiate message list — express.e:8820-8878 (listMSGs)
+ * Prompts: "Starting message [N]: " then shows columnar list.
  */
 async function listAllMessages(socket: any, session: BBSSession): Promise<void> {
   const messages = session.tempData.msgReaderMessages;
+  if (!messages || messages.length === 0) {
+    emitText(socket, '\r\n');
+    await displaySingleMessage(socket, session, session.tempData.msgReaderIndex);
+    return;
+  }
+  // lowestNotDel = lowest non-deleted message number in list
+  const lowestMsgNum = (messages[0] as any).msgNumber || messages[0].id;
 
-  // express.e:11197-11199 listMSGs - no header, displays messages directly
+  // express.e:8831: "Starting message [N]: " prompt
+  emitText(socket, `\x1b[32mStarting message \x1b[33m[\x1b[0m${lowestMsgNum}\x1b[33m]\x1b[0m: `);
+  session.tempData.msgListLowest = lowestMsgNum;
+  session.subState = LoggedOnSubState.MSG_LIST_START_INPUT;
+}
+
+/**
+ * Handle "Starting message [N]: " input — express.e:8833-8877
+ */
+export async function handleMsgListStartInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const messages = session.tempData.msgReaderMessages;
+  const lowestMsgNum = session.tempData.msgListLowest || 1;
+  let startNum: number;
+
+  if (input.trim() === '') {
+    // express.e:8834-8836: blank → use lowestNotDel
+    startNum = lowestMsgNum;
+  } else {
+    const parsed = parseInt(input.trim(), 10);
+    if (isNaN(parsed)) {
+      // express.e:8840-8842: Val returned 0 → RETURN RESULT_FAILURE (back to nav)
+      await displaySingleMessage(socket, session, session.tempData.msgReaderIndex);
+      return;
+    }
+    startNum = parsed;
+  }
+
+  // express.e:8845-8878: list messages from startNum
+  // msgReaderMessages is already filtered for this user; apply start number filter
+  const filtered = messages.filter((m: any) => ((m as any).msgNumber || m.id) >= startNum);
+  let wroteHeader = false;
+
   emitText(socket, '\r\n');
 
-  messages.forEach((msg: any, index: number) => {
-    const msgNumber = msg.msgNumber || msg.id;
-    const isNew = msgNumber > (session.lastNewReadConf || 0);
-    const newIndicator = isNew ? AnsiUtil.colorize('[NEW] ', 'yellow') : '';
-    const privateIndicator = msg.isPrivate ? AnsiUtil.colorize('[P] ', 'red') : '';
+  for (const msg of filtered) {
+    const msgNum = (msg as any).msgNumber || msg.id;
 
-    emitText(socket, `${String(msgNumber).padStart(4)} `);
-    emitText(socket, `${msg.author.substring(0, 20).padEnd(20)} `);
-    emitText(socket, `${newIndicator}${privateIndicator}${msg.subject.substring(0, 40)}\r\n`);
-  });
+    if (!wroteHeader) {
+      // express.e:8857-8859: header lines
+      emitText(socket, '\r\n\x1b[32mMsg    Type     From                           Subject              \r\n');
+      emitText(socket, '\x1b[33m------ -------  -----------------------------  ---------------------\r\n');
+      emitText(socket, '\x1b[0m');
+      wroteHeader = true;
+    }
+
+    // express.e:8863: P/p = Public, else Private
+    const typeStr = msg.isPrivate ? 'Private' : 'Public ';
+    // express.e:8864: \z\r\d[6] \s  \l\s[29]  \l\s[21]
+    const msgNumStr = String(msgNum).padStart(6);
+    const fromPad = (msg.author || '').substring(0, 29).padEnd(29);
+    const subjPad = (msg.subject || '').substring(0, 21).padEnd(21);
+    emitText(socket, `${msgNumStr} ${typeStr}  ${fromPad}  ${subjPad}\x1b[0m\r\n`);
+  }
+
+  if (!wroteHeader) {
+    emitText(socket, 'No messages found.\r\n');
+  }
 
   emitText(socket, '\r\n');
-  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-
   // Return to current message
-  const currentIndex = session.tempData.msgReaderIndex;
-  await displaySingleMessage(socket, session, currentIndex);
+  await displaySingleMessage(socket, session, session.tempData.msgReaderIndex);
 }
 
 /**

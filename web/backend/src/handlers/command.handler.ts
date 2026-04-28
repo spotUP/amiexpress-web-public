@@ -181,6 +181,7 @@ import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
   handleMessageReaderNav,
+  handleMsgListStartInput,
   setMessagingDependencies,
   setMoveEditDependencies,
   handleMsgMoveConfInput,
@@ -3026,6 +3027,23 @@ console.log(' In conference selection state');
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer = (session.inputBuffer || '') + data;
       // Client handles character echo
+    }
+    return;
+  }
+
+  // Handle listMSGs start message number input - express.e:8833-8843
+  if (session.subState === LoggedOnSubState.MSG_LIST_START_INPUT) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMsgListStartInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
     }
     return;
   }

@@ -16,7 +16,7 @@ import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.
 import { mailOnSysopComment } from '../../services/mail-notification.service';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
-import { getSystemTime } from '../../utils/date-time.util';
+import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
 
 
 // Dependencies (injected from index.ts)
@@ -942,7 +942,8 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
   // Separator (express.e:10936-10939: formatLongDateTime + SetStr(str,70))
   const parentMsg = quoteData.parentMessage;
   const authorName = parentMsg.author || parentMsg.fromUser || parentMsg.fromName || 'Unknown';
-  const msgDate = new Date(parentMsg.createdAt || parentMsg.created_at || Date.now()).toLocaleString();
+  const parentDate = parentMsg.createdAt || parentMsg.created_at || parentMsg.timestamp;
+  const msgDate = formatLongDateTime(parentDate instanceof Date ? parentDate : new Date(parentDate || Date.now()));
   const separator = ` -----[ ${authorName} ]--[ ${msgDate} ]----------------------------------------------------------------------`.substring(0, 70);
   quotedLines.push(separator);       // express.e:10939
   quotedLines.push(' ');             // express.e:10942 msgBuf.setItem(lines,' ')

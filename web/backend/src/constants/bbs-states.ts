@@ -84,6 +84,7 @@ export enum LoggedOnSubState {
   // Message operations
   READ_MESSAGES = 'read_messages',
   MSG_READER_NAV = 'msg_reader_nav',                    // Message reader navigation
+  MSG_LIST_START_INPUT = 'msg_list_start_input',        // listMSGs: "Starting message [N]: " input
   POST_MESSAGE = 'post_message',
   BULLETIN_INPUT = 'bulletin_input',                    // Bulletin reading input
   POST_MESSAGE_TO = 'post_message_to',
