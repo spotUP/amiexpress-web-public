@@ -64,10 +64,11 @@ function formatRecipientDisplay(msg: any, session: BBSSession): string {
   if (!msg.isPrivate) {
     return 'ALL';
   }
-  // Check for EALL (case-insensitive) - express.e:8902-8905
+  // Check for EALL (case-insensitive) - express.e:8904-8907
+  // confMailName = loggedOnUserKeys.userName (express.e:12461) — the user's own name
   if (msg.toUser && msg.toUser.toLowerCase() === 'eall') {
-    const confName = session.currentConfName || `Conf ${session.currentConf || 1}`;
-    return `${confName} (ALL)`;
+    const mailName = (session.user as any)?.username || (session.user as any)?.name || 'User';
+    return `${mailName} (ALL)`;
   }
   return msg.toUser || 'ALL';
 }
@@ -331,144 +332,59 @@ async function displayMessagesNonStop(socket: any, session: BBSSession, startInd
 }
 
 /**
- * Display short help menu (helplist=1)
- * From express.e:11009-11017
+ * Display short help menu (helplist=1) — express.e:12020-12032
+ * Note: short help does NOT include A>gain (that's in full help only).
  */
 function displayShortHelp(socket: any, session: BBSSession): void {
-  const messages = session.tempData.msgReaderMessages;
-  const currentIndex = session.tempData.msgReaderIndex;
-  const navStr = getMsgNavStr(messages, currentIndex);
+  const navStr = getMsgNavStr(session.tempData.msgReaderMessages, session.tempData.msgReaderIndex);
 
-  emitText(socket, AnsiUtil.colorize('A', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('gain', 'cyan'));
-  emitText(socket, '\r\n');
-
+  // express.e:12020-12030 — leading \b\n before each entry, reset [0m at end
   if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
-    emitText(socket, AnsiUtil.colorize('D', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize('elete Message', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Message\x1b[0m');
   }
-
-  // M - Move (sysop only) - express.e:11004
   if (checkSecurity(session.user, ACSPermission.SYSOP_READ)) {
-    emitText(socket, AnsiUtil.colorize('M', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize('ove', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, '\r\n\x1b[33mM\x1b[32m>\x1b[36move\x1b[0m');
   }
-
-  emitText(socket, AnsiUtil.colorize('F', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('orward', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('R', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('eply', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('L', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('ist', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('Q', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('uit', 'cyan'));
-  emitText(socket, '\r\n');
-
-  // express.e:12031: \b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m str[32m )[0m?
+  emitText(socket, '\r\n\x1b[33mF\x1b[32m>\x1b[36morward\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mR\x1b[32m>\x1b[36meply\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mL\x1b[32m>\x1b[36mist\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mQ\x1b[32m>\x1b[36muit\x1b[0m');
+  // express.e:12031
   emitText(socket, '\r\n\x1b[32m<\x1b[33mCR\x1b[32m>\x1b[0m=\x1b[33mNext \x1b[32m(\x1b[0m ' + navStr + '\x1b[32m )\x1b[0m? ');
 
   session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
 
 /**
- * Display full help menu (helplist=2)
- * From express.e:11018-11045
+ * Display full help menu (helplist=2) — express.e:12035-12060
+ * Note: A>gain has NO leading \b\n; all others do (express.e:12035).
  */
 function displayFullHelp(socket: any, session: BBSSession): void {
-  const messages = session.tempData.msgReaderMessages;
-  const currentIndex = session.tempData.msgReaderIndex;
-  const navStr = getMsgNavStr(messages, currentIndex);
+  const navStr = getMsgNavStr(session.tempData.msgReaderMessages, session.tempData.msgReaderIndex);
 
-  emitText(socket, AnsiUtil.colorize('A', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('gain', 'cyan'));
-  emitText(socket, '\r\n');
-
+  // express.e:12035 — no leading \b\n on A (continuation of nav prompt line)
+  emitText(socket, '\x1b[33mA\x1b[32m>\x1b[36mgain\x1b[0m');
   if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
-    emitText(socket, AnsiUtil.colorize('D', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize('elete Message', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Message\x1b[0m');
   }
-
-  // M - Move (sysop only) - express.e:11015
   if (checkSecurity(session.user, ACSPermission.SYSOP_READ)) {
-    emitText(socket, AnsiUtil.colorize('M', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize('ove Message', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, '\r\n\x1b[33mM\x1b[32m>\x1b[36move Message\x1b[0m');
   }
-
-  emitText(socket, AnsiUtil.colorize('F', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('orward', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('R', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('eply', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('L', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('ist all messages', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('NS', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize(' Non-stop mode', 'cyan'));
-  emitText(socket, '\r\n');
-
-  emitText(socket, AnsiUtil.colorize('K', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('eep and quit', 'cyan'));
-  emitText(socket, '\r\n');
-
-  // E/EH/EM - Edit (sysop only) - express.e:11027-11030
+  emitText(socket, '\r\n\x1b[33mF\x1b[32m>\x1b[36morward\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mR\x1b[32m>\x1b[36meply\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mL\x1b[32m>\x1b[36mist all messages\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mNS\x1b[32m>\x1b[36m Non-stop mode\x1b[0m');
+  emitText(socket, '\r\n\x1b[33mK\x1b[32m>\x1b[36meep and quit\x1b[0m');
   if (checkSecurity(session.user, ACSPermission.MESSAGE_EDIT)) {
-    emitText(socket, AnsiUtil.colorize('E', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize(' Edit Emacs Message', 'cyan'));
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('EH', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize(' Edit Message Header', 'cyan'));
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('EM', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize(' Edit Message Body', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, '\r\n\x1b[33mE\x1b[32m>\x1b[36m Edit Emacs Message\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mEH\x1b[32m>\x1b[36m Edit Message Header\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mEM\x1b[32m>\x1b[36m Edit Message Body\x1b[0m');
   }
-
-  // U - User Account Edit - express.e:12054-12055
   if (checkSecurity(session.user, ACSPermission.ACCOUNT_EDITING)) {
-    emitText(socket, AnsiUtil.colorize('U', 'yellow'));
-    emitText(socket, AnsiUtil.colorize('>', 'green'));
-    emitText(socket, AnsiUtil.colorize('ser Account Edit', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, '\r\n\x1b[33mU\x1b[32m>\x1b[36mser Account Edit\x1b[0m');
   }
-
-  emitText(socket, AnsiUtil.colorize('Q', 'yellow'));
-  emitText(socket, AnsiUtil.colorize('>', 'green'));
-  emitText(socket, AnsiUtil.colorize('uit', 'cyan'));
-  emitText(socket, '\r\n');
-
-  // express.e:12059: \b\n[32m<[33mCR[32m>[0m=[33mNext [32m([0m str[32m )[0m?
+  emitText(socket, '\r\n\x1b[33mQ\x1b[32m>\x1b[36muit\x1b[0m');
+  // express.e:12059
   emitText(socket, '\r\n\x1b[32m<\x1b[33mCR\x1b[32m>\x1b[0m=\x1b[33mNext \x1b[32m(\x1b[0m ' + navStr + '\x1b[32m )\x1b[0m? ');
 
   session.subState = LoggedOnSubState.MSG_READER_NAV;
