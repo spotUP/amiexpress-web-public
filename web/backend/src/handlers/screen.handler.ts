@@ -688,11 +688,22 @@ export async function parseMciCodes(
     return char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  // Helper function to build MCI regex with current terminator
+  // express.e:5272-5288: optional 1-3 digit width prefix before MCI code
+  // ~N  → full value; ~10N → truncated to 10 chars (aePuts2 semantics)
   const mciRegex = (code: string): RegExp => {
     const escapedTerm = escapeRegex(mciTerminator);
-    return new RegExp(`~${code}${escapedTerm}`, 'g');
+    return new RegExp(`~(\\d{0,3})${code}${escapedTerm}`, 'g');
   };
+
+  // Apply optional field width: positive maxLen truncates, -1 = no limit
+  const applyWidth = (value: string, digits: string): string => {
+    const maxLen = digits.length > 0 ? parseInt(digits, 10) : -1;
+    return maxLen > 0 ? value.substring(0, maxLen) : value;
+  };
+
+  // Format a number with commas (express.e formatBCD / formatUnsignedLong style)
+  const formatWithCommas = (n: number): string =>
+    n.toLocaleString('en-US');
 
   // Remove ~D codes from output (they're control codes, not display codes)
   parsed = parsed.replace(terminatorRegex, (match, newTerm) => {
@@ -797,7 +808,8 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       if (!checkConfAccess(session.user, confId)) continue;
       num++;
       const confName = conferences[i].name.padEnd(30, ' ');
-      confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3)}\x1b[34m] \x1b[0m${confName}`;
+      // express.e:5615: \r\z\d[3] = right-justified zero-padded 3-digit number
+      confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3, '0')}\x1b[34m] \x1b[0m${confName}`;
       if (num % 2 === 0) confDir += '\r\n';
     }
     // Add final newline if odd number of entries
@@ -899,30 +911,28 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   }
 
   // User Information Codes (express.e:5291-5400)
-  // NOTE: Using dynamic MCI terminator from Phase 5 implementation
-  parsed = parsed.replace(mciRegex('N'), username);           // N - Username
+  // All replacements use replacer functions to support optional numeric field widths (~10N etc.)
+  parsed = parsed.replace(mciRegex('N'), (_, d) => applyWidth(username, d));
   parsed = parsed.replace(/~N(?=\s|$)/g, username);
-  parsed = parsed.replace(mciRegex('P'), '');  // P - Password (security - intentionally blank)
-  parsed = parsed.replace(mciRegex('UL'), user.location || '');  // UL - User Location
-  parsed = parsed.replace(mciRegex('#'), user.phoneNumber || '');  // # - Phone Number
-  parsed = parsed.replace(mciRegex('TC'), timesCalled.toString());  // TC - Times Called
-  parsed = parsed.replace(mciRegex('TT'), (user.callsToday || 0).toString());  // TT - Today's Calls
-  // ~LC - Last Call (express.e:5315-5318) - formatLongDateTime(loggedOnUser.timeLastOn)
-  // Formats using the full "DDD DD-MMM-YYYY HH:MM:SS" pattern (MiscFuncs.e:320-341)
-  // user.lastLogin is a Date (database/types.ts:36); user.timeLastOn is an alias
+  parsed = parsed.replace(mciRegex('P'), '');
+  parsed = parsed.replace(mciRegex('UL'), (_, d) => applyWidth(user.location || '', d));
+  parsed = parsed.replace(mciRegex('#'), (_, d) => applyWidth(user.phoneNumber || '', d));
+  parsed = parsed.replace(mciRegex('TC'), (_, d) => applyWidth(timesCalled.toString(), d));
+  parsed = parsed.replace(mciRegex('TT'), (_, d) => applyWidth((user.callsToday || 0).toString(), d));
   const lcRaw = user.lastLogin || user.timeLastOn;
   const lcDate: Date | null = lcRaw instanceof Date ? lcRaw : (lcRaw ? new Date(lcRaw) : null);
-  parsed = parsed.replace(mciRegex('LC'), lcDate ? formatLongDateTime(lcDate) : 'Never');  // LC - Last Call
-  parsed = parsed.replace(mciRegex('M'), messagesPosted.toString());  // M - Messages Posted
-  parsed = parsed.replace(mciRegex('A'), secLevel.toString());  // A - Access/Security Level
-  parsed = parsed.replace(mciRegex('S'), user.id?.toString() || '0');  // S - Slot Number (user ID)
-  parsed = parsed.replace(mciRegex('CA'), user.confAccess || 'XXX');  // CA - Conference Access String
-  parsed = parsed.replace(mciRegex('BR'), '57600');  // BR - Baud Rate
-  parsed = parsed.replace(mciRegex('HW'), 'Web Browser');  // HW - Hardware/Computer Type
-  parsed = parsed.replace(mciRegex('TL'), Math.floor((user.dailyTimeLimit || 120) / 60).toString());  // TL - Time Limit
-  parsed = parsed.replace(mciRegex('TR'), Math.floor(session.timeRemaining / 60).toString());  // TR - Time Remaining
-  parsed = parsed.replace(mciRegex('UB'), uploadBytes.toString());  // UB - Upload Bytes
-  parsed = parsed.replace(mciRegex('DB'), downloadBytes.toString());  // DB - Download Bytes
+  parsed = parsed.replace(mciRegex('LC'), (_, d) => applyWidth(lcDate ? formatLongDateTime(lcDate) : 'Never', d));
+  parsed = parsed.replace(mciRegex('M'), (_, d) => applyWidth(messagesPosted.toString(), d));
+  parsed = parsed.replace(mciRegex('A'), (_, d) => applyWidth(secLevel.toString(), d));
+  parsed = parsed.replace(mciRegex('S'), (_, d) => applyWidth(user.id?.toString() || '0', d));
+  parsed = parsed.replace(mciRegex('CA'), (_, d) => applyWidth(user.confAccess || 'XXX', d));
+  parsed = parsed.replace(mciRegex('BR'), (_, d) => applyWidth('57600', d));
+  parsed = parsed.replace(mciRegex('HW'), (_, d) => applyWidth('Web Browser', d));
+  parsed = parsed.replace(mciRegex('TL'), (_, d) => applyWidth(Math.floor((user.dailyTimeLimit || 120) / 60).toString(), d));
+  parsed = parsed.replace(mciRegex('TR'), (_, d) => applyWidth(Math.floor(session.timeRemaining / 60).toString(), d));
+  // express.e:5351-5358: ~UB/~DB use formatBCD() which comma-formats the byte count
+  parsed = parsed.replace(mciRegex('UB'), (_, d) => applyWidth(formatWithCommas(uploadBytes), d));
+  parsed = parsed.replace(mciRegex('DB'), (_, d) => applyWidth(formatWithCommas(downloadBytes), d));
   // ~SU / ~SD - Upload/Download Size (express.e:5359-5366) - calcSizeText()
   // express.e calcSizeText() divides by 1024 repeatedly until value < 1024,
   // appending lowercase unit suffix: b, kb, mb, gb, tb, pb (MiscFuncs.e:3336-3370)
@@ -936,29 +946,24 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
     }
     return `${val}${units[i]}`;
   };
-  parsed = parsed.replace(mciRegex('SU'), calcSizeText(uploadBytes));  // SU - Upload Size
-  parsed = parsed.replace(mciRegex('SD'), calcSizeText(downloadBytes));  // SD - Download Size
-  parsed = parsed.replace(mciRegex('FU'), uploads.toString());  // FU - Files Uploaded
-  parsed = parsed.replace(mciRegex('FD'), downloads.toString());  // FD - Files Downloaded
-  parsed = parsed.replace(mciRegex('BD'), (user.byteLimit || 0).toString());  // BD - Today's Byte Limit
-  // ~ON / ~LG - Node Number (express.e:5379-5382) - StringF(tempstr,'\d',node)
+  parsed = parsed.replace(mciRegex('SU'), (_, d) => applyWidth(calcSizeText(uploadBytes), d));
+  parsed = parsed.replace(mciRegex('SD'), (_, d) => applyWidth(calcSizeText(downloadBytes), d));
+  parsed = parsed.replace(mciRegex('FU'), (_, d) => applyWidth(uploads.toString(), d));
+  parsed = parsed.replace(mciRegex('FD'), (_, d) => applyWidth(downloads.toString(), d));
+  parsed = parsed.replace(mciRegex('BD'), (_, d) => applyWidth((user.byteLimit || 0).toString(), d));
   const nodeNumStr = (session.nodeId || 1).toString();
-  parsed = parsed.replace(mciRegex('ON'), nodeNumStr);  // ON - Node Number
-  parsed = parsed.replace(mciRegex('LG'), nodeNumStr);  // LG - Node Number (alias)
-  parsed = parsed.replace(mciRegex('IN'), user.email || '');  // IN - Internet Name (email)
-  parsed = parsed.replace(mciRegex('RN'), user.realName || username);  // RN - Real Name
+  parsed = parsed.replace(mciRegex('ON'), (_, d) => applyWidth(nodeNumStr, d));
+  parsed = parsed.replace(mciRegex('LG'), (_, d) => applyWidth(nodeNumStr, d));
+  parsed = parsed.replace(mciRegex('IN'), (_, d) => applyWidth(user.email || '', d));
+  parsed = parsed.replace(mciRegex('RN'), (_, d) => applyWidth(user.realName || username, d));
 
   // Conference Information (express.e:5413-5427)
-  // ~CF = Conference Number (relConfNum) - express.e:5413-5416
-  // ~CN = Conference Name (currentConfName) - express.e:5417-5419
-  parsed = parsed.replace(mciRegex('CF'), ((session.currentConf || 0) + 1).toString());  // CF - Conference Number
-  parsed = parsed.replace(mciRegex('CN'), session.currentConfName || 'Main');  // CN - Conference Name
+  parsed = parsed.replace(mciRegex('CF'), (_, d) => applyWidth(((session.currentConf || 0) + 1).toString(), d));
+  parsed = parsed.replace(mciRegex('CN'), (_, d) => applyWidth(session.currentConfName || 'Main', d));
 
-  // ~MB - Current Message Base Number (express.e:5442)
   const currentMsgBase = session.currentMsgBase || 1;
-  parsed = parsed.replace(mciRegex('MB'), currentMsgBase.toString());
+  parsed = parsed.replace(mciRegex('MB'), (_, d) => applyWidth(currentMsgBase.toString(), d));
 
-  // ~MN - Message Base Name (express.e:5443)
   let msgBaseName = 'Default';
   try {
     const messageBases = await db.getMessageBases(session.currentConf);
@@ -967,38 +972,25 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
     }
   } catch (error) {
 console.error('[parseMciCodes] Error getting message base name:', error);
-    SysopDebugUtil.debug(
-      null,
-      session,
-      'MCI',
-      'Error parsing ~MN| (message base name)',
-      { error: (error as Error).message },
-      DebugSeverity.WARNING
-    );
+    SysopDebugUtil.debug(null, session, 'MCI', 'Error parsing ~MN| (message base name)',
+      { error: (error as Error).message }, DebugSeverity.WARNING);
   }
-  parsed = parsed.replace(mciRegex('MN'), msgBaseName);
+  parsed = parsed.replace(mciRegex('MN'), (_, d) => applyWidth(msgBaseName, d));
 
-  // ~CT - Current Time (express.e:5431-5434) - formatLongTime(logonTime)
-  // express.e uses logonTime (session start), NOT current time
-  parsed = parsed.replace(mciRegex('CT'), formatLongTime(logonDate));  // CT - Logon Time
-  parsed = parsed.replace(mciRegex('VD'), '2.00');  // VD - Version Number (display)
-  parsed = parsed.replace(mciRegex('VE'), 'AmiExpress-Web 2.0');  // VE - Version (full)
+  parsed = parsed.replace(mciRegex('CT'), (_, d) => applyWidth(formatLongTime(logonDate), d));
+  parsed = parsed.replace(mciRegex('VD'), (_, d) => applyWidth('2.00', d));
+  parsed = parsed.replace(mciRegex('VE'), (_, d) => applyWidth('AmiExpress-Web 2.0', d));
 
-  // System Information
-  // ~ND - Node Number (express.e:5409-5412) - StringF(tempstr,'\d',node)
-  parsed = parsed.replace(mciRegex('ND'), (session.nodeId || 1).toString());  // ND - Node Number
-  // ~DT - Date (express.e:5435-5438) - formatLongDate(getSystemTime()) - current system date
-  parsed = parsed.replace(mciRegex('DT'), formatLongDate(now));  // DT - Current Date (FORMAT_USA: MM-DD-YY)
-  // ~OT - Online Time (express.e:5395-5398) - formatLongTime(logonTime) - session start time
-  parsed = parsed.replace(mciRegex('OT'), formatLongTime(logonDate));  // OT - Logon Time
-  // ~OD - Online Date (express.e:5391-5394) - formatLongDate(logonTime) - session start date
-  parsed = parsed.replace(mciRegex('OD'), formatLongDate(logonDate));  // OD - Logon Date (FORMAT_USA: MM-DD-YY)
+  parsed = parsed.replace(mciRegex('ND'), (_, d) => applyWidth((session.nodeId || 1).toString(), d));
+  parsed = parsed.replace(mciRegex('DT'), (_, d) => applyWidth(formatLongDate(now), d));
+  parsed = parsed.replace(mciRegex('OT'), (_, d) => applyWidth(formatLongTime(logonDate), d));
+  parsed = parsed.replace(mciRegex('OD'), (_, d) => applyWidth(formatLongDate(logonDate), d));
 
   // ~SC - System Calls Today (express.e:5407)
   // Use SystemStatsService to get real call count
   const { systemStats } = await import('../services/SystemStatsService');
   const todayCalls = systemStats.getTodayCalls();
-  parsed = parsed.replace(mciRegex('SC'), todayCalls.toString());
+  parsed = parsed.replace(mciRegex('SC'), (_, d) => applyWidth(todayCalls.toString(), d));
 
   // File Area Codes - Flagged Files (express.e:5439-5454)
   // ~FC - Flagged Files Count (express.e:5442-5445 returns flagFilesList.count())
@@ -1007,22 +999,14 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   const userId = session.user?.id || 0;
   const sessionFlaggedFiles = flaggedFilesManager.getFiles(userId);
 
-  // ~FC - Count of flagged files (express.e:5442-5445)
-  parsed = parsed.replace(mciRegex('FC'), sessionFlaggedFiles.length.toString());
-
-  // ~FF - Flagged Files space-separated (express.e:5439-5441 calls showFlaggedFiles)
-  // Format: filenames separated by spaces
+  parsed = parsed.replace(mciRegex('FC'), (_, d) => applyWidth(sessionFlaggedFiles.length.toString(), d));
   const flaggedFilesSpaceSep = sessionFlaggedFiles.map(f => f.fileName).join(' ');
-  parsed = parsed.replace(mciRegex('FF'), flaggedFilesSpaceSep);
-
-  // ~FL - Flagged Files List one per line (express.e:5446-5454)
-  // Format: "                     filename\b\n"
+  parsed = parsed.replace(mciRegex('FF'), (_, d) => applyWidth(flaggedFilesSpaceSep, d));
   let flaggedFilesList = '';
   for (const file of sessionFlaggedFiles) {
-    // Format matches express.e: 21 spaces + filename + backspace + newline
     flaggedFilesList += `                     ${file.fileName}\b\r\n`;
   }
-  parsed = parsed.replace(mciRegex('FL'), flaggedFilesList);
+  parsed = parsed.replace(mciRegex('FL'), (_, d) => applyWidth(flaggedFilesList, d));
 
   // AK - Access Keys (express.e:5428-5430 calls displayKeys())
   // express.e:29863-29871 - Displays sysop function key shortcuts
@@ -1109,9 +1093,7 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   parsed = parsed.replace(/^~$/gm, '\x1b[2J\x1b[H');  // Clear screen if ~ is the only content
 
   // ~w - Word wrap / Delay (express.e:5481-5489)
-  // Format: ~w or ~w<ms> - delay/pause
-  // In screen files, this is typically ignored or minimal delay
-  // We'll just remove it from output (delay would be client-side)
+  // WEB_: express.e:5481-5489 — Amiga tick-based delay; no equivalent on Node.js/WebSocket path; ~w is a no-op (stripped from output)
   const escapedTerm = escapeRegex(mciTerminator);
   parsed = parsed.replace(new RegExp(`~w\\d*${escapedTerm}`, 'g'), '');
 

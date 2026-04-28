@@ -22,6 +22,8 @@ import { BBSPaths } from '../../utils/bbs-paths.util';
 import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
 import { flaggedFilesManager } from '../../services/FlaggedFilesManager';
 import * as path from 'path';
+import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
+import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
 
 interface Conference {
   id: number;
@@ -240,59 +242,59 @@ console.log('[ENV] User Statistics');
 
   // User Number (express.e:25550-25552) - only if USERNUMBER_LOGIN tooltype
   if (user.slotNumber !== undefined) {
-    socket.emit('ansi-output', `\x1b[0;32mUser Number\x1b[0;33m:\x1b[0m ${user.slotNumber}\r\n`);
+    socket.emit('ansi-output', `\x1b[32mUser Number\x1b[33m:\x1b[0m ${user.slotNumber}\r\n`);
   }
 
   // Area Name (express.e:25554-25556) - only if CONFRELATIVE=FALSE
   if (user.conferenceAccess) {
-    socket.emit('ansi-output', `\x1b[0;32mArea Name  \x1b[0;33m:\x1b[0m ${user.conferenceAccess}\r\n`);
+    socket.emit('ansi-output', `\x1b[32mArea Name  \x1b[33m:\x1b[0m ${user.conferenceAccess}\r\n`);
   }
 
   // Caller Number (express.e:25558)
   const callerNum = session.callerNum || 0;
-  socket.emit('ansi-output', `\x1b[0;32mCaller Num.\x1b[0;33m:\x1b[0m ${callerNum}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mCaller Num.\x1b[33m:\x1b[0m ${callerNum}\r\n`);
 
-  // Last Date On (express.e:25560-25562)
+  // Last Date On (express.e:25560-25562) — formatLongDateTime like Amiga
   if (user.timeLastOn) {
-    const lastDate = new Date(user.timeLastOn).toLocaleString();
-    socket.emit('ansi-output', `\x1b[0;32mLst Date On\x1b[0;33m:\x1b[0m ${lastDate}\r\n`);
+    const lastDate = formatLongDateTime(new Date(user.timeLastOn));
+    socket.emit('ansi-output', `\x1b[32mLst Date On\x1b[33m:\x1b[0m ${lastDate}\r\n`);
   }
 
   // Security Level (express.e:25563)
   const secLevel = user.secLevel || 0;
-  socket.emit('ansi-output', `\x1b[0;32mSecurity Lv\x1b[0;33m:\x1b[0m ${secLevel}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mSecurity Lv\x1b[33m:\x1b[0m ${secLevel}\r\n`);
 
   // Times Called (express.e:25565)
   const timesCalled = user.timesCalled || 0;
-  socket.emit('ansi-output', `\x1b[0;32m# Times On \x1b[0;33m:\x1b[0m ${timesCalled}\r\n`);
+  socket.emit('ansi-output', `\x1b[32m# Times On \x1b[33m:\x1b[0m ${timesCalled}\r\n`);
 
   // Times Today (express.e:25567)
   const timesToday = user.timesToday || 0;
-  socket.emit('ansi-output', `\x1b[0;32mTimes Today\x1b[0;33m:\x1b[0m ${timesToday}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mTimes Today\x1b[33m:\x1b[0m ${timesToday}\r\n`);
 
   // Messages Posted (express.e:25569)
   const msgsPosted = user.messagesPosted || 0;
-  socket.emit('ansi-output', `\x1b[0;32mMsgs Posted\x1b[0;33m:\x1b[0m ${msgsPosted}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mMsgs Posted\x1b[33m:\x1b[0m ${msgsPosted}\r\n`);
 
   // Online Baud (express.e:25571) - web connections use high speed
   const onlineBaud = (session as any).connectionSpeed || 115200;
-  socket.emit('ansi-output', `\x1b[0;32mOnline Baud\x1b[0;33m:\x1b[0m ${onlineBaud}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mOnline Baud\x1b[33m:\x1b[0m ${onlineBaud}\r\n`);
 
   // Rate CPS UP (express.e:25573-25574)
   const upCPS = user.upCPS || 0;
-  socket.emit('ansi-output', `\x1b[0;32mRate CPS UP\x1b[0;33m:\x1b[0m ${upCPS}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mRate CPS UP\x1b[33m:\x1b[0m ${upCPS}\r\n`);
 
   // Rate CPS DN (express.e:25576-25577)
   const dnCPS = user.dnCPS || 0;
-  socket.emit('ansi-output', `\x1b[0;32mRate CPS DN\x1b[0;33m:\x1b[0m ${dnCPS}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mRate CPS DN\x1b[33m:\x1b[0m ${dnCPS}\r\n`);
 
   // Screen Clear (express.e:25580)
   const screenClr = user.screenClr ? 'YES' : 'NO';
-  socket.emit('ansi-output', `\x1b[0;32mScreen  Clr\x1b[0;33m:\x1b[0m ${screenClr}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mScreen  Clr\x1b[33m:\x1b[0m ${screenClr}\r\n`);
 
   // Protocol (express.e:25583)
   const protocol = user.xferProtocol || 'Zmodem';
-  socket.emit('ansi-output', `\x1b[0;32mProtocol   \x1b[0;33m:\x1b[0m ${protocol}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mProtocol   \x1b[33m:\x1b[0m ${protocol}\r\n`);
 
   // Credit Account (express.e:25586-25594)
   // IF (checkSecurity(ACS_SHOW_PAYMENTS)) AND (loggedOnUser.creditDays>0)
@@ -302,35 +304,32 @@ console.log('[ENV] User Statistics');
     const expirationTimestamp = creditStartDate + (creditDays * 86400 * 1000); // Convert days to ms
     const now = Date.now();
     if (expirationTimestamp > now) {
-      // express.e:25588-25590 - Credit account still active
-      const expirationDate = new Date(expirationTimestamp);
-      const month = String(expirationDate.getMonth() + 1).padStart(2, '0');
-      const day = String(expirationDate.getDate()).padStart(2, '0');
-      const year = String(expirationDate.getFullYear()).slice(-2);
-      socket.emit('ansi-output', `\x1b[0;32mCredit Account Expires\x1b[0;33m:\x1b[0m ${month}-${day}-${year}\r\n`);
+      // express.e:25588-25590: formatLongDate(creditStartDate + creditDays*86400)
+      const expiresStr = formatLongDate(new Date(expirationTimestamp));
+      socket.emit('ansi-output', `\x1b[32mCredit Account Expires\x1b[33m:\x1b[0m ${expiresStr}\r\n`);
     } else {
       // express.e:25592 - Credit account has expired
-      socket.emit('ansi-output', '\x1b[0;31mCredit Account has EXPIRED\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[31mCredit Account has EXPIRED\x1b[0m\r\n');
     }
   }
 
   // Sysop Here (express.e:25596)
   const sysopHere = (session as any).sysopAvail ? 'YES' : 'NO';
-  socket.emit('ansi-output', `\x1b[0;32mSysop  Here\x1b[0;33m:\x1b[0m ${sysopHere}\r\n`);
+  socket.emit('ansi-output', `\x1b[32mSysop  Here\x1b[33m:\x1b[0m ${sysopHere}\r\n`);
 
   // Sysop Pages Remaining (express.e:25599-25601)
   // IF(pagesAllowed<>-1) THEN show pages remaining
   const pagesAllowed = session.pagesAllowed;
   if (pagesAllowed !== undefined && pagesAllowed !== -1) {
-    socket.emit('ansi-output', `\x1b[0;32mSysop Pages Remaining\x1b[0;33m:\x1b[0m ${pagesAllowed}\r\n`);
+    socket.emit('ansi-output', `\x1b[32mSysop Pages Remaining\x1b[33m:\x1b[0m ${pagesAllowed}\r\n`);
   }
 
   // express.e:25604 - fileStatus(1) - Display file statistics for current conference
   // express.e:24141-24190
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[0;32m              Uploads                 Downloads\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[0;32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\r\n');
 
   // Display current conference stats - express.e:24164-24186
@@ -354,7 +353,7 @@ console.log('[ENV] User Statistics');
   const bytesAvailStr = bytesAvail >= 0 ? formatBytes(bytesAvail) : 'Infinite';
   const ratioStr = ratio > 0 ? `1:${ratio}` : 'DSBL';
 
-  socket.emit('ansi-output', `\x1b[0;33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[0;36m${fileUploads.toString().padStart(7)}  ${formatBytes(bytesUploaded).padStart(14)} ${fileDownloads.toString().padStart(7)}  ${formatBytes(bytesDownloaded).padStart(14)}   ${bytesAvailStr.padStart(9)}  ${ratioStr}\x1b[0m\r\n`);
+  socket.emit('ansi-output', `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[0;36m${fileUploads.toString().padStart(7)}  ${formatBytes(bytesUploaded).padStart(14)} ${fileDownloads.toString().padStart(7)}  ${formatBytes(bytesDownloaded).padStart(14)}   ${bytesAvailStr.padStart(9)}  ${ratioStr}\x1b[0m\r\n`);
   socket.emit('ansi-output', '\x1b[0m\r\n');
 
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
@@ -451,8 +450,20 @@ export async function handleJoinConferenceCommand(
     return;
   }
 
-  // express.e:25120 - saveMsgPointers(currentConf, currentMsgBase)
-  // This is handled by joinConference function
+  // express.e:25121 - saveMsgPointers(currentConf, currentMsgBase)
+  // Save current conference read pointers BEFORE switching conferences.
+  // Must happen here (not inside joinConference) — joinConference only
+  // saves pointers for the NEW conference after a mail scan.
+  if (session.user && session.currentConf && session.currentMsgBase) {
+    try {
+      const confBase = await loadMsgPointers(session.user.id, session.currentConf, session.currentMsgBase);
+      confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
+      confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
+      await saveMsgPointers(confBase);
+    } catch (err) {
+      console.warn('[handleJoinConferenceCommand] saveMsgPointers error:', err);
+    }
+  }
 
   // express.e:25122 - setEnvStat(ENV_JOIN)
 console.log('[ENV] Join Conference');
@@ -721,6 +732,18 @@ export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, i
     socket.emit('ansi-output', '\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
+  }
+
+  // express.e:25121 - saveMsgPointers before switching (same guard as internalCommandJ)
+  if (session.user && session.currentConf && session.currentMsgBase) {
+    try {
+      const confBase = await loadMsgPointers(session.user.id, session.currentConf, session.currentMsgBase);
+      confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
+      confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
+      await saveMsgPointers(confBase);
+    } catch (err) {
+      console.warn('[handleJoinMsgBaseInput] saveMsgPointers error:', err);
+    }
   }
 
   // Join conference with selected message base (express.e:25181)

@@ -374,9 +374,7 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
       await handleConferenceFlagsCommand(socket, session);
       return RESULT_SUCCESS;
 
-    case 'Q': // Quiet Mode Toggle (internalCommandQ) - express.e:25504-25516
-      handleQuietModeCommand(socket, session);
-      return RESULT_SUCCESS;
+    // Q handled above (line 216) via olm.handler handleQuietCommand — 1:1 with express.e:25504-25516
 
 
     case '?': // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
