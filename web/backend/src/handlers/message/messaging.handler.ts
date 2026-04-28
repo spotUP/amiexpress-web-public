@@ -14,11 +14,12 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { messageIndexManager } from '../../services/MessageIndexManager';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
-import { getAllMessageIds, readMessageFile, markMessageReceived } from '../../utils/message-file.util';
+import { getAllMessageIds, readMessageFile, markMessageReceived, unmarkMessageReceived } from '../../utils/message-file.util';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { config } from '../../config';
 import { translationService, TranslatorMode } from '../../services/TranslationService';
 import { ACSPermission as ACSPerm } from '../../constants/acs-permissions';
+import { handleEditUserAccount } from '../user/account.handler';
 
 // Dependencies (injected)
 let _db: any;
@@ -446,6 +447,14 @@ function displayFullHelp(socket: any, session: BBSSession): void {
     emitText(socket, '\r\n');
   }
 
+  // U - User Account Edit - express.e:12054-12055
+  if (checkSecurity(session.user, ACSPermission.ACCOUNT_EDITING)) {
+    emitText(socket, AnsiUtil.colorize('U', 'yellow'));
+    emitText(socket, AnsiUtil.colorize('>', 'green'));
+    emitText(socket, AnsiUtil.colorize('ser Account Edit', 'cyan'));
+    emitText(socket, '\r\n');
+  }
+
   emitText(socket, AnsiUtil.colorize('Q', 'yellow'));
   emitText(socket, AnsiUtil.colorize('>', 'green'));
   emitText(socket, AnsiUtil.colorize('uit', 'cyan'));
@@ -585,20 +594,40 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // K - Keep (mark unread) and advance to next message - express.e:12094-12101
-  // Sets kMsgFlag=TRUE, marks recv=0, decrements lastNewReadConf, then falls through
-  // to passItIN: → JUMP goNextMsg (continues to next message, does NOT exit reader)
+  // K - Keep (mark unread) and quit - express.e:11124-11136, 12094-12101
+  // 1. mailHeader.recv:=0; saveOverHeader(gfh) — clear recv flag on disk
+  // 2. IF lastNewReadConf>=msgNumb THEN lastNewReadConf--  (express.e:11128)
+  // 3. IF mailStat.lowestNotDel>=msgNumb THEN lastNewReadConf:=lowestNotDel  (express.e:11129)
+  // 4. kMsgFlag:=TRUE → RETURN RESULT_SUCCESS (exits reader, not JUMP goNextMsg in nav path)
   if (command === 'K') {
     const msg = messages[currentIndex];
     const msgNum = (msg as any).msgNumber || msg.id;
-    // Undo read marking: back up lastNewReadConf so this message shows as unread again
+
+    // express.e:11126: mailHeader.recv:=0; saveOverHeader(gfh)
+    // Delete the .recv companion file so confScan sees this message as unread again
+    const confId: number = session.tempData.msgReaderConfId || session.currentConf || 1;
+    const bbsDataPath: string = config.get('dataDir');
+    await unmarkMessageReceived(confId, msgNum, bbsDataPath);
+
+    // express.e:11128: IF lastNewReadConf>=mailHeader.msgNumb THEN lastNewReadConf--
     if ((session.lastNewReadConf || 0) >= msgNum) {
       session.lastNewReadConf = Math.max(msgNum - 1, 0);
     }
+
+    // express.e:11129: IF mailStat.lowestNotDel>=mailHeader.msgNumb THEN lastNewReadConf:=lowestNotDel
+    // lowestNotDel = lowest message number still in the reader list
+    const lowestNotDel = messages.length > 0
+      ? ((messages[0] as any).msgNumber || messages[0].id)
+      : 0;
+    if (lowestNotDel >= msgNum) {
+      session.lastNewReadConf = lowestNotDel;
+    }
+
     // Back up highest-read pointer so the pointer save won't re-mark it read
     if ((session.tempData.msgReaderHighestRead || 0) >= msgNum) {
       session.tempData.msgReaderHighestRead = Math.max(msgNum - 1, 0);
     }
+
     // Advance to next message (express.e falls through to JUMP goNextMsg)
     if (currentIndex < messages.length - 1) {
       await displaySingleMessage(socket, session, currentIndex + 1);
@@ -729,6 +758,28 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   // WEB_: no Emacs editor; re-display message then nav prompt (express.e:11150 displayMessage + JUMP nextMenu)
   if ((command === 'E' || command === 'EM') && checkSecurity(session.user, ACSPermission.MESSAGE_EDIT)) {
     await displaySingleMessage(socket, session, currentIndex);
+    return;
+  }
+
+  // U - User Account Edit - express.e:11154-11176, 12196-12217
+  // Requires ACS_ACCOUNT_EDITING. Looks up the message author and launches account editor.
+  // express.e: findUserFromName → loadAccount → editInfo; "User no longer exists.\r\n" if not found
+  if (command === 'U' && checkSecurity(session.user, ACSPermission.ACCOUNT_EDITING)) {
+    const msg = messages[currentIndex];
+    const authorName: string = msg.author || '';
+    if (authorName) {
+      // handleEditUserAccount calls db.getUserByUsername, sets ACCOUNT_EDITOR_EDIT subState.
+      // We must preserve the message reader context so we can return to the nav prompt.
+      // express.e:11165-11170: sendCLS(); editInfo(); sendCLS(); displayMessage(); JUMP contloop
+      // WEB_: account editor does not return to message reader automatically; display nav prompt after.
+      // Store caller context so account editor exit can navigate back.
+      session.tempData.msgReaderReturnAfterAccountEdit = true;
+      handleEditUserAccount(socket, session, authorName);
+    } else {
+      // No author — treat as "User no longer exists."
+      emitText(socket, 'User no longer exists.\r\n');
+      displayMessageNavigationPrompt(socket, session);
+    }
     return;
   }
 
@@ -1452,18 +1503,32 @@ export async function handleChooseTranslatorInput(socket: any, session: BBSSessi
     return;
   }
 
+  // H - Toggle word highlight - express.e:11407-11414
+  // loggedOnUser.translatorID:=Eor(loggedOnUser.translatorID,128)
+  // Prints "WORD HIGHLIGHT ON" or "WORD HIGHLIGHT OFF", then JUMP redoTrans (re-prompts)
+  if (trimmed.toUpperCase().startsWith('H')) {
+    const currentId: number = session.user?.translatorID ?? 0;
+    const newId = currentId ^ 128;
+    if (session.user) {
+      session.user.translatorID = newId;
+    }
+    const isOn = (newId & 128) !== 0;
+    emitText(socket, `WORD HIGHLIGHT ${isOn ? 'ON' : 'OFF'}`);
+    emitPrompt(socket, '\r\nLanguage (num) >: ');
+    return;
+  }
+
   // Parse language number
   const langNum = parseInt(trimmed, 10);
   if (isNaN(langNum) || langNum < 1 || langNum > languages.length) {
-    // Invalid - redisplay prompt - express.e:11414 JUMP redoTrans
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('Invalid selection.', 'red'));
+    // Invalid - redisplay prompt - express.e:11418 RETURN RESULT_SUCCESS (treats as cancel)
+    // WEB_: re-prompt to avoid silently doing nothing
     emitText(socket, '\r\n');
     emitPrompt(socket, 'Language (num) >: ');
     return;
   }
 
-  // Set user's language - express.e:11407-11412
+  // Set user's language - express.e:11417-11423
   const selectedLang = languages[langNum - 1];
   translationService.setUserLanguage(session.user?.id || 0, selectedLang);
 

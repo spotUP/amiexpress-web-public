@@ -300,6 +300,28 @@ export async function markMessageReceived(
 }
 
 /**
+ * Unmark message as received — express.e:11126 mailHeader.recv:=0; saveOverHeader(gfh)
+ * Deletes companion .recv file so confScan treats the message as unread again.
+ * Called by K (Keep) command.
+ */
+export async function unmarkMessageReceived(
+  confNum: number,
+  msgNum: number,
+  bbsDataPath: string
+): Promise<void> {
+  const messagesDir = getMessagesDir(confNum, bbsDataPath);
+  const recvPath = path.join(messagesDir, `${msgNum}.recv`);
+  try {
+    await fs.unlink(recvPath);
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+    // File didn't exist — recv was already 0, nothing to do
+  }
+}
+
+/**
  * Check if message has been received
  */
 export async function isMessageReceived(
