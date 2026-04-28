@@ -124,16 +124,20 @@ launch_tmux_session() {
   tmux new-session -d -s "$session" -n logs \
     "cd '$root' && bash '$0' --bbs-only; bash"
 
-  # pane 1 (bottom-left): status strip
-  tmux split-window -v -p 30 -t "${session}:logs" \
+  # Split top pane horizontally → pane 0 (left: server log) | pane 1 (right: free shell)
+  tmux split-window -h -p 50 -t "${session}:logs.0" \
+    "cd '$root'; bash"
+
+  # Split pane 0 vertically → pane 2 (bottom-left: status strip)
+  tmux split-window -v -p 30 -t "${session}:logs.0" \
     "cd '$root' && node dev/console/dist/strip/strip.js; bash"
 
-  # split pane 1 in half horizontally → pane 2: preview log
-  tmux split-window -h -p 67 -t "${session}:logs.1" \
+  # Split pane 1 vertically → pane 3 (bottom-right area, split into 2 cols)
+  tmux split-window -v -p 30 -t "${session}:logs.1" \
     "cd '$root' && tail -f logs/frontend.log 2>/dev/null || echo 'waiting for preview log...'; bash"
 
-  # split pane 2 in half horizontally → pane 3: door watcher log
-  tmux split-window -h -p 50 -t "${session}:logs.2" \
+  # Split pane 3 horizontally → pane 4 (door watcher)
+  tmux split-window -h -p 50 -t "${session}:logs.3" \
     "cd '$root' && tail -f logs/door-watcher.log 2>/dev/null || echo 'waiting for watcher log...'; bash"
 
   # Window 1: clean shell
