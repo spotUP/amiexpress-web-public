@@ -263,8 +263,13 @@ export class ChatRepository extends BaseRepository<any> {
   async joinChatRoom(roomId: string, userId: string, username: string, socketId: string, isModerator: boolean = false): Promise<void> {
 
     const stmt = this.prepare(`
-      INSERT OR REPLACE INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator)
+      INSERT INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator)
       VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (room_id, user_id) DO UPDATE SET
+        username = excluded.username,
+        socket_id = excluded.socket_id,
+        is_moderator = excluded.is_moderator,
+        joined_at = strftime('%s', 'now')
     `);
     stmt.run(roomId, userId, username, socketId, isModerator ? 1 : 0);
   }
