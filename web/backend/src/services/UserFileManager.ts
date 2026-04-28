@@ -136,11 +136,6 @@ export class UserFileManager {
     this.userKeysPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.keys'));
     this.userMiscPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.misc'));
 
-console.log('[UserFileManager] Initialized');
-console.log(`  BBS root: ${this.bbsRoot}`);
-console.log(`  user.data: ${this.userDataPath}`);
-console.log(`  user.keys: ${this.userKeysPath}`);
-console.log(`  user.misc: ${this.userMiscPath}`);
   }
  
   private normalizeTargetPath(targetPath: string): string {

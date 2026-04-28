@@ -28,8 +28,6 @@ export class CallersLogManager {
   constructor() {
     // BBS: points to project root
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
-console.log('[CallersLogManager] Initialized');
-console.log(`  BBS root: ${this.bbsRoot}`);
   }
 
   /**
