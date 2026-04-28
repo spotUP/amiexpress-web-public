@@ -428,13 +428,9 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   // express.e:25089-25110 internalCommandUpHat - no header, searches help/ directory
   socket.emit('ansi-output', '\r\n');
 
+  // express.e:25106-25108: empty params → RETURN RESULT_SUCCESS (no output)
   if (!params.trim()) {
-    socket.emit('ansi-output', 'Usage: ^ <topic>\r\n');
-    socket.emit('ansi-output', 'Example: ^upload (shows help on uploading files)\r\n');
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
