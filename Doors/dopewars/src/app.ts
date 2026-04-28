@@ -143,7 +143,6 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   screen.key(['b','B'], () => {
     console.log(`[GANJA] key B pressed, mode=${mode}`);
     if (mode !== 'normal') return;
-    console.log(`[GANJA] marketState prices: ${JSON.stringify(marketState?.prices?.map(p => ({idx: p.index, name: p.name, price: p.price})))}`);
     showBuyOverlay(screen, marketState, state,
       (drug, amt) => runAction(async () => {
         console.log(`[GANJA] buyDrug drug=${drug} amt=${amt}`);

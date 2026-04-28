@@ -234,7 +234,9 @@ class DopewarsServer extends events_1.EventEmitter {
         return { ...state, id, name: row?.bbs_handle ?? id };
     }
     async getMarket(id) {
-        return this.wasm.getMarket(this.getIdx(id));
+        const raw = this.wasm.getMarket(this.getIdx(id));
+        // Only expose drugs available at this location (price > 0)
+        return { ...raw, prices: raw.prices.filter(p => p.price > 0) };
     }
 }
 exports.DopewarsServer = DopewarsServer;

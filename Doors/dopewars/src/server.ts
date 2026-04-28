@@ -280,6 +280,8 @@ export class DopewarsServer extends EventEmitter {
   }
 
   async getMarket(id: string): Promise<MarketState> {
-    return this.wasm.getMarket(this.getIdx(id));
+    const raw = this.wasm.getMarket(this.getIdx(id));
+    // Only expose drugs available at this location (price > 0)
+    return { ...raw, prices: raw.prices.filter(p => p.price > 0) };
   }
 }
