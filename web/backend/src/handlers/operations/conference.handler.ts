@@ -5,7 +5,7 @@
  * Based on express.e conference functions.
  */
 
-import { displayScreen, doPause } from '../screen.handler';
+import { displayScreen } from '../screen.handler';
 import { displayMainMenu } from '../command-handler/menu';
 import { getMailStatFile, loadMsgPointers, saveMsgPointers, validatePointers } from '../../utils/message-pointers.util';
 import { finalizeCommand } from '../../utils/command-response.util';
@@ -267,20 +267,9 @@ console.warn('[joinConference] saveMsgPointers error:', err);
   }
 
   if (!silent) {
-    // express.e:5056-5061 - Display per-conference CONF_BULL screen every
-    // join. Resolver looks in Conf{N}/Screens/ so each conference can ship
-    // its own ASCII banner. Missing file is fine (optional per conf).
-    // Reported 2026-04-24: conference banners only appeared 'rarely' because
-    // this call wasn't wired. Silent=true so conferences without a CONF_BULL
-    // don't pop the 'Screen not found' sysop alert.
-    try {
-      const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
-      if (shown) {
-        doPause(socket, session);
-      }
-    } catch (err) {
-      console.warn('[joinConference] CONF_BULL display failed:', err);
-    }
+    // express.e:5056-5061 - CONF_BULL screen and doPause are handled by the caller
+    // (advanceDisplayFlow AUTO_REJOIN block) BEFORE joinConference is called.
+    // This prevents non-blocking doPause from racing with the "Joining Conference" output.
 
     // express.e:5065 - IF quietJoin=FALSE THEN aePuts('\b\n')
     // QUIET_JOIN tooltype not set in bbsConfig.info, so always emit

@@ -739,7 +739,25 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       // express.e:28573-28574 - After CONF_BULL, auto-rejoin with user stats
       // express.e: joinConf(loggedOnUser.confRJoin,loggedOnUser.msgBaseRJoin,FALSE,FORCE_MAILSCAN_SKIP)
       if (session.subState === LoggedOnSubState.AUTO_REJOIN) {
-        displayFlowLog('AUTO_REJOIN: calling joinConference with auto=true');
+        // express.e:5056-5061 — joinConf shows CONF_BULL and calls doPause() BEFORE
+        // emitting "Joining Conference". We do it here in the display-flow loop so the
+        // doPause correctly gates the output: show CONF_BULL now, return (waiting for
+        // space), then on the next tick (confBullShown=true) complete the join.
+        if (!session.tempData?.confBullShown) {
+          try {
+            const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
+            if (shown) {
+              if (!session.tempData) session.tempData = {};
+              session.tempData.confBullShown = true;
+              doPause(socket, session); // user presses space → advanceDisplayFlow re-enters AUTO_REJOIN
+              displayFlowLog('pause after CONF_BULL');
+              return;
+            }
+          } catch (_) {}
+        }
+        delete session.tempData?.confBullShown;
+
+        displayFlowLog('AUTO_REJOIN: calling joinConference');
         const confId = session.user?.confRJoin || session.currentConf || 1;
         // express.e:4995 - IF (msgBaseNum<1) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
         // msgBaseRJoin is a RELATIVE number (1 = first message base), not a database ID
