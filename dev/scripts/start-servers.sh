@@ -96,6 +96,65 @@ for arg in "$@"; do
   esac
 done
 
+# ─── tmux console ────────────────────────────────────────────────────────────
+# Only activate in an interactive terminal that has tmux AND is not already
+# inside a tmux session ($TMUX is set by tmux in all child processes).
+launch_tmux_session() {
+  local session="amiexpress"
+
+  # If session already exists, just attach
+  if tmux has-session -t "$session" 2>/dev/null; then
+    exec tmux attach -t "$session"
+  fi
+
+  # Build the console app if it hasn't been built yet
+  local console_dir
+  console_dir="$(cd "$(dirname "$0")/../.." && pwd)/dev/console"
+  if [ -d "$console_dir" ] && [ -f "$console_dir/package.json" ]; then
+    (cd "$console_dir" && npm run build --silent 2>/dev/null) || true
+  fi
+
+  # Determine the project root (two levels up from this script)
+  local root
+  root="$(cd "$(dirname "$0")/../.." && pwd)"
+
+  # Window 0: logs layout
+  # pane 0 (top 70%): runs THIS script --bbs-only; $TMUX will be set so the
+  #                   tmux gate below won't fire again — no infinite loop.
+  tmux new-session -d -s "$session" -n logs \
+    "cd '$root' && bash '$0' --bbs-only; bash"
+
+  # pane 1 (bottom-left): status strip
+  tmux split-window -v -p 30 -t "${session}:logs" \
+    "cd '$root' && node dev/console/dist/strip/strip.js; bash"
+
+  # split pane 1 in half horizontally → pane 2: preview log
+  tmux split-window -h -p 67 -t "${session}:logs.1" \
+    "cd '$root' && tail -f logs/frontend.log 2>/dev/null || echo 'waiting for preview log...'; bash"
+
+  # split pane 2 in half horizontally → pane 3: door watcher log
+  tmux split-window -h -p 50 -t "${session}:logs.2" \
+    "cd '$root' && tail -f logs/door-watcher.log 2>/dev/null || echo 'waiting for watcher log...'; bash"
+
+  # Window 1: clean shell
+  tmux new-window -t "$session" -n shell "cd '$root'; bash"
+
+  # Window 2: Ink console TUI (starts after 8s to let backend come up)
+  tmux new-window -t "$session" -n console \
+    "cd '$root' && sleep 8 && node dev/console/dist/src/index.js; bash"
+
+  # Focus the logs window on attach
+  tmux select-window -t "${session}:logs"
+  tmux select-pane  -t "${session}:logs.0"
+
+  exec tmux attach -t "$session"
+}
+
+if [ -t 1 ] && command -v tmux &>/dev/null && [ -z "${TMUX:-}" ]; then
+  launch_tmux_session
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Display startup mode
 printf "%b\n" "${CYAN}${BOLD}"
 echo "╔═══════════════════════════════════════════════════════════════════╗"
