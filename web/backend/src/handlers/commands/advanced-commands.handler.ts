@@ -12,6 +12,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 
 import type { BBSSession } from '../../index';
 
@@ -325,9 +326,26 @@ async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Pro
       // Get user's scan flags for this conference/base
       const scanFlags = await getUserScanFlags(session.user.id, conf.id, msgBase.id);
 
-      // express.e:24695-24726 - Determine flag status (*, F, D, or space)
-      const mailFlag = (scanFlags & MAIL_SCAN_MASK) ? '*' : ' ';
-      const fileFlag = (scanFlags & FILE_SCAN_MASK) ? '*' : ' ';
+      // express.e:24695-24726 - Determine flag status (F/D/*/space) per tooltype + user flags
+      // c1 = MailScan column: FORCE_NEWSCAN -> 'F', NO_NEWSCAN -> 'D', bit set -> '*', else ' '
+      // c2 = FileScan column: SHOW_NEW_FILES -> 'F', NO_NEW_FILES -> 'D', bit set -> '*', else ' '
+      const confFlags = getConferenceToolFlags(conf.id);
+      let mailFlag: string;
+      if (confFlags.forceNewscan) {
+        mailFlag = 'F';
+      } else if (confFlags.noNewscan) {
+        mailFlag = 'D';
+      } else {
+        mailFlag = (scanFlags & MAIL_SCAN_MASK) ? '*' : ' ';
+      }
+      let fileFlag: string;
+      if (confFlags.showNewFiles) {
+        fileFlag = 'F';
+      } else if (confFlags.noNewFiles) {
+        fileFlag = 'D';
+      } else {
+        fileFlag = (scanFlags & FILE_SCAN_MASK) ? '*' : ' ';
+      }
       const allFlag = (scanFlags & MAILSCAN_ALL) ? '*' : ' ';
       const zoomFlag = (scanFlags & ZOOM_SCAN_MASK) ? '*' : ' ';
 

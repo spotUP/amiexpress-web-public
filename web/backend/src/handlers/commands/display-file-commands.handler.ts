@@ -592,14 +592,17 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
 
 console.log('[ENV] Bulletins');
 
-  // Check if BullHelp.txt exists - Bulletins are at BBS root, NOT in Screens/
+  // express.e:24616-24621 - Check confScreenDir + 'Bulletins/BullHelp.txt'
+  // confScreenDir = Conf{N}/Screens/ — per-conference screen directory
   const dataDir = config.get('dataDir');
-  const bullHelpPath = path.join(dataDir, 'Bulletins', 'BullHelp.txt');
+  const currentConf = session.currentConf || 1;
+  const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
+  const bullHelpPath = path.join(confScreenDir, 'Bulletins', 'BullHelp.txt');
   if (!amigafs.existsSync(bullHelpPath)) {
+    // express.e:24619 - myError(ERR_NO_BULLS)
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Sorry, there are no bulletins available'));
+    socket.emit('ansi-output', 'Sorry, there are no bulletins available\r\n');
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -628,9 +631,12 @@ console.log('[ENV] Bulletins');
  * Helper: Show bulletin help screen and prompt for bulletin number
  */
 function _showBulletinHelp(socket: any, session: BBSSession): void {
-  // Display BullHelp screen - use full path with dataDir
+  // express.e:24630-24632 - StrCopy(str,confScreenDir); StrAdd(str,'Bulletins/BullHelp')
+  // confScreenDir = Conf{N}/Screens/
   const dataDir = config.get('dataDir');
-  const bullHelpBasePath = path.join(dataDir, 'Bulletins', 'BullHelp');
+  const currentConf = session.currentConf || 1;
+  const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
+  const bullHelpBasePath = path.join(confScreenDir, 'Bulletins', 'BullHelp');
   const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
   if (helpScreen) {
@@ -653,8 +659,12 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
  * Helper: Display a specific bulletin
  */
 function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number, nonStopDisplay: boolean): void {
+  // express.e:24648 - StringF(str,'\sBulletins/Bull\d',confScreenDir,stat)
+  // confScreenDir = Conf{N}/Screens/
   const dataDir = config.get('dataDir');
-  const bulletinBasePath = path.join(dataDir, 'Bulletins', `Bull${bulletinNum}`);
+  const currentConf = session.currentConf || 1;
+  const confScreenDir = path.join(dataDir, `Conf${currentConf}`, 'Screens');
+  const bulletinBasePath = path.join(confScreenDir, 'Bulletins', `Bull${bulletinNum}`);
   const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
   socket.emit('ansi-output', '\r\n');

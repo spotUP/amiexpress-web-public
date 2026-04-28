@@ -62,7 +62,7 @@ export function setUtilityCommandsDependencies(deps: {
  * @param params - Optional parameters to pass to goodbye command
  */
 export function handleRelogonCommand(socket: any, session: BBSSession, params: string = ''): void {
-  // Check security - express.e:25535
+  // express.e:25535 - checkSecurity(ACS_RELOGON)
   if (!checkSecurity(session.user, ACSPermission.RELOGON)) {
     ErrorHandler.permissionDenied(socket, 'relogon', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -70,34 +70,21 @@ export function handleRelogonCommand(socket: any, session: BBSSession, params: s
     return;
   }
 
-  // express.e:25534-25537 internalCommandRL - no header, just sets flag and calls G
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Are you sure you want to relogon? (Y/N): ');
-
-  // Wait for confirmation
-  session.subState = LoggedOnSubState.RL_CONFIRM;
-  session.tempData = { relogonCommand: true, params };
+  // express.e:25536-25537 internalCommandRL - no confirmation prompt; set flag and call G immediately
+  // WEB_: express.e sets relogon:=TRUE then calls internalCommandG directly (no "Are you sure?")
+  session.relogon = true;
+  _handleGoodbyeCommand(socket, session, params);
 }
 
 /**
  * Handle RL confirmation input
+ * WEB_: This state is no longer entered (RL no longer prompts for confirmation per express.e:25534-25538).
+ * Kept for safe state-router backward-compat; remove once RL_CONFIRM is purged from bbs-states.
  */
-export function handleRelogonConfirm(socket: any, session: BBSSession, input: string): void {
-  const answer = input.trim().toUpperCase();
-
-  if (answer === 'Y' || answer === 'YES') {
-    // Set relogon flag and call goodbye - express.e:25536-25537
-    session.relogon = true;
-    _handleGoodbyeCommand(socket, session, session.tempData?.params || '');
-  } else {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Relogon cancelled.\r\n');
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  }
-
+export function handleRelogonConfirm(socket: any, session: BBSSession, _input: string): void {
+  // Fallthrough: treat any input as confirmed since we should not reach this state anymore.
+  session.relogon = true;
+  _handleGoodbyeCommand(socket, session, session.tempData?.params || '');
   delete session.tempData;
 }
 

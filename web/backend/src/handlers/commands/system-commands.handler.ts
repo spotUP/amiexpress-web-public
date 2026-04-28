@@ -227,9 +227,8 @@ export function handleQuietModeCommand(socket: any, session: BBSSession): void {
 export function handleHelpCommand(socket: any, session: BBSSession, params: string = ''): void {
   // express.e:25079-25081 - Parse parameters
   const parsedParams = ParamsUtil.parse(params);
-  const nonStopDisplay = ParamsUtil.hasFlag(parsedParams, 'NS');
-
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  // express.e:25076 - nonStopDisplayFlag:=paramsContains('NS')
+  ParamsUtil.hasFlag(parsedParams, 'NS'); // consumed; no CLS emitted (express.e:25071-25087 has none)
 
   // express.e:25083 - Find help file
   // StringF(tempstr,'\sBBSHelp',cmds.bbsLoc)

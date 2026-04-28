@@ -59,14 +59,11 @@ export function handleAnsiModeCommand(socket: any, session: BBSSession): void {
     session.user.ansi = next;
   }
 
+  // express.e:25241-25246 - plain text, no color codes, no pause
   if (!next) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Ansi Color Off\r\n');
-    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\r\nAnsi Color Off\r\n');
   } else {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.successLine('Ansi Color On'));
-    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\r\nAnsi Color On\r\n');
   }
 
   if (_db && session.user?.id) {
@@ -75,7 +72,6 @@ export function handleAnsiModeCommand(socket: any, session: BBSSession): void {
     });
   }
 
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
