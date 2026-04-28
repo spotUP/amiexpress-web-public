@@ -597,10 +597,11 @@ console.log(`[confScan] Partial uploads for slot ${slotNumber} in Conf${conf}:`,
   }
 
   // express.e:28145 - mystat:=doPause()
-  // express.e:28146 - IF(mystat<0) THEN RETURN mystat
-  // doPause only runs if partial upload check actually ran (ACS_UPLOAD was true).
-  // For web version, emit a blank line separator instead of a full doPause.
-  socket.emit('ansi-output', '\r\n');
+  // After all conferences scanned (mail + partial uploads if ACS_UPLOAD),
+  // pause so the user can read the scan results before the screen scrolls
+  // away with the auto-rejoin display.
+  const { doPause } = require('../screen.handler');
+  doPause(socket, session);
 }
 
 /**

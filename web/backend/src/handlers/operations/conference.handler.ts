@@ -151,6 +151,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     return false;
   }
 
+  console.log(`[CONF-DEBUG] joinConference: requested=${arguments[2]} resolved=${confId} auto=${auto} confScan=${confScan} silent=${silent} stack=`, new Error().stack?.split('\n').slice(2,7).join(' | '));
   session.currentConf = confId;
   session.conferenceId = confId; // XIM doors read this
   session.currentConference = confId; // GlobalStructures reads this

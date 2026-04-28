@@ -833,6 +833,7 @@ console.error('[Webhook] Error sending user login webhook:', error);
       session.currentConf = user.autoRejoin || 1;
       session.currentConference = user.autoRejoin || 1;
       session.conferenceId = user.autoRejoin || 1;
+      console.log(`[CONF-DEBUG] login: user=${user.username} autoRejoin=${user.autoRejoin} confRJoin=${user.confRJoin} → session.currentConf=${session.currentConf}`);
       // Like express.e:394 - default cmdShortcuts to FALSE (line input mode)
       // This will be set to TRUE if .keys file exists when displaying menu (express.e:6567-6573)
       session.cmdShortcuts = false;

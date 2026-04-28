@@ -165,8 +165,11 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   // Normal logout - express.e:8284-8289
   session.state = BBSState.AWAIT;
 
-  // express.e:8191 aePuts('\b\nClick...') — no trailing newline, no "NO CARRIER"
-  socket.emit('ansi-output', '\r\nClick...');
+  // express.e:8191 aePuts('\b\nClick...') — express.e relies on the modem to print
+  // "NO CARRIER" when the line drops. WEB_: there's no modem in our path, so we
+  // append the conventional "NO CARRIER" string ourselves so users get the same
+  // retro disconnect feel.
+  socket.emit('ansi-output', '\r\nClick...\r\nNO CARRIER\r\n');
 
   // Emit disconnect event to close connection (give time for screen to display and door to run)
   setTimeout(() => {

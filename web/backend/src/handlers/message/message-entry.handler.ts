@@ -600,6 +600,15 @@ console.error('[saveMessage] Error:', error);
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
+
+  // Force the menu prompt to render. The debounce in displayMainMenu/displayMenuPrompt
+  // could swallow the post-save prompt if any earlier code path bumped the timestamps;
+  // forceMenuDisplay=true bypasses that. saveMessage is one place where we are CERTAIN
+  // we want the menu prompt — no race.
+  try {
+    const { displayMainMenu } = require('../command-handler/menu');
+    await displayMainMenu(socket, session, true /* forceMenuDisplay */);
+  } catch (_) { /* swallow — advanceDisplayFlow is the fallback */ }
 }
 
 /**
