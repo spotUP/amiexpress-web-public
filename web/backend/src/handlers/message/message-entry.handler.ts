@@ -80,7 +80,7 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
 /**
  * Handle subject input - express.e:10839-10849
  */
-export function handleMessageSubjectInput(socket: any, session: BBSSession, input: string): void {
+export async function handleMessageSubjectInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const subject = input.trim();
 
   // Blank = abort:
@@ -96,7 +96,7 @@ export function handleMessageSubjectInput(socket: any, session: BBSSession, inpu
       session.tempData = { msgReaderMessages, msgReaderIndex, msgReaderHighestRead: msgReaderHighest };
       session.subState = LoggedOnSubState.MSG_READER_NAV;
       const { displaySingleMessage } = require('./messaging.handler');
-      (async () => { await displaySingleMessage(socket, session, msgReaderIndex); })();
+      await displaySingleMessage(socket, session, msgReaderIndex);
     } else {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
