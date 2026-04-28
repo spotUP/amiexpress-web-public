@@ -14,6 +14,7 @@ import * as path from 'path';
 import { fileAreaManager } from '../../services/FileAreaManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
+import { formatLongDate } from '../../utils/date-time.util';
 import { storeUploadContext } from '../../server/upload-session-store';
 
 // Dependencies (injected)
@@ -610,7 +611,7 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
 
     matchingFiles.forEach((file: any) => {
       const sizeKB = Math.ceil(file.size / 1024);
-      const dateStr = new Date(file.uploaddate).toLocaleDateString();
+      const dateStr = formatLongDate(new Date(file.uploaddate));
       const description = file.fileid_diz || file.description;
 
       emitText(socket, `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
@@ -696,7 +697,7 @@ console.log('[displayNewFiles] Search date:', searchDate);
 
     // Always show header during confScan (express.e doesn't suppress this)
     emitText(socket, '\r\n');
-    emitText(socket, `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
+    emitText(socket, `Searching for files newer than: ${formatLongDate(searchDate)}\r\n\r\n`);
 
     // Get file areas for current conference from database
     const conferenceId = session.currentConf || 1;
@@ -799,7 +800,7 @@ console.log('[displayNewFilesFromDatabase] User stopped scan');
         // Display each new file with pause check
         for (const file of newFiles) {
           const sizeKB = Math.ceil(file.size / 1024);
-          const uploadDate = new Date(file.uploaddate).toLocaleDateString();
+          const uploadDate = formatLongDate(new Date(file.uploaddate));
 
           // Format: filename  sizeKB  date  uploader
           emitLine(
@@ -870,7 +871,7 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
         // Display new files (like displayIt2 in AmiExpress)
         newFilesInArea.forEach(file => {
           const sizeKB = Math.ceil(file.size / 1024);
-          const dateStr = file.uploadDate.toLocaleDateString();
+          const dateStr = formatLongDate(file.uploadDate);
           const description = file.fileIdDiz || file.description;
 
           emitText(socket, `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
@@ -1241,7 +1242,7 @@ console.log('startFileDownload called for area:', fileArea.name);
   emitText(socket, '\x1b[32mAvailable Files:\x1b[0m\r\n\r\n');
   areaFiles.forEach((file, index) => {
     const sizeKB = Math.ceil(file.size / 1024);
-    const dateStr = file.uploadDate.toLocaleDateString();
+    const dateStr = formatLongDate(file.uploadDate);
     const description = file.fileIdDiz || file.description;
     emitText(socket, `${index + 1}. ${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
     emitText(socket, `   ${description}\r\n\r\n`);

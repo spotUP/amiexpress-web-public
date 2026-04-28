@@ -661,10 +661,11 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       await _displayScreenTypeList(socket, session);
       break;
 
-    case 10: // Toggle Screen Clear - express.e:25993-25994
-      session.user.ansi = !session.user.ansi;
-      await db.updateUser(session.user.id, { ansi: session.user.ansi });
-      _displayWCommandMenu(socket, session);
+    case 10: // Toggle Screen Clear — express.e:25993: userFlags EOR USER_SCRNCLR (bit 8)
+      { const SCRNCLR = 8;
+        session.user.userFlags = (session.user.userFlags || 0) ^ SCRNCLR;
+        await db.updateUser(session.user.id, { userFlags: session.user.userFlags });
+        _displayWCommandMenu(socket, session); }
       break;
 
     case 11: // Edit Transfer Protocol - express.e:25995-26002
@@ -695,6 +696,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       }
       const currentEditor = session.user.editorType || 0;
       session.user.editorType = (currentEditor + 1) % 3;
+      await db.updateUser(session.user.id, { editorType: session.user.editorType });
       _displayWCommandMenu(socket, session);
       break;
 
@@ -898,8 +900,9 @@ export async function handleWEditInternetnameInput(socket: any, session: BBSSess
     return;
   }
 
+  session.user.internetName = trimmed;
+  await db.updateUser(session.user.id, { internetName: trimmed });
   emitText(socket, '\r\nOk!\r\n');
-  // For web version, just store in a custom field or ignore
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
@@ -988,9 +991,10 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
     return;
   }
 
-  // Passwords match - hash and save (express.e:25958-25970)
+  // Passwords match - hash and save (express.e:25958-25970: setNewPassword())
   const hashedPassword = await bcrypt.hash(trimmed, 10);
   session.user.password = hashedPassword;
+  await db.updateUser(session.user.id, { passwordHash: hashedPassword });
 
   emitText(socket, '\r\nPassword updated successfully.\r\n');
   _displayWCommandMenu(socket, session);
