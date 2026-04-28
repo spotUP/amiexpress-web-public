@@ -22,61 +22,63 @@ type AmigaUserData = any;
  * +0x1F: pass[9] (9 bytes) - legacy, not used
  * +0x28: location[30] (30 bytes)
  * +0x46: phoneNumber[13] (13 bytes)
- * +0x53: slotNumber (INT = 2 bytes)
- * +0x55: secStatus (INT = 2 bytes)
- * +0x57: secBoard (INT = 2 bytes)
- * +0x59: secLibrary (INT = 2 bytes)
- * +0x5B: secBulletin (INT = 2 bytes)
- * +0x5D: messagesPosted (INT = 2 bytes)
- * +0x5F: newSinceDate (LONG = 4 bytes)
- * +0x63: pwdHash (LONG = 4 bytes) - legacy
- * +0x67: confRead2 (LONG = 4 bytes) - not used
- * +0x6B: confRead3 (LONG = 4 bytes) - not used
- * +0x6F: zoomType (INT = 2 bytes)
- * +0x71: unknown (INT = 2 bytes)
- * +0x73: unknown2 (INT = 2 bytes)
- * +0x75: unknown3 (INT = 2 bytes)
- * +0x77: xferProtocol (INT = 2 bytes)
- * +0x79: filler2 (INT = 2 bytes)
- * +0x7B: lcFiles (INT = 2 bytes)
- * +0x7D: badFiles (INT = 2 bytes)
- * +0x7F: accountDate (LONG = 4 bytes)
- * +0x83: screenType (INT = 2 bytes)
- * +0x85: editorType (INT = 2 bytes)
- * +0x87: conferenceAccess[10] (10 bytes)
- * +0x91: uploads (INT = 2 bytes)
- * +0x93: downloads (INT = 2 bytes)
- * +0x95: confRJoin (INT = 2 bytes)
- * +0x97: timesCalled (INT = 2 bytes)
- * +0x99: timeLastOn (LONG = 4 bytes)
- * +0x9D: timeUsed (LONG = 4 bytes)
- * +0xA1: timeLimit (LONG = 4 bytes)
- * +0xA5: timeTotal (LONG = 4 bytes)
- * +0xA9: bytesDownload (LONG = 4 bytes)
- * +0xAD: bytesUpload (LONG = 4 bytes)
- * +0xB1: dailyBytesLimit (LONG = 4 bytes)
- * +0xB5: dailyBytesDld (LONG = 4 bytes)
- * +0xB9: expert (CHAR = 1 byte)
- * +0xBA: chatRemain (LONG = 4 bytes)
- * +0xBE: chatLimit (LONG = 4 bytes)
- * +0xC2: creditDays (LONG = 4 bytes)
- * +0xC6: creditAmount (LONG = 4 bytes)
- * +0xCA: creditStartDate (LONG = 4 bytes)
- * +0xCE: creditTotalToDate (LONG = 4 bytes)
- * +0xD2: creditTotalDate (LONG = 4 bytes)
- * +0xD6: creditTracking (CHAR = 1 byte)
- * +0xD7: translatorID (CHAR = 1 byte)
- * +0xD8: msgBaseRJoin (INT = 2 bytes)
- * +0xDA: confYM9 (LONG = 4 bytes)
- * +0xDE: todaysBytesLimit (LONG = 4 bytes)
- * +0xE2: protocol (CHAR = 1 byte)
- * +0xE3: uucpa (CHAR = 1 byte)
- * +0xE4: lineLength (CHAR = 1 byte)
- * +0xE5: newUser (CHAR = 1 byte)
- * TOTAL SIZE: 230 bytes (0xE6)
+ * +0x53: [1 byte pad to align slotNumber (INT) to even address]
+ * +0x54: slotNumber (INT = 2 bytes)
+ * +0x56: secStatus (INT = 2 bytes)
+ * +0x58: secBoard (INT = 2 bytes)
+ * +0x5A: secLibrary (INT = 2 bytes)
+ * +0x5C: secBulletin (INT = 2 bytes)
+ * +0x5E: messagesPosted (INT = 2 bytes)
+ * +0x60: newSinceDate (LONG = 4 bytes)
+ * +0x64: pwdHash (LONG = 4 bytes) - legacy
+ * +0x68: confRead2 (LONG = 4 bytes) - not used
+ * +0x6C: confRead3 (LONG = 4 bytes) - not used
+ * +0x70: zoomType (INT = 2 bytes)
+ * +0x72: unknown (INT = 2 bytes)
+ * +0x74: unknown2 (INT = 2 bytes)
+ * +0x76: unknown3 (INT = 2 bytes)
+ * +0x78: xferProtocol (INT = 2 bytes)
+ * +0x7A: filler2 (INT = 2 bytes)
+ * +0x7C: lcFiles (INT = 2 bytes)
+ * +0x7E: badFiles (INT = 2 bytes)
+ * +0x80: accountDate (LONG = 4 bytes)
+ * +0x84: screenType (INT = 2 bytes)
+ * +0x86: editorType (INT = 2 bytes)
+ * +0x88: conferenceAccess[10] (10 bytes)
+ * +0x92: uploads (INT = 2 bytes)
+ * +0x94: downloads (INT = 2 bytes)
+ * +0x96: confRJoin (INT = 2 bytes)
+ * +0x98: timesCalled (INT = 2 bytes)
+ * +0x9A: timeLastOn (LONG = 4 bytes)
+ * +0x9E: timeUsed (LONG = 4 bytes)
+ * +0xA2: timeLimit (LONG = 4 bytes)
+ * +0xA6: timeTotal (LONG = 4 bytes)
+ * +0xAA: bytesDownload (LONG = 4 bytes)
+ * +0xAE: bytesUpload (LONG = 4 bytes)
+ * +0xB2: dailyBytesLimit (LONG = 4 bytes)
+ * +0xB6: dailyBytesDld (LONG = 4 bytes)
+ * +0xBA: expert (CHAR = 1 byte)
+ * +0xBB: [1 byte pad to align chatRemain (LONG) to even address]
+ * +0xBC: chatRemain (LONG = 4 bytes)
+ * +0xC0: chatLimit (LONG = 4 bytes)
+ * +0xC4: creditDays (LONG = 4 bytes)
+ * +0xC8: creditAmount (LONG = 4 bytes)
+ * +0xCC: creditStartDate (LONG = 4 bytes)
+ * +0xD0: creditTotalToDate (LONG = 4 bytes)
+ * +0xD4: creditTotalDate (LONG = 4 bytes)
+ * +0xD8: creditTracking (CHAR = 1 byte)
+ * +0xD9: translatorID (CHAR = 1 byte)
+ * +0xDA: msgBaseRJoin (INT = 2 bytes)
+ * +0xDC: confYM9 (LONG = 4 bytes)
+ * +0xE0: todaysBytesLimit (LONG = 4 bytes)
+ * +0xE4: protocol (CHAR = 1 byte)
+ * +0xE5: uucpa (CHAR = 1 byte)
+ * +0xE6: lineLength (CHAR = 1 byte)
+ * +0xE7: newUser (CHAR = 1 byte)
+ * TOTAL SIZE: 232 bytes (0xE8)
  */
 export class UserStructure {
-  static readonly SIZE = 230; // 0xE6 bytes
+  static readonly SIZE = 232; // 0xE8 bytes
 
   /**
    * Write user structure to emulator memory
@@ -98,149 +100,155 @@ console.log(`[UserStructure] Writing user structure at 0x${addr.toString(16)}`);
     // +0x46: phoneNumber[13] - null-terminated string
     this.writeString(emulator, addr + 0x46, user.phoneNumber || '', 13);
 
-    // +0x53: slotNumber (INT)
-    emulator.writeMemory16(addr + 0x53, user.slotNumber || 0);
+    // +0x53: 1 byte pad to align slotNumber (INT) to even address
+    emulator.writeMemory(addr + 0x53, 0);
 
-    // +0x55: secStatus (INT) - security level
-    emulator.writeMemory16(addr + 0x55, user.securityLevel || 0);
+    // +0x54: slotNumber (INT)
+    emulator.writeMemory16(addr + 0x54, user.slotNumber || 0);
 
-    // +0x57: secBoard (INT) - file/byte ratio
-    emulator.writeMemory16(addr + 0x57, user.secBoard || 0);
+    // +0x56: secStatus (INT) - security level
+    emulator.writeMemory16(addr + 0x56, user.securityLevel || 0);
 
-    // +0x59: secLibrary (INT) - ratio
-    emulator.writeMemory16(addr + 0x59, user.secLibrary || 0);
+    // +0x58: secBoard (INT) - file/byte ratio
+    emulator.writeMemory16(addr + 0x58, user.secBoard || 0);
 
-    // +0x5B: secBulletin (INT) - computer type
-    emulator.writeMemory16(addr + 0x5B, user.secBulletin || 0);
+    // +0x5A: secLibrary (INT) - ratio
+    emulator.writeMemory16(addr + 0x5A, user.secLibrary || 0);
 
-    // +0x5D: messagesPosted (INT)
-    emulator.writeMemory16(addr + 0x5D, user.messagesPosted || 0);
+    // +0x5C: secBulletin (INT) - computer type
+    emulator.writeMemory16(addr + 0x5C, user.secBulletin || 0);
 
-    // +0x5F: newSinceDate (LONG) - timestamp
-    emulator.writeMemory32(addr + 0x5F, user.newSinceDate || 0);
+    // +0x5E: messagesPosted (INT)
+    emulator.writeMemory16(addr + 0x5E, user.messagesPosted || 0);
 
-    // +0x63: pwdHash (LONG) - legacy, write 0
-    emulator.writeMemory32(addr + 0x63, 0);
+    // +0x60: newSinceDate (LONG) - timestamp
+    emulator.writeMemory32(addr + 0x60, user.newSinceDate || 0);
 
-    // +0x67: confRead2 (LONG) - not used
-    emulator.writeMemory32(addr + 0x67, 0);
+    // +0x64: pwdHash (LONG) - legacy, write 0
+    emulator.writeMemory32(addr + 0x64, 0);
 
-    // +0x6B: confRead3 (LONG) - not used
-    emulator.writeMemory32(addr + 0x6B, 0);
+    // +0x68: confRead2 (LONG) - not used
+    emulator.writeMemory32(addr + 0x68, 0);
 
-    // +0x6F: zoomType (INT)
-    emulator.writeMemory16(addr + 0x6F, user.zoomType || 0);
+    // +0x6C: confRead3 (LONG) - not used
+    emulator.writeMemory32(addr + 0x6C, 0);
 
-    // +0x71-0x75: unknown fields
-    emulator.writeMemory16(addr + 0x71, 0);
-    emulator.writeMemory16(addr + 0x73, 0);
-    emulator.writeMemory16(addr + 0x75, 0);
+    // +0x70: zoomType (INT)
+    emulator.writeMemory16(addr + 0x70, user.zoomType || 0);
 
-    // +0x77: xferProtocol (INT)
-    emulator.writeMemory16(addr + 0x77, user.xferProtocol || 0);
+    // +0x72-0x76: unknown fields
+    emulator.writeMemory16(addr + 0x72, 0);
+    emulator.writeMemory16(addr + 0x74, 0);
+    emulator.writeMemory16(addr + 0x76, 0);
 
-    // +0x79: filler2 (INT)
-    emulator.writeMemory16(addr + 0x79, 0);
+    // +0x78: xferProtocol (INT)
+    emulator.writeMemory16(addr + 0x78, user.xferProtocol || 0);
 
-    // +0x7B: lcFiles (INT)
-    emulator.writeMemory16(addr + 0x7B, 0);
+    // +0x7A: filler2 (INT)
+    emulator.writeMemory16(addr + 0x7A, 0);
 
-    // +0x7D: badFiles (INT)
-    emulator.writeMemory16(addr + 0x7D, 0);
+    // +0x7C: lcFiles (INT)
+    emulator.writeMemory16(addr + 0x7C, 0);
 
-    // +0x7F: accountDate (LONG) - timestamp
+    // +0x7E: badFiles (INT)
+    emulator.writeMemory16(addr + 0x7E, 0);
+
+    // +0x80: accountDate (LONG) - timestamp
     const accountDate = user.createdAt ? Math.floor(new Date(user.createdAt).getTime() / 1000) : 0;
-    emulator.writeMemory32(addr + 0x7F, accountDate);
+    emulator.writeMemory32(addr + 0x80, accountDate);
 
-    // +0x83: screenType (INT)
-    emulator.writeMemory16(addr + 0x83, user.screenType || 0);
+    // +0x84: screenType (INT)
+    emulator.writeMemory16(addr + 0x84, user.screenType || 0);
 
-    // +0x85: editorType (INT)
-    emulator.writeMemory16(addr + 0x85, user.editorType || 0);
+    // +0x86: editorType (INT)
+    emulator.writeMemory16(addr + 0x86, user.editorType || 0);
 
-    // +0x87: conferenceAccess[10]
+    // +0x88: conferenceAccess[10]
     const confAccess = user.conferenceAccess || '';
     for (let i = 0; i < 10; i++) {
-      emulator.writeMemory(addr + 0x87 + i, i < confAccess.length ? confAccess.charCodeAt(i) : 0);
+      emulator.writeMemory(addr + 0x88 + i, i < confAccess.length ? confAccess.charCodeAt(i) : 0);
     }
 
-    // +0x91: uploads (INT)
-    emulator.writeMemory16(addr + 0x91, user.uploads || 0);
+    // +0x92: uploads (INT)
+    emulator.writeMemory16(addr + 0x92, user.uploads || 0);
 
-    // +0x93: downloads (INT)
-    emulator.writeMemory16(addr + 0x93, user.downloads || 0);
+    // +0x94: downloads (INT)
+    emulator.writeMemory16(addr + 0x94, user.downloads || 0);
 
-    // +0x95: confRJoin (INT) - last conference rejoined
-    emulator.writeMemory16(addr + 0x95, user.confRJoin || 0);
+    // +0x96: confRJoin (INT) - last conference rejoined
+    emulator.writeMemory16(addr + 0x96, user.confRJoin || 0);
 
-    // +0x97: timesCalled (INT)
-    emulator.writeMemory16(addr + 0x97, user.timesCalled || 0);
+    // +0x98: timesCalled (INT)
+    emulator.writeMemory16(addr + 0x98, user.timesCalled || 0);
 
-    // +0x99: timeLastOn (LONG) - timestamp
+    // +0x9A: timeLastOn (LONG) - timestamp
     const timeLastOn = user.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0;
-    emulator.writeMemory32(addr + 0x99, timeLastOn);
+    emulator.writeMemory32(addr + 0x9A, timeLastOn);
 
-    // +0x9D: timeUsed (LONG) - seconds used this session
-    emulator.writeMemory32(addr + 0x9D, user.timeUsed || 0);
+    // +0x9E: timeUsed (LONG) - seconds used this session
+    emulator.writeMemory32(addr + 0x9E, user.timeUsed || 0);
 
-    // +0xA1: timeLimit (LONG) - time limit in seconds
-    emulator.writeMemory32(addr + 0xA1, user.timeLimit || 3600);
+    // +0xA2: timeLimit (LONG) - time limit in seconds
+    emulator.writeMemory32(addr + 0xA2, user.timeLimit || 3600);
 
-    // +0xA5: timeTotal (LONG) - total time remaining
-    emulator.writeMemory32(addr + 0xA5, user.timeTotal || 3600);
+    // +0xA6: timeTotal (LONG) - total time remaining
+    emulator.writeMemory32(addr + 0xA6, user.timeTotal || 3600);
 
-    // +0xA9: bytesDownload (LONG)
-    emulator.writeMemory32(addr + 0xA9, user.bytesDownload || 0);
+    // +0xAA: bytesDownload (LONG)
+    emulator.writeMemory32(addr + 0xAA, user.bytesDownload || 0);
 
-    // +0xAD: bytesUpload (LONG)
-    emulator.writeMemory32(addr + 0xAD, user.bytesUpload || 0);
+    // +0xAE: bytesUpload (LONG)
+    emulator.writeMemory32(addr + 0xAE, user.bytesUpload || 0);
 
-    // +0xB1: dailyBytesLimit (LONG)
-    emulator.writeMemory32(addr + 0xB1, user.dailyBytesLimit || 0);
+    // +0xB2: dailyBytesLimit (LONG)
+    emulator.writeMemory32(addr + 0xB2, user.dailyBytesLimit || 0);
 
-    // +0xB5: dailyBytesDld (LONG) - daily bytes downloaded
-    emulator.writeMemory32(addr + 0xB5, user.dailyBytesDld || 0);
+    // +0xB6: dailyBytesDld (LONG) - daily bytes downloaded
+    emulator.writeMemory32(addr + 0xB6, user.dailyBytesDld || 0);
 
-    // +0xB9: expert (CHAR) - expert mode flag ("X" = expert)
-    emulator.writeMemory(addr + 0xB9, user.expert === 'X' ? 1 : 0);
+    // +0xBA: expert (CHAR) - expert mode flag ("X" = expert)
+    emulator.writeMemory(addr + 0xBA, user.expert === 'X' ? 1 : 0);
 
-    // +0xBA: chatRemain (LONG) - chat time remaining
-    emulator.writeMemory32(addr + 0xBA, user.chatRemain || 0);
+    // +0xBB: 1 byte pad to align chatRemain (LONG) to even address
+    emulator.writeMemory(addr + 0xBB, 0);
 
-    // +0xBE: chatLimit (LONG) - chat time limit
-    emulator.writeMemory32(addr + 0xBE, user.chatLimit || 0);
+    // +0xBC: chatRemain (LONG) - chat time remaining
+    emulator.writeMemory32(addr + 0xBC, user.chatRemain || 0);
 
-    // +0xC2-0xD5: credit fields (not used in web version)
-    emulator.writeMemory32(addr + 0xC2, 0); // creditDays
-    emulator.writeMemory32(addr + 0xC6, 0); // creditAmount
-    emulator.writeMemory32(addr + 0xCA, 0); // creditStartDate
-    emulator.writeMemory32(addr + 0xCE, 0); // creditTotalToDate
-    emulator.writeMemory32(addr + 0xD2, 0); // creditTotalDate
-    emulator.writeMemory(addr + 0xD6, 0);   // creditTracking
+    // +0xC0: chatLimit (LONG) - chat time limit
+    emulator.writeMemory32(addr + 0xC0, user.chatLimit || 0);
 
-    // +0xD7: translatorID (CHAR)
-    emulator.writeMemory(addr + 0xD7, user.translatorID || 0);
+    // +0xC4-0xD7: credit fields (not used in web version)
+    emulator.writeMemory32(addr + 0xC4, 0); // creditDays
+    emulator.writeMemory32(addr + 0xC8, 0); // creditAmount
+    emulator.writeMemory32(addr + 0xCC, 0); // creditStartDate
+    emulator.writeMemory32(addr + 0xD0, 0); // creditTotalToDate
+    emulator.writeMemory32(addr + 0xD4, 0); // creditTotalDate
+    emulator.writeMemory(addr + 0xD8, 0);   // creditTracking
 
-    // +0xD8: msgBaseRJoin (INT)
-    emulator.writeMemory16(addr + 0xD8, user.msgBaseRJoin || 0);
+    // +0xD9: translatorID (CHAR)
+    emulator.writeMemory(addr + 0xD9, user.translatorID || 0);
 
-    // +0xDA: confYM9 (LONG) - not used
-    emulator.writeMemory32(addr + 0xDA, 0);
+    // +0xDA: msgBaseRJoin (INT)
+    emulator.writeMemory16(addr + 0xDA, user.msgBaseRJoin || 0);
 
-    // +0xDE: todaysBytesLimit (LONG)
-    emulator.writeMemory32(addr + 0xDE, user.dailyBytesLimit || 0);
+    // +0xDC: confYM9 (LONG) - not used
+    emulator.writeMemory32(addr + 0xDC, 0);
 
-    // +0xE2: protocol (CHAR)
-    emulator.writeMemory(addr + 0xE2, user.protocol || 0);
+    // +0xE0: todaysBytesLimit (LONG)
+    emulator.writeMemory32(addr + 0xE0, user.dailyBytesLimit || 0);
 
-    // +0xE3: uucpa (CHAR)
-    emulator.writeMemory(addr + 0xE3, user.uucpa || 0);
+    // +0xE4: protocol (CHAR)
+    emulator.writeMemory(addr + 0xE4, user.protocol || 0);
 
-    // +0xE4: lineLength (CHAR)
-    emulator.writeMemory(addr + 0xE4, user.lineLength || 80);
+    // +0xE5: uucpa (CHAR)
+    emulator.writeMemory(addr + 0xE5, user.uucpa || 0);
 
-    // +0xE5: newUser (CHAR)
-    emulator.writeMemory(addr + 0xE5, user.newUser ? 1 : 0);
+    // +0xE6: lineLength (CHAR)
+    emulator.writeMemory(addr + 0xE6, user.lineLength || 80);
+
+    // +0xE7: newUser (CHAR)
+    emulator.writeMemory(addr + 0xE7, user.newUser ? 1 : 0);
 
 console.log(`[UserStructure] Wrote user "${user.username}" to 0x${addr.toString(16)}`);
   }
@@ -254,42 +262,44 @@ console.log(`[UserStructure] Wrote user "${user.username}" to 0x${addr.toString(
     user.username = this.readString(emulator, addr + 0x00, 31);
     user.location = this.readString(emulator, addr + 0x28, 30);
     user.phoneNumber = this.readString(emulator, addr + 0x46, 13);
-    user.slotNumber = emulator.readMemory16(addr + 0x53);
-    user.securityLevel = emulator.readMemory16(addr + 0x55);
-    user.secBoard = emulator.readMemory16(addr + 0x57);
-    user.secLibrary = emulator.readMemory16(addr + 0x59);
-    user.secBulletin = emulator.readMemory16(addr + 0x5B);
-    user.messagesPosted = emulator.readMemory16(addr + 0x5D);
-    user.newSinceDate = emulator.readMemory32(addr + 0x5F);
-    user.zoomType = emulator.readMemory16(addr + 0x6F);
-    user.xferProtocol = emulator.readMemory16(addr + 0x77);
-    user.screenType = emulator.readMemory16(addr + 0x83);
-    user.editorType = emulator.readMemory16(addr + 0x85);
-    user.uploads = emulator.readMemory16(addr + 0x91);
-    user.downloads = emulator.readMemory16(addr + 0x93);
-    user.confRJoin = emulator.readMemory16(addr + 0x95);
-    user.timesCalled = emulator.readMemory16(addr + 0x97);
-    user.timeUsed = emulator.readMemory32(addr + 0x9D);
-    user.timeLimit = emulator.readMemory32(addr + 0xA1);
-    user.timeTotal = emulator.readMemory32(addr + 0xA5);
-    user.bytesDownload = emulator.readMemory32(addr + 0xA9);
-    user.bytesUpload = emulator.readMemory32(addr + 0xAD);
-    user.dailyBytesLimit = emulator.readMemory32(addr + 0xB1);
-    user.dailyBytesDld = emulator.readMemory32(addr + 0xB5);
-    user.expert = emulator.readMemory(addr + 0xB9) !== 0 ? 'X' : 'N';
-    user.chatRemain = emulator.readMemory32(addr + 0xBA);
-    user.chatLimit = emulator.readMemory32(addr + 0xBE);
-    user.translatorID = emulator.readMemory(addr + 0xD7);
-    user.msgBaseRJoin = emulator.readMemory16(addr + 0xD8);
-    user.protocol = emulator.readMemory(addr + 0xE2);
-    user.uucpa = emulator.readMemory(addr + 0xE3);
-    user.lineLength = emulator.readMemory(addr + 0xE4);
-    user.newUser = emulator.readMemory(addr + 0xE5) !== 0;
+    // +0x53: pad byte (skipped)
+    user.slotNumber = emulator.readMemory16(addr + 0x54);
+    user.securityLevel = emulator.readMemory16(addr + 0x56);
+    user.secBoard = emulator.readMemory16(addr + 0x58);
+    user.secLibrary = emulator.readMemory16(addr + 0x5A);
+    user.secBulletin = emulator.readMemory16(addr + 0x5C);
+    user.messagesPosted = emulator.readMemory16(addr + 0x5E);
+    user.newSinceDate = emulator.readMemory32(addr + 0x60);
+    user.zoomType = emulator.readMemory16(addr + 0x70);
+    user.xferProtocol = emulator.readMemory16(addr + 0x78);
+    user.screenType = emulator.readMemory16(addr + 0x84);
+    user.editorType = emulator.readMemory16(addr + 0x86);
+    user.uploads = emulator.readMemory16(addr + 0x92);
+    user.downloads = emulator.readMemory16(addr + 0x94);
+    user.confRJoin = emulator.readMemory16(addr + 0x96);
+    user.timesCalled = emulator.readMemory16(addr + 0x98);
+    user.timeUsed = emulator.readMemory32(addr + 0x9E);
+    user.timeLimit = emulator.readMemory32(addr + 0xA2);
+    user.timeTotal = emulator.readMemory32(addr + 0xA6);
+    user.bytesDownload = emulator.readMemory32(addr + 0xAA);
+    user.bytesUpload = emulator.readMemory32(addr + 0xAE);
+    user.dailyBytesLimit = emulator.readMemory32(addr + 0xB2);
+    user.dailyBytesDld = emulator.readMemory32(addr + 0xB6);
+    user.expert = emulator.readMemory(addr + 0xBA) !== 0 ? 'X' : 'N';
+    // +0xBB: pad byte (skipped)
+    user.chatRemain = emulator.readMemory32(addr + 0xBC);
+    user.chatLimit = emulator.readMemory32(addr + 0xC0);
+    user.translatorID = emulator.readMemory(addr + 0xD9);
+    user.msgBaseRJoin = emulator.readMemory16(addr + 0xDA);
+    user.protocol = emulator.readMemory(addr + 0xE4);
+    user.uucpa = emulator.readMemory(addr + 0xE5);
+    user.lineLength = emulator.readMemory(addr + 0xE6);
+    user.newUser = emulator.readMemory(addr + 0xE7) !== 0;
 
     // Read conferenceAccess
     let confAccess = '';
     for (let i = 0; i < 10; i++) {
-      const byte = emulator.readMemory(addr + 0x87 + i);
+      const byte = emulator.readMemory(addr + 0x88 + i);
       if (byte === 0) break;
       confAccess += String.fromCharCode(byte);
     }
