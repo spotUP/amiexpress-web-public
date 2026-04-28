@@ -58,7 +58,9 @@ class DopewarsServer extends events_1.EventEmitter {
         for (const row of (0, db_1.getActivePlayers)(this.db)) {
             const idx = this.wasm.addPlayer(0, row.bbs_handle);
             this.playerIndex.set(row.id, idx);
-            this.wasm.generateDrugs(idx); // repopulate market prices after server restart
+            // Restore saved state so players don't lose progress on server restart
+            this.wasm.restorePlayerState(idx, row.cash ?? 0, row.debt ?? 0, row.bank ?? 0, row.health ?? 100, row.coat_size ?? 100, row.location ?? 0, row.turn ?? 0);
+            this.wasm.generateDrugs(idx); // regenerate market prices for restored location
         }
     }
     /* ─── Theme ─────────────────────────────────────────────── */

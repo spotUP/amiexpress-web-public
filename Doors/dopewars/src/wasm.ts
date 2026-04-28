@@ -12,6 +12,7 @@ export class DopewarsWasmBindings {
     initGame:           (turns: number, cash: number, debt: number, di: number, bi: number) => void;
     addPlayer:          (userdata: number, name: string) => number;
     removePlayer:       (idx: number) => void;
+    restorePlayerState: (idx: number, cash: number, debt: number, bank: number, health: number, coatSize: number, location: number, turn: number) => void;
     generateDrugs:      (idx: number) => void;
     randomOffer:        (idx: number) => number;
     buyDrug:            (idx: number, drug: number, amount: number) => void;
@@ -45,6 +46,7 @@ export class DopewarsWasmBindings {
       initGame:           w('wasm_init_game',            null,     ['number','number','number','number','number']),
       addPlayer:          w('wasm_add_player',           'number', ['number','string']),
       removePlayer:       w('wasm_remove_player',        null,     ['number']),
+      restorePlayerState: w('wasm_restore_player_state', null,     ['number','number','number','number','number','number','number','number']),
       generateDrugs:      w('wasm_generate_drugs',       null,     ['number']),
       randomOffer:        w('wasm_random_offer',         'number', ['number']),
       buyDrug:            w('wasm_buy_drug',             null,     ['number','number','number']),
@@ -114,6 +116,11 @@ export class DopewarsWasmBindings {
   getMarket(idx: number): MarketState {
     const json = this.fns.getMarket(idx);
     return JSON.parse(json ?? 'null');
+  }
+
+  restorePlayerState(idx: number, cash: number, debt: number, bank: number,
+                     health: number, coatSize: number, location: number, turn: number): void {
+    this.fns.restorePlayerState(idx, cash, debt, bank, health, coatSize, location, turn);
   }
 
   setDrugName(i: number, n: string): void      { this.fns.setDrugName(i, n); }

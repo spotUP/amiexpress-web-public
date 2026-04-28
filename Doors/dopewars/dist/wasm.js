@@ -11,6 +11,7 @@ class DopewarsWasmBindings {
             initGame: w('wasm_init_game', null, ['number', 'number', 'number', 'number', 'number']),
             addPlayer: w('wasm_add_player', 'number', ['number', 'string']),
             removePlayer: w('wasm_remove_player', null, ['number']),
+            restorePlayerState: w('wasm_restore_player_state', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
             generateDrugs: w('wasm_generate_drugs', null, ['number']),
             randomOffer: w('wasm_random_offer', 'number', ['number']),
             buyDrug: w('wasm_buy_drug', null, ['number', 'number', 'number']),
@@ -73,6 +74,9 @@ class DopewarsWasmBindings {
     getMarket(idx) {
         const json = this.fns.getMarket(idx);
         return JSON.parse(json ?? 'null');
+    }
+    restorePlayerState(idx, cash, debt, bank, health, coatSize, location, turn) {
+        this.fns.restorePlayerState(idx, cash, debt, bank, health, coatSize, location, turn);
     }
     setDrugName(i, n) { this.fns.setDrugName(i, n); }
     setDrugCheapStr(i, s) { this.fns.setDrugCheapStr(i, s); }

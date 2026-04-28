@@ -26,6 +26,7 @@ export declare class DopewarsWasmBindings {
     sendHighScores(idx: number, endGame: boolean): void;
     getPlayerState(idx: number): PlayerState;
     getMarket(idx: number): MarketState;
+    restorePlayerState(idx: number, cash: number, debt: number, bank: number, health: number, coatSize: number, location: number, turn: number): void;
     setDrugName(i: number, n: string): void;
     setDrugCheapStr(i: number, s: string): void;
     setLocationName(i: number, n: string): void;

@@ -138,6 +138,24 @@ int wasm_add_player(void *userdata, const char *name) {
   return idx;
 }
 
+/* Restore a returning player's saved state from the database.
+ * Called after wasm_add_player when the server restarts and reloads
+ * active sessions — otherwise players always start at StartCash/100hp. */
+EMSCRIPTEN_KEEPALIVE
+void wasm_restore_player_state(int idx, double cash, double debt, double bank,
+                               int health, int coat_size, int location,
+                               int turn) {
+  Player *p = get_player(idx);
+  if (!p) return;
+  p->Cash     = (price_t)cash;
+  p->Debt     = (price_t)debt;
+  p->Bank     = (price_t)bank;
+  p->Health   = health;
+  p->CoatSize = coat_size;
+  p->IsAt     = location;
+  p->Turn     = turn;
+}
+
 EMSCRIPTEN_KEEPALIVE
 void wasm_remove_player(int idx) {
   Player *p = get_player(idx);
