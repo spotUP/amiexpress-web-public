@@ -660,9 +660,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
       session.subState = LoggedOnSubState.FORWARD_MESSAGE_TO;
     } else {
-      // express.e:11186 JUMP contloop — nav prompt only, no message re-render
-      emitText(socket, '\r\n');
-      emitText(socket, 'Not your message.\r\n');
+      // express.e:11920: '\b\nMessage not deleted, not your mail.\b\n\b\n'
+      emitText(socket, '\r\nMessage not deleted, not your mail.\r\n\r\n');
       displayMessageNavigationPrompt(socket, session);
     }
     return;
@@ -691,9 +690,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       messages.splice(currentIndex, 1);
       session.tempData.msgReaderMessages = messages;
 
-      // If there are no more messages, exit
+      // If there are no more messages, exit (express.e goNextMsg→QUIT prompt→exit — no extra message)
       if (messages.length === 0) {
-        emitText(socket, 'No more messages.\r\n');
         await saveMessagePointerAndExit(socket, session);
         return;
       }
