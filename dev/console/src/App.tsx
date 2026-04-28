@@ -1,0 +1,59 @@
+import React, { useState, useEffect } from 'react';
+import { Box, useInput, useApp } from 'ink';
+import { Header } from './components/Header.js';
+import { TabBar, type TabName } from './components/TabBar.js';
+import { Footer } from './components/Footer.js';
+import { NodesTab } from './components/tabs/NodesTab.js';
+import { UsersTab } from './components/tabs/UsersTab.js';
+import { ConfsTab } from './components/tabs/ConfsTab.js';
+import { CallersTab } from './components/tabs/CallersTab.js';
+import { LogsTab } from './components/tabs/LogsTab.js';
+import { getNodes } from './api/client.js';
+
+interface Props {
+  username: string;
+}
+
+export function App({ username }: Props) {
+  const { exit } = useApp();
+  const [activeTab, setActiveTab] = useState<TabName>('Nodes');
+  const [backendUp, setBackendUp] = useState(false);
+
+  useInput((input, key) => {
+    if (input === 'q' && !key.ctrl) exit();
+  });
+
+  useEffect(() => {
+    async function checkBackend() {
+      try {
+        await getNodes();
+        setBackendUp(true);
+      } catch {
+        setBackendUp(false);
+      }
+    }
+    checkBackend();
+    const id = setInterval(checkBackend, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <Box flexDirection="column" height="100%">
+      <Header
+        username={username}
+        backendUp={backendUp}
+        previewUp={true}
+        watchUp={true}
+      />
+      <TabBar active={activeTab} onChange={setActiveTab} />
+      <Box flexGrow={1} flexDirection="column" paddingX={1}>
+        {activeTab === 'Nodes' && <NodesTab />}
+        {activeTab === 'Users' && <UsersTab />}
+        {activeTab === 'Confs' && <ConfsTab />}
+        {activeTab === 'Callers' && <CallersTab />}
+        {activeTab === 'Logs' && <LogsTab />}
+      </Box>
+      <Footer activeTab={activeTab} />
+    </Box>
+  );
+}
