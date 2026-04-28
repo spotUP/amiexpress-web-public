@@ -12,13 +12,15 @@ const SOURCE_LABELS: Record<LogSource, string> = {
   door68k: '68K Door',
 };
 
-// Switcher row: tab content starts at row 8.
-// Labels: "Backend"(7) + gap(3) + "Preview"(7) + gap(3) + "68K Door"(8) starting at col 1.
-const SWITCHER_ROW = 8;
+// Switcher row: tab content starts at row 5 (sidebar layout, no TabBar).
+// Labels: "Backend"(7) + gap(3) + "Preview"(7) + gap(3) + "68K Door"(8).
+// Content origin = sidebar(22) + paddingX=1 + 1 = col 24.
+const SWITCHER_ROW = 5;
+const BASE = 24;
 const SWITCHER_RANGES: Array<{ from: number; to: number; src: LogSource }> = [
-  { from: 1, to: 7, src: 'backend' },     // "Backend"  cols 1-7
-  { from: 11, to: 17, src: 'frontend' },  // "Preview"  cols 11-17 (after gap=3)
-  { from: 21, to: 28, src: 'door68k' },   // "68K Door" cols 21-28
+  { from: BASE,      to: BASE + 6,  src: 'backend' },   // "Backend"
+  { from: BASE + 10, to: BASE + 16, src: 'frontend' },  // "Preview"  (gap=3)
+  { from: BASE + 20, to: BASE + 27, src: 'door68k' },   // "68K Door"
 ];
 
 export function LogsTab() {

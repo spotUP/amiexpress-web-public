@@ -14,10 +14,10 @@ import type { SystemConfig, NodeStatus } from '../../api/types.js';
 type Panel = 'nodes' | 'config';
 type NodeAction = 'start' | 'exit' | 'reserve' | 'sysop';
 
-// Panel switcher row (top of tab content area).
-const SWITCHER_ROW = 8;
-// Nodes-panel item rows: switcher (8) + spacer (9) + sub-header (10) + spacer (11) → items at 12+.
-const NODES_ITEMS_START_ROW = 12;
+// Panel switcher row (top of tab content area in sidebar layout).
+const SWITCHER_ROW = 5;
+// Nodes-panel item rows: switcher (5) + spacer (6) + sub-header (7) + spacer (8) → items at 9+.
+const NODES_ITEMS_START_ROW = 9;
 
 export function SystemTab() {
   const [panel, setPanel] = useState<Panel>('nodes');
@@ -49,8 +49,11 @@ export function SystemTab() {
   // Approximate ranges: cols 1-9 = Nodes, cols 13-22 = Config.
   const onSwitcherClick = useCallback((e: MouseClick) => {
     if (e.button !== 0 || e.row !== SWITCHER_ROW || pendingAction) return;
-    if (e.col >= 1 && e.col <= 9) setPanel('nodes');
-    else if (e.col >= 13 && e.col <= 22) setPanel('config');
+    // Content origin = sidebar(22) + paddingX=1 + 1 = col 24.
+    // Labels: "[n] Nodes" (9 chars) + gap(3) + "[c] Config" (10 chars).
+    const BASE = 24;
+    if (e.col >= BASE && e.col <= BASE + 8) setPanel('nodes');
+    else if (e.col >= BASE + 12 && e.col <= BASE + 21) setPanel('config');
   }, [pendingAction]);
   useMouse(onSwitcherClick);
 

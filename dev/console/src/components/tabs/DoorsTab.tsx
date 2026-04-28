@@ -3,12 +3,13 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
 import { getDoors, reloadDoors } from '../../api/client.js';
 import { useGridClick } from '../../hooks/useRowClick.js';
+import { SIDEBAR_WIDTH } from '../Sidebar.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { DoorInfo } from '../../api/types.js';
 
 const ITEM_WIDTH = 32; // command(4) + type(8) + name(18) + padding(2)
-const ITEMS_START_ROW = 10;
-const ITEMS_START_COL = 2; // App.tsx wraps content in paddingX={1}
+const ITEMS_START_ROW = 7;
+const ITEMS_START_COL = SIDEBAR_WIDTH + 2; // sidebar (22) + paddingX=1 (1) + 1 = 24
 
 function formatItem(d: DoorInfo, isSelected: boolean): string {
   const cursor = isSelected ? '▶ ' : '  ';

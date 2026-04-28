@@ -7,7 +7,7 @@ import type { ConferenceConfig, ConferenceHealth } from '../../api/types.js';
 
 type Mode = 'list' | 'health-result' | 'fix-result';
 
-const ITEMS_START_ROW = 10;
+const ITEMS_START_ROW = 7;
 
 export function ConfsTab() {
   const [confs, setConfs] = useState<ConferenceConfig[]>([]);

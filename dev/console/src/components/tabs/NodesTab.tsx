@@ -7,7 +7,7 @@ import { kickNode, chatNode } from '../../api/client.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { NodeStatus } from '../../api/types.js';
 
-const ITEMS_START_ROW = 10;
+const ITEMS_START_ROW = 7;
 
 type Mode = 'list' | 'confirm-kick' | 'chat-input';
 

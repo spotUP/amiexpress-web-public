@@ -8,7 +8,7 @@ import type { UserRecord } from '../../api/types.js';
 
 type Mode = 'list' | 'edit-sl' | 'confirm-ban' | 'confirm-delete';
 
-const ITEMS_START_ROW = 10;
+const ITEMS_START_ROW = 7;
 
 function getSecLevel(u: UserRecord): number {
   return u.secLevel ?? u.seclevel ?? 0;

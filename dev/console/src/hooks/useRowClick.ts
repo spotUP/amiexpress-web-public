@@ -1,12 +1,16 @@
 import { useCallback } from 'react';
 import { useMouse, type MouseClick } from './useMouse.js';
+import { SIDEBAR_WIDTH } from '../components/Sidebar.js';
 
-// Standard tab content layout (assuming the alt-screen buffer mode in index.tsx):
-//   rows 1-4   Header (4 rows: border + 2 content + border)
-//   rows 5-7   TabBar (3 rows: border + content + border)
-//   row  8     <tab's first row of content>
-// Each tab decides what ends up at row 8 onward. Pass `startRow` = the
-// 1-indexed row where the FIRST clickable item is rendered.
+// Standard tab content layout (alt-screen buffer mode in index.tsx):
+//   rows 1-4         Header (4 rows: border + 2 content + border)
+//   rows 5..H-3      Sidebar (left 22 cols) | Content (right, rest)
+//   rows H-2..H      Footer (3 rows)
+// Each tab decides what ends up at row 5 onward in the content area.
+// Pass `startRow` = the 1-indexed row where the FIRST clickable item is rendered.
+//
+// Clicks where col <= SIDEBAR_WIDTH belong to the Sidebar and are ignored
+// here so list clicks don't fire when a sidebar item is clicked.
 export function useRowClick(
   itemCount: number,
   startRow: number,
@@ -16,6 +20,7 @@ export function useRowClick(
   const handler = useCallback((e: MouseClick) => {
     if (!enabled) return;
     if (e.button !== 0) return;
+    if (e.col <= SIDEBAR_WIDTH) return;
     const idx = e.row - startRow;
     if (idx >= 0 && idx < itemCount) onSelect(idx);
   }, [itemCount, startRow, onSelect, enabled]);
@@ -40,6 +45,7 @@ export function useGridClick(
   const handler = useCallback((e: MouseClick) => {
     if (!enabled) return;
     if (e.button !== 0) return;
+    if (e.col <= SIDEBAR_WIDTH) return;
     const rowIdx = e.row - startRow;
     if (rowIdx < 0 || rowIdx >= rowsPerCol) return;
     const colIdx = Math.floor((e.col - colStartCol) / itemWidth);

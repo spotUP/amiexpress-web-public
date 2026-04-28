@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, useInput, useApp, useStdout } from 'ink';
 import { Header } from './components/Header.js';
-import { TabBar, type TabName } from './components/TabBar.js';
+import { Sidebar } from './components/Sidebar.js';
 import { Footer } from './components/Footer.js';
 import { DashboardTab } from './components/tabs/DashboardTab.js';
 import { NodesTab } from './components/tabs/NodesTab.js';
@@ -12,17 +12,32 @@ import { LogsTab } from './components/tabs/LogsTab.js';
 import { DoorsTab } from './components/tabs/DoorsTab.js';
 import { SystemTab } from './components/tabs/SystemTab.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
+import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
 
 interface Props {
   username: string;
 }
 
+// Map page id → component. Keep separate from registry.ts to avoid pulling
+// every tab module into the registry (which is read by the Sidebar even when
+// some pages aren't implemented yet).
+const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
+  dashboard: DashboardTab,
+  nodes:     NodesTab,
+  users:     UsersTab,
+  confs:     ConfsTab,
+  callers:   CallersTab,
+  logs:      LogsTab,
+  doors:     DoorsTab,
+  system:    SystemTab,
+};
+
 export function App({ username }: Props) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const termHeight = stdout?.rows ?? 24;
-  const [activeTab, setActiveTab] = useState<TabName>('Dashboard');
+  const [activePage, setActivePage] = useState<string>(DEFAULT_PAGE);
   const [backendUp, setBackendUp] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -42,31 +57,32 @@ export function App({ username }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Pin the root box to the exact terminal height so flexGrow inside
-  // pushes Footer to the very bottom row. Without this, Ink's `height="100%"`
-  // collapses to content size and Footer renders just below the tab content
-  // — which breaks any click-row math that assumes a fixed bottom location.
+  const ActiveComponent = PAGE_COMPONENTS[activePage];
+
+  // Layout:
+  //   row 1-4         Header (full width)
+  //   rows 5..H-3     Sidebar (left ~22 cols) | Content (rest)
+  //   rows H-2..H     Footer (full width)
+  // Pinning the root box height to termHeight so flexGrow inside the middle
+  // row pushes Footer to the actual bottom.
   return (
     <Box flexDirection="column" height={termHeight}>
       <Header username={username} backendUp={backendUp} previewUp={true} watchUp={true} />
-      <TabBar active={activeTab} onChange={setActiveTab} />
-      <Box flexGrow={1} flexDirection="column" paddingX={1}>
-        {showHelp ? (
-          <HelpOverlay activeTab={activeTab} onClose={() => setShowHelp(false)} />
-        ) : (
-          <>
-            {activeTab === 'Dashboard' && <DashboardTab />}
-            {activeTab === 'Nodes'     && <NodesTab />}
-            {activeTab === 'Users'     && <UsersTab />}
-            {activeTab === 'Confs'     && <ConfsTab />}
-            {activeTab === 'Callers'   && <CallersTab />}
-            {activeTab === 'Logs'      && <LogsTab />}
-            {activeTab === 'Doors'     && <DoorsTab />}
-            {activeTab === 'System'    && <SystemTab />}
-          </>
-        )}
+      <Box flexDirection="row" flexGrow={1}>
+        <Sidebar activePageId={activePage} onSelect={setActivePage} />
+        <Box flexGrow={1} flexDirection="column" paddingX={1}>
+          {showHelp ? (
+            <HelpOverlay activePageId={activePage} onClose={() => setShowHelp(false)} />
+          ) : ActiveComponent ? (
+            <ActiveComponent />
+          ) : (
+            <Box paddingY={2}>
+              <></>
+            </Box>
+          )}
+        </Box>
       </Box>
-      <Footer activeTab={activeTab} />
+      <Footer activePageId={activePage} />
     </Box>
   );
 }
