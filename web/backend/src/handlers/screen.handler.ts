@@ -1277,6 +1277,9 @@ console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
           const randomNum = Math.floor(Math.random() * maxCount) + 1;
           const randomFile = formatNumberedFilename(basePath, randomNum);
           screenDebug('[MCI] Sequential: ~SR_ selected:', randomFile);
+          // ~SR_ always shows a full-screen art file — clear before drawing
+          // so previous door output (e.g. dRE!WAll) doesn't bleed through
+          socket.emit('ansi-output', '\x1b[2J\x1b[H');
           await displayScreen(socket, session, randomFile, false);
         }
       }
@@ -2228,7 +2231,11 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     const earlyWipeResult = parseWipeMCI(content);
     const hasEarlyWipeAnimation = earlyWipeResult.wipeType !== null;
     // Use content without wipe code for MCI processing
-    let contentForMci = content;
+    // If the file starts with a form feed (0x0C = Amiga "clear screen"), emit ESC[2J and strip it.
+    // xterm.js treats 0x0C as a newline; on Amiga console.device it clears the screen.
+    let contentForMci = (content.charCodeAt(0) === 0x0C)
+      ? (socket.emit('ansi-output', '\x1b[2J\x1b[H'), content.slice(1))
+      : content;
     // When wipe is detected, disable inline mode so parsed contains full content for animation
     // (inline mode emits content directly and sets parsed='', breaking wipe animation)
     const mciSocket = hasEarlyWipeAnimation ? undefined : socket;
