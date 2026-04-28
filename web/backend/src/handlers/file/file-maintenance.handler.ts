@@ -325,7 +325,8 @@ console.log('[FM] Starting file maintenance');
       const dirFilePath = dirMeta.path;
 
       // express.e:24972-24991 - Display scanning message
-      socket.emit('ansi-output', AnsiUtil.colorize(`Scanning directory ${dirMeta.label}\r\n`, 'yellow'));
+      // express.e:26191 'Scanning directory \d\b\n' — plain text, no color
+      socket.emit('ansi-output', `Scanning directory ${dirMeta.label}\r\n`);
       session.tempData.lineCount = (session.tempData.lineCount || 0) + 1;
 
       if (!fs.existsSync(dirFilePath)) {

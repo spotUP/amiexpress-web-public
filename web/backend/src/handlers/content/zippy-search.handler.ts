@@ -54,7 +54,7 @@ console.log('[ENV] Files');
     const maxDirs = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
     if (maxDirs === 0) {
       // express.e:26139 - myError(5)
-      socket.emit('ansi-output', '\x1b[31mNo files available in this conference.\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -83,7 +83,7 @@ console.log('[ENV] Files');
 
     // No search string - prompt user - express.e:26150-26157
     // aePuts('Enter string to search for: ')
-    socket.emit('ansi-output', '\x1b[36mEnter string to search for: \x1b[0m');
+    socket.emit('ansi-output', 'Enter string to search for: ');
     session.subState = LoggedOnSubState.ZIPPY_SEARCH_INPUT;
     session.tempData = {
       waitingForZippySearch: true,
@@ -229,11 +229,11 @@ console.log('[ENV] Files');
         if (dirNum === -1) {
           // HOLD directory - express.e:26200-26202
           dirFilePath = path.join(confPath, 'hold', 'held');
-          socket.emit('ansi-output', '\x1b[32mScanning directory HOLD\x1b[0m\r\n');
+          socket.emit('ansi-output', 'Scanning directory HOLD\r\n');
         } else {
           // Regular directory - express.e:26188-26198
           dirFilePath = path.join(confPath, `DIR${dirNum}`);
-          socket.emit('ansi-output', `\x1b[32mScanning directory ${dirNum}\x1b[0m\r\n`);
+          socket.emit('ansi-output', `Scanning directory ${dirNum}\r\n`);
         }
 
         // Call zippy() - express.e:26203
