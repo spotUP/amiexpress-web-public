@@ -290,7 +290,8 @@ console.log('Too many login errors, disconnecting');
               { reason: 'empty username', retries: session.loginRetryCount, maxFails },
               DebugSeverity.CRITICAL
             );
-            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            // express.e:29634: plain text
+            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
@@ -348,7 +349,8 @@ console.log('Too many login errors, disconnecting');
               { reason: 'empty password', username: safeUsername, retries: session.loginRetryCount, maxFails },
               DebugSeverity.CRITICAL
             );
-            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            // express.e:29634: plain text
+            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
@@ -408,7 +410,8 @@ console.log('Too many login errors, disconnecting');
             }
 
             // No reset available - disconnect
-            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            // express.e:29634: plain text
+            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
@@ -438,12 +441,15 @@ console.log('[LOGIN] User authenticated successfully, proceeding with login flow
           session.loginRetryCount++;
           const maxFails = getMaxPasswordFails();
 console.warn(`[LOGIN] User ${safeUsername} has slotNumber=0 (deleted account) — rejecting login`);
+          // express.e:29703: 'That account has been deleted.\b\n'
+          socket.emit('ansi-output', 'That account has been deleted.\r\n');
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            // express.e:29634: '\b\nToo Many Errors, Goodbye!\b\n' — plain text
+            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
-          socket.emit('login-failed', { reason: 'Invalid credentials', retryFrom: 'username' });
+          socket.emit('login-failed', { reason: 'deleted account', retryFrom: 'username' });
           if (!handleFailure()) return;
           return;
         }
@@ -985,7 +991,8 @@ console.log('🔍 Checking if username exists:', safeUsername);
             { reason: 'empty username', retries: session.loginRetryCount },
             DebugSeverity.CRITICAL
           );
-          socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+          // express.e:29634: plain text
+            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
           setTimeout(() => socket.disconnect(), 500);
           return;
         }
@@ -1071,7 +1078,8 @@ console.log('Too many login errors, disconnecting');
             { reason: 'retry limit exceeded', retries: session.loginRetryCount },
             DebugSeverity.CRITICAL
           );
-          socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+          // express.e:29634: plain text
+            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
           setTimeout(() => socket.disconnect(), 500);
           return;
         }
