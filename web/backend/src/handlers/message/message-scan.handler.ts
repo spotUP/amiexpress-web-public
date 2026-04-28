@@ -247,6 +247,8 @@ async function getMessagesForConfScan(
 
         // express.e:11706 — match toName === confMailName, 'eall', or 'all'
         // AND (mailHeader.recv=0) — exclude messages already marked received
+        // WEB_: express.e gates 'all' on cb.handle[0] & MAILSCAN_ALL (conference Conf.DB flag).
+        // We include 'all' unconditionally — more inclusive, requires conf Conf.DB reads to fix.
         if ((toLower === safeName || toLower === 'eall' || toLower === 'all') && header.recv === 0) {
           results.push({
             msgNum: header.msgNumb,
