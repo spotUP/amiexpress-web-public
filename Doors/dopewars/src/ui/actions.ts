@@ -1,5 +1,17 @@
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createList, bindKeys } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { bindKeys } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// Local list factory — same as createList but without forced scrollable/alwaysScroll
+// which adds a scroll-indicator bar inside overlays even when all items fit.
+function overlayList(opts: any): any {
+  return blessed.list({
+    tags: true,
+    keys: true,
+    mouse: true,
+    style: { selected: { bg: 'blue', fg: 'white' } },
+    ...opts,
+  });
+}
 import { MarketState, PlayerState, GameQuestion, HighScore } from '../types';
 
 export type ActionBarMode = 'normal' | 'combat' | 'question';
@@ -50,7 +62,7 @@ export function showBuyOverlay(
     label: ' BUY — click item or Enter to confirm ',
   });
 
-  const list = createList({
+  const list = overlayList({
     parent: box,
     top: 0, left: 0,
     width: '100%-2',
@@ -203,7 +215,7 @@ export function showSellOverlay(
     label: ' SELL — click item or Enter to confirm ',
   });
 
-  const list = createList({
+  const list = overlayList({
     parent: box,
     top: 0, left: 0,
     width: '100%-2',
@@ -329,7 +341,7 @@ export function showJetOverlay(
     label: ' JET TO — click or Enter ',
   });
 
-  const list = createList({
+  const list = overlayList({
     parent: box,
     top: 0, left: 0,
     width: '100%-2',

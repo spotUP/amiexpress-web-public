@@ -11,6 +11,17 @@ exports.showQuestionOverlay = showQuestionOverlay;
 exports.showHighScores = showHighScores;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+// Local list factory — same as createList but without forced scrollable/alwaysScroll
+// which adds a scroll-indicator bar inside overlays even when all items fit.
+function overlayList(opts) {
+    return blessed_1.default.list({
+        tags: true,
+        keys: true,
+        mouse: true,
+        style: { selected: { bg: 'blue', fg: 'white' } },
+        ...opts,
+    });
+}
 function renderActionBar(box, mode) {
     if (mode === 'combat') {
         box.setContent('  {bold}[F]{/}ight  {bold}[R]{/}un to...  {bold}[S]{/}urrender');
@@ -45,7 +56,7 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         height: Math.min(market.prices.length, 12) + 6,
         label: ' BUY — click item or Enter to confirm ',
     });
-    const list = (0, blessed_helpers_1.createList)({
+    const list = overlayList({
         parent: box,
         top: 0, left: 0,
         width: '100%-2',
@@ -178,7 +189,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
         height: Math.min(carrying.length, 12) + 6,
         label: ' SELL — click item or Enter to confirm ',
     });
-    const list = (0, blessed_helpers_1.createList)({
+    const list = overlayList({
         parent: box,
         top: 0, left: 0,
         width: '100%-2',
@@ -287,7 +298,7 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         height: Math.min(items.length, 12) + 4,
         label: ' JET TO — click or Enter ',
     });
-    const list = (0, blessed_helpers_1.createList)({
+    const list = overlayList({
         parent: box,
         top: 0, left: 0,
         width: '100%-2',
