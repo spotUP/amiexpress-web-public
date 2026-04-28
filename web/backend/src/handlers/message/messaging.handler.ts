@@ -737,8 +737,36 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
+  // Number input — express.e:12264-12268: isDigit → msgNum:=Val(str) → goNextMsg
+  // Jump to the message with that number
+  if (/^\d+$/.test(command)) {
+    const targetNum = parseInt(command, 10);
+    const targetIdx = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) === targetNum);
+    if (targetIdx >= 0) {
+      await displaySingleMessage(socket, session, targetIdx);
+    } else {
+      // express.e: readit would hit "That message has been deleted." or skip past range
+      emitText(socket, '\r\n');
+      displayMessageNavigationPrompt(socket, session);
+    }
+    return;
+  }
+
+  // + — advance forward (already handled by CR; express.e:12238 fwdFlag:=1)
+  // - — go backward; find previous message
+  if (command === '-' || command.endsWith('-')) {
+    if (currentIndex > 0) {
+      await displaySingleMessage(socket, session, currentIndex - 1);
+    } else {
+      // express.e noMoreMinus(): "The first message in this conference is N\r\n"
+      const lowestNum = (messages[0] as any).msgNumber || messages[0].id;
+      emitText(socket, `\r\nThe first message in this conference is ${lowestNum}\r\n`);
+      displayMessageNavigationPrompt(socket, session);
+    }
+    return;
+  }
+
   // Invalid command — express.e:11213 aePuts('No such command!!\b\n') then JUMP contloop
-  // contloop shows the nav prompt again without re-rendering the message
   emitText(socket, '\r\n');
   emitText(socket, 'No such command!!\r\n');
   displayMessageNavigationPrompt(socket, session);
