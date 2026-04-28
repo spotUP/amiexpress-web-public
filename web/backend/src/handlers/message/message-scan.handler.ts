@@ -533,10 +533,11 @@ console.warn('[advanceConferenceScan] no confScanState found');
       continue;
     }
 
-    // express.e:11712-11714 — blank lines + table header
+    // express.e:11712-11715 — blank lines + table header + reset
     socket.emit('ansi-output', '\r\n\r\n');
     socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
     socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+    socket.emit('ansi-output', '\x1b[0m');
 
     // express.e:11720 - per-message row
     for (const m of scanMsgs) {
