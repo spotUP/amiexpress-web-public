@@ -127,8 +127,8 @@ async function handleNewFilesDisplay(socket: any, session: BBSSession): Promise<
   const fileAreas = await db.getFileAreas(conferenceId);
 
   if (fileAreas.length === 0) {
-    socket.emit('ansi-output', AnsiUtil.warningLine('No file areas available.'));
-    socket.emit('ansi-output', '\r\n');
+    // express.e myError(ERR_NOFILES=5): 'No files available in this conference.\b\n\b\n'
+    socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;

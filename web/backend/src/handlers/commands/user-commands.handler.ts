@@ -357,9 +357,8 @@ console.log('[ENV] User Statistics');
     socket.emit('ansi-output',
       `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[33m${fileUploads.toString().padStart(7)}  ${bytesUpStr.padStart(14)} ${fileDownloads.toString().padStart(7)}  ${bytesDnStr.padStart(14)}   ${bytesAvailStr.padStart(9)}  \x1b[31mDSBLD\x1b[0m\r\n`);
   }
+  // express.e:24188 aePuts('[0m\b\n'); then ENDPROC RESULT_SUCCESS — main loop sets menuPause:=TRUE
   socket.emit('ansi-output', '\x1b[0m\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

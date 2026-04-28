@@ -200,11 +200,10 @@ export function handleNodeUptimeCommand(socket: any, session: BBSSession): void 
   // express.e:25667-25672: '\b\nNode \d was started at \s.\b\n' with formatLongDateTime(nodeStart)
   const nodeStartTime = session.nodeStartTime || Date.now();
   const startTime = formatLongDateTime(new Date(nodeStartTime));
+  // express.e:25667-25673 ENDPROC RESULT_SUCCESS — no press-key; main loop sets menuPause:=TRUE
   socket.emit('ansi-output', `\r\nNode ${session.nodeId || 1} was started at ${startTime}.\r\n`);
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**

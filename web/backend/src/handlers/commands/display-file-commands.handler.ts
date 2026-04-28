@@ -174,8 +174,10 @@ async function displayFileList(socket: any, session: BBSSession, params: string,
   const fileAreas = await _db.getFileAreas(conferenceId);
 
   if (fileAreas.length === 0) {
-    socket.emit('ansi-output', AnsiUtil.errorLine('No file areas available in this conference.'));
-    finalizeCommand(socket, session, 'File areas unavailable');
+    // express.e myError(ERR_NOFILES=5): 'No files available in this conference.\b\n\b\n'
+    socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
@@ -211,9 +213,8 @@ async function displayFileList(socket: any, session: BBSSession, params: string,
       `Reverse scanning directory ${areaNumber}` :
       `Scanning directory ${areaNumber}`;
 
-    socket.emit('ansi-output', AnsiUtil.colorize(headerText, 'cyan') + '\r\n');
-    socket.emit('ansi-output', AnsiUtil.colorize(`Area: ${area.name}`, 'yellow') + '\r\n');
-    socket.emit('ansi-output', '\r\n');
+    // express.e:27667-27683 'Scanning directory \d\b\n' or 'Reverse scanning directory \d\b\n' — plain text
+    socket.emit('ansi-output', headerText + '\r\n');
 
     // Get files in this area - express.e:27695 displayIt()
     const files = await _db.getFilesByArea(area.id);
