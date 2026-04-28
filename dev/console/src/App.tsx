@@ -11,6 +11,11 @@ import { CallersTab } from './components/tabs/CallersTab.js';
 import { LogsTab } from './components/tabs/LogsTab.js';
 import { DoorsTab } from './components/tabs/DoorsTab.js';
 import { SystemTab } from './components/tabs/SystemTab.js';
+import { SystemConfigPage } from './components/tabs/SystemConfigPage.js';
+import { HealthCheckPage } from './components/tabs/HealthCheckPage.js';
+import { AuditLogPage } from './components/tabs/AuditLogPage.js';
+import { SessionLogsPage } from './components/tabs/SessionLogsPage.js';
+import { OperatorChatPage } from './components/tabs/OperatorChatPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
@@ -23,14 +28,20 @@ interface Props {
 // every tab module into the registry (which is read by the Sidebar even when
 // some pages aren't implemented yet).
 const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
-  dashboard: DashboardTab,
-  nodes:     NodesTab,
-  users:     UsersTab,
-  confs:     ConfsTab,
-  callers:   CallersTab,
-  logs:      LogsTab,
-  doors:     DoorsTab,
-  system:    SystemTab,
+  dashboard:      DashboardTab,
+  nodes:          NodesTab,
+  users:          UsersTab,
+  confs:          ConfsTab,
+  callers:        CallersTab,
+  logs:           LogsTab,
+  doors:          DoorsTab,
+  system:         SystemTab,
+  // Phase B
+  'system-config': SystemConfigPage,
+  health:          HealthCheckPage,
+  audit:           AuditLogPage,
+  sessions:        SessionLogsPage,
+  'op-chat':       OperatorChatPage,
 };
 
 export function App({ username }: Props) {

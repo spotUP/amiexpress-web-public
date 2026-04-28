@@ -68,7 +68,20 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-  { id: 'op-chat', label: 'Operator Chat', category: 'Live', footerHint: '(coming in phase B)', helpKeys: [], implemented: false },
+  {
+    id: 'op-chat',
+    label: 'Operator Chat',
+    category: 'Live',
+    footerHint: '[enter] accept  [esc] end  [1-4] quick reply',
+    helpKeys: [
+      ['↑↓',     'Select a pending page'],
+      ['enter',  'Accept the selected page and start chat'],
+      ['esc',    'End the active chat'],
+      ['1-4',    'Send a canned quick reply'],
+      ['type',   'Type a message and press [enter] to send'],
+    ],
+    implemented: true,
+  },
 
   // ─── Users ─────────────────────────────────────────────────────
   {
@@ -88,7 +101,32 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
   { id: 'security', label: 'Security', category: 'Users', footerHint: '(coming in phase C)', helpKeys: [], implemented: false },
-  { id: 'audit',    label: 'Audit Log', category: 'Users', footerHint: '(coming in phase B)', helpKeys: [], implemented: false },
+  {
+    id: 'audit',
+    label: 'Audit Log',
+    category: 'Users',
+    footerHint: '[/]filter table  [c]lear  [r]efresh  [↑↓] scroll',
+    helpKeys: [
+      ['↑↓', 'Select an entry — its before/after diff shows below'],
+      ['/',  'Filter by table name'],
+      ['c',  'Clear filter'],
+      ['r',  'Refresh from server'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'sessions',
+    label: 'Session Logs',
+    category: 'Users',
+    footerHint: '[enter] view session log  [r]efresh  [↑↓] scroll',
+    helpKeys: [
+      ['↑↓', 'Select a session'],
+      ['enter / click', 'Open the session log'],
+      ['esc', 'Back to session list (when viewing a log)'],
+      ['r',  'Refresh from server'],
+    ],
+    implemented: true,
+  },
 
   // ─── Content ───────────────────────────────────────────────────
   {
@@ -126,8 +164,33 @@ export const PAGES: PageMeta[] = [
   { id: 'import-export',  label: 'Import / Export', category: 'Files', footerHint: '(coming in phase D)', helpKeys: [], implemented: false },
 
   // ─── System ────────────────────────────────────────────────────
-  { id: 'system-config',  label: 'System Config',   category: 'System', footerHint: '(coming in phase B)', helpKeys: [], implemented: false },
-  { id: 'health',         label: 'Health Check',    category: 'System', footerHint: '(coming in phase B)', helpKeys: [], implemented: false },
+  {
+    id: 'system-config',
+    label: 'System Config',
+    category: 'System',
+    footerHint: '[e]dit  [s]ave  [r]efresh  [R]revert  [↑↓] select',
+    helpKeys: [
+      ['↑↓', 'Select a field'],
+      ['e',  'Edit the selected field'],
+      ['s',  'Save all pending changes'],
+      ['R',  'Revert all pending changes'],
+      ['r',  'Refresh from server (discards pending)'],
+      ['Pending fields are marked with * and shown in yellow', ''],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'health',
+    label: 'Health Check',
+    category: 'System',
+    footerHint: '[f]ix  [r]efresh  auto-refresh 30s',
+    helpKeys: [
+      ['f', 'Run auto-fix for all fixable issues'],
+      ['r', 'Refresh now'],
+      ['Issues in red are errors, yellow are warnings', ''],
+    ],
+    implemented: true,
+  },
   { id: 'deployment',     label: 'Deployment',      category: 'System', footerHint: '(coming in phase E)', helpKeys: [], implemented: false },
   {
     id: 'system',

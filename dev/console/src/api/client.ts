@@ -153,3 +153,85 @@ export async function setQuietMode(enabled: boolean) {
     body: JSON.stringify({ enabled }),
   });
 }
+
+// ───── Phase B additions ────────────────────────────────────────────
+
+export async function updateSystemConfig(updates: Record<string, unknown>) {
+  return request<{ success: boolean }>('/api/config/system', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export interface HealthIssue {
+  category?: string;
+  severity?: 'ok' | 'warning' | 'error' | string;
+  message: string;
+  fixable?: boolean;
+  details?: string;
+}
+
+export async function getHealthCheck() {
+  const res = await request<{ success: boolean; data: { issues?: HealthIssue[]; healthy?: boolean; [k: string]: unknown } }>('/api/config/health');
+  return res.data;
+}
+
+export async function autoFixHealth() {
+  return request<{ success: boolean; message?: string; data?: { fixed?: number } }>('/api/config/health/auto-fix', {
+    method: 'POST',
+  });
+}
+
+export interface AuditEntry {
+  id: number;
+  table_name: string;
+  record_id: string | number;
+  action: string;
+  changed_by?: string;
+  before?: unknown;
+  after?: unknown;
+  timestamp: string;
+}
+
+export async function getAuditLog(opts: { tableName?: string; limit?: number } = {}) {
+  const params = new URLSearchParams();
+  if (opts.tableName) params.set('tableName', opts.tableName);
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const q = params.toString();
+  const res = await request<{ success: boolean; data: AuditEntry[] }>(`/api/config/audit${q ? '?' + q : ''}`);
+  return res.data ?? [];
+}
+
+export interface SessionInfo {
+  id: string;
+  username?: string;
+  nodeId?: number;
+  startedAt?: string;
+  endedAt?: string | null;
+  active?: boolean;
+}
+
+export async function getSessions() {
+  const res = await request<{ success: boolean; data: SessionInfo[] }>('/api/sessions');
+  return res.data ?? [];
+}
+
+export async function getSessionLog(sessionId: string) {
+  const res = await request<{ success: boolean; data: { lines?: string[]; entries?: unknown[]; [k: string]: unknown } }>(`/api/sessions/${sessionId}/log`);
+  return res.data;
+}
+
+export interface OperatorChatConfig {
+  page_timeout_seconds?: number;
+  cooldown_seconds?: number;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  discord_webhook_url?: string;
+  quick_replies?: string[];
+  [k: string]: unknown;
+}
+
+export async function getOperatorChatConfig() {
+  const res = await request<{ success: boolean; data: OperatorChatConfig }>('/api/config/operator-chat');
+  return res.data;
+}
