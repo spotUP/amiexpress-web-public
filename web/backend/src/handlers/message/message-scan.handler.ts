@@ -889,9 +889,7 @@ export async function displayMailScanScreen(socket: any, session: any): Promise<
     }
   }
 
-  // Now perform the actual scan
+  // Now perform the actual scan — express.e confScan just calls joinConf/scanMessages; main loop sets menuPause:=TRUE
   await performConferenceScan(socket, session);
-
-  // Press any key to continue
-  socket.emit('ansi-output', '\r\n' + AnsiUtil.pressKeyPrompt());
+  session.menuPause = true;
 }

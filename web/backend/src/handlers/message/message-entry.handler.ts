@@ -550,8 +550,8 @@ console.error('[Webhook] Error sending new message webhook:', error);
       );
     }
 
-    // WEB_: press-key prompt so user sees the message before menu redisplays
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+    // express.e saves message and returns to main loop; main loop sets menuPause:=TRUE
+    session.menuPause = true;
 
   } catch (error) {
 console.error('[saveMessage] Error:', error);

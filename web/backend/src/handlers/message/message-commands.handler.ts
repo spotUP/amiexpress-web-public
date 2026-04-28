@@ -88,7 +88,7 @@ export function setMessageCommandsDependencies(deps: {
  * @param session - Current BBS session
  * @param params - Optional message base number (e.g., "2") or conference.msgbase (e.g., "1.2")
  */
-export function handleJoinMessageBaseCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleJoinMessageBaseCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Check security - express.e:25191
   if (!checkSecurity(session.user, ACSPermission.JOIN_CONFERENCE)) {
     ErrorHandler.permissionDenied(socket, 'join message base', {
@@ -102,14 +102,11 @@ console.log('[ENV] Join');
   const parsedParams = ParamsUtil.parse(params);
   let newMsgBase = -1;
 
-  // If params contain ".", delegate to J command (join conference) - express.e:25197-25200
+  // If params contain ".", delegate to J command (join conference) - express.e:25203-25205
+  // express.e just calls internalCommandJ(params) silently — no message
   if (parsedParams.length > 0 && parsedParams[0].includes('.')) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.warningLine('Use J command to join conferences (e.g., "J 1.2")'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    const { handleJoinConferenceCommand } = require('../commands/navigation-commands.handler');
+    await handleJoinConferenceCommand(socket, session, params);
     return;
   }
 
@@ -148,14 +145,6 @@ console.log('[ENV] Join');
     // Try to display JoinMsgBase screen (conference-specific or generic)
     _displayScreen(socket, session, 'JOINMSGBASE');
 
-    emitText(socket, '\r\n');
-    emitText(socket, 'Available message bases:\r\n');
-    currentConfBases.forEach((mb, index) => {
-      const num = index + 1;
-      const currentIndicator = mb.id === session.currentMsgBase ? AnsiUtil.colorize(' <-- Current', 'green') : '';
-      emitText(socket, `${num}. ${mb.name}${currentIndicator}\r\n`);
-    });
-
     // express.e:25224: 'Message Base Number (1-N): ' — plain text
     emitText(socket, `Message Base Number (1-${msgBaseCount}): `);
 
@@ -176,17 +165,10 @@ console.log('[ENV] Join');
     // Join the message base - express.e:25232
     _joinConference(socket, session, session.currentConf!, selectedBase.id);
 
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.successLine(`Joined message base: ${selectedBase.name}`));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+  // express.e:25232 joinConf() already outputs 'Joining Conference: ...' — no extra message
   } else {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('Invalid message base number'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+    emitText(socket, '\r\nCommand requires higher access.\r\n');
   }
-
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -210,9 +192,7 @@ export function handleJMInput(socket: any, session: BBSSession, input: string): 
   const msgBaseNum = parseInt(input.trim());
 
   if (isNaN(msgBaseNum) || msgBaseNum < 1 || msgBaseNum > currentConfBases.length) {
-    emitText(socket, AnsiUtil.errorLine('Invalid message base number'));
-    emitText(socket, '\r\n');
-    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
+    // express.e:25230-25234 — invalid number just clamps; no error message
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -221,10 +201,8 @@ export function handleJMInput(socket: any, session: BBSSession, input: string): 
   const selectedBase = currentConfBases[msgBaseNum - 1];
 
   if (selectedBase) {
+    // express.e:25236 joinConf() - outputs "Joining Conference: {name}" already
     _joinConference(socket, session, session.currentConf!, selectedBase.id);
-    emitText(socket, AnsiUtil.successLine(`Joined message base: ${selectedBase.name}`));
-  } else {
-    emitText(socket, AnsiUtil.errorLine('Invalid message base'));
   }
 
   emitText(socket, '\r\n');
