@@ -141,9 +141,11 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   /* -- Keyboard bindings ------------------------------------------ */
 
   screen.key(['b','B'], () => {
+    console.log(`[GANJA] key B pressed, mode=${mode}`);
     if (mode !== 'normal') return;
     showBuyOverlay(screen, marketState, state,
       (drug, amt) => runAction(async () => {
+        console.log(`[GANJA] buyDrug drug=${drug} amt=${amt}`);
         const r = await server.buyDrug(id, drug, amt);
         await applyResult(r);
         fullRender();
@@ -153,9 +155,11 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   });
 
   screen.key(['s','S'], () => {
+    console.log(`[GANJA] key S pressed, mode=${mode}`);
     if (mode !== 'normal') return;
     showSellOverlay(screen, state, marketState,
       (drug, amt) => runAction(async () => {
+        console.log(`[GANJA] sellDrug drug=${drug} amt=${amt}`);
         const r = await server.sellDrug(id, drug, amt);
         await applyResult(r);
         fullRender();
@@ -165,9 +169,11 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   });
 
   screen.key(['j','J'], () => {
+    console.log(`[GANJA] key J pressed, mode=${mode}`);
     if (mode !== 'normal') return;
     showJetOverlay(screen, state.location, server.getLocationNames(),
       (loc) => runAction(async () => {
+        console.log(`[GANJA] jetTo loc=${loc}`);
         const r = await server.jetTo(id, loc);
         updatePresenceSub(r.newState.location);
         await applyResult(r);
@@ -178,6 +184,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   });
 
   screen.key(['h','H'], () => {
+    console.log(`[GANJA] key H pressed, mode=${mode}`);
     if (mode !== 'normal') return;
     runAction(async () => {
       showHighScores(screen, await server.getHighScores(), () => fullRender());
@@ -185,11 +192,17 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   });
 
   screen.key(['q','Q'], () => {
+    console.log(`[GANJA] key Q pressed`);
     runAction(async () => {
       await server.leaveGame(id);
       inputManager.disable();
       screen.destroy();
     });
+  });
+
+  // Log any unhandled keypress at screen level for diagnostics
+  screen.on('keypress', (_ch: any, key: any) => {
+    console.log(`[GANJA] screen keypress: ${key?.full ?? key?.name ?? JSON.stringify(key)} mode=${mode}`);
   });
 
   /* -- Boot ------------------------------------------------------- */

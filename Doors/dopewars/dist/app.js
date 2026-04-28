@@ -138,27 +138,33 @@ async function createApp(ctx, server) {
     }
     /* -- Keyboard bindings ------------------------------------------ */
     screen.key(['b', 'B'], () => {
+        console.log(`[GANJA] key B pressed, mode=${mode}`);
         if (mode !== 'normal')
             return;
         (0, actions_1.showBuyOverlay)(screen, marketState, state, (drug, amt) => runAction(async () => {
+            console.log(`[GANJA] buyDrug drug=${drug} amt=${amt}`);
             const r = await server.buyDrug(id, drug, amt);
             await applyResult(r);
             fullRender();
         }), () => fullRender());
     });
     screen.key(['s', 'S'], () => {
+        console.log(`[GANJA] key S pressed, mode=${mode}`);
         if (mode !== 'normal')
             return;
         (0, actions_1.showSellOverlay)(screen, state, marketState, (drug, amt) => runAction(async () => {
+            console.log(`[GANJA] sellDrug drug=${drug} amt=${amt}`);
             const r = await server.sellDrug(id, drug, amt);
             await applyResult(r);
             fullRender();
         }), () => fullRender());
     });
     screen.key(['j', 'J'], () => {
+        console.log(`[GANJA] key J pressed, mode=${mode}`);
         if (mode !== 'normal')
             return;
         (0, actions_1.showJetOverlay)(screen, state.location, server.getLocationNames(), (loc) => runAction(async () => {
+            console.log(`[GANJA] jetTo loc=${loc}`);
             const r = await server.jetTo(id, loc);
             updatePresenceSub(r.newState.location);
             await applyResult(r);
@@ -166,6 +172,7 @@ async function createApp(ctx, server) {
         }), () => fullRender());
     });
     screen.key(['h', 'H'], () => {
+        console.log(`[GANJA] key H pressed, mode=${mode}`);
         if (mode !== 'normal')
             return;
         runAction(async () => {
@@ -173,11 +180,16 @@ async function createApp(ctx, server) {
         });
     });
     screen.key(['q', 'Q'], () => {
+        console.log(`[GANJA] key Q pressed`);
         runAction(async () => {
             await server.leaveGame(id);
             inputManager.disable();
             screen.destroy();
         });
+    });
+    // Log any unhandled keypress at screen level for diagnostics
+    screen.on('keypress', (_ch, key) => {
+        console.log(`[GANJA] screen keypress: ${key?.full ?? key?.name ?? JSON.stringify(key)} mode=${mode}`);
     });
     /* -- Boot ------------------------------------------------------- */
     inputManager.enable();

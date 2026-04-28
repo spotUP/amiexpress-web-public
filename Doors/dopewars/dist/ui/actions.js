@@ -21,7 +21,7 @@ function renderActionBar(box, mode) {
         return;
     }
     box.setContent('  {bold}[B]{/}uy  {bold}[S]{/}ell  {bold}[J]{/}et  {bold}[H]{/}iscores  {bold}[Q]{/}uit' +
-        '    {grey-fg}bank/loan/guns triggered on arrival{/}');
+        '    {grey-fg}click market to buy · click inventory to sell{/}');
 }
 function overlay(screen, opts) {
     return blessed_1.default.box({
@@ -34,16 +34,16 @@ function overlay(screen, opts) {
     });
 }
 /* ─── Buy overlay ──────────────────────────────────────────
- * List navigation: up/down arrows.
- * Amount: [<] and [>] keys (left/right arrows), or type digits.
- * Enter to confirm, ESC to cancel.
+ * Click list item OR press Enter to confirm.
+ * [<]/[>] to adjust amount, digits to type amount.
+ * ESC to cancel.
  */
 function showBuyOverlay(screen, market, state, onBuy, onCancel) {
     const coatFree = state.coatSize - state.drugs.reduce((s, d) => s + d.carried, 0);
     const box = overlay(screen, {
         width: 50,
         height: Math.min(market.prices.length, 12) + 6,
-        label: ' BUY ',
+        label: ' BUY — click item or Enter to confirm ',
     });
     const list = (0, blessed_helpers_1.createList)({
         parent: box,
@@ -63,6 +63,7 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
     });
     let amount = 1;
     let typing = false;
+    let closed = false;
     function currentPrice() {
         const idx = list.selected ?? 0;
         return market.prices[idx]?.price ?? 0;
@@ -87,17 +88,19 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         if (amount > max)
             amount = max;
     }
-    let unbind;
+    let unbindEnter = () => { };
+    let unbindOther = () => { };
+    function unbind() { unbindOther(); unbindEnter(); }
     function cleanup() {
+        closed = true;
         unbind();
         list.removeAllListeners('select');
         box.destroy();
         screen.render();
     }
-    const leftFn = () => { amount = Math.max(1, amount - 1); typing = false; renderStatus(); };
-    const rightFn = () => { clampAmount(); amount = Math.min(maxAmount(), amount + 1); typing = false; renderStatus(); };
-    const escapeFn = () => { cleanup(); onCancel(); };
-    const enterFn = () => {
+    function confirm() {
+        if (closed)
+            return;
         clampAmount();
         if (amount >= 1) {
             const idx = list.selected ?? 0;
@@ -107,41 +110,49 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
                 onBuy(p.index, amount);
             }
         }
-    };
-    const backspaceFn = () => {
-        const s = String(amount).slice(0, -1);
-        amount = s.length ? parseInt(s, 10) : 1;
-        renderStatus();
-    };
-    // When list selection changes, reset amount
+    }
+    // Mouse: clicking a list item selects + confirms immediately
+    list.on('select', (_item, idx) => {
+        list.select(idx);
+        confirm();
+    });
+    // Reset amount when drug selection changes (keyboard nav)
     list.on('action', () => { amount = 1; typing = false; renderStatus(); });
     const digitBindings = [];
     for (let d = 0; d <= 9; d++) {
         const digit = d;
-        const fn = () => {
-            if (!typing || amount === 0) {
-                amount = digit;
-                typing = true;
-            }
-            else {
-                const n = parseInt(String(amount) + String(digit), 10);
-                amount = n;
-            }
-            clampAmount();
-            renderStatus();
-        };
-        digitBindings.push([[String(d)], fn]);
+        digitBindings.push([[String(d)], () => {
+                if (!typing || amount === 0) {
+                    amount = digit;
+                    typing = true;
+                }
+                else {
+                    amount = parseInt(String(amount) + String(digit), 10);
+                }
+                clampAmount();
+                renderStatus();
+            }]);
     }
-    unbind = (0, blessed_helpers_1.bindKeys)(screen, [
-        [['left'], leftFn],
-        [['right'], rightFn],
-        [['escape'], escapeFn],
-        [['enter'], enterFn],
-        [['backspace'], backspaceFn],
-        ...digitBindings,
-    ]);
+    list.select(0);
     list.focus();
     renderStatus();
+    // All keys except Enter bind immediately — Escape/arrows/digits active right away.
+    unbindOther = (0, blessed_helpers_1.bindKeys)(screen, [
+        [['escape'], () => { cleanup(); onCancel(); }],
+        [['left'], () => { amount = Math.max(1, amount - 1); typing = false; renderStatus(); }],
+        [['right'], () => { clampAmount(); amount = Math.min(maxAmount(), amount + 1); typing = false; renderStatus(); }],
+        [['up'], () => { list.up(1); amount = 1; typing = false; renderStatus(); }],
+        [['down'], () => { list.down(1); amount = 1; typing = false; renderStatus(); }],
+        [['backspace'], () => { const s = String(amount).slice(0, -1); amount = s.length ? parseInt(s, 10) : 1; renderStatus(); }],
+        ...digitBindings,
+    ]);
+    // Enter deferred one tick to drain any buffered Enter from the previous action.
+    // Guard with `closed` so a quick Escape does not create a ghost handler.
+    setImmediate(() => {
+        if (closed)
+            return;
+        unbindEnter = (0, blessed_helpers_1.bindKeys)(screen, [[['enter'], confirm]]);
+    });
 }
 /* ─── Sell overlay ─────────────────────────────────────── */
 function showSellOverlay(screen, state, market, onSell, onCancel) {
@@ -154,7 +165,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
     const box = overlay(screen, {
         width: 50,
         height: Math.min(carrying.length, 12) + 6,
-        label: ' SELL ',
+        label: ' SELL — click item or Enter to confirm ',
     });
     const list = (0, blessed_helpers_1.createList)({
         parent: box,
@@ -177,6 +188,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
     });
     let amount = 1;
     let typing = false;
+    let closed = false;
     function currentMax() {
         const idx = list.selected ?? 0;
         return carrying[idx]?.carried ?? 1;
@@ -194,17 +206,19 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
         if (amount > max)
             amount = max;
     }
-    let unbind;
+    let unbindEnter = () => { };
+    let unbindOther = () => { };
+    function unbind() { unbindOther(); unbindEnter(); }
     function cleanup() {
+        closed = true;
         unbind();
         list.removeAllListeners('select');
         box.destroy();
         screen.render();
     }
-    const leftFn = () => { amount = Math.max(1, amount - 1); typing = false; renderStatus(); };
-    const rightFn = () => { clampAmount(); amount = Math.min(currentMax(), amount + 1); typing = false; renderStatus(); };
-    const escapeFn = () => { cleanup(); onCancel(); };
-    const enterFn = () => {
+    function confirm() {
+        if (closed)
+            return;
         clampAmount();
         if (amount >= 1) {
             const idx = list.selected ?? 0;
@@ -214,39 +228,44 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
                 onSell(d.index, amount);
             }
         }
-    };
-    const backspaceFn = () => {
-        const s = String(amount).slice(0, -1);
-        amount = s.length ? parseInt(s, 10) : 1;
-        renderStatus();
-    };
+    }
+    list.on('select', (_item, idx) => {
+        list.select(idx);
+        confirm();
+    });
     list.on('action', () => { amount = 1; typing = false; renderStatus(); });
     const digitBindings = [];
     for (let d = 0; d <= 9; d++) {
         const digit = d;
-        const fn = () => {
-            if (!typing || amount === 0) {
-                amount = digit;
-                typing = true;
-            }
-            else {
-                amount = parseInt(String(amount) + String(digit), 10);
-            }
-            clampAmount();
-            renderStatus();
-        };
-        digitBindings.push([[String(d)], fn]);
+        digitBindings.push([[String(d)], () => {
+                if (!typing || amount === 0) {
+                    amount = digit;
+                    typing = true;
+                }
+                else {
+                    amount = parseInt(String(amount) + String(digit), 10);
+                }
+                clampAmount();
+                renderStatus();
+            }]);
     }
-    unbind = (0, blessed_helpers_1.bindKeys)(screen, [
-        [['left'], leftFn],
-        [['right'], rightFn],
-        [['escape'], escapeFn],
-        [['enter'], enterFn],
-        [['backspace'], backspaceFn],
-        ...digitBindings,
-    ]);
+    list.select(0);
     list.focus();
     renderStatus();
+    unbindOther = (0, blessed_helpers_1.bindKeys)(screen, [
+        [['escape'], () => { cleanup(); onCancel(); }],
+        [['left'], () => { amount = Math.max(1, amount - 1); typing = false; renderStatus(); }],
+        [['right'], () => { clampAmount(); amount = Math.min(currentMax(), amount + 1); typing = false; renderStatus(); }],
+        [['up'], () => { list.up(1); amount = 1; typing = false; renderStatus(); }],
+        [['down'], () => { list.down(1); amount = 1; typing = false; renderStatus(); }],
+        [['backspace'], () => { const s = String(amount).slice(0, -1); amount = s.length ? parseInt(s, 10) : 1; renderStatus(); }],
+        ...digitBindings,
+    ]);
+    setImmediate(() => {
+        if (closed)
+            return;
+        unbindEnter = (0, blessed_helpers_1.bindKeys)(screen, [[['enter'], confirm]]);
+    });
 }
 /* ─── Jet overlay ──────────────────────────────────────── */
 function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel) {
@@ -254,7 +273,7 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
     const box = overlay(screen, {
         width: 36,
         height: Math.min(items.length, 12) + 4,
-        label: ' JET TO ',
+        label: ' JET TO — click or Enter ',
     });
     const list = (0, blessed_helpers_1.createList)({
         parent: box,
@@ -265,7 +284,7 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         keys: true, mouse: true,
         items,
     });
-    const hint = blessed_1.default.box({
+    blessed_1.default.box({
         parent: box,
         bottom: 1, left: 0,
         width: '100%-2', height: 1,
@@ -274,23 +293,45 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         content: '  [Enter] jet   [ESC] cancel',
     });
     list.select(currentLocation);
-    let unbind;
+    let unbindEnter = () => { };
+    let unbindOther = () => { };
+    let closed = false;
+    function unbind() { unbindOther(); unbindEnter(); }
     function cleanup() {
+        closed = true;
         unbind();
         list.removeAllListeners('select');
         box.destroy();
         screen.render();
     }
-    const escapeFn = () => { cleanup(); onCancel(); };
-    unbind = (0, blessed_helpers_1.bindKeys)(screen, [[['escape'], escapeFn]]);
-    list.on('select', (_item, index) => {
-        if (index === currentLocation)
+    function jetTo(index) {
+        if (closed)
             return;
+        if (index === currentLocation) {
+            cleanup();
+            onCancel();
+            return;
+        }
         cleanup();
         onJet(index);
+    }
+    // Mouse: clicking a location jets there immediately
+    list.on('select', (_item, idx) => {
+        list.select(idx);
+        jetTo(idx);
     });
     list.focus();
     screen.render();
+    unbindOther = (0, blessed_helpers_1.bindKeys)(screen, [
+        [['escape'], () => { cleanup(); onCancel(); }],
+        [['up'], () => { list.up(1); screen.render(); }],
+        [['down'], () => { list.down(1); screen.render(); }],
+    ]);
+    setImmediate(() => {
+        if (closed)
+            return;
+        unbindEnter = (0, blessed_helpers_1.bindKeys)(screen, [[['enter'], () => jetTo(list.selected ?? currentLocation)]]);
+    });
 }
 /* ─── Question overlay ─────────────────────────────────── */
 function showQuestionOverlay(screen, question, onAnswer) {
@@ -298,12 +339,19 @@ function showQuestionOverlay(screen, question, onAnswer) {
     const displayPrompt = raw.includes('^') ? raw.split('^').slice(1).join('^').trim() : raw.trim();
     const box = overlay(screen, { width: 62, height: 7, label: ' ACTION REQUIRED ' });
     box.setContent('\n  ' + displayPrompt + '\n\n  {bold}[Y]{/}es  {bold}[N]{/}o  {bold}[ESC]{/} = No');
-    let unbind;
-    function cleanup() { unbind(); box.destroy(); screen.render(); }
-    const yesFn = () => { cleanup(); onAnswer('y'); };
-    const noFn = () => { cleanup(); onAnswer('n'); };
+    let closed = false;
+    let unbind = () => { };
+    function cleanup() { closed = true; unbind(); box.destroy(); screen.render(); }
+    const yesFn = () => { if (!closed) {
+        cleanup();
+        onAnswer('y');
+    } };
+    const noFn = () => { if (!closed) {
+        cleanup();
+        onAnswer('n');
+    } };
     unbind = (0, blessed_helpers_1.bindKeys)(screen, [
-        [['y', 'Y'], yesFn],
+        [['y', 'Y', 'enter'], yesFn], // Enter = Yes (most natural confirmation)
         [['n', 'N', 'escape'], noFn],
     ]);
     box.focus();
@@ -318,10 +366,12 @@ function showHighScores(screen, scores, onClose) {
         width: 62, height: Math.min(rows.length + 5, 22), label: ' HIGH SCORES ',
     });
     box.setContent(rows.join('\n') + '\n\n  {bold}[ESC]{/} or {bold}[Q]{/} to close');
-    let unbind;
-    function cleanup() { unbind(); box.destroy(); screen.render(); }
-    const closeFn = () => { cleanup(); onClose(); };
-    unbind = (0, blessed_helpers_1.bindKeys)(screen, [[['escape', 'q', 'Q'], closeFn]]);
+    let unbind = () => { };
+    let closed = false;
+    function cleanup() { closed = true; unbind(); box.destroy(); screen.render(); }
+    const closeFn = () => { if (!closed)
+        cleanup(); onClose(); };
+    unbind = (0, blessed_helpers_1.bindKeys)(screen, [[['escape', 'q', 'Q', 'enter'], closeFn]]);
     box.focus();
     screen.render();
 }
