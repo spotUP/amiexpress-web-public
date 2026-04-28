@@ -80,11 +80,13 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
     }
 
     // For non-C64 terminals, show the graphics prompt
-    // express.e:29528 - ANSI prompt
+    // express.e:29528 - aePuts('ANSI, RIP or No graphics (A/r/n)? ')
+    // WEB_: PETSCII option removed — not in express.e:29528. C64 terminals are detected
+    // via telnet TTYPE negotiation (see c64 branch above) and never reach this prompt.
 console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
     session.subState = LoggedOnSubState.ANSI_PROMPT;
     session.tempData = { inputBuffer: '' }; // Initialize input buffer
-    socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+    socket.emit('ansi-output', '\r\nANSI, RIP or No graphics (A/r/n)? ');
     return true;
   }
 

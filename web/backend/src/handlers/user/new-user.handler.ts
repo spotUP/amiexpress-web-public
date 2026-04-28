@@ -26,6 +26,7 @@ import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
 import { loadBBSConfig } from '../../services/bbs-config-file.service';
+import { parseInfoFile } from '../../utils/info-file.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
 // materially, so re-consent can be forced for existing users).
@@ -240,6 +241,68 @@ async function continueAfterGdprConsent(socket: Socket, session: any) {
 }
 
 /**
+ * Load banned names from NamesNotAllowed.info tooltypes (NAME.1, NAME.2, ...).
+ * express.e:11254-11266 — TOOLTYPE_NAMESNOTALLOWED, NAME.n tooltype entries.
+ */
+function loadBannedNames(): string[] {
+  const banned: string[] = [];
+  try {
+    const baseDir = config.getConfig().dataDir;
+    const candidates = [
+      path.join(baseDir, 'NamesNotAllowed.info'),
+      path.join(baseDir, '..', 'NamesNotAllowed.info')
+    ];
+    let infoPath: string | null = null;
+    for (const p of candidates) {
+      if (amigafs.existsSync(p)) {
+        infoPath = p;
+        break;
+      }
+    }
+    if (!infoPath) return banned;
+    const info = parseInfoFile(infoPath);
+    for (const tt of info.tooltypes) {
+      if (tt.commented) continue;
+      if (/^NAME\.\d+$/i.test(tt.key) && tt.value) {
+        banned.push(tt.value.toLowerCase());
+      }
+    }
+  } catch (error) {
+    console.warn('[NEW USER] Unable to load NamesNotAllowed.info:', error);
+  }
+  return banned;
+}
+
+/**
+ * Check if a name contains wildcards (express.e:11226-11232 checkForAst).
+ * Returns true if the name contains '*' (wildcard).
+ */
+function checkForAst(name: string): boolean {
+  return name.includes('*');
+}
+
+/**
+ * Check if a name is allowed (express.e:11234-11268 checkIfNameAllowed).
+ * Returns null if allowed, or the rejection message string if disallowed.
+ * Checks: empty, 'NEW', starts with 'ACS.', banned list.
+ */
+function checkIfNameAllowed(name: string): string | null {
+  const upper = name.toUpperCase();
+  // express.e:11239-11241
+  if (name === '') return 'Username not allowed!!';
+  // express.e:11244-11246
+  if (upper === 'NEW') return 'Username not allowed!!';
+  // express.e:11249-11251
+  if (upper.startsWith('ACS.')) return 'Username not allowed!!';
+  // express.e:11254-11266 — banned names from NamesNotAllowed.info
+  const banned = loadBannedNames();
+  for (const b of banned) {
+    if (b === upper.toLowerCase()) return 'Username not allowed!!';
+  }
+  return null;
+}
+
+/**
  * Prompt for name - express.e:30141
  */
 function promptForName(socket: Socket, session: any) {
@@ -253,7 +316,18 @@ function promptForName(socket: Socket, session: any) {
 }
 
 /**
- * Handle name input - express.e:30115-30168
+ * Handle name input - express.e:30128-30189
+ *
+ * express.e uses a FOR i:=0 TO 4 loop (5 iterations) where any rejection
+ * (blank, 1-char, checkIfNameAllowed, wildcard, duplicate) loops back via
+ * JUMP floopc.  After 5 total iterations the loop falls through and prints
+ * "Too Many Errors, Goodbye!".  A separate `ch` counter tracks blank-only
+ * entries and disconnects after >5 consecutive blanks (express.e:30148-30154).
+ *
+ * We mirror this with a single retryCount that increments for every failure
+ * regardless of type, disconnecting after 5.  Blank also gets the extra
+ * early-exit at >5 blank-only attempts (expressed as the same counter here
+ * since the outer loop already caps at 5).
  */
 export async function handleNameInput(socket: Socket, session: any, input: string) {
   // If input is empty but we have a prefill in inputBuffer, use that
@@ -265,7 +339,7 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
 
   session.newUserData.retryCount = session.newUserData.retryCount || 0;
 
-  // express.e:30138 - IF(StrLen(loggedOnUser.name)=0)
+  // express.e:30148-30154 - IF(StrLen(loggedOnUser.name)=0) ch++ IF(ch>5) TooMany
   if (name === '') {
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount > 5) {
@@ -278,23 +352,68 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     return;
   }
 
-  // express.e:30126 - IF(StrLen(loggedOnUser.name)=1)
+  // express.e:30157-30159 - IF(StrLen(loggedOnUser.name)=1) "Get REAL!!"
   if (name.length === 1) {
     socket.emit('ansi-output', '\r\nGet REAL!!  One Character???\r\n');
+    // express.e:30159 JUMP floopc - counts toward the retry limit
+    session.newUserData.retryCount++;
+    if (session.newUserData.retryCount >= 5) {
+      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
+      setTimeout(() => socket.disconnect(), 500);
+      return;
+    }
     promptForName(socket, session);
     return;
   }
 
-  // express.e:30135 - aePuts('\b\nChecking for duplicate name...')
+  // express.e:30163-30165 - checkIfNameAllowed
+  const notAllowedMsg = checkIfNameAllowed(name);
+  if (notAllowedMsg !== null) {
+    socket.emit('ansi-output', `\r\n${notAllowedMsg}\r\n\r\n`);
+    // express.e:30164 JUMP floopc - counts toward retry limit
+    session.newUserData.retryCount++;
+    if (session.newUserData.retryCount >= 5) {
+      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
+      setTimeout(() => socket.disconnect(), 500);
+      return;
+    }
+    promptForName(socket, session);
+    return;
+  }
+
+  // express.e:30169-30175 - checkForAst: no wildcards in name
+  if (checkForAst(name)) {
+    socket.emit('ansi-output', '\r\nNo wildcards allowed in a name.\r\n');
+    // express.e:30174 JUMP floopc - counts toward retry limit
+    session.newUserData.retryCount++;
+    if (session.newUserData.retryCount >= 5) {
+      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
+      setTimeout(() => socket.disconnect(), 500);
+      return;
+    }
+    promptForName(socket, session);
+    return;
+  }
+
+  // express.e:30169 - aePuts('\b\nChecking for duplicate name...')
   socket.emit('ansi-output', '\r\nChecking for duplicate name...');
 
   const existingUser = await db.getUserByUsername(name);
   if (existingUser) {
+    // express.e:30179 - aePuts('Already in use!, try another.\b\n')
     socket.emit('ansi-output', 'Already in use!, try another.\r\n');
+    // express.e:30180 JUMP floopc - counts toward retry limit
+    session.newUserData.retryCount++;
+    if (session.newUserData.retryCount >= 5) {
+      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
+      setTimeout(() => socket.disconnect(), 500);
+      return;
+    }
     promptForName(socket, session);
     return;
   }
 
+  // express.e:30182 - aePuts('Ok!\b\n\b\n') then JUMP jLoop2
   socket.emit('ansi-output', 'Ok!\r\n\r\n');
 
   // Save name and move to next question

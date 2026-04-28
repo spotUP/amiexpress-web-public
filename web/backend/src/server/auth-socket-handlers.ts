@@ -432,6 +432,22 @@ console.log('Too many login errors, disconnecting');
         }
 console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
 
+        // express.e:29624 — userNum:=tempUser.slotNumber; deleted accounts have slotNumber=0.
+        // A-DEV-10: reject login for deleted/invalid accounts (slotNumber=0).
+        if (!user.slotNumber || user.slotNumber === 0) {
+          session.loginRetryCount++;
+          const maxFails = getMaxPasswordFails();
+console.warn(`[LOGIN] User ${safeUsername} has slotNumber=0 (deleted account) — rejecting login`);
+          if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
+            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+          socket.emit('login-failed', { reason: 'Invalid credentials', retryFrom: 'username' });
+          if (!handleFailure()) return;
+          return;
+        }
+
         // Reset retry counter on successful login
         session.loginRetryCount = 0;
         ipBanManager.resetFailures(remoteAddress);
