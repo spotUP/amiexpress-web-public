@@ -85,20 +85,21 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   }
 
   async function applyResult(result: ActionResult): Promise<void> {
-    const prevLocation = state?.location ?? -1;  // capture BEFORE update
     state = { ...result.newState, id, name: user.username ?? id };
     try { marketState = await server.getMarket(id); } catch { /* ignore if out of game */ }
     updatePresenceSub(state.location);
 
-    // C_DRUGHERE (75/'K') = raw price data — market refreshed via getMarket(), skip it
-    // C_UPDATE (74/'J', or 85/'U' per some code paths) = internal ping, no visible text
+    // C_DRUGHERE (75/'K') fires only in wasm_move_player → SendDrugsHere.
+    // It means the player just arrived at a new location. Skip it from display
+    // (market panel already updated via getMarket) but use it as an arrival signal.
+    // C_UPDATE (74/'J', or 85/'U') = internal player-data ping, no user-visible text.
+    const jetted = result.events.some(e => e.code === 75);
     for (const ev of result.events) {
       if (ev.msg && ev.code !== 75 && ev.code !== 74 && ev.code !== 85) {
         pushEvent(events, ev.msg);
       }
     }
-    // Show arrival message when location changed
-    if (state.location !== prevLocation) {
+    if (jetted) {
       const locName = server.getLocationNames()[state.location];
       if (locName) pushEvent(events, `You are in {cyan-fg}${locName}{/}.`);
     }
