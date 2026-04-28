@@ -429,9 +429,8 @@ void SendPlayerData(Player *To) {
 void SendPrintMessage(Player *From, AICode AI, Player *To, char *Data) {
   (void)From; (void)AI;
   if (!To || !Data) return;
-  char json[2048];
-  snprintf(json, sizeof(json), "{\"code\":%d,\"msg\":\"%s\"}", (int)C_PRINTMESSAGE, Data);
-  dw_fire_event(To, (int)C_PRINTMESSAGE, json);
+  /* Pass Data directly — dw_fire_event handles the JSON wrapping itself */
+  dw_fire_event(To, (int)C_PRINTMESSAGE, Data);
 }
 
 /*
