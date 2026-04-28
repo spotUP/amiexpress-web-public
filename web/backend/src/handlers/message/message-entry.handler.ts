@@ -434,6 +434,10 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     const messageBody = entry.body.join('\n');
     const messageDate = getSystemTime();
 
+    // express.e:10790-10794 — public msgs get 'p' status for users with ACS_CENSORED, else 'P'.
+    // (Private msgs always get 'R' regardless.) The repository checks `censored` to decide P vs p.
+    const censored = !entry.isPrivate && checkSecurity(session.user, ACSPermission.CENSORED);
+
     const message = {
       subject: entry.subject,
       body: messageBody,
@@ -448,8 +452,9 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       edited: false,
       editedBy: null,
       editedAt: null,
-      transferFiles: entry.transferFiles || false
-    };
+      transferFiles: entry.transferFiles || false,
+      censored
+    } as any;
 
     // CRITICAL: Write message to DISK (AmiExpress format)
     // Express.e:10694-10704 - Messages MUST be on disk for doors to read

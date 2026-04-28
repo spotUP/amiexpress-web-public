@@ -48,9 +48,13 @@ export class MessageRepository extends BaseRepository<any> {
 console.log(`[Database] Synced message ${messageId} to ${msgNumber}.msg (conf ${message.conferenceId})`);
 
       // Write to HeaderFile (message index) and update MailStats
+      // express.e:10790-10794: 'R' for private, 'p' for censored public, 'P' for normal public
       const timestamp = Math.floor(message.timestamp.getTime() / 1000);
+      const status = message.isPrivate
+        ? MsgStatus.PRIVATE
+        : ((message as any).censored ? MsgStatus.CENSORED : MsgStatus.NORMAL);
       messageIndexManager.appendMessageHeader(message.conferenceId, {
-        status: message.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
+        status,
         msgNumb: msgNumber,
         toName: message.toUser || 'ALL',
         fromName: message.author,
