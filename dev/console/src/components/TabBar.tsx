@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
 
-export const TABS = ['Nodes', 'Users', 'Confs', 'Callers', 'Logs'] as const;
+export const TABS = ['Dashboard', 'Nodes', 'Users', 'Confs', 'Callers', 'Logs', 'Doors', 'System'] as const;
 export type TabName = (typeof TABS)[number];
 
 interface Props {
@@ -19,15 +19,15 @@ export function TabBar({ active, onChange }: Props) {
   });
 
   return (
-    <Box borderStyle="single" borderColor="cyan" paddingX={1}>
+    <Box borderStyle="single" borderColor="cyan" paddingX={1} flexWrap="wrap">
       {TABS.map((tab, i) => (
-        <Box key={tab} marginRight={2}>
+        <Box key={tab} marginRight={1}>
           <Text
             color={tab === active ? 'cyan' : 'white'}
             bold={tab === active}
             underline={tab === active}
           >
-            [{i + 1}] {tab}
+            [{i + 1}]{tab}
           </Text>
         </Box>
       ))}

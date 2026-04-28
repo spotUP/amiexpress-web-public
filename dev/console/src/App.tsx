@@ -3,11 +3,14 @@ import { Box, useInput, useApp } from 'ink';
 import { Header } from './components/Header.js';
 import { TabBar, type TabName } from './components/TabBar.js';
 import { Footer } from './components/Footer.js';
+import { DashboardTab } from './components/tabs/DashboardTab.js';
 import { NodesTab } from './components/tabs/NodesTab.js';
 import { UsersTab } from './components/tabs/UsersTab.js';
 import { ConfsTab } from './components/tabs/ConfsTab.js';
 import { CallersTab } from './components/tabs/CallersTab.js';
 import { LogsTab } from './components/tabs/LogsTab.js';
+import { DoorsTab } from './components/tabs/DoorsTab.js';
+import { SystemTab } from './components/tabs/SystemTab.js';
 import { getNodes } from './api/client.js';
 
 interface Props {
@@ -16,7 +19,7 @@ interface Props {
 
 export function App({ username }: Props) {
   const { exit } = useApp();
-  const [activeTab, setActiveTab] = useState<TabName>('Nodes');
+  const [activeTab, setActiveTab] = useState<TabName>('Dashboard');
   const [backendUp, setBackendUp] = useState(false);
 
   useInput((input, key) => {
@@ -25,12 +28,8 @@ export function App({ username }: Props) {
 
   useEffect(() => {
     async function checkBackend() {
-      try {
-        await getNodes();
-        setBackendUp(true);
-      } catch {
-        setBackendUp(false);
-      }
+      try { await getNodes(); setBackendUp(true); }
+      catch { setBackendUp(false); }
     }
     checkBackend();
     const id = setInterval(checkBackend, 10_000);
@@ -39,19 +38,17 @@ export function App({ username }: Props) {
 
   return (
     <Box flexDirection="column" height="100%">
-      <Header
-        username={username}
-        backendUp={backendUp}
-        previewUp={true}
-        watchUp={true}
-      />
+      <Header username={username} backendUp={backendUp} previewUp={true} watchUp={true} />
       <TabBar active={activeTab} onChange={setActiveTab} />
       <Box flexGrow={1} flexDirection="column" paddingX={1}>
-        {activeTab === 'Nodes' && <NodesTab />}
-        {activeTab === 'Users' && <UsersTab />}
-        {activeTab === 'Confs' && <ConfsTab />}
-        {activeTab === 'Callers' && <CallersTab />}
-        {activeTab === 'Logs' && <LogsTab />}
+        {activeTab === 'Dashboard' && <DashboardTab />}
+        {activeTab === 'Nodes'     && <NodesTab />}
+        {activeTab === 'Users'     && <UsersTab />}
+        {activeTab === 'Confs'     && <ConfsTab />}
+        {activeTab === 'Callers'   && <CallersTab />}
+        {activeTab === 'Logs'      && <LogsTab />}
+        {activeTab === 'Doors'     && <DoorsTab />}
+        {activeTab === 'System'    && <SystemTab />}
       </Box>
       <Footer activeTab={activeTab} />
     </Box>
