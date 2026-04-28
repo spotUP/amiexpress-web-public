@@ -73,12 +73,18 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         const byMoney = price > 0 ? Math.floor(state.cash / price) : 9999;
         return Math.min(coatFree, byMoney);
     }
-    function renderStatus() {
+    function renderStatus(cantAfford = false) {
         const max = maxAmount();
         const price = currentPrice();
         const total = Math.round(price * amount);
-        statusBox.setContent(`  Amount: {bold}{yellow-fg}${amount}{/}{/}  (max ${max})   Total: $${total.toLocaleString('en-US')}\n` +
-            `  [<] less  [>] more  digits to type  [Enter] buy  [ESC] cancel`);
+        const amountStr = cantAfford
+            ? `{red-fg}${amount}{/}`
+            : `{bold}{yellow-fg}${amount}{/}{/}`;
+        const hint = cantAfford
+            ? `  {red-fg}Can't afford this — use Up/Down to pick a cheaper drug{/}`
+            : `  [<] less  [>] more  digits to type  [Enter] buy  [ESC] cancel`;
+        statusBox.setContent(`  Amount: ${amountStr}  (max ${max})   Total: $${total.toLocaleString('en-US')}\n` +
+            hint);
         screen.render();
     }
     function clampAmount() {
@@ -102,13 +108,15 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         if (closed)
             return;
         clampAmount();
-        if (amount >= 1) {
-            const idx = list.selected ?? 0;
-            const p = market.prices[idx];
-            if (p) {
-                cleanup();
-                onBuy(p.index, amount);
-            }
+        if (amount < 1) {
+            renderStatus(true); // flash "can't afford" and stay open
+            return;
+        }
+        const idx = list.selected ?? 0;
+        const p = market.prices[idx];
+        if (p) {
+            cleanup();
+            onBuy(p.index, amount);
         }
     }
     // Mouse: clicking a list item selects + confirms immediately
@@ -133,8 +141,11 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
                 renderStatus();
             }]);
     }
-    list.select(0);
+    // Start on the first drug the player can actually afford; fall back to index 0.
+    const firstAffordable = market.prices.findIndex(p => p.price > 0 && Math.floor(state.cash / p.price) >= 1 && coatFree >= 1);
+    list.select(firstAffordable >= 0 ? firstAffordable : 0);
     list.focus();
+    clampAmount(); // clamp before first render so amount reflects real max
     renderStatus();
     // All keys except Enter bind immediately — Escape/arrows/digits active right away.
     unbindOther = (0, blessed_helpers_1.bindKeys)(screen, [
