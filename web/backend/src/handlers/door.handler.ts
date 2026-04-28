@@ -2342,11 +2342,14 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
     // Ensure disk-based user data is available for 68K doors (confAccess + slot + stats)
     if (session.user?.username) {
       let confAccess = (session as any).confAccess || '';
-      let userSlotNumber = Number.isFinite((session as any).userSlotNumber)
-        ? (session as any).userSlotNumber
-        : -1;
-      let slotIndex = userSlotNumber > 0 ? userSlotNumber - 1 : -1;
       let diskUserStats = (session as any).diskUserStats ?? null;
+
+      // Always prefer the DB-stored slot number — session.userSlotNumber may be stale
+      // from a previous door run (e.g. AquaScan_020 set it to 8 via findUserSlotByName
+      // which returned the last duplicate entry instead of the correct slot).
+      const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
+      let userSlotNumber = dbSlot > 0 ? dbSlot : (Number.isFinite((session as any).userSlotNumber) ? (session as any).userSlotNumber : -1);
+      let slotIndex = userSlotNumber > 0 ? userSlotNumber - 1 : -1;
 
       if (slotIndex >= 0) {
         if (!confAccess) {
@@ -2358,7 +2361,7 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
       }
 
       if (slotIndex < 0 || !confAccess || !diskUserStats) {
-        // Prefer DB slot number over name search (name search returns LAST duplicate).
+        // Further fallback: name search (less reliable — may return last duplicate).
         const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
         const foundIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(session.user.username);
         if (foundIndex >= 0) {
