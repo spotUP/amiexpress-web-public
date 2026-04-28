@@ -170,29 +170,29 @@ console.error('Error parsing QWK packet:', error);
   // Parse individual QWK message
   private parseQWKMessage(buffer: Buffer, offset: number, header: any): any | null {
     try {
-      // QWK message format:
-      // - Status byte
-      // - Message number (LE u32)
-      // - Date (MM-DD-YY)
-      // - Time (HH:MM)
-      // - To (25 chars, null padded)
-      // - From (25 chars, null padded)
-      // - Subject (25 chars, null padded)
-      // - Password (12 chars, null padded)
-      // - Reference number (LE u16)
-      // - Number of blocks (LE u16)
-      // - Active flag
-      // - Conference number
-      // - Logical message number (LE u16)
-      // - Tag line (null padded)
+      // QWK 128-byte message block layout (per qwk.e createMessageDat2/main):
+      // offset  0       (1)  : status char
+      // offset  1-7     (7)  : message number, 7-char left-justified ASCII decimal
+      // offset  8-15    (8)  : date  (MM-DD-YY)
+      // offset 16-20    (5)  : time  (HH:MM)
+      // offset 21-45   (25)  : to field
+      // offset 46-70   (25)  : from field
+      // offset 71-95   (25)  : subject field
+      // offset 96-115  (20)  : password (blanks)
+      // offset 116-121  (6)  : block count, 6-char ASCII decimal
+      // offset 122      (1)  : active flag
+      // offset 123-124  (2)  : conference number, LE uint16
+      // offset 125-126  (2)  : relative message number, LE uint16
+      // offset 127      (1)  : net-tag flag
 
       const status = buffer[offset];
-      const msgNum = buffer.readUInt32LE(offset + 1);
-      const dateStr = buffer.slice(offset + 5, offset + 13).toString('ascii').trim();
-      const timeStr = buffer.slice(offset + 13, offset + 18).toString('ascii').trim();
-      const to = buffer.slice(offset + 18, offset + 43).toString('ascii').replace(/\0/g, '').trim();
-      const from = buffer.slice(offset + 43, offset + 68).toString('ascii').replace(/\0/g, '').trim();
-      const subject = buffer.slice(offset + 68, offset + 93).toString('ascii').replace(/\0/g, '').trim();
+      // H-4 fix: msgNum is a 7-char ASCII decimal string, not a binary uint32
+      const msgNum = parseInt(buffer.slice(offset + 1, offset + 8).toString('ascii').trim(), 10) || 0;
+      const dateStr = buffer.slice(offset + 8, offset + 16).toString('ascii').trim();
+      const timeStr = buffer.slice(offset + 16, offset + 21).toString('ascii').trim();
+      const to = buffer.slice(offset + 21, offset + 46).toString('ascii').replace(/\0/g, '').trim();
+      const from = buffer.slice(offset + 46, offset + 71).toString('ascii').replace(/\0/g, '').trim();
+      const subject = buffer.slice(offset + 71, offset + 96).toString('ascii').replace(/\0/g, '').trim();
 
       // Parse date (MM-DD-YY format)
       let date: Date;
@@ -214,7 +214,8 @@ console.error('Error parsing QWK packet:', error);
 
       // Read message body (starts after header)
       const bodyStart = offset + 128; // QWK messages are 128-byte aligned
-      const numBlocks = buffer.readUInt16LE(offset + 116);
+      // Block count is at offset 116-121 as 6-char ASCII decimal (per qwk.e)
+      const numBlocks = parseInt(buffer.slice(offset + 116, offset + 122).toString('ascii').trim(), 10) || 1;
       const bodyLength = (numBlocks - 1) * 128; // First block is header
 
       let body = '';
@@ -361,6 +362,67 @@ console.error('Error parsing QWK message:', error);
     return header;
   }
 
+  // Create CONTROL.DAT content (per qwk.e createControlDat)
+  // CONTROL.DAT is required by all QWK readers to open the packet.
+  // Format (each line ends with \r\n):
+  //   line 1:  BBS name
+  //   line 2:  city, state (location)
+  //   line 3:  phone number
+  //   line 4:  "sysopName, Sysop"
+  //   line 5:  "000000,bbsId"  (serial#, BBS ID)
+  //   line 6:  creation date/time
+  //   line 7:  user name (uppercase)
+  //   line 8:  blank
+  //   line 9:  "0"  (total messages)
+  //   line 10: "0"  (total bytes)
+  //   line 11: conference count
+  //   line 12+: alternating confNum, confName (one per line each)
+  //   then: HELLO, NEWS, GOODBYE
+  createControlDat(
+    bbsName: string,
+    bbsLocation: string,
+    bbsNumber: string,
+    sysopName: string,
+    userName: string,
+    conferences: Array<{ id: number; name: string }>,
+    totalMessages: number = 0
+  ): Buffer {
+    const now = getSystemTime();
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd = now.getDate().toString().padStart(2, '0');
+    const yy = (now.getFullYear() % 100).toString().padStart(2, '0');
+    const hh = now.getHours().toString().padStart(2, '0');
+    const mn = now.getMinutes().toString().padStart(2, '0');
+    const ss = now.getSeconds().toString().padStart(2, '0');
+    const dateTimeStr = `${mm}-${dd}-${yy},${hh}:${mn}:${ss}`;
+
+    const lines: string[] = [
+      bbsName,
+      bbsLocation,
+      bbsNumber,
+      `${sysopName}, Sysop`,
+      `000000,${this.bbsId}`,
+      dateTimeStr,
+      userName.toUpperCase(),
+      '',
+      totalMessages.toString(),
+      '0',
+      conferences.length.toString(),
+    ];
+
+    for (const conf of conferences) {
+      lines.push(conf.id.toString());
+      // Conference name truncated to 10 chars per qwk.e (IF StrLen(tempstr)>10 THEN SetStr(tempstr,10))
+      lines.push(conf.name.substring(0, 10));
+    }
+
+    lines.push('HELLO');
+    lines.push('NEWS');
+    lines.push('GOODBYE');
+
+    return Buffer.from(lines.join('\r\n') + '\r\n', 'ascii');
+  }
+
   // Create QWK message buffer
   private createQWKMessage(message: QWKMessage, msgNum: number): Buffer {
     // Calculate number of 128-byte blocks needed
@@ -371,60 +433,80 @@ console.error('Error parsing QWK message:', error);
 
     const buffer = Buffer.alloc(numBlocks * 128);
 
+    // QWK 128-byte message block layout (per qwk.e createMessageDat2):
+    // offset  0       (1)  : status char
+    // offset  1-7     (7)  : message number, 7-char left-justified ASCII decimal
+    // offset  8-15    (8)  : date  (MM-DD-YY)
+    // offset 16-20    (5)  : time  (HH:MM)
+    // offset 21-45   (25)  : to field
+    // offset 46-70   (25)  : from field
+    // offset 71-95   (25)  : subject field
+    // offset 96-115  (20)  : password (spaces)
+    // offset 116-121  (6)  : block count, 6-char left-justified ASCII decimal
+    // offset 122      (1)  : active flag (0xE1)
+    // offset 123-124  (2)  : conference number, LE uint16
+    // offset 125-126  (2)  : relative message number, LE uint16
+    // offset 127      (1)  : net-tag flag (space)
+
+    // Fill buffer with spaces (QWK uses space-padding for ASCII fields)
+    buffer.fill(0x20);
+
     // Status byte
-    let status = 0;
-    if (message.isPrivate) status |= 0x01;
-    if (message.isReply) status |= 0x02;
+    let status = 0x20; // space = normal/public message (per QWK convention)
+    if (message.isPrivate) status = 0x2A; // '*' = private
     buffer[0] = status;
 
-    // Message number
-    buffer.writeUInt32LE(msgNum, 1);
+    // H-4 fix: message number as 7-char left-justified ASCII decimal, space-padded
+    const msgNumStr = msgNum.toString().substring(0, 7).padEnd(7, ' ');
+    buffer.write(msgNumStr, 1, 7, 'ascii');
 
-    // Date (MM-DD-YY format)
+    // Date (MM-DD-YY format) at offset 8, 8 chars
     const date = message.date;
     const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}-${(date.getFullYear() % 100).toString().padStart(2, '0')}`;
-    buffer.write(dateStr, 5, 8, 'ascii');
+    buffer.write(dateStr.padEnd(8, ' ').substring(0, 8), 8, 8, 'ascii');
 
-    // Time (HH:MM format)
+    // Time (HH:MM format) at offset 16, 5 chars
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-    buffer.write(timeStr, 13, 5, 'ascii');
+    buffer.write(timeStr.padEnd(5, ' ').substring(0, 5), 16, 5, 'ascii');
 
-    // To field (25 chars, null padded)
-    const toField = (message.to || '').padEnd(25, '\0').substring(0, 25);
-    buffer.write(toField, 18, 25, 'ascii');
+    // To field (25 chars, space-padded) at offset 21
+    const toField = (message.to || '').substring(0, 25).padEnd(25, ' ');
+    buffer.write(toField, 21, 25, 'ascii');
 
-    // From field (25 chars, null padded)
-    const fromField = message.from.padEnd(25, '\0').substring(0, 25);
-    buffer.write(fromField, 43, 25, 'ascii');
+    // From field (25 chars, space-padded) at offset 46
+    const fromField = message.from.substring(0, 25).padEnd(25, ' ');
+    buffer.write(fromField, 46, 25, 'ascii');
 
-    // Subject field (25 chars, null padded)
-    const subjectField = message.subject.padEnd(25, '\0').substring(0, 25);
-    buffer.write(subjectField, 68, 25, 'ascii');
+    // Subject field (25 chars, space-padded) at offset 71
+    const subjectField = message.subject.substring(0, 25).padEnd(25, ' ');
+    buffer.write(subjectField, 71, 25, 'ascii');
 
-    // Password field (12 chars, null padded) - empty for now
-    buffer.write('\0'.repeat(12), 93, 12, 'ascii');
+    // Password field (20 chars, spaces) at offset 96 — already filled with spaces
 
-    // Reference number (0 for new messages)
-    buffer.writeUInt16LE(0, 105);
+    // Block count at offset 116, 6-char left-justified ASCII decimal
+    const blockCountStr = numBlocks.toString().substring(0, 6).padEnd(6, ' ');
+    buffer.write(blockCountStr, 116, 6, 'ascii');
 
-    // Number of blocks
-    buffer.writeUInt16LE(numBlocks, 107);
+    // Active flag at offset 122
+    buffer[122] = 0xE1;
 
-    // Active flag (1 = active)
-    buffer[109] = 1;
+    // H-5 fix: conference number as LE uint16 at bytes 123-124
+    buffer[123] = message.conference & 0xFF;
+    buffer[124] = (message.conference >> 8) & 0xFF;
 
-    // Conference number
-    buffer[110] = message.conference;
+    // Relative message number as LE uint16 at bytes 125-126
+    buffer[125] = msgNum & 0xFF;
+    buffer[126] = (msgNum >> 8) & 0xFF;
 
-    // Logical message number
-    buffer.writeUInt16LE(msgNum, 111);
+    // byte 127 = net-tag flag, already space (0x20) from fill
 
-    // Tag line (empty)
-    buffer.write('\0'.repeat(16), 113, 16, 'ascii');
-
-    // Message body (starts at offset 128)
-    const bodyBuffer = Buffer.from(message.body, 'ascii');
-    bodyBuffer.copy(buffer, 128, 0, Math.min(bodyBuffer.length, (numBlocks - 1) * 128));
+    // Message body (starts at offset 128), newlines converted to 0xE3 per qwk.e
+    const bodyBytes = Buffer.from(message.body, 'ascii');
+    const bodyDest = buffer.slice(128);
+    const copyLen = Math.min(bodyBytes.length, (numBlocks - 1) * 128);
+    for (let i = 0; i < copyLen; i++) {
+      bodyDest[i] = bodyBytes[i] === 0x0A ? 0xE3 : bodyBytes[i];
+    }
 
     return buffer;
   }
