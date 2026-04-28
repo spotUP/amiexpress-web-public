@@ -116,6 +116,11 @@ console.log('[ENV] Sysop');
  * Displays caller activity logs for sysop review.
  * In multi-node systems, allows selecting which node's log to view.
  * Web version: Single-node, shows recent caller activity from database.
+ *
+ * WEB_: express.e:24478-24506 walks BBS:Node{N}/Callerslog files, lists all nodes that
+ * have a Callerslog file, and prompts the user to select a node number.
+ * Our deployment is single-node and logs go to the database, not per-node flat files,
+ * so the node-selection loop is replaced with a flat DB query of recent caller activity.
  */
 export async function handleCallersLogCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Check security - express.e:24464
@@ -131,17 +136,13 @@ export async function handleCallersLogCommand(socket: any, session: BBSSession, 
 
 console.log('[ENV] Sysop');
 
-  // express.e:24464-24509 - no header, displays callers log directly
+  // express.e:24469 - aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');
 
-  // Original AmiExpress (express.e:24470-24509):
-  // - Parses params to get node number
-  // - If params provided, displays that node's log
-  // - If no params, shows all nodes and prompts for selection
-  // - Calls displayCallersLog(filename, nonStop)
-  //
-  // Web version: Single-node, so we just show recent activity
-
+  // WEB_: express.e:24473-24507 opens BBS:Node{N}/Callerslog for each node, displays
+  // a numbered list of nodes that have logs, and prompts for node selection before
+  // calling displayCallersLog(). Since logs are stored in the DB (not per-node flat
+  // files), we display recent caller activity directly without the node-selection step.
   socket.emit('ansi-output', 'Recent caller activity:\r\n');
   socket.emit('ansi-output', '\r\n');
 

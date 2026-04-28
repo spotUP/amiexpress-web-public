@@ -44,73 +44,143 @@ export class ZippySearchHandler {
     // setEnvStat(ENV_FILES) - express.e:26132
 console.log('[ENV] Files');
 
-    // express.e:26137-26140
+    // express.e:26134-26135
+    // lineCount:=0; nonStopDisplayFlag:=FALSE (handled in performSearch)
+
+    // express.e:26137 - aePuts('\b\n')
     socket.emit('ansi-output', '\r\n');
 
     // Check if conference has files - express.e:26138-26141
     const maxDirs = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
     if (maxDirs === 0) {
+      // express.e:26139 - myError(5)
       socket.emit('ansi-output', '\x1b[31mNo files available in this conference.\x1b[0m\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
 
-    // Parse parameters - express.e:26146
-    const paramParts = params.trim().split(/\s+/);
-    const hasNonStop = paramParts.filter(p => p.toUpperCase() === 'NS').length > 0;
+    // parseParams(params) - express.e:26143
+    const paramParts = params.trim().split(/\s+/).filter(p => p.length > 0);
+    const hasNonStop = paramParts.some(p => p.toUpperCase() === 'NS');
     const nonNsParams = paramParts.filter(p => p.toUpperCase() !== 'NS');
 
-    // Get search string from params or prompt - express.e:26148-26157
-    let searchString = '';
-
+    // express.e:26145-26148: IF parsedParams.count()>0 THEN StrCopy(ss,parsedParams.item(0)); JUMP zSkip1
     if (nonNsParams.length > 0) {
-      searchString = nonNsParams[0];
-    } else {
-      // No search string provided - prompt user
-      socket.emit('ansi-output', '\x1b[36mEnter string to search for: \x1b[0m');
-      session.subState = LoggedOnSubState.ZIPPY_SEARCH_INPUT;
-      session.tempData = {
-        waitingForZippySearch: true,
-        nonStopDisplay: hasNonStop,
-        dirSpanParam: nonNsParams[1] || ''
-      };
+      const searchString = nonNsParams[0];
+      // zSkip1: UpperStr(ss) - express.e:26160
+      const searchUpper = searchString.toUpperCase();
+
+      // express.e:26162-26168: IF parsedParams.count()>1 THEN getDirSpan(param[1]) ELSE getDirSpan('')
+      if (nonNsParams.length > 1) {
+        // Dir span passed as second param - parse directly, no prompt
+        await this.performSearch(socket, session, searchUpper, nonNsParams[1], hasNonStop, maxDirs);
+      } else {
+        // No dir param - must prompt user with getDirSpan (express.e:26165)
+        await ZippySearchHandler._promptDirSpan(socket, session, searchUpper, hasNonStop, maxDirs);
+      }
       return;
     }
 
-    // Perform search
-    await this.performSearch(socket, session, searchString, nonNsParams[1] || '', hasNonStop, maxDirs);
+    // No search string - prompt user - express.e:26150-26157
+    // aePuts('Enter string to search for: ')
+    socket.emit('ansi-output', '\x1b[36mEnter string to search for: \x1b[0m');
+    session.subState = LoggedOnSubState.ZIPPY_SEARCH_INPUT;
+    session.tempData = {
+      waitingForZippySearch: true,
+      nonStopDisplay: hasNonStop,
+      maxDirs,
+    };
   }
 
   /**
-   * Handle search string input continuation
+   * Handle search string input continuation (express.e:26150-26157)
    */
   static async handleSearchInput(
     socket: Socket,
     session: BBSSession,
     input: string
   ): Promise<void> {
-    if (session.tempData?.waitingForZippySearch) {
-      session.tempData.waitingForZippySearch = false;
-      const nonStop = session.tempData.nonStopDisplay || false;
-      const dirSpanParam = session.tempData.dirSpanParam || '';
+    if (!session.tempData?.waitingForZippySearch) return;
 
-      socket.emit('ansi-output', '\r\n');
+    // express.e:26154 - aePuts('\b\n')
+    socket.emit('ansi-output', '\r\n');
 
-      if (!input.trim()) {
-        // Empty input - cancel - express.e:26154-26156
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
-      }
-
-      // Perform the search
-      const maxDirs2 = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
-      await this.performSearch(socket, session, input.trim(), dirSpanParam, nonStop, maxDirs2);
+    if (!input.trim()) {
+      // Empty input - cancel - express.e:26155-26157 IF(StrLen(ss)=0) RETURN RESULT_SUCCESS
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
     }
+
+    // express.e:26159-26160: zSkip1: UpperStr(ss)
+    const searchUpper = input.trim().toUpperCase();
+    const nonStop = session.tempData.nonStopDisplay || false;
+    const maxDirs = session.tempData.maxDirs || await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
+
+    session.tempData.waitingForZippySearch = false;
+
+    // express.e:26162-26166: no params.count()>1, so call getDirSpan('') - prompts the user
+    await ZippySearchHandler._promptDirSpan(socket, session, searchUpper, nonStop, maxDirs);
+  }
+
+  /**
+   * Show getDirSpan prompt and wait for directory selection (express.e:26857-26912)
+   * Called after search string is known but before search begins.
+   */
+  private static async _promptDirSpan(
+    socket: Socket,
+    session: BBSSession,
+    searchString: string,
+    nonStop: boolean,
+    maxDirs: number
+  ): Promise<void> {
+    const { getDirSpanPrompt } = require('../../utils/dir-span.util');
+    const { checkSecurity: cs } = require('../../utils/acs.util');
+    const { ACSPermission: ACSP } = require('../../constants/acs-permissions');
+    const hasHoldAccess = cs(session.user, ACSP.HOLD_ACCESS);
+
+    // express.e:26862-26868 - aePuts(dirSpanPrompt)
+    socket.emit('ansi-output', getDirSpanPrompt(maxDirs, hasHoldAccess));
+
+    session.subState = LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT;
+    session.tempData = {
+      zippySearchString: searchString,
+      zippyNonStop: nonStop,
+      zippyMaxDirs: maxDirs,
+    };
+  }
+
+  /**
+   * Handle directory span input for Z command (express.e:26869-26912)
+   * Called when user responds to getDirSpan prompt.
+   */
+  static async handleDirSpanInput(
+    socket: Socket,
+    session: BBSSession,
+    input: string
+  ): Promise<void> {
+    const searchString = session.tempData?.zippySearchString || '';
+    const nonStop = session.tempData?.zippyNonStop || false;
+    const maxDirs = session.tempData?.zippyMaxDirs || 1;
+
+    // express.e:26871-26873: IF(StrLen(str)=0) RETURN RESULT_FAILURE (user pressed Enter = cancel)
+    if (!input.trim()) {
+      socket.emit('ansi-output', '\r\n');
+      // stat=RESULT_FAILURE -> express.e:26168 RETURN RESULT_SUCCESS (exits command cleanly)
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    socket.emit('ansi-output', '\r\n');
+
+    await this.performSearch(socket, session, searchString, input.trim(), nonStop, maxDirs);
   }
 
   /**
    * Perform the search
-   * Port from express.e:26159-26209
+   * Port from express.e:26170-26213 (after getDirSpan returns)
+   *
+   * @param searchString - Already uppercased search string (express.e:26160 UpperStr done)
+   * @param dirSpanParam - Directory selection string as typed by user (A/U/H/number)
    */
   private static async performSearch(
     socket: Socket,
@@ -124,40 +194,28 @@ console.log('[ENV] Files');
     // Initialize pause state
     initPauseState(session);
     if (nonStop) {
+      // nonStopDisplayFlag:=paramsContains('NS') - express.e:26170
       setNonStopMode(session, true);
     }
 
-    // UpperStr(ss) - express.e:26159
-    const searchUpper = searchString.toUpperCase();
+    // searchString is already uppercased by callers (express.e:26160 UpperStr applied before performSearch)
 
-    // getDirSpan - express.e:26161-26168
-    const { getDirSpanPrompt } = require('../utils/dir-span.util');
+    // Parse dirSpanParam into startDir/endDir using parseDirSpan util
+    // Mirrors getDirSpan() logic - express.e:26880-26910
+    const { parseDirSpan } = require('../../utils/dir-span.util');
+    const { checkSecurity: cs } = require('../../utils/acs.util');
+    const { ACSPermission: ACSP } = require('../../constants/acs-permissions');
+    const hasHoldAccess = cs(session.user, ACSP.HOLD_ACCESS);
 
-    // For now, default to upload directory (U) if not specified
-    // In full implementation, would call getDirSpan() for interactive selection
-    const dirSpan = dirSpanParam || 'U';
-
-    // Determine directory range
-    let startDir = 1;
-    let endDir = 1;
-
-    if (dirSpan.toUpperCase() === 'A') {
-      // All directories — express.e:26886-26889 getDirSpan 'A': startDir=1, dirScan=maxDirs
-      startDir = 1;
-      endDir = maxDirs;
-    } else if (dirSpan.toUpperCase() === 'U') {
-      // Upload directory (last directory) — express.e:26881-26884 getDirSpan 'U': startDir=dirScan=maxDirs
-      startDir = maxDirs;
-      endDir = maxDirs;
-    } else if (dirSpan.toUpperCase() === 'H') {
-      // HOLD directory - special case (-1)
-      startDir = -1;
-      endDir = -1;
-    } else if (!isNaN(parseInt(dirSpan))) {
-      // Specific directory number
-      startDir = parseInt(dirSpan);
-      endDir = parseInt(dirSpan);
+    const span = parseDirSpan(dirSpanParam, maxDirs, hasHoldAccess);
+    if (!span.success) {
+      socket.emit('ansi-output', `\r\nNo such directory.\r\n\r\n`);
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
     }
+
+    const startDir = span.startDir;
+    const endDir = span.endDir;
 
     socket.emit('ansi-output', '\r\n');
 
@@ -179,7 +237,7 @@ console.log('[ENV] Files');
         }
 
         // Call zippy() - express.e:26203
-        const stat = await this.zippy(socket, session, dirFilePath, searchUpper, nonStop);
+        const stat = await this.zippy(socket, session, dirFilePath, searchString, nonStop);
 
         if (stat < 0) {
           socket.emit('ansi-output', '\r\n');

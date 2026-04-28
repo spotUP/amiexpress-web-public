@@ -2735,10 +2735,17 @@ console.log(' In file upload state - canceling upload');
     return;
   }
 
-  // Handle zippy search input (Z command continuation)
+  // Handle zippy search input (Z command continuation - express.e:26150-26157)
   if (session.subState === LoggedOnSubState.ZIPPY_SEARCH_INPUT) {
     const { ZippySearchHandler } = require('./zippy-search.handler');
     await ZippySearchHandler.handleSearchInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle zippy dir span input (Z command getDirSpan prompt - express.e:26162-26168)
+  if (session.subState === LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT) {
+    const { ZippySearchHandler } = require('./zippy-search.handler');
+    await ZippySearchHandler.handleDirSpanInput(socket, session, data.trim());
     return;
   }
 

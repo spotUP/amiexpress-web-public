@@ -59,6 +59,7 @@ export enum LoggedOnSubState {
   DOWNLOAD_PGOODBYE = 'download_pgoodbye',              // express.e:13750 pGoodbye() countdown after G+download
   VIEW_FILE_INPUT = 'view_file_input',                  // V command filename input
   ZIPPY_SEARCH_INPUT = 'zippy_search_input',            // Z command search string input
+  ZIPPY_DIR_SPAN_INPUT = 'zippy_dir_span_input',        // Z command getDirSpan directory selection (express.e:26162-26168)
   BATCH_DOWNLOAD_CONFIRM = 'batch_download_confirm',    // Batch download confirmation
   FILES_MAINTENANCE = 'files_maintenance',
   FILES_MAINT_SELECT = 'files_maint_select',

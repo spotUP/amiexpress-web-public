@@ -653,14 +653,12 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       session.subState = LoggedOnSubState.W_EDIT_LINES;
       break;
 
-    case 8: // Edit Computer - express.e:25981-25986
-      emitText(socket, 'Computer Type: ');
-      session.subState = LoggedOnSubState.W_EDIT_COMPUTER;
+    case 8: // Edit Computer - express.e:26038-26044, chooseComputer() express.e:11319-11346
+      await _displayComputerList(socket, session);
       break;
 
-    case 9: // Edit Screen Type - express.e:25987-25992
-      emitText(socket, 'Screen Type: ');
-      session.subState = LoggedOnSubState.W_EDIT_SCREENTYPE;
+    case 9: // Edit Screen Type - express.e:26045-26051, chooseScreenType() express.e:11348-11368
+      await _displayScreenTypeList(socket, session);
       break;
 
     case 10: // Toggle Screen Clear - express.e:25993-25994
@@ -1028,20 +1026,118 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
 }
 
 /**
+ * Display numbered computer list and prompt (chooseComputer - express.e:11319-11346)
+ * Two-column layout: \d[2]> \l\s[34]
+ */
+async function _displayComputerList(socket: any, session: BBSSession): Promise<void> {
+  let choices: string[] = [];
+
+  try {
+    const repo = db.getConfigRepository();
+    if (repo && typeof repo.getAllComputerTypes === 'function') {
+      const records = repo.getAllComputerTypes();
+      if (Array.isArray(records) && records.length > 0) {
+        choices = records
+          .filter((c: any) => c.enabled !== false)
+          .sort((a: any, b: any) => a.computer_number - b.computer_number)
+          .map((c: any) => c.computer_name);
+      }
+    }
+  } catch (_e) { /* fall through to defaults */ }
+
+  if (choices.length === 0) {
+    choices = [
+      'AMiGA 500', 'AMiGA 2000', 'AMiGA 3000', 'AMiGA 4000', 'AMiGA 1200',
+      'IBM PC/Compatible', 'Macintosh', 'C64/128', 'Atari ST', 'Other'
+    ];
+  }
+
+  // express.e:11323-11333 - FOR stat:=0 TO computerTypes.count()-1 STEP 2, two-column display
+  for (let i = 0; i < choices.length; i += 2) {
+    const left = `${String(i + 1).padStart(2, ' ')}> ${choices[i].padEnd(34, ' ')}`;
+    if (i + 1 < choices.length) {
+      emitText(socket, `${left}${String(i + 2).padStart(2, ' ')}> ${choices[i + 1]}\r\n`);
+    } else {
+      emitText(socket, `${left}\r\n`);
+    }
+  }
+  emitText(socket, '\r\n');
+
+  // express.e:11337 - aePuts('Choose computer type: ')
+  emitText(socket, 'Choose computer type: ');
+
+  session.tempData = session.tempData || {};
+  session.tempData.computerChoices = choices;
+  session.subState = LoggedOnSubState.W_EDIT_COMPUTER;
+}
+
+/**
+ * Display numbered screen type list and prompt (chooseScreenType - express.e:11348-11368)
+ * Single-column layout: \d> \l\s
+ */
+async function _displayScreenTypeList(socket: any, session: BBSSession): Promise<void> {
+  let choices: string[] = [];
+
+  try {
+    const repo = db.getConfigRepository();
+    if (repo && typeof repo.getAllScreenTypes === 'function') {
+      const records = repo.getAllScreenTypes();
+      if (Array.isArray(records) && records.length > 0) {
+        choices = records
+          .filter((c: any) => c.enabled !== false)
+          .sort((a: any, b: any) => a.screen_number - b.screen_number)
+          .map((c: any) => c.screen_title || c.screen_type);
+      }
+    }
+  } catch (_e) { /* fall through to defaults */ }
+
+  if (choices.length === 0) {
+    choices = ['ANSI', 'ASCII', 'Amiga ANSI', 'VT100', 'RIP'];
+  }
+
+  // express.e:11353-11356 - FOR stat:=1 TO screenTypeTitle.count() single-column
+  for (let i = 0; i < choices.length; i++) {
+    emitText(socket, `${i + 1}> ${choices[i]}\r\n`);
+  }
+
+  // express.e:11359 - aePuts('\b\nChoose screen type: ')
+  emitText(socket, '\r\nChoose screen type: ');
+
+  session.tempData = session.tempData || {};
+  session.tempData.screenTypeChoices = choices;
+  session.subState = LoggedOnSubState.W_EDIT_SCREENTYPE;
+}
+
+/**
  * Handle edit computer input - express.e:25981-25986
  */
 export async function handleWEditComputerInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // express.e:11336-11345 (chooseComputer jLoop6)
+  // Accepts a 1-based number from the list, or empty to cancel
   const trimmed = input.trim();
 
-  // Empty = cancel
   if (trimmed === '') {
+    // Empty = cancel - express.e:11340 IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  session.user.computer = trimmed;
-  await db.updateUser(session.user.id, { computer: trimmed });
+  const choices: string[] = session.tempData?.computerChoices || [];
+  const num = parseInt(trimmed, 10);
+
+  if (isNaN(num) || num < 1 || num > choices.length) {
+    // Invalid - re-prompt loop (express.e:11342 IF((stat <= 0) OR (stat > computerTypes.count())) THEN JUMP jLoop6)
+    await _displayComputerList(socket, session);
+    return;
+  }
+
+  // express.e:11344 loggedOnUser.secBulletin:=stat-1
+  const selectedName = choices[num - 1];
+  session.user.computer = selectedName;
+  await db.updateUser(session.user.id, { computer: selectedName });
+
+  if (session.tempData) delete session.tempData.computerChoices;
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1051,17 +1147,32 @@ export async function handleWEditComputerInput(socket: any, session: BBSSession,
  * Handle edit screen type input - express.e:25987-25992
  */
 export async function handleWEditScreentypeInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // express.e:11358-11367 (chooseScreenType stLoop5)
+  // Accepts a 1-based number from the list, or empty to cancel
   const trimmed = input.trim();
 
-  // Empty = cancel
   if (trimmed === '') {
+    // Empty = cancel - express.e:11362 IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  session.user.screenType = trimmed;
-  await db.updateUser(session.user.id, { screenType: trimmed });
+  const choices: string[] = session.tempData?.screenTypeChoices || [];
+  const num = parseInt(trimmed, 10);
+
+  if (isNaN(num) || num < 1 || num > choices.length) {
+    // Invalid - re-prompt loop (express.e:11364 IF((stat <= 0) OR (stat > screenTypeTitle.count())) THEN JUMP stLoop5)
+    await _displayScreenTypeList(socket, session);
+    return;
+  }
+
+  // express.e:11366 loggedOnUser.screenType:=stat-1
+  const selectedName = choices[num - 1];
+  session.user.screenType = selectedName;
+  await db.updateUser(session.user.id, { screenType: selectedName });
+
+  if (session.tempData) delete session.tempData.screenTypeChoices;
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
