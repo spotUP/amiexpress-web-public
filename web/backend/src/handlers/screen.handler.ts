@@ -620,11 +620,15 @@ function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Ar
 // of processLogon (line 29477), then displays BBSTITLE without clearing (line 29552),
 // and login prompts appear below with just a newline (line 29571).
 const SCREENS_REQUIRE_CLEAR = new Set([
+  'BBSTITLE',
   'LOGON',
   'BULL',
   'NODE_BULL',
   'CONF_BULL',
   'MENU',
+  'LOGOFF',
+  'JOIN',
+  'JOINED',
 ]);
 
 /**
