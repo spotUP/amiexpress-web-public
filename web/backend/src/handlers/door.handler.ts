@@ -615,18 +615,18 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
     let diskUserStats: ReturnType<typeof userDatabaseManager.readUserStatsFromDisk> = null;
     const username = session.user?.username;
     if (username) {
-      const slotIndex = userDatabaseManager.findUserSlotByName(username);
+      // Prefer the DB-stored slot number (authoritative) over name search.
+      // findUserSlotByName returns the LAST match, which is wrong when user.data has
+      // duplicate entries (e.g. sysop appears at indices 1-7 from prior appends).
+      const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
+      let slotIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(username);
       if (slotIndex >= 0) {
         confAccess = userDatabaseManager.readConfAccessFromDisk(slotIndex);
         diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
         userSlotNumber = slotIndex + 1;
-console.log(
-          `[launchAmigaDoor] Read from disk: slotIndex=${slotIndex} slotNumber=${userSlotNumber} confAccess="${confAccess}" stats=${JSON.stringify(diskUserStats)}`
-        );
       } else {
         // Fallback to session data if user not found in disk files
         confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
-console.log(`[launchAmigaDoor] User not found in disk, fallback to session: "${confAccess}"`);
       }
     }
 console.log(`[launchAmigaDoor] Using confAccess = "${confAccess}" (len=${confAccess.length})`);
@@ -2358,7 +2358,9 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
       }
 
       if (slotIndex < 0 || !confAccess || !diskUserStats) {
-        const foundIndex = userDatabaseManager.findUserSlotByName(session.user.username);
+        // Prefer DB slot number over name search (name search returns LAST duplicate).
+        const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
+        const foundIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(session.user.username);
         if (foundIndex >= 0) {
           if (!confAccess) {
             confAccess = userDatabaseManager.readConfAccessFromDisk(foundIndex);
@@ -2368,12 +2370,8 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
           }
           slotIndex = foundIndex;
           userSlotNumber = foundIndex + 1;
-console.log(
-            `[executeAmigaDoor] Read from disk: slotIndex=${foundIndex} slotNumber=${userSlotNumber} confAccess="${confAccess}" stats=${JSON.stringify(diskUserStats)}`
-          );
         } else if (!confAccess) {
           confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
-console.log(`[executeAmigaDoor] User not found in disk, fallback confAccess="${confAccess}"`);
         }
       }
 
