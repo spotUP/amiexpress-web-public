@@ -122,6 +122,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     (session as any).transferRawSend ||
     ((buf: Buffer) => socket.emit('transfer-raw:data', buf));
 
+  const ulStartTime = Date.now();
   const manager = new ZmodemTransferManager({
     session,
     transport: {
@@ -131,11 +132,47 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     direction: 'upload',
     paths: [playpen],
     onComplete: (ok, detail) => {
-      const list = (detail?.received || []).map((p) => path.basename(p)).join(', ');
-      socket.emit(
-        'ansi-output',
-        `\r\n${ok ? 'Upload complete' : 'Upload aborted'}${list ? `: ${list}` : ''}\r\n`
-      );
+      if (!ok) {
+        socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = true;
+        return;
+      }
+
+      // express.e:19053 '\b\n\b\nFile Uploading Complete...\b\n'
+      socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+
+      const received = detail?.received || [];
+      const ulFileCount = received.length;
+      let totalBytes = 0;
+      try {
+        const fsSync = require('fs');
+        for (const fp of received) {
+          try { totalBytes += fsSync.statSync(fp).size; } catch (_) {}
+        }
+      } catch (_) {}
+      const bytesKB    = Math.floor(totalBytes / 1024);
+      const ulTTTM     = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000)); // seconds
+      const minutes    = Math.floor(ulTTTM / 60);
+      const seconds    = ulTTTM % 60;
+      const cps        = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
+      const onlineBaud = (session as any).baudRate || 115200;
+      const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
+      const eff        = Math.floor((cps * 100) / baudDiv10);
+
+      // express.e:19072 ' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.'
+      const statsLine = ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps, ${eff}% efficiency.`;
+      socket.emit('ansi-output', statsLine + '\r\n\r\n');
+
+      // express.e:19109: peff = (ulTTTM * 3 / 2) + 60 when files > 0 and time > 0
+      let peff = 0;
+      if (ulFileCount > 0 && ulTTTM > 0) {
+        peff = Math.floor((ulTTTM * 3) / 2) + 60;
+      }
+      const timeIncreasedMins = Math.floor(peff / 60);
+      // express.e:19127 'Time increased by \d mins.\b\n\b\n'
+      socket.emit('ansi-output', `Time increased by ${timeIncreasedMins} mins.\r\n\r\n`);
+
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = true;
     },

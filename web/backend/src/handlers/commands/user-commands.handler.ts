@@ -108,17 +108,35 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
   }
 
+  const ulStartTime = Date.now();
   const manager = new ZmodemTransferManager({
     session,
     transport,
     direction: 'upload',
     paths: [playpen],
     onComplete: (ok, detail) => {
-      const list = (detail?.received || []).map((p) => path.basename(p)).join(', ');
-      socket.emit(
-        'ansi-output',
-        `\r\n${ok ? 'Upload complete' : 'Upload aborted'}${list ? `: ${list}` : ''}\r\n`
-      );
+      if (!ok) {
+        socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = true;
+        return;
+      }
+      socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+      const received = detail?.received || [];
+      const ulFileCount = received.length;
+      let totalBytes = 0;
+      try {
+        const fsSync = require('fs');
+        for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
+      } catch (_) {}
+      const bytesKB = Math.floor(totalBytes / 1024);
+      const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
+      const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
+      const baud    = Math.max(1, Math.floor(((session as any).baudRate || 115200) / 10));
+      const eff     = Math.floor((cps * 100) / baud);
+      socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${Math.floor(ulTTTM/60)} minute(s). ${ulTTTM%60} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
+      let peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
+      socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = true;
     },
