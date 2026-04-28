@@ -1,18 +1,11 @@
+// MUST be first: redirects console.* to stderr before any module initializes.
+// AmigaDoorSession (and transitively config.ts) fires console.log during import;
+// without this first the logs land in the door's stdout redirect file (quicknew.txt etc.).
+import "./console-to-stderr";
 import "reflect-metadata";
 import path from "path";
 import { EventEmitter } from "events";
 import { AmigaDoorSession } from "../amiga-emulation/AmigaDoorSession";
-
-// Redirect all debug/log output to stderr so that stdout contains ONLY the
-// door's actual ANSI output.  The batch scheduler captures stdout for the
-// redirect file (e.g. >bbs:screens/quicknew.txt); mixing debug logs into
-// that file produces garbage that gets displayed to users.
-const _write = (s: string) => process.stderr.write(s);
-console.log   = (...a) => _write(a.join(' ') + '\n');
-console.info  = (...a) => _write(a.join(' ') + '\n');
-console.warn  = (...a) => _write(a.join(' ') + '\n');
-console.error = (...a) => _write(a.join(' ') + '\n');
-console.debug = (...a) => _write(a.join(' ') + '\n');
 
 class MockSocket extends EventEmitter {
   emit(event: string, data?: any): boolean {

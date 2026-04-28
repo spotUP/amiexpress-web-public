@@ -171,7 +171,6 @@ export class ConfigManager {
     try {
       // In a real implementation, this would read from a config file
       // For now, we just use defaults
-console.log('Configuration loaded from:', this.configPath);
     } catch (error) {
 console.warn('Failed to load config, using defaults:', error);
     }
