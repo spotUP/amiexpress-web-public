@@ -323,9 +323,10 @@ console.log('[ENV] Files');
 
       // express.e:12587 - Error if filename not found
       if (!foundStart) {
-        socket.emit('ansi-output', '\x1b[31mSorry filename not found!\x1b[0m\r\n');
+        // express.e:12587: 'Sorry filename not found!\b\n' — plain text, no color
+        socket.emit('ansi-output', 'Sorry filename not found!\r\n');
       } else {
-        socket.emit('ansi-output', `\x1b[32mFlagged ${flaggedCount} file(s) from ${filename} onwards.\x1b[0m\r\n`);
+        // express.e silently flags files — no success message shown
         if (flaggedCount > 0) {
           await manager.save();
         }
