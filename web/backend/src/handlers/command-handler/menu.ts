@@ -16,7 +16,7 @@ import {
 } from './dependency-injection';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
-import { updateTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
+import { updateTimeUsed, checkTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
 import { setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 
@@ -101,21 +101,32 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
     }
   }
 
-  // express.e: after menu display, reset doorExpertMode and emit newline
+  // express.e:28588 - doorExpertMode:=FALSE; aePuts('\b\n')
   // Note: express.e uses '\b\n' where \b is carriage return in E language, maps to \r\n
   session.doorExpertMode = false;
   socket.emit('ansi-output', '\r\n');
 
+  // express.e:28590 - IF checkOnlineStatus()<>RESULT_SUCCESS THEN reqState:=REQ_STATE_LOGOFF
+  // Map carrier check to socket connected state: if socket is gone, set LOGOFF and bail out.
+  if (!socket.connected) {
+    session.subState = LoggedOnSubState.LOGOFF;
+    return;
+  }
+
+  // express.e:28591 - updateTimeUsed()
+  updateTimeUsed(socket, session);
+
+  // express.e:28592 - checkTimeUsed()
+  // If time exceeded, checkTimeUsed displays the time-expired message and sets subState=LOGOFF.
+  const timeUp = await checkTimeUsed(socket, session);
+  if (timeUp) {
+    return;
+  }
+
+  // express.e:28593-28594 - show queued olm messages
   if (typeof processOlmMessageQueue === 'function') {
     processOlmMessageQueue(socket, session, true);
   }
-
-  // Reset doorExpertMode after menu display (express.e:28586)
-  session.doorExpertMode = false;
-
-  // Update time used and check if exceeded (express.e:28591-28592)
-  // Note: updateTimeUsed is also called in displayMenuPrompt, but express.e calls it here too
-  updateTimeUsed(socket, session);
 
   // express.e:28596 - setEnvStat(ENV_IDLE) before menu prompt
   setEnvStat(session, EnvStat.IDLE);
