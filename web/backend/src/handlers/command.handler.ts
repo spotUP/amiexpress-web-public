@@ -3828,13 +3828,16 @@ export async function runBbsCommand(socket: any, session: BBSSession, command: s
 }
 
 // Process command with priority system (express.e:28229-28257)
-export async function processCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
+// allowSyscmd=FALSE matches express.e default: SYSCMD is never searched for interactive
+// user menu input. Pass allowSyscmd=TRUE only for internal BBS system calls (batch
+// scripts, AREXX, door callbacks, ~CC_ MCI codes) — express.e:28249.
+export async function processCommand(socket: any, session: BBSSession, command: string, params: string, allowSyscmd: boolean = false): Promise<string> {
   // Ignore command processing if no longer logged on (e.g., after logoff)
   if (session.state !== BBSState.LOGGEDON) {
     return 'IGNORED';
   }
 
-console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
+console.log(`[CommandPriority] Processing command: ${command} with params: ${params} allowSyscmd: ${allowSyscmd}`);
 
   // SPECIAL CASE: "J" command with numeric params should use internal handler directly
   // This handles RETURNCOMMAND "j 2" from JoinCnf door - it means "join conference 2"
@@ -3853,15 +3856,18 @@ console.log(`[CommandPriority] J with numeric param "${trimmedParams}" - using i
     return 'SUCCESS';
   }
 
-  // Try SysCommand first
-  const sysResult = await runSysCommand(socket, session, command, params);
-  if (sysResult === 'SUCCESS') {
+  // Try SysCommand first — only when allowSyscmd=TRUE (express.e:28249)
+  // Interactive user menu input always uses allowSyscmd=FALSE (express.e:28229 default)
+  if (allowSyscmd) {
+    const sysResult = await runSysCommand(socket, session, command, params);
+    if (sysResult === 'SUCCESS') {
 console.log('[CommandPriority] Executed as SysCommand');
-    return 'SUCCESS';
-  }
-  if (sysResult === 'NOT_ALLOWED') {
+      return 'SUCCESS';
+    }
+    if (sysResult === 'NOT_ALLOWED') {
 console.log('[CommandPriority] SysCommand denied by permissions');
-    return 'NOT_ALLOWED';
+      return 'NOT_ALLOWED';
+    }
   }
 
   // Try BbsCommand second

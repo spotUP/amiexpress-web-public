@@ -826,6 +826,8 @@ console.log(
         // CRITICAL: Use processCommand directly, NOT handleCommand!
         // handleCommand is for character-by-character input with line buffering.
         // processCommand executes a full command string immediately.
+        // Door RETURNCOMMAND is a system-initiated call (like express.e processSysCommand),
+        // so allowSyscmd=true — express.e:28249.
         const { processCommand } = require('./command.handler');
         const runCommand = async (cmd?: string) => {
           if (cmd && cmd.trim().length > 0) {
@@ -834,7 +836,7 @@ console.log(
             const command = parts[0];
             const params = parts.slice(1).join(' ');
             console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
-            await processCommand(socket, session, command, params);
+            await processCommand(socket, session, command, params, true);
           }
         };
 
@@ -2621,6 +2623,8 @@ console.log(
         // CRITICAL: Use processCommand directly, NOT handleCommand!
         // handleCommand is for character-by-character input with line buffering.
         // processCommand executes a full command string immediately.
+        // Door RETURNCOMMAND is a system-initiated call (like express.e processSysCommand),
+        // so allowSyscmd=true — express.e:28249.
         const { processCommand } = require('./command.handler');
         const runCommand = async (cmd?: string) => {
           if (cmd && cmd.trim().length > 0) {
@@ -2629,7 +2633,7 @@ console.log(
             const command = parts[0];
             const params = parts.slice(1).join(' ');
             console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
-            await processCommand(socket, session, command, params);
+            await processCommand(socket, session, command, params, true);
           }
         };
 

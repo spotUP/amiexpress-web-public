@@ -1181,7 +1181,8 @@ console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', sessio
         // Save subState so any door launched here (68K or TS) can't clobber it.
         // Door executors set DOOR_RUNNING and may not restore it on early exit.
         const subStateBeforeInlineCmd = session.subState;
-        const result = await processCommand(socket, session, cmdCode, cmdParams);
+        // express.e:5555-5563 calls processSysCommand() which always allows SYSCMD
+        const result = await processCommand(socket, session, cmdCode, cmdParams, true);
         if (session.subState !== subStateBeforeInlineCmd) {
           session.subState = subStateBeforeInlineCmd;
         }

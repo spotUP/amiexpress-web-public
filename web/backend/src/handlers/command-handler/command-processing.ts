@@ -45,25 +45,33 @@ export async function runBbsCommand(socket: any, session: BBSSession, command: s
 /**
  * Process command with priority system (express.e:28229-28257)
  * Priority: SysCommand → BbsCommand → InternalCommand
+ *
+ * allowSyscmd=FALSE matches express.e default: SYSCMD is never searched for interactive
+ * user menu input. Pass allowSyscmd=TRUE only for internal BBS system calls (batch
+ * scripts, AREXX, door callbacks, ~CC_ MCI codes) — express.e:28249.
  */
 export async function processCommand(
   socket: any,
   session: BBSSession,
   command: string,
   params: string,
-  processBBSCommand: (socket: any, session: BBSSession, command: string, params: string) => Promise<void>
+  processBBSCommand: (socket: any, session: BBSSession, command: string, params: string) => Promise<void>,
+  allowSyscmd: boolean = false
 ): Promise<string> {
-console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
+console.log(`[CommandPriority] Processing command: ${command} with params: ${params} allowSyscmd: ${allowSyscmd}`);
 
-  // Try SysCommand first
-  const sysResult = await runSysCommand(socket, session, command, params);
-  if (sysResult === COMMAND_RESULT_SUCCESS) {
+  // Try SysCommand first — only when allowSyscmd=TRUE (express.e:28249)
+  // Interactive user menu input always uses allowSyscmd=FALSE (express.e:28229 default)
+  if (allowSyscmd) {
+    const sysResult = await runSysCommand(socket, session, command, params);
+    if (sysResult === COMMAND_RESULT_SUCCESS) {
 console.log('[CommandPriority] Executed as SysCommand');
-    return COMMAND_RESULT_SUCCESS;
-  }
-  if (sysResult === COMMAND_RESULT_NOT_ALLOWED) {
+      return COMMAND_RESULT_SUCCESS;
+    }
+    if (sysResult === COMMAND_RESULT_NOT_ALLOWED) {
 console.log('[CommandPriority] SysCommand denied by permissions');
-    return COMMAND_RESULT_NOT_ALLOWED;
+      return COMMAND_RESULT_NOT_ALLOWED;
+    }
   }
 
   // Try BbsCommand second

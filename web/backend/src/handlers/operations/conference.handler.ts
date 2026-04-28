@@ -233,8 +233,9 @@ console.warn('[joinConference] Mail scan error:', err);
       console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);
       // express.e:5067 - scanHoldDesc() — WEB_: not applicable
       // express.e:5068 - processSysCommand('S') - Display user stats
+      // processSysCommand always allows SYSCMD (express.e:28249)
       const { processCommand } = require('../command.handler');
-      await processCommand(socket, session, 'S', '');
+      await processCommand(socket, session, 'S', '', true);
 
       // express.e:5071-5074 - Display "Auto-ReJoined" message
       const autoReJoinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
