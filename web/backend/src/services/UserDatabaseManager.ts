@@ -383,7 +383,7 @@ export class UserDatabaseManager {
     return buffer;
   }
 
-  private serializeUserMisc(misc: UserMiscStruct): Buffer {
+  serializeUserMisc(misc: UserMiscStruct): Buffer {
     const buffer = Buffer.alloc(this.USERMISC_SIZE);
     let offset = 0;
     offset = this.writeString(buffer, offset, misc.internetName, 10);
@@ -638,6 +638,36 @@ console.warn(`[UserDatabaseManager] Unknown field: ${field}`);
     } finally {
       fs.closeSync(fd);
     }
+  }
+
+  /**
+   * Clear forcePwdReset and update pwdLastUpdated in user.misc after a
+   * successful forced password change.
+   * express.e:29828-29829 — pwdLastUpdated:=getSystemTime(); forcePwdReset:=FALSE
+   *
+   * @param slotNumber - 1-based Amiga slot number
+   */
+  updateUserMiscAfterPasswordChange(slotNumber: number): void {
+    if (!fs.existsSync(this.userMiscPath)) return;
+
+    const diskData = this.readUserFromDisk(slotNumber);
+    if (!diskData) {
+console.warn(`[UserDatabaseManager] updateUserMiscAfterPasswordChange: no misc record for slot ${slotNumber}`);
+      return;
+    }
+
+    const nowSecs = Math.floor(Date.now() / 1000);
+    diskData.misc.pwdLastUpdated = nowSecs;
+    diskData.misc.forcePwdReset = 0;
+
+    const miscBuffer = this.serializeUserMisc(diskData.misc);
+    const fd = fs.openSync(this.userMiscPath, 'r+');
+    try {
+      fs.writeSync(fd, miscBuffer, 0, miscBuffer.length, slotNumber * this.USERMISC_SIZE);
+    } finally {
+      fs.closeSync(fd);
+    }
+console.log(`[UserDatabaseManager] Cleared forcePwdReset and updated pwdLastUpdated for slot ${slotNumber}`);
   }
 }
 

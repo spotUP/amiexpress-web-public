@@ -2158,13 +2158,29 @@ console.error('Error creating indexes:', error);
   }
 
   /**
-   * Update user password - express.e:29196-29213
-   * Hashes the password and updates the database
+   * Update user password - express.e:29196-29213 / express.e:29827-29829
+   * Hashes the password, updates the database, then clears forcePwdReset and
+   * updates pwdLastUpdated in the disk misc file (user.misc) so that
+   * 68K doors and the next login expiry check see the fresh timestamp.
+   *
+   * @param userId       - DB user id
+   * @param newPassword  - Plaintext new password
+   * @param slotNumber   - Amiga disk slot (1-based). If omitted or 0, disk update is skipped.
    */
-  async updateUserPassword(userId: string, newPassword: string): Promise<void> {
+  async updateUserPassword(userId: string, newPassword: string, slotNumber?: number): Promise<void> {
     const hashedPassword = await this.hashPassword(newPassword);
     await this.userRepo!.updateUser(userId, { passwordHash: hashedPassword });
 console.log(`[Database] Password updated for user ${userId}`);
+
+    // express.e:29828-29829 — pwdLastUpdated:=getSystemTime(); forcePwdReset:=FALSE
+    if (slotNumber && slotNumber > 0) {
+      try {
+        userDatabaseManager.updateUserMiscAfterPasswordChange(slotNumber);
+      } catch (err) {
+console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, err);
+        // Non-fatal — DB password is already updated
+      }
+    }
   }
 
   async getUsers(...args: Parameters<UserRepository['getUsers']>) {

@@ -110,9 +110,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     'loggedin' |
     'checking-username' |
     'logging-in' |
-    'password-reset'
+    'password-reset' |
+    'forced-pwd-change'
   >('waiting');
-  const passwordResetInput = useRef<string>(''); // Buffer for password reset input
+  const passwordResetInput = useRef<string>('');      // Buffer for email-based password reset input
+  const forcedPwdChangeInput = useRef<string>('');   // Buffer for forced-change-at-login input
   const username = useRef<string>('');
   const password = useRef<string>('');
   const newUserPromptUsername = useRef<string>('');
@@ -503,6 +505,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         } else if (data.length === 1 && data >= ' ') {
           passwordResetInput.current += data;
           term.write(passwordMode.current ? '*' : data);
+        }
+        return;
+      }
+
+      if (loginState.current === 'forced-pwd-change') {
+        if (data === '\r' || data === '\n') {
+          socket?.emit('forced-pwd-change-input', { input: forcedPwdChangeInput.current });
+          term.write('\r\n');
+          forcedPwdChangeInput.current = '';
+        } else if (data === '\x7f' || data === '\x08') {
+          if (forcedPwdChangeInput.current.length > 0) {
+            forcedPwdChangeInput.current = forcedPwdChangeInput.current.slice(0, -1);
+            term.write('\b \b');
+          }
+        } else if (data.length === 1 && data >= ' ') {
+          forcedPwdChangeInput.current += data;
+          term.write('*'); // always mask during forced change
         }
         return;
       }
@@ -1929,6 +1948,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // mask-input controls whether to echo or mask characters
     });
 
+    // Forced password change flow - express.e:29785-29845
+    // Triggered when the server detects forcePwdReset=1 or PASSWORD_EXPIRY_DAYS has elapsed.
+    socket.on('prompt-forced-pwd-change', () => {
+      console.log('[ForcedPwdChange] Entering forced password change mode');
+      loginState.current = 'forced-pwd-change';
+      forcedPwdChangeInput.current = '';
+      // mask-input will be set true by the server immediately after this event
+    });
+
+    // Server signals that the forced password change succeeded and the BBS session
+    // is continuing normally (bulletin flow starting).
+    socket.on('forced-pwd-change-complete', () => {
+      console.log('[ForcedPwdChange] Password changed successfully, resuming BBS session');
+      loginState.current = 'loggedin';
+      forcedPwdChangeInput.current = '';
+    });
+
     socket.on('mask-input', (enabled: boolean) => {
       console.log('[PasswordReset] Mask input:', enabled);
       passwordMode.current = enabled;
@@ -2135,6 +2171,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
 
+      // Handle forced password change flow - express.e:29785-29845
+      if (loginState.current === 'forced-pwd-change') {
+        if (key === '\r' || key === '\n') {
+          console.log('[ForcedPwdChange] Sending input:', forcedPwdChangeInput.current.length > 0 ? '(has input)' : '(empty)');
+          socket.emit('forced-pwd-change-input', { input: forcedPwdChangeInput.current });
+          term.write('\r\n');
+          forcedPwdChangeInput.current = '';
+        } else if (key === '\x7f' || key === '\b') {
+          if (forcedPwdChangeInput.current.length > 0) {
+            forcedPwdChangeInput.current = forcedPwdChangeInput.current.slice(0, -1);
+            term.write('\b \b');
+          }
+        } else if (key.length === 1 && key >= ' ') {
+          forcedPwdChangeInput.current += key;
+          // Always mask: passwords are never echoed during forced change
+          term.write('*');
+        }
+        return;
+      }
+
       // Handle new user prompt
       if (loginState.current === 'new-user-prompt') {
         const promptUser = newUserPromptUsername.current || username.current || '';
@@ -2189,7 +2245,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         loginState.current === 'new-user-prompt' ||
         loginState.current === 'checking-username' ||
         loginState.current === 'logging-in' ||
-        loginState.current === 'password-reset'
+        loginState.current === 'password-reset' ||
+        loginState.current === 'forced-pwd-change'
         // Note: 'registering' removed - server handles registration input including pause prompts
       ) {
         return;

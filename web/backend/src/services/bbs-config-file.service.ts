@@ -27,6 +27,7 @@ export interface BBSConfigData {
   min_password_length?: number;
   min_password_strength?: number;
   max_password_fails?: number;
+  password_expiry_days?: number;   // express.e:29785 — PASSWORD_EXPIRY_DAYS tooltype (0 = disabled)
   password_security?: string;
   strict_password_policy?: boolean;
   auto_validate?: boolean;
@@ -128,6 +129,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'MIN_PASSWORD_LENGTH': 'min_password_length',
   'MIN_PASSWORD_STRENGTH': 'min_password_strength',
   'MAX_PASSWORD_FAILS': 'max_password_fails',
+  'PASSWORD_EXPIRY_DAYS': 'password_expiry_days',   // express.e:29785
   'PASSWORD_SECURITY': 'password_security',
   'STRICT_PASSWORD_POLICY': 'strict_password_policy',
   'AUTO_VALIDATE': 'auto_validate',

@@ -10,6 +10,7 @@ import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { userFileManager } from '../services/UserFileManager';
+import { userDatabaseManager } from '../services/UserDatabaseManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity, setEnvStat } from '../utils/security.util';
 import { EnvStat } from '../constants/env-codes';
@@ -36,6 +37,36 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
 import { emitUserLogin } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
+
+/**
+ * Check password strength against MIN_PASSWORD_LENGTH and MIN_PASSWORD_STRENGTH tooltypes.
+ * express.e:908-933
+ *
+ * Returns:
+ *   true  — password meets all criteria
+ *   1     — password too short (fails MIN_PASSWORD_LENGTH)
+ *   2     — password lacks enough character classes (fails MIN_PASSWORD_STRENGTH)
+ */
+function checkPasswordStrength(newPass: string, minLength: number, minStrength: number): true | 1 | 2 {
+  // express.e:910-912 — MIN_PASSWORD_LENGTH check
+  if (minLength > 0 && newPass.length < minLength) return 1;
+
+  // express.e:915-932 — MIN_PASSWORD_STRENGTH check (how many character classes are present)
+  if (minStrength > 0) {
+    const cap = Math.min(minStrength, 4);
+    let lower = 0, upper = 0, num = 0, sym = 0;
+    for (let i = 0; i < newPass.length; i++) {
+      const c = newPass.charCodeAt(i);
+      if (c >= 48 && c <= 57)       num   = 1;
+      else if (c >= 65 && c <= 90)  upper = 1;
+      else if (c >= 97 && c <= 122) lower = 1;
+      else                          sym   = 1;
+    }
+    if (lower + upper + num + sym < cap) return 2;
+  }
+
+  return true;
+}
 
 /**
  * Register authentication socket event handlers
@@ -629,9 +660,24 @@ console.error(`[LOGIN] Error writing node files:`, error);
         return;
       }
 
+      // Read Amiga-format user.misc for accountLocked, forcePwdReset, pwdLastUpdated.
+      // These fields live in the binary disk file, not the SQL DB.
+      // express.e:29775-29845 — these checks gate entry into the BBS.
+      let diskMisc: ReturnType<typeof userDatabaseManager.readUserFromDisk> = null;
+      if (user.slotNumber && user.slotNumber > 0) {
+        try {
+          diskMisc = userDatabaseManager.readUserFromDisk(user.slotNumber);
+        } catch (err) {
+console.warn(`[LOGIN] Could not read user.misc for slot ${user.slotNumber}:`, err);
+        }
+      }
+      const miscAccountLocked  = diskMisc ? diskMisc.misc.accountLocked  : 0;
+      const miscForcePwdReset  = diskMisc ? diskMisc.misc.forcePwdReset  : 0;
+      const miscPwdLastUpdated = diskMisc ? diskMisc.misc.pwdLastUpdated : 0;
+
       // express.e:29775-29782 — accountLocked check
       // Show message, offer comment to sysop, then disconnect.
-      if (user.accountLocked) {
+      if (miscAccountLocked) {
         socket.emit('ansi-output', '\r\nYour account is locked out (possibly due to repeated password failures)\r\n\r\n');
         socket.emit('ansi-output', 'Leave a comment for the sysop...\r\n\r\n');
         const { processCommand } = require('../handlers/command.handler');
@@ -640,6 +686,79 @@ console.error(`[LOGIN] Error writing node files:`, error);
         session.state = BBSState.AWAIT; // prevent further BBS processing
         setTimeout(() => socket.disconnect(), 1500);
         return;
+      }
+
+      // express.e:29785-29845 — PASSWORD_EXPIRY_DAYS and forcePwdReset flow
+      {
+        // Read PASSWORD_EXPIRY_DAYS from system config (db row — kept in sync from bbsConfig.info)
+        let pwdExpiryDays = 0;
+        try {
+          const sysConf = db.getConfigRepository().getSystemConfig();
+          if (sysConf && typeof sysConf.password_expiry_days === 'number') {
+            pwdExpiryDays = sysConf.password_expiry_days;
+          }
+        } catch (_err) { /* non-fatal */ }
+
+        // express.e:29786-29790 — if pwdExpiryDays >= 0 and pwdLastUpdated is stale, force reset
+        // Note: express.e uses >= 0, meaning 0 = "enabled with 0-day expiry" would always force
+        // reset. In practice sysops set this to a positive integer; 0 means "off" in our config.
+        let forcedByExpiry = false;
+        if (pwdExpiryDays > 0 && miscPwdLastUpdated > 0) {
+          const nowSecs = Math.floor(Date.now() / 1000);
+          if (miscPwdLastUpdated + pwdExpiryDays * 86400 < nowSecs) {
+            forcedByExpiry = true;
+          }
+        }
+
+        const needsPwdChange = forcedByExpiry || miscForcePwdReset !== 0;
+
+        if (needsPwdChange) {
+          // express.e:29793-29802 — check if user has ACS_EDIT_PASSWORD permission
+          // If not, they cannot change it — show message, open comment door, disconnect.
+          const { checkSecurity } = require('../utils/acs.util');
+          const { ACSPermission } = require('../constants/acs-permissions');
+          const canEditPassword = checkSecurity(user, ACSPermission.EDIT_PASSWORD);
+
+          if (!canEditPassword) {
+            socket.emit('ansi-output', '\r\nYour account requires your password to be changed, however you do not have permission to do so.\r\n');
+            socket.emit('ansi-output', 'Leave a comment for the sysop...\r\n\r\n');
+            const { processCommand } = require('../handlers/command.handler');
+            await processCommand(socket, session, 'C', '');
+            socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
+            session.state = BBSState.AWAIT;
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+
+          // express.e:29804-29844 — prompt user to change password (up to 3 attempts)
+          // Read strength policy from system config once
+          let minPasswordLength = 0;
+          let minPasswordStrength = 0;
+          try {
+            const sysConf = db.getConfigRepository().getSystemConfig();
+            if (sysConf) {
+              minPasswordLength  = sysConf.min_password_length  ?? 0;
+              minPasswordStrength = sysConf.min_password_strength ?? 0;
+            }
+          } catch (_err) { /* non-fatal */ }
+
+          // Store state for the socket event handler below
+          session.forcedPwdChangeState = 'await_new';
+          session.forcedPwdChangeUsername = user.username;
+          session.forcedPwdChangeUserId   = user.id;
+          session.forcedPwdChangeSlot     = user.slotNumber ?? 0;
+          session.forcedPwdChangeRetry    = 0;
+          session.forcedPwdChangePwdHash      = user.passwordHash ?? '';
+          session.forcedPwdChangeMinLen       = minPasswordLength;
+          session.forcedPwdChangeMinStrength  = minPasswordStrength;
+
+          // Tell frontend to enter forced-pwd-change mode (routes Enter key to the right event)
+          socket.emit('prompt-forced-pwd-change');
+          socket.emit('ansi-output', '\r\nYour account requires your password to be changed.\r\n\r\n');
+          socket.emit('ansi-output', 'Enter New Password: ');
+          socket.emit('mask-input', true);
+          return;  // wait for 'forced-pwd-change-input' events
+        }
       }
 
       // Log successful login (express.e:9493 callersLog)
@@ -1060,6 +1179,212 @@ console.error('Password reset error:', error);
         DebugSeverity.CRITICAL
       );
       socket.emit('ansi-output', '\r\n\x1b[31mPassword reset error. Goodbye!\x1b[0m\r\n');
+      setTimeout(() => socket.disconnect(), 500);
+    }
+  });
+
+  // Forced password change flow - express.e:29804-29844
+  // Fired by the frontend when the user submits a password in the forced-change dialog.
+  // The dialog goes: await_new -> await_confirm -> (success | retry | disconnect)
+  socket.on('forced-pwd-change-input', async (data: { input: string }) => {
+    try {
+      if (!session.forcedPwdChangeState) return; // stale event, ignore
+
+      const newPass = data.input || ''; // do not trim — passwords may have leading/trailing spaces
+
+      if (session.forcedPwdChangeState === 'await_new') {
+        // express.e:29807-29808 — getPass2('Enter New Password: ') — check not empty
+        if (newPass.length === 0) {
+          // Empty entry — increment retry and loop
+          session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
+          if ((session.forcedPwdChangeRetry ?? 0) > 3) {
+            // express.e:29840-29844 — exceeded 3 retries, disconnect
+            socket.emit('mask-input', false);
+            socket.emit('ansi-output', '\r\nYou have not updated your password so you will now be disconnected...\r\n\r\n');
+            session.state = BBSState.AWAIT;
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+          socket.emit('ansi-output', 'Enter New Password: ');
+          return;
+        }
+
+        // express.e:29812 — checkUserPassword: new password must differ from old
+        const sameAsOld = await db.verifyPassword(newPass, session.forcedPwdChangePwdHash ?? '');
+        if (sameAsOld) {
+          socket.emit('ansi-output', '\r\nYour new password must be different from your old password...\r\n\r\n');
+          session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
+          if ((session.forcedPwdChangeRetry ?? 0) > 3) {
+            socket.emit('mask-input', false);
+            socket.emit('ansi-output', 'You have not updated your password so you will now be disconnected...\r\n\r\n');
+            session.state = BBSState.AWAIT;
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+          socket.emit('ansi-output', 'Enter New Password: ');
+          return;
+        }
+
+        // express.e:29815-29825 — checkPasswordStrength
+        const minLen      = session.forcedPwdChangeMinLen      ?? 0;
+        const minStrength = session.forcedPwdChangeMinStrength ?? 0;
+        const strengthResult = checkPasswordStrength(newPass, minLen, minStrength);
+        if (strengthResult !== true) {
+          if (strengthResult === 1) {
+            socket.emit('ansi-output', `\r\nPassword length must be at least ${minLen} chars, try again..\r\n\r\n`);
+          } else {
+            socket.emit('ansi-output', `\r\nPassword must have at least ${minStrength} of these:\r\n  upper case,lower case, numeric and symbols, try again..\r\n\r\n`);
+          }
+          session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
+          if ((session.forcedPwdChangeRetry ?? 0) > 3) {
+            socket.emit('mask-input', false);
+            socket.emit('ansi-output', 'You have not updated your password so you will now be disconnected...\r\n\r\n');
+            session.state = BBSState.AWAIT;
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+          socket.emit('ansi-output', 'Enter New Password: ');
+          return;
+        }
+
+        // First entry passed all checks — ask for confirmation
+        session.forcedPwdChangeNewPass = newPass;
+        session.forcedPwdChangeState = 'await_confirm';
+        socket.emit('ansi-output', 'Reenter New Password: ');
+
+      } else if (session.forcedPwdChangeState === 'await_confirm') {
+        // express.e:29809-29834 — compare first and second entries
+        const firstPass = session.forcedPwdChangeNewPass ?? '';
+
+        if (newPass !== firstPass) {
+          // express.e:29832-29834 — mismatch, loop back to await_new
+          socket.emit('ansi-output', '\r\nPasswords do not match, please try again.\r\n\r\n');
+          session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
+          if ((session.forcedPwdChangeRetry ?? 0) > 3) {
+            socket.emit('mask-input', false);
+            socket.emit('ansi-output', 'You have not updated your password so you will now be disconnected...\r\n\r\n');
+            session.state = BBSState.AWAIT;
+            setTimeout(() => socket.disconnect(), 1500);
+            return;
+          }
+          session.forcedPwdChangeState = 'await_new';
+          session.forcedPwdChangeNewPass = undefined;
+          socket.emit('ansi-output', 'Enter New Password: ');
+          return;
+        }
+
+        // Passwords match — save
+        // express.e:29827-29829 — setNewPassword + pwdLastUpdated + forcePwdReset:=FALSE
+        const userId   = session.forcedPwdChangeUserId   ?? '';
+        const slotNum  = session.forcedPwdChangeSlot     ?? 0;
+
+        await db.updateUserPassword(userId, firstPass, slotNum);
+console.log(`[AUTH] Forced password change completed for user ${session.forcedPwdChangeUsername}`);
+
+        // Clear forced-change state
+        session.forcedPwdChangeState        = undefined;
+        session.forcedPwdChangeUsername     = undefined;
+        session.forcedPwdChangeUserId       = undefined;
+        session.forcedPwdChangeSlot         = undefined;
+        session.forcedPwdChangeRetry        = undefined;
+        session.forcedPwdChangePwdHash      = undefined;
+        session.forcedPwdChangeNewPass      = undefined;
+        session.forcedPwdChangeMinLen       = undefined;
+        session.forcedPwdChangeMinStrength  = undefined;
+
+        // Stop masking input on the frontend
+        socket.emit('mask-input', false);
+
+        // Reload the updated user record so the session has the new hash
+        const updatedUser = await db.getUserById(userId);
+        if (updatedUser && session.user) {
+          session.user.passwordHash = updatedUser.passwordHash;
+        }
+
+        // Run the post-login steps that were deferred while waiting for the password change.
+        const savedUsername = session.forcedPwdChangeUsername ?? '';
+
+        // express.e:9493 — callersLog
+        await callersLog(userId, savedUsername, 'Logged on').catch((_e: any) => { /* non-fatal */ });
+
+        // System stats (~SC MCI)
+        try {
+          const { systemStats } = await import('../services/SystemStatsService');
+          await systemStats.incrementCalls(userId as any);
+        } catch (_e) { /* non-fatal */ }
+
+        // Webhook (skip sysops)
+        const sessionUserObj = session.user as any;
+        if (sessionUserObj && sessionUserObj.secLevel < 255) {
+          try {
+            const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+            await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
+              username: savedUsername,
+              userId,
+              secLevel: sessionUserObj.secLevel,
+              calls: (sessionUserObj.calls ?? 0) + 1
+            });
+          } catch (_e) { /* non-fatal */ }
+        }
+
+        // Session preferences (confRJoin, currentConf etc.) normally set between
+        // callersLog and the bulletin flow in the regular login handler.
+        if (sessionUserObj) {
+          session.confRJoin          = sessionUserObj.autoRejoin || 1;
+          session.msgBaseRJoin       = 1;
+          session.currentConf        = sessionUserObj.autoRejoin || 1;
+          session.currentConference  = sessionUserObj.autoRejoin || 1;
+          session.conferenceId       = sessionUserObj.autoRejoin || 1;
+          session.cmdShortcuts       = false;
+          session.inDoorManager      = false;
+          session.mouseEventsEnabled = false;
+          session.doorInputHandler   = undefined;
+          if (session.shortcuts) session.shortcuts.clear();
+        }
+
+        // Tell frontend the forced-change is done — loginState -> 'loggedin'
+        // so regular terminal key events (pause prompts, bulletin nav, etc.) resume normally.
+        socket.emit('forced-pwd-change-complete');
+
+        // Begin bulletin flow (BULL -> NODE_BULL -> confScan -> CONF_BULL -> MENU)
+        session.subState = LoggedOnSubState.DISPLAY_BULL;
+        triggerSamiLogRefresh();
+
+        // GDPR gate
+        if (!(session.user as any)?.gdprConsentAt) {
+          const { promptGdprBackfill } = require('../handlers/user/gdpr.handler');
+          await promptGdprBackfill(socket, session);
+          return;
+        }
+
+        // Display LOGON screen then drive the bulletin flow.
+        let pwdChangeLogonDisplayed = false;
+        if (!session.quickFlag) {
+          pwdChangeLogonDisplayed = await displayScreen(socket, session, 'LOGON', false);
+        }
+
+        const { handleCommand } = require('../handlers/command.handler');
+        if (pwdChangeLogonDisplayed) {
+          if (!session.paginatedScreen) {
+            doPause(socket, session);
+          }
+          // handleCommand called when the pause resolves (advanceDisplayFlow in command.handler)
+        } else {
+          await handleCommand(socket, session, '');
+        }
+      }
+    } catch (error) {
+console.error('[AUTH] forced-pwd-change-input error:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'AUTH',
+        'Exception in forced-pwd-change-input handler',
+        { error: (error as Error).message, state: session.forcedPwdChangeState },
+        DebugSeverity.CRITICAL
+      );
+      socket.emit('mask-input', false);
+      socket.emit('ansi-output', '\r\n\x1b[31mPassword change error. Goodbye!\x1b[0m\r\n');
       setTimeout(() => socket.disconnect(), 500);
     }
   });

@@ -389,6 +389,16 @@ export interface BBSSession {
   passwordResetCode?: string; // Generated 10-char reset code sent to email
   passwordResetUsername?: string; // Username attempting password reset
   passwordResetState?: 'await_confirm' | 'await_code' | 'await_new_password'; // Current reset flow state
+  // Forced password change flow - express.e:29785-29845 (forcePwdReset / PASSWORD_EXPIRY_DAYS)
+  forcedPwdChangeState?: 'await_new' | 'await_confirm'; // Step in forced-change dialog
+  forcedPwdChangeUsername?: string;    // Username being changed
+  forcedPwdChangeUserId?: string;      // DB user id
+  forcedPwdChangeSlot?: number;        // Amiga disk slot number
+  forcedPwdChangeRetry?: number;       // Number of attempts so far (max 3)
+  forcedPwdChangePwdHash?: string;     // Current password hash (to detect same-password re-use)
+  forcedPwdChangeNewPass?: string;     // First entry of new password (waiting for confirm)
+  forcedPwdChangeMinLen?: number;      // Cached MIN_PASSWORD_LENGTH tooltype value
+  forcedPwdChangeMinStrength?: number; // Cached MIN_PASSWORD_STRENGTH tooltype value
   callerNum?: number; // Caller number for this session (total calls to BBS)
   paginatedScreen?: {
     lines: string[];
