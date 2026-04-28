@@ -386,10 +386,8 @@ console.error('[CommandPassword] No password-protected command in session');
 
   // express.e:4725 - Case-insensitive password comparison (StriCmp)
   if (password.toLowerCase() !== commandDef.password.toLowerCase()) {
-    // express.e:4726-4728 - Invalid password
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('InValid Password!'));
-    socket.emit('ansi-output', '\r\n');
+    // express.e:4726: '\b\nInValid Password!\b\n' — plain text
+    socket.emit('ansi-output', '\r\nInValid Password!\r\n');
 
     // Clean up and return to menu
     delete session.tempData.passwordProtectedCommand;

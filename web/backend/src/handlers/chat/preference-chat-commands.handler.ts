@@ -145,15 +145,12 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
 
 console.log('[ENV] Mail');
 
-  // express.e:24662-24664 - Start private message to sysop
-  // express.e:24658-24669 - no header, goes directly to mail entry
-  // internalCommandC just calls enterComment(MAIL_SYSOP_COMMENT,currentConf,1)
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n`);
-  socket.emit('ansi-output', 'To: sysop\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Enter subject for your comment (or press Enter to abort):\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('Subject: ', 'green'));
+  // express.e:8779-8783 commentToSYSOP():
+  // separator box, To: sysopName line, then Subject prompt
+  const sysopName = session.tempData?.sysopName || 'sysop';
+  socket.emit('ansi-output', '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+  socket.emit('ansi-output', `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m'\x1b[33mALL\x1b[32m'\x1b[32m?\x1b[0m ${sysopName}\r\n`);
+  socket.emit('ansi-output', '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
 
   // Set up message entry with recipient pre-set to sysop
   session.inputBuffer = '';

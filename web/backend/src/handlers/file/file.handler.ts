@@ -714,9 +714,8 @@ console.log('[displayNewFiles] Found', areas.length, 'file areas');
     // Display new files from database - express.e:27906-27950
     await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
 
-    // Pause prompt controlled by newFilesPauseFlag (set by confScan) - express.e:27934-27938
+    // express.e:27934-27938: IF NOT newFilesPauseFlag THEN flagPause(1) — main loop doPause handles
     if (!session.newFilesPauseFlag) {
-      emitPrompt(socket, AnsiUtil.pressKeyPrompt());
       session.menuPause = true;
     }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
