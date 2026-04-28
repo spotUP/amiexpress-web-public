@@ -750,8 +750,7 @@ async function getConfBaseRecord(userId: string, confId: number, msgBaseId: numb
       return existingResult;
     }
 
-    // Create new record with explicit scan_flags=0 (not the SQL DEFAULT of 12,
-    // which would incorrectly enable both FILE_SCAN and MAIL_SCAN for every conf).
+    // Create new record with explicit scan_flags=0 (schema DEFAULT is now 0).
     db.db.prepare(`
       INSERT INTO conf_base (user_id, conference_id, message_base_id, scan_flags)
       VALUES (?, ?, ?, 0)

@@ -526,14 +526,13 @@ async function getUserScanFlags(userId: string, confId: number, msgBaseId: numbe
     );
 
     if (result.rows.length > 0) {
-      return result.rows[0].scan_flags || 12; // Default: MAIL_SCAN_MASK | FILE_SCAN_MASK
+      return result.rows[0].scan_flags ?? 0;
     }
 
-    // No entry yet, return default
-    return 12; // MAIL_SCAN_MASK | FILE_SCAN_MASK
+    return 0; // No entry — default to no auto-scan (opt-in via CF command or SHOW_NEW_FILES tooltype)
   } catch (error) {
 console.error('[CF] Error getting scan flags:', error);
-    return 12;
+    return 0;
   }
 }
 
