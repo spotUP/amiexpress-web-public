@@ -390,11 +390,10 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     socket.emit('ansi-output', `Download URL: /api/qwk/download/${filename}\r\n`);
     socket.emit('ansi-output', '\r\n');
 
-    // express.e:26244-26247 - prompt for pack method (LHA or ZIP)
-    socket.emit('ansi-output', AnsiUtil.colorize('Pack Method: ', 'cyan'));
-    socket.emit('ansi-output', '1) LHA, 2) ZIP\r\n');
-    socket.emit('ansi-output', AnsiUtil.colorize('(ZIP selected automatically for web)', 'green'));
-    socket.emit('ansi-output', '\r\n\r\n');
+    // express.e:26244: '\r\n[32mPack Method [0m1) LHA, 2) ZIP ?>'
+    // WEB_: auto-selects ZIP; no interactive prompt possible during transfer setup
+    socket.emit('ansi-output', '\r\n\x1b[32mPack Method \x1b[0m1) LHA, 2) ZIP ?>\r\n');
+    socket.emit('ansi-output', '\x1b[33mPrepare for ZoomMail Zmodem Download:\x1b[0m\r\n');
 
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
