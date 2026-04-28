@@ -1019,8 +1019,13 @@ export async function handleForwardMessageToInput(socket: any, session: BBSSessi
   session.tempData.forwardData.toUser = recipient.toUpperCase();
   emitText(socket, '\r\n');
 
-  // Prompt for subject (express.e:9825-9830)
+  // Prompt for subject (express.e:9825-9826: lineInput pre-fills with mailHeader.subject)
+  const originalSubject = session.tempData.forwardOriginalMessage?.subject || '';
   emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
+  if (originalSubject) {
+    emitText(socket, originalSubject);
+    session.inputBuffer = originalSubject;
+  }
   session.subState = LoggedOnSubState.FORWARD_MESSAGE_SUBJECT;
 }
 
@@ -1072,7 +1077,8 @@ export async function handleForwardMessagePrivateInput(socket: any, session: BBS
 
   // Check if user can delete original message (express.e:9853-9860)
   if (session.tempData.forwardData.canDeleteOriginal) {
-    emitText(socket, 'Delete original message ');
+    // express.e:9855: aePuts('Delete original message ') then yesNo(2) = (y/N)?
+    emitText(socket, 'Delete original message \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
     session.subState = LoggedOnSubState.FORWARD_MESSAGE_DELETE_ORIGINAL;
   } else {
     // Skip to saving message
