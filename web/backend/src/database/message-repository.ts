@@ -339,9 +339,14 @@ console.error(`[Database] Failed to delete message file from disk:`, error);
 
   async updateReadPointer(userId: number, conferenceId: number, messageBaseId: number, lastRead: number): Promise<void> {
 
+    // Use INSERT ... ON CONFLICT DO UPDATE to preserve existing scan_flags and other fields.
+    // INSERT OR REPLACE deletes then re-inserts, resetting scan_flags to the SQL DEFAULT,
+    // which caused AquaScan to run on every login after any message was read.
     const stmt = this.prepare(`
-      INSERT OR REPLACE INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf, scan_flags)
+      VALUES (?, ?, ?, ?, 0)
+      ON CONFLICT(user_id, conference_id, message_base_id)
+      DO UPDATE SET last_msg_read_conf = MAX(last_msg_read_conf, excluded.last_msg_read_conf)
     `);
     stmt.run(userId.toString(), conferenceId, messageBaseId, lastRead);
   }

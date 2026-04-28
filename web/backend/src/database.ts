@@ -746,6 +746,20 @@ console.log('Checking for missing columns in messages table...');
 console.log('[+] Added receivedat column to messages (express.e:8915-8926)');
       }
 
+      // Fix conf_base rows created with the wrong SQL DEFAULT (12 = FILE_SCAN|MAIL_SCAN).
+      // Any row with scan_flags=12 was created by a faulty INSERT that omitted scan_flags,
+      // causing the SQL DEFAULT of 12 to be used. Reset these to 0 (no auto-scan).
+      // Rows with other values (e.g., set deliberately by the CF command) are left alone.
+      {
+        const confBaseInfo = this.db.prepare('PRAGMA table_info(conf_base)').all() as any[];
+        if (confBaseInfo.length > 0) {
+          const changed = this.db.prepare('UPDATE conf_base SET scan_flags = 0 WHERE scan_flags = 12').run();
+          if (changed.changes > 0) {
+console.log(`[migration] Reset ${changed.changes} conf_base rows from scan_flags=12 to 0 (fixing AquaScan auto-launch bug)`);
+          }
+        }
+      }
+
 console.log('All migrations completed successfully');
     } catch (error) {
 console.error('Error running migrations:', error);
@@ -1251,7 +1265,7 @@ console.error('Error running migrations:', error);
           message_base_id INTEGER NOT NULL REFERENCES message_bases(id) ON DELETE CASCADE,
           last_new_read_conf INTEGER DEFAULT 0,
           last_msg_read_conf INTEGER DEFAULT 0,
-          scan_flags INTEGER DEFAULT 12,
+          scan_flags INTEGER DEFAULT 0,
           messages_posted INTEGER DEFAULT 0,
           new_since_date INTEGER DEFAULT (strftime('%s', 'now')),
           bytes_download INTEGER DEFAULT 0,

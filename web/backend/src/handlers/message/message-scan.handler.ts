@@ -20,7 +20,6 @@ import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManag
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { getAllMessageIds, readMessageFile, readMailStats, messageFileExists } from '../../utils/message-file.util';
 import { config } from '../../config';
-import { handleNewFilesCommand } from '../commands/navigation-commands.handler';
 import * as fs from 'fs';
 import * as path from 'path';
 import { dateTimeToDateStamp } from '../../utils/date-time.util';
