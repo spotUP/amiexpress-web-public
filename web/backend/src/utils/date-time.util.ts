@@ -27,31 +27,34 @@ export function getSystemDate(): Date {
 }
 
 /**
- * Format date as "DD-MMM-YYYY" (Amiga long date format)
- * Equivalent to MiscFuncs.e formatLongDate()
+ * Format date as "MM-DD-YY" (Amiga FORMAT_USA date format)
+ * Equivalent to MiscFuncs.e formatLongDate() which uses FORMAT_USA.
  *
- * Express.e usage: 22 instances
- * Examples: "07-Jan-2026", "15-Dec-1995"
+ * AmigaDOS DateToStr with FORMAT_USA produces "MM-DD-YY" (2-digit year).
+ * MiscFuncs.e:287-297 — dt.format:=FORMAT_USA; DateToStr(dt); StringF(outDateStr,'\s',datestr)
+ *
+ * Express.e usage: 22 instances (used by ~OD, ~DT MCI codes)
+ * Examples: "04-07-26", "12-25-95"
  *
  * @param date - Date to format
- * @returns Formatted date string "DD-MMM-YYYY"
+ * @returns Formatted date string "MM-DD-YY"
  */
 export function formatLongDate(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
+  const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
+  const year = String(date.getFullYear()).slice(-2);
 
-  return `${day}-${month}-${year}`;
+  return `${month}-${day}-${year}`;
 }
 
 /**
  * Format time as "HH:MM:SS" (24-hour format)
- * Equivalent to MiscFuncs.e formatLongTime()
+ * Equivalent to MiscFuncs.e formatLongTime() which uses FORMAT_USA.
  *
- * Express.e usage: 10 instances
+ * AmigaDOS DateToStr with FORMAT_USA produces "HH:MM:SS".
+ * MiscFuncs.e:299-318 — dt.format:=FORMAT_USA; DateToStr(dt); StringF(outDateStr,'\s',time)
+ *
+ * Express.e usage: 10 instances (used by ~CT, ~OT MCI codes)
  * Examples: "14:32:15", "09:05:00"
  *
  * @param date - Date to format
@@ -66,17 +69,43 @@ export function formatLongTime(date: Date): string {
 }
 
 /**
- * Format date and time as "DD-MMM-YYYY HH:MM:SS"
- * Equivalent to MiscFuncs.e formatLongDateTime()
+ * Format date and time as "DDD DD-MMM-YYYY HH:MM:SS"
+ * Equivalent to MiscFuncs.e formatLongDateTime() which uses FORMAT_DOS.
  *
- * Express.e usage: 21 instances
- * Examples: "07-Jan-2026 14:32:15", "25-Dec-1995 09:00:00"
+ * AmigaDOS DateToStr with FORMAT_DOS produces:
+ *   daystr = "Mon", datestr = "07-Jan-26", timestr = "14:32:00"
+ * MiscFuncs.e:320-341 assembles:
+ *   StringF(outDateStr,'\s[3] \s[7]\d\s \s', daystr, datestr,
+ *           IF dt.stamp.days>=8035 THEN 20 ELSE 19, datestr+7, timestr)
+ * This produces: "Mon 07-Jan-2026 14:32:00"
+ *   - 3-char day abbreviation
+ *   - space
+ *   - first 7 chars of DOS datestr ("DD-MMM-") + century (20/19) + 2-digit year
+ *   - space
+ *   - time "HH:MM:SS"
+ *
+ * Express.e usage: 21 instances (used by ~LC MCI code)
+ * Examples: "Mon 07-Jan-2026 14:32:00", "Thu 25-Dec-1995 09:00:00"
  *
  * @param date - Date to format
- * @returns Formatted datetime string "DD-MMM-YYYY HH:MM:SS"
+ * @returns Formatted datetime string "DDD DD-MMM-YYYY HH:MM:SS"
  */
 export function formatLongDateTime(date: Date): string {
-  return `${formatLongDate(date)} ${formatLongTime(date)}`;
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const dayName = dayNames[date.getDay()];
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = monthNames[date.getMonth()];
+  const fullYear = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  // MiscFuncs.e:338: StringF(outDateStr,'\s[3] \s[7]\d\s \s',daystr,datestr,century,datestr+7,timestr)
+  // datestr (FORMAT_DOS) = "DD-MMM-YY", first 7 chars = "DD-MMM-", then century+2digit year
+  return `${dayName} ${day}-${month}-${fullYear} ${hours}:${minutes}:${seconds}`;
 }
 
 /**

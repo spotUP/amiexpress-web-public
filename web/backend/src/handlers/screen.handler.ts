@@ -23,7 +23,7 @@ import { sequentialFileManager, formatNumberedFilename } from '../services/Seque
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/amigafs';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
-import { getSystemTime } from '../utils/date-time.util';
+import { getSystemTime, formatLongDate, formatLongTime, formatLongDateTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -705,6 +705,11 @@ export async function parseMciCodes(
 
   // Date/Time setup
   const now = getSystemTime();
+  // Logon time: session.logonTime is Unix seconds (set by time-tracking.util.ts)
+  // Fall back to session.loginTime (ms) or current time if logonTime not yet set
+  const logonDate = session.logonTime
+    ? new Date(session.logonTime * 1000)
+    : (session.loginTime ? new Date(session.loginTime) : now);
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dayName = days[now.getDay()];
@@ -714,7 +719,9 @@ export async function parseMciCodes(
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
+  // fullDateTime uses current time (used by legacy % codes)
   const fullDateTime = `${dayName} ${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+  // timeStr = current time (used by legacy %T)
   const timeStr = `${hours}:${minutes}:${seconds}`;
 
   // Process multi-character MCI codes FIRST to avoid collisions
@@ -874,7 +881,12 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   parsed = parsed.replace(mciRegex('#'), user.phoneNumber || '');  // # - Phone Number
   parsed = parsed.replace(mciRegex('TC'), timesCalled.toString());  // TC - Times Called
   parsed = parsed.replace(mciRegex('TT'), (user.callsToday || 0).toString());  // TT - Today's Calls
-  parsed = parsed.replace(mciRegex('LC'), user.lastLoginDate || 'Never');  // LC - Last Call
+  // ~LC - Last Call (express.e:5315-5318) - formatLongDateTime(loggedOnUser.timeLastOn)
+  // Formats using the full "DDD DD-MMM-YYYY HH:MM:SS" pattern (MiscFuncs.e:320-341)
+  // user.lastLogin is a Date (database/types.ts:36); user.timeLastOn is an alias
+  const lcRaw = user.lastLogin || user.timeLastOn;
+  const lcDate: Date | null = lcRaw instanceof Date ? lcRaw : (lcRaw ? new Date(lcRaw) : null);
+  parsed = parsed.replace(mciRegex('LC'), lcDate ? formatLongDateTime(lcDate) : 'Never');  // LC - Last Call
   parsed = parsed.replace(mciRegex('M'), messagesPosted.toString());  // M - Messages Posted
   parsed = parsed.replace(mciRegex('A'), secLevel.toString());  // A - Access/Security Level
   parsed = parsed.replace(mciRegex('S'), user.id?.toString() || '0');  // S - Slot Number (user ID)
@@ -885,13 +897,28 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   parsed = parsed.replace(mciRegex('TR'), Math.floor(session.timeRemaining / 60).toString());  // TR - Time Remaining
   parsed = parsed.replace(mciRegex('UB'), uploadBytes.toString());  // UB - Upload Bytes
   parsed = parsed.replace(mciRegex('DB'), downloadBytes.toString());  // DB - Download Bytes
-  parsed = parsed.replace(mciRegex('SU'), (uploadBytes / 1024).toFixed(0) + 'K');  // SU - Upload Size
-  parsed = parsed.replace(mciRegex('SD'), (downloadBytes / 1024).toFixed(0) + 'K');  // SD - Download Size
+  // ~SU / ~SD - Upload/Download Size (express.e:5359-5366) - calcSizeText()
+  // express.e calcSizeText() divides by 1024 repeatedly until value < 1024,
+  // appending lowercase unit suffix: b, kb, mb, gb, tb, pb (MiscFuncs.e:3336-3370)
+  const calcSizeText = (bytes: number): string => {
+    const units = ['b', 'kb', 'mb', 'gb', 'tb', 'pb'];
+    let val = bytes;
+    let i = 0;
+    while (val >= 1024 && i < units.length - 1) {
+      val = Math.round(val / 1024);
+      i++;
+    }
+    return `${val}${units[i]}`;
+  };
+  parsed = parsed.replace(mciRegex('SU'), calcSizeText(uploadBytes));  // SU - Upload Size
+  parsed = parsed.replace(mciRegex('SD'), calcSizeText(downloadBytes));  // SD - Download Size
   parsed = parsed.replace(mciRegex('FU'), uploads.toString());  // FU - Files Uploaded
   parsed = parsed.replace(mciRegex('FD'), downloads.toString());  // FD - Files Downloaded
   parsed = parsed.replace(mciRegex('BD'), (user.byteLimit || 0).toString());  // BD - Today's Byte Limit
-  parsed = parsed.replace(mciRegex('ON'), '1');  // ON/LG - Node Number
-  parsed = parsed.replace(mciRegex('LG'), '1');
+  // ~ON / ~LG - Node Number (express.e:5379-5382) - StringF(tempstr,'\d',node)
+  const nodeNumStr = (session.nodeId || 1).toString();
+  parsed = parsed.replace(mciRegex('ON'), nodeNumStr);  // ON - Node Number
+  parsed = parsed.replace(mciRegex('LG'), nodeNumStr);  // LG - Node Number (alias)
   parsed = parsed.replace(mciRegex('IN'), user.email || '');  // IN - Internet Name (email)
   parsed = parsed.replace(mciRegex('RN'), user.realName || username);  // RN - Real Name
 
@@ -926,17 +953,20 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   parsed = parsed.replace(mciRegex('MN'), msgBaseName);
 
   // ~CT - Current Time (express.e:5431-5434) - formatLongTime(logonTime)
-  parsed = parsed.replace(mciRegex('CT'), timeStr);  // CT - Current Time
+  // express.e uses logonTime (session start), NOT current time
+  parsed = parsed.replace(mciRegex('CT'), formatLongTime(logonDate));  // CT - Logon Time
   parsed = parsed.replace(mciRegex('VD'), '2.00');  // VD - Version Number (display)
   parsed = parsed.replace(mciRegex('VE'), 'AmiExpress-Web 2.0');  // VE - Version (full)
 
   // System Information
   // ~ND - Node Number (express.e:5409-5412) - StringF(tempstr,'\d',node)
   parsed = parsed.replace(mciRegex('ND'), (session.nodeId || 1).toString());  // ND - Node Number
-  // ~DT - Date (express.e:5435-5438) - formatLongDate(getSystemTime())
-  parsed = parsed.replace(mciRegex('DT'), `${day}-${month}-${year}`);  // DT - Date
-  parsed = parsed.replace(mciRegex('OT'), timeStr);  // OT - Time Only
-  parsed = parsed.replace(mciRegex('OD'), `${day}-${month}-${year}`);  // OD - Date Only
+  // ~DT - Date (express.e:5435-5438) - formatLongDate(getSystemTime()) - current system date
+  parsed = parsed.replace(mciRegex('DT'), formatLongDate(now));  // DT - Current Date (FORMAT_USA: MM-DD-YY)
+  // ~OT - Online Time (express.e:5395-5398) - formatLongTime(logonTime) - session start time
+  parsed = parsed.replace(mciRegex('OT'), formatLongTime(logonDate));  // OT - Logon Time
+  // ~OD - Online Date (express.e:5391-5394) - formatLongDate(logonTime) - session start date
+  parsed = parsed.replace(mciRegex('OD'), formatLongDate(logonDate));  // OD - Logon Date (FORMAT_USA: MM-DD-YY)
 
   // ~SC - System Calls Today (express.e:5407)
   // Use SystemStatsService to get real call count
@@ -981,8 +1011,19 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   ].join('\r\n');
   parsed = parsed.replace(mciRegex('AK'), accessKeysDisplay);
   parsed = parsed.replace(mciRegex('SP'), ' ');  // SP - Space
-  parsed = parsed.replace(mciRegex('CR'), '\r\n');  // CR - Carriage Return
-  parsed = parsed.replace(mciRegex('NS'), '');  // NS - No Space (nothing)
+  // ~CR - Keypress wait (express.e:5462-5468) - readChar(INPUT_TIMEOUT) — waits for any key
+  // WEB_: express.e:5462 does readChar(INPUT_TIMEOUT); in string-replace mode we cannot
+  // perform an async character read mid-substitution. Emit \r\n as a visible line break.
+  // Inline mode with a socket is the correct place to implement a real keypress wait (future work).
+  parsed = parsed.replace(mciRegex('CR'), '\r\n');  // CR - line break (WEB_ deviation: should be keypress wait)
+  // ~NS - Non-Stop display flag (express.e uses nonStopText/nonStopDisplayFlag)
+  // Setting this suppresses all subsequent pause prompts for this file display.
+  parsed = parsed.replace(mciRegex('NS'), () => {
+    if (session) {
+      (session as any).nonStopText = true;
+    }
+    return '';
+  });  // NS - set nonStopText flag, no output
   // Some screens use bare ~SP (no delimiter) to pause; strip and mark pause
   parsed = parsed.replace(/~SP(\s|$)/g, () => {
     hasPause = true;
