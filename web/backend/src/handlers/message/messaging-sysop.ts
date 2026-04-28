@@ -319,11 +319,13 @@ async function saveEditedHeader(socket: any, session: BBSSession): Promise<void>
   const currentIndex = session.tempData.editMessageIndex;
 
   try {
+    // express.e:11643 — editHeader sets mh.recv:=0; the edited message is treated as fresh.
     await _getDb('saveEditedHeader').updateMessage(msg.id, {
       author: editHeader.from,
       toUser: editHeader.to,
       subject: editHeader.subject,
-      isPrivate: editHeader.isPrivate
+      isPrivate: editHeader.isPrivate,
+      receivedAt: null
     });
 
     const messages = session.tempData.msgReaderMessages;
@@ -332,6 +334,7 @@ async function saveEditedHeader(socket: any, session: BBSSession): Promise<void>
       messages[currentIndex].toUser = editHeader.to;
       messages[currentIndex].subject = editHeader.subject;
       messages[currentIndex].isPrivate = editHeader.isPrivate;
+      messages[currentIndex].receivedAt = null;
     }
 
     delete session.tempData.editMessage;
