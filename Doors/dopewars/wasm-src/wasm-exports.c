@@ -205,6 +205,7 @@ void wasm_sell_drug(int idx, int drug_index, int amount) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_move_player(int idx, int location) {
   extern void SendEvent(Player*);
+  extern void SendDrugsHere(Player*, gboolean);
   extern int DebtInterest, BankInterest;
   Player *p = get_player(idx);
   if (!p) return;
@@ -212,6 +213,10 @@ void wasm_move_player(int idx, int location) {
   p->Turn++;
   if (p->Debt > 0) p->Debt = p->Debt * (1.0 + DebtInterest / 100.0);
   if (p->Bank > 0) p->Bank = p->Bank * (1.0 + BankInterest / 100.0);
+  /* Generate new drug prices for the new location.
+   * SendEvent() exits immediately when EventNum==E_NONE so it never
+   * calls GenerateDrugsHere itself — we must call SendDrugsHere directly. */
+  SendDrugsHere(p, TRUE);
   SendEvent(p);
 }
 
