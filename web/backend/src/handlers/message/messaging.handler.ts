@@ -970,8 +970,26 @@ export function handleEnterMessageFullCommand(
   const firstParam = params.trim();
   if (firstParam && firstParam.length <= 30) {
     // express.e:10762-10774: parsedParams[0] ≤ 30 chars → pre-fill To:, JUMP skipEntry
-    session.tempData.messageEntry.toUser = firstParam;
-    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${firstParam}\r\n`);
+    // express.e:10785-10816: after skipEntry, run EALL/recipient checks
+    const firstParamLower = firstParam.toLowerCase();
+
+    // express.e:10802: StrCmp(str,'eall',5) — check first 4 chars for 'eall'
+    if (firstParamLower === 'eall' || firstParamLower.startsWith('eall')) {
+      // express.e:10810: IF(checkSecurity(ACS_EALL_MESSAGES))
+      if (!checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
+        // express.e:10814: aePuts('\b\nUser does not exist!!\b\n\b\n')
+        emitText(socket, '\r\nUser does not exist!!\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.tempData = undefined;
+        return;
+      }
+      // express.e:10811-10812: aFlag:=2; toName:='EALL'
+      session.tempData.messageEntry.toUser = 'EALL';
+    } else {
+      session.tempData.messageEntry.toUser = firstParam;
+    }
+
+    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${session.tempData.messageEntry.toUser}\r\n`);
     // Skip To: prompt — go straight to Subject (skipEntry → line 10785)
     emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
     session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;

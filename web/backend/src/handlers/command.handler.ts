@@ -4161,6 +4161,10 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       handleEnterMessageFullCommand(socket, session, params);
       return;
 
+    case 'EALL': // Enter Message to EALL — equivalent to 'E EALL' (express.e:10800-10816)
+      handleEnterMessageFullCommand(socket, session, 'EALL');
+      return;
+
     case '<': // Previous Conference (internalCommandLT) - express.e:24529-24546
       await handlePreviousConferenceCommand(socket, session);
       return;
