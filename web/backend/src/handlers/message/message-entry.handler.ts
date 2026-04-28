@@ -82,7 +82,8 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
  * Handle subject input - express.e:10839-10849
  */
 export async function handleMessageSubjectInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const subject = input.trim();
+  // express.e:10847 — lineInput('','',30,...) caps subject at 30 chars
+  const subject = input.trim().substring(0, 30);
 
   // Blank = abort:
   // - replyToMSG:9890: RETURN RESULT_SUCCESS → back to reader
@@ -1075,8 +1076,8 @@ export async function handleForwardMessageSubjectInput(socket: any, session: BBS
     return;
   }
 
-  // Store subject
-  session.tempData.forwardData.subject = input;
+  // express.e:9826 — lineInput('','',30,...) caps subject at 30 chars
+  session.tempData.forwardData.subject = input.substring(0, 30);
 
   // Prompt for privacy (express.e:9837-9851)
   emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
