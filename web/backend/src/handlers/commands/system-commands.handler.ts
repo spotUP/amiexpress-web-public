@@ -201,13 +201,13 @@ export function handleQuietModeCommand(socket: any, session: BBSSession): void {
   // Send quiet flag to other systems (for web version, this is just local)
   // sendQuietFlag(quietFlag) - express.e:25507
 
+  // express.e:25508-25511 — plain text, no decoration, no press-key
   if (session.quietMode) {
-    socket.emit('ansi-output', '\r\n' + AnsiUtil.successLine('Quiet Mode On') + '\r\n');
+    socket.emit('ansi-output', '\r\nQuiet Mode On\r\n');
   } else {
-    socket.emit('ansi-output', '\r\n' + AnsiUtil.successLine('Quiet Mode Off') + '\r\n');
+    socket.emit('ansi-output', '\r\nQuiet Mode Off\r\n');
   }
 
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 

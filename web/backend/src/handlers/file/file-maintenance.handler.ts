@@ -832,7 +832,8 @@ console.error('[FM] Failed to map dir to area:', error);
 
     if (action === 'V') {
       if (!ctx.viewAllowed) {
-        socket.emit('ansi-output', AnsiUtil.errorLine('View option is not available for this directory'));
+        // express.e:25015 '\b\nView option is not available for hold directory\b\n'
+        socket.emit('ansi-output', '\r\nView option is not available for hold directory\r\n');
         await this.redisplayPrompt(socket, session);
         return;
       }

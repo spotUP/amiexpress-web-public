@@ -77,11 +77,9 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
     return;
   }
 
-  emitText(socket, '\x1b[2J\x1b[H');
-
   console.log('[ENV] Doors');
 
-  // express.e:24217-24224 - Table header (exact format from who() function)
+  // express.e:24217-24218: aePuts('\b\n\b\n') before table (no screen clear)
   emitText(socket, '\r\n');
   emitText(socket, '\r\n');
   emitText(socket, '\x1b[34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
@@ -119,10 +117,8 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   emitText(socket, '\x1b[34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
   emitText(socket, '\r\n');
 
-  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.paginatedScreen = undefined;
-  session.lastScreenHadPause = false;
+  // express.e: who() returns RESULT_SUCCESS — no press-key, main loop sets menuPause:=TRUE
+  session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
@@ -145,8 +141,6 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
     });
     return;
   }
-
-  emitText(socket, '\x1b[2J\x1b[H');
 
   console.log('[ENV] Doors');
 
@@ -189,10 +183,8 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
   emitText(socket, '\x1b[34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
   emitText(socket, '\r\n');
 
-  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.paginatedScreen = undefined;
-  session.lastScreenHadPause = false;
+  // express.e: who(1) returns RESULT_SUCCESS — no press-key
+  session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
