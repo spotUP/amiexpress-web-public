@@ -77,7 +77,12 @@ export async function readMailStats(confNum: number, bbsDataPath: string): Promi
     throw error;
   }
 
-  // Binary format: 3 x 4-byte integers (big-endian) = 12 bytes.
+  // Binary format per axobjects.e mailStat OBJECT:
+  //   offset  0: lowestKey    LONG (4 bytes, BE)
+  //   offset  4: highMsgNum   LONG (4 bytes, BE)
+  //   offset  8: lowestNotDel LONG (4 bytes, BE)
+  //   offset 12: pad[6]       ARRAY OF CHAR (6 bytes)
+  //   total: 18 bytes
   //
   // Historically some MailStats files were created in an older 2-int32 (8-byte)
   // format or left zeroed by stale init paths. Rather than throwing and
@@ -86,7 +91,7 @@ export async function readMailStats(confNum: number, bbsDataPath: string): Promi
   // New posts then get a fresh high-water message ID from 1.
   if (buffer.length < 12) {
 console.warn(
-      `[MailStats] ${mailStatsPath} is ${buffer.length} bytes (expected >=12). ` +
+      `[MailStats] ${mailStatsPath} is ${buffer.length} bytes (expected >=18). ` +
       `Treating as corrupted and rebuilding with defaults.`
     );
     const defaultStats: MailStats = {
@@ -100,8 +105,8 @@ console.warn(
 
   return {
     lowestKey: buffer.readInt32BE(0),
-    lowestNotDel: buffer.readInt32BE(4),
-    highMsgNum: buffer.readInt32BE(8),
+    highMsgNum: buffer.readInt32BE(4),
+    lowestNotDel: buffer.readInt32BE(8),
   };
 }
 
@@ -120,11 +125,17 @@ export async function writeMailStats(
   // Ensure Messages directory exists
   await fs.mkdir(messagesDir, { recursive: true });
 
-  // Write binary format: 3 x 4-byte integers (big-endian)
-  const buffer = Buffer.alloc(12);
+  // Write binary format per axobjects.e mailStat OBJECT:
+  //   offset  0: lowestKey    LONG (4 bytes, BE)
+  //   offset  4: highMsgNum   LONG (4 bytes, BE)
+  //   offset  8: lowestNotDel LONG (4 bytes, BE)
+  //   offset 12: pad[6]       ARRAY OF CHAR (6 bytes, zeroed)
+  //   total: 18 bytes
+  const buffer = Buffer.alloc(18, 0);
   buffer.writeInt32BE(stats.lowestKey, 0);
-  buffer.writeInt32BE(stats.lowestNotDel, 4);
-  buffer.writeInt32BE(stats.highMsgNum, 8);
+  buffer.writeInt32BE(stats.highMsgNum, 4);
+  buffer.writeInt32BE(stats.lowestNotDel, 8);
+  // bytes 12-17 are pad[6], left as zero
 
   await fs.writeFile(mailStatsPath, buffer);
 console.log(`[MailStats] Conf${confNum}: low=${stats.lowestNotDel} high=${stats.highMsgNum}`);

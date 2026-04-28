@@ -37,9 +37,9 @@ describe('readMailStats recovery', () => {
       const stats = await readMailStats(99, bbsRoot);
       expect(stats).toEqual({ lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
 
-      // File should now be the canonical 12 bytes.
+      // File should now be the canonical 18 bytes (axobjects.e mailStat SIZEOF).
       const onDisk = fs.readFileSync(getMailStatsPath(99, bbsRoot));
-      expect(onDisk.length).toBe(12);
+      expect(onDisk.length).toBe(18);
     } finally {
       cleanup();
     }
@@ -50,7 +50,7 @@ describe('readMailStats recovery', () => {
     try {
       const stats = await readMailStats(98, bbsRoot);
       expect(stats.highMsgNum).toBe(1);
-      expect(fs.readFileSync(getMailStatsPath(98, bbsRoot)).length).toBe(12);
+      expect(fs.readFileSync(getMailStatsPath(98, bbsRoot)).length).toBe(18);
     } finally {
       cleanup();
     }
@@ -61,17 +61,18 @@ describe('readMailStats recovery', () => {
     try {
       const stats = await readMailStats(97, bbsRoot);
       expect(stats).toEqual({ lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
-      expect(fs.readFileSync(getMailStatsPath(97, bbsRoot)).length).toBe(12);
+      expect(fs.readFileSync(getMailStatsPath(97, bbsRoot)).length).toBe(18);
     } finally {
       cleanup();
     }
   });
 
-  test('valid 12-byte MailStats is read verbatim', async () => {
-    const buf = Buffer.alloc(12);
-    buf.writeInt32BE(5, 0);    // lowestKey (big-endian: Amiga 68K format)
-    buf.writeInt32BE(3, 4);    // lowestNotDel
-    buf.writeInt32BE(42, 8);   // highMsgNum
+  test('valid 18-byte MailStats is read verbatim', async () => {
+    // axobjects.e mailStat field order: lowestKey(0) highMsgNum(4) lowestNotDel(8) pad[6](12)
+    const buf = Buffer.alloc(18, 0);
+    buf.writeInt32BE(5, 0);    // lowestKey
+    buf.writeInt32BE(42, 4);   // highMsgNum
+    buf.writeInt32BE(3, 8);    // lowestNotDel
     const { bbsRoot, cleanup } = setUp(96, buf);
     try {
       const stats = await readMailStats(96, bbsRoot);
@@ -82,13 +83,13 @@ describe('readMailStats recovery', () => {
   });
 });
 
-describe('writeMailStats always produces 12 bytes', () => {
-  test('fresh defaults serialize to exactly 12 bytes', async () => {
+describe('writeMailStats always produces 18 bytes', () => {
+  test('fresh defaults serialize to exactly 18 bytes (axobjects.e SIZEOF mailStat)', async () => {
     const { bbsRoot, cleanup } = setUp(95, null);
     try {
       await writeMailStats(95, bbsRoot, { lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
       const onDisk = fs.readFileSync(getMailStatsPath(95, bbsRoot));
-      expect(onDisk.length).toBe(12);
+      expect(onDisk.length).toBe(18);
     } finally {
       cleanup();
     }

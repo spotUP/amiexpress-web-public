@@ -4,7 +4,7 @@
  *
  * Messages stored as .msg files in Conf{N}/Messages/{messageId}.msg
  * MailStats binary file tracks message IDs in Conf{N}/Messages/MailStats
- * Format: 3 x 4-byte little-endian integers (lowestKey, lowestNotDel, highMsgNum)
+ * Format: 3 x 4-byte big-endian LONGs + 6-byte pad = 18 bytes (lowestKey, highMsgNum, lowestNotDel, pad[6])
  */
 
 import * as fs from 'fs/promises';
@@ -75,10 +75,11 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         const statsPath = getMailStatsPath(1, testBbsPath);
         const buffer = await fs.readFile(statsPath);
 
-        expect(buffer.length).toBe(12); // 3 x 4-byte integers
-        expect(buffer.readInt32BE(0)).toBe(1);
-        expect(buffer.readInt32BE(4)).toBe(5);
-        expect(buffer.readInt32BE(8)).toBe(100);
+        // axobjects.e mailStat: lowestKey(0) highMsgNum(4) lowestNotDel(8) pad[6](12) = 18 bytes
+        expect(buffer.length).toBe(18);
+        expect(buffer.readInt32BE(0)).toBe(1);    // lowestKey
+        expect(buffer.readInt32BE(4)).toBe(100);  // highMsgNum
+        expect(buffer.readInt32BE(8)).toBe(5);    // lowestNotDel
       });
 
       it('should create Messages directory if missing', async () => {
@@ -96,9 +97,9 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         await writeMailStats(1, testBbsPath, stats);
 
         const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32BE(0)).toBe(0);
-        expect(buffer.readInt32BE(4)).toBe(0);
-        expect(buffer.readInt32BE(8)).toBe(0);
+        expect(buffer.readInt32BE(0)).toBe(0);  // lowestKey
+        expect(buffer.readInt32BE(4)).toBe(0);  // highMsgNum
+        expect(buffer.readInt32BE(8)).toBe(0);  // lowestNotDel
       });
 
       it('should handle large values', async () => {
@@ -111,9 +112,9 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         await writeMailStats(1, testBbsPath, stats);
 
         const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32BE(0)).toBe(1000000);
-        expect(buffer.readInt32BE(4)).toBe(999999);
-        expect(buffer.readInt32BE(8)).toBe(1000001);
+        expect(buffer.readInt32BE(0)).toBe(1000000);  // lowestKey
+        expect(buffer.readInt32BE(4)).toBe(1000001);  // highMsgNum
+        expect(buffer.readInt32BE(8)).toBe(999999);   // lowestNotDel
       });
 
       it('should overwrite existing MailStats', async () => {
@@ -124,7 +125,7 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         await writeMailStats(1, testBbsPath, stats2);
 
         const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32BE(8)).toBe(20);
+        expect(buffer.readInt32BE(4)).toBe(20);  // highMsgNum at offset 4
       });
     });
 
@@ -155,7 +156,7 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
         const messagesDir = getMessagesDir(1, testBbsPath);
         await fs.mkdir(messagesDir, { recursive: true });
 
-        // Write only 8 bytes (should be 12); production code rebuilds with defaults
+        // Write only 8 bytes (should be 18); production code rebuilds with defaults
         const buffer = Buffer.alloc(8);
         await fs.writeFile(getMailStatsPath(1, testBbsPath), buffer);
 
