@@ -149,8 +149,14 @@ void wasm_remove_player(int idx) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_generate_drugs(int idx) {
   extern void GenerateDrugsHere(Player*, void*);
+  extern int NumDrug;
   Player *p = get_player(idx);
-  if (p) GenerateDrugsHere(p, NULL);
+  if (!p) return;
+  /* Allocate a proper DealType array (NULL caused a WASM null-write) */
+  int nd = NumDrug > 0 ? NumDrug : 12;
+  void *deal = g_new0(gint, nd);  /* gint same size as enum DealType */
+  GenerateDrugsHere(p, deal);
+  g_free(deal);
 }
 
 EMSCRIPTEN_KEEPALIVE

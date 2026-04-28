@@ -141,6 +141,7 @@ async function createApp(ctx, server) {
         console.log(`[GANJA] key B pressed, mode=${mode}`);
         if (mode !== 'normal')
             return;
+        console.log(`[GANJA] marketState prices: ${JSON.stringify(marketState?.prices?.map(p => ({ idx: p.index, name: p.name, price: p.price })))}`);
         (0, actions_1.showBuyOverlay)(screen, marketState, state, (drug, amt) => runAction(async () => {
             console.log(`[GANJA] buyDrug drug=${drug} amt=${amt}`);
             const r = await server.buyDrug(id, drug, amt);
