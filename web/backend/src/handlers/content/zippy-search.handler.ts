@@ -78,7 +78,7 @@ console.log('[ENV] Files');
     }
 
     // Perform search
-    await this.performSearch(socket, session, searchString, nonNsParams[1] || '', hasNonStop);
+    await this.performSearch(socket, session, searchString, nonNsParams[1] || '', hasNonStop, maxDirs);
   }
 
   /**
@@ -103,7 +103,8 @@ console.log('[ENV] Files');
       }
 
       // Perform the search
-      await this.performSearch(socket, session, input.trim(), dirSpanParam, nonStop);
+      const maxDirs2 = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
+      await this.performSearch(socket, session, input.trim(), dirSpanParam, nonStop, maxDirs2);
     }
   }
 
@@ -116,7 +117,8 @@ console.log('[ENV] Files');
     session: BBSSession,
     searchString: string,
     dirSpanParam: string,
-    nonStop: boolean
+    nonStop: boolean,
+    maxDirs: number = 1
   ): Promise<void> {
 
     // Initialize pause state
@@ -140,13 +142,13 @@ console.log('[ENV] Files');
     let endDir = 1;
 
     if (dirSpan.toUpperCase() === 'A') {
-      // All directories
+      // All directories — express.e:26886-26889 getDirSpan 'A': startDir=1, dirScan=maxDirs
       startDir = 1;
-      endDir = 20; // maxDirs
+      endDir = maxDirs;
     } else if (dirSpan.toUpperCase() === 'U') {
-      // Upload directory (last directory)
-      startDir = 20; // maxDirs
-      endDir = 20;
+      // Upload directory (last directory) — express.e:26881-26884 getDirSpan 'U': startDir=dirScan=maxDirs
+      startDir = maxDirs;
+      endDir = maxDirs;
     } else if (dirSpan.toUpperCase() === 'H') {
       // HOLD directory - special case (-1)
       startDir = -1;

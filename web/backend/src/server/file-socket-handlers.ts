@@ -781,27 +781,32 @@ console.log("[Upload] No upload context for batch complete");
     return;
   }
 
-  // Show completion statistics (express.e:19059-19083)
+  // Show completion statistics (express.e:18850-18858, 19053-19073)
   const uploadTime = Math.floor(
     (Date.now() - session.tempData.uploadStartTime) / 1000
   ); // seconds
-  const minutes = Math.floor(uploadTime / 60);
-  const seconds = uploadTime % 60;
+  const ulFileCount = session.tempData.uploadedFiles || 0;
+  const ulTTTM = uploadTime; // already in seconds
+  const minutes = Math.floor(ulTTTM / 60);
+  const seconds = ulTTTM % 60;
   const bytesKB = Math.floor(session.tempData.uploadedBytes / 1024);
   const cps =
     uploadTime > 0
       ? Math.floor(session.tempData.uploadedBytes / uploadTime)
       : 0;
+  // express.e:19071 tTEFF = cps ratio as percentage (approximated as 100% for web transfers)
+  const eff = 100;
 
+  // express.e:18850 aePuts('\b\n\b\nFile Uploading Complete...\b\n')
   socket.emit("ansi-output", "\r\n\r\nFile Uploading Complete...\r\n");
-  socket.emit(
-    "ansi-output",
-    ` ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.\r\n`
-  );
-  socket.emit("ansi-output", "\r\n");
+  // express.e:18857 StringF(string,' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.'...)
+  const statsLine = ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps, ${eff}% efficiency.`;
+  socket.emit("ansi-output", statsLine + "\r\n");
+  // express.e:18860 aePuts('\b\n\b\n')
+  socket.emit("ansi-output", "\r\n\r\n");
 
-  // Log batch upload summary
-  const summaryLog = `\t ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.`;
+  // Log batch upload summary (express.e:18862-18871 callersLog/udLog)
+  const summaryLog = `\t${statsLine}`;
   await callersLog(session.user!.id, session.user!.username, summaryLog);
 
   // Notify sysop of upload (express.e:19098)
@@ -820,6 +825,19 @@ console.error(
       `[Upload] Error sending upload notification: ${error.message}`
     );
   }
+
+  // express.e:19109-19128: compute time credit and emit "Time increased by N mins."
+  // peff = (ulTTTM * 3 / 2) + 60 when files > 0 and time > 0, else 0
+  // WEB_: efficiency percentage used for peff calculation is approximated as
+  //       (uploadTime * 3 / 2 + 60) seconds credit — matches express.e:19109 formula
+  //       but tTEFF (efficiency %) is not tracked in web transfers (always 100%).
+  let peff = 0;
+  if (ulFileCount > 0 && ulTTTM > 0) {
+    peff = Math.floor((ulTTTM * 3) / 2) + 60; // seconds
+  }
+  const timeIncreasedMins = Math.floor(peff / 60);
+  // express.e:19127 StringF(str,'Time increased by \d mins.\b\n\b\n',Div(peff,60))
+  socket.emit("ansi-output", `Time increased by ${timeIncreasedMins} mins.\r\n\r\n`);
 
   // Read goodbye flag before clearUploadContext wipes tempData
   const goodbyeAfter = !!(session.tempData?.goodbyeAfterTransfer);

@@ -81,8 +81,8 @@ export function displayFileAreaContents(socket: any, session: BBSSession, area: 
     }
   };
 
-  // Show "Scanning directory X" message (express.e:27674 or 27683)
-  emit(`Scanning directory ${area.id}, Area: ${area.name}\r\n`);
+  // Show "Scanning directory X" message — express.e:27667-27683 shows only the number, no area name suffix
+  emit(`Scanning directory ${area.id}\r\n`);
 
   // Get files in this area (like reading DIR file in AmiExpress)
   const areaFiles = fileEntries.filter(file => file.areaId === area.id);

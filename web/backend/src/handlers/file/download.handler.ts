@@ -219,14 +219,29 @@ export class DownloadHandler {
     const filespecNum = numFiles + 1;
     const minsLeft = (session as any).timeRemaining || 60;
 
-    if (!user.secLibrary) {
+    if (!user.secLibrary || (session as any).creditAccountEnabled) {
       // express.e:20118 '\b\n\d mins, (Ratio Disabled), Filespec(\d): '
       socket.emit('ansi-output', `\r\n${minsLeft} mins, (Ratio Disabled), Filespec(${filespecNum}): `);
     } else {
-      // express.e:19786 ratioType=0: '\b\n\d mins, \d bytes, Filespec(\d): '
-      // bytesADL=$7fffffff (Infinite) for web — express.e would show Infinite here too
-      // since we have no modem speed and no daily byte cap
-      socket.emit('ansi-output', `\r\n${minsLeft} mins, Infinite bytes, Filespec(${filespecNum}): `);
+      // express.e:19784-19789 downloadPrompt — ratioType stored in loggedOnUser.secBoard
+      // ratioType=0: bytes only  '\b\n\d mins, \d bytes, Filespec(\d): '
+      // ratioType=2: files only  '\b\n\d mins, \d files, Filespec(\d): '
+      // ratioType=1: bytes+files '\b\n\d mins, \d bytes, \d files, Filespec(\d): '
+      // bytesADL=$7fffffff means unlimited — web always uses $7fffffff so show 'Infinite'
+      const ratioType = (user as any).secBoard || 0;
+      const bytesAvail = 'Infinite'; // bytesADL=$7fffffff for web (no daily byte cap)
+      const filesAvail = (user.secLibrary * ((user.uploads || 0) + 1)) - (user.downloads || 0);
+
+      if (ratioType === 2) {
+        // express.e:19787 ratioType=2: files only
+        socket.emit('ansi-output', `\r\n${minsLeft} mins, ${filesAvail} files, Filespec(${filespecNum}): `);
+      } else if (ratioType === 1) {
+        // express.e:19788 ratioType=1: bytes + files
+        socket.emit('ansi-output', `\r\n${minsLeft} mins, ${bytesAvail} bytes, ${filesAvail} files, Filespec(${filespecNum}): `);
+      } else {
+        // express.e:19786 ratioType=0: bytes only (default)
+        socket.emit('ansi-output', `\r\n${minsLeft} mins, ${bytesAvail} bytes, Filespec(${filespecNum}): `);
+      }
     }
   }
 
@@ -471,14 +486,23 @@ export class DownloadHandler {
 
     // express.e:20266
     // ' \d files, \sk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d'
-    const elapsed  = Math.max(1, Math.round((Date.now() - startTime) / 1000));
-    const mins     = Math.floor(elapsed / 60);
-    const secs     = elapsed % 60;
-    const totalKb  = Math.floor(totalBytes / 1024);
-    const cps      = totalBytes > 0 ? Math.round(totalBytes / elapsed) : 0;
+    // pcps=tTCPS (actual cps from transfer), peff=tTEFF=calcEfficiency(tTCPS,onlineBaud)
+    // calcEfficiency(cps,baud): IF cps>21474836 THEN Mul(Div(cps,Div(baud,10)),100)
+    //                           ELSE Div(Mul(cps,100),Div(baud,10))
+    // = (cps * 100) / (baud / 10) = (cps * 1000) / baud
+    const elapsed    = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+    const mins       = Math.floor(elapsed / 60);
+    const secs       = elapsed % 60;
+    const totalKb    = Math.floor(totalBytes / 1024);
+    const cps        = totalBytes > 0 ? Math.round(totalBytes / elapsed) : 0;
     const onlineBaud = (session as any).onlineBaud || 38400;
+    // express.e:413-420 calcEfficiency: avoid overflow for very high cps
+    const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
+    const efficiency = cps > 21474836
+      ? Math.floor(Math.floor(cps / baudDiv10) * 100)
+      : Math.floor((cps * 100) / baudDiv10);
     socket.emit('ansi-output',
-      ` ${fileList.length} files, ${totalKb}k bytes, ${mins} minutes ${secs} seconds ${cps} cps, 100% efficiency at ${onlineBaud}\r\n`);
+      ` ${fileList.length} files, ${totalKb}k bytes, ${mins} minutes ${secs} seconds ${cps} cps, ${efficiency}% efficiency at ${onlineBaud}\r\n`);
     // express.e:20268 aePuts('\b\n\b\n')
     socket.emit('ansi-output', '\r\n');
 
@@ -492,12 +516,129 @@ export class DownloadHandler {
 
     // express.e:20317 IF((mystat=71) OR (mystat=103)) THEN RETURN(pGoodbye())
     if (goodbyeAfter) {
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
-      handleGoodbyeCommand(socket, session, 'Y');
+      // express.e:13750-13772 pGoodbye(): 10-second countdown; Enter/Y cancels, N=logoff
+      await this.startPGoodbye(socket, session);
     } else {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
     }
+  }
+
+  /**
+   * express.e:13750-13772 pGoodbye()
+   * Countdown from 10 to 1, one second per tick.
+   * "Last chance!  Auto LOGOFF in N SECS.  Abort: (Enter)=yes? "
+   * N/n → RESULT_GOODBYE (proceed with logoff)
+   * Y/T/Enter/LF → RESULT_SUCCESS (cancel, return to menu)
+   * No input after 10 ticks → RESULT_GOODBYE
+   *
+   * In the web event-driven model: show first tick, set DOWNLOAD_PGOODBYE
+   * sub-state, schedule a 1-second interval tick. Each tick: redraw prompt
+   * with updated count. On input or final tick: resolve.
+   */
+  private static async startPGoodbye(socket: Socket, session: BBSSession): Promise<void> {
+    const totalTicks = 10;
+    session.tempData = {
+      ...(session.tempData || {}),
+      pGoodbyeTicksLeft: totalTicks,
+      pGoodbyePending: true,
+    };
+
+    // Show first line (express.e: aePuts('\b\n') then [A then prompt)
+    // First tick we just emit newline + prompt without cursor-up (nothing above to overwrite)
+    const msg = `Last chance!  Auto LOGOFF in ${totalTicks} SECS.  Abort: (Enter)=yes? `;
+    socket.emit('ansi-output', `\r\n${msg}`);
+
+    session.subState = LoggedOnSubState.DOWNLOAD_PGOODBYE;
+
+    // Schedule tick interval — each second, decrement and redraw
+    const interval = setInterval(async () => {
+      // Guard: session may have already transitioned away
+      if (session.subState !== LoggedOnSubState.DOWNLOAD_PGOODBYE || !session.tempData?.pGoodbyePending) {
+        clearInterval(interval);
+        return;
+      }
+
+      session.tempData.pGoodbyeTicksLeft--;
+      const ticks = session.tempData.pGoodbyeTicksLeft as number;
+
+      if (ticks <= 0) {
+        // express.e:13770-13772 loop ended → RESULT_GOODBYE
+        clearInterval(interval);
+        session.tempData.pGoodbyePending = false;
+        socket.emit('ansi-output', '\r\n');
+        await this.doGoodbyeLogoff(socket, session);
+        return;
+      }
+
+      // express.e:13756-13759: aePuts('\b\n'), aePuts('[A'), aePuts(prompt)
+      // \b\n = CR+LF, [A = ANSI cursor up 1 line — overwrites previous countdown line
+      const nextMsg = `Last chance!  Auto LOGOFF in ${ticks} SECS.  Abort: (Enter)=yes? `;
+      socket.emit('ansi-output', `\r\n\x1b[A${nextMsg}`);
+    }, 1000);
+
+    // Store interval ID so input handler can clear it
+    session.tempData.pGoodbyeInterval = interval as unknown as number;
+  }
+
+  /**
+   * express.e:13750-13772 pGoodbye() — input handler
+   * Called for each character received while in DOWNLOAD_PGOODBYE state.
+   */
+  static async handlePGoodbyeInput(socket: Socket, session: BBSSession, data: string): Promise<void> {
+    if (!session.tempData?.pGoodbyePending) return;
+
+    const ch = data[0] || '';
+    const interval = session.tempData.pGoodbyeInterval;
+    if (interval != null) {
+      clearInterval(interval as unknown as NodeJS.Timeout);
+    }
+    session.tempData.pGoodbyePending = false;
+    session.tempData.pGoodbyeInterval = undefined;
+
+    // express.e:13762-13768:
+    // stat="n" OR "N" → 'No\b\n\b\n' → RESULT_GOODBYE (proceed with logoff)
+    // stat="y" OR "T" OR CR(13) OR LF(10) → 'Yes\b\n\b\n' → RESULT_SUCCESS (cancel)
+    if (ch === 'n' || ch === 'N') {
+      socket.emit('ansi-output', 'No\r\n\r\n');
+      await this.doGoodbyeLogoff(socket, session);
+    } else if (ch === 'y' || ch === 'Y' || ch === 'T' || ch === '\r' || ch === '\n') {
+      socket.emit('ansi-output', 'Yes\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
+    // Any other key: express.e readChar(1) just returns 0 on no input or unknown key
+    // so we ignore and let the interval continue — but we already cancelled it above.
+    // Re-show the current tick prompt and restart the interval.
+    else {
+      const ticks = session.tempData?.pGoodbyeTicksLeft as number || 1;
+      const nextMsg = `Last chance!  Auto LOGOFF in ${ticks} SECS.  Abort: (Enter)=yes? `;
+      socket.emit('ansi-output', `\r\n\x1b[A${nextMsg}`);
+      session.tempData.pGoodbyePending = true;
+      const newInterval = setInterval(async () => {
+        if (session.subState !== LoggedOnSubState.DOWNLOAD_PGOODBYE || !session.tempData?.pGoodbyePending) {
+          clearInterval(newInterval);
+          return;
+        }
+        session.tempData.pGoodbyeTicksLeft--;
+        const t = session.tempData.pGoodbyeTicksLeft as number;
+        if (t <= 0) {
+          clearInterval(newInterval);
+          session.tempData.pGoodbyePending = false;
+          socket.emit('ansi-output', '\r\n');
+          await this.doGoodbyeLogoff(socket, session);
+          return;
+        }
+        socket.emit('ansi-output', `\r\n\x1b[A${'Last chance!  Auto LOGOFF in ' + t + ' SECS.  Abort: (Enter)=yes? '}`);
+      }, 1000);
+      session.tempData.pGoodbyeInterval = newInterval as unknown as number;
+    }
+  }
+
+  /**
+   * Perform the actual logoff after pGoodbye countdown expires or N is pressed.
+   */
+  private static async doGoodbyeLogoff(socket: Socket, session: BBSSession): Promise<void> {
+    const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+    await handleGoodbyeCommand(socket, session, 'Y');
   }
 
   /**

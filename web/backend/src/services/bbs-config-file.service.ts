@@ -106,6 +106,8 @@ export interface BBSConfigData {
   quiet_join?: boolean;
   convert_to_mb?: boolean;
   reg_key?: string;
+  // express.e:sopt.toggles[TOGGLES_CREDITBYKB] — count UL/DL bytes in kilobytes instead of bytes
+  credit_by_kb?: boolean;
 
   // Logging
   debug_mode?: boolean;
@@ -209,6 +211,8 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'QUIET_JOIN': 'quiet_join',
   'CONVERT_TO_MB': 'convert_to_mb',
   'REGKEY': 'reg_key',
+  // express.e sopt.toggles[TOGGLES_CREDITBYKB] — counts UL/DL in KB instead of bytes
+  'CREDITBYKB': 'credit_by_kb',
 
   // Logging
   'DEBUG_MODE': 'debug_mode',

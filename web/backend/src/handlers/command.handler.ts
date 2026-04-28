@@ -2222,6 +2222,13 @@ console.log(' [DOWNLOAD] User confirming download');
     return;
   }
 
+  // PRIORITY 9b: Handle DOWNLOAD_PGOODBYE (express.e:13750 pGoodbye countdown)
+  if (session.subState === LoggedOnSubState.DOWNLOAD_PGOODBYE) {
+    const { DownloadHandler } = require('./file/download.handler');
+    await DownloadHandler.handlePGoodbyeInput(socket, session, data);
+    return;
+  }
+
   // Handle substate-specific input
   // If menu is waiting to display and the user pressed any key (including Enter),
   // immediately drop to READ_COMMAND so input is not lost to the display flow loop.

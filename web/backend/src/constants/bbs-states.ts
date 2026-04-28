@@ -56,6 +56,7 @@ export enum LoggedOnSubState {
   FLAG_FROM_INPUT = 'flag_from_input',          // A command flag from input
   DOWNLOAD_FILENAME_INPUT = 'download_filename_input',  // D command filename input
   DOWNLOAD_CONFIRM_INPUT = 'download_confirm_input',    // D command download confirmation
+  DOWNLOAD_PGOODBYE = 'download_pgoodbye',              // express.e:13750 pGoodbye() countdown after G+download
   VIEW_FILE_INPUT = 'view_file_input',                  // V command filename input
   ZIPPY_SEARCH_INPUT = 'zippy_search_input',            // Z command search string input
   BATCH_DOWNLOAD_CONFIRM = 'batch_download_confirm',    // Batch download confirmation

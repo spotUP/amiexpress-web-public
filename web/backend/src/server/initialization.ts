@@ -4,6 +4,8 @@ import { db } from '../database';
 import { config } from '../config';
 import { initializeContainer } from '../container';
 import { loadConfConfig } from '../services/conf-config.service';
+import { loadBBSConfig } from '../services/bbs-config-file.service';
+import { setACSConfig, ToggleFlags } from '../utils/acs.util';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
 import {
   loadFileAreasFromDisk,
@@ -285,6 +287,16 @@ export async function initializeData(io?: SocketIOServer) {
     // The BBS ALWAYS uses disk files, NOT the database, for conference configuration
     const bbsRoot = process.env.BBS_ROOT || config.get('dataDir');
     console.log(`[INIT] bbsRoot=${bbsRoot}`);
+
+    // Load bbsConfig.info tooltypes into ACS config toggles (express.e sopt.toggles)
+    // Done once at startup so all handlers see consistent values via getACSConfig()
+    const diskBBSConfig = loadBBSConfig(bbsRoot);
+    const acsToggles = new Array(20).fill(false);
+    // express.e sopt.toggles[TOGGLES_CREDITBYKB=19]
+    if (diskBBSConfig.credit_by_kb) acsToggles[ToggleFlags.CREDITBYKB] = true;
+    setACSConfig({ toggles: acsToggles });
+    console.log(`[INIT] ACS toggles loaded — CREDITBYKB=${acsToggles[ToggleFlags.CREDITBYKB]}`);
+
     const confConfig = loadConfConfig(bbsRoot);
 
     if (confConfig && confConfig.confCount > 0) {
