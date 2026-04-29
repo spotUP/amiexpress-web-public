@@ -24,10 +24,13 @@ kill_project_procs() {
   local label="$2"
   local pids
   pids=$(pgrep -f "$pattern" 2>/dev/null | while read pid; do
-    # Skip self and parent
-    case "$SKIP_PIDS" in
-      *" $pid "*) continue ;;
-    esac
+    # Skip self and parent. Use POSIX parameter expansion instead of `case`
+    # (case inside a subshell from $(... | while ...) trips macOS bash 3.2).
+    # SKIP_PIDS has spaces around every pid (" 123 456 "); if " $pid " is
+    # found anywhere, the %% strip changes the value.
+    if [ "${SKIP_PIDS%% $pid *}" != "$SKIP_PIDS" ]; then
+      continue
+    fi
     # Check if this process belongs to our project
     if ps -p "$pid" -o args= 2>/dev/null | grep -q "$PROJECT_ROOT"; then
       echo "$pid"
