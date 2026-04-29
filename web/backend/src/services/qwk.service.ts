@@ -168,7 +168,10 @@ console.error('Error parsing QWK packet:', error);
   }
 
   // Parse individual QWK message
-  private parseQWKMessage(buffer: Buffer, offset: number, header: any): any | null {
+  parseQWKMessage(buffer: Buffer, offset: number, header: any): any | null {
+    // QWK message header is exactly 128 bytes per qwk.e — anything shorter
+    // can't possibly contain the fixed-offset fields below.
+    if (buffer.length - offset < 128) return null;
     try {
       // QWK 128-byte message block layout (per qwk.e createMessageDat2/main):
       // offset  0       (1)  : status char

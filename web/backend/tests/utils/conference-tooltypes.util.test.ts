@@ -82,6 +82,7 @@ describe('Conference Tooltypes Utility', () => {
           noBulls: false,
           noConfBulls: false,
           freeDownloads: false,
+          menuPrompt: '',
         });
       });
 

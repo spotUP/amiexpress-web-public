@@ -222,54 +222,51 @@ describe('ErrorHandler', () => {
   });
 
   describe('permissionDenied', () => {
-    it('should send permission denied error with action', () => {
+    // express.e:3037-3039 higherAccess() — emits exactly "Command requires
+    // higher access." with no separator and no press-key prompt. The action
+    // string and default nextState behavior were dropped to match express.e.
+    it('emits the express.e higherAccess message', () => {
       ErrorHandler.permissionDenied(mockSocket, 'delete files');
 
       const outputs = emittedEvents
         .filter(e => e.event === 'ansi-output')
         .map(e => e.data);
 
-      expect(outputs.some((o: string) => o.includes('delete files'))).toBe(true);
-      expect(outputs.some((o: string) => o.includes('permission'))).toBe(true);
+      expect(outputs.some((o: string) => o.includes('Command requires higher access'))).toBe(true);
     });
 
-    it('should show prompt by default', () => {
+    it('does not show a press-key prompt (express.e parity)', () => {
       ErrorHandler.permissionDenied(mockSocket, 'edit settings');
 
       const outputs = emittedEvents
         .filter(e => e.event === 'ansi-output')
         .map(e => e.data);
 
-      expect(outputs.some((o: string) => o.includes('Press any key'))).toBe(true);
+      expect(outputs.some((o: string) => o.includes('Press any key'))).toBe(false);
     });
 
-    it('should set default nextState to DISPLAY_CONF_BULL', () => {
+    it('leaves subState unchanged when no nextState option is given', () => {
       mockSocket.session.subState = LoggedOnSubState.DISPLAY_MENU;
       ErrorHandler.permissionDenied(mockSocket, 'access admin');
-
-      expect(mockSocket.session.subState).toBe(LoggedOnSubState.DISPLAY_CONF_BULL);
-    });
-
-    it('should allow overriding nextState', () => {
-      ErrorHandler.permissionDenied(mockSocket, 'access admin', {
-        nextState: LoggedOnSubState.DISPLAY_MENU,
-      });
 
       expect(mockSocket.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     });
 
-    it('should respect custom options', () => {
+    it('allows overriding nextState explicitly', () => {
+      ErrorHandler.permissionDenied(mockSocket, 'access admin', {
+        nextState: LoggedOnSubState.DISPLAY_CONF_BULL,
+      });
+
+      expect(mockSocket.session.subState).toBe(LoggedOnSubState.DISPLAY_CONF_BULL);
+    });
+
+    it('respects clearMenuPause option', () => {
       mockSocket.session.menuPause = true;
       ErrorHandler.permissionDenied(mockSocket, 'delete', {
         clearMenuPause: true,
-        showPrompt: false,
       });
 
       expect(mockSocket.session.menuPause).toBe(false);
-      const outputs = emittedEvents
-        .filter(e => e.event === 'ansi-output')
-        .map(e => e.data);
-      expect(outputs.some((o: string) => o.includes('Press any key'))).toBe(false);
     });
   });
 

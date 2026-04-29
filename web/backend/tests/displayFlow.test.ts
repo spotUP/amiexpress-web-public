@@ -177,39 +177,40 @@ describe('Display flow parity', () => {
   test('advances through display flow states (BULL -> NODE_BULL -> CONF_BULL -> MENU)', async () => {
     const session = baseSession();
 
-    // For this test, doPause should NOT set paginatedScreen (so bulletin flow continues)
-    doPauseMock.mockImplementation(() => {
-      // Don't set paginatedScreen - let the flow continue
-    });
+    // No-pause doPause so the loop drives through every state in order.
+    doPauseMock.mockImplementation(() => { /* no paginatedScreen — keep flowing */ });
 
-    // First call: BULL → NODE_BULL → CONF_BULL → AUTO_REJOIN → DISPLAY_MENU.
-    // CONF_SCAN sets session.menuPause=true, so DISPLAY_MENU calls doPause and returns.
+    // First call: DISPLAY_BULL → ... → CONF_SCAN → performConferenceScan
+    // (mocked to land on DISPLAY_CONF_BULL) → return.
     await handleCommand(socket, session, '');
     expect(displayScreenMock).toHaveBeenCalled();
-    const screenNames = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
-    expect(screenNames).toContain('BULL');
-    expect(screenNames).toContain('NODE_BULL');
-    expect(displayConferenceBulletinsMock).toHaveBeenCalled();
+    const screenNames1 = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
+    expect(screenNames1).toContain('BULL');
+    expect(screenNames1).toContain('NODE_BULL');
     expect(doPauseMock).toHaveBeenCalled();
 
-    // Second call: resumes from DISPLAY_MENU (menuPause now false) — main menu shown.
+    // Second call: DISPLAY_CONF_BULL → AUTO_REJOIN → displayScreen('CONF_BULL').
+    // CONF_BULL is rendered here (express.e:5058) — not in displayConferenceBulletins
+    // anymore. See tests/conference-join-conf-bull.test.ts for the architectural pin.
     displayScreenMock.mockClear();
     await handleCommand(socket, session, '');
-    expect(displayMainMenuMock).toHaveBeenCalled();
+    const screenNames2 = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
+    expect(screenNames2).toContain('CONF_BULL');
   });
 
-  // express.e:29853-29855 — quickFlag=TRUE skips BULL bulletin display
-  test('express.e:29853 — quickFlag=true skips BULL screen entirely', async () => {
-    doPauseMock.mockImplementation(() => {}); // no-pause, let flow continue
+  // express.e:29853-29855 — quickFlag only skips the LOGON screen, NOT BULL.
+  // Earlier copies of this test asserted the opposite, but the source is
+  //   IF (quickFlag=FALSE) IF (displayScreen(SCREEN_LOGON)) THEN doPause()
+  // — there is no quickFlag check around displayScreen(SCREEN_BULL).
+  test('express.e:29853 — quickFlag does NOT suppress BULL/NODE_BULL', async () => {
+    doPauseMock.mockImplementation(() => {});
     const session = baseSession();
     session.quickFlag = true;
 
     await handleCommand(socket, session, '');
 
     const bullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'BULL');
-    expect(bullCalls).toHaveLength(0);
-    const nodeBullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'NODE_BULL');
-    expect(nodeBullCalls).toHaveLength(0);
+    expect(bullCalls.length).toBeGreaterThan(0);
   });
 
   // express.e:28556 — doPause IS called when BULL screen was shown
@@ -226,24 +227,9 @@ describe('Display flow parity', () => {
     expect(session.paginatedScreen).toBeDefined();
   });
 
-  test('skips bull screens when NO_BULLS/NO_CONF_BULLS set', async () => {
-    getConferenceToolFlagsMock.mockReturnValue({
-      forceNewscan: false,
-      noNewscan: false,
-      showNewFiles: false,
-      noNewFiles: false,
-      forceMenus: false,
-      noBulls: true,
-      noConfBulls: true,
-    });
-    const session = baseSession();
-
-    // First key should skip straight to confScan -> CONF_BULL (skipped) -> MENU
-    await handleCommand(socket, session, '');
-    await handleCommand(socket, session, '');
-
-    expect(displayScreenMock).not.toHaveBeenCalled();
-    expect(displayConferenceBulletinsMock).not.toHaveBeenCalled();
-    expect(session.subState).toBe(LoggedOnSubState.READ_COMMAND);
-  });
+  // NO_BULLS / NO_CONF_BULLS are not in express.e — the original BBS always
+  // displays BULL/NODE_BULL/CONF_BULL when the screens exist. Supporting
+  // suppression tooltypes would be a WEB_-tagged extension, which we
+  // explicitly avoid for this codebase. Test removed; if the extension is
+  // ever introduced, gate it behind a WEB_* tag and add a parity test there.
 });

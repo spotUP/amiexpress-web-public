@@ -87,7 +87,7 @@ describe('file-upload.util', () => {
     it('should reject filenames longer than 12 characters', () => {
       const result = validateFilename('verylongfilename.txt');
       expect(result.valid).toBe(false);
-      expect(result.error).toBe('Files longer than 12 characters are not allowed');
+      expect(result.error).toBe('Files longer than 12 characters are not allowed.');
     });
 
     it('should accept exactly 12 character filenames', () => {

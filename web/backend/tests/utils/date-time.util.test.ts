@@ -53,48 +53,40 @@ describe('Date/Time Utility Functions', () => {
   });
 
   describe('formatLongDate', () => {
-    it('should format date as DD-MMM-YYYY', () => {
-      const date = new Date('2026-01-07T14:30:00Z');
-      const result = formatLongDate(date);
-      expect(result).toBe('07-Jan-2026');
+    // MiscFuncs.e:287-297 — DateToStr with FORMAT_USA produces "MM-DD-YY".
+    // The previous tests expected DD-MMM-YYYY (DOS format) which is what
+    // formatLongDateTime renders, not formatLongDate.
+    it('should format date as MM-DD-YY (FORMAT_USA)', () => {
+      const date = new Date(2026, 0, 7, 14, 30, 0);
+      expect(formatLongDate(date)).toBe('01-07-26');
     });
 
-    it('should format single-digit days with leading zero', () => {
-      const date = new Date('2026-03-05T12:00:00Z');
-      const result = formatLongDate(date);
-      expect(result).toBe('05-Mar-2026');
+    it('should pad single-digit months and days', () => {
+      const date = new Date(2026, 2, 5, 12, 0, 0);
+      expect(formatLongDate(date)).toBe('03-05-26');
     });
 
     it('should format all 12 months correctly', () => {
-      const expected = [
-        '15-Jan-2025', '15-Feb-2025', '15-Mar-2025', '15-Apr-2025',
-        '15-May-2025', '15-Jun-2025', '15-Jul-2025', '15-Aug-2025',
-        '15-Sep-2025', '15-Oct-2025', '15-Nov-2025', '15-Dec-2025'
-      ];
-
       for (let month = 0; month < 12; month++) {
         const date = new Date(2025, month, 15);
-        const result = formatLongDate(date);
-        expect(result).toBe(expected[month]);
+        const mm = String(month + 1).padStart(2, '0');
+        expect(formatLongDate(date)).toBe(`${mm}-15-25`);
       }
     });
 
-    it('should format last day of month correctly', () => {
-      const date = new Date('2024-02-29T12:00:00Z'); // Leap year
-      const result = formatLongDate(date);
-      expect(result).toBe('29-Feb-2024');
+    it('should format leap-day correctly', () => {
+      const date = new Date(2024, 1, 29, 12, 0, 0);
+      expect(formatLongDate(date)).toBe('02-29-24');
     });
 
     it('should format first day of month correctly', () => {
-      const date = new Date('2026-01-01T00:00:00Z');
-      const result = formatLongDate(date);
-      expect(result).toBe('01-Jan-2026');
+      const date = new Date(2026, 0, 1, 0, 0, 0);
+      expect(formatLongDate(date)).toBe('01-01-26');
     });
 
     it('should format Amiga-era date correctly (1990s)', () => {
-      const date = new Date('1995-12-25T12:00:00Z');
-      const result = formatLongDate(date);
-      expect(result).toBe('25-Dec-1995');
+      const date = new Date(1995, 11, 25, 12, 0, 0);
+      expect(formatLongDate(date)).toBe('12-25-95');
     });
   });
 
@@ -131,22 +123,21 @@ describe('Date/Time Utility Functions', () => {
   });
 
   describe('formatLongDateTime', () => {
-    it('should format datetime as DD-MMM-YYYY HH:MM:SS', () => {
-      const date = new Date(2026, 0, 7, 14, 32, 15); // Local time
-      const result = formatLongDateTime(date);
-      expect(result).toBe('07-Jan-2026 14:32:15');
+    // MiscFuncs.e:320-341 — FORMAT_DOS output assembled with a 3-char weekday
+    // prefix: "DDD DD-MMM-YYYY HH:MM:SS".
+    it('should format datetime as DDD DD-MMM-YYYY HH:MM:SS', () => {
+      const date = new Date(2026, 0, 7, 14, 32, 15); // Wed
+      expect(formatLongDateTime(date)).toBe('Wed 07-Jan-2026 14:32:15');
     });
 
     it('should format midnight on New Years correctly', () => {
-      const date = new Date(2026, 0, 1, 0, 0, 0); // Local time
-      const result = formatLongDateTime(date);
-      expect(result).toBe('01-Jan-2026 00:00:00');
+      const date = new Date(2026, 0, 1, 0, 0, 0); // Thu
+      expect(formatLongDateTime(date)).toBe('Thu 01-Jan-2026 00:00:00');
     });
 
     it('should format Christmas 1995 correctly', () => {
-      const date = new Date(1995, 11, 25, 9, 0, 0); // Local time
-      const result = formatLongDateTime(date);
-      expect(result).toBe('25-Dec-1995 09:00:00');
+      const date = new Date(1995, 11, 25, 9, 0, 0); // Mon
+      expect(formatLongDateTime(date)).toBe('Mon 25-Dec-1995 09:00:00');
     });
   });
 

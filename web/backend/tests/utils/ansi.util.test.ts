@@ -69,8 +69,13 @@ describe('AnsiUtil', () => {
   });
 
   describe('clearScreen', () => {
-    it('should return clear screen sequence', () => {
-      expect(AnsiUtil.clearScreen()).toBe(ANSI.CLEAR_SCREEN);
+    it('returns scroll-then-home so previous output stays in scrollback', () => {
+      // ESC[2J would erase the viewport without pushing content into the
+      // xterm.js scrollback buffer. AnsiUtil.clearScreen scrolls 30 lines
+      // (one screen height) and homes the cursor instead — see ansi.util.ts.
+      const result = AnsiUtil.clearScreen();
+      expect(result).toBe('\r\n'.repeat(30) + '\x1b[H');
+      expect(result).not.toContain('\x1b[2J');
     });
   });
 

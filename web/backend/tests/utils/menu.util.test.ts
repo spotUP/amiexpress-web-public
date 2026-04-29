@@ -101,8 +101,10 @@ describe('menu.util', () => {
     it('should clear screen at start', () => {
       const result = MenuUtil.renderMenu(basicMenuState);
 
-      // Should start with clear screen code
-      expect(result).toContain('\x1b[2J');
+      // AnsiUtil.clearScreen() now scrolls 30 lines and homes the cursor
+      // (preserves xterm.js scrollback) instead of emitting ESC[2J.
+      expect(result).toContain('\x1b[H');
+      expect(result.indexOf('\x1b[H')).toBeLessThan(70); // appears near the start
     });
 
     it('should include separator lines', () => {

@@ -318,9 +318,20 @@ describe('ANSI Output Utility Functions', () => {
     });
 
     describe('clear', () => {
-      it('should add clear screen code', () => {
+      // ScreenBuffer.clear() now uses AnsiUtil.clearScreen() — scrolls 30 lines
+      // and homes the cursor (preserves xterm.js scrollback). The CLEAR_SCREEN
+      // constant ('\x1b[2J\x1b[H') still exists for animated transitions but
+      // is no longer used by clear().
+      it('should home the cursor', () => {
         buffer.clear();
-        expect(buffer.toString()).toContain(CLEAR_SCREEN);
+        expect(buffer.toString()).toContain('\x1b[H');
+      });
+
+      it('should scroll one screen height of newlines', () => {
+        buffer.clear();
+        const output = buffer.toString();
+        // 30 \r\n pairs precede the cursor home
+        expect(output.indexOf('\x1b[H')).toBeGreaterThan(58);
       });
 
       it('should return this for chaining', () => {
@@ -331,7 +342,7 @@ describe('ANSI Output Utility Functions', () => {
       it('should work with other operations', () => {
         buffer.clear().write('After clear');
         const output = buffer.toString();
-        expect(output).toContain(CLEAR_SCREEN);
+        expect(output).toContain('\x1b[H');
         expect(output).toContain('After clear');
       });
     });

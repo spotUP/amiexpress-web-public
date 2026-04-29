@@ -4,15 +4,20 @@
  * Tests classic BBS DIR file format parsing
  */
 
-// Mock dependencies BEFORE imports
-const actualFs = jest.requireActual('fs');
-jest.mock('fs', () => ({
-  ...actualFs,
-  promises: {
-    ...actualFs.promises,
-    readFile: jest.fn(),
-  },
-}));
+// Mock dependencies BEFORE imports.
+// jest.mock() is hoisted above top-level code, so requireActual must run
+// inside the factory — the previous outer `const actualFs` was undefined at
+// hoist time and threw "Cannot access 'actualFs' before initialization".
+jest.mock('fs', () => {
+  const actualFs = jest.requireActual('fs');
+  return {
+    ...actualFs,
+    promises: {
+      ...actualFs.promises,
+      readFile: jest.fn(),
+    },
+  };
+});
 jest.mock('../../src/utils/amigafs', () => ({
   findCaseInsensitive: jest.fn(),
 }));

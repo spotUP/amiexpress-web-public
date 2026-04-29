@@ -23,4 +23,9 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 10000,
+  // ESM-style relative imports use `.js` suffixes that swc/jest preserves.
+  // Strip them so jest's resolver finds the underlying `.ts` source.
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
 };

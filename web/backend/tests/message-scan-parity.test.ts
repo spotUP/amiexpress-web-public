@@ -1,8 +1,29 @@
+// The chain `message-scan.handler` -> `command.handler` -> `index.ts` boots
+// the real telnet/SSH/HTTP servers. With jest.resetModules() we re-require
+// that chain per test, so each test would try to bind the same fixed ports.
+// Override before any require to make every binding land on an ephemeral
+// port (or a clearly unused range) so successive resetModules() never collide.
+process.env.TELNET_PORT = '0';
+process.env.SSH_PORT = '0';
+process.env.BACKEND_PORT = '0';
+process.env.PORT = '0';
+
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 import { ScanFlags } from '../src/types/message-pointers';
+
+// jest.spyOn cannot redefine swc-emitted exports (they're declared
+// non-configurable). Hoist jest.mock so each export exists as a jest.fn()
+// that tests can re-implement via mockImplementation / mockResolvedValue.
+jest.mock('../src/utils/conference-tooltypes.util', () => ({
+  getConferenceToolFlags: jest.fn(),
+}));
+jest.mock('../src/handlers/command-execution.handler', () => ({
+  runSysCommand: jest.fn(),
+  runSystemCommand: jest.fn(),
+}));
 
 describe('message scan mail parity', () => {
   let db: any;
@@ -33,7 +54,7 @@ describe('message scan mail parity', () => {
     jest.resetModules();
 
     const tooltypes = require('../src/utils/conference-tooltypes.util');
-    jest.spyOn(tooltypes, 'getConferenceToolFlags').mockImplementation(() => ({
+    (tooltypes.getConferenceToolFlags as jest.Mock).mockImplementation(() => ({
       forceNewscan: false,
       noNewscan: false,
       showNewFiles: false,
@@ -107,7 +128,11 @@ describe('message scan mail parity', () => {
       extMsgNum: 0
     });
     messageIndexManager.appendMessageHeader(1, {
-      status: MsgStatus.DELETED | MsgStatus.PRIVATE,
+      // express.e mailHeader.status is a single ASCII char ('P', 'p', 'R', 'D')
+      // — the old `DELETED | PRIVATE` bit-OR collapsed to `'V'` (0x56), which
+      // matched neither status. DELETED alone is what express.e uses for a
+      // killed private message anyway (no compound state).
+      status: MsgStatus.DELETED,
       msgNumb: 3,
       toName: 'SYSOP',
       fromName: 'ALICE',
@@ -281,7 +306,13 @@ describe('file scan gating parity', () => {
     );
   }
 
-  test('per-base FILE_SCAN_MASK triggers new files scan', async () => {
+  test('per-base FILE_SCAN_MASK alone does NOT trigger file scan (WEB_ deviation)', async () => {
+    // express.e:601-607 originally enabled the new-files scan whenever the
+    // user's conf_base FILE_SCAN_MASK bit was set. The WEB_ port omits that
+    // DB-based path on purpose (handoff.md: "File scan at login disabled
+    // (uses QuickNew instead of AquaScan); set SHOW_NEW_FILES in .info to
+    // re-enable per conference"). Per-base scan_flags alone — without the
+    // SHOW_NEW_FILES tooltype — must NOT call runSysCommand('N','S U').
     const { tmpRoot, performConferenceScan, messageIndexManager, MsgStatus } = setup();
     await setScanFlags(ScanFlags.FILE_SCAN | ScanFlags.MAIL_SCAN);
     messageIndexManager.initializeMessageIndex(1);
@@ -296,12 +327,14 @@ describe('file scan gating parity', () => {
       extMsgNum: 0
     });
 
-    const runSysCommand = jest.spyOn(require('../src/handlers/command-execution.handler'), 'runSysCommand').mockResolvedValue(undefined);
+    const runSysCommand = require('../src/handlers/command-execution.handler').runSysCommand as jest.Mock;
+    runSysCommand.mockReset();
+    runSysCommand.mockResolvedValue(undefined);
     const socket = { emit: jest.fn() };
     const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
 
     await performConferenceScan(socket, session);
-    expect(runSysCommand).toHaveBeenCalledWith(socket, session, 'N', 'S U');
+    expect(runSysCommand).not.toHaveBeenCalled();
 
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
@@ -321,7 +354,9 @@ describe('file scan gating parity', () => {
       extMsgNum: 0
     });
 
-    const runSysCommand = jest.spyOn(require('../src/handlers/command-execution.handler'), 'runSysCommand').mockResolvedValue(undefined);
+    const runSysCommand = require('../src/handlers/command-execution.handler').runSysCommand as jest.Mock;
+    runSysCommand.mockReset();
+    runSysCommand.mockResolvedValue(undefined);
     const socket = { emit: jest.fn() };
     const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
 
@@ -346,7 +381,9 @@ describe('file scan gating parity', () => {
       extMsgNum: 0
     });
 
-    const runSysCommand = jest.spyOn(require('../src/handlers/command-execution.handler'), 'runSysCommand').mockResolvedValue(undefined);
+    const runSysCommand = require('../src/handlers/command-execution.handler').runSysCommand as jest.Mock;
+    runSysCommand.mockReset();
+    runSysCommand.mockResolvedValue(undefined);
     const socket = { emit: jest.fn() };
     const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
 

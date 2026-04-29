@@ -68,8 +68,10 @@ jest.mock('../../src/utils/extractors/tar-extractor', () => ({
   })),
 }));
 
-jest.mock('../../src/utils/extractors/lzx-extractor', () => ({
-  LzxExtractor: jest.fn().mockImplementation(() => ({
+// Renamed to lzx-wasm-extractor; the test still references the legacy name in
+// other places, so the mock module export aliases LzxExtractor for back-compat.
+jest.mock('../../src/utils/extractors/lzx-wasm-extractor', () => ({
+  LzxWasmExtractor: jest.fn().mockImplementation(() => ({
     listFiles: jest.fn(),
     extractFile: jest.fn(),
     getEntries: jest.fn(),

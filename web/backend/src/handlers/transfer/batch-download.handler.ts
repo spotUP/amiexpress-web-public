@@ -137,6 +137,26 @@ export class BatchDownloadHandler {
     session: BBSSession,
     input: string
   ): Promise<void> {
+    const answer = input.trim().toUpperCase();
+
+    // express.e:12670 — pendingGoodbye uses BATCH_DOWNLOAD_CONFIRM but does
+    // NOT also set waitingForBatchConfirm/downloadFileList. Handle this
+    // branch BEFORE the early-return guard below so a Y/N at the
+    // "Do you leave without them?" prompt actually drives the logoff.
+    if (session.tempData?.pendingGoodbye) {
+      const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
+      delete session.tempData.pendingGoodbye;
+      delete session.tempData.pendingGoodbyeParams;
+      if (answer === 'Y') {
+        const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+        handleGoodbyeCommand(socket, session, pendingParams);
+      } else {
+        socket.emit('ansi-output', '\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+      }
+      return;
+    }
+
     // Support both the flagManager batch flow and the file selector batch flow
     if (!session.tempData?.waitingForBatchConfirm && !session.tempData?.downloadFileList) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -145,25 +165,6 @@ export class BatchDownloadHandler {
 
     session.tempData.waitingForBatchConfirm = false;
     const downloadList = session.tempData.batchDownloadList || session.tempData.downloadFileList || [];
-    const answer = input.trim().toUpperCase();
-
-    // express.e:12670: "Do you leave without them?" — Y=leave (logoff), N/CR=cancel logoff
-    // Regular batch: Y=download, N=cancel
-    if (session.tempData?.pendingGoodbye) {
-      const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
-      delete session.tempData.pendingGoodbye;
-      delete session.tempData.pendingGoodbyeParams;
-      if (answer === 'Y') {
-        // User chose to leave without downloading — proceed with logoff
-        const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
-        handleGoodbyeCommand(socket, session, pendingParams);
-      } else {
-        // User wants to stay and download — cancel logoff
-        socket.emit('ansi-output', '\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-      }
-      return;
-    }
 
     if (answer !== 'Y' && answer !== 'YES') {
       socket.emit('ansi-output', '\r\n\x1b[33mBatch download cancelled.\x1b[0m\r\n');

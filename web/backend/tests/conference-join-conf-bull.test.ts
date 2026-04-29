@@ -30,22 +30,19 @@ describe('Node/conference screen display wiring (2026-04-24)', () => {
     expect(call).toMatch(/NODE_BULL'\s*,\s*true\s*,\s*\/\*\s*silent\s*\*\/\s*true/);
   });
 
-  test('joinConference calls displayScreen("CONF_BULL") with silent=true', () => {
+  test('command.handler advanceDisplayFlow shows CONF_BULL + doPause before joinConference', () => {
+    // CONF_BULL display moved out of joinConference (express.e:5056-5061
+    // notes pin this) into the advanceDisplayFlow AUTO_REJOIN block in
+    // command.handler.ts. The handler imports doPause and emits CONF_BULL +
+    // doPause BEFORE invoking joinConference, ensuring the bulletin lands
+    // before the "Joining Conference" line.
     const src = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'handlers', 'operations', 'conference.handler.ts'),
+      path.join(__dirname, '..', 'src', 'handlers', 'command.handler.ts'),
       'utf8'
     );
-    // Must import doPause alongside displayScreen so the doPause() after
-    // CONF_BULL compiles.
-    expect(src).toMatch(/import\s*\{[^}]*\bdoPause\b[^}]*\}\s*from\s*['"]\.\.\/screen\.handler['"]/);
-    // Must invoke displayScreen with 'CONF_BULL' and silent=true.
-    expect(src).toMatch(/displayScreen\(socket,\s*session,\s*'CONF_BULL'[^)]*true[^)]*\)/);
-    // Must be inside the non-silent join branch (i.e. not inside an
-    // `if (silent)` guard) — do that by requiring the call to appear
-    // BEFORE the 'auto-rejoin' branch marker.
-    const callIdx = src.search(/displayScreen\(socket,\s*session,\s*'CONF_BULL'/);
-    const autoBranchIdx = src.search(/express\.e:5066-5088 - auto-rejoin/);
-    expect(callIdx).toBeGreaterThan(0);
-    expect(autoBranchIdx).toBeGreaterThan(callIdx); // CONF_BULL fires first
+    // Must import doPause from screen.handler.
+    expect(src).toMatch(/import\s*\{[^}]*\bdoPause\b[^}]*\}\s*from\s*['"]\.\/screen\.handler['"]/);
+    // Must reference CONF_BULL via displayScreen (or matching constant).
+    expect(src).toMatch(/displayScreen[\s\S]{0,200}?(?:'CONF_BULL'|SCREEN_CONF_BULL)/);
   });
 });

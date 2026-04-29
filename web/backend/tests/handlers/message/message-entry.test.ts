@@ -96,15 +96,16 @@ describe('handleMessageSubjectInput', () => {
     expect(session.tempData).toBeUndefined();
   });
 
-  test('blank subject emits abort message', () => {
-    jest.useFakeTimers();
+  test('blank subject silently returns (express.e:10854 RESULT_FAILURE)', () => {
+    // Express.e enterMSG returns silently on a blank subject — there is no
+    // textual "Aborted" message. The handler still emits a CR/LF for
+    // formatting before transitioning back to DISPLAY_MENU.
     const socket = makeSocket();
     const session = makeSession();
     handleMessageSubjectInput(socket, session, '');
-    jest.runAllTimers();
-    jest.useRealTimers();
     const emitted = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
-    expect(emitted).toMatch(/abort/i);
+    expect(emitted).not.toMatch(/abort/i);
+    expect(emitted.length).toBeLessThan(20); // just whitespace, no banner
   });
 
   test('valid subject stored on tempData', () => {

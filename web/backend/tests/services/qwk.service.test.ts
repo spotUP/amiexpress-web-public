@@ -125,8 +125,9 @@ describe('QWKManager — parseQWKMessage', () => {
     // Subject at offset 71: 25 chars, null-padded
     buf.write('Test Subject', 71, 'ascii');
 
-    // Number of blocks (LE u16) at offset 116
-    buf.writeUInt16LE(2, 116); // 2 blocks
+    // Number of blocks at offset 116 — qwk.e stores this as a 6-char ASCII
+    // decimal, NOT a binary LE u16 (the prior test wrote it incorrectly).
+    buf.write('     2', 116, 'ascii'); // right-justified in 6-char field
 
     return buf;
   }
@@ -167,8 +168,12 @@ describe('QWKManager — parseQWKMessage', () => {
   });
 
   test('totalLength equals numBlocks * 128', () => {
-    const buf = makeQWKMessage();
-    buf.writeUInt16LE(3, 116); // 3 blocks
+    const buf = Buffer.alloc(384, 0x20);
+    buf[0] = 0x20;
+    buf.write('01-15-26', 8, 'ascii');
+    buf.write('14:30', 16, 'ascii');
+    // qwk.e numBlocks is a 6-char ASCII decimal at offset 116
+    buf.write('     3', 116, 'ascii');
     const result = mgr.parseQWKMessage(buf, 0, {});
     expect(result?.totalLength).toBe(3 * 128);
   });

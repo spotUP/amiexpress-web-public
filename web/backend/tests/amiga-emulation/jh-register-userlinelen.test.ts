@@ -61,6 +61,13 @@ class StubEmulator {
     }
     return out;
   }
+
+  // The TLP2 BSS patch in handleRegister reads register A4 and writes lineLen
+  // to A4+0x3022. Return 0 so the patch's `a4 > 0x1000` guard skips the
+  // memory write — the patch is irrelevant to userLineLen reply tests.
+  getRegister(_idx: number): number {
+    return 0;
+  }
 }
 
 function buildHandler(user: any) {

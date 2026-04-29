@@ -18,9 +18,12 @@ describe('system commands - goodbye flagged files', () => {
     handleGoodbyeCommand(socket, session, '');
 
     expect(session.subState).toBe(LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM);
+    // express.e:12670-12672 — "You have flagged files still not downloaded.
+    // Do you leave without them?" (yesNo prompt). The earlier copy of this
+    // test expected "Download them now?" which was never in express.e.
     expect(socket.emit).toHaveBeenCalledWith(
       'ansi-output',
-      expect.stringContaining('Download them now?')
+      expect.stringContaining('Do you leave without them?')
     );
   });
 

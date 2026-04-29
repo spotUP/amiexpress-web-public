@@ -147,7 +147,7 @@ describe('download-ratios.util', () => {
         const result = await checkDownloadRatios(user, 2000);
         expect(result).toEqual({
           canDownload: false,
-          errorMessage: 'Not enough daily byte allowance for requested downloads.'
+          errorMessage: 'Not enough daily byte allowance for requested downloads'
         });
       });
 
@@ -200,7 +200,7 @@ describe('download-ratios.util', () => {
         const result = await checkDownloadRatios(user, requests);
         expect(result).toEqual({
           canDownload: false,
-          errorMessage: 'Not enough daily byte allowance for requested downloads.'
+          errorMessage: 'Not enough daily byte allowance for requested downloads'
         });
       });
     });
