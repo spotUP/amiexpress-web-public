@@ -2262,10 +2262,22 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
 
     if (!allowMCI) {
       // Raw display: no MCI processing. Return content directly as parsed output.
+      // EXCEPT we still strip bare `~SP` directives — they're control codes, not
+      // displayable text, and frequently appear at the end of art/ANSI files
+      // (e.g. Conf*/Screens/uprough.txt) intended to pause after the art renders.
+      // Without this strip, raw display emits "~SP" literally to the user.
       screenDebug(`[displayScreen] allowMCI=FALSE for ${screenName} (first line does not start with '~'), skipping MCI`);
-      parsed = contentForMci;
+      let rawHasPause = false;
+      const stripped = contentForMci.replace(/~SP(\s|$)/g, () => {
+        rawHasPause = true;
+        return '';
+      });
+      parsed = stripped;
       commands = [];
-      session.lastScreenHadPause = false;
+      session.lastScreenHadPause = rawHasPause;
+      if (rawHasPause) {
+        screenDebug(`[displayScreen] Raw-display: stripped trailing ~SP, marking pause`);
+      }
     } else {
 
     // === ~SP (Soft Pause) Segment Processing ===

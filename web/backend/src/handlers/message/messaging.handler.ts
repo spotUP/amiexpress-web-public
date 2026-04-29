@@ -246,8 +246,13 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   emitText(socket, `\x1b[32mSubject\x1b[33m: \x1b[0m${msg.subject}\r\n`);
   emitText(socket, '\r\n');
 
-  // Display message body - express.e:8965-8969
-  emitText(socket, `${msg.body}\r\n`);
+  // Display message body - express.e:8965-8969.
+  // Body files are stored with raw `\n` line breaks (express.e:10700-10703
+  // writes `\s\n` per line). xterm.js needs `\r\n` to return the cursor to
+  // column 1; bare `\n` only advances a row, so subsequent lines render
+  // indented under whatever column the previous line ended at.
+  const bodyForDisplay = (msg.body || '').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+  emitText(socket, `${bodyForDisplay}\r\n`);
   emitText(socket, '\r\n');
 
   // express.e:8943-8949 - Mark message as received if addressed to current user
@@ -314,7 +319,9 @@ async function displayMessagesNonStop(socket: any, session: BBSSession, startInd
     emitText(socket, `\x1b[32mSubject\x1b[33m: \x1b[0m${msg.subject}\r\n\r\n`);
 
     // Body — express.e:8954-8958: nonStopMail=TRUE → displayFile with checkForPause=FALSE
-    emitText(socket, `${msg.body}\r\n\r\n`);
+    // Convert raw \n line breaks to \r\n so xterm.js returns to col 1 between lines.
+    const bodyForDisplay = (msg.body || '').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+    emitText(socket, `${bodyForDisplay}\r\n\r\n`);
   }
 
   // End of messages - save pointer and exit

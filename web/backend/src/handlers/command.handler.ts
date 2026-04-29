@@ -766,10 +766,19 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // doPause correctly gates the output: show CONF_BULL now, return (waiting for
         // space), then on the next tick (confBullShown=true) complete the join.
         if (!session.tempData?.confBullShown) {
-          // Pre-set currentConf so CONF_BULL's MCI codes (~CC_CONFTOP, ~CC_*)
-          // resolve to the rejoin target. joinConference below re-sets the
-          // full session.currentConf*/Name/MsgBase state authoritatively.
+          // Pre-set ALL conf-identifying session fields so CONF_BULL's MCI
+          // codes (~CC_CONFTOP, ~CC_*) and the menu prompt format
+          // ([relConfNum:currentConfName]) all resolve to the rejoin
+          // target. ~CC_CONFTOP runs the conftop door which reads
+          // Conf<relConfNum>/ctop.data; without relConfNum it would look
+          // in conf 0 and report "not installed" even when ctop.data
+          // exists for the target conf.
+          // joinConference below re-sets the full state authoritatively.
           session.currentConf = confId;
+          session.relConfNum = confId;
+          session.conferenceId = confId;
+          session.currentConference = confId;
+          session.currentMsgBase = msgBaseId;
           if (targetConfName) session.currentConfName = targetConfName;
           try {
             const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
