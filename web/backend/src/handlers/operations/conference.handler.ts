@@ -151,13 +151,21 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     return false;
   }
 
-  console.log(`[CONF-DEBUG] joinConference: requested=${arguments[2]} resolved=${confId} auto=${auto} confScan=${confScan} silent=${silent} stack=`, new Error().stack?.split('\n').slice(2,7).join(' | '));
-  session.currentConf = confId;
-  session.conferenceId = confId; // XIM doors read this
-  session.currentConference = confId; // GlobalStructures reads this
-  session.currentMsgBase = msgBaseId; // Database ID for internal queries
-  session.currentConfName = conference.name;
-  session.relConfNum = confId; // For simplicity, use absolute conf number as relative
+  // express.e:11750-11754 — during scans, save oldcn / restore after.
+  // Silent or confScan joins are background iterations; they must not leak into
+  // user-facing session state (currentConfName / relConfNum drive the menu prompt).
+  // Without this gate the partial-upload-check loop in confScan ends in the LAST
+  // accessible conf (e.g. 14 for sysop) and the menu briefly shows that conf
+  // before AUTO_REJOIN switches back to confRJoin.
+  const isBackgroundScan = silent || confScan;
+  if (!isBackgroundScan) {
+    session.currentConf = confId;
+    session.conferenceId = confId; // XIM doors read this
+    session.currentConference = confId; // GlobalStructures reads this
+    session.currentMsgBase = msgBaseId; // Database ID for internal queries
+    session.currentConfName = conference.name;
+    session.relConfNum = confId; // For simplicity, use absolute conf number as relative
+  }
   // express.e:5130 - IF (auto=FALSE) AND (confScan=FALSE): save confRJoin
   // During confScan or auto-rejoin, confRJoin must NOT be overwritten.
   if (!auto && !confScan) {

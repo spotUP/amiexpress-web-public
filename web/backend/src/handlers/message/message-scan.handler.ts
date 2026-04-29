@@ -597,11 +597,12 @@ console.log(`[confScan] Partial uploads for slot ${slotNumber} in Conf${conf}:`,
   }
 
   // express.e:28145 - mystat:=doPause()
-  // After all conferences scanned (mail + partial uploads if ACS_UPLOAD),
-  // pause so the user can read the scan results before the screen scrolls
-  // away with the auto-rejoin display.
-  const { doPause } = require('../screen.handler');
-  doPause(socket, session);
+  // TODO: this doPause needs to be wired into the display flow state machine
+  // (similar to round 7's CONF_BULL fix). A naked doPause() here sets
+  // paginatedScreen but advanceDisplayFlow continues regardless, so the prompt
+  // is buried by AUTO_REJOIN output. For now, fall through — CONF_BULL
+  // screen + doPause inside AUTO_REJOIN serves as the visible pause.
+  socket.emit('ansi-output', '\r\n');
 }
 
 /**
