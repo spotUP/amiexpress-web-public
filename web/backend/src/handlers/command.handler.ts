@@ -785,7 +785,19 @@ console.error('[handleCommand] Error running queued screen commands:', error);
             if (shown) {
               if (!session.tempData) session.tempData = {};
               session.tempData.confBullShown = true;
-              doPause(socket, session); // user presses space → advanceDisplayFlow re-enters AUTO_REJOIN
+              // displayScreen already set up the pause/segment state for any
+              // ~SP / ~f / ~CC_ MCI codes inside CONF_BULL. Don't call doPause
+              // here — that would overwrite session.paginatedScreen and cause
+              // CONF_BULL's pendingInlineContent (e.g. ~CC_CONFTOP after the
+              // ~SP) to run twice OR get dropped on screen-segment resume.
+              if (session.lastScreenHadPause || session.screenSegments) {
+                displayFlowLog('CONF_BULL set up internal pause/segments — yielding');
+                return;
+              }
+              // Screen had no built-in pause and no pending segments: emit
+              // an explicit pause so the user gets a chance to read CONF_BULL
+              // before joinConference fires.
+              doPause(socket, session);
               displayFlowLog('pause after CONF_BULL');
               return;
             }
