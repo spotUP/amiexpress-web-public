@@ -9,6 +9,13 @@ echo "-> Killing AmiExpress servers (project: $PROJECT_ROOT)..."
 # Remove stale lockfile
 rm -f /tmp/amiexpress-servers.lock
 
+# Don't kill our own process tree. When start-servers.sh invokes us, our
+# parent PID ($PPID) is the start-servers.sh that just spawned us; killing
+# it would terminate the script that's about to start fresh servers.
+SELF_PID="$$"
+PARENT_PID="${PPID:-0}"
+SKIP_PIDS=" $SELF_PID $PARENT_PID "
+
 # Helper: kill processes matching a pattern, but ONLY if their command line
 # contains our project root. This prevents killing processes from other
 # projects (e.g., DEViLBOX) that match the same generic patterns.
@@ -17,6 +24,10 @@ kill_project_procs() {
   local label="$2"
   local pids
   pids=$(pgrep -f "$pattern" 2>/dev/null | while read pid; do
+    # Skip self and parent
+    case "$SKIP_PIDS" in
+      *" $pid "*) continue ;;
+    esac
     # Check if this process belongs to our project
     if ps -p "$pid" -o args= 2>/dev/null | grep -q "$PROJECT_ROOT"; then
       echo "$pid"
