@@ -638,23 +638,20 @@ echo ""
 
 fi  # End of QUICK_MODE check (if QUICK_MODE=true, all above was skipped)
 
-# Lockfile to prevent multiple instances
+# Always kill any existing servers / TUI / watchers first so a re-run never
+# fights with a previous instance. kill-servers.sh handles the lockfile,
+# zombie procs (start-servers, watch-doors, tsx, build-wasm), and the dev/
+# console TUI. If anything was running, it's gone after this returns.
 LOCKFILE="/tmp/amiexpress-servers.lock"
 if [ -f "$LOCKFILE" ]; then
   LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null)
   if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-    printf "%b\n" "${RED}[ERROR] Servers already running (PID $LOCK_PID)${RESET}"
-    printf "%b\n" "${YELLOW}Run ./dev/scripts/kill-servers.sh first${RESET}"
-    exit 1
-  else
-    # Stale lock file, remove it
-    rm -f "$LOCKFILE"
+    printf "%b\n" "${YELLOW}[INFO] Existing servers running (PID $LOCK_PID) — stopping them first${RESET}"
   fi
 fi
+./dev/scripts/kill-servers.sh || true
+rm -f "$LOCKFILE"
 echo $$ > "$LOCKFILE"
-
-# Kill any existing servers first
-./dev/scripts/kill-servers.sh || exit 1
 
 printf "%b\n" "${CYAN}→ Starting servers (unified deployment - all frontends served from backend)...${RESET}"
 echo ""
