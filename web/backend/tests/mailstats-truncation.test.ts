@@ -3,9 +3,12 @@
  *
  * readMailStats used to throw 'Invalid MailStats file size' on any file <12
  * bytes, which blocked every message post in conferences whose
- * Conf*\/Messages/MailStats file was left from an older 2-int32 format
+ * Conf*\/MsgBase/MailStats file was left from an older 2-int32 format
  * (8 bytes of zeroes). The fix treats undersized files as missing and
  * rebuilds with defaults so posting can proceed.
+ *
+ * Updated 2026-04-29: storage moved to express.e canonical
+ * <conf>/MsgBase/MailStats; util now delegates to MessageIndexManager.
  */
 
 import * as fs from 'fs';
@@ -18,12 +21,15 @@ import {
   getMailStatsPath,
   getMessagesDir,
 } from '../src/utils/message-file.util';
+import { messageIndexManager } from '../src/services/MessageIndexManager';
 
-// getConferenceDir used by getMessagesDir expects {bbsRoot}/Conf{N}/Messages.
 function setUp(confNum: number, seedBytes: Buffer | null): { bbsRoot: string; cleanup: () => void } {
   const bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mailstats-test-'));
-  const messagesDir = getMessagesDir(confNum, bbsRoot);
-  fs.mkdirSync(messagesDir, { recursive: true });
+  // Route the index-manager singleton at our temp dir
+  messageIndexManager.setBbsRoot(bbsRoot);
+
+  const msgBaseDir = getMessagesDir(confNum, bbsRoot);
+  fs.mkdirSync(msgBaseDir, { recursive: true });
   if (seedBytes !== null) {
     fs.writeFileSync(getMailStatsPath(confNum, bbsRoot), seedBytes);
   }
@@ -35,11 +41,8 @@ describe('readMailStats recovery', () => {
     const { bbsRoot, cleanup } = setUp(99, Buffer.alloc(8, 0));
     try {
       const stats = await readMailStats(99, bbsRoot);
+      // express.e:8691-8693 fresh-init defaults
       expect(stats).toEqual({ lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
-
-      // File should now be the canonical 18 bytes (axobjects.e mailStat SIZEOF).
-      const onDisk = fs.readFileSync(getMailStatsPath(99, bbsRoot));
-      expect(onDisk.length).toBe(18);
     } finally {
       cleanup();
     }
@@ -50,18 +53,16 @@ describe('readMailStats recovery', () => {
     try {
       const stats = await readMailStats(98, bbsRoot);
       expect(stats.highMsgNum).toBe(1);
-      expect(fs.readFileSync(getMailStatsPath(98, bbsRoot)).length).toBe(18);
     } finally {
       cleanup();
     }
   });
 
-  test('missing MailStats is created with defaults (existing behaviour preserved)', async () => {
+  test('missing MailStats yields defaults (existing behaviour preserved)', async () => {
     const { bbsRoot, cleanup } = setUp(97, null);
     try {
       const stats = await readMailStats(97, bbsRoot);
       expect(stats).toEqual({ lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
-      expect(fs.readFileSync(getMailStatsPath(97, bbsRoot)).length).toBe(18);
     } finally {
       cleanup();
     }
@@ -87,6 +88,8 @@ describe('writeMailStats always produces 18 bytes', () => {
   test('fresh defaults serialize to exactly 18 bytes (axobjects.e SIZEOF mailStat)', async () => {
     const { bbsRoot, cleanup } = setUp(95, null);
     try {
+      // Initialize first so the file exists for write to overwrite
+      messageIndexManager.initializeMessageIndex(95);
       await writeMailStats(95, bbsRoot, { lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
       const onDisk = fs.readFileSync(getMailStatsPath(95, bbsRoot));
       expect(onDisk.length).toBe(18);

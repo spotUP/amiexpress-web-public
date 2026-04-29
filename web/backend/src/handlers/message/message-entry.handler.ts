@@ -474,8 +474,10 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
     emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
 
-    // Save to database (for web UI, search indexing)
-    const messageId = await _db.createMessage(message);
+    // Save to database (for web UI / search indexing only).
+    // Body file + HeaderFile already written by writeMessageFile above —
+    // tell createMessage to skip its own disk-write to avoid duplicates.
+    const messageId = await _db.createMessage(message, { skipDiskWrite: true });
 
     // Increment messagesPosted counter (express.e:10127)
     session.user!.messagesPosted = (session.user!.messagesPosted || 0) + 1;

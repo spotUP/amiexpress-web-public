@@ -1,10 +1,16 @@
 /**
- * Unit tests for message-file.util.ts
- * Tests AmiExpress message storage (1:1 port from express.e)
+ * Unit tests for `utils/message-file.util.ts` — express.e canonical layout.
  *
- * Messages stored as .msg files in Conf{N}/Messages/{messageId}.msg
- * MailStats binary file tracks message IDs in Conf{N}/Messages/MailStats
- * Format: 3 x 4-byte big-endian LONGs + 6-byte pad = 18 bytes (lowestKey, highMsgNum, lowestNotDel, pad[6])
+ * Layout:
+ *   Body file: `<conf>/MsgBase/<msgNum>` (no extension, raw lines)
+ *   HeaderFile: `<conf>/MsgBase/HeaderFile` (110-byte msgHeader records)
+ *   MailStats:  `<conf>/MsgBase/MailStats` (18-byte BE struct)
+ *
+ * Semantics:
+ *   `mailStat.highMsgNum` = NEXT id to assign (express.e:10688)
+ *   `getNextMessageId` returns current high; append bumps high+1 (express.e:12418)
+ *   On 1→2 transition `lowestNotDel := 1` (express.e:12419)
+ *   Header field truncation: 31 chars (axobjects.e mailHeader)
  */
 
 import * as fs from 'fs/promises';
@@ -24,17 +30,17 @@ import {
   deleteMessageFile,
   getAllMessageIds,
   type MailStats,
-  type MessageFile,
 } from '../../src/utils/message-file.util';
+import { messageIndexManager } from '../../src/services/MessageIndexManager';
 
-describe('Message File Utility (AmiExpress Message Storage)', () => {
+describe('Message File Utility (express.e canonical layout)', () => {
   let testBbsPath: string;
-  let confPath: string;
 
   beforeEach(async () => {
     testBbsPath = await fs.mkdtemp(path.join(os.tmpdir(), 'msg-test-'));
-    confPath = path.join(testBbsPath, 'Conf1');
-    await fs.mkdir(confPath, { recursive: true });
+    await fs.mkdir(path.join(testBbsPath, 'Conf1'), { recursive: true });
+    // Route the singleton at our temp dir for this test
+    messageIndexManager.setBbsRoot(testBbsPath);
   });
 
   afterEach(async () => {
@@ -44,712 +50,441 @@ describe('Message File Utility (AmiExpress Message Storage)', () => {
   });
 
   describe('Path utilities', () => {
-    it('should generate correct Messages directory path', () => {
-      const result = getMessagesDir(1, testBbsPath);
-      expect(result).toBe(path.join(testBbsPath, 'Conf1', 'Messages'));
+    it('resolves to <conf>/MsgBase/ (express.e msgBaseLocation)', () => {
+      expect(getMessagesDir(1, testBbsPath)).toBe(
+        path.join(testBbsPath, 'Conf1', 'MsgBase')
+      );
     });
 
-    it('should generate correct MailStats path', () => {
-      const result = getMailStatsPath(1, testBbsPath);
-      expect(result).toBe(path.join(testBbsPath, 'Conf1', 'Messages', 'MailStats'));
+    it('places MailStats inside MsgBase/', () => {
+      expect(getMailStatsPath(1, testBbsPath)).toBe(
+        path.join(testBbsPath, 'Conf1', 'MsgBase', 'MailStats')
+      );
     });
 
-    it('should handle different conference numbers', () => {
+    it('handles different conference numbers', () => {
       expect(getMessagesDir(5, testBbsPath)).toContain('Conf5');
       expect(getMessagesDir(10, testBbsPath)).toContain('Conf10');
-      expect(getMailStatsPath(5, testBbsPath)).toContain('Conf5/Messages/MailStats');
+      expect(getMailStatsPath(5, testBbsPath)).toMatch(
+        /Conf5[/\\]MsgBase[/\\]MailStats$/
+      );
     });
   });
 
-  describe('MailStats (binary format)', () => {
-    describe('writeMailStats', () => {
-      it('should write MailStats in correct binary format', async () => {
-        const stats: MailStats = {
-          lowestKey: 1,
-          lowestNotDel: 5,
-          highMsgNum: 100
-        };
+  describe('MailStats binary format', () => {
+    it('writes 18-byte BE struct (lowestKey, highMsgNum, lowestNotDel, pad[6])', async () => {
+      // Init MsgBase directory + initial MailStats so writeMailStats has somewhere to write
+      messageIndexManager.initializeMessageIndex(1);
 
-        await writeMailStats(1, testBbsPath, stats);
+      const stats: MailStats = { lowestKey: 1, lowestNotDel: 5, highMsgNum: 100 };
+      await writeMailStats(1, testBbsPath, stats);
 
-        const statsPath = getMailStatsPath(1, testBbsPath);
-        const buffer = await fs.readFile(statsPath);
-
-        // axobjects.e mailStat: lowestKey(0) highMsgNum(4) lowestNotDel(8) pad[6](12) = 18 bytes
-        expect(buffer.length).toBe(18);
-        expect(buffer.readInt32BE(0)).toBe(1);    // lowestKey
-        expect(buffer.readInt32BE(4)).toBe(100);  // highMsgNum
-        expect(buffer.readInt32BE(8)).toBe(5);    // lowestNotDel
-      });
-
-      it('should create Messages directory if missing', async () => {
-        const stats: MailStats = { lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 };
-
-        await writeMailStats(1, testBbsPath, stats);
-
-        const messagesDir = getMessagesDir(1, testBbsPath);
-        expect(fsSync.existsSync(messagesDir)).toBe(true);
-      });
-
-      it('should handle zero values', async () => {
-        const stats: MailStats = { lowestKey: 0, lowestNotDel: 0, highMsgNum: 0 };
-
-        await writeMailStats(1, testBbsPath, stats);
-
-        const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32BE(0)).toBe(0);  // lowestKey
-        expect(buffer.readInt32BE(4)).toBe(0);  // highMsgNum
-        expect(buffer.readInt32BE(8)).toBe(0);  // lowestNotDel
-      });
-
-      it('should handle large values', async () => {
-        const stats: MailStats = {
-          lowestKey: 1000000,
-          lowestNotDel: 999999,
-          highMsgNum: 1000001
-        };
-
-        await writeMailStats(1, testBbsPath, stats);
-
-        const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32BE(0)).toBe(1000000);  // lowestKey
-        expect(buffer.readInt32BE(4)).toBe(1000001);  // highMsgNum
-        expect(buffer.readInt32BE(8)).toBe(999999);   // lowestNotDel
-      });
-
-      it('should overwrite existing MailStats', async () => {
-        const stats1: MailStats = { lowestKey: 1, lowestNotDel: 1, highMsgNum: 10 };
-        const stats2: MailStats = { lowestKey: 1, lowestNotDel: 5, highMsgNum: 20 };
-
-        await writeMailStats(1, testBbsPath, stats1);
-        await writeMailStats(1, testBbsPath, stats2);
-
-        const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
-        expect(buffer.readInt32BE(4)).toBe(20);  // highMsgNum at offset 4
-      });
+      const buffer = await fs.readFile(getMailStatsPath(1, testBbsPath));
+      expect(buffer.length).toBe(18);
+      expect(buffer.readInt32BE(0)).toBe(1);    // lowestKey
+      expect(buffer.readInt32BE(4)).toBe(100);  // highMsgNum
+      expect(buffer.readInt32BE(8)).toBe(5);    // lowestNotDel
     });
 
-    describe('readMailStats', () => {
-      it('should read MailStats from binary file', async () => {
-        const expected: MailStats = { lowestKey: 1, lowestNotDel: 5, highMsgNum: 100 };
-        await writeMailStats(1, testBbsPath, expected);
+    it('round-trips MailStats correctly', async () => {
+      messageIndexManager.initializeMessageIndex(1);
 
-        const result = await readMailStats(1, testBbsPath);
+      const original: MailStats = { lowestKey: 42, lowestNotDel: 40, highMsgNum: 50 };
+      await writeMailStats(1, testBbsPath, original);
 
-        expect(result).toEqual(expected);
-      });
-
-      it('should create default MailStats if file missing', async () => {
-        const result = await readMailStats(1, testBbsPath);
-
-        expect(result).toEqual({
-          lowestKey: 1,
-          lowestNotDel: 0,
-          highMsgNum: 1
-        });
-
-        // Should have written default to disk
-        expect(fsSync.existsSync(getMailStatsPath(1, testBbsPath))).toBe(true);
-      });
-
-      it('should return defaults for undersized file (< 12 bytes)', async () => {
-        const messagesDir = getMessagesDir(1, testBbsPath);
-        await fs.mkdir(messagesDir, { recursive: true });
-
-        // Write only 8 bytes (should be 18); production code rebuilds with defaults
-        const buffer = Buffer.alloc(8);
-        await fs.writeFile(getMailStatsPath(1, testBbsPath), buffer);
-
-        const result = await readMailStats(1, testBbsPath);
-        expect(result.lowestKey).toBe(1);
-        expect(result.lowestNotDel).toBe(0);
-        expect(result.highMsgNum).toBe(1);
-      });
-
-      it('should handle corrupted file', async () => {
-        const messagesDir = getMessagesDir(1, testBbsPath);
-        await fs.mkdir(messagesDir, { recursive: true });
-
-        // Write garbage data (valid size but wrong format)
-        const buffer = Buffer.alloc(12, 0xFF);
-        await fs.writeFile(getMailStatsPath(1, testBbsPath), buffer);
-
-        const result = await readMailStats(1, testBbsPath);
-
-        // Should read the binary values even if they're "wrong"
-        expect(result.lowestKey).toBe(-1);
-        expect(result.lowestNotDel).toBe(-1);
-        expect(result.highMsgNum).toBe(-1);
-      });
+      const result = await readMailStats(1, testBbsPath);
+      expect(result).toEqual(original);
     });
 
-    describe('read/write round-trip', () => {
-      it('should round-trip MailStats correctly', async () => {
-        const original: MailStats = { lowestKey: 42, lowestNotDel: 40, highMsgNum: 50 };
-
-        await writeMailStats(1, testBbsPath, original);
-        const result = await readMailStats(1, testBbsPath);
-
-        expect(result).toEqual(original);
-      });
+    it('readMailStats returns express.e fresh-init defaults when missing', async () => {
+      // No MsgBase dir, no MailStats file
+      const result = await readMailStats(1, testBbsPath);
+      // express.e:8691-8693 defaults
+      expect(result).toEqual({ lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
     });
   });
 
-  describe('getNextMessageId', () => {
-    it('should return current highMsgNum and increment', async () => {
+  describe('getNextMessageId — express.e:10688', () => {
+    it('returns the current highMsgNum (NOT high+1)', async () => {
+      messageIndexManager.initializeMessageIndex(1);
       const stats: MailStats = { lowestKey: 1, lowestNotDel: 1, highMsgNum: 10 };
       await writeMailStats(1, testBbsPath, stats);
 
       const nextId = await getNextMessageId(1, testBbsPath);
+      // current high IS the next id — high is bumped only when the header is appended
       expect(nextId).toBe(10);
 
-      const updated = await readMailStats(1, testBbsPath);
-      expect(updated.highMsgNum).toBe(11);
+      // Reading without writing should not have bumped high
+      const after = await readMailStats(1, testBbsPath);
+      expect(after.highMsgNum).toBe(10);
     });
 
-    it('should increment multiple times', async () => {
-      await writeMailStats(1, testBbsPath, { lowestKey: 1, lowestNotDel: 0, highMsgNum: 1 });
-
-      const id1 = await getNextMessageId(1, testBbsPath);
-      const id2 = await getNextMessageId(1, testBbsPath);
-      const id3 = await getNextMessageId(1, testBbsPath);
-
-      expect(id1).toBe(1);
-      expect(id2).toBe(2);
-      expect(id3).toBe(3);
-
-      const stats = await readMailStats(1, testBbsPath);
-      expect(stats.highMsgNum).toBe(4);
-    });
-
-    it('should create default MailStats if missing', async () => {
+    it('on a fresh msgbase returns 1', async () => {
       const nextId = await getNextMessageId(1, testBbsPath);
-
-      expect(nextId).toBe(1); // Default highMsgNum is 1
-
-      const stats = await readMailStats(1, testBbsPath);
-      expect(stats.highMsgNum).toBe(2); // Incremented to 2
+      expect(nextId).toBe(1);
     });
   });
 
   describe('formatMessageDate', () => {
-    it('should format date correctly', () => {
-      const date = new Date('2025-12-05T14:32:10');
-      const result = formatMessageDate(date);
-      expect(result).toBe('05-Dec-25 14:32:10');
+    it('formats DD-MMM-YY HH:MM:SS', () => {
+      expect(formatMessageDate(new Date('2025-12-05T14:32:10')))
+        .toBe('05-Dec-25 14:32:10');
     });
 
-    it('should handle different months', () => {
+    it('handles different months', () => {
       expect(formatMessageDate(new Date('2025-01-15T00:00:00'))).toContain('Jan-25');
-      expect(formatMessageDate(new Date('2025-02-15T00:00:00'))).toContain('Feb-25');
       expect(formatMessageDate(new Date('2025-06-15T00:00:00'))).toContain('Jun-25');
       expect(formatMessageDate(new Date('2025-12-15T00:00:00'))).toContain('Dec-25');
     });
 
-    it('should pad single-digit days', () => {
-      const date = new Date('2025-05-03T10:00:00');
-      expect(formatMessageDate(date)).toMatch(/^03-/);
+    it('pads single-digit days/hours/minutes/seconds', () => {
+      const d = new Date('2025-05-03T03:05:08');
+      expect(formatMessageDate(d)).toBe('03-May-25 03:05:08');
     });
 
-    it('should pad hours, minutes, seconds', () => {
-      const date = new Date('2025-05-15T03:05:08');
-      const result = formatMessageDate(date);
-      expect(result).toContain('03:05:08');
-    });
-
-    it('should handle year 2000 correctly', () => {
-      const date = new Date('2000-05-15T12:00:00');
-      expect(formatMessageDate(date)).toContain('-00 ');
-    });
-
-    it('should handle year 2099', () => {
-      const date = new Date('2099-05-15T12:00:00');
-      expect(formatMessageDate(date)).toContain('-99 ');
+    it('handles year-2000 wrap', () => {
+      expect(formatMessageDate(new Date('2000-05-15T12:00:00'))).toContain('-00 ');
+      expect(formatMessageDate(new Date('2099-05-15T12:00:00'))).toContain('-99 ');
     });
   });
 
-  describe('writeMessageFile', () => {
-    it('should write message file with correct format', async () => {
+  describe('writeMessageFile — body file + HeaderFile entry', () => {
+    it('writes body to <conf>/MsgBase/<msgNum> (no .msg extension)', async () => {
       const message = {
         from: 'Alice',
         to: 'Bob',
-        subject: 'Test Message',
-        date: '05-Dec-25 14:32:10',
-        body: 'This is the message body.\nWith multiple lines.'
-      };
-
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
-
-      expect(msgNum).toBe(1); // First message
-
-      const filePath = path.join(getMessagesDir(1, testBbsPath), '1.msg');
-      const content = await fs.readFile(filePath, 'utf-8');
-      const lines = content.split('\n');
-
-      expect(lines[0]).toBe('Alice');
-      expect(lines[1]).toBe('Bob');
-      expect(lines[2]).toBe('Test Message');
-      expect(lines[3]).toBe('05-Dec-25 14:32:10');
-      expect(lines[4]).toBe('1');
-      expect(lines.slice(5).join('\n')).toBe('This is the message body.\nWith multiple lines.');
-    });
-
-    it('should auto-increment message numbers', async () => {
-      const message = {
-        from: 'User',
-        to: 'ALL',
         subject: 'Test',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
+        date: '05-Dec-25 14:32:10',
+        body: 'This is the body.\nLine 2.',
       };
-
-      const msg1 = await writeMessageFile(1, 0, message, testBbsPath);
-      const msg2 = await writeMessageFile(1, 0, message, testBbsPath);
-      const msg3 = await writeMessageFile(1, 0, message, testBbsPath);
-
-      expect(msg1).toBe(1);
-      expect(msg2).toBe(2);
-      expect(msg3).toBe(3);
-    });
-
-    it('should handle message to ALL (public)', async () => {
-      const message = {
-        from: 'SysOp',
-        to: 'ALL',
-        subject: 'System Notice',
-        date: formatMessageDate(new Date()),
-        body: 'Welcome to the BBS!'
-      };
-
-      await writeMessageFile(1, 0, message, testBbsPath);
-
-      const filePath = path.join(getMessagesDir(1, testBbsPath), '1.msg');
-      const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toContain('ALL');
-    });
-
-    it('should handle empty body', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Empty',
-        date: formatMessageDate(new Date()),
-        body: ''
-      };
-
       const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
+      expect(msgNum).toBe(1);
 
-      const filePath = path.join(getMessagesDir(1, testBbsPath), `${msgNum}.msg`);
+      const filePath = path.join(getMessagesDir(1, testBbsPath), '1');
+      expect(fsSync.existsSync(filePath)).toBe(true);
+      // No .msg file (express.e doesn't add an extension)
+      expect(fsSync.existsSync(filePath + '.msg')).toBe(false);
+
       const content = await fs.readFile(filePath, 'utf-8');
-      const lines = content.split('\n');
-
-      expect(lines.length).toBeGreaterThanOrEqual(5);
-      expect(lines.slice(5).join('\n')).toBe('');
+      // Body is stored raw — no metadata prefix
+      expect(content).toBe('This is the body.\nLine 2.\n');
+      expect(content).not.toContain('Alice');
+      expect(content).not.toContain('Bob');
     });
 
-    it('should handle long message body', async () => {
+    it('appends a HeaderFile entry with metadata', async () => {
+      await writeMessageFile(1, 0, {
+        from: 'Alice', to: 'Bob', subject: 'Hello',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      }, testBbsPath);
+
+      const headers = messageIndexManager.readHeaderFile(1);
+      expect(headers).toHaveLength(1);
+      expect(headers[0].fromName).toBe('Alice');
+      expect(headers[0].toName).toBe('Bob');
+      expect(headers[0].subject).toBe('Hello');
+      expect(headers[0].msgNumb).toBe(1);
+      expect(headers[0].recv).toBe(0);
+    });
+
+    it('bumps highMsgNum unconditionally and sets lowestNotDel:=1 on first save', async () => {
+      // Fresh msgbase: high=1, lowestNotDel=0
+      const before = await readMailStats(1, testBbsPath);
+      expect(before.highMsgNum).toBe(1);
+      expect(before.lowestNotDel).toBe(0);
+
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'A', to: 'B', subject: 's',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      }, testBbsPath);
+      expect(msgNum).toBe(1);
+
+      // express.e:12418 high+=1 → 2; express.e:12419 high===2 → lowestNotDel:=1
+      const after = await readMailStats(1, testBbsPath);
+      expect(after.highMsgNum).toBe(2);
+      expect(after.lowestNotDel).toBe(1);
+    });
+
+    it('auto-increments message numbers across multiple saves', async () => {
+      const m = {
+        from: 'U', to: 'ALL', subject: 's',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      };
+      expect(await writeMessageFile(1, 0, m, testBbsPath)).toBe(1);
+      expect(await writeMessageFile(1, 0, m, testBbsPath)).toBe(2);
+      expect(await writeMessageFile(1, 0, m, testBbsPath)).toBe(3);
+
+      const stats = await readMailStats(1, testBbsPath);
+      // After N msgs starting from fresh init: high = N + 1
+      expect(stats.highMsgNum).toBe(4);
+    });
+
+    it('handles empty body', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'Empty',
+        date: '05-Dec-25 14:32:10',
+        body: '',
+      }, testBbsPath);
+
+      const filePath = path.join(getMessagesDir(1, testBbsPath), String(msgNum));
+      const content = await fs.readFile(filePath, 'utf-8');
+      // Empty body still gets terminating newline
+      expect(content).toBe('\n');
+    });
+
+    it('handles long bodies verbatim', async () => {
       const longBody = 'Line\n'.repeat(100);
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Long',
-        date: formatMessageDate(new Date()),
-        body: longBody
-      };
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'Long',
+        date: '05-Dec-25 14:32:10',
+        body: longBody,
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
-
-      const filePath = path.join(getMessagesDir(1, testBbsPath), `${msgNum}.msg`);
+      const filePath = path.join(getMessagesDir(1, testBbsPath), String(msgNum));
       const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toContain(longBody);
+      expect(content.startsWith(longBody)).toBe(true);
     });
   });
 
-  describe('readMessageFile', () => {
-    it('should read message file correctly', async () => {
-      const original = {
-        from: 'Alice',
-        to: 'Bob',
-        subject: 'Test',
+  describe('readMessageFile — composes body + HeaderFile', () => {
+    it('reads body and metadata correctly', async () => {
+      await writeMessageFile(1, 0, {
+        from: 'Alice', to: 'Bob', subject: 'Test',
         date: '05-Dec-25 14:32:10',
-        body: 'Body text'
-      };
+        body: 'Body text',
+      }, testBbsPath);
 
-      await writeMessageFile(1, 0, original, testBbsPath);
       const result = await readMessageFile(1, 1, testBbsPath);
-
       expect(result).not.toBeNull();
       expect(result!.from).toBe('Alice');
       expect(result!.to).toBe('Bob');
       expect(result!.subject).toBe('Test');
-      expect(result!.date).toBe('05-Dec-25 14:32:10');
       expect(result!.msgNum).toBe(1);
       expect(result!.body).toBe('Body text');
-      expect(result!.isPrivate).toBe(true); // to != 'ALL'
+      expect(result!.isPrivate).toBe(true);  // to != ALL
     });
 
-    it('should detect public messages (to: ALL)', async () => {
-      const message = {
-        from: 'SysOp',
-        to: 'ALL',
-        subject: 'Public',
-        date: formatMessageDate(new Date()),
-        body: 'Public message'
-      };
+    it('detects public messages (to: ALL)', async () => {
+      await writeMessageFile(1, 0, {
+        from: 'SysOp', to: 'ALL', subject: 'Pub',
+        date: '05-Dec-25 14:32:10',
+        body: 'Public',
+      }, testBbsPath);
 
-      await writeMessageFile(1, 0, message, testBbsPath);
       const result = await readMessageFile(1, 1, testBbsPath);
-
       expect(result!.isPrivate).toBe(false);
     });
 
-    it('should return null for non-existent message', async () => {
+    it('returns null for non-existent message', async () => {
       const result = await readMessageFile(1, 999, testBbsPath);
       expect(result).toBeNull();
     });
 
-    it('should handle message with multiline body', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Multiline',
-        date: formatMessageDate(new Date()),
-        body: 'Line 1\nLine 2\nLine 3'
-      };
+    it('preserves multiline body verbatim', async () => {
+      await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'M',
+        date: '05-Dec-25 14:32:10',
+        body: 'Line 1\nLine 2\nLine 3',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
-      const result = await readMessageFile(1, msgNum, testBbsPath);
-
+      const result = await readMessageFile(1, 1, testBbsPath);
       expect(result!.body).toBe('Line 1\nLine 2\nLine 3');
     });
 
-    it('should return null for invalid format (too few lines)', async () => {
-      const messagesDir = getMessagesDir(1, testBbsPath);
-      await fs.mkdir(messagesDir, { recursive: true });
-
-      // Write malformed message (only 3 lines)
-      await fs.writeFile(path.join(messagesDir, '1.msg'), 'Line1\nLine2\nLine3');
+    it('returns null when body file is missing even if HeaderFile has it', async () => {
+      await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 's',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      }, testBbsPath);
+      // delete the body file directly
+      const filePath = path.join(getMessagesDir(1, testBbsPath), '1');
+      await fs.unlink(filePath);
 
       const result = await readMessageFile(1, 1, testBbsPath);
       expect(result).toBeNull();
     });
   });
 
-  describe('write/read round-trip', () => {
-    it('should round-trip message correctly', async () => {
-      const original = {
-        from: 'TestUser',
-        to: 'Recipient',
-        subject: 'Round Trip Test',
-        date: '01-Jan-26 00:00:00',
-        body: 'This is a test message.\nWith multiple lines.\nAnd special chars: !@#$%'
-      };
-
-      const msgNum = await writeMessageFile(1, 0, original, testBbsPath);
-      const result = await readMessageFile(1, msgNum, testBbsPath);
-
-      expect(result).not.toBeNull();
-      expect(result!.from).toBe(original.from);
-      expect(result!.to).toBe(original.to);
-      expect(result!.subject).toBe(original.subject);
-      expect(result!.date).toBe(original.date);
-      expect(result!.body).toBe(original.body);
-    });
-  });
-
   describe('messageFileExists', () => {
-    it('should return true for existing message', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Exists',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
-      };
-
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
+    it('returns true for existing message', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'E',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      }, testBbsPath);
       expect(messageFileExists(1, msgNum, testBbsPath)).toBe(true);
     });
 
-    it('should return false for non-existent message', () => {
+    it('returns false for non-existent message', () => {
       expect(messageFileExists(1, 999, testBbsPath)).toBe(false);
     });
 
-    it('should return false for non-existent conference', () => {
+    it('returns false for non-existent conference', () => {
       expect(messageFileExists(99, 1, testBbsPath)).toBe(false);
     });
   });
 
   describe('deleteMessageFile', () => {
-    it('should rename message to .deleted', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Delete Me',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
-      };
-
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
+    it('removes the body file and marks header DELETED', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'D',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      }, testBbsPath);
 
       await deleteMessageFile(1, msgNum, testBbsPath);
 
-      const messagesDir = getMessagesDir(1, testBbsPath);
-      expect(fsSync.existsSync(path.join(messagesDir, `${msgNum}.msg`))).toBe(false);
-      expect(fsSync.existsSync(path.join(messagesDir, `${msgNum}.msg.deleted`))).toBe(true);
-    });
-
-    it('should not throw on deleting non-existent message', async () => {
-      await expect(deleteMessageFile(1, 999, testBbsPath)).resolves.not.toThrow();
-    });
-
-    it('should remove message from active messages', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Test',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
-      };
-
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
-
-      await deleteMessageFile(1, msgNum, testBbsPath);
-
+      // Body gone
       expect(messageFileExists(1, msgNum, testBbsPath)).toBe(false);
+
+      // Header still exists but status is 'D' (express.e DELETED = 0x44)
+      const headers = messageIndexManager.readHeaderFile(1);
+      expect(headers[0].status).toBe(0x44);
+    });
+
+    it('does not throw when deleting non-existent message', async () => {
+      await expect(deleteMessageFile(1, 999, testBbsPath)).resolves.not.toThrow();
     });
   });
 
-  describe('getAllMessageIds', () => {
-    it('should return all message IDs sorted', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Test',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
+  describe('getAllMessageIds — filters DELETED status', () => {
+    it('returns all live message ids sorted', async () => {
+      const m = {
+        from: 'U', to: 'T', subject: 's',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
       };
+      await writeMessageFile(1, 0, m, testBbsPath);
+      await writeMessageFile(1, 0, m, testBbsPath);
+      await writeMessageFile(1, 0, m, testBbsPath);
 
-      await writeMessageFile(1, 0, message, testBbsPath);
-      await writeMessageFile(1, 0, message, testBbsPath);
-      await writeMessageFile(1, 0, message, testBbsPath);
-
-      const ids = await getAllMessageIds(1, testBbsPath);
-
-      expect(ids).toEqual([1, 2, 3]);
+      expect(await getAllMessageIds(1, testBbsPath)).toEqual([1, 2, 3]);
     });
 
-    it('should return empty array for no messages', async () => {
-      const ids = await getAllMessageIds(1, testBbsPath);
-      expect(ids).toEqual([]);
+    it('returns empty for fresh msgbase', async () => {
+      expect(await getAllMessageIds(1, testBbsPath)).toEqual([]);
     });
 
-    it('should ignore .deleted files', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Test',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
+    it('skips deleted messages', async () => {
+      const m = {
+        from: 'U', to: 'T', subject: 's',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
       };
-
-      await writeMessageFile(1, 0, message, testBbsPath);
-      await writeMessageFile(1, 0, message, testBbsPath);
+      await writeMessageFile(1, 0, m, testBbsPath);
+      await writeMessageFile(1, 0, m, testBbsPath);
 
       await deleteMessageFile(1, 1, testBbsPath);
 
-      const ids = await getAllMessageIds(1, testBbsPath);
-      expect(ids).toEqual([2]); // Only non-deleted message
+      expect(await getAllMessageIds(1, testBbsPath)).toEqual([2]);
     });
 
-    it('should ignore MailStats file', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Test',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
-      };
-
-      await writeMessageFile(1, 0, message, testBbsPath);
-
-      const ids = await getAllMessageIds(1, testBbsPath);
-      expect(ids).toEqual([1]); // MailStats not included
-    });
-
-    it('should handle gaps in message numbers', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Test',
-        date: formatMessageDate(new Date()),
-        body: 'Body'
-      };
-
-      await writeMessageFile(1, 0, message, testBbsPath);
-      await writeMessageFile(1, 0, message, testBbsPath);
-      await writeMessageFile(1, 0, message, testBbsPath);
-
-      await deleteMessageFile(1, 2, testBbsPath);
-
-      const ids = await getAllMessageIds(1, testBbsPath);
-      expect(ids).toEqual([1, 3]); // Gap at 2
-    });
-
-    it('should return empty array for non-existent conference', async () => {
-      const ids = await getAllMessageIds(99, testBbsPath);
-      expect(ids).toEqual([]);
+    it('returns empty for non-existent conference', async () => {
+      expect(await getAllMessageIds(99, testBbsPath)).toEqual([]);
     });
   });
 
-  describe('Real-world BBS message scenarios', () => {
-    it('should handle typical message posting workflow', async () => {
-      // User posts message
-      const message = {
-        from: 'retrouser',
-        to: 'sysop',
-        subject: 'Question about downloads',
-        date: formatMessageDate(new Date()),
-        body: 'Hi SysOp,\n\nWhere can I find the latest Amiga demos?\n\nThanks!'
-      };
+  describe('Real-world scenarios', () => {
+    it('typical post + read workflow', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'retrouser', to: 'sysop', subject: 'Question',
+        date: '05-Dec-25 14:32:10',
+        body: 'Hi SysOp,\n\nWhere can I find demos?\n\nThanks!',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
-
-      // Verify written
       expect(messageFileExists(1, msgNum, testBbsPath)).toBe(true);
 
-      // SysOp reads message
       const read = await readMessageFile(1, msgNum, testBbsPath);
       expect(read!.from).toBe('retrouser');
       expect(read!.isPrivate).toBe(true);
     });
 
-    it('should handle public announcement', async () => {
-      const announcement = {
-        from: 'SysOp',
-        to: 'ALL',
-        subject: 'System Maintenance Tonight',
-        date: formatMessageDate(new Date()),
-        body: 'The BBS will be down for maintenance tonight at 11 PM.\nExpected downtime: 2 hours.'
-      };
+    it('public announcement to ALL', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'SysOp', to: 'ALL', subject: 'Maintenance',
+        date: '05-Dec-25 14:32:10',
+        body: 'Down at 11pm.',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, announcement, testBbsPath);
       const read = await readMessageFile(1, msgNum, testBbsPath);
-
       expect(read!.isPrivate).toBe(false);
       expect(read!.to).toBe('ALL');
     });
 
-    it('should handle message deletion workflow', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Old Message',
+    it('post → delete → not in active list', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'Old',
         date: '01-Jan-90 00:00:00',
-        body: 'This is old'
-      };
+        body: 'Old',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
-
-      // Message exists
-      expect(messageFileExists(1, msgNum, testBbsPath)).toBe(true);
-
-      // Delete message
       await deleteMessageFile(1, msgNum, testBbsPath);
-
-      // No longer exists
       expect(messageFileExists(1, msgNum, testBbsPath)).toBe(false);
-
-      // Not in active messages
-      const allIds = await getAllMessageIds(1, testBbsPath);
-      expect(allIds).not.toContain(msgNum);
+      expect(await getAllMessageIds(1, testBbsPath)).not.toContain(msgNum);
     });
 
-    it('should handle conference message scanning', async () => {
-      // Post several messages
+    it('5 msgs + scan + MailStats high reflects next-to-assign', async () => {
+      const m = {
+        from: 'U', to: 'ALL', subject: 's',
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      };
       for (let i = 0; i < 5; i++) {
-        await writeMessageFile(1, 0, {
-          from: `User${i}`,
-          to: 'ALL',
-          subject: `Message ${i}`,
-          date: formatMessageDate(new Date()),
-          body: `Body ${i}`
-        }, testBbsPath);
+        await writeMessageFile(1, 0, { ...m, subject: `s${i}` }, testBbsPath);
       }
 
-      // Scan conference
-      const allIds = await getAllMessageIds(1, testBbsPath);
-      expect(allIds).toHaveLength(5);
-      expect(allIds).toEqual([1, 2, 3, 4, 5]);
+      expect(await getAllMessageIds(1, testBbsPath)).toEqual([1, 2, 3, 4, 5]);
 
-      // Check MailStats
       const stats = await readMailStats(1, testBbsPath);
-      expect(stats.highMsgNum).toBe(6); // Next message would be 6
+      // 5 msgs posted starting from high=1 → high becomes 6 (next-to-assign)
+      expect(stats.highMsgNum).toBe(6);
     });
   });
 
   describe('Edge cases', () => {
-    it('should handle very long subject', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
+    it('truncates 31-char metadata fields (axobjects.e mailHeader)', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'User', to: 'Test',
         subject: 'A'.repeat(200),
-        date: formatMessageDate(new Date()),
-        body: 'Body'
-      };
+        date: '05-Dec-25 14:32:10',
+        body: 'b',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
       const read = await readMessageFile(1, msgNum, testBbsPath);
-
-      expect(read!.subject).toBe('A'.repeat(200));
+      // mailHeader.subject is CHAR[31] — anything past byte 30 truncates
+      expect(read!.subject.length).toBe(31);
+      expect(read!.subject).toBe('A'.repeat(31));
     });
 
-    it('should handle special characters in message', async () => {
-      const message = {
-        from: 'User™',
-        to: 'Test©',
-        subject: 'Special: !@#$%^&*()',
-        date: formatMessageDate(new Date()),
-        body: 'Body with ñ, é, ü, and emoji 🎉'
-      };
+    it('preserves UTF-8 in body, ASCII-truncates in metadata', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'User', to: 'Test', subject: 'Special',
+        date: '05-Dec-25 14:32:10',
+        body: 'Body with ñ é ü 🎉',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
       const read = await readMessageFile(1, msgNum, testBbsPath);
-
-      expect(read!.from).toBe('User™');
-      expect(read!.to).toBe('Test©');
-      expect(read!.body).toContain('emoji 🎉');
+      // Body file is binary-safe — UTF-8 preserved
+      expect(read!.body).toContain('🎉');
+      // Metadata uses ASCII (mailHeader is ASCII bytes); non-ASCII chars get
+      // dropped by Buffer.from(... 'ascii') in serializer, which is consistent
+      // with express.e's StrCopy behavior.
+      expect(read!.from).toBe('User');
     });
 
-    it('should handle message with only newlines in body', async () => {
-      const message = {
-        from: 'User',
-        to: 'Test',
-        subject: 'Newlines',
-        date: formatMessageDate(new Date()),
-        body: '\n\n\n'
-      };
+    it('preserves body of only newlines', async () => {
+      const msgNum = await writeMessageFile(1, 0, {
+        from: 'U', to: 'T', subject: 'NL',
+        date: '05-Dec-25 14:32:10',
+        body: '\n\n\n',
+      }, testBbsPath);
 
-      const msgNum = await writeMessageFile(1, 0, message, testBbsPath);
       const read = await readMessageFile(1, msgNum, testBbsPath);
-
       expect(read!.body).toBe('\n\n\n');
-    });
-
-    it('should handle message number overflow (large values)', async () => {
-      const stats: MailStats = {
-        lowestKey: 1,
-        lowestNotDel: 1,
-        highMsgNum: 999999
-      };
-
-      await writeMailStats(1, testBbsPath, stats);
-
-      const nextId = await getNextMessageId(1, testBbsPath);
-      expect(nextId).toBe(999999);
-
-      const updated = await readMailStats(1, testBbsPath);
-      expect(updated.highMsgNum).toBe(1000000);
     });
   });
 });

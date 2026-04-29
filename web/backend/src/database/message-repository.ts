@@ -12,7 +12,20 @@ import { BaseRepository } from './BaseRepository';
 export class MessageRepository extends BaseRepository<any> {
   constructor(db: any) { super(db); }
 
-  async createMessage(message: Omit<Message, 'id'>): Promise<number> {
+  /**
+   * Persist a message.
+   *
+   * @param message — message data
+   * @param opts.skipDiskWrite — true if the caller already wrote the body file
+   *   and HeaderFile entry (e.g. message-entry.handler.saveMessage went
+   *   through `writeMessageFile` from utils/message-file.util.ts before
+   *   reaching here). Avoids the dual-allocation that produced two
+   *   physical .msg files per posted message.
+   */
+  async createMessage(
+    message: Omit<Message, 'id'>,
+    opts?: { skipDiskWrite?: boolean }
+  ): Promise<number> {
 
     const stmt = this.prepare(`
       INSERT INTO messages (
@@ -33,44 +46,30 @@ export class MessageRepository extends BaseRepository<any> {
 
     const messageId = result.lastInsertRowid as number;
 
-    // CRITICAL: Write to disk files for Amiga door compatibility
+    // Skip disk write when the caller already handled it (express.e flow:
+    // message-entry.handler.saveMessage allocates msgNum and writes file +
+    // HeaderFile up-front via writeMessageFile, then calls this for SQL only).
+    if (opts?.skipDiskWrite) {
+      return messageId;
+    }
+
+    // Disk write path — used by importers, AREXX, BBSApi, web-admin compose.
     try {
-      // Get next message number from message index manager
       const msgNumber = messageIndexManager.getNextMessageNumber(message.conferenceId);
+      const fullMessage: Message = { ...message, id: messageId };
 
-      const fullMessage: Message = {
-        ...message,
-        id: messageId
-      };
-
-      // Write .msg file (message text)
+      // writeMessageFile writes raw body to <conf>/MsgBase/<msgNum> AND
+      // appends a HeaderFile entry (no double-append: it checks for an
+      // existing header for the same msgNum before appending).
       messageFileManager.writeMessageFile(fullMessage, message.conferenceId, msgNumber);
-console.log(`[Database] Synced message ${messageId} to ${msgNumber}.msg (conf ${message.conferenceId})`);
-
-      // Write to HeaderFile (message index) and update MailStats
-      // express.e:10790-10794: 'R' for private, 'p' for censored public, 'P' for normal public
-      const timestamp = Math.floor(message.timestamp.getTime() / 1000);
-      const status = message.isPrivate
-        ? MsgStatus.PRIVATE
-        : ((message as any).censored ? MsgStatus.CENSORED : MsgStatus.NORMAL);
-      messageIndexManager.appendMessageHeader(message.conferenceId, {
-        status,
-        msgNumb: msgNumber,
-        toName: message.toUser || 'ALL',
-        fromName: message.author,
-        subject: message.subject,
-        msgDate: timestamp,
-        recv: 0,  // Not received yet
-        extMsgNum: msgNumber
-      });
-console.log(`[Database] Synced message ${messageId} to HeaderFile and MailStats (conf ${message.conferenceId})`);
+console.log(`[Database] Synced message ${messageId} as msg #${msgNumber} (conf ${message.conferenceId})`);
     } catch (error) {
 console.error(`[Database] Failed to sync message to disk:`, error);
       SysopDebugUtil.debug(
         null,
         null,
         'Database',
-        `Failed to sync new message to disk files (.msg and HeaderFile)`,
+        `Failed to sync new message to disk (body + HeaderFile)`,
         {
           error: error instanceof Error ? error.message : String(error),
           messageId,
@@ -79,7 +78,7 @@ console.error(`[Database] Failed to sync message to disk:`, error);
         },
         DebugSeverity.WARNING
       );
-      // Don't throw - DB insert succeeded, file write is best-effort
+      // Don't throw — DB insert succeeded
     }
 
     return messageId;

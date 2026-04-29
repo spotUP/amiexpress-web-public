@@ -1,191 +1,140 @@
 /**
- * Message File Utilities
- * 1:1 port from AmiExpress express.e message storage
+ * Message File Utilities — express.e canonical layout
  *
- * Messages are stored as plain text files in Conf{N}/Messages/{messageId}.msg
- * MailStats binary file tracks message IDs in Conf{N}/Messages/MailStats
+ * Express.e stores messages at `<msgBaseLocation>/<msgNum>` (no extension):
+ *   - msgBaseLocation defaults to `<conf>/MsgBase/` (express.e:2068)
+ *   - File body is RAW message lines only (express.e:10700-10703)
+ *   - Header metadata (from/to/subj/date/recv/status) lives in HeaderFile struct
+ *     managed by MessageIndexManager (axobjects.e mailHeader OBJECT, 110 bytes)
+ *   - MailStats counters (lowestKey, highMsgNum, lowestNotDel) live in
+ *     `<conf>/MsgBase/MailStats` managed by MessageIndexManager
+ *
+ * This module composes header (HeaderFile) + body (flat file) into the
+ * higher-level MessageFile API expected by callers.
  */
 
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { getConferenceDir } from './file-hold.util';
+import { messageIndexManager, MsgHeader, MsgStatus, MailStat } from '../services/MessageIndexManager';
 
 /**
- * MailStats structure (express.e:8672-8707)
- * Binary file tracking message numbers
+ * Re-export MailStats type for legacy callers (alias of MailStat without pad).
+ * Kept so existing imports from this module still type-check.
  */
 export interface MailStats {
-  lowestKey: number;      // Lowest message ID ever used
-  lowestNotDel: number;   // Lowest non-deleted message ID
-  highMsgNum: number;     // Highest message number (next ID to use)
+  lowestKey: number;
+  lowestNotDel: number;
+  highMsgNum: number;
 }
 
 /**
- * Message structure for .msg files
+ * Message structure surfaced to callers (header from HeaderFile + body from
+ * <conf>/MsgBase/<msgNum>).
  */
 export interface MessageFile {
-  from: string;           // Sender username
-  to: string;             // Recipient username or 'ALL'
-  subject: string;        // Message subject
-  date: string;           // Date timestamp (format: DD-MMM-YY HH:MM:SS)
-  msgNum: number;         // Message number (ID)
-  body: string;           // Message body (plain text, newline separated)
-  isPrivate?: boolean;    // Private message flag (not in file, derived from to != 'ALL')
-  receivedAt?: Date;      // express.e:8915-8926 - When recipient read the message (mailHeader.recv)
+  from: string;
+  to: string;
+  subject: string;
+  date: string;             // formatted "DD-MMM-YY HH:MM:SS"
+  msgNum: number;
+  body: string;
+  isPrivate?: boolean;
+  receivedAt?: Date;        // mh.recv as Date (0 → undefined)
 }
 
 /**
- * Get path to Messages directory for conference
- * Express.e:8676 - getMsgBaseLocation()
+ * Get path to the msgBase directory — express.e msgBaseLocation default
+ * (express.e:2068 — `<confLocation>/MsgBase/`).
  */
 export function getMessagesDir(confNum: number, bbsDataPath: string): string {
   const confPath = getConferenceDir(confNum, bbsDataPath);
-  return path.join(confPath, 'Messages');
+  return path.join(confPath, 'MsgBase');
 }
 
 /**
- * Get path to MailStats file
- * Express.e:8677 - StrAdd(string,'MailStats')
+ * Get path to MailStats file (managed by MessageIndexManager).
  */
 export function getMailStatsPath(confNum: number, bbsDataPath: string): string {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  return path.join(messagesDir, 'MailStats');
+  return path.join(getMessagesDir(confNum, bbsDataPath), 'MailStats');
 }
 
 /**
- * Read MailStats file (binary format)
- * Express.e:8672-8707 - getMailStatFile()
+ * Read MailStats — delegates to MessageIndexManager (single source of truth).
  */
-export async function readMailStats(confNum: number, bbsDataPath: string): Promise<MailStats> {
-  const mailStatsPath = getMailStatsPath(confNum, bbsDataPath);
-
-  let buffer: Buffer;
-  try {
-    buffer = await fs.readFile(mailStatsPath);
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      // File doesn't exist - create default (express.e:8691-8693).
-      const defaultStats: MailStats = {
-        lowestKey: 1,
-        lowestNotDel: 0,
-        highMsgNum: 1,
-      };
-      await writeMailStats(confNum, bbsDataPath, defaultStats);
-      return defaultStats;
-    }
-    throw error;
+export async function readMailStats(confNum: number, _bbsDataPath: string): Promise<MailStats> {
+  const stats = messageIndexManager.readMailStats(confNum);
+  if (!stats) {
+    // express.e:8691-8693 fresh init
+    return { lowestKey: 1, highMsgNum: 1, lowestNotDel: 0 };
   }
-
-  // Binary format per axobjects.e mailStat OBJECT:
-  //   offset  0: lowestKey    LONG (4 bytes, BE)
-  //   offset  4: highMsgNum   LONG (4 bytes, BE)
-  //   offset  8: lowestNotDel LONG (4 bytes, BE)
-  //   offset 12: pad[6]       ARRAY OF CHAR (6 bytes)
-  //   total: 18 bytes
-  //
-  // Historically some MailStats files were created in an older 2-int32 (8-byte)
-  // format or left zeroed by stale init paths. Rather than throwing and
-  // blocking every message post in the conference, treat an undersized file
-  // as equivalent to missing: log a warning, rebuild with defaults, continue.
-  // New posts then get a fresh high-water message ID from 1.
-  if (buffer.length < 12) {
-console.warn(
-      `[MailStats] ${mailStatsPath} is ${buffer.length} bytes (expected >=18). ` +
-      `Treating as corrupted and rebuilding with defaults.`
-    );
-    const defaultStats: MailStats = {
-      lowestKey: 1,
-      lowestNotDel: 0,
-      highMsgNum: 1,
-    };
-    await writeMailStats(confNum, bbsDataPath, defaultStats);
-    return defaultStats;
-  }
-
   return {
-    lowestKey: buffer.readInt32BE(0),
-    highMsgNum: buffer.readInt32BE(4),
-    lowestNotDel: buffer.readInt32BE(8),
+    lowestKey: stats.lowestKey,
+    highMsgNum: stats.highMsgNum,
+    lowestNotDel: stats.lowestNotDel,
   };
 }
 
 /**
- * Write MailStats file (binary format)
- * Express.e:8694 - Write(fd,mailStat,SIZEOF mailStat)
+ * Write MailStats — delegates to MessageIndexManager.
  */
 export async function writeMailStats(
   confNum: number,
-  bbsDataPath: string,
+  _bbsDataPath: string,
   stats: MailStats
 ): Promise<void> {
-  const mailStatsPath = getMailStatsPath(confNum, bbsDataPath);
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-
-  // Ensure Messages directory exists
-  await fs.mkdir(messagesDir, { recursive: true });
-
-  // Write binary format per axobjects.e mailStat OBJECT:
-  //   offset  0: lowestKey    LONG (4 bytes, BE)
-  //   offset  4: highMsgNum   LONG (4 bytes, BE)
-  //   offset  8: lowestNotDel LONG (4 bytes, BE)
-  //   offset 12: pad[6]       ARRAY OF CHAR (6 bytes, zeroed)
-  //   total: 18 bytes
-  const buffer = Buffer.alloc(18, 0);
-  buffer.writeInt32BE(stats.lowestKey, 0);
-  buffer.writeInt32BE(stats.highMsgNum, 4);
-  buffer.writeInt32BE(stats.lowestNotDel, 8);
-  // bytes 12-17 are pad[6], left as zero
-
-  await fs.writeFile(mailStatsPath, buffer);
-console.log(`[MailStats] Conf${confNum}: low=${stats.lowestNotDel} high=${stats.highMsgNum}`);
+  messageIndexManager.writeMailStats(confNum, {
+    lowestKey: stats.lowestKey,
+    highMsgNum: stats.highMsgNum,
+    lowestNotDel: stats.lowestNotDel,
+    pad: Buffer.alloc(6, 0),
+  });
 }
 
 /**
- * Get next message ID and increment highMsgNum
- * Express.e behavior - messages use incremental IDs
- */
-export async function getNextMessageId(confNum: number, bbsDataPath: string): Promise<number> {
-  const stats = await readMailStats(confNum, bbsDataPath);
-  const nextId = stats.highMsgNum;
-
-  // Increment for next message
-  stats.highMsgNum = nextId + 1;
-  await writeMailStats(confNum, bbsDataPath, stats);
-
-  return nextId;
-}
-
-/**
- * Format date for message file
- * Express.e:8894-8895 - formatLongDateTime(timeVar,date)
- * Format: "DD-MMM-YY HH:MM:SS" (e.g., "05-Dec-25 14:32:10")
+ * Format date for message header — express.e formatLongDateTime
+ * Format: "DD-MMM-YY HH:MM:SS" (e.g. "05-Dec-25 14:32:10")
  */
 export function formatMessageDate(date: Date): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
   const day = String(date.getDate()).padStart(2, '0');
   const month = months[date.getMonth()];
   const year = String(date.getFullYear()).slice(-2);
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
-
   return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
 }
 
 /**
- * Write message to disk as .msg file
- * Express.e:8953 - StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+ * Get path to a single message body file: <conf>/MsgBase/<msgNum>
+ * (express.e:10694 — `StringF(tempStr, '\s\d', msgBaseLocation, mh.msgNumb)`)
+ */
+function getMessageFilePath(confNum: number, msgNum: number, bbsDataPath: string): string {
+  return path.join(getMessagesDir(confNum, bbsDataPath), String(msgNum));
+}
+
+/**
+ * Allocate next message id and return it. Caller must then write body and
+ * append HeaderFile entry; MailStats high gets bumped by appendMessageHeader.
  *
- * File format:
- * Line 1: from username
- * Line 2: to username
- * Line 3: subject
- * Line 4: date (DD-MMM-YY HH:MM:SS)
- * Line 5: message number
- * Line 6+: message body
+ * Express.e:10688 — `mh.msgNumb := mailStat.highMsgNum` returns the current
+ * high as the new id; saveMessageHeader bumps it later.
+ */
+export async function getNextMessageId(confNum: number, _bbsDataPath: string): Promise<number> {
+  return messageIndexManager.getNextMessageNumber(confNum);
+}
+
+/**
+ * Write a new message: append HeaderFile entry + write raw body file.
+ *
+ * Body file format (express.e:10700-10703): one line per body line, '\n' (LF).
+ * Header metadata (from/to/subj/date) goes ONLY into HeaderFile, never the
+ * body file.
+ *
+ * Returns the assigned msgNumber.
  */
 export async function writeMessageFile(
   confNum: number,
@@ -193,219 +142,194 @@ export async function writeMessageFile(
   message: Omit<MessageFile, 'msgNum'>,
   bbsDataPath: string
 ): Promise<number> {
-  // Get next message ID
-  const msgNum = await getNextMessageId(confNum, bbsDataPath);
+  const msgNum = messageIndexManager.getNextMessageNumber(confNum);
+  const dir = getMessagesDir(confNum, bbsDataPath);
+  const msgFilePath = getMessageFilePath(confNum, msgNum, bbsDataPath);
 
-  // Build message file path
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const msgFilePath = path.join(messagesDir, `${msgNum}.msg`);
+  await fs.mkdir(dir, { recursive: true });
 
-  // Ensure Messages directory exists
-  await fs.mkdir(messagesDir, { recursive: true });
+  // express.e:10700-10703 — body lines only, no header
+  const bodyLines = message.body.split('\n');
+  const content = bodyLines.map(l => l + '\n').join('');
 
-  // Format message file content
-  const lines = [
-    message.from,
-    message.to,
-    message.subject,
-    message.date,
-    String(msgNum),
-    message.body
-  ];
-
-  const content = lines.join('\n');
-
-  // Write atomically (write to temp file, then rename)
+  // Atomic write — utf-8 to preserve any non-ASCII chars in the body
   const tempPath = msgFilePath + '.tmp';
   try {
     await fs.writeFile(tempPath, content, 'utf-8');
     await fs.rename(tempPath, msgFilePath);
-
-console.log(`[Message] Wrote Conf${confNum} message ${msgNum}: ${message.subject}`);
-    return msgNum;
-  } catch (error: any) {
-    // Clean up temp file on error
-    try {
-      await fs.unlink(tempPath);
-    } catch {}
-    throw error;
+  } catch (err) {
+    try { await fs.unlink(tempPath); } catch {}
+    throw err;
   }
+
+  // Build HeaderFile entry — express.e:10790-10794 status: 'P' public,
+  // 'p' censored public, 'R' private, 'D' deleted
+  const isPrivate = (message.to || '').toUpperCase() !== 'ALL';
+  const status: number = isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL;
+
+  // msgDate as Amiga seconds — express.e stores Unix-epoch-equivalent LONG.
+  // Parse the formatted date back to a Date and convert to seconds.
+  const msgDateSec = parseMessageDateToUnixSec(message.date);
+
+  const header: MsgHeader = {
+    status,
+    msgNumb: msgNum,
+    toName: message.to || 'ALL',
+    fromName: message.from,
+    subject: message.subject,
+    msgDate: msgDateSec,
+    recv: 0,                   // unread
+    extMsgNum: -1,             // express.e:10689
+  };
+
+  // appendMessageHeader bumps highMsgNum by 1 (express.e:12418-12419)
+  messageIndexManager.appendMessageHeader(confNum, header);
+
+console.log(`[Message] Wrote Conf${confNum} msg ${msgNum}: ${message.subject}`);
+  return msgNum;
 }
 
 /**
- * Read message from disk
- * Express.e:8953-8962 - displayFile(tempStr,...)
+ * Read a message — combines body file + HeaderFile metadata.
  */
 export async function readMessageFile(
   confNum: number,
   msgNum: number,
   bbsDataPath: string
 ): Promise<MessageFile | null> {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const msgFilePath = path.join(messagesDir, `${msgNum}.msg`);
+  const msgFilePath = getMessageFilePath(confNum, msgNum, bbsDataPath);
 
+  let body: string;
   try {
-    const content = await fs.readFile(msgFilePath, 'utf-8');
-    const lines = content.split('\n');
-
-    if (lines.length < 6) {
-console.error(`[Message] Invalid format in ${msgFilePath}`);
-      return null;
-    }
-
-    // Read received timestamp from companion file (express.e:8915-8926 mailHeader.recv)
-    const recvPath = path.join(messagesDir, `${msgNum}.recv`);
-    let receivedAt: Date | undefined;
-    try {
-      const recvContent = await fs.readFile(recvPath, 'utf-8');
-      const timestamp = parseInt(recvContent.trim(), 10);
-      if (!isNaN(timestamp) && timestamp > 0) {
-        receivedAt = new Date(timestamp);
-      }
-    } catch {
-      // No .recv file means not yet received - that's fine
-    }
-
-    return {
-      from: lines[0],
-      to: lines[1],
-      subject: lines[2],
-      date: lines[3],
-      msgNum: parseInt(lines[4]),
-      body: lines.slice(5).join('\n'),
-      isPrivate: lines[1].toUpperCase() !== 'ALL',
-      receivedAt
-    };
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      return null;  // Message doesn't exist
-    }
-    throw error;
+    body = await fs.readFile(msgFilePath, 'utf-8');
+    // Strip trailing newline added during write
+    if (body.endsWith('\n')) body = body.slice(0, -1);
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
   }
+
+  // Header from HeaderFile (single source of truth)
+  const headers = messageIndexManager.readHeaderFile(confNum);
+  const header = headers.find(h => h.msgNumb === msgNum);
+  if (!header) return null;
+
+  return {
+    from: header.fromName,
+    to: header.toName,
+    subject: header.subject,
+    date: formatMessageDate(new Date(header.msgDate * 1000)),
+    msgNum: header.msgNumb,
+    body,
+    isPrivate: header.toName.toUpperCase() !== 'ALL',
+    receivedAt: header.recv > 0 ? new Date(header.recv * 1000) : undefined,
+  };
 }
 
 /**
- * Mark message as received (express.e:8943-8949)
- * Creates companion file {msgNum}.recv with timestamp
+ * Mark message as received — express.e:8943-8949
+ * Sets mh.recv to current time in HeaderFile (no companion file).
  */
 export async function markMessageReceived(
   confNum: number,
   msgNum: number,
-  bbsDataPath: string
+  _bbsDataPath: string
 ): Promise<void> {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const recvPath = path.join(messagesDir, `${msgNum}.recv`);
-  const timestamp = Date.now();
-  await fs.writeFile(recvPath, timestamp.toString(), 'utf-8');
+  const recv = Math.floor(Date.now() / 1000);
+  messageIndexManager.updateMessageHeader(confNum, msgNum, { recv });
 }
 
 /**
- * Unmark message as received — express.e:11126 mailHeader.recv:=0; saveOverHeader(gfh)
- * Deletes companion .recv file so confScan treats the message as unread again.
- * Called by K (Keep) command.
+ * Unmark received — express.e:11126 mh.recv := 0; saveOverHeader(gfh)
  */
 export async function unmarkMessageReceived(
   confNum: number,
   msgNum: number,
-  bbsDataPath: string
+  _bbsDataPath: string
 ): Promise<void> {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const recvPath = path.join(messagesDir, `${msgNum}.recv`);
-  try {
-    await fs.unlink(recvPath);
-  } catch (error: any) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-    // File didn't exist — recv was already 0, nothing to do
-  }
+  messageIndexManager.updateMessageHeader(confNum, msgNum, { recv: 0 });
 }
 
 /**
- * Check if message has been received
+ * Check if message is received (mh.recv != 0).
  */
 export async function isMessageReceived(
   confNum: number,
   msgNum: number,
-  bbsDataPath: string
+  _bbsDataPath: string
 ): Promise<boolean> {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const recvPath = path.join(messagesDir, `${msgNum}.recv`);
-  try {
-    await fs.access(recvPath);
-    return true;
-  } catch {
-    return false;
-  }
+  const headers = messageIndexManager.readHeaderFile(confNum);
+  const header = headers.find(h => h.msgNumb === msgNum);
+  return !!(header && header.recv > 0);
 }
 
 /**
- * Check if message file exists
+ * Check if message body file exists on disk.
  */
 export function messageFileExists(
   confNum: number,
   msgNum: number,
   bbsDataPath: string
 ): boolean {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const msgFilePath = path.join(messagesDir, `${msgNum}.msg`);
-  return fsSync.existsSync(msgFilePath);
+  return fsSync.existsSync(getMessageFilePath(confNum, msgNum, bbsDataPath));
 }
 
 /**
- * Delete message (mark as deleted by renaming)
- * Express.e uses 'D' status in header, we can rename file to .deleted
+ * Delete a message: mark header as 'D' (express.e DELETED status) and
+ * remove the body file. MailStats lowestNotDel recomputed by
+ * updateMailStatsAfterDelete.
  */
 export async function deleteMessageFile(
   confNum: number,
   msgNum: number,
   bbsDataPath: string
 ): Promise<void> {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
-  const msgFilePath = path.join(messagesDir, `${msgNum}.msg`);
-  const deletedPath = path.join(messagesDir, `${msgNum}.msg.deleted`);
-
+  const msgFilePath = getMessageFilePath(confNum, msgNum, bbsDataPath);
   try {
-    await fs.rename(msgFilePath, deletedPath);
-console.log(`[Message] Deleted Conf${confNum} message ${msgNum}`);
-  } catch (error: any) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
+    await fs.unlink(msgFilePath);
+  } catch (err: any) {
+    if (err.code !== 'ENOENT') throw err;
   }
+  messageIndexManager.deleteMessageHeader(confNum, msgNum);
+console.log(`[Message] Deleted Conf${confNum} msg ${msgNum}`);
 }
 
 /**
- * Get all message IDs in conference (scan Messages directory)
- * Express.e:8845-8876 - listMSGs()
+ * Get all live (non-deleted) message ids in a conference, sorted ascending.
+ * Reads HeaderFile and filters out DELETED status — body files are
+ * authoritative for existence but HeaderFile is the canonical index.
  */
 export async function getAllMessageIds(
   confNum: number,
-  bbsDataPath: string
+  _bbsDataPath: string
 ): Promise<number[]> {
-  const messagesDir = getMessagesDir(confNum, bbsDataPath);
+  const headers = messageIndexManager.readHeaderFile(confNum);
+  return headers
+    .filter(h => h.status !== MsgStatus.DELETED)
+    .map(h => h.msgNumb)
+    .sort((a, b) => a - b);
+}
 
-  try {
-    const files = await fs.readdir(messagesDir);
-    const msgIds: number[] = [];
-
-    for (const file of files) {
-      // Match .msg files, ignore .deleted and MailStats
-      if (file.endsWith('.msg') && !file.includes('.deleted')) {
-        const msgNum = parseInt(path.basename(file, '.msg'));
-        if (!isNaN(msgNum)) {
-          msgIds.push(msgNum);
-        }
-      }
-    }
-
-    // Sort numerically
-    msgIds.sort((a, b) => a - b);
-    return msgIds;
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      return [];  // No messages directory
-    }
-    throw error;
-  }
+/**
+ * Parse a formatted message date "DD-MMM-YY HH:MM:SS" back to Unix seconds.
+ * Used to build HeaderFile.msgDate when writing a new message.
+ */
+function parseMessageDateToUnixSec(dateStr: string): number {
+  const months: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+  const m = /^(\d{2})-([A-Za-z]{3})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(dateStr || '');
+  if (!m) return Math.floor(Date.now() / 1000);
+  const day = parseInt(m[1], 10);
+  const mon = months[m[2]];
+  // Y2K window — AmiExpress convention: 80-99 → 1980-1999, 00-79 → 2000-2079.
+  // Keeps msgDate within i32 Unix-seconds range (max ~2038) and matches the
+  // 2-digit year handling shipped with the original BBS.
+  const yyRaw = parseInt(m[3], 10);
+  const yr = yyRaw >= 80 ? 1900 + yyRaw : 2000 + yyRaw;
+  const h = parseInt(m[4], 10);
+  const min = parseInt(m[5], 10);
+  const s = parseInt(m[6], 10);
+  return Math.floor(new Date(yr, mon, day, h, min, s).getTime() / 1000);
 }

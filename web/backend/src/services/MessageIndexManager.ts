@@ -70,6 +70,14 @@ export class MessageIndexManager {
   }
 
   /**
+   * Override bbsRoot — for tests that operate on a temp directory.
+   * Production code never calls this; the constructor sets the production root.
+   */
+  setBbsRoot(root: string): void {
+    this.bbsRoot = root;
+  }
+
+  /**
    * Get path to MsgBase directory for a conference
    */
   private getMsgBaseDir(confNumber: number): string {
@@ -126,10 +134,11 @@ console.log(`[MessageIndexManager] Created HeaderFile for Conf${confNumber}`);
     }
 
     // Create initial MailStats if it doesn't exist
+    // express.e:8691-8693 — fresh msgbase: lowestKey=1, highMsgNum=1, lowestNotDel=0
     if (!fs.existsSync(statsPath)) {
       const initialStats: MailStat = {
-        lowestKey: 0,
-        highMsgNum: 0,
+        lowestKey: 1,
+        highMsgNum: 1,
         lowestNotDel: 0,
         pad: Buffer.alloc(6, 0)
       };
@@ -398,37 +407,35 @@ console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in Header
   }
 
   /**
-   * Update MailStats after adding a message
+   * Update MailStats after adding a message — express.e:12418-12419
+   * Unconditionally bumps highMsgNum by 1 (highMsgNum stores the NEXT id to assign).
+   * On 1→2 transition (first save in a fresh msgbase) sets lowestNotDel:=1.
    */
   private updateMailStatsAfterAdd(confNumber: number, msgNumber: number): void {
     let stats = this.readMailStats(confNumber);
 
     if (!stats) {
+      // Should not happen — initializeMessageIndex creates MailStats. Synthesize
+      // express.e fresh-init values, then apply the post-save bump below.
       stats = {
-        lowestKey: msgNumber,
-        highMsgNum: msgNumber,
-        lowestNotDel: msgNumber,
+        lowestKey: 1,
+        highMsgNum: 1,
+        lowestNotDel: 0,
         pad: Buffer.alloc(6, 0)
       };
-    } else {
-      // Update highMsgNum if this is higher
-      if (msgNumber > stats.highMsgNum) {
-        stats.highMsgNum = msgNumber;
-      }
+    }
 
-      // Update lowestKey if this is lower or first message
-      if (stats.lowestKey === 0 || msgNumber < stats.lowestKey) {
-        stats.lowestKey = msgNumber;
-      }
+    // express.e:12418 — UNCONDITIONAL increment (highMsgNum := highMsgNum + 1).
+    // Caller already wrote the header for msgNumber (== old highMsgNum).
+    stats.highMsgNum = stats.highMsgNum + 1;
 
-      // Update lowestNotDel
-      if (stats.lowestNotDel === 0 || msgNumber < stats.lowestNotDel) {
-        stats.lowestNotDel = msgNumber;
-      }
+    // express.e:12419 — first message ever bumps lowestNotDel to 1
+    if (stats.highMsgNum === 2) {
+      stats.lowestNotDel = 1;
     }
 
     this.writeMailStats(confNumber, stats);
-console.log(`[MessageIndexManager] Updated MailStats: high=${stats.highMsgNum}, low=${stats.lowestKey}`);
+console.log(`[MessageIndexManager] Updated MailStats: high=${stats.highMsgNum}, low=${stats.lowestKey}, lowestNotDel=${stats.lowestNotDel}`);
   }
 
   /**
@@ -509,11 +516,17 @@ console.log(`[MessageIndexManager] MailLock released for Conf${confNumber} by no
   }
 
   /**
-   * Get next available message number
+   * Get next available message number — express.e:10688
+   * `mh.msgNumb := mailStat.highMsgNum`. The current high IS the next id.
+   * After saveMessageHeader the high is bumped by 1 (see updateMailStatsAfterAdd).
    */
   getNextMessageNumber(confNumber: number): number {
     const stats = this.readMailStats(confNumber);
-    return stats ? stats.highMsgNum + 1 : 1;
+    if (!stats) {
+      // Fresh msgbase: express.e:8693 inits highMsgNum=1, so first msg id is 1
+      return 1;
+    }
+    return stats.highMsgNum;
   }
 }
 
