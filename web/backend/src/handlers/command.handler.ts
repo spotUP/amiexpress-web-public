@@ -3263,14 +3263,14 @@ console.log(' In conference selection state');
       // the static-imported instance but the R-command path hit an
       // undefined-_db on the dynamic-imported instance.
       await handleMessageReaderNav(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
+    } else if (data === '\x7f' || data === '\b') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
+        emitText(socket, '\b \b'); // Echo so user sees their typing
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer = (session.inputBuffer || '') + data;
-      // Client handles character echo
+      emitText(socket, data); // Echo so user sees their typing
     }
     return;
   }
