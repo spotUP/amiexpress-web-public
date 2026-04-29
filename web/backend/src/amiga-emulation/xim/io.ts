@@ -102,21 +102,25 @@ export class XIMIOHandler {
   }
 
   /**
-   * Direct emit that bypasses modem emulator throttling
-   * Doors should output at full speed regardless of user's modem speed preference
-   * Must check _directEmit at call time since modem emulator may install after XIM handler
-   */
-  /**
-   * Direct emit that bypasses modem emulator throttling
-   * Doors output at full speed regardless of user's modem speed preference
+   * Emit XIM door output through the user's modem-speed throttle.
+   *
+   * Policy (per user direction 2026-04-29):
+   *   - 68K and AREXX doors are emulated at the user's chosen modem speed,
+   *     1:1 with how the same door would behave on real Amiga hardware.
+   *   - Modern TypeScript doors disable throttling on entry (see
+   *     `executeTypeScriptDoor` in handlers/door.handler.ts ~line 1515).
+   *
+   * Previously this method called `socket._directEmit` to bypass the
+   * modem emulator wrapper. That made 68K door output run at full speed
+   * regardless of the user's modem setting, which broke modem-emulation
+   * fidelity (and made effects like Conftop's clear/redraw render too
+   * fast to be visible).
+   *
+   * Method name kept (`directEmit`) to preserve call sites; the "direct"
+   * now means "go through the wrapped socket.emit which the modem
+   * emulator throttles", not "bypass the wrapper".
    */
   private directEmit(event: string, ...args: any[]): boolean {
-    const socket = this.socket as any;
-    // Use the direct emit stored by modem emulator, or call emit on prototype
-    if (socket._directEmit) {
-      return socket._directEmit(event, ...args);
-    }
-    // No modem emulator installed, use regular emit
     return this.socket.emit(event, ...args);
   }
 

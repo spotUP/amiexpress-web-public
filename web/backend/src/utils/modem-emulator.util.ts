@@ -275,12 +275,17 @@ console.log(`[ModemEmulator] Intercepting ansi-output (${data.length} bytes), th
     (this.socket as any)._modemEmulatorInstalled = true;
     (this.socket as any)._modemEmulator = this;
 
-    // CRITICAL: Provide _directEmit for XIM doors to bypass throttling
-    // XIM doors output text faster than modem speeds and need direct socket access
+    // _directEmit is exposed for code paths that legitimately need to send
+    // a single byte to the wire bypassing the throttle queue (e.g. screen
+    // wipes / slowmo timing emit their own per-frame chunks and must not
+    // double-throttle). It is NOT used by 68K / AREXX doors anymore — those
+    // throttle at the user's modem speed for 1:1 Amiga fidelity. Modern
+    // TypeScript doors disable throttling outright via modemEmulator.disable()
+    // on door entry (see handlers/door.handler.ts executeTypeScriptDoor).
     (this.socket as any)._directEmit = (event: string, ...args: any[]) => {
       return self.directEmit(event, ...args);
     };
-console.log(`[ModemEmulator] install() complete - _directEmit provided for XIM bypass`);
+console.log(`[ModemEmulator] install() complete - _directEmit provided for screen-wipe/slowmo paths`);
   }
 }
 
