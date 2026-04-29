@@ -745,11 +745,32 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       // express.e:28573-28574 - After CONF_BULL, auto-rejoin with user stats
       // express.e: joinConf(loggedOnUser.confRJoin,loggedOnUser.msgBaseRJoin,FALSE,FORCE_MAILSCAN_SKIP)
       if (session.subState === LoggedOnSubState.AUTO_REJOIN) {
+        // Resolve the rejoin target FIRST so we can pre-set currentConf before
+        // CONF_BULL renders. Without this, ~CC_CONFTOP and any other
+        // conf-scoped MCI codes inside the bulletin screen would resolve in
+        // the prior (login-default) conference and report wrong data
+        // (e.g. "Conference Top Uploaders is not installed").
+        const confId = session.user?.confRJoin || session.currentConf || 1;
+        // express.e:4995 - IF (msgBaseNum<1) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
+        // msgBaseRJoin is a RELATIVE number (1 = first message base), not a database ID
+        const confMsgBases = getMessageBases().filter((mb: any) => mb.conferenceId === confId);
+        let msgBaseNum = session.user?.msgBaseRJoin || session.msgBaseRJoin || 1;
+        if (msgBaseNum < 1 || msgBaseNum > confMsgBases.length) {
+          msgBaseNum = 1;
+        }
+        const msgBaseId = confMsgBases.length > 0 ? confMsgBases[msgBaseNum - 1]?.id || confMsgBases[0].id : 1;
+        const targetConfName = getConferences().find((c: any) => c.id === confId)?.name || '';
+
         // express.e:5056-5061 — joinConf shows CONF_BULL and calls doPause() BEFORE
         // emitting "Joining Conference". We do it here in the display-flow loop so the
         // doPause correctly gates the output: show CONF_BULL now, return (waiting for
         // space), then on the next tick (confBullShown=true) complete the join.
         if (!session.tempData?.confBullShown) {
+          // Pre-set currentConf so CONF_BULL's MCI codes (~CC_CONFTOP, ~CC_*)
+          // resolve to the rejoin target. joinConference below re-sets the
+          // full session.currentConf*/Name/MsgBase state authoritatively.
+          session.currentConf = confId;
+          if (targetConfName) session.currentConfName = targetConfName;
           try {
             const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
             if (shown) {
@@ -764,18 +785,6 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         delete session.tempData?.confBullShown;
 
         displayFlowLog('AUTO_REJOIN: calling joinConference');
-        const confId = session.user?.confRJoin || session.currentConf || 1;
-        // express.e:4995 - IF (msgBaseNum<1) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
-        // msgBaseRJoin is a RELATIVE number (1 = first message base), not a database ID
-        const confMsgBases = getMessageBases().filter((mb: any) => mb.conferenceId === confId);
-        // Use user's stored msgBaseRJoin (relative number per express.e:5136)
-        let msgBaseNum = session.user?.msgBaseRJoin || session.msgBaseRJoin || 1;
-        // Validate range like express.e:4995 does
-        if (msgBaseNum < 1 || msgBaseNum > confMsgBases.length) {
-          msgBaseNum = 1;
-        }
-        // Convert relative number to database ID for joinConference call
-        const msgBaseId = confMsgBases.length > 0 ? confMsgBases[msgBaseNum - 1]?.id || confMsgBases[0].id : 1;
         displayFlowLog(`AUTO_REJOIN: confId=${confId}, msgBaseNum=${msgBaseNum}, msgBaseId=${msgBaseId}`);
 
         // express.e:28574 - joinConf(loggedOnUser.confRJoin, loggedOnUser.msgBaseRJoin, FALSE, FORCE_MAILSCAN_SKIP)
@@ -3720,8 +3729,11 @@ console.log(' In READ_COMMAND state, reading line input');
       const { getPreviousCommand } = require('../utils/command-history.util');
       const previousCmd = getPreviousCommand(session);
       if (previousCmd) {
-        // Clear current line (express.e:2260-2267)
-        let clearSequence = '';
+        // Clear current line (express.e:2260-2267) — cursor may be mid-buffer,
+        // so first move to end before backspacing.
+        const cur = (session as any)._readCommandCurpos ?? session.inputBuffer.length;
+        const moveRight = '\x1b[C'.repeat(Math.max(0, session.inputBuffer.length - cur));
+        let clearSequence = moveRight;
         for (let i = 0; i < session.inputBuffer.length; i++) {
           clearSequence += '\b \b';
         }
@@ -3730,6 +3742,7 @@ console.log(' In READ_COMMAND state, reading line input');
         // Display previous command (express.e:2268, 2272)
         session.inputBuffer = previousCmd;
         emitText(socket, previousCmd);
+        (session as any)._readCommandCurpos = previousCmd.length;
       }
       return;
     }
@@ -3739,7 +3752,9 @@ console.log(' In READ_COMMAND state, reading line input');
       const nextCmd = getNextCommand(session);
       if (nextCmd) {
         // Clear current line (express.e:2277-2284)
-        let clearSequence = '';
+        const cur = (session as any)._readCommandCurpos ?? session.inputBuffer.length;
+        const moveRight = '\x1b[C'.repeat(Math.max(0, session.inputBuffer.length - cur));
+        let clearSequence = moveRight;
         for (let i = 0; i < session.inputBuffer.length; i++) {
           clearSequence += '\b \b';
         }
@@ -3748,6 +3763,7 @@ console.log(' In READ_COMMAND state, reading line input');
         // Display next command (express.e:2285, 2289)
         session.inputBuffer = nextCmd;
         emitText(socket, nextCmd);
+        (session as any)._readCommandCurpos = nextCmd.length;
       }
       return;
     }
@@ -3793,19 +3809,59 @@ console.log(' Empty command, redisplaying menu');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         await menuDisplayMainMenu(socket, session);
       }
-    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
-      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
-        // This moves cursor back, overwrites char with space, moves cursor back again
-        emitText(socket, '\b \b');
+    }
+    // express.e:2236-2400 lineInput supports curpos-based editing.
+    // Track cursor position so left/right arrows move within the buffer and
+    // backspace/insert work at the cursor (not always at end-of-buffer).
+    let curpos: number = (session as any)._readCommandCurpos ?? session.inputBuffer.length;
+    if (curpos > session.inputBuffer.length) curpos = session.inputBuffer.length;
+
+    if (data === '\x1b[D') {
+      // Left arrow — move cursor left if not at start
+      if (curpos > 0) {
+        curpos--;
+        emitText(socket, '\x1b[D');
+        (session as any)._readCommandCurpos = curpos;
       }
-      // If buffer is empty, ignore backspace (prevents erasing prompt)
+      return;
+    }
+    if (data === '\x1b[C') {
+      // Right arrow — move cursor right if not at end
+      if (curpos < session.inputBuffer.length) {
+        curpos++;
+        emitText(socket, '\x1b[C');
+        (session as any)._readCommandCurpos = curpos;
+      }
+      return;
+    }
+    if (data === '\x7f' || data === '\b') { // Backspace at cursor
+      if (curpos > 0) {
+        const buf = session.inputBuffer;
+        const tail = buf.slice(curpos);
+        session.inputBuffer = buf.slice(0, curpos - 1) + tail;
+        curpos--;
+        // Redraw: BS + tail + space (to erase last char position) + move cursor back
+        emitText(socket, '\b' + tail + ' ' + '\x1b[D'.repeat(tail.length + 1));
+        (session as any)._readCommandCurpos = curpos;
+      }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      emitText(socket, data);
+      const buf = session.inputBuffer;
+      if (curpos === buf.length) {
+        // Append at end (fast path)
+        session.inputBuffer = buf + data;
+        emitText(socket, data);
+      } else {
+        // Insert at cursor and redraw tail
+        const tail = buf.slice(curpos);
+        session.inputBuffer = buf.slice(0, curpos) + data + tail;
+        emitText(socket, data + tail + '\x1b[D'.repeat(tail.length));
+      }
+      curpos++;
+      (session as any)._readCommandCurpos = curpos;
+    }
+    // Reset curpos when buffer is empty (e.g., after submit)
+    if (session.inputBuffer.length === 0) {
+      (session as any)._readCommandCurpos = 0;
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
