@@ -237,7 +237,15 @@ console.warn('[joinConference] Failed to sync node user file:', err);
   // Runs when: auto=FALSE AND forceMailScan != FORCE_MAILSCAN_SKIP
   // Then scans if: FORCE_MAILSCAN_ALL OR checkMailConfScan() returns true
   // After scan: saveMsgPointers() persists updated read pointers to disk
-  if (!auto && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
+  //
+  // WEB_: when called from confScan (advanceConferenceScan), skip the
+  // per-conf mail scan here. advanceConferenceScan iterates the same
+  // conferences and runs the scan + "Would you like to read it now" prompt
+  // itself (express.e:11737-11765 — the prompt lives in searchNewMail). If
+  // we ran it here too, performSingleConfMailScan would advance the read
+  // pointer first and the outer loop's getMessagesForConfScan would find
+  // nothing, suppressing the prompt.
+  if (!auto && !confScan && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
     let shouldScan = forceMailScan === FORCE_MAILSCAN_ALL;
     if (!shouldScan) {
       // express.e:5120 - checkMailConfScan(conf, msgBaseNum)
