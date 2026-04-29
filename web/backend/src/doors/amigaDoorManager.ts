@@ -1427,8 +1427,34 @@ console.error('Cleanup error:', error);
   async deleteTypeScriptDoor(doorName: string): Promise<{ success: boolean; message: string }> {
     try {
       // Accept both 'arkanoid' and 'Doors/arkanoid' — strip any leading Doors/ prefix
-      const name = doorName.replace(/^Doors[\\/]/i, '');
-      const doorPath = path.join(this.bbsRoot, 'Doors', name);
+      const name = (doorName || '').replace(/^Doors[\\/]/i, '').trim();
+
+      // === SAFETY GUARDS — never delete Doors/ itself or escape the target dir ===
+      // A blank, '.', '..', or '/'-containing name would let rmSync below wipe
+      // the entire Doors/ root or step outside it. Refuse outright.
+      if (!name) {
+        return {
+          success: false,
+          message: `Refused to delete: empty door name (would wipe Doors/ root). Caller passed: ${JSON.stringify(doorName)}`
+        };
+      }
+      if (name === '.' || name === '..' || name.includes('/') || name.includes('\\') || name.includes('\0')) {
+        return {
+          success: false,
+          message: `Refused to delete: invalid door name '${name}' (path traversal / multi-segment).`
+        };
+      }
+      const doorsRoot = path.resolve(this.bbsRoot, 'Doors');
+      const doorPath = path.resolve(doorsRoot, name);
+      // Resolved path MUST start with doorsRoot + sep AND not equal doorsRoot.
+      const sep = path.sep;
+      if (doorPath === doorsRoot || !doorPath.startsWith(doorsRoot + sep)) {
+        return {
+          success: false,
+          message: `Refused to delete: resolved path '${doorPath}' would escape ${doorsRoot}.`
+        };
+      }
+
       const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
       const deletedFiles: string[] = [];
 
