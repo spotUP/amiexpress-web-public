@@ -741,11 +741,56 @@ class AmiExpressDocsServer {
             }
           },
           {
-            name: 'list_express_modules',
-            description: 'List all available express.e modules with descriptions and line ranges',
+            name: 'search_ndk_structs',
+            description: 'Search NDK 3.1 structs, constants, and library functions by name. Returns field layouts, offsets, LVOs, register assignments. Source: amiga-reversing knowledge base.',
             inputSchema: {
               type: 'object',
-              properties: {}
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Name to search for (struct name, constant name, or function name). Case-insensitive substring match.'
+                },
+                type: {
+                  type: 'string',
+                  description: 'Limit search to a specific category',
+                  enum: ['structs', 'constants', 'functions', 'all'],
+                  default: 'all'
+                },
+                library: {
+                  type: 'string',
+                  description: 'For function searches: limit to a specific library (e.g. "dos.library", "exec.library")',
+                  default: null
+                }
+              },
+              required: ['query']
+            }
+          },
+          {
+            name: 'search_hw_registers',
+            description: 'Search Amiga custom chip hardware registers by name or address. Returns register function, access mode, chip, and bit definitions. Source: amiga-reversing knowledge base (HRM).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Register name (e.g. "DMACON", "INTENA") or hex address (e.g. "DFF096"). Case-insensitive.'
+                }
+              },
+              required: ['query']
+            }
+          },
+          {
+            name: 'search_m68k_isa',
+            description: 'Search M68K instruction set by mnemonic. Returns syntax, operation, condition codes, description. Source: amiga-reversing knowledge base (Motorola PRM).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Instruction mnemonic (e.g. "MOVE", "JSR", "LEA") or keyword in description. Case-insensitive.'
+                }
+              },
+              required: ['query']
             }
           }
         ]
@@ -772,6 +817,12 @@ class AmiExpressDocsServer {
             return await this.handleReadExpressModule(args);
           case 'list_express_modules':
             return await this.handleListExpressModules();
+          case 'search_ndk_structs':
+            return await this.handleSearchNdkStructs(args);
+          case 'search_hw_registers':
+            return await this.handleSearchHwRegisters(args);
+          case 'search_m68k_isa':
+            return await this.handleSearchM68kIsa(args);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -1016,6 +1067,141 @@ class AmiExpressDocsServer {
       content: [{
         type: 'text',
         text: JSON.stringify(modules, null, 2)
+      }]
+    };
+  }
+
+  // ── Amiga Knowledge Base search tools ──────────────────────────────────────
+  // Indexes are loaded once on first use and cached for the server lifetime.
+
+  _ndkIndex = null;
+  _hwIndex = null;
+  _m68kIndex = null;
+
+  async _loadIndex(field, filename) {
+    if (this[field]) return this[field];
+    const filepath = path.join(__dirname, 'data', filename);
+    try {
+      const raw = await fs.readFile(filepath, 'utf-8');
+      this[field] = JSON.parse(raw);
+      return this[field];
+    } catch (err) {
+      throw new Error(
+        `Knowledge base index not found: ${filename}\n` +
+        `Run: node mcp-server/build-indexes.js`
+      );
+    }
+  }
+
+  async handleSearchNdkStructs(args) {
+    const index = await this._loadIndex('_ndkIndex', 'ndk-structs-index.json');
+    const { query, type = 'all', library = null } = args;
+    const q = query.toLowerCase();
+    const results = { query, type, structs: [], constants: [], functions: [] };
+    const MAX = 15;
+
+    // Search structs
+    if (type === 'all' || type === 'structs') {
+      for (const [key, s] of Object.entries(index.structs)) {
+        if (key.includes(q) || s.name.toLowerCase().includes(q)) {
+          results.structs.push(s);
+          if (results.structs.length >= MAX) break;
+        }
+      }
+    }
+
+    // Search constants
+    if (type === 'all' || type === 'constants') {
+      for (const [key, c] of Object.entries(index.constants)) {
+        if (key.includes(q) || c.name.toLowerCase().includes(q)) {
+          results.constants.push(c);
+          if (results.constants.length >= MAX) break;
+        }
+      }
+    }
+
+    // Search library functions
+    if (type === 'all' || type === 'functions') {
+      const libs = library
+        ? { [library.toLowerCase()]: index.libraries[library.toLowerCase()] }
+        : index.libraries;
+      for (const [libKey, lib] of Object.entries(libs)) {
+        if (!lib) continue;
+        for (const [fnKey, fn] of Object.entries(lib.functions)) {
+          if (fnKey.includes(q) || fn.name.toLowerCase().includes(q)) {
+            results.functions.push({ library: lib.name, ...fn });
+            if (results.functions.length >= MAX) break;
+          }
+        }
+        if (results.functions.length >= MAX) break;
+      }
+    }
+
+    const total = results.structs.length + results.constants.length + results.functions.length;
+    return {
+      content: [{
+        type: 'text',
+        text: total === 0
+          ? `No results for "${query}" (searched: ${type})`
+          : JSON.stringify(results, null, 2)
+      }]
+    };
+  }
+
+  async handleSearchHwRegisters(args) {
+    const index = await this._loadIndex('_hwIndex', 'hw-registers-index.json');
+    const { query } = args;
+    const q = query.toLowerCase().replace(/^0x/, '');
+    const results = [];
+
+    for (const reg of index.registers) {
+      const nameMatch = reg.name.toLowerCase().includes(q);
+      const addrMatch = (reg.address || '').toLowerCase().replace(/^0x/, '').includes(q);
+      const funcMatch = (reg.function || '').toLowerCase().includes(q);
+      if (nameMatch || addrMatch || funcMatch) {
+        results.push(reg);
+        if (results.length >= 20) break;
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: results.length === 0
+          ? `No hardware registers matching "${query}"`
+          : JSON.stringify({ query, base: index.base_address, results }, null, 2)
+      }]
+    };
+  }
+
+  async handleSearchM68kIsa(args) {
+    const index = await this._loadIndex('_m68kIndex', 'm68k-isa-index.json');
+    const { query } = args;
+    const q = query.toLowerCase();
+    const results = [];
+
+    for (const instr of index.instructions) {
+      const mnemonicMatch = instr.mnemonic.toLowerCase() === q;
+      const mnemonicPartial = instr.mnemonic.toLowerCase().includes(q);
+      const descMatch = (instr.description || '').toLowerCase().includes(q);
+      const titleMatch = (instr.title || '').toLowerCase().includes(q);
+      if (mnemonicMatch || mnemonicPartial || descMatch || titleMatch) {
+        // Exact mnemonic matches go first
+        if (mnemonicMatch) {
+          results.unshift(instr);
+        } else {
+          results.push(instr);
+        }
+        if (results.length >= 15) break;
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: results.length === 0
+          ? `No M68K instructions matching "${query}"`
+          : JSON.stringify({ query, results }, null, 2)
       }]
     };
   }

@@ -159,6 +159,41 @@ Read express.e by logical module (more efficient than line ranges).
 ### list_express_modules
 List all available express.e modules with descriptions and line ranges.
 
+### search_ndk_structs
+Search NDK 3.1 structs, constants, and library functions by name. Returns field layouts, offsets, LVOs, register assignments.
+
+```typescript
+{
+  query: string,           // name to search (case-insensitive substring)
+  type?: 'all' | 'structs' | 'constants' | 'functions',
+  library?: string         // e.g. "dos.library", "exec.library"
+}
+```
+
+**Source:** amiga-reversing knowledge base (NDK 3.1 parsed includes)
+
+### search_hw_registers
+Search Amiga custom chip hardware registers by name or address. Returns register function, access mode, chip, and bit definitions.
+
+```typescript
+{
+  query: string  // register name (e.g. "DMACON") or hex address (e.g. "DFF096")
+}
+```
+
+**Source:** amiga-reversing knowledge base (Hardware Reference Manual)
+
+### search_m68k_isa
+Search M68K instruction set by mnemonic or keyword. Returns syntax, operation, condition codes, description.
+
+```typescript
+{
+  query: string  // mnemonic (e.g. "MOVE", "JSR") or keyword in description
+}
+```
+
+**Source:** amiga-reversing knowledge base (Motorola M68K PRM)
+
 ## Usage in Claude Desktop
 
 The MCP server is already configured in `.mcp.json`. Available tools will appear automatically in Claude Desktop.

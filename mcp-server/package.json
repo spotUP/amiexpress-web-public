@@ -7,7 +7,8 @@
     "amiexpress-docs-mcp": "./index.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "build-indexes": "node build-indexes.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1"

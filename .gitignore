@@ -172,6 +172,7 @@ Desktop.ini
 data/
 !data/amiga-roms/
 !web/backend/data/amiga-roms/
+!mcp-server/data/
 tracker-data/
 backend/data/*
 !backend/data/bbs/
@@ -262,6 +263,10 @@ dev/docs/radare2
 Documentation/7-Reference Sources/NDK3.2R4/
 Documentation/7-Reference Sources/AmiXDoors-master/
 Documentation/7-Reference Sources/Doors_with_Source/
+
+# amiga-reversing knowledge bases - large JSON files (re-download with build-indexes.js)
+# Keep README.md and .md files, ignore multi-MB JSON source files
+Documentation/7-Reference Sources/amiga-reversing/*.json
 highscores.json
 
 # Backup files

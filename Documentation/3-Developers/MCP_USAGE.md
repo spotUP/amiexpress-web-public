@@ -115,6 +115,54 @@ Lists all 19 modules with descriptions and line ranges.
 mcp__amiexpress-docs__list_express_modules({})
 ```
 
+### 8. `search_ndk_structs`
+Search NDK 3.1 structs, constants, and library functions by name. Returns field layouts with offsets/sizes, constant values, LVO offsets, and register assignments.
+
+```javascript
+// Find a struct layout
+mcp__amiexpress-docs__search_ndk_structs({
+  query: "Process",
+  type: "structs"
+})
+
+// Find constants
+mcp__amiexpress-docs__search_ndk_structs({
+  query: "MEMF_",
+  type: "constants"
+})
+
+// Find library functions with LVO and register info
+mcp__amiexpress-docs__search_ndk_structs({
+  query: "OpenLibrary",
+  type: "functions",
+  library: "exec.library"
+})
+```
+
+Source: amiga-reversing knowledge base (NDK 3.1 parsed includes). 334 structs, 8483 constants, 43 libraries.
+
+### 9. `search_hw_registers`
+Search Amiga custom chip hardware registers by name or address. Returns register function, access mode, chip assignment, and individual bit definitions.
+
+```javascript
+mcp__amiexpress-docs__search_hw_registers({
+  query: "DMACON"   // or "DFF096" for address search
+})
+```
+
+Source: amiga-reversing knowledge base (Hardware Reference Manual). 245 registers.
+
+### 10. `search_m68k_isa`
+Search M68K instruction set by mnemonic or keyword. Returns syntax, operation summary, condition code effects, and description.
+
+```javascript
+mcp__amiexpress-docs__search_m68k_isa({
+  query: "MOVE"     // exact mnemonic or keyword in description
+})
+```
+
+Source: amiga-reversing knowledge base (Motorola M68K PRM). 126 instructions.
+
 ## Workflows
 
 ### Implementing a BBS Command
@@ -149,13 +197,43 @@ mcp__amiexpress-docs__search_express_source({ query: "~UN", context: 5 })
 
 ### Looking Up AmigaOS Functions
 ```javascript
+// Autodocs: full prose documentation
 mcp__amiexpress-docs__search_ndk_autodocs({
   query: "AllocDosObject",
   library: "dos"
 })
+
+// NDK structs: struct layouts, LVOs, register assignments
+mcp__amiexpress-docs__search_ndk_structs({
+  query: "AllocDosObject",
+  type: "functions",
+  library: "dos.library"
+})
+
+// express.e: how AmiExpress uses it
 mcp__amiexpress-docs__search_express_source({
   query: "AllocDosObject",
   context: 5
+})
+```
+
+### Debugging 68K Door Issues
+```javascript
+// Look up a struct layout for memory offset debugging
+mcp__amiexpress-docs__search_ndk_structs({
+  query: "Process",
+  type: "structs"
+})
+// -> Shows pr_CLI @ offset 172 (0xAC), pr_CurrentDir @ offset 152 (0x98)
+
+// Check an instruction's behavior and condition codes
+mcp__amiexpress-docs__search_m68k_isa({
+  query: "CMPI"
+})
+
+// Look up a hardware register
+mcp__amiexpress-docs__search_hw_registers({
+  query: "INTENA"
 })
 ```
 

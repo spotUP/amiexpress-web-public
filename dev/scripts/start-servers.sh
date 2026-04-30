@@ -701,7 +701,13 @@ fi
 rm -f "$LOCKFILE"
 echo $$ > "$LOCKFILE"
 
-printf "%b\n" "${CYAN}→ Starting servers (unified deployment - all frontends served from backend)...${RESET}"
+# Build MCP search indexes if missing (compact Amiga knowledge base lookups)
+if [ ! -f "$REPO_ROOT/mcp-server/data/ndk-structs-index.json" ]; then
+  printf "%b\n" "${CYAN}-> Building MCP knowledge base indexes...${RESET}"
+  (cd "$REPO_ROOT" && node mcp-server/build-indexes.js 2>/dev/null) || true
+fi
+
+printf "%b\n" "${CYAN}-> Starting servers (unified deployment - all frontends served from backend)...${RESET}"
 echo ""
 
 # Enhanced trap to kill all servers and cleanup on exit
