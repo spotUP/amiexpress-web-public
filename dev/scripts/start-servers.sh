@@ -125,7 +125,7 @@ launch_tmux_session() {
   #   ├──────────────────┴───────────────┤
   #   │  Shell (25%)                      │
   #   └──────────────────────────────────┘
-  # Admin panel also at: http://localhost:3001/admin/
+  #   Status bar: keybindings for quit/restart/browser
 
   # Pane 0: server log (runs start-servers.sh inside tmux)
   tmux new-session -d -s "$session" -n amiexpress \
@@ -138,6 +138,63 @@ launch_tmux_session() {
   # Pane 2: shell (bottom, full width)
   tmux split-window -v -p 25 -t "${session}:amiexpress.0" \
     "cd '$root'; bash"
+
+  # ── Status bar & keybindings ──────────────────────────────────────────────
+  # Style: Amiga-esque blue bar with yellow hotkeys
+  tmux set-option -t "$session" status on
+  tmux set-option -t "$session" status-position bottom
+  tmux set-option -t "$session" status-style "bg=blue,fg=white"
+  tmux set-option -t "$session" status-left " #[fg=cyan,bold]AmiExpress#[default] "
+  tmux set-option -t "$session" status-left-length 15
+  tmux set-option -t "$session" status-right \
+    "#[fg=yellow]F1#[default]=Help #[fg=yellow]F2#[default]=Restart #[fg=yellow]F3#[default]=BBS #[fg=yellow]F4#[default]=Admin #[fg=yellow]F5#[default]=Logs #[fg=yellow]F10#[default]=Quit "
+  tmux set-option -t "$session" status-right-length 80
+  tmux set-option -t "$session" window-status-format ""
+  tmux set-option -t "$session" window-status-current-format ""
+
+  # F1 = Show help popup
+  tmux bind-key -n F1 display-popup -w 60 -h 18 -T " AmiExpress Hotkeys " \
+    "echo ''; \
+     echo '  F1   This help'; \
+     echo '  F2   Restart backend'; \
+     echo '  F3   Open BBS in browser'; \
+     echo '  F4   Open Admin in browser'; \
+     echo '  F5   Tail backend log'; \
+     echo '  F10  Quit (stop servers + exit)'; \
+     echo ''; \
+     echo '  Ctrl+B arrows  Switch panes'; \
+     echo '  Ctrl+B z        Zoom pane (fullscreen toggle)'; \
+     echo '  Ctrl+B d        Detach (servers keep running)'; \
+     echo ''; \
+     echo '  Press any key to close'; \
+     read -n1"
+
+  # F2 = Restart backend (kill + re-run start-servers in pane 0)
+  tmux bind-key -n F2 \
+    send-keys -t "${session}:amiexpress.0" C-c \; \
+    send-keys -t "${session}:amiexpress.0" \
+      "cd '$root' && ./dev/scripts/kill-servers.sh 2>/dev/null; bash '$0' --bbs-only" Enter
+
+  # F3 = Open BBS in browser
+  tmux bind-key -n F3 \
+    run-shell "open 'http://localhost:3001/' 2>/dev/null || xdg-open 'http://localhost:3001/' 2>/dev/null"
+
+  # F4 = Open Admin in browser
+  tmux bind-key -n F4 \
+    run-shell "open 'http://localhost:3001/admin/' 2>/dev/null || xdg-open 'http://localhost:3001/admin/' 2>/dev/null"
+
+  # F5 = Tail backend log in a popup
+  tmux bind-key -n F5 display-popup -w 90% -h 80% -T " Backend Log " \
+    "tail -100f '$root/logs/backend.log'"
+
+  # F10 = Quit everything
+  tmux bind-key -n F10 confirm-before -p \
+    "Stop all servers and exit? (y/n)" \
+    "run-shell 'cd $root && ./dev/scripts/kill-servers.sh 2>/dev/null'; kill-session -t $session"
+
+  # Clean up global keybindings when session dies
+  tmux set-hook -t "$session" session-closed \
+    "unbind-key -n F1; unbind-key -n F2; unbind-key -n F3; unbind-key -n F4; unbind-key -n F5; unbind-key -n F10"
 
   # Focus the server log pane
   tmux select-pane -t "${session}:amiexpress.0"

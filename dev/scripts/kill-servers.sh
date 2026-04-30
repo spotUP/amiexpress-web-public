@@ -65,6 +65,13 @@ if command -v tmux >/dev/null 2>&1 && tmux has-session -t amiexpress 2>/dev/null
     echo "-> Skipping tmux kill (running inside 'amiexpress' session)"
   else
     echo "-> Killing tmux session 'amiexpress'..."
+    # Clean up global F-key bindings before killing the session
+    tmux unbind-key -n F1 2>/dev/null
+    tmux unbind-key -n F2 2>/dev/null
+    tmux unbind-key -n F3 2>/dev/null
+    tmux unbind-key -n F4 2>/dev/null
+    tmux unbind-key -n F5 2>/dev/null
+    tmux unbind-key -n F10 2>/dev/null
     tmux kill-session -t amiexpress 2>/dev/null
   fi
 fi
