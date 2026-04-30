@@ -52,15 +52,15 @@ kill_project_procs() {
 
 # Kill only OUR project's processes
 kill_project_procs "jest-worker" "stuck jest workers"
-kill_project_procs "start-servers.sh" "old start-servers instances"
 kill_project_procs "watch-doors.ts" "watch-doors processes"
 kill_project_procs "tsx.*src/index.ts" "backend tsx processes"
 kill_project_procs "build-wasm" "build-wasm scripts"
 
-# Only kill console TUI / status strip when called from OUTSIDE the tmux
-# session. When called from pane 0 during startup, these are sibling panes
-# that we want to keep alive.
+# Only kill start-servers instances and console TUI / status strip when
+# called from OUTSIDE the tmux session. When called from pane 0 during
+# startup, start-servers.sh is our own parent and the TUI is a sibling pane.
 if [ "$CURRENT_TMUX_SESSION" != "amiexpress" ]; then
+  kill_project_procs "start-servers.sh" "old start-servers instances"
   kill_project_procs "dev/console/dist/src/index.js" "console TUI"
   kill_project_procs "dev/console/dist/strip/strip.js" "status strip"
 fi
