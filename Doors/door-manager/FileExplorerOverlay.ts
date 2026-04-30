@@ -161,6 +161,14 @@ export class FileExplorerOverlay {
       }
     });
 
+    // List widget emits 'cancel' when ESC is pressed (before overlay sees it),
+    // so we must also listen here to close the browser view.
+    this.listWidget.on('cancel', () => {
+      if (this.viewerState === 'browser') {
+        this.close();
+      }
+    });
+
     this.listWidget.focus();
     this.updateHeader();
   }
@@ -214,6 +222,7 @@ export class FileExplorerOverlay {
 
     this.listWidget.setItems(items);
     this.listWidget.select(0);
+    this.listWidget.focus();
     this.updateHeader();
     this.screen.render();
   }
