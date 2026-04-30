@@ -52,9 +52,7 @@ kill_project_procs "dev/console/dist/src/index.js" "console TUI"
 kill_project_procs "dev/console/dist/strip/strip.js" "status strip"
 kill_project_procs "build-wasm" "build-wasm scripts"
 
-# Tear down the tmux session that start-servers.sh creates (window 0 logs,
-# window 1 shell, window 2 console TUI). If it doesn't exist, this is a
-# silent no-op. Don't touch sessions for other projects.
+# Tear down the tmux session that start-servers.sh creates.
 # Skip if we're running INSIDE the amiexpress tmux session (e.g., when
 # start-servers.sh calls us from pane 0 during startup — killing the session
 # we're inside would immediately terminate everything).

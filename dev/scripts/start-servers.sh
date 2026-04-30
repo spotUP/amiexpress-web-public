@@ -118,38 +118,29 @@ launch_tmux_session() {
   local root
   root="$(cd "$(dirname "$0")/../.." && pwd)"
 
-  # Window 0: logs layout
-  # pane 0 (top 70%): runs THIS script --bbs-only; $TMUX will be set so the
-  #                   tmux gate below won't fire again — no infinite loop.
-  tmux new-session -d -s "$session" -n logs \
+  # Single window, 3-pane layout:
+  #   ┌──────────────────┬───────────────┐
+  #   │  Server log       │  Console TUI  │
+  #   │  (55%)            │  (45%)        │
+  #   ├──────────────────┴───────────────┤
+  #   │  Shell (25%)                      │
+  #   └──────────────────────────────────┘
+  # Admin panel also at: http://localhost:3001/admin/
+
+  # Pane 0: server log (runs start-servers.sh inside tmux)
+  tmux new-session -d -s "$session" -n amiexpress \
     "cd '$root' && bash '$0' --bbs-only; bash"
 
-  # Split top pane horizontally → pane 0 (left: server log) | pane 1 (right: free shell)
-  tmux split-window -h -p 50 -t "${session}:logs.0" \
-    "cd '$root'; bash"
-
-  # Split pane 0 vertically → pane 2 (bottom-left: status strip)
-  tmux split-window -v -p 30 -t "${session}:logs.0" \
-    "cd '$root' && node dev/console/dist/strip/strip.js; bash"
-
-  # Split pane 1 vertically → pane 3 (bottom-right area, split into 2 cols)
-  tmux split-window -v -p 30 -t "${session}:logs.1" \
-    "cd '$root' && tail -f logs/frontend.log 2>/dev/null || echo 'waiting for preview log...'; bash"
-
-  # Split pane 3 horizontally → pane 4 (door watcher)
-  tmux split-window -h -p 50 -t "${session}:logs.3" \
-    "cd '$root' && tail -f logs/door-watcher.log 2>/dev/null || echo 'waiting for watcher log...'; bash"
-
-  # Window 1: clean shell
-  tmux new-window -t "$session" -n shell "cd '$root'; bash"
-
-  # Window 2: Ink console TUI (starts after 8s to let backend come up)
-  tmux new-window -t "$session" -n console \
+  # Pane 1: console TUI (right side, waits for backend)
+  tmux split-window -h -p 45 -t "${session}:amiexpress.0" \
     "cd '$root' && sleep 8 && node dev/console/dist/src/index.js; bash"
 
-  # Focus the logs window on attach
-  tmux select-window -t "${session}:logs"
-  tmux select-pane  -t "${session}:logs.0"
+  # Pane 2: shell (bottom, full width)
+  tmux split-window -v -p 25 -t "${session}:amiexpress.0" \
+    "cd '$root'; bash"
+
+  # Focus the server log pane
+  tmux select-pane -t "${session}:amiexpress.0"
 
   exec tmux attach -t "$session"
 }
