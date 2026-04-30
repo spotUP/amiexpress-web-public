@@ -16,6 +16,13 @@ SELF_PID="$$"
 PARENT_PID="${PPID:-0}"
 SKIP_PIDS=" $SELF_PID $PARENT_PID "
 
+# Detect if we're running inside the amiexpress tmux session (used to
+# skip killing sibling panes and the session itself).
+CURRENT_TMUX_SESSION=""
+if [ -n "${TMUX:-}" ]; then
+  CURRENT_TMUX_SESSION="$(tmux display-message -p '#S' 2>/dev/null)"
+fi
+
 # Helper: kill processes matching a pattern, but ONLY if their command line
 # contains our project root. This prevents killing processes from other
 # projects (e.g., DEViLBOX) that match the same generic patterns.
@@ -48,19 +55,21 @@ kill_project_procs "jest-worker" "stuck jest workers"
 kill_project_procs "start-servers.sh" "old start-servers instances"
 kill_project_procs "watch-doors.ts" "watch-doors processes"
 kill_project_procs "tsx.*src/index.ts" "backend tsx processes"
-kill_project_procs "dev/console/dist/src/index.js" "console TUI"
-kill_project_procs "dev/console/dist/strip/strip.js" "status strip"
 kill_project_procs "build-wasm" "build-wasm scripts"
+
+# Only kill console TUI / status strip when called from OUTSIDE the tmux
+# session. When called from pane 0 during startup, these are sibling panes
+# that we want to keep alive.
+if [ "$CURRENT_TMUX_SESSION" != "amiexpress" ]; then
+  kill_project_procs "dev/console/dist/src/index.js" "console TUI"
+  kill_project_procs "dev/console/dist/strip/strip.js" "status strip"
+fi
 
 # Tear down the tmux session that start-servers.sh creates.
 # Skip if we're running INSIDE the amiexpress tmux session (e.g., when
 # start-servers.sh calls us from pane 0 during startup — killing the session
 # we're inside would immediately terminate everything).
 if command -v tmux >/dev/null 2>&1 && tmux has-session -t amiexpress 2>/dev/null; then
-  CURRENT_TMUX_SESSION=""
-  if [ -n "${TMUX:-}" ]; then
-    CURRENT_TMUX_SESSION="$(tmux display-message -p '#S' 2>/dev/null)"
-  fi
   if [ "$CURRENT_TMUX_SESSION" = "amiexpress" ]; then
     echo "-> Skipping tmux kill (running inside 'amiexpress' session)"
   else
