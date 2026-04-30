@@ -55,9 +55,20 @@ kill_project_procs "build-wasm" "build-wasm scripts"
 # Tear down the tmux session that start-servers.sh creates (window 0 logs,
 # window 1 shell, window 2 console TUI). If it doesn't exist, this is a
 # silent no-op. Don't touch sessions for other projects.
+# Skip if we're running INSIDE the amiexpress tmux session (e.g., when
+# start-servers.sh calls us from pane 0 during startup — killing the session
+# we're inside would immediately terminate everything).
 if command -v tmux >/dev/null 2>&1 && tmux has-session -t amiexpress 2>/dev/null; then
-  echo "-> Killing tmux session 'amiexpress'..."
-  tmux kill-session -t amiexpress 2>/dev/null
+  CURRENT_TMUX_SESSION=""
+  if [ -n "${TMUX:-}" ]; then
+    CURRENT_TMUX_SESSION="$(tmux display-message -p '#S' 2>/dev/null)"
+  fi
+  if [ "$CURRENT_TMUX_SESSION" = "amiexpress" ]; then
+    echo "-> Skipping tmux kill (running inside 'amiexpress' session)"
+  else
+    echo "-> Killing tmux session 'amiexpress'..."
+    tmux kill-session -t amiexpress 2>/dev/null
+  fi
 fi
 
 # Kill by port — only ports actually owned by AmiExpress-Web.
