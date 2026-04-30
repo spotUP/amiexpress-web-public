@@ -204,12 +204,12 @@ export class FileExplorerOverlay {
       if (isReadable(f.name)) {
         items.push(`${f.name.padEnd(36)} {white-fg}${size}{/white-fg}`);
       } else {
-        items.push(`{#555555-fg}${f.name.padEnd(36)} ${size}{/#555555-fg}`);
+        items.push(`{gray-fg}${f.name.padEnd(36)} ${size}{/gray-fg}`);
       }
     }
 
     if (items.length === 0) {
-      items.push('{#555555-fg}(empty directory){/#555555-fg}');
+      items.push('{gray-fg}(empty directory){/gray-fg}');
     }
 
     this.listWidget.setItems(items);

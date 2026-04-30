@@ -103,12 +103,12 @@ export class InfoEditorOverlay {
 
   private renderList(): void {
     const items = this.tooltypes.map(tt => {
-      const prefix = tt.commented ? '{#555555-fg}!' : '{yellow-fg}';
-      const suffix = tt.commented ? '{/#555555-fg}' : '{/yellow-fg}';
+      const prefix = tt.commented ? '{gray-fg}!' : '{yellow-fg}';
+      const suffix = tt.commented ? '{/gray-fg}' : '{/yellow-fg}';
       const kv = tt.value ? `${tt.key}=${tt.value}` : tt.key;
       return `${prefix}${kv}${suffix}`;
     });
-    if (items.length === 0) items.push('{#555555-fg}(empty){/#555555-fg}');
+    if (items.length === 0) items.push('{gray-fg}(empty){/gray-fg}');
     (this.listWidget as any).setItems(items);
   }
 
