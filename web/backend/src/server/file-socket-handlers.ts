@@ -288,26 +288,21 @@ export async function processBatchFile(
 
   // Use sequential counter instead of array index (fixes off-by-one bugs)
   const currentIndex = uploadContext.currentUploadIndex || 0;
-  const currentFile = uploadContext.uploadBatch[currentIndex];
+  let currentFile = uploadContext.uploadBatch[currentIndex];
 
   // Increment files processed counter for tracking
   if (!uploadContext.filesProcessedCount) {
     uploadContext.filesProcessedCount = 0;
   }
 
+  // If batch is empty (user pressed blank line at FileName prompt without naming a file),
+  // synthesize an entry from the actual upload data. ZMODEM behaviour: filename comes
+  // from the protocol, not from the user's pre-listing.
   if (!currentFile) {
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[31mError: No file info for uploaded file\x1b[0m\r\n"
-    );
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-    );
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    clearUploadContext(session, socket);
-    return;
+    const actualName = data.originalname || data.filename || `upload_${Date.now()}.dat`;
+    currentFile = { filename: actualName, description: '' } as any;
+    if (!uploadContext.uploadBatch) uploadContext.uploadBatch = [];
+    uploadContext.uploadBatch[currentIndex] = currentFile;
   }
 
   const currentFilename = sanitizeInput(currentFile.filename);
