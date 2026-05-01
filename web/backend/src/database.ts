@@ -2776,7 +2776,7 @@ console.log(`  ✓ Created file area: ${area.name}`);
         ratio: 0,
         ratioType: 0,
         timeTotal: 0,
-        timeLimit: 0,
+        timeLimit: 3600, // express.e:7684 default = 3600 seconds (60 minutes)
         timeUsed: 0,
         chatLimit: 0,
         chatUsed: 0,

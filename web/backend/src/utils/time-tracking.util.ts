@@ -34,6 +34,12 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
     session.logonTime = currTime;
     session.lastTimeUpdate = currTime;
 
+    // express.e:7684 defaults timeLimit to 3600 (seconds = 60 minutes).
+    // Guard against 0 or negative values from DB (imported users, missing fields).
+    if (!session.user.timeLimit || session.user.timeLimit <= 0) {
+      session.user.timeLimit = 3600; // 1 hour default per express.e:7684
+    }
+
     // Initialize timeTotal from timeLimit (express.e:534)
     // Both are in seconds (not minutes) - express.e:5345,7684 confirms this
     if (session.user.timeTotal === 0 || session.user.timeTotal < session.user.timeUsed) {
@@ -102,7 +108,8 @@ export async function checkTimeUsed(socket: any, session: BBSSession): Promise<b
     }
 
     // express.e:558-561 - Display SCREEN_LOGON24 or fallback message
-    const screenDisplayed = await displayScreen(socket, session, 'LOGON24', false);
+    // Screen is optional -- suppress "Screen not found" sysop notification
+    const screenDisplayed = await displayScreen(socket, session, 'LOGON24', true);
     if (!screenDisplayed) {
       socket.emit('ansi-output', '\r\nYou have exceeded your time limit\r\n');
       socket.emit('ansi-output', 'Goodbye\r\n\r\n');

@@ -160,7 +160,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       ratio: safeNumber(user.ratio, 0),
       ratioType: safeNumber(user.ratiotype, 0),
       timeTotal: safeNumber(user.timetotal, 0),
-      timeLimit: safeNumber(user.timelimit, 0),
+      timeLimit: safeNumber(user.timelimit, 3600),
       timeUsed: safeNumber(user.timeused, 0),
       chatLimit: safeNumber(user.chatlimit, 0),
       chatUsed: safeNumber(user.chatused, 0),
