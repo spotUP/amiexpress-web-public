@@ -13,6 +13,7 @@
 
 Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [34m----------------------------------------------------------------------------[0m
+[31m19.2 1[37m [32msysop            [33mUnknown             [34m01:24:00 [35m(------)[36m 0:01 [31m   0 [32m   0[0m
 [31m19.2 1[37m [32mspot             [33mUnknown             [34m01:21:00 [35m(------)[36m 0:01 [31m   0 [32m   0[0m
 [31m19.2 1[37m [32mspot             [33mUnknown             [34m01:21:00 [35m(------)[36m 0:01 [31m   0 [32m   0[0m
 [31m19.2 1[37m [32mspot             [33mUnknown             [34m01:21:00 [35m(------)[36m 0:01 [31m   0 [32m   0[0m
@@ -26,12 +27,11 @@ Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [31m19.2 1[37m [32msysop            [33mUnknown             [34m09:44:00 [35m(------)[36m 0:00 [31m   0 [32m   0[0m
 [31m19.2 1[37m [32msysop            [33mUnknown             [34m09:44:00 [35m(------)[36m 0:00 [31m   0 [32m   0[0m
 [31m19.2 1[37m [32msysop            [33mUnknown             [34m09:44:00 [35m(------)[36m 0:00 [31m   0 [32m   0[0m
-[31m19.2 1[37m [32msysop            [33mUnknown             [34m01:19:00 [35m(------)[36m 1:43 [31m   0 [32m   0[0m
 [31m19.2 1[37m [32msysop            [33mUnknown             [34m01:19:00 [35m(------)[36m 1:43 [31m   0 [32m   0[0m
 [34m----------------------------------------------------------------------------[0m
-                [44;4;33mFreedom of choice is made for you my friend.[0m                
+                [44;4;33mDo you see what I see? Truth is an offence.[0m                
                                                                       v2.00 
- Calls:    9 / Y'day:    9 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 
+ Calls:    1 / Y'day:    9 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 
  The Records - Calls: 9999 | U: 9999 / 99999k | D:  256 /     0k | Hrs: 999 
 
  [31mThe Actions: [34m[-[36mH[34m-] [32mPassword Hack  [34m[-[36mC[34m-] [32mDrop Carrier.  [34m[-[36mP[34m-] [32mSysop Page...[75D[B [37m------------ [34m[[36mD[34m/[36md[34m] [32mDownload/Fail  [34m[[36mD[34m/[36mu[34m] [32mUpload/Fail..  [34m[-[36mS[34m-] [32mSysop Command[0m
