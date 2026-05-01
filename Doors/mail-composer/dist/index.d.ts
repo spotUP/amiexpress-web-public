@@ -5,6 +5,5 @@
  * message recipient/subject header bolted on. Draw ANSI art and send it
  * as messages to other users.
  */
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
-declare const door: Door;
+declare const door: any;
 export default door;

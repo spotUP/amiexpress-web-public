@@ -194,10 +194,8 @@ var BugStorage = class {
 async function sendWebhook(storage, event, bug) {
   const webhooks = storage.getWebhooks();
   for (const webhook of webhooks) {
-    if (!webhook.enabled)
-      continue;
-    if (!webhook.events.includes(event))
-      continue;
+    if (!webhook.enabled) continue;
+    if (!webhook.events.includes(event)) continue;
     try {
       let payload;
       if (webhook.type === "discord") {
@@ -465,33 +463,26 @@ var BugTrackerApp = class {
       }
     });
     this.registerKey(["n", "N"], () => {
-      if (this.currentView === "menu")
-        this.showCreateBug();
+      if (this.currentView === "menu") this.showCreateBug();
     });
     this.registerKey(["l", "L"], () => {
-      if (this.currentView === "menu")
-        this.showBugList();
+      if (this.currentView === "menu") this.showBugList();
     });
     this.registerKey(["m", "M"], () => {
-      if (this.currentView === "menu")
-        this.showBugList(false, this.username);
+      if (this.currentView === "menu") this.showBugList(false, this.username);
     });
     this.registerKey(["s", "S"], () => {
-      if (this.currentView === "menu")
-        this.showBugList(true);
+      if (this.currentView === "menu") this.showBugList(true);
     });
     this.registerKey(["a", "A"], () => {
-      if (this.currentView === "menu")
-        this.showAnalytics();
+      if (this.currentView === "menu") this.showAnalytics();
     });
     if (this.isSysop) {
       this.registerKey(["t", "T"], () => {
-        if (this.currentView === "menu")
-          this.showSysopTools();
+        if (this.currentView === "menu") this.showSysopTools();
       });
       this.registerKey(["w", "W"], () => {
-        if (this.currentView === "menu")
-          this.showWebhookSettings();
+        if (this.currentView === "menu") this.showWebhookSettings();
       });
     }
     const statsContent = [
@@ -583,8 +574,7 @@ var BugTrackerApp = class {
     };
     bugs.sort((a, b) => {
       const pDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
-      if (pDiff !== 0)
-        return pDiff;
+      if (pDiff !== 0) return pDiff;
       return b.createdAt - a.createdAt;
     });
     const filterLabels = {
@@ -678,8 +668,7 @@ var BugTrackerApp = class {
       }
     });
     this.registerKey(["n", "N"], () => {
-      if (this.currentView === "list")
-        this.showCreateBug();
+      if (this.currentView === "list") this.showCreateBug();
     });
     this.registerKey(["f", "F"], () => {
       if (this.currentView === "list") {
@@ -1190,8 +1179,7 @@ var BugTrackerApp = class {
   // Webhook Settings (Sysop only)
   // ============================================================================
   showWebhookSettings() {
-    if (!this.isSysop)
-      return;
+    if (!this.isSysop) return;
     this.currentView = "settings";
     this.clearMain();
     const webhooks = this.storage.getWebhooks();
@@ -1313,8 +1301,7 @@ var BugTrackerApp = class {
   // Sysop Tools (Sysop only)
   // ============================================================================
   showSysopTools() {
-    if (!this.isSysop)
-      return;
+    if (!this.isSysop) return;
     this.currentView = "settings";
     this.clearMain();
     const stats = this.storage.getStats();
@@ -1403,28 +1390,22 @@ var BugTrackerApp = class {
       }
     });
     this.registerKey(["b", "B"], () => {
-      if (this.currentView === "settings")
-        this.showBulkStatusChange();
+      if (this.currentView === "settings") this.showBulkStatusChange();
     });
     this.registerKey(["a", "A"], () => {
-      if (this.currentView === "settings")
-        this.showBulkAssign();
+      if (this.currentView === "settings") this.showBulkAssign();
     });
     this.registerKey(["c", "C"], () => {
-      if (this.currentView === "settings")
-        this.closeAllFixedBugs();
+      if (this.currentView === "settings") this.closeAllFixedBugs();
     });
     this.registerKey(["p", "P"], () => {
-      if (this.currentView === "settings")
-        this.purgeClosedBugs();
+      if (this.currentView === "settings") this.purgeClosedBugs();
     });
     this.registerKey(["r", "R"], () => {
-      if (this.currentView === "settings")
-        this.showUserReport();
+      if (this.currentView === "settings") this.showUserReport();
     });
     this.registerKey(["x", "X"], () => {
-      if (this.currentView === "settings")
-        this.showMainMenu();
+      if (this.currentView === "settings") this.showMainMenu();
     });
     this.registerKey(["escape"], () => {
       if (this.currentView === "settings") {
@@ -1469,10 +1450,8 @@ var BugTrackerApp = class {
     const bugs = this.storage.getBugs();
     const knownUsers = /* @__PURE__ */ new Set();
     bugs.forEach((b) => {
-      if (b.reporter)
-        knownUsers.add(b.reporter);
-      if (b.assignee)
-        knownUsers.add(b.assignee);
+      if (b.reporter) knownUsers.add(b.reporter);
+      if (b.assignee) knownUsers.add(b.assignee);
     });
     const userList = ["(Unassign All)", "(Enter custom username)", ...Array.from(knownUsers).sort()];
     const filterOptions = [
@@ -1671,8 +1650,7 @@ var BugTrackerApp = class {
   // ============================================================================
   toggleVote(bugId) {
     const bug = this.storage.getBug(bugId);
-    if (!bug)
-      return;
+    if (!bug) return;
     if (bug.votes.includes(this.username)) {
       this.storage.unvoteBug(bugId, this.username);
       this.showMessage("Vote Removed", "Your vote has been removed.");
@@ -1702,8 +1680,7 @@ var BugTrackerApp = class {
   }
   showEditBug(bugId) {
     const bug = this.storage.getBug(bugId);
-    if (!bug)
-      return;
+    if (!bug) return;
     this.showTextInput("Edit Title", bug.title, false, (title) => {
       if (title && title.trim()) {
         this.storage.updateBug(bugId, { title: title.trim() });
@@ -1732,13 +1709,10 @@ var BugTrackerApp = class {
     const bugs = this.storage.getBugs();
     const knownUsers = /* @__PURE__ */ new Set();
     bugs.forEach((b) => {
-      if (b.reporter)
-        knownUsers.add(b.reporter);
-      if (b.assignee)
-        knownUsers.add(b.assignee);
+      if (b.reporter) knownUsers.add(b.reporter);
+      if (b.assignee) knownUsers.add(b.assignee);
       b.comments.forEach((c) => {
-        if (c.author)
-          knownUsers.add(c.author);
+        if (c.author) knownUsers.add(c.author);
       });
     });
     const userList = Array.from(knownUsers).sort();
@@ -1755,16 +1729,14 @@ var BugTrackerApp = class {
       if (idx === 0) {
         this.storage.updateBug(bugId, { assignee: null });
         const bug = this.storage.getBug(bugId);
-        if (bug)
-          sendWebhook(this.storage, "update", bug);
+        if (bug) sendWebhook(this.storage, "update", bug);
         this.showMessage("Updated", "Bug unassigned.", () => this.showBugDetail(bugId));
       } else if (idx === 1) {
         this.showTextInput("Enter Username", "", false, (assignee) => {
           if (assignee && assignee.trim()) {
             this.storage.updateBug(bugId, { assignee: assignee.trim() });
             const bug = this.storage.getBug(bugId);
-            if (bug)
-              sendWebhook(this.storage, "update", bug);
+            if (bug) sendWebhook(this.storage, "update", bug);
             this.showMessage("Assigned", `Bug assigned to ${assignee.trim()}.`, () => this.showBugDetail(bugId));
           } else {
             this.showBugDetail(bugId);
@@ -1774,16 +1746,14 @@ var BugTrackerApp = class {
         const selectedUser = userList[idx - 2];
         this.storage.updateBug(bugId, { assignee: selectedUser });
         const bug = this.storage.getBug(bugId);
-        if (bug)
-          sendWebhook(this.storage, "update", bug);
+        if (bug) sendWebhook(this.storage, "update", bug);
         this.showMessage("Assigned", `Bug assigned to ${selectedUser}.`, () => this.showBugDetail(bugId));
       }
     });
   }
   confirmDeleteBug(bugId) {
     const bug = this.storage.getBug(bugId);
-    if (!bug)
-      return;
+    if (!bug) return;
     this.showConfirm(`Delete Bug #${bugId}?`, `Are you sure you want to delete "${bug.title}"?`, (confirmed) => {
       if (confirmed) {
         this.storage.deleteBug(bugId);
@@ -1997,18 +1967,15 @@ ${message}
       };
       msgBox.once("keypress", () => {
         cleanup();
-        if (callback)
-          callback();
+        if (callback) callback();
       });
       backdrop.on("click", () => {
         cleanup();
-        if (callback)
-          callback();
+        if (callback) callback();
       });
       msgBox.on("click", () => {
         cleanup();
-        if (callback)
-          callback();
+        if (callback) callback();
       });
       this.screen.render();
     });
@@ -2098,10 +2065,10 @@ door.onStart(async (ctx) => {
   const mode = args[0]?.toUpperCase();
   await createApp(session, mode);
 });
-var bug_tracker_default = door;
+var index_default = door;
 export {
   createApp,
-  bug_tracker_default as default,
+  index_default as default,
   metadata
 };
 //# sourceMappingURL=index.js.map

@@ -24,10 +24,14 @@ const line_clear_animation_1 = require("../effects/line-clear-animation");
  * lock flash, grade-up, combo, section COOL/REGRET, hold piece).
  */
 class VersusScreen {
-    constructor(screen, engine, inputHandler, sounds, state, network, attackManager, botOrAI // number = old botDifficulty, object = VersusAI controller
-    ) {
+    constructor(screen, engine, inputHandler, sounds, state, network, attackManager, botOrAI, // number = old botDifficulty, object = VersusAI controller
+    sessionRef) {
         this.botPlayer = null;
         this.versusAI = null; // VersusAI controller for CPU Battle mode
+        this.voiceStates = new Map();
+        this.localMuted = false;
+        this.sessionSocket = null;
+        this.voiceSpeakingHandler = null;
         this.lastOpponentCount = -1; // tracks layout switch
         // Board overlay compositor for inline effects (same as game-screen)
         this.boardOverlay = [];
@@ -57,6 +61,7 @@ class VersusScreen {
         this.state = state;
         this.network = network;
         this.attackManager = attackManager;
+        this.sessionSocket = sessionRef?.bbsSession?.socket ?? null;
         this.minimapRenderer = new minimap_1.MinimapRenderer({ height: 10, compact: true });
         this.opponentTracker = new minimap_1.OpponentTracker();
         // Check if AI controller was passed (new implementation)
@@ -232,6 +237,21 @@ class VersusScreen {
         });
         // Start in 1v1 mode (hidden minimap panel); render() will switch as needed
         this.minimapPanel.hide();
+        // Voice speaking indicators
+        if (this.sessionSocket) {
+            this.voiceSpeakingHandler = (data) => {
+                const existing = this.voiceStates.get(String(data.userId)) ?? { speaking: false, muted: false };
+                this.voiceStates.set(String(data.userId), { ...existing, speaking: data.speaking });
+                this.screen.render();
+            };
+            this.sessionSocket.on('voice:speaking', this.voiceSpeakingHandler);
+            // M key toggles mic mute
+            this.screen.key(['m', 'M'], () => {
+                this.localMuted = !this.localMuted;
+                this.sessionSocket.emit('audio:mute', { muted: this.localMuted });
+                this.screen.render();
+            });
+        }
     }
     /**
      * Setup network event listeners
@@ -689,13 +709,19 @@ class VersusScreen {
             const oppLevel = opp?.level ?? '-';
             const oppGrade = opp?.grade ?? '-';
             const oppAlive = opp ? opp.alive : true;
+            const localUserId = String(this.network?.getMatchState()?.players.find(p => !p.isBot && !this.opponentTracker.getAliveOpponents().some((o) => String(o.id) === String(p.id)))?.id ?? '');
+            const oppUserId = String(opp?.id ?? '');
+            const voiceSection = this.sessionSocket
+                ? this.renderVoiceSection(localUserId, oppUserId)
+                : '';
             this.opponentInfoBox.setContent(`{cyan-fg}${oppName}{/cyan-fg}\n\n` +
                 `Level: {yellow-fg}${oppLevel}{/yellow-fg}\n` +
                 `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
                 `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
                 (attackPending > 0
                     ? `{red-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/red-fg}`
-                    : `{gray-fg}No incoming attack{/gray-fg}`));
+                    : `{gray-fg}No incoming attack{/gray-fg}`) +
+                voiceSection);
         }
         // Stats bar
         const combo = gameState.combo;
@@ -1076,9 +1102,34 @@ class VersusScreen {
         return baseChar;
     }
     /**
+     * Render voice chat status section for opponentInfoBox
+     */
+    renderVoiceSection(localUserId, oppUserId) {
+        const fmtRow = (uid, label, isLocal) => {
+            const muted = isLocal ? this.localMuted : (this.voiceStates.get(uid)?.muted ?? false);
+            const speaking = this.voiceStates.get(uid)?.speaking ?? false;
+            if (muted)
+                return `{red-fg}[M]{/red-fg} ${label}`;
+            if (speaking)
+                return `{green-fg}[*]{/green-fg} ${label}`;
+            return `{gray-fg}[ ]{/gray-fg} ${label}`;
+        };
+        const localName = this.state.playerName || 'You';
+        const opp = this.opponentTracker.getAliveOpponents()[0];
+        const oppName = opp?.name || 'Opp';
+        return (`\n{cyan-fg}-- VOICE ----------{/cyan-fg}\n` +
+            `${fmtRow(localUserId, localName, true)}\n` +
+            `${fmtRow(oppUserId, oppName, false)}\n` +
+            `{gray-fg}M=mute{/gray-fg}`);
+    }
+    /**
      * Cleanup
      */
     cleanup() {
+        if (this.sessionSocket && this.voiceSpeakingHandler) {
+            this.sessionSocket.off('voice:speaking', this.voiceSpeakingHandler);
+            this.voiceSpeakingHandler = null;
+        }
         this.running = false;
         this.unsubscribers.forEach(unsub => unsub());
         this.unsubscribers = [];

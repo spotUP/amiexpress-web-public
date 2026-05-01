@@ -139,8 +139,11 @@ class CardLobbyApp {
             // NOTE: grabKeys is NOT a valid blessed constructor option
             // DoorInputManager.enable() sets screen.program.grabKeys = true (line 265)
         });
-        // Clear the blessed screen
+        // Clear terminal then flush blessed's internal buffer
+        this.screen.program.write('\x1b[2J');
+        this.screen.program.write('\x1b[H');
         this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+        this.screen.alloc();
         // Set up input management (enables mouse, keyboard routing)
         // DoorInputManager handles all the input routing automatically
         this.inputManager = new door_input_manager_1.DoorInputManager(this.session, this.screen, {

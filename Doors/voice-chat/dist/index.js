@@ -67,6 +67,10 @@ door.onStart(async (ctx) => {
     const screen = (0, bbs_door_sdk_1.createScreen)(ctx.bbs, {
         title: 'Voice Chat',
     });
+    screen.program.write('\x1b[2J');
+    screen.program.write('\x1b[H');
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     // Setup input handler to route terminal input to blessed
     const bbsSession = ctx.bbsSession;
     if (bbsSession) {

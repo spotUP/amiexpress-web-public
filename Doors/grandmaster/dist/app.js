@@ -174,6 +174,8 @@ class GrandmasterApp {
         this.network = null;
         this.attackManager = null;
         this.currentScreen = 'menu';
+        this._voiceRoom = null;
+        this._voiceSocketHandlers = [];
         this.session = session;
         this.state = this.createInitialState();
         this.loadSettings(); // Load per-user settings from disk
@@ -419,6 +421,54 @@ class GrandmasterApp {
         });
     }
     /**
+     * Start voice relay for a VS lobby / game session.
+     * Joins the socket to a named room and relays audio:data / voice:speaking
+     * events between all peers in that room.
+     */
+    startVoice(matchId) {
+        const socket = this.session.bbsSession?.socket;
+        if (!socket)
+            return;
+        const roomName = `voice:${matchId}`;
+        this._voiceRoom = roomName;
+        socket.join(roomName);
+        const onAudioData = (chunk) => {
+            socket.to(roomName).emit('audio:data', {
+                userId: this.session.user?.id ?? 'unknown',
+                chunk,
+            });
+        };
+        const onSpeaking = (data) => {
+            socket.to(roomName).emit('voice:speaking', {
+                userId: this.session.user?.id ?? 'unknown',
+                speaking: data.speaking,
+            });
+        };
+        socket.on('audio:data', onAudioData);
+        socket.on('voice:speaking', onSpeaking);
+        this._voiceSocketHandlers = [
+            ['audio:data', onAudioData],
+            ['voice:speaking', onSpeaking],
+        ];
+        // Tell the browser to start the mic
+        void this.session.bbsSession?.audio?.startStreaming?.();
+    }
+    /**
+     * Stop voice relay and release mic.
+     */
+    stopVoice() {
+        const socket = this.session.bbsSession?.socket;
+        if (socket && this._voiceRoom) {
+            for (const [ev, fn] of this._voiceSocketHandlers)
+                socket.off(ev, fn);
+            socket.leave(this._voiceRoom);
+        }
+        this._voiceRoom = null;
+        this._voiceSocketHandlers = [];
+        // Tell the browser to release the mic
+        void this.session.bbsSession?.audio?.stopStreaming?.();
+    }
+    /**
      * Show main menu
      */
     async showMainMenu() {
@@ -542,6 +592,10 @@ class GrandmasterApp {
         this.inputHandler.setEnabled(false);
         this.inputManager.suspend(); // Disable grabKeys so List widgets can receive input
         const nav = createMenuNav(this.session.bbsSession, this.screen);
+        // Start voice for the lobby + any subsequent VS game in this session
+        const voiceMatchId = this.network?.getMatchState()?.matchId
+            ?? `lobby-${this.session.user?.id ?? Date.now()}`;
+        this.startVoice(voiceMatchId);
         // Check if network is available
         if (!this.network) {
             const errorBox = (0, blessed_helpers_1.createBox)({
@@ -562,6 +616,7 @@ class GrandmasterApp {
             await this.waitForKey();
             errorBox.destroy();
             nav.destroy();
+            this.stopVoice();
             return;
         }
         // Show mode selection first
@@ -616,38 +671,111 @@ class GrandmasterApp {
         modePanel.destroy();
         if (modeSelection === 3) {
             nav.destroy();
+            this.stopVoice();
             return; // Back to menu
         }
-        // Map selection to mode
+        // ── Mode-selection + lobby loop ────────────────────────────────────────
+        // Stays in this loop (and keeps voice active) until the player starts a
+        // game or explicitly goes Back to the main menu.
         const modes = ['versus_1v1', 'team_2v2', 'battle_royale'];
-        const selectedMode = modes[modeSelection];
-        // Create lobby screen
-        const localPlayerId = this.session.user?.id || this.state.playerName;
-        const lobbyScreen = new lobby_screen_1.LobbyScreen(this.screen, this.state, this.sounds, this.network, localPlayerId);
-        // Show lobby and wait for result.
-        // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
-        // waiting lobby with the same mode, or creates one the next player will join.
-        // 'custom' would make every player create their own private lobby (each sees only themselves).
-        const result = await lobbyScreen.show('matchmaking', selectedMode);
-        // Re-enable game mode and input handler after lobby
-        nav.destroy();
-        this.inputHandler.setEnabled(true);
-        this.inputManager.resume(); // Re-enable grabKeys
-        if (this.session.bbs?.enableGameMode) {
-            this.session.bbs.enableGameMode();
-            console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
-        }
-        if (result.action === 'start' && result.mode) {
-            // Check if bots were added to the lobby (auto-filled for solo testing)
-            const matchState = this.network?.getMatchState();
-            const hasBots = matchState?.players.some(p => p.isBot) ?? false;
-            if (hasBots) {
-                // Route to CPU battle so the bot AI is actually running
-                const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
-                await this.startCpuBattle(botDifficulty);
+        let selectedMode = modes[modeSelection];
+        let changingMode = false;
+        while (true) {
+            if (changingMode) {
+                // Re-show mode selection overlay
+                changingMode = false;
+                const rePanel = (0, blessed_helpers_1.createBox)({
+                    parent: this.screen,
+                    top: 'center',
+                    left: 'center',
+                    width: 50,
+                    height: 12,
+                    border: { type: 'line' },
+                    label: ' Change Mode ',
+                    style: { border: { fg: 'cyan' } },
+                    fixed: true,
+                });
+                const reList = (0, blessed_helpers_1.createList)({
+                    parent: rePanel,
+                    top: 1,
+                    left: 1,
+                    width: 48,
+                    height: 10,
+                    style: { selected: { bg: 'blue', fg: 'white' } },
+                    keys: true,
+                    vi: true,
+                    mouse: true,
+                    items: ['1v1 Versus', '2v2 Team Battle', 'Battle Royale (99)', 'Back to Menu'],
+                });
+                reList.focus();
+                this.screen.render();
+                const newModeIdx = await new Promise((resolve) => {
+                    const onSel = (_item, index) => { this.screen.unkey(['escape'], onEsc); resolve(index); };
+                    const onEsc = () => { reList.removeListener('select', onSel); this.screen.unkey(['escape'], onEsc); resolve(3); };
+                    reList.on('select', onSel);
+                    this.screen.key(['escape'], onEsc);
+                });
+                reList.destroy();
+                rePanel.destroy();
+                if (newModeIdx === 3) {
+                    // Back to main menu — stop voice and exit
+                    nav.destroy();
+                    this.stopVoice();
+                    this.inputHandler.setEnabled(true);
+                    this.inputManager.resume();
+                    if (this.session.bbs?.enableGameMode) {
+                        this.session.bbs.enableGameMode();
+                    }
+                    return;
+                }
+                selectedMode = modes[newModeIdx];
+            }
+            // Create lobby screen
+            // Use 'matchmaking' so the broker's atomic handleMatchmake joins an existing
+            // waiting lobby with the same mode, or creates one the next player will join.
+            // 'custom' would make every player create their own private lobby (each sees only themselves).
+            const localPlayerId = this.session.user?.id || this.state.playerName;
+            const lobbyScreen = new lobby_screen_1.LobbyScreen(this.screen, this.state, this.sounds, this.network, localPlayerId);
+            // Register C key inside lobby to trigger mode change (without leaving voice)
+            const onChangeMode = () => { changingMode = true; };
+            this.screen.key(['c', 'C'], onChangeMode);
+            const result = await lobbyScreen.show('matchmaking', selectedMode);
+            this.screen.unkey(['c', 'C'], onChangeMode);
+            if (result.action === 'start' && result.mode) {
+                // Game starting — re-enable input and route to the appropriate game
+                nav.destroy();
+                this.inputHandler.setEnabled(true);
+                this.inputManager.resume();
+                if (this.session.bbs?.enableGameMode) {
+                    this.session.bbs.enableGameMode();
+                    console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
+                }
+                const matchState = this.network?.getMatchState();
+                const hasBots = matchState?.players.some(p => p.isBot) ?? false;
+                if (hasBots) {
+                    const botDifficulty = matchState?.players.find(p => p.isBot)?.botDifficulty ?? 5;
+                    await this.startCpuBattle(botDifficulty);
+                }
+                else {
+                    await this.startVersusGame(result.mode);
+                }
+                return;
+            }
+            else if (changingMode) {
+                // C was pressed during lobby — loop back to mode selection overlay
+                continue;
             }
             else {
-                await this.startVersusGame(result.mode);
+                // Player pressed Leave/Back in lobby without requesting a mode change
+                nav.destroy();
+                this.stopVoice();
+                this.inputHandler.setEnabled(true);
+                this.inputManager.resume();
+                if (this.session.bbs?.enableGameMode) {
+                    this.session.bbs.enableGameMode();
+                    console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
+                }
+                return;
             }
         }
     }
@@ -1929,7 +2057,8 @@ class GrandmasterApp {
         // Create game engine with attack manager
         this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
         // Create versus screen
-        const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, this.network, this.attackManager);
+        const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, this.network, this.attackManager, undefined, // botOrAI
+        this.session);
         // Run game loop
         await versusScreen.run();
         // Submit score and broadcast match result
@@ -1943,6 +2072,7 @@ class GrandmasterApp {
         this.screen.program.enableMouse();
         // Clean up
         versusScreen.cleanup();
+        this.stopVoice();
         this.gameEngine = null;
         this.attackManager = null;
         this.state.currentMode = null;
@@ -1983,8 +2113,8 @@ class GrandmasterApp {
         botDifficulty, this.state.settings, this.sounds);
         // Create versus screen with AI opponents
         const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, null, // No network for CPU battle
-        this.attackManager, versusAI // Pass AI controller instead of botDifficulty
-        );
+        this.attackManager, versusAI, // Pass AI controller instead of botDifficulty
+        this.session);
         // Run game loop
         await versusScreen.run();
         // Submit score and broadcast match result
@@ -1999,6 +2129,7 @@ class GrandmasterApp {
         // Clean up AI
         versusAI.destroy();
         versusScreen.cleanup();
+        this.stopVoice();
         this.gameEngine = null;
         this.attackManager = null;
         this.state.currentMode = null;

@@ -30,6 +30,10 @@ export declare class VersusScreen {
     private opponentTracker;
     private botPlayer;
     private versusAI;
+    private voiceStates;
+    private localMuted;
+    private sessionSocket;
+    private voiceSpeakingHandler;
     private boardBox;
     private nextBox;
     private holdBox;
@@ -64,7 +68,8 @@ export declare class VersusScreen {
     private twentyGFlashTimer;
     private rainbowTimer;
     private lastRainbowUpdate;
-    constructor(screen: Screen, engine: GameEngine, inputHandler: InputHandler, sounds: SoundEngine, state: AppState, network: GrandmasterNetworkManager | null, attackManager: AttackManager, botOrAI?: number | any);
+    constructor(screen: Screen, engine: GameEngine, inputHandler: InputHandler, sounds: SoundEngine, state: AppState, network: GrandmasterNetworkManager | null, attackManager: AttackManager, botOrAI?: number | any, // number = old botDifficulty, object = VersusAI controller
+    sessionRef?: any);
     /**
      * Setup UI layout — 80x24 terminal
      *
@@ -171,6 +176,10 @@ export declare class VersusScreen {
      * Apply glow effect to block character
      */
     private applyGlow;
+    /**
+     * Render voice chat status section for opponentInfoBox
+     */
+    private renderVoiceSection;
     /**
      * Cleanup
      */

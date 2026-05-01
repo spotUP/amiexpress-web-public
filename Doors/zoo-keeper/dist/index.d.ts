@@ -6,12 +6,11 @@
  * 1. The fallback door for terminal-only sessions (no audio)
  * 2. The server entry point for hybrid door mode
  */
-import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import { rpcHandlers } from "./server";
 export { rpcHandlers };
 /**
  * Main door entry point
  */
-declare const door: Door;
+declare const door: any;
 export default door;
 //# sourceMappingURL=index.d.ts.map

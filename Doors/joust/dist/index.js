@@ -534,6 +534,10 @@ door.onStart(async (ctx) => {
         /* cached */
     }
     initScreen();
+    screen.program.write('\x1b[2J');
+    screen.program.write('\x1b[H');
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     showMenu();
 });
 door.onInput((ctx, key) => handleInput(key.raw || key.key || key));

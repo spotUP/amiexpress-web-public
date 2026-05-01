@@ -165,6 +165,13 @@ class FileExplorerOverlay {
                 this.close();
             }
         });
+        // List widget emits 'cancel' when ESC is pressed (before overlay sees it),
+        // so we must also listen here to close the browser view.
+        this.listWidget.on('cancel', () => {
+            if (this.viewerState === 'browser') {
+                this.close();
+            }
+        });
         this.listWidget.focus();
         this.updateHeader();
     }
@@ -202,14 +209,15 @@ class FileExplorerOverlay {
                 items.push(`${f.name.padEnd(36)} {white-fg}${size}{/white-fg}`);
             }
             else {
-                items.push(`{#555555-fg}${f.name.padEnd(36)} ${size}{/#555555-fg}`);
+                items.push(`{gray-fg}${f.name.padEnd(36)} ${size}{/gray-fg}`);
             }
         }
         if (items.length === 0) {
-            items.push('{#555555-fg}(empty directory){/#555555-fg}');
+            items.push('{gray-fg}(empty directory){/gray-fg}');
         }
         this.listWidget.setItems(items);
         this.listWidget.select(0);
+        this.listWidget.focus();
         this.updateHeader();
         this.screen.render();
     }

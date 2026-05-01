@@ -69,13 +69,13 @@ class InfoEditorOverlay {
     }
     renderList() {
         const items = this.tooltypes.map(tt => {
-            const prefix = tt.commented ? '{#555555-fg}!' : '{yellow-fg}';
-            const suffix = tt.commented ? '{/#555555-fg}' : '{/yellow-fg}';
+            const prefix = tt.commented ? '{gray-fg}!' : '{yellow-fg}';
+            const suffix = tt.commented ? '{/gray-fg}' : '{/yellow-fg}';
             const kv = tt.value ? `${tt.key}=${tt.value}` : tt.key;
             return `${prefix}${kv}${suffix}`;
         });
         if (items.length === 0)
-            items.push('{#555555-fg}(empty){/#555555-fg}');
+            items.push('{gray-fg}(empty){/gray-fg}');
         this.listWidget.setItems(items);
     }
     editSelected() {

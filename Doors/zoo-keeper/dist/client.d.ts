@@ -1,4 +1,3 @@
-import { ClientDoor } from "@amiexpress/bbs-door-sdk/client";
-declare const door: ClientDoor;
+declare const door: any;
 export default door;
 //# sourceMappingURL=client.d.ts.map

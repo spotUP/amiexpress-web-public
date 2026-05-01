@@ -34,6 +34,8 @@ export declare class GrandmasterApp {
     private attackManager;
     private multiplayerServer;
     private currentScreen;
+    private _voiceRoom;
+    private _voiceSocketHandlers;
     constructor(session: DoorSession);
     /**
      * Create initial application state
@@ -72,6 +74,16 @@ export declare class GrandmasterApp {
      * Show attract mode (boot sequence + demo gameplay + info screens)
      */
     private showAttractMode;
+    /**
+     * Start voice relay for a VS lobby / game session.
+     * Joins the socket to a named room and relays audio:data / voice:speaking
+     * events between all peers in that room.
+     */
+    private startVoice;
+    /**
+     * Stop voice relay and release mic.
+     */
+    private stopVoice;
     /**
      * Show main menu
      */

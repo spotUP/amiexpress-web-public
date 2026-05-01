@@ -609,6 +609,10 @@ door.onStart(async (ctx) => {
         // Use defaults
     }
     initScreen();
+    screen.program.write('\x1b[2J');
+    screen.program.write('\x1b[H');
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
     // Set up input management (enables mouse, keyboard routing)
     inputManager = new DoorInputManager(ctx, screen, {
         enableGameMode: true, // Game needs raw keyboard input

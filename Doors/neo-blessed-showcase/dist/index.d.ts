@@ -6,7 +6,6 @@
  * This is the complete 2000+ line showcase with 10 interactive pages showing
  * all 49 widgets, live animations, charts, gauges, and best practices.
  */
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
-declare const door: Door;
+declare const door: any;
 export default door;
 //# sourceMappingURL=index.d.ts.map

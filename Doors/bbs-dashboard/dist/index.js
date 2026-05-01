@@ -59,6 +59,10 @@ class BBSDashboard {
             title: 'BBS SysOp Dashboard',
             responsive: true,
         });
+        this.screen.program.write('\x1b[2J');
+        this.screen.program.write('\x1b[H');
+        this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+        this.screen.alloc();
         // System Resources Panel (top-left)
         this.systemPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,

@@ -39,9 +39,11 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@amiexpress/bbs-door-sdk/client");
+const client_2 = require("@amiexpress/bbs-door-sdk/client");
 const Tone = __importStar(require("tone"));
 class GrandmasterAudioClient {
     constructor() {
+        this.voiceCapture = null;
         this.sfxVolume = 1;
         this.musicVolume = 0.8;
         this.currentMusic = null;
@@ -93,6 +95,19 @@ class GrandmasterAudioClient {
             }
         };
         on('door-active', doorActiveHandler);
+        // Voice chat: VoiceCapture reacts to audio:start-streaming/stop-streaming
+        // automatically via door events. Forward speaking/level state to server.
+        const vc = new client_2.VoiceCapture(this.door);
+        this.voiceCapture = vc;
+        vc.on('speaking', (speaking) => {
+            this.door.emit('voice:speaking', { speaking });
+        });
+        vc.on('level', (level) => {
+            this.door.emit('voice:level', { level });
+        });
+        vc.on('error', (err) => {
+            console.warn('[GrandmasterAudioClient] Mic error:', err.message);
+        });
     }
     cleanup() {
         this.stopMusic();
@@ -112,6 +127,8 @@ class GrandmasterAudioClient {
         }
         this.tonePlayers.clear();
         this.toneLoads.clear();
+        this.voiceCapture?.destroy();
+        this.voiceCapture = null;
     }
     playSfx(data) {
         if (!data?.file)
