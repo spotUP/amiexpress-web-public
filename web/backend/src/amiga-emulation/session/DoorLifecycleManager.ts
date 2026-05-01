@@ -1096,12 +1096,27 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         //   - utility.library: 0xeff00-0xf0000
         // Library trap regions: traps are at negative offsets from base, can extend 1KB+ below base
         // Examples: Wait at -318 (0x80000-0x13e=0x7fec2), GetMsg at -372 (0x7fe8c), FindPort at -390 (0x7fe7a)
-        const isJumpToLibraryTrap = (
+        // Check static library trap ranges + dynamic libraries (AEDoor, bsdsocket, etc.)
+        let isJumpToLibraryTrap = (
           (pcAfterBatch >= 0x7f800 && pcAfterBatch < 0x80000) ||   // exec.library (expanded: -2048 to 0)
           (pcAfterBatch >= 0xaf800 && pcAfterBatch < 0xb0000) ||   // dos.library (expanded)
           (pcAfterBatch >= 0xcf800 && pcAfterBatch < 0xd0000) ||   // icon.library (expanded)
           (pcAfterBatch >= 0xef800 && pcAfterBatch < 0xf0000)      // utility.library (expanded)
         );
+        // Dynamically check all opened library bases (covers AEDoor.library, bsdsocket.library, etc.)
+        if (!isJumpToLibraryTrap && this.libraryManager?.execLibrary) {
+          const dynamicLibs = ['AEDoor.library', 'bsdsocket.library', 'intuition.library',
+                               'graphics.library', 'mathffp.library', 'mathtrans.library',
+                               'mathieeedoubbas.library', 'mathieeedoubtrans.library',
+                               'mathieeesingbas.library', 'amissl.library'];
+          for (const libName of dynamicLibs) {
+            const base = this.libraryManager.execLibrary.getLibraryBase(libName);
+            if (base && pcAfterBatch >= base - 0x800 && pcAfterBatch < base) {
+              isJumpToLibraryTrap = true;
+              break;
+            }
+          }
+        }
 
         if (Math.abs(jumpSize) > 0x1000 && !isJumpToLibraryTrap) { // Only track large jumps, exclude library calls
           if (this.executionState.lastJumpSizes.length > 0 &&
