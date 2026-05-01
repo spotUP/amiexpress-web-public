@@ -22,7 +22,6 @@ import * as path from 'path';
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
-const TAIL_SCAN_WINDOW = 4096; // bytes to scan backward for a clean line boundary
 
 export interface LogRetentionConfig {
   /** Absolute or dataDir-relative paths to trim. */
@@ -79,38 +78,13 @@ export class LogRetentionService {
   }
 
   /**
-   * Tail-trim a file to its last ~maxBytes, snapping to the nearest
-   * newline so we don't cut mid-entry.
+   * Truncate a log file to zero bytes in-place.
+   * In-place truncate preserves open file descriptors so the Node
+   * process keeps writing to the same inode afterwards.
    */
-  private async tailTrim(filePath: string, currentSize: number): Promise<number> {
-    const startOffset = Math.max(0, currentSize - this.maxBytes);
-    // Read a small window from startOffset to find the next newline so we
-    // don't start mid-entry.
-    const fh = await fsp.open(filePath, 'r');
-    try {
-      const windowSize = Math.min(TAIL_SCAN_WINDOW, currentSize - startOffset);
-      const buf = Buffer.alloc(windowSize);
-      await fh.read(buf, 0, windowSize, startOffset);
-      // Find first newline in the window; cut after it so the kept tail
-      // starts on a fresh log entry.
-      const newlineIdx = buf.indexOf(0x0a);
-      const cutAt = newlineIdx >= 0 ? startOffset + newlineIdx + 1 : startOffset;
-
-      // Read the tail into memory (we only keep up to maxBytes, acceptable).
-      const tailSize = currentSize - cutAt;
-      const tailBuf = Buffer.alloc(tailSize);
-      await fh.read(tailBuf, 0, tailSize, cutAt);
-      await fh.close();
-
-      // Write atomically via temp + rename so readers don't see a half-file.
-      const tmp = `${filePath}.retention-tmp`;
-      await fsp.writeFile(tmp, tailBuf);
-      await fsp.rename(tmp, filePath);
-      return tailSize;
-    } catch (error) {
-      try { await fh.close(); } catch {}
-      throw error;
-    }
+  private async tailTrim(filePath: string, _currentSize: number): Promise<number> {
+    await fsp.truncate(filePath, 0);
+    return 0;
   }
 
   /**
