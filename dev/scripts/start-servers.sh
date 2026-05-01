@@ -707,6 +707,13 @@ if [ ! -f "$REPO_ROOT/mcp-server/data/ndk-structs-index.json" ]; then
   (cd "$REPO_ROOT" && node mcp-server/build-indexes.js 2>/dev/null) || true
 fi
 
+# Regenerate LVO/struct maps if index is newer than generated files
+LVO_GEN="$REPO_ROOT/web/backend/src/amiga-emulation/constants/lvo-names.generated.ts"
+if [ ! -f "$LVO_GEN" ] || [ "$REPO_ROOT/mcp-server/data/ndk-structs-index.json" -nt "$LVO_GEN" ]; then
+  printf "%b\n" "${CYAN}-> Generating LVO/struct maps from NDK index...${RESET}"
+  (cd "$REPO_ROOT" && node dev/scripts/generate-lvo-maps.js 2>/dev/null) || true
+fi
+
 printf "%b\n" "${CYAN}-> Starting servers (unified deployment - all frontends served from backend)...${RESET}"
 echo ""
 

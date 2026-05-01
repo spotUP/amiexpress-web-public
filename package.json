@@ -20,7 +20,8 @@
     "xim:debug": "npx tsx dev/scripts/xim-debug.ts",
     "xim:replay:real": "npx tsx dev/scripts/xim-replay-real.ts",
     "xim:record": "npx tsx dev/scripts/xim-record.ts",
-    "xim:perf": "npx tsx dev/scripts/xim-perf.ts"
+    "xim:perf": "npx tsx dev/scripts/xim-perf.ts",
+    "generate:lvo": "node dev/scripts/generate-lvo-maps.js"
   },
   "dependencies": {
     "axios": "^1.13.2",

@@ -29,6 +29,7 @@ import { IntuitionLibrary } from "./IntuitionLibrary";
 import { BsdSocketLibrary } from "./BsdSocketLibrary";
 import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./AmiSSLLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
+import { getLvoName } from "../constants/lvo-names.generated";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
@@ -1162,10 +1163,10 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
 
       const vector: LibraryVector = {
         offset,
-        name: `${normalized}-stub`,
+        name: getLvoName(normalized, offset) || `${normalized}-stub`,
         handler: (emu: MoiraEmulator) => {
 console.log(
-            `[LibraryTraps] Stubbed ${normalized} offset ${offset} at PC=0x${trapAddr.toString(
+            `[LibraryTraps] Stubbed ${normalized} ${getLvoName(normalized, offset) || `offset ${offset}`} at PC=0x${trapAddr.toString(
               16
             )}`
           );
@@ -1229,10 +1230,11 @@ console.log(`[LibraryTraps] AEDoor call? PC=0x${pc.toString(16)} offset=${offset
       // Only trigger if PC is in the ACTUAL library vector range, not ROM space
       // Exec.library vectors are roughly from -700 to -30 from ExecBase
       if (pc >= execBase - 700 && pc < execBase && execOffset <= -30) {
-console.error(`[LibraryTraps] *** UNIMPLEMENTED EXEC FUNCTION ***`);
+        const execFnName = getLvoName('exec.library', execOffset) || `unknown(${execOffset})`;
+console.error(`[LibraryTraps] *** UNIMPLEMENTED EXEC FUNCTION: ${execFnName} ***`);
 console.error(`[LibraryTraps]   PC: 0x${pc.toString(16)}`);
 console.error(`[LibraryTraps]   ExecBase: 0x${execBase.toString(16)}`);
-console.error(`[LibraryTraps]   LVO offset: ${execOffset}`);
+console.error(`[LibraryTraps]   LVO offset: ${execOffset} = ${execFnName}`);
 console.error(
           `[LibraryTraps]   This is likely a missing Exec.library function!`
         );
@@ -1302,9 +1304,10 @@ console.error(
       // DOS.library check - more restrictive range
       if (dosBase && pc >= dosBase - 300 && pc < dosBase && dosOffset <= -30) {
         const offset = pc - dosBase;
-console.error(`[LibraryTraps] *** UNIMPLEMENTED DOS FUNCTION ***`);
+        const dosFnName = getLvoName('dos.library', offset) || `unknown(${offset})`;
+console.error(`[LibraryTraps] *** UNIMPLEMENTED DOS FUNCTION: ${dosFnName} ***`);
 console.error(
-          `[LibraryTraps]   PC: 0x${pc.toString(16)}, LVO: ${offset}`
+          `[LibraryTraps]   PC: 0x${pc.toString(16)}, LVO: ${offset} = ${dosFnName}`
         );
         // Simulate RTS with D0=0
         this.emulator.setRegister(0, 0);

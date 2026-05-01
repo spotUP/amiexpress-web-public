@@ -6,6 +6,7 @@
 
 import { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
 import { debugLog } from "../../../utils/debug-log";
+import { getLvoName } from "../../constants/lvo-names.generated.js";
 import type { ExecutionState, LifecycleConfig } from "../DoorLifecycleManager.js";
 
 export interface WriteCallLogEntry {
@@ -116,18 +117,32 @@ export class DoorExecutionLogger {
 
   /**
    * Map an AEDoor.library LVO offset to a human-readable function name.
-   * The table is intentionally partial — only names we actively log in this
-   * file. Full LVO coverage is in library-vectors/aedoor-vectors.ts.
+   * AEDoor is custom (not in NDK) so we maintain a complete map from
+   * library-vectors/aedoor-vectors.ts.
    */
   getAEDoorFunctionName(offset: number): string {
-    const functionMap: { [key: string]: string } = {
-      "-6": "Open",
-      "-12": "Close",
-      "-48": "Write",
-      "-500": "WriteStr",
-      "-512": "GetUserInput",
-      "-572": "LineInput",
+    const functionMap: Record<number, string> = {
+      [-24]: 'Stub_-24',
+      [-30]: 'CreateComm',
+      [-36]: 'DeleteComm',
+      [-42]: 'SendCmd',
+      [-48]: 'SendStrCmd',
+      [-54]: 'SendDataCmd',
+      [-60]: 'SendStrDataCmd',
+      [-66]: 'GetData',
+      [-72]: 'GetString',
+      [-78]: 'Prompt',
+      [-84]: 'WriteStr',
+      [-90]: 'ShowGFile',
+      [-96]: 'ShowFile',
+      [-102]: 'SetDT',
+      [-108]: 'GetDT',
+      [-114]: 'GetStr',
+      [-120]: 'CopyStr',
+      [-126]: 'HotKey',
+      [-132]: 'PreCreateComm',
+      [-138]: 'PostDeleteComm',
     };
-    return functionMap[offset.toString()] || `Unknown(offset ${offset})`;
+    return functionMap[offset] || `Unknown(offset ${offset})`;
   }
 }
