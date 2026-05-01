@@ -17,8 +17,8 @@ export { ACS_PERMISSION_NAMES as ACS_NAMES } from '../constants/acs-permissions'
 // Re-export EnvStat (not duplicated, just commonly used with security)
 export { EnvStat } from '../constants/env-codes';
 
-// Re-export findAcsLevel
-export { findAcsLevel } from '../constants/security-levels';
+// Re-export findAcsLevel from ACS access loader (express.e:3025-3035 file-based scan)
+export { findAcsLevel } from './acs-access-loader';
 
 /**
  * Security session interface - now part of User object in acs.util.ts

@@ -11,6 +11,13 @@ import * as path from 'path';
 import { ACSPermission, ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import type { User } from '../database';
+import {
+  loadAcsAccessFiles,
+  isAcsLoaded,
+  findAcsLevel as findAcsLevelFromFiles,
+  checkDefaultAccess,
+  checkAcsPermission,
+} from './acs-access-loader';
 
 // ===== User Flag Constants (axenums.e:46) =====
 export enum UserFlags {
@@ -201,33 +208,35 @@ export function checkSecurity(
     return true;
   }
 
-  // express.e:8487-8489 - Check default access
+  // express.e:8487-8489 - Check default access (Access/Default.info)
   // IF (overrideDefaultAccess=FALSE) AND (securityFlag<>ACS_OVERRIDE_DEFAULTS)
   //   IF checkToolTypeExists(TOOLTYPE_DEFAULT_ACCESS,0,ListItem(securityNames,securityFlag)) THEN RETURN TRUE
   if (
     !acsConfig.overrideDefaultAccess &&
     securityFlag !== ACSPermission.OVERRIDE_DEFAULTS
   ) {
-    // In web version, we'll use a simple default: allow if sec level >= 10
-    if (user.secLevel >= 10) return true;
+    const permName = ACS_PERMISSION_NAMES[securityFlag];
+    if (permName && checkDefaultAccess(permName)) return true;
   }
 
   // express.e:8491 - IF (acsLevel=-1) THEN RETURN FALSE
-  const acsLevel = user.secLevel;
+  // Compute acsLevel from loaded ACS files (express.e:3025-3035 findAcsLevel)
+  const acsLevel = findAcsLevelFromFiles(user.secLevel);
   if (acsLevel === -1) return false;
 
   // express.e:8493-8495 - Check user-specific access
   // IF userSpecificAccess
   //   IF checkToolTypeExists(TOOLTYPE_USER_ACCESS,0,ListItem(securityNames,securityFlag)) THEN RETURN TRUE
   if (acsConfig.userSpecificAccess) {
-    // In web version, sysop (level 255) gets all permissions
-    if (user.secLevel === 255) return true;
+    // WEB_: User-specific .info files not implemented; per-user overrides
+    // are handled via securityFlags in the database instead.
   }
 
-  // express.e:8497 - Final fallback: check access level
+  // express.e:8497 - Final fallback: check ACS level file
   // ENDPROC checkToolTypeExists(TOOLTYPE_ACCESS,acsLevel,ListItem(securityNames,securityFlag))
-  // For web version: default deny unless seclevel >= 100 for most operations
-  return user.secLevel >= 100;
+  const permName = ACS_PERMISSION_NAMES[securityFlag];
+  if (!permName) return false;
+  return checkAcsPermission(acsLevel, permName);
 }
 
 /**
@@ -326,8 +335,6 @@ export function setUserFlag(user: User, flag: UserFlags, enabled: boolean): void
 // ===== Session-based Helper Functions (from security.util.ts) =====
 // These work with session objects that contain user + temporary security state
 
-import { findAcsLevel } from '../constants/security-levels';
-
 /**
  * Set temporary security flag (grant permission for session)
  */
@@ -421,23 +428,32 @@ export function checkToolTypeExists(username: string): boolean {
 }
 
 /**
- * Check if user can override default access settings
- * Express.e checks ACS_OVERRIDE_DEFAULTS permission flag
+ * Check if default access should be overridden
+ * express.e:453 - IF configFileExists(tempStr)=FALSE THEN overrideDefaultAccess:=TRUE
+ *
+ * When no Default.info exists, overrideDefaultAccess=TRUE (skip default access check).
+ * When Default.info exists, check if user has ACS_OVERRIDE_DEFAULTS permission.
  *
  * @param session Current session
- * @returns True if user has override permission
+ * @returns True if default access check should be skipped
  */
 export function checkOverrideDefaults(session: any): boolean {
-  if (!session.user) return false;
+  if (!session.user) return true;
 
-  // Check if user has ACS_OVERRIDE_DEFAULTS permission
-  // This allows users to bypass certain default security restrictions
-  const acsLevel = findAcsLevel(session.user.secLevel || 0);
+  // If no Default.info was loaded, override defaults (skip the default check)
+  // This matches express.e behavior when the config file doesn't exist
+  if (!checkDefaultAccess('ACS.OVERRIDE_DEFAULTS')) {
+    // Check if Default.info has ANY entries (if not loaded, it's empty)
+    // When empty/missing, overrideDefaultAccess = TRUE
+    return true;
+  }
 
-  // Check if this ACS level grants override permission
-  // In AmiExpress, this was a specific tooltype setting
-  // Web implementation: Check against security level threshold (255 = sysop)
-  return acsLevel >= 255;
+  // Default.info exists; check if user has OVERRIDE_DEFAULTS permission
+  // Note: this is checked via the ACS level file, not Default.info itself,
+  // to avoid recursion (express.e:8487 guards against this)
+  const acsLevel = findAcsLevelFromFiles(session.user.secLevel || 0);
+  if (acsLevel === -1) return false;
+  return checkAcsPermission(acsLevel, 'ACS.OVERRIDE_DEFAULTS');
 }
 
 /**
@@ -446,18 +462,33 @@ export function checkOverrideDefaults(session: any): boolean {
 export function initializeSecurity(session: any): void {
   if (!session.user) return;
 
-  // Calculate ACS level
-  session.acsLevel = findAcsLevel(session.user.secLevel || 0);
+  // Load ACS access files if not already loaded
+  if (!isAcsLoaded()) {
+    // BBS root contains the Access/ directory
+    // Server runs from web/backend/, so ../../ reaches the project root
+    const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '..', '..');
+    loadAcsAccessFiles(bbsRoot);
+  }
+
+  // Calculate ACS level using file-based scanning (express.e:3025-3035)
+  session.acsLevel = findAcsLevelFromFiles(session.user.secLevel || 0);
 
   // Check if user-specific access file exists (Amiga tooltype checking)
   session.userSpecificAccess = checkToolTypeExists(session.user.username);
 
-  // Check override defaults permission
+  // express.e:453 - overrideDefaultAccess depends on whether Default.info exists
+  // If no Default.info, overrideDefaultAccess=TRUE (skip default access check)
   session.overrideDefaultAccess = checkOverrideDefaults(session);
 
-  // Clear temporary flags
-  session.user.securityFlags = '';
-  session.user.secOverride = '';
+  // Preserve database-stored securityFlags and secOverride.
+  // express.e loads these from the user record -- do NOT clear them.
+  // Only initialize to empty if they don't exist at all.
+  if (!session.user.securityFlags && session.user.securityFlags !== '') {
+    session.user.securityFlags = '';
+  }
+  if (!session.user.secOverride && session.user.secOverride !== '') {
+    session.user.secOverride = '';
+  }
 
   // Initialize environment status
   session.currentStat = EnvStat.IDLE;
