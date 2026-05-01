@@ -655,7 +655,7 @@ console.error('[BBSEvent] Error emitting login event:', error);
 console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
 
         // Write to CallersLog
-        callersLogManager.logLogin(nodeId, user.username);
+        callersLogManager.logLogin(nodeId, user.username, 1, user.location || 'Unknown');
       } catch (error) {
 console.error(`[LOGIN] Error writing node files:`, error);
         SysopDebugUtil.debugFileError(
