@@ -2,6 +2,10 @@
  * LVO maps derived from dev/docs/LVOs.i (Amiga LVO reference).
  * These are used for logging/trap naming only.
  *
+ * DEPRECATED: Prefer lvo-names.generated.ts (auto-generated from NDK 3.1
+ * with complete coverage of 43 libraries). This file is retained for
+ * backward compatibility with existing imports.
+ *
  * Offsets are negative byte displacements from the library base.
  * Populated from dev/docs/amiga68ktools-master/tools/LVOs.i.
  */
