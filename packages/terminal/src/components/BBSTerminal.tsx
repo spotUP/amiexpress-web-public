@@ -2240,6 +2240,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
       if (
+        loginState.current === 'waiting' ||
         loginState.current === 'username' ||
         loginState.current === 'password' ||
         loginState.current === 'new-user-prompt' ||
@@ -2248,6 +2249,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         loginState.current === 'password-reset' ||
         loginState.current === 'forced-pwd-change'
         // Note: 'registering' removed - server handles registration input including pause prompts
+        // 'waiting' must also be blocked: during login-time doors like FRONTEND,
+        // keystrokes can arrive before the backend emits Username:/Password: prompts.
+        // If forwarded here, they get misrouted as normal BBS commands.
       ) {
         return;
       }
