@@ -6716,8 +6716,26 @@ debugLog(`[dos.library] GetCurrentDirName → "${currentDir}"`);
 
 debugLog(`[dos.library] GetProgramName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
 
-    // Return a generic program name (could be enhanced to track actual program)
-    const programName = `DoorProgram`;
+    // Read program name from CLI structure (cli_CommandName at offset 0x10)
+    // CLI base is at 0xa0000, cli_CommandName is a BPTR to a BSTR
+    let programName = "DoorProgram";
+    try {
+      const cliAddr = 0xa0000;
+      const cmdNameBptr = this.emulator.readMemory32(cliAddr + 0x10);
+      if (cmdNameBptr !== 0) {
+        const bstrAddr = cmdNameBptr << 2; // BPTR to real address
+        const bstrLen = this.emulator.readMemory(bstrAddr) & 0xff;
+        if (bstrLen > 0 && bstrLen < 256) {
+          let name = "";
+          for (let i = 0; i < bstrLen; i++) {
+            name += String.fromCharCode(this.emulator.readMemory(bstrAddr + 1 + i));
+          }
+          programName = name;
+        }
+      }
+    } catch (e) {
+      // Fall back to generic name
+    }
 
     if (bufferSize < programName.length + 1) {
 console.error(`[dos.library] GetProgramName: Buffer too small`);
@@ -6725,11 +6743,11 @@ console.error(`[dos.library] GetProgramName: Buffer too small`);
       return;
     }
 
-    // Write program name to buffer
+    // Write program name as C string to buffer
     this.emulator.writeString(bufferAddr, programName);
 
 debugLog(`[dos.library] GetProgramName → "${programName}"`);
-    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE (DOSTRUE)
   }
 
   /**

@@ -496,6 +496,18 @@ export const DOS_VECTORS: LibraryVector[] = [
   },
 
   // ============================================
+  // Program/CLI Name Functions
+  // ============================================
+  {
+    offset: -576,
+    name: "GetProgramName",
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetProgramName();
+      return emu.getRegister(0);
+    },
+  },
+
+  // ============================================
   // Shell/System Execution
   // ============================================
   {
