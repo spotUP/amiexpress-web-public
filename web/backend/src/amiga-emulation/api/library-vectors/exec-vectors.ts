@@ -154,6 +154,105 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
     },
   },
   {
+    offset: -186, // LVO -186
+    name: "Allocate",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Allocate(memHeader, byteSize) -> memBlock or NULL
+      // SAS/C runtime calls this to sub-allocate from its own pools.
+      // Return 0 (NULL) to force fallback to AllocMem which we handle properly.
+      return 0;
+    },
+  },
+  {
+    offset: -234, // LVO -234
+    name: "Insert",
+    handler: (emu, lib: ExecLibrary) => {
+      const listAddr = emu.getRegister(8);  // A0
+      const nodeAddr = emu.getRegister(9);  // A1
+      const afterAddr = emu.getRegister(10); // A2
+      lib.insert(listAddr, nodeAddr, afterAddr);
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -240, // LVO -240
+    name: "AddHead",
+    handler: (emu, lib: ExecLibrary) => {
+      const listAddr = emu.getRegister(8); // A0
+      const nodeAddr = emu.getRegister(9); // A1
+      lib.addHead(listAddr, nodeAddr);
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -246, // LVO -246
+    name: "AddTail",
+    handler: (emu, lib: ExecLibrary) => {
+      const listAddr = emu.getRegister(8); // A0
+      const nodeAddr = emu.getRegister(9); // A1
+      lib.addTail(listAddr, nodeAddr);
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -252, // LVO -252
+    name: "Remove",
+    handler: (emu, lib: ExecLibrary) => {
+      const nodeAddr = emu.getRegister(9); // A1
+      lib.remove(nodeAddr);
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -258, // LVO -258
+    name: "RemHead",
+    handler: (emu, lib: ExecLibrary) => {
+      const listAddr = emu.getRegister(8); // A0
+      return lib.remHead(listAddr);
+    },
+  },
+  {
+    offset: -264, // LVO -264
+    name: "RemTail",
+    handler: (emu, _lib: ExecLibrary) => {
+      // RemTail: remove last node from list, return it (or NULL if empty)
+      // Rarely used by SAS/C runtime; stub as NULL for now
+      return 0;
+    },
+  },
+  {
+    offset: -558, // LVO -558
+    name: "InitSemaphore",
+    handler: (emu, _lib: ExecLibrary) => {
+      // InitSemaphore(signalSemaphore) - no-op in single-threaded emulation
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -564, // LVO -564
+    name: "ObtainSemaphore",
+    handler: (emu, _lib: ExecLibrary) => {
+      // ObtainSemaphore(signalSemaphore) - no-op in single-threaded emulation
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -570, // LVO -570
+    name: "ReleaseSemaphore",
+    handler: (emu, _lib: ExecLibrary) => {
+      // ReleaseSemaphore(signalSemaphore) - no-op in single-threaded emulation
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -594, // LVO -594
+    name: "AttemptSemaphore",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // AttemptSemaphore -> return TRUE (1) = semaphore obtained
+      return 1;
+    },
+  },
+  {
     offset: -198, // LVO -198 (0xFF3A)
     name: "AllocMem",
     handler: (emu, lib: ExecLibrary) => {
