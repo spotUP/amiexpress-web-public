@@ -614,9 +614,30 @@ export const DOS_VECTORS: LibraryVector[] = [
   },
   // -888: StartNotify
   // -894: EndNotify
-  // -900: SetVar
-  // -906: GetVar
-  // -912: DeleteVar
+  {
+    offset: -900,
+    name: "SetVar",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetVar();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -906,
+    name: "GetVar",
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetVar();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -912,
+    name: "DeleteVar",
+    handler: (emu, lib: DosLibrary) => {
+      lib.DeleteVar();
+      return emu.getRegister(0);
+    },
+  },
   // -918: FindVar
   // -924: dosPrivate4 (private)
   // -930: CliInitNewcli
