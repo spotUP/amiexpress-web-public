@@ -226,7 +226,7 @@ console.log(`[EnvironmentManager] DeleteVar("${name}")`);
    * Pre-populate standard DOS and BBS environment variables
    * Called at session initialization
    */
-  public populateStandardVars(bbsRoot: string, nodeId: number, confId: number, username: string, secLevel: number): void {
+   public populateStandardVars(bbsRoot: string, nodeId: number, confId: number, username: string, secLevel: number): void {
 console.log(`[EnvironmentManager] Populating standard environment variables`);
 
     // Standard AmigaDOS variables
@@ -239,20 +239,43 @@ console.log(`[EnvironmentManager] Populating standard environment variables`);
     // Device info
     this.setVar('DEVINFO', 'CON:,NIL:,SER:', EnvironmentManager.GVF_LOCAL_VAR);
 
-    // BBS-specific variables
-    this.setVar('BBS_ROOT', bbsRoot, EnvironmentManager.GVF_LOCAL_VAR);
-    this.setVar('NODE_ID', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
-    this.setVar('CONF_ID', String(confId), EnvironmentManager.GVF_LOCAL_VAR);
-    this.setVar('USER_NAME', username, EnvironmentManager.GVF_LOCAL_VAR);
-    this.setVar('USER_LEVEL', String(secLevel), EnvironmentManager.GVF_LOCAL_VAR);
+    // Kickstart/Workbench versions (matches env-initializer.ts)
+    this.setVar('Kickstart', '39.106', EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('Workbench', '39.29', EnvironmentManager.GVF_LOCAL_VAR);
 
-    // AmiExpress node number variables (doors check these to find their node)
-    // Multiple names exist because different door authors used different conventions
+    // BBS path and location variables
+    this.setVar('BBS_ROOT', bbsRoot, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('BBSPATH', bbsRoot, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('BBS_PATH', bbsRoot, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('BBSDATA', bbsRoot, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('BBS_NAME', 'AmiExpress Web BBS', EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('BBSNAME', 'AmiExpress Web BBS', EnvironmentManager.GVF_LOCAL_VAR);
+
+    // Node number variables (doors check various names)
+    this.setVar('NODE_ID', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('AXNODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('AMX_NODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('NODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('AXNODENUM', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('BBSNODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('NODE_NUMBER', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+
+    // User/session variables (used by AquaWho, DOORSMENU, etc.)
+    this.setVar('USERNAME', username, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('USER_NAME', username, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('HANDLE', username, EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('USER_LEVEL', String(secLevel), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('SYSOP', 'sysop', EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('SYSOP_NAME', 'sysop', EnvironmentManager.GVF_LOCAL_VAR);
+
+    // Conference info
+    this.setVar('CONF_ID', String(confId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('CONF', String(confId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('CONFNUM', String(confId), EnvironmentManager.GVF_LOCAL_VAR);
+
+    // Connection/serial variables (doors may check these)
+    this.setVar('BAUD', '115200', EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('SERIALRATE', '115200', EnvironmentManager.GVF_LOCAL_VAR);
 
 console.log(`[EnvironmentManager] Populated ${this.variables.size} standard variables`);
   }

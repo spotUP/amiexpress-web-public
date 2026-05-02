@@ -43,14 +43,26 @@ export function initializeENVFiles(envPath: string, config: ENVConfig): void {
   createENVFile(envPath, 'Result2', '0');
 
   // Kickstart and Workbench versions (from real Amiga ENV)
-  // These match Kickstart 3.1 (v39.106) and Workbench 3.1 (v39.29)
   createENVFile(envPath, 'Kickstart', '39.106');
   createENVFile(envPath, 'Workbench', '39.29');
 
-  // BBS-specific environment files
+  // BBS name and sysop
   createENVFile(envPath, 'BBS_NAME', bbsName);
+  createENVFile(envPath, 'BBSNAME', bbsName);
+  createENVFile(envPath, 'SYSOP', sysop);
   createENVFile(envPath, 'SYSOP_NAME', sysop);
+
+  // Node number (all common variable names used by various doors)
   createENVFile(envPath, 'NODE_NUMBER', String(nodeId));
+  createENVFile(envPath, 'AXNODE', String(nodeId));
+  createENVFile(envPath, 'AMX_NODE', String(nodeId));
+  createENVFile(envPath, 'NODE', String(nodeId));
+  createENVFile(envPath, 'AXNODENUM', String(nodeId));
+  createENVFile(envPath, 'BBSNODE', String(nodeId));
+
+  // Connection info
+  createENVFile(envPath, 'BAUD', '115200');
+  createENVFile(envPath, 'SERIALRATE', '115200');
 
   // JoinCnf password failure tracking files (one per node)
   // Doors like JoinCnf use these to track failed password attempts
