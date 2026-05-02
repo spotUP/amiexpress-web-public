@@ -1083,69 +1083,14 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
                            (pcAfterBatch % 2 !== 0) ||
                            (pcAfterBatch > 0x400 && pcAfterBatch < 0x1000);
 
-        // Detect stuck loops by tracking repeated identical jump patterns
-        // If we see the SAME jump size 5+ times in a row, it's a stuck loop
-        // Example: PC jumps by +0x9c40 repeatedly: 0xc023da -> 0xc0c01a -> 0xc15c5a -> ...
-        //
-        // EXCEPTION: Jumps to library trap addresses are NORMAL repeated calls (e.g., FindToolType
-        // called multiple times to read config). Library trap regions are at negative offsets
-        // from library bases:
-        //   - exec.library: 0x7ff00-0x80000
-        //   - dos.library: 0xaff00-0xb0000
-        //   - icon.library: 0xcff00-0xd0000
-        //   - utility.library: 0xeff00-0xf0000
-        // Library trap regions: traps are at negative offsets from base, can extend 1KB+ below base
-        // Examples: Wait at -318 (0x80000-0x13e=0x7fec2), GetMsg at -372 (0x7fe8c), FindPort at -390 (0x7fe7a)
-        // Check static library trap ranges + dynamic libraries (AEDoor, bsdsocket, etc.)
-        let isJumpToLibraryTrap = (
-          (pcAfterBatch >= 0x7f800 && pcAfterBatch < 0x80000) ||   // exec.library (expanded: -2048 to 0)
-          (pcAfterBatch >= 0xaf800 && pcAfterBatch < 0xb0000) ||   // dos.library (expanded)
-          (pcAfterBatch >= 0xcf800 && pcAfterBatch < 0xd0000) ||   // icon.library (expanded)
-          (pcAfterBatch >= 0xef800 && pcAfterBatch < 0xf0000)      // utility.library (expanded)
-        );
-        // Dynamically check all opened library bases (covers AEDoor.library, bsdsocket.library, etc.)
-        if (!isJumpToLibraryTrap && this.libraryManager?.execLibrary) {
-          const dynamicLibs = ['AEDoor.library', 'bsdsocket.library', 'intuition.library',
-                               'graphics.library', 'mathffp.library', 'mathtrans.library',
-                               'mathieeedoubbas.library', 'mathieeedoubtrans.library',
-                               'mathieeesingbas.library', 'amissl.library'];
-          for (const libName of dynamicLibs) {
-            const base = this.libraryManager.execLibrary.getLibraryBase(libName);
-            if (base && pcAfterBatch >= base - 0x800 && pcAfterBatch < base) {
-              isJumpToLibraryTrap = true;
-              break;
-            }
-          }
-        }
-
-        if (Math.abs(jumpSize) > 0x1000 && !isJumpToLibraryTrap) { // Only track large jumps, exclude library calls
-          if (this.executionState.lastJumpSizes.length > 0 &&
-              this.executionState.lastJumpSizes.every(js => js === jumpSize)) {
-            this.executionState.sameJumpCount++;
-          } else {
-            this.executionState.sameJumpCount = 1;
-          }
-
-          // Keep last 3 jump sizes for pattern detection
-          this.executionState.lastJumpSizes.push(jumpSize);
-          if (this.executionState.lastJumpSizes.length > 3) {
-            this.executionState.lastJumpSizes.shift();
-          }
-
-          // If we see the same jump 5 times, it's a stuck loop (unless waiting for input)
-          if (this.executionState.sameJumpCount >= 5 && !isWaitingForXIMInput && !isInWaitLoop) {
-            console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: Same jump pattern ${this.executionState.sameJumpCount} times`);
-            console.error(`  Jump size: +0x${jumpSize.toString(16)} (${jumpSize})`);
-            console.error(`  PC sequence: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}`);
-            console.error(`  Last ${this.executionState.lastJumpSizes.length} jumps: ${this.executionState.lastJumpSizes.map(j => `+0x${j.toString(16)}`).join(', ')}`);
-            this.terminate();
-            return;
-          }
-        } else if (isJumpToLibraryTrap) {
-          // Reset stuck loop counter when we hit a library call - this is normal behavior
-          this.executionState.sameJumpCount = 0;
-          this.executionState.lastJumpSizes = [];
-        }
+        // "Same jump pattern" stuck loop detection DISABLED (2026-05-02).
+        // This heuristic false-positived on every new SAS/C door installed (GLC, DOORSMENU, etc.)
+        // because legitimate main loops produce identical batch-level PC deltas when iterating
+        // through heap-resident C library code or processing config items.
+        // Real stuck-door protection is provided by:
+        //   - Execution timeout (300s hard limit)
+        //   - Post-shutdown timeout (forces exit after JH_SHUTDOWN)
+        //   - loopGuardLimit with progress tracking (iteration cap)
 
         // Skip invalid PC detection if:
         // 1. Emulator is paused or task is waiting (isInWaitLoop)
