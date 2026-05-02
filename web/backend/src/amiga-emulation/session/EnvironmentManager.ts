@@ -246,6 +246,14 @@ console.log(`[EnvironmentManager] Populating standard environment variables`);
     this.setVar('USER_NAME', username, EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('USER_LEVEL', String(secLevel), EnvironmentManager.GVF_LOCAL_VAR);
 
+    // AmiExpress node number variables (doors check these to find their node)
+    // Multiple names exist because different door authors used different conventions
+    this.setVar('AXNODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('AMX_NODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('NODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('AXNODENUM', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+    this.setVar('BBSNODE', String(nodeId), EnvironmentManager.GVF_LOCAL_VAR);
+
 console.log(`[EnvironmentManager] Populated ${this.variables.size} standard variables`);
   }
 
