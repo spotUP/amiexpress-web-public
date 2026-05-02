@@ -245,11 +245,113 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
     },
   },
   {
-    offset: -594, // LVO -594
+    offset: -576, // LVO -576 (AttemptSemaphore)
     name: "AttemptSemaphore",
     handler: (_emu, _lib: ExecLibrary) => {
       // AttemptSemaphore -> return TRUE (1) = semaphore obtained
       return 1;
+    },
+  },
+  {
+    offset: -594, // LVO -594 (FindSemaphore)
+    name: "FindSemaphore",
+    handler: (emu, _lib: ExecLibrary) => {
+      // A1 = name of semaphore to find
+      // Return 0 (not found) - we don't maintain a semaphore list
+      const nameAddr = emu.getRegister(9); // A1
+      const name = emu.readString(nameAddr, 64);
+      console.log(`[exec-vectors] FindSemaphore: "${name}" -> 0 (not found)`);
+      return 0;
+    },
+  },
+  {
+    offset: -408, // LVO -408 (OldOpenLibrary)
+    name: "OldOpenLibrary",
+    handler: (emu, lib: ExecLibrary) => {
+      // OldOpenLibrary: A1 = library name, no version check (version=0)
+      const nameAddr = emu.getRegister(9); // A1
+      const name = emu.readString(nameAddr, 64);
+      console.log(`[exec-vectors] OldOpenLibrary TRAP: name="${name}"`);
+      const result = lib.openLibrary(nameAddr, 0);
+      console.log(`[exec-vectors] OldOpenLibrary TRAP result: 0x${result.toString(16)}`);
+      return result;
+    },
+  },
+  {
+    offset: -120, // LVO -120 (Disable)
+    name: "Disable",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Disable interrupts - no-op in emulated single-threaded environment
+      return 0;
+    },
+  },
+  {
+    offset: -126, // LVO -126 (Enable)
+    name: "Enable",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Enable interrupts - no-op in emulated single-threaded environment
+      return 0;
+    },
+  },
+  {
+    offset: -192, // LVO -192 (Deallocate)
+    name: "Deallocate",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Deallocate memory from a MemHeader region - no-op (we use AllocMem/FreeMem)
+      return 0;
+    },
+  },
+  {
+    offset: -216, // LVO -216 (AvailMem)
+    name: "AvailMem",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Return available memory - report 4MB available
+      return 4 * 1024 * 1024;
+    },
+  },
+  {
+    offset: -276, // LVO -276 (FindName)
+    name: "FindName",
+    handler: (emu, _lib: ExecLibrary) => {
+      // A0 = list, A1 = name string. Search list for node with matching ln_Name.
+      // Return 0 (not found) - most callers handle this gracefully
+      const nameAddr = emu.getRegister(9); // A1
+      const name = emu.readString(nameAddr, 64);
+      console.log(`[exec-vectors] FindName: "${name}" -> 0 (not found)`);
+      return 0;
+    },
+  },
+  {
+    offset: -534, // LVO -534 (TypeOfMem)
+    name: "TypeOfMem",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // D1 = address. Return memory attributes.
+      // MEMF_PUBLIC (1) | MEMF_FAST (4) = 5
+      return 5;
+    },
+  },
+  {
+    offset: -636, // LVO -636 (CacheClearU)
+    name: "CacheClearU",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Clear all CPU caches - no-op in emulation
+      return 0;
+    },
+  },
+  {
+    offset: -642, // LVO -642 (CacheClearE)
+    name: "CacheClearE",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Clear specific cache lines - no-op in emulation
+      return 0;
+    },
+  },
+  {
+    offset: -678, // LVO -678 (ObtainSemaphoreShared)
+    name: "ObtainSemaphoreShared",
+    handler: (_emu, _lib: ExecLibrary) => {
+      // Same as ObtainSemaphore but for shared/read access - no-op
+      return 0;
     },
   },
   {
