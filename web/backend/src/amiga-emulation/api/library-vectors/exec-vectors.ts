@@ -136,6 +136,24 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
     },
   },
   {
+    offset: -150, // LVO -150 (0xFF6A)
+    name: "SuperState",
+    handler: (emu, _lib: ExecLibrary) => {
+      // SuperState: enter supervisor mode, return old user stack in D0
+      // In emulation there's no privilege distinction; return current SP
+      return emu.getRegister(15); // A7 (SP)
+    },
+  },
+  {
+    offset: -156, // LVO -156 (0xFF64)
+    name: "UserState",
+    handler: (emu, _lib: ExecLibrary) => {
+      // UserState(sysStack): return to user mode, D0 = old supervisor stack
+      // In emulation there's no privilege distinction; return current SP
+      return emu.getRegister(15); // A7 (SP)
+    },
+  },
+  {
     offset: -198, // LVO -198 (0xFF3A)
     name: "AllocMem",
     handler: (emu, lib: ExecLibrary) => {
