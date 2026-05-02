@@ -499,10 +499,34 @@ export const DOS_VECTORS: LibraryVector[] = [
   // Program/CLI Name Functions
   // ============================================
   {
+    offset: -564,
+    name: "GetCurrentDirName",
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetCurrentDirName();
+      return emu.getRegister(0);
+    },
+  },
+  {
     offset: -576,
     name: "GetProgramName",
     handler: (emu, lib: DosLibrary) => {
       lib.GetProgramName();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -594,
+    name: "SetProgramDir",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetProgramDir();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -600,
+    name: "GetProgramDir",
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetProgramDir();
       return emu.getRegister(0);
     },
   },
@@ -543,7 +567,14 @@ export const DOS_VECTORS: LibraryVector[] = [
   // ============================================
   // Command Support
   // ============================================
-  // -792: CheckSignal
+  {
+    offset: -792,
+    name: "CheckSignal",
+    handler: (emu, lib: DosLibrary) => {
+      lib.CheckSignal();
+      return emu.getRegister(0);
+    },
+  },
   {
     offset: -798,
     name: "ReadArgs",
@@ -643,7 +674,14 @@ export const DOS_VECTORS: LibraryVector[] = [
   // -930: CliInitNewcli
   // -936: CliInitRun
   // -942: WriteChars
-  // -948: PutStr
+  {
+    offset: -948,
+    name: "PutStr",
+    handler: (emu, lib: DosLibrary) => {
+      lib.PutStr();
+      return emu.getRegister(0);
+    },
+  },
   {
     offset: -954,
     name: "VPrintf",
