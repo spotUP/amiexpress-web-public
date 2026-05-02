@@ -620,9 +620,9 @@ console.log(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}
       const byteSize = emu.getRegister(0); // D0
       const requirements = emu.getRegister(1); // D1
 console.log(
-        `[ExecLibrary] AllocVec(${byteSize}, ${requirements}) - using AllocMem`
+        `[ExecLibrary] AllocVec(${byteSize}, 0x${requirements.toString(16)})`
       );
-      return lib.allocMem(byteSize, requirements);
+      return lib.allocVec(byteSize, requirements);
     },
   },
   {
@@ -630,9 +630,8 @@ console.log(
     name: "FreeVec",
     handler: (emu, lib: ExecLibrary) => {
       const memPtr = emu.getRegister(9); // A1
-      const size = emu.getRegister(0); // D0
-console.log(`[ExecLibrary] FreeVec(0x${memPtr.toString(16)}, ${size})`);
-      lib.freeMem(memPtr, size);
+      if (memPtr === 0) return 0; // NULL is valid no-op for FreeVec
+      lib.freeVec(memPtr);
       return 0;
     },
   },
