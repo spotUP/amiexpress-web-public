@@ -560,10 +560,26 @@ debugLog(
     const resetAnsiIfNeeded = (text: string): string =>
       ANSI_SGR.test(text) && !ANSI_RESET_SUFFIX.test(text) ? text + '\x1b[0m' : text;
 
+    // XIM-protocol doors (XIM, AIM, TIM, IIM, MCI, AEM — anything that's
+    // NOT SIM/SUP) talk to the user via AEDoor.library JH_PUTSTR / JH_PUTCH
+    // messages. On real Amiga, AmiExpress launches them with stdout pointed
+    // at NIL: so any DOS Write(Output(), ...) the door does goes nowhere.
+    // Without this filter, those bytes leak through to the user terminal —
+    // e.g. Conftop emits its startup banner via printf to stdout AND its
+    // report banner via JH_PUTSTR, so the user sees the banner twice.
+    //
+    // For SIM/SUP doors that DO use stdout legitimately, keep the original
+    // forwarding behaviour. The transfer-raw passthrough still applies in
+    // both cases (file transfers route binary bytes through stdout).
+    const stdoutGoesToUser = !useXimProtocol;
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {
         this.socket.emit('transfer-raw:echo', buf);
+        return;
+      }
+      if (!stdoutGoesToUser) {
+        // XIM-protocol door — silently discard CLI/stdout writes
         return;
       }
       const text = resetAnsiIfNeeded(normalizeAnsiNewlines(buf.toString('latin1')));
@@ -575,9 +591,12 @@ debugLog(
         this.socket.emit('transfer-raw:echo', Buffer.from(text, 'latin1'));
         return;
       }
+      if (!stdoutGoesToUser) {
+        return;
+      }
       this.socket.emit("ansi-output", resetAnsiIfNeeded(normalizeAnsiNewlines(text)));
     });
-debugLog("[LibraryManager] DOS.library output callback configured");
+debugLog(`[LibraryManager] DOS.library output callback configured (stdoutGoesToUser=${stdoutGoesToUser}, doorType=${doorType})`);
 
     // Expose raw input hook to the session so socket-handlers can feed transfer-raw data
     const bbsSession: any = this.config.bbsSession || {};
