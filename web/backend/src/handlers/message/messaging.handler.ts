@@ -605,6 +605,12 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
   // R - Reply - express.e:9874-9907 replyToMSG()
   if (command === 'R') {
+    // express.e:12162 captureRealAndInternetNames before replyToMSG
+    const { captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
+    if (typeof captureNames === 'function' && !captureNames(socket, session)) {
+      displayMessageNavigationPrompt(socket, session);
+      return;
+    }
     const msg = messages[currentIndex];
 
     // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
@@ -711,6 +717,12 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
   // F - Forward message - express.e:11178-11191, forwardMSG:9807-9871
   if (command === 'F') {
+    // express.e:12154 captureRealAndInternetNames before forwardMSG
+    const { captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
+    if (typeof captureNames === 'function' && !captureNames(socket, session)) {
+      displayMessageNavigationPrompt(socket, session);
+      return;
+    }
     const msg = messages[currentIndex];
     // Check if user can forward this message:
     // - Public messages (not private)
@@ -1073,6 +1085,14 @@ export function handleEnterMessageFullCommand(
   }
 
   _setEnvStat(session, EnvStat.MAIL);
+
+  // express.e:12471 captureRealAndInternetNames(conf, msgBaseNum) — gate the
+  // entry on REALNAME/INTERNETNAME tooltype requirements.
+  const { captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
+  if (typeof captureNames === 'function' && !captureNames(socket, session)) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
 
   // express.e msgToHeader():9998-10001
   emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');

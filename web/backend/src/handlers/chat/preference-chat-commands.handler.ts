@@ -143,6 +143,16 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
     return;
   }
 
+  // express.e:8762 captureRealAndInternetNames before commentToSYSOP body.
+  try {
+    const { captureRealAndInternetNames } = require('../message/message-entry.handler');
+    if (typeof captureRealAndInternetNames === 'function' &&
+        !captureRealAndInternetNames(socket, session)) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+  } catch { /* helper not available — proceed without check */ }
+
 console.log('[ENV] Mail');
 
   // express.e:8779-8783 commentToSYSOP():

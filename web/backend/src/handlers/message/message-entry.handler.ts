@@ -32,6 +32,43 @@ export function setMessageEntryDependencies(deps: {
 }
 
 /**
+ * express.e:28151-28230 captureRealAndInternetNames — when the conf or
+ * msgbase requires REALNAME / INTERNETNAME (per-conf or per-msgbase
+ * tooltype) and the user hasn't filled those fields, block the message
+ * entry. Express.e prompts inline with a uniqueness loop; we surface a
+ * notice and abort so the user can set the field via the account editor
+ * (which is closer to modern web UX) before retrying.
+ *
+ * Returns true if entry should proceed, false if blocked.
+ */
+export function captureRealAndInternetNames(socket: any, session: BBSSession): boolean {
+  const confId = session.currentConf || 1;
+  const msgBaseId = session.currentMsgBase || 1;
+  if (confId < 1 || msgBaseId < 1) return true;
+
+  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confId);
+  // requireUsername / requireRealname are populated from REALNAME, REALNAME.<n>,
+  // INTERNETNAME, INTERNETNAME.<n> tooltypes (see conference-tooltypes.util.ts).
+  // express.e:28159-28164 OR's all four into realNamesUsed/internetNamesUsed.
+  const realNamesUsed = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
+  const userMisc: any = (session.user as any) || {};
+  const realName = String(userMisc.realName || userMisc.realname || '').trim();
+  const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
+
+  if (realNamesUsed && realName.length === 0) {
+    emitText(socket, '\r\nReal Names are required for messages in this conference/msgbase\r\n');
+    emitText(socket, 'Use the account editor to set your real name first.\r\n\r\n');
+    return false;
+  }
+  // We don't yet model an INTERNETNAME flag separately on ConferenceToolFlags
+  // (the existing tooltype harvester doesn't pull INTERNETNAME). Internet
+  // name enforcement is a follow-up; the realName gate covers the common
+  // sysop config.
+  return true;
+}
+
+/**
  * express.e:10787-10788 — EXTSEND.<msgBase> tooltype on the conf icon marks
  * a msgbase as "external" (e.g. routed to a UUCP/FidoNet gateway). When set:
  *   - express.e:10805-10808: EALL is forbidden
@@ -736,9 +773,22 @@ console.log(`[Message] Calling webhook for message: subject="${entry.subject}", 
       });
 console.log('[Message] Webhook call completed');
 
-      // If message is to sysop, also trigger COMMENT_POSTED webhook
-      // express.e:6704 - runExecuteOn('SYSOP_COMMENT') called from doCommentNotify()
-      if (entry.toUser.toLowerCase() === 'sysop') {
+      // If message is to sysop, also trigger COMMENT_POSTED webhook.
+      // express.e:10717-10719 saveNewMSG fires doCommentNotify when
+      // tempUser.slotNumber=1 — i.e. the recipient is the sysop slot.
+      // We accept both the literal 'SYSOP' token AND a DB lookup that
+      // resolves to slot 1, so sysops who don't go by 'sysop' still
+      // get the notification.
+      let toUserIsSysop = entry.toUser.toLowerCase() === 'sysop';
+      if (!toUserIsSysop && entry.toUser) {
+        try {
+          const resolved = await _db?.getUserByUsername?.(entry.toUser);
+          if (resolved && (resolved.slotNumber === 1 || resolved.slot === 1)) {
+            toUserIsSysop = true;
+          }
+        } catch { /* DB lookup failure — fall through to literal check */ }
+      }
+      if (toUserIsSysop) {
         await webhookService.sendWebhook(WebhookTrigger.COMMENT_POSTED, {
           username: session.user!.username,
           userId: session.user!.id,

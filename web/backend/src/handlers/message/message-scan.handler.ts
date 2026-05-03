@@ -236,6 +236,12 @@ async function getMessagesForConfScan(
     const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
     const pointer = validated.lastNewReadConf || 0;
 
+    // express.e:11706 gates 'all'-addressed messages on the per-conf
+    // MAILSCAN_ALL flag (cb.handle[0] AND MAILSCAN_ALL). We pull that
+    // bit out of the user's confBase.scanFlags (synced from Conf.DB).
+    const MAILSCAN_ALL_BIT = 1 << 7;
+    const includeAllInScan = (validated.scanFlags & MAILSCAN_ALL_BIT) !== 0;
+
     if (headers.length > 0) {
       for (const header of headers) {
         if (header.msgNumb <= pointer) continue;
@@ -246,10 +252,13 @@ async function getMessagesForConfScan(
         const isPrivate = header.status === MsgStatus.PRIVATE;
 
         // express.e:11706 — match toName === confMailName, 'eall', or 'all'
-        // AND (mailHeader.recv=0) — exclude messages already marked received
-        // WEB_: express.e gates 'all' on cb.handle[0] & MAILSCAN_ALL (conference Conf.DB flag).
-        // We include 'all' unconditionally — more inclusive, requires conf Conf.DB reads to fix.
-        if ((toLower === safeName || toLower === 'eall' || toLower === 'all') && header.recv === 0) {
+        // AND (mailHeader.recv=0) — exclude messages already marked received.
+        // 'all' is gated on the MAILSCAN_ALL bit; without it set, 'all'
+        // messages don't surface in mail scan.
+        const matchesUser = toLower === safeName;
+        const matchesEall = toLower === 'eall';
+        const matchesAll = toLower === 'all' && includeAllInScan;
+        if ((matchesUser || matchesEall || matchesAll) && header.recv === 0) {
           results.push({
             msgNum: header.msgNumb,
             isPrivate,
@@ -259,7 +268,7 @@ async function getMessagesForConfScan(
         }
       }
     } else {
-      // Disk-based fallback
+      // Disk-based fallback. Same MAILSCAN_ALL gate as the HeaderFile path.
       const messageIds = await getAllMessageIds(conferenceId, bbsDataPath);
       for (const msgNum of messageIds) {
         if (msgNum <= pointer) continue;
@@ -267,11 +276,13 @@ async function getMessagesForConfScan(
         if (!message) continue;
 
         const toLower = (message.to || '').trim().toLowerCase();
-        const isPrivate = message.isPrivate && toLower !== 'all' && toLower !== 'eall';
 
-        // express.e:11706 AND (mailHeader.recv=0) — skip already-received messages
-        // receivedAt undefined <=> recv=0 (not yet marked received)
-        if ((toLower === safeName || toLower === 'eall' || toLower === 'all') && !message.receivedAt) {
+        // express.e:11706 AND (mailHeader.recv=0) — skip already-received messages.
+        // 'all' gated on MAILSCAN_ALL flag (computed above as includeAllInScan).
+        const matchesUser = toLower === safeName;
+        const matchesEall = toLower === 'eall';
+        const matchesAll = toLower === 'all' && includeAllInScan;
+        if ((matchesUser || matchesEall || matchesAll) && !message.receivedAt) {
           results.push({
             msgNum,
             isPrivate: message.isPrivate === true,

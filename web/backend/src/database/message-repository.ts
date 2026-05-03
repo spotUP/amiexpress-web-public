@@ -232,42 +232,110 @@ console.error(`[Database] Failed to sync updated message to disk:`, error);
     const stmt = this.prepare('DELETE FROM messages WHERE id = ?');
     stmt.run(id);
 
-    // CRITICAL: Delete from disk files for Amiga door compatibility
+    // CRITICAL: Delete from disk files for Amiga door compatibility.
+    // express.e deleteMSG (11913-11942) wraps the on-disk operations in
+    // lockMsgBase() so concurrent deletes/saves can't race on MailStats
+    // and HeaderFile. Match that pattern via acquireMailLock.
     if (row) {
+      const conferenceId: number = row.conferenceid;
+      const msgNumber: number = row.id;
+
+      // Lazy-require to dodge circular imports.
+      const { readAttachList, getAttachListPath } = require('../utils/message-file.util');
+      const fs = require('fs').promises;
+      const { config } = require('../config');
+      const bbsDataPath = config.get('dataDir');
+
+      // Snapshot attachment list BEFORE we try to acquire the lock —
+      // readAttachList only reads, so it's safe outside.
+      let attachList: { deleteOnMessageDelete: boolean; filenames: string[] } | null = null;
       try {
-        const msgNumber = row.id;
+        attachList = await readAttachList(conferenceId, msgNumber, bbsDataPath);
+      } catch { /* no A<N> file is normal for unattached messages */ }
 
-        // Delete .msg file
-        messageFileManager.deleteMessageFile(row.conferenceid, msgNumber);
+      // Best-effort lock; matches express.e:11925 — if we can't acquire,
+      // log + still proceed (DB delete already happened, leaving disk in
+      // sync is best-effort). The 200ms × 25-attempt budget mirrors the
+      // writeMessageFile path.
+      const LOCK_RETRY_MS = 200;
+      const LOCK_MAX_ATTEMPTS = 25;
+      let acquired = false;
+      for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt++) {
+        if (messageIndexManager.acquireMailLock(conferenceId, 0)) {
+          acquired = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, LOCK_RETRY_MS));
+      }
+      if (!acquired) {
+        console.warn(
+          `[Database] deleteMessage: could not acquire MailLock for Conf${conferenceId} — proceeding without lock (DB row already removed)`,
+        );
+      }
 
-        // Mark as deleted in HeaderFile (don't remove, just mark status)
-        messageIndexManager.deleteMessageHeader(row.conferenceid, msgNumber);
+      try {
+        // express.e:11931 checkAttachedFile(delMsgNum, 0) — if A<N> exists
+        // and the delete-on-msg-delete flag (Y) is set, delete each
+        // attachment file from disk. Then always remove A<N> itself
+        // (express.e:11900 DeleteFile path on the move-attached case
+        // serves the same role on the source side).
+        if (attachList) {
+          if (attachList.deleteOnMessageDelete) {
+            for (const fname of attachList.filenames) {
+              try {
+                await fs.unlink(fname);
+              } catch { /* attachment may already be missing — best-effort */ }
+            }
+          }
+          try {
+            await fs.unlink(getAttachListPath(conferenceId, msgNumber, bbsDataPath));
+          } catch { /* A<N> already gone — best-effort */ }
+        }
 
-console.log(`[Database] Deleted message ${id} from .msg and marked in HeaderFile`);
+        // Delete .msg body file (express.e:11933-11934 SetProtection +
+        // DeleteFile)
+        messageFileManager.deleteMessageFile(conferenceId, msgNumber);
+
+        // Mark as deleted in HeaderFile (express.e:11930 status:='D' +
+        // 11935 saveOverHeader). deleteMessageHeader also updates
+        // mailStat.lowestNotDel via updateMailStatsAfterDelete.
+        messageIndexManager.deleteMessageHeader(conferenceId, msgNumber);
+
+console.log(`[Database] Deleted message ${id} from .msg, A<N>, and marked status='D' in HeaderFile`);
       } catch (error) {
 console.error(`[Database] Failed to delete message file from disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,
           'Database',
-          `Failed to delete message from disk files (.msg and HeaderFile)`,
+          `Failed to delete message from disk files (.msg, A<N>, HeaderFile)`,
           {
             error: error instanceof Error ? error.message : String(error),
             messageId: id,
-            conferenceId: row.conferenceid
+            conferenceId,
           },
           DebugSeverity.WARNING
         );
+      } finally {
+        if (acquired) {
+          messageIndexManager.releaseMailLock(conferenceId, 0);
+        }
       }
     }
   }
 
   /**
-   * Move message to different conference/msgbase
-   * From express.e:11827-11911 (moveMSG)
+   * Move message to different conference/msgbase — express.e:11827-11910 moveMSG.
+   *
+   * Acquires the dest msgbase lock, allocates a fresh msgNum from dest's
+   * mailStat.highMsgNum, writes body + appends header to dest (which bumps
+   * stats), copies the A&lt;src&gt; attachment list to A&lt;dest&gt;, then locks
+   * src and tombstones the source body+header. Avoids the pre-fix bug
+   * where destMsgNumber=srcMsgNumber silently overwrote any existing dest
+   * message with the same id, and where updateMessageHeader silently failed
+   * because the dest entry didn't exist yet.
    */
   async moveMessage(id: number, destConferenceId: number, destMessageBaseId: number): Promise<void> {
-    // Get current message
     const selectStmt = this.prepare('SELECT * FROM messages WHERE id = ?');
     const row = selectStmt.get(id) as any;
 
@@ -278,68 +346,96 @@ console.error(`[Database] Failed to delete message file from disk:`, error);
     const srcConferenceId = row.conferenceid;
     const srcMsgNumber = row.id;
 
-    // Update database record with new conference/msgbase
+    // Lazy-require the canonical write/read primitives so we avoid a
+    // circular import at module load.
+    const {
+      writeMessageFile,
+      readAttachList,
+      formatMessageDate,
+      getAttachListPath,
+    } = require('../utils/message-file.util');
+    const fs = require('fs').promises;
+    const { config } = require('../config');
+    const bbsDataPath = config.get('dataDir');
+
+    // express.e:9846-9851 status preservation — keep censored 'p' across move.
+    let status: number;
+    if (row.isprivate === 1) {
+      status = MsgStatus.PRIVATE;
+    } else if (row.censored === 1) {
+      status = MsgStatus.CENSORED;
+    } else {
+      status = MsgStatus.NORMAL;
+    }
+
+    // Read src attachment list before we tombstone the source so we can copy it.
+    let attachList: { deleteOnMessageDelete: boolean; filenames: string[] } | null = null;
+    try {
+      attachList = await readAttachList(srcConferenceId, srcMsgNumber, bbsDataPath);
+    } catch { /* missing A<N> is normal for messages with no attachments */ }
+
+    // STEP 1: Write to destination through the canonical path. writeMessageFile
+    // acquires the dest mailLock, picks the next free msgNum, writes the body
+    // file, appends to HeaderFile (bumping highMsgNum), and writes A<destNum>
+    // if attachments are supplied. Returns the assigned dest msgNum.
+    const messageDate = new Date(row.timestamp * 1000);
+    const destMsgNumber = await writeMessageFile(
+      destConferenceId,
+      destMessageBaseId,
+      {
+        from: row.author,
+        to: row.touser || 'ALL',
+        subject: row.subject,
+        date: formatMessageDate(messageDate),
+        body: row.body || '',
+        status,
+        attachments: attachList && attachList.filenames.length > 0
+          ? { filenames: attachList.filenames, deleteOnMessageDelete: attachList.deleteOnMessageDelete }
+          : undefined,
+      },
+      bbsDataPath,
+      0, // nodeId — server-side move, no specific node holds the lock
+    );
+
+    // STEP 2: Update DB to point at dest. The DB id stays the same — we only
+    // re-locate which canonical conf/msgbase it lives in. (Web search/UI
+    // continues to find the row by its DB id; the on-disk msgNum is now
+    // tracked by the new HeaderFile entry just appended.)
     const updateStmt = this.prepare(`
       UPDATE messages SET conferenceid = ?, messagebaseid = ?
       WHERE id = ?
     `);
     updateStmt.run(destConferenceId, destMessageBaseId, id);
 
-    // CRITICAL: Move files for Amiga door compatibility
+    // STEP 3: Tombstone the source. Marks src HeaderFile entry status='D'
+    // (express.e:11930), updates lowestNotDel via deleteMessageHeader's
+    // updateMailStatsAfterDelete, then removes the canonical body file.
+    // express.e:11900 also DeleteFile's the old A<N> after the copy succeeds.
     try {
-      const fullMessage: Message = {
-        id: row.id,
-        subject: row.subject,
-        body: row.body,
-        author: row.author,
-        timestamp: new Date(row.timestamp * 1000),
-        conferenceId: destConferenceId, // NEW conference
-        messageBaseId: destMessageBaseId, // NEW msgbase
-        isPrivate: row.isprivate === 1,
-        toUser: row.touser,
-        parentId: row.parentid,
-        attachments: JSON.parse(row.attachments || '[]'),
-        edited: row.edited === 1,
-        editedBy: row.editedby,
-        editedAt: row.editedat ? new Date(row.editedat * 1000) : undefined
-      };
-
-      // Get next message number in destination conference
-      // For simplicity, use current id as msgNumber (web version doesn't use sequential numbering)
-      const destMsgNumber = srcMsgNumber;
-
-      // Create new .msg file in destination
-      messageFileManager.updateMessageFile(fullMessage, destConferenceId, destMsgNumber);
-
-      // Create HeaderFile entry in destination
-      const timestamp = Math.floor(fullMessage.timestamp.getTime() / 1000);
-      messageIndexManager.updateMessageHeader(destConferenceId, destMsgNumber, {
-        status: fullMessage.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
-        toName: fullMessage.toUser || 'ALL',
-        fromName: fullMessage.author,
-        subject: fullMessage.subject,
-        msgDate: timestamp
-      });
-
-      // Delete old .msg file and mark as deleted in old HeaderFile
-      messageFileManager.deleteMessageFile(srcConferenceId, srcMsgNumber);
       messageIndexManager.deleteMessageHeader(srcConferenceId, srcMsgNumber);
-
-      console.log(`[Database] Moved message ${id} from conf ${srcConferenceId} to conf ${destConferenceId}`);
+      messageFileManager.deleteMessageFile(srcConferenceId, srcMsgNumber);
+      // Remove src A<N> attachment list — it's been copied to A<destNum>.
+      if (attachList) {
+        try {
+          await fs.unlink(getAttachListPath(srcConferenceId, srcMsgNumber, bbsDataPath));
+        } catch { /* best-effort */ }
+      }
+      console.log(`[Database] Moved message ${id} src=conf${srcConferenceId}/${srcMsgNumber} → dest=conf${destConferenceId}/${destMsgNumber}`);
     } catch (error) {
-      console.error(`[Database] Failed to move message files on disk:`, error);
+      console.error('[Database] Move: src tombstone failed:', error);
       SysopDebugUtil.debug(
         null,
         null,
         'Database',
-        `Failed to move message files on disk`,
+        'Move: failed to tombstone source message',
         {
           error: error instanceof Error ? error.message : String(error),
           messageId: id,
           srcConferenceId,
-          destConferenceId
+          destConferenceId,
+          destMsgNumber,
         },
-        DebugSeverity.WARNING
+        DebugSeverity.WARNING,
       );
     }
   }
