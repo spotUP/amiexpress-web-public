@@ -92,6 +92,22 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
    * Queue data for throttled output
    */
   write(data: string): void {
+    // WIRE_TRACE=1 — log UTF-8 hex around any high-bit codepoint (>=U+0080) so
+    // we can see whether server-side sends 0xC2 0xB7 intact. Used to diagnose
+    // the FLT-logo `·` → `��` mojibake report (handoff #66). Off by default.
+    if (process.env.WIRE_TRACE === '1') {
+      for (let i = 0; i < data.length; i++) {
+        const cp = data.codePointAt(i);
+        if (cp !== undefined && cp >= 0x80 && cp <= 0xff) {
+          const ctx = data.slice(Math.max(0, i - 4), i + 5);
+          const utf8 = Buffer.from(ctx, 'utf-8');
+          const hex = Array.from(utf8).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          console.log(`[WIRE-TRACE] high-bit U+${cp.toString(16).padStart(4, '0')} at idx=${i}  ctx=${JSON.stringify(ctx)}  utf8=${hex}`);
+          break; // log first occurrence per emit, not every char
+        }
+      }
+    }
+
     if (!this.enabled) {
       // No throttling - send immediately
       this.directEmit('ansi-output', data);
