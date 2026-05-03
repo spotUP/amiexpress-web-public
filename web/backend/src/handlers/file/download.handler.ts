@@ -81,10 +81,13 @@ export class DownloadHandler {
     } catch { /* fileAreaManager may not expose this API — continue */ }
 
     // express.e:19966-19971 IF(quietDownload=FALSE) IF(displayScreen(SCREEN_DOWNLOAD)) doPause() \b\n
+    // The DOWNLOAD screen is optional (express.e treats a missing file as a falsy return and
+    // moves on silently). Pass silent=true so absence does not log "Screen not found" or
+    // notify the sysop — matches the express.e contract.
     try {
       const { displayScreen, doPause } = require('../screen.handler');
       if (typeof displayScreen === 'function') {
-        const shown = await displayScreen(socket, session, 'DOWNLOAD');
+        const shown = await displayScreen(socket, session, 'DOWNLOAD', true, true);
         if (shown) {
           if (typeof doPause === 'function') doPause(socket, session);
           socket.emit('ansi-output', '\r\n');
@@ -154,8 +157,16 @@ export class DownloadHandler {
     // If any are present, tempList.count()<>0 → show '\b\nChecking...\b\n' (line 20066)
     const fileList: any[] = [];
 
+    // Flagged files live on session.flaggedFiles. The F command (display-file-commands.handler.ts)
+    // and the door-side JH_FLAGFILE handler (xim/system-commands.ts) both push objects shaped
+    // {filename, confNum, ...}. Earlier code looked at session.tempData?.flaggedFiles and used
+    // a camelCase `fileName` property — neither of which matches the producers, so flags from
+    // the file-listing UI never made it into the download set.
+    const sessionFlaggedFiles: any[] = Array.isArray((session as any).flaggedFiles)
+      ? (session as any).flaggedFiles
+      : [];
     const hasFlags = (session.flagManager instanceof FileFlagManager && session.flagManager.getCount() > 0)
-                  || (Array.isArray(session.tempData?.flaggedFiles) && session.tempData.flaggedFiles.length > 0);
+                  || sessionFlaggedFiles.length > 0;
     const hasParams = !!params.trim();
 
     if (hasFlags || hasParams) {
@@ -170,13 +181,13 @@ export class DownloadHandler {
             fileList.push(...found);
           }
         }
-        if (Array.isArray(session.tempData?.flaggedFiles)) {
-          for (const f of session.tempData.flaggedFiles) {
-            if (f?.fileName) {
-              const found = await this.findFilesInConference(
-                dataDir, f.confNum || session.currentConf || 1, f.fileName);
-              fileList.push(...found);
-            }
+        for (const f of sessionFlaggedFiles) {
+          // Accept both {filename} (F command, JH_FLAGFILE) and legacy {fileName}.
+          const name = f?.filename || f?.fileName || (typeof f === 'string' ? f : '');
+          if (name) {
+            const found = await this.findFilesInConference(
+              dataDir, f?.confNum || session.currentConf || 1, name);
+            fileList.push(...found);
           }
         }
       }
