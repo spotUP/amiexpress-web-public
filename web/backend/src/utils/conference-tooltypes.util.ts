@@ -18,6 +18,17 @@ export interface ConferenceToolFlags {
   freeDownloads: boolean;
   // express.e:5013 / express.e:15269 — MENU_PROMPT tooltype overrides the standard menu prompt
   menuPrompt: string;
+  // express.e:4078-4087 — CHECK_REALNAME tooltypes:
+  //   USERNAME → require username on message TO: field (XIM data=2)
+  //   REALNAME → require realname (XIM data=1)
+  //   neither  → handle/alias OK (XIM data=0)
+  // The per-msgbase form is `USERNAME.<n>` / `REALNAME.<n>`; we surface
+  // those as keyed sets so the XIM handler can pick the right one for
+  // the current message base.
+  requireUsername: boolean;
+  requireRealname: boolean;
+  requireUsernameMsgBases: Set<number>;
+  requireRealnameMsgBases: Set<number>;
 }
 
 const defaultFlags: ConferenceToolFlags = {
@@ -31,6 +42,10 @@ const defaultFlags: ConferenceToolFlags = {
   noConfBulls: false,
   freeDownloads: false,
   menuPrompt: '',
+  requireUsername: false,
+  requireRealname: false,
+  requireUsernameMsgBases: new Set<number>(),
+  requireRealnameMsgBases: new Set<number>(),
 };
 
 const conferenceTooltypeCache = new Map<number, ConferenceToolFlags>();
@@ -160,6 +175,26 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     if (tooltypeMap.has('MENU_PROMPT')) {
       result.menuPrompt = tooltypeMap.get('MENU_PROMPT')!;
     }
+
+    // express.e:4081-4084 — USERNAME / REALNAME tooltypes (conf-wide, plus
+    // per-msgbase variants USERNAME.<n> / REALNAME.<n>).
+    if (flagSet.has('USERNAME')) result.requireUsername = true;
+    if (flagSet.has('REALNAME')) result.requireRealname = true;
+    const msgBaseUserSet = new Set<number>();
+    const msgBaseRealSet = new Set<number>();
+    for (const key of flagSet) {
+      const usernameMatch = /^USERNAME\.(\d+)$/.exec(key);
+      if (usernameMatch) {
+        msgBaseUserSet.add(parseInt(usernameMatch[1]!, 10));
+        continue;
+      }
+      const realnameMatch = /^REALNAME\.(\d+)$/.exec(key);
+      if (realnameMatch) {
+        msgBaseRealSet.add(parseInt(realnameMatch[1]!, 10));
+      }
+    }
+    if (msgBaseUserSet.size > 0) result.requireUsernameMsgBases = msgBaseUserSet;
+    if (msgBaseRealSet.size > 0) result.requireRealnameMsgBases = msgBaseRealSet;
 
     return result;
   } catch (error) {

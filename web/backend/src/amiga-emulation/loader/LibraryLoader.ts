@@ -576,21 +576,6 @@ console.log(`[LibraryLoader] Jump table entry: offset ${offset} -> 0x${targetAdd
   }
 
   /**
-   * Unload a library (if not in use)
-   */
-  unloadLibrary(libraryName: string): boolean {
-    if (!this.loadedLibraries.has(libraryName)) {
-      return false;
-    }
-
-    // TODO: Check reference count
-    // For now, just remove from map (memory remains)
-    this.loadedLibraries.delete(libraryName);
-console.log(`[LibraryLoader] Unloaded library: ${libraryName}`);
-    return true;
-  }
-
-  /**
    * Get list of loaded libraries
    */
   getLoadedLibraries(): string[] {

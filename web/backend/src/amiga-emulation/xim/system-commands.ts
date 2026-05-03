@@ -20,6 +20,7 @@ import { ximLogger } from '../../utils/XIMLogger';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
 import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -1716,20 +1717,30 @@ debugLog(`[XIMSystem] CHOOSE_NAME: search="${searchName}" maxLen=${maxLen}`);
 
   /**
    * Handle CHECK_REALNAME (636)
-   * express.e:4078-4087: Check if realname is required for current msgbase
+   * express.e:4078-4087 — Check what name flavour the current msgbase requires.
+   *   2 = USERNAME required (TO: must match an existing handle/username)
+   *   1 = REALNAME required (TO: must be a real name)
+   *   0 = handle/alias OK (default)
+   *
+   * USERNAME beats REALNAME if both are set on the same conference.
+   * Per-msgbase tooltypes (USERNAME.<n> / REALNAME.<n>) override conf-wide ones.
    */
   handleCheckRealname(msg: XIMMessage): void {
-debugLog(`[XIMSystem] CHECK_REALNAME`);
-
-    // Return 0=handle, 1=realname required, 2=username required
-    // For now, return 0 (use handle/username)
     const confNum = this.bbsSession?.conferenceId || 1;
+    const msgBaseNum = (this.bbsSession as any)?.msgBaseNum
+      ?? (this.bbsSession as any)?.currentMsgBase
+      ?? 0;
+    const flags = getConferenceToolFlags(confNum);
 
-    // TODO: Check ConfConfig.info for REALNAME/USERNAME tooltypes
-    // For now, default to handle
-debugLog(`[XIMSystem]   Returning 0 (use handle)`);
+    let result = 0;
+    if (flags.requireUsernameMsgBases.has(msgBaseNum) || flags.requireUsername) {
+      result = 2;
+    } else if (flags.requireRealnameMsgBases.has(msgBaseNum) || flags.requireRealname) {
+      result = 1;
+    }
 
-    this.reply(msg, 0);
+debugLog(`[XIMSystem] CHECK_REALNAME conf=${confNum} mb=${msgBaseNum} → ${result}`);
+    this.reply(msg, result);
   }
 
   /**
