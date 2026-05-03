@@ -1365,15 +1365,6 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       return;
     }
 
-    // Assignment: VAR = value
-    if (line.includes('=') && !line.includes('==') && !line.includes('>=') && !line.includes('<=')) {
-      const [varName, ...valueParts] = line.split('=');
-      const value = valueParts.join('=').trim();
-      const evaluated = await this.evaluateExpression(value);
-      this.variables.set(varName.trim(), evaluated);
-      return;
-    }
-
     // SAY command
     if (line.toUpperCase().startsWith('SAY ')) {
       const text = await this.evaluateExpression(line.substring(4));
@@ -1391,10 +1382,31 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       return;
     }
 
-    // IF statement (simple)
+    // IF statement — checked BEFORE assignment so `IF i = 3 THEN ...` doesn't
+    // get misclassified as an assignment of variable "IF i" (the line
+    // contains `=`).
     if (line.toUpperCase().startsWith('IF ')) {
       await this.executeIf(line);
       return;
+    }
+
+    // Assignment: VAR = value. MUST come after keyword checks (SAY, CALL, IF
+    // etc.) — otherwise lines like `IF i = 3 THEN SAY 'x'` get parsed as
+    // assignment of "IF i" (since the line contains `=`). REXX assignment
+    // syntax: a single bare symbol followed by `=`. We restrict the LHS to
+    // a simple identifier to avoid sucking up control-flow statements.
+    if (line.includes('=') && !line.includes('==') && !line.includes('>=') && !line.includes('<=')) {
+      const eqIdx = line.indexOf('=');
+      const lhs = line.slice(0, eqIdx).trim();
+      // Only treat as assignment if LHS is a bare identifier (no spaces, no
+      // operators). Reserved-keyword check guards against IF/DO/WHILE/etc.
+      const RESERVED = new Set(['IF', 'DO', 'WHILE', 'UNTIL', 'TO', 'BY', 'SELECT', 'WHEN', 'OTHERWISE', 'THEN', 'ELSE', 'END', 'FOREVER', 'PROCEDURE', 'CALL', 'SAY', 'RETURN', 'EXIT', 'BREAK', 'LEAVE', 'ITERATE', 'CONTINUE', 'PARSE', 'ARG', 'SIGNAL', 'NUMERIC', 'TRACE', 'ADDRESS']);
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(lhs) && !RESERVED.has(lhs.toUpperCase())) {
+        const value = line.slice(eqIdx + 1).trim();
+        const evaluated = await this.evaluateExpression(value);
+        this.variables.set(lhs, evaluated);
+        return;
+      }
     }
 
     // Function call (standalone)
@@ -1884,21 +1896,36 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
   }
 
   /**
-   * Evaluate expression — REXX semantics, with explicit `||` concat
-   * recognized BEFORE the string-literal pass so that
-   *   "Welcome back, " || username || "!"
-   * doesn't get misclassified as a single quoted string spanning the whole
-   * expression. Concatenation splits respect quotes and parens so
-   *   "a||b" || foo("x||y")
-   * tokenizes correctly.
+   * Evaluate expression — REXX semantics, with operator precedence.
+   * Order (lowest to highest precedence):
+   *   1. `||` concat
+   *   2. `+` `-` (binary)
+   *   3. `*` `/` `%` `//`
+   *   4. unary `-`
+   *   5. atom (literal | var | function call | parenthesized expr)
+   * All splits are top-level only — they respect quotes and parens.
    */
   private async evaluateExpression(expr: string): Promise<any> {
     expr = expr.trim();
     if (expr.length === 0) return '';
 
-    // FIRST: split on top-level `||` (outside quotes / parens). This catches
-    // common REXX strings like `"x" || y || "z"` where the whole expression
-    // happens to start and end with `"`.
+    // Strip enclosing parens if they're balanced and wrap the whole expr
+    while (expr.startsWith('(') && expr.endsWith(')')) {
+      // Verify the leading `(` matches the trailing `)`
+      let depth = 0;
+      let allBalanced = true;
+      for (let i = 0; i < expr.length; i++) {
+        if (expr[i] === '(') depth++;
+        else if (expr[i] === ')') {
+          depth--;
+          if (depth === 0 && i < expr.length - 1) { allBalanced = false; break; }
+        }
+      }
+      if (!allBalanced || depth !== 0) break;
+      expr = expr.slice(1, -1).trim();
+    }
+
+    // 1. `||` concat (lowest precedence)
     const concatParts = this.splitTopLevel(expr, '||');
     if (concatParts.length > 1) {
       const evaluated = await Promise.all(
@@ -1907,14 +1934,74 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
       return evaluated.map(v => (v === undefined || v === null) ? '' : String(v)).join('');
     }
 
+    // 2. `+` / `-` (binary additive). Split LEFT-to-RIGHT so `a - b - c`
+    // evaluates as (a - b) - c. We split on the LAST top-level operator
+    // and recurse, but only when it's NOT a unary sign. Skip if the operator
+    // is at position 0 (would be unary).
+    {
+      const additiveOps = ['+', '-'];
+      const idx = this.findLastTopLevelBinaryOp(expr, additiveOps);
+      if (idx > 0) {
+        const op = expr[idx]!;
+        const left = expr.slice(0, idx).trim();
+        const right = expr.slice(idx + 1).trim();
+        const lv = Number(await this.evaluateExpression(left));
+        const rv = Number(await this.evaluateExpression(right));
+        if (Number.isFinite(lv) && Number.isFinite(rv)) {
+          return op === '+' ? lv + rv : lv - rv;
+        }
+      }
+    }
+
+    // 3. `*` / `/` / `%` / `//` (multiplicative). Same left-to-right rule.
+    {
+      // Try `//` (integer divide) first — multi-char op, before single `/`
+      const idxIDiv = this.findLastTopLevelOp(expr, '//');
+      if (idxIDiv > 0) {
+        const left = expr.slice(0, idxIDiv).trim();
+        const right = expr.slice(idxIDiv + 2).trim();
+        const lv = Number(await this.evaluateExpression(left));
+        const rv = Number(await this.evaluateExpression(right));
+        if (Number.isFinite(lv) && Number.isFinite(rv) && rv !== 0) {
+          return Math.trunc(lv / rv);
+        }
+      }
+      const idx = this.findLastTopLevelBinaryOp(expr, ['*', '/', '%']);
+      if (idx > 0) {
+        const op = expr[idx]!;
+        const left = expr.slice(0, idx).trim();
+        const right = expr.slice(idx + 1).trim();
+        const lv = Number(await this.evaluateExpression(left));
+        const rv = Number(await this.evaluateExpression(right));
+        if (Number.isFinite(lv) && Number.isFinite(rv)) {
+          if (op === '*') return lv * rv;
+          if (op === '/') return rv === 0 ? NaN : lv / rv;
+          if (op === '%') return rv === 0 ? NaN : lv % rv;
+        }
+      }
+    }
+
+    // 4. Unary `-`
+    if (expr.startsWith('-')) {
+      const v = await this.evaluateExpression(expr.slice(1).trim());
+      const n = Number(v);
+      if (Number.isFinite(n)) return -n;
+    }
+
+    // 5. Atoms.
     // String literal
     if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
       return expr.substring(1, expr.length - 1);
     }
 
     // Number literal
-    if (!isNaN(Number(expr))) {
+    if (!isNaN(Number(expr)) && expr.length > 0) {
       return Number(expr);
+    }
+
+    // Function call: NAME(args)
+    if (/^\w+\s*\(.*\)$/.test(expr) && expr.endsWith(')')) {
+      return await this.evaluateFunction(expr);
     }
 
     // Variable
@@ -1922,13 +2009,59 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
       return this.variables.get(expr);
     }
 
-    // Function call
-    if (expr.includes('(') && expr.endsWith(')')) {
-      return await this.evaluateFunction(expr);
-    }
-
-    // Default: return as string
+    // Default: return as string (REXX uppercase-symbol convention)
     return expr;
+  }
+
+  /**
+   * Find the LAST occurrence of any of `ops` at top level (outside quotes
+   * and parens) in `s`, AT POSITION > 0 (so we don't catch unary signs).
+   * Returns -1 if none found. Used for left-associative binary operators.
+   */
+  private findLastTopLevelBinaryOp(s: string, ops: string[]): number {
+    let inS = false, inD = false, depth = 0;
+    let last = -1;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (!inS && !inD) {
+        if (c === "'") { inS = true; continue; }
+        if (c === '"') { inD = true; continue; }
+        if (c === '(') { depth++; continue; }
+        if (c === ')') { depth = Math.max(0, depth - 1); continue; }
+        if (depth === 0 && i > 0 && ops.includes(c)) {
+          // Skip if this `+` / `-` follows another operator (then it's unary):
+          // e.g. `a * -b` — the `-` is unary, not binary.
+          const prev = s.slice(0, i).trimEnd();
+          const lastChar = prev.charAt(prev.length - 1);
+          if (lastChar && '+-*/%|&<>=~!('.includes(lastChar)) continue;
+          last = i;
+        }
+      } else if (inS && c === "'") inS = false;
+      else if (inD && c === '"') inD = false;
+    }
+    return last;
+  }
+
+  /** Find LAST top-level occurrence of multi-char `op`. */
+  private findLastTopLevelOp(s: string, op: string): number {
+    let inS = false, inD = false, depth = 0;
+    let last = -1;
+    const olen = op.length;
+    for (let i = 0; i + olen <= s.length; i++) {
+      const c = s[i];
+      if (!inS && !inD) {
+        if (c === "'") { inS = true; continue; }
+        if (c === '"') { inD = true; continue; }
+        if (c === '(') { depth++; continue; }
+        if (c === ')') { depth = Math.max(0, depth - 1); continue; }
+        if (depth === 0 && s.substr(i, olen) === op) {
+          last = i;
+          i += olen - 1;
+        }
+      } else if (inS && c === "'") inS = false;
+      else if (inD && c === '"') inD = false;
+    }
+    return last;
   }
 
   /**
