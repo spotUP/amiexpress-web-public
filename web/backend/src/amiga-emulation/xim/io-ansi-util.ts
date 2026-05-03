@@ -43,12 +43,19 @@ export function processRawText(
   //    Without this, colours appear as "[36m" instead of coloured text.
   converted = converted.replace(/\x9b/g, '\x1b[');
 
-  // 3. Form Feed (0x0C) → scroll-to-scrollback + cursor-home.
-  //    Amiga console.device: 0x0C = "Clear screen and home cursor".
-  //    Doors like dRE!WAll send \f\n\r to blank the terminal before drawing.
-  //    ESC[2J erases the visible viewport without pushing to xterm.js scrollback,
-  //    so we scroll 30 lines instead — same visual effect, user can still scroll up.
-  converted = converted.replace(/\f/g, '\r\n'.repeat(30) + '\x1b[H');
+  // 3. Form Feed (0x0C) → ESC[2J ESC[H — true clear-screen + home.
+  //    Amiga console.device: 0x0C = "Clear screen and home cursor". Real
+  //    AmiExpress sends this to the modem terminal which actually erases
+  //    the viewport — what came before is gone.
+  //
+  //    Earlier versions translated \f to "30 \r\n + ESC[H" so xterm.js
+  //    kept the prior content in scrollback (nice UX). But it broke 1:1
+  //    fidelity: e.g. Conftop emits its intro banner via JH_SM, then \f to
+  //    erase, then re-emits a slightly-different report banner. With the
+  //    scroll variant, the intro banner stays visible above the report so
+  //    the user sees the banner twice. With true clear, only the report
+  //    banner is visible — matching real reference-board BBS.
+  converted = converted.replace(/\f/g, '\x1b[2J\x1b[H');
 
   // 4. Strip Amiga-specific cursor-off/on codes: ESC[N p (space before 'p').
   //    Standard ANSI cursor codes use [?25h/[?25l — no space.
