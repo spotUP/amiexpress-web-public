@@ -19,7 +19,15 @@
  *   --json         Output in JSON format (for list/get commands)
  */
 
-import { parseInfoFile, writeInfoFile, toggleTooltypeComment, updateTooltype, Tooltype } from '../utils/info-file.util.js';
+import {
+  parseInfoFile,
+  writeInfoFile as writeInfoFileRaw,
+  toggleTooltypeComment,
+  updateTooltype,
+  InfoFileWriteError,
+  InfoFile,
+  Tooltype,
+} from '../utils/info-file.util.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -98,6 +106,23 @@ NOTES:
 function log(options: Options, message: string): void {
   if (options.verbose) {
 console.log(`[VERBOSE] ${message}`);
+  }
+}
+
+/**
+ * Wrap writeInfoFile so InfoFileWriteError surfaces as a clean CLI error
+ * instead of crashing with an unhandled exception. Returns true on success.
+ */
+function writeInfoFile(info: InfoFile): true {
+  try {
+    writeInfoFileRaw(info);
+    return true;
+  } catch (e) {
+    if (e instanceof InfoFileWriteError) {
+      console.error(`[ERROR] ${e.message}`);
+      process.exit(1);
+    }
+    throw e;
   }
 }
 

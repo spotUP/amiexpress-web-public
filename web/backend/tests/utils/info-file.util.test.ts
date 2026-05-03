@@ -292,6 +292,47 @@ describe('info-file.util', () => {
       const written = readTestFile(filePath);
       expect(written.toString()).toContain('#DOORTYPE=XIM');
     });
+
+    /**
+     * Regression: handoff #2 — info-editor delete reported [OK] but
+     * the tooltype persisted on Doors/5D-User/5D-User.info because the
+     * file's tooltype array structure couldn't be located, so parseInfoFile
+     * tagged it _fallback and writeInfoFile silently wrote rawBuffer back
+     * unchanged. Now writeInfoFile throws InfoFileWriteError so callers
+     * (info-editor CLI, web admin, door manager UI) report the failure
+     * honestly instead of claiming success.
+     */
+    it('throws InfoFileWriteError when called on a _fallback file', () => {
+      // Build a binary .info that the locator can't parse: magic header,
+      // some icon data, and a stray "OVERCLOCK=100\0" string preceded by a
+      // bogus length prefix (matches the 5D-User.info shape we saw).
+      const buf = Buffer.alloc(60);
+      buf[0] = 0xe3;
+      buf[1] = 0x10;
+      // Bogus length prefix (4 instead of 14) followed by the tooltype string.
+      // No surrounding count field — locateTooltypeArray gives up.
+      buf.writeUInt32BE(4, 40);
+      buf.write('OVERCLOCK=100\0', 44, 'latin1');
+      const filePath = writeTestFile('malformed.info', buf);
+
+      const info = parseInfoFile(filePath);
+      expect(info.isBinary).toBe(true);
+      // Sanity: the heuristic scan picks up OVERCLOCK; that's how the silent-
+      // success bug fooled users in the first place.
+      expect(info.tooltypes.some(tt => tt.key === 'OVERCLOCK')).toBe(true);
+
+      // Pretend the user deleted OVERCLOCK.
+      info.tooltypes = info.tooltypes.filter(tt => tt.key !== 'OVERCLOCK');
+
+      const { InfoFileWriteError } = require('../../src/utils/info-file.util');
+      expect(() => writeInfoFile(info)).toThrow(InfoFileWriteError);
+      expect(() => writeInfoFile(info)).toThrow(/non-standard or corrupted/);
+
+      // And the on-disk file is unchanged (write was rejected, not partially
+      // applied — caller still has the original to retry/report).
+      const onDisk = readTestFile(filePath);
+      expect(onDisk).toEqual(buf);
+    });
   });
 
   describe('writeInfoFile - Text mode', () => {

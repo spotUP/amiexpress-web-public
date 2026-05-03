@@ -269,18 +269,41 @@ interface InfoFileInternal extends InfoFile {
 }
 
 /**
+ * Thrown when writeInfoFile cannot safely persist mutations because the
+ * file's tooltype array structure isn't recognised (i.e. parseInfoFile
+ * tagged it `_fallback`). Surfacing this as a real error prevents the
+ * silent-[OK] bug where set/delete/enable/disable claimed success but
+ * left the file unchanged.
+ */
+export class InfoFileWriteError extends Error {
+  constructor(public readonly filePath: string, message: string) {
+    super(message);
+    this.name = 'InfoFileWriteError';
+  }
+}
+
+/**
  * Write an InfoFile back to disk. For binary files the tooltype array
  * is serialized as a 4-byte BE count followed by length-prefixed,
  * null-terminated entries — preserving the surrounding DiskObject
  * structure, image data, and any trailing NewIcons chunks.
+ *
+ * Throws InfoFileWriteError if `info` was parsed in `_fallback` mode
+ * (tooltype array structure not recognised). The previous behaviour
+ * silently wrote the original bytes back, so set/delete looked like
+ * they succeeded while the on-disk file was unchanged.
  */
 export function writeInfoFile(info: InfoFile): void {
   if (info.isBinary) {
     if ((info as InfoFileInternal)._fallback) {
-      // We don't understand this file's internal structure; refuse to
-      // re-serialize it. Write the original bytes back unchanged.
-      fs.writeFileSync(info.filePath, info.rawBuffer);
-      return;
+      throw new InfoFileWriteError(
+        info.filePath,
+        `Cannot write ${info.filePath}: tooltype array structure not recognised. ` +
+        `This .info file uses a non-standard or corrupted layout — the in-memory ` +
+        `tooltype list was extracted heuristically and changes cannot be safely ` +
+        `re-serialised. Re-create the .info via Workbench/IconEdit, or fix the ` +
+        `binary structure manually.`
+      );
     }
 
     if (info.tooltypes.length === 0 && info.iconData.length === 0) {
