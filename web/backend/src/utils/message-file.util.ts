@@ -312,6 +312,41 @@ export async function readMessageFile(
 }
 
 /**
+ * Overwrite the body file for an existing message — express.e EM
+ * (Edit Body) at lines 11142-11148 / 12183-12188:
+ *   loadMsg(msgBaseLocation/N)
+ *   IF edit() = SUCCESS THEN saveMsg(msgBaseLocation/N)
+ *
+ * Differs from writeMessageFile: does NOT bump highMsgNum, does NOT
+ * touch lockMsgBase (the msg already exists; this is a body-only edit).
+ * Preserves the existing HeaderFile entry; caller may separately clear
+ * recv via messageIndexManager.updateMessageHeader if desired (express.e
+ * editHeader does this; editBody does not).
+ */
+export async function overwriteMessageBody(
+  confNum: number,
+  msgNum: number,
+  body: string,
+  bbsDataPath: string,
+): Promise<void> {
+  const msgFilePath = getMessageFilePath(confNum, msgNum, bbsDataPath);
+  const dir = getMessagesDir(confNum, bbsDataPath);
+  await fs.mkdir(dir, { recursive: true });
+
+  const bodyLines = body.split('\n');
+  const content = bodyLines.map(l => l + '\n').join('');
+
+  const tempPath = msgFilePath + '.tmp';
+  try {
+    await fs.writeFile(tempPath, content, 'utf-8');
+    await fs.rename(tempPath, msgFilePath);
+  } catch (err) {
+    try { await fs.unlink(tempPath); } catch {}
+    throw err;
+  }
+}
+
+/**
  * Read the attachment list for a message — express.e:8964 checkAttachedFile.
  * Returns null if no attachments file exists. First line is Y/N delete-flag,
  * remaining lines are filenames.

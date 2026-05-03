@@ -519,12 +519,21 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
   // Display parent lines with numbers — express.e:10894 uses '\z\l\d[2]> \s\b\n'
   // (zero-padded width 2: "05> "). The body editor's prompt at 10172 uses '\d[2]>'
   // (space-padded: " 5> "). These are different by design — quote display zero-pads.
+  // express.e:10891 sets nonStopDisplayFlag=FALSE + lineCount=0; the loop
+  // body calls checkForPause() per line so long parent messages page
+  // through the screen.
   emitText(socket, '\r\n');
-  parentLines.forEach((line: string, index: number) => {
+  const { checkForPause } = require('../../utils/flag-pause.util');
+  if (!session.tempData) session.tempData = {} as any;
+  session.tempData.nonStopDisplayFlag = false;
+  session.tempData.lineCount = 0;
+  for (let index = 0; index < parentLines.length; index++) {
     const n = index + 1;
     const numStr = n <= 99 ? String(n).padStart(2, '0') : String(n);
-    emitText(socket, `${numStr}> ${line}\r\n`);
-  });
+    emitText(socket, `${numStr}> ${parentLines[index]}\r\n`);
+    const cont = await checkForPause(socket, session);
+    if (cont === false) break;  // user pressed N — stop showing further lines
+  }
 
   // express.e:10902: aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ') — plain text
   emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
@@ -547,6 +556,48 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
   // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
   emitText(socket, '\r\nSaving...');
 
+  // express.e EM (11142-11148 / 12183-12188): edit-existing branch.
+  // editingExistingMsgId is set by the EM command in messaging.handler.ts.
+  // Skip the new-message creation path and overwrite the canonical body
+  // file in place, then return to the message reader nav prompt.
+  if (entry?.editingExistingMsgId) {
+    try {
+      const { overwriteMessageBody } = require('../../utils/message-file.util');
+      const messageBody = entry.body.join('\n');
+      await overwriteMessageBody(
+        session.currentConf || 1,
+        entry.editingExistingMsgId,
+        messageBody,
+        config.get('dataDir'),
+      );
+      // Sync DB body so search index/web UI stays in sync
+      try {
+        await _db.updateMessage?.(entry.editingExistingMsgId, { body: messageBody });
+      } catch { /* DB sync best-effort */ }
+
+      emitText(socket, ` Message ${entry.editingExistingMsgId} body updated.\r\n\r\n`);
+
+      // Return to message reader at the same index — express.e:11148+
+      // displayMessage(gfh) re-renders, JUMP nextMenu shows nav prompt.
+      const returnIndex = entry.editingReturnIndex ?? 0;
+      const messages = session.tempData.msgReaderMessages || [];
+      // Update in-memory copy too so the redisplay shows new body
+      if (messages[returnIndex]) {
+        messages[returnIndex].body = messageBody;
+      }
+      session.tempData.messageEntry = undefined as any;
+      session.subState = LoggedOnSubState.MSG_READER_NAV;
+      const { displaySingleMessage } = require('./messaging.handler');
+      await displaySingleMessage(socket, session, returnIndex);
+    } catch (err: any) {
+      console.error('[EM] Error overwriting message body:', err);
+      emitText(socket, '\r\nError saving body.\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+    }
+    return;
+  }
+
   try {
     // Create message object
     const messageBody = entry.body.join('\n');
@@ -556,10 +607,14 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     //   Private prompt = Y       → 'R' (PRIVATE)
     //   Private prompt = N + censored → 'p' (CENSORED)
     //   Private prompt = N         → 'P' (NORMAL)
-    // Reply preserves 'p' if original was 'p' (express.e:10870, replyFlag path)
-    // — we surface that via entry.statusOverride when set by the reply flow.
-    const censored = !entry.isPrivate && checkSecurity(session.user, ACSPermission.CENSORED);
+    // Reply preserves 'p' if original was 'p' (express.e:10870, replyFlag
+    // path: `IF checkSecurity(ACS_CENSORED) OR ((mailHeader.status="p") AND
+    // (replyFlag=1)) THEN status:='p'`).
     const { MsgStatus } = require('../../services/MessageIndexManager');
+    const userIsCensored = checkSecurity(session.user, ACSPermission.CENSORED);
+    const parentWasCensored = entry.parentId &&
+      (entry.parentMsgStatus === 'p' || entry.parentMsgStatus === MsgStatus.CENSORED);
+    const censored = !entry.isPrivate && (userIsCensored || parentWasCensored);
     let status: number;
     if (entry.isPrivate) {
       status = MsgStatus.PRIVATE; // 'R'
@@ -1194,7 +1249,7 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
 /**
  * Helper: Prompt for message body - express.e:10898-10909
  */
-function promptForMessageBody(socket: any, session: BBSSession): void {
+export function promptForMessageBody(socket: any, session: BBSSession): void {
   // express.e: aePuts("   Enter your text. (Enter) alone to end. (75 chars/line)\n")
   emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');
   // express.e:10150-10152: StrCopy(str,'|-------...');SetStr(str,75);StringF(tempstr,'   (\s)\b\n',str)

@@ -333,67 +333,149 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       // express.e yesNo(2): single-char read, no Enter needed; default=N on CR
       await handleMessagePrivateInput(socket, session, data);
       return;
-    case LoggedOnSubState.POST_MESSAGE_BODY:
-      // Line-input editor: buffer characters, echo locally, submit on Enter
+    case LoggedOnSubState.POST_MESSAGE_BODY: {
+      // Line-input editor with cursor-position tracking — express.e edit()
+      // at 10168+. session.inputBuffer holds the line content; an x cursor
+      // (session.bodyCursorX) tracks where edits + arrow keys land within
+      // that buffer. Without x tracking, arrow keys would do nothing and
+      // DEL/insert-mid-line would be broken.
       if (!session.inputBuffer) {
         session.inputBuffer = '';
       }
+      if (typeof (session as any).bodyCursorX !== 'number') {
+        (session as any).bodyCursorX = 0;
+      }
+      const buf = () => session.inputBuffer || '';
+      const setBuf = (v: string) => { session.inputBuffer = v; };
+      let x: number = (session as any).bodyCursorX;
+      const setX = (v: number) => { x = v; (session as any).bodyCursorX = v; };
 
       if (data === '\r' || data === '\n') {
-        const line = session.inputBuffer;
-        session.inputBuffer = '';
+        const line = buf();
+        setBuf('');
+        setX(0);
         emitText(socket, '\r\n'); // Move to the next line like express.e
         await handleMessageBodyInput(socket, session, line);
       } else if (data === '\x1e' || data === '\x18') {
-        // express.e:10195-10205 — Ctrl-X (code 30 = 0x1E in 68K AmiExpress;
-        // we also accept ASCII 0x18 / Ctrl-X for modern terminals): clear
-        // current line. Walk back over every echoed char with "\b \b".
-        const len = session.inputBuffer.length;
+        // express.e:10195-10205 — Ctrl-X clears current line. Move cursor
+        // back to column 0, erase visible chars, reset buffer + x.
+        const len = buf().length;
         if (len > 0) {
           let erase = '';
-          for (let i = 0; i < len; i++) erase += '\b \b';
+          // Move cursor to start, then erase to end-of-line, then position 0.
+          // Use \b \b walk so we don't depend on terminal CSI.
+          // First walk back from current x to 0:
+          for (let i = 0; i < x; i++) erase += '\b';
+          // Then erase len chars and walk back:
+          for (let i = 0; i < len; i++) erase += ' ';
+          for (let i = 0; i < len; i++) erase += '\b';
           emitText(socket, erase);
-          session.inputBuffer = '';
+          setBuf('');
+          setX(0);
         }
       } else if (data === '\x7f' || data === '\b') {
-        // express.e:10207-10224 backspace
-        if (session.inputBuffer.length > 0) {
-          session.inputBuffer = session.inputBuffer.slice(0, -1);
-          emitText(socket, '\b \b'); // Erase last char visibly
+        // express.e:10207-10224 backspace — delete CHAR BEFORE cursor.
+        if (x > 0) {
+          const cur = buf();
+          const before = cur.slice(0, x - 1);
+          const after = cur.slice(x);
+          setBuf(before + after);
+          setX(x - 1);
+          // Re-render: backspace, erase tail with spaces, restore cursor.
+          let out = '\b' + after + ' ';
+          for (let i = 0; i < after.length + 1; i++) out += '\b';
+          emitText(socket, out);
+        }
+      } else if (data === '\x1b[3~' || data === '\x7e') {
+        // express.e:10226-10240 DEL — delete CHAR AT cursor (forward).
+        // Standard xterm sends ESC[3~ for DEL key.
+        if (x < buf().length) {
+          const cur = buf();
+          const before = cur.slice(0, x);
+          const after = cur.slice(x + 1);
+          setBuf(before + after);
+          // Render: emit chars after cursor, blank-pad, walk back.
+          let out = after + ' ';
+          for (let i = 0; i < after.length + 1; i++) out += '\b';
+          emitText(socket, out);
+        }
+      } else if (data === '\x1b[D' || data === '\x1bOD') {
+        // express.e:10166 rawArrow=TRUE — left arrow moves cursor.
+        if (x > 0) {
+          setX(x - 1);
+          emitText(socket, '\x1b[D');
+        }
+      } else if (data === '\x1b[C' || data === '\x1bOC') {
+        // Right arrow moves cursor (bounded by buffer end).
+        if (x < buf().length) {
+          setX(x + 1);
+          emitText(socket, '\x1b[C');
+        }
+      } else if (data === '\x1b[H' || data === '\x01') {
+        // Home / Ctrl-A → start of line.
+        if (x > 0) {
+          emitText(socket, `\x1b[${x}D`);
+          setX(0);
+        }
+      } else if (data === '\x1b[F' || data === '\x05') {
+        // End / Ctrl-E → end of line.
+        const len = buf().length;
+        if (x < len) {
+          emitText(socket, `\x1b[${len - x}C`);
+          setX(len);
         }
       } else if (data === '\t') {
         // express.e:10242-10257 Tab — expand to next 8-column boundary by
-        // padding spaces. Truncated if it would exceed maxLineLen-3 (=72 for
-        // default 75-char limit).
-        const x = session.inputBuffer.length;
+        // padding spaces. Truncated if it would exceed maxLineLen-3.
         const maxLineLen = 75;
         const tabStop = (Math.floor(x / 8) + 1) * 8;
         if (tabStop <= maxLineLen - 3) {
           const pad = ' '.repeat(tabStop - x);
-          session.inputBuffer += pad;
+          const cur = buf();
+          setBuf(cur.slice(0, x) + pad + cur.slice(x));
+          setX(x + pad.length);
           emitText(socket, pad);
         }
-        // else: silently drop — express.e treats over-budget Tab as no-op
       } else if (data === '\x1b') {
-        // ESC alone — express.e ignores (no abort-via-ESC during edit).
-        // Multi-byte escape sequences (cursor keys etc.) arrive in one
-        // chunk on most terminals; the printable-range check below filters
-        // any tail bytes that aren't valid content.
+        // ESC alone — ignored. Multi-byte escape sequences are matched
+        // explicitly above (cursor/Home/End/DEL).
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        session.inputBuffer += data;
-        emitText(socket, data); // Echo printable characters
+        // Insert printable char at cursor position.
+        const cur = buf();
+        const before = cur.slice(0, x);
+        const after = cur.slice(x);
+        setBuf(before + data + after);
+        setX(x + 1);
+        if (after.length === 0) {
+          emitText(socket, data);
+        } else {
+          // Re-render: char + tail, then walk cursor back over tail.
+          let out = data + after;
+          for (let i = 0; i < after.length; i++) out += '\b';
+          emitText(socket, out);
+        }
       } else if (data.length > 1) {
-        // express.e:10118 ED_ANSI_ALLOWED — full editor accepts ANSI.
-        // For our line buffer, accept multi-byte escape sequences as a
-        // single token (CSI, SGR etc.) by appending verbatim. Filters
-        // anything with embedded control chars except CSI/ESC.
+        // express.e:10118 ED_ANSI_ALLOWED — accept multi-byte ANSI in line
+        // buffer at cursor position. We've already handled known cursor/edit
+        // sequences above; anything left through here is treated as content.
         const cleaned = data.replace(/[\x00-\x08\x0a-\x1a\x1c-\x1f\x7f]/g, '');
         if (cleaned) {
-          session.inputBuffer += cleaned;
-          emitText(socket, cleaned);
+          const cur = buf();
+          const before = cur.slice(0, x);
+          const after = cur.slice(x);
+          setBuf(before + cleaned + after);
+          setX(x + cleaned.length);
+          if (after.length === 0) {
+            emitText(socket, cleaned);
+          } else {
+            let out = cleaned + after;
+            for (let i = 0; i < after.length; i++) out += '\b';
+            emitText(socket, out);
+          }
         }
       }
       return;
+    }
     case LoggedOnSubState.POST_MESSAGE_OPTIONS:
       await handleMessageOptionsInput(socket, session, data.trim());
       return;

@@ -305,9 +305,43 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   // writes `\s\n` per line). xterm.js needs `\r\n` to return the cursor to
   // column 1; bare `\n` only advances a row, so subsequent lines render
   // indented under whatever column the previous line ended at.
-  const bodyForDisplay = (msg.body || '').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-  emitText(socket, `${bodyForDisplay}\r\n`);
+  //
+  // express.e:8961 displayFile(tempStr,TRUE,TRUE,FALSE) — second TRUE arg
+  // enables checkForPause() per line. Match that here: emit line-by-line
+  // and call checkForPause when lineCount hits userLineLen. nonStopMail
+  // bypasses pause (express.e:8954-8958 sets nonStopDisplayFlag=TRUE).
+  const bodyLines = (msg.body || '').replace(/\r\n/g, '\n').split('\n');
+  const { checkForPause } = require('../../utils/flag-pause.util');
+  // Header above already consumed ~5 lines (express.e:8939 lineCount+=5).
+  // Honor user's existing lineCount if set, otherwise seed to 5.
+  if (!session.tempData) session.tempData = {};
+  if (typeof session.tempData.lineCount !== 'number') {
+    session.tempData.lineCount = 5;
+  } else {
+    session.tempData.lineCount += 5;
+  }
+  // nonStopMail (R command's NS param) propagates to nonStopDisplayFlag
+  // for the duration of body emission; restore afterwards.
+  const wasNonStop = !!session.tempData.nonStopDisplayFlag;
+  if (session.tempData.nonStopMail) {
+    session.tempData.nonStopDisplayFlag = true;
+  }
+  for (let i = 0; i < bodyLines.length; i++) {
+    emitText(socket, `${bodyLines[i]}\r\n`);
+    const cont = await checkForPause(socket, session);
+    if (cont === false) {
+      // User chose "N" → stop display, jump straight to nav prompt.
+      emitText(socket, '\r\n');
+      session.tempData.nonStopDisplayFlag = wasNonStop;
+      session.tempData.lineCount = 0;
+      displayMessageNavigationPrompt(socket, session);
+      return;
+    }
+  }
   emitText(socket, '\r\n');
+  // Reset for next message (express.e: lineCount stays managed by reader)
+  session.tempData.nonStopDisplayFlag = wasNonStop;
+  session.tempData.lineCount = 0;
 
   // express.e:8964 checkAttachedFile(msgNumb, 1) — display the attachment list
   // for this message. Express.e additionally offers download/list actions; we
@@ -607,6 +641,10 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       parentId: msg.id,
       // express.e:9880: frm = mailHeader.toName; used for delete-original eligibility (9898-9903)
       replyOriginalToUser: msg.toUser,
+      // express.e:10870 — replying to a censored ('p') public message keeps
+      // the reply at 'p' even when user picks Public. Capture parent status
+      // here so saveMessage can OR it into the censored decision.
+      parentMsgStatus: (msg as any).status ?? null,
     };
     // express.e:9894 replyFlag=1 → enterMSG skips To:/Subject: and jumps to skipBegin
     // We go to POST_MESSAGE_SUBJECT to capture any subject edit; handler will proceed to Private
@@ -786,10 +824,42 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // E or EM - Edit message body (sysop only) - express.e:11142-11148
-  // WEB_: no Emacs editor; re-display message then nav prompt (express.e:11150 displayMessage + JUMP nextMenu)
+  // E or EM - Edit message body (sysop) - express.e:11142-11148 / 12183-12188
+  // express.e: loadMsg(msgFile) → edit() → saveMsg(msgFile) overwrites the
+  // canonical body file at msgBaseLocation/<N>. We re-use the existing body
+  // editor (POST_MESSAGE_BODY + Msg. Options menu) and route the Save action
+  // through overwriteMessageBody when editingExistingMsgId is set.
   if ((command === 'E' || command === 'EM') && checkSecurity(session.user, ACSPermission.MESSAGE_EDIT)) {
-    await displaySingleMessage(socket, session, currentIndex);
+    const msg = messages[currentIndex];
+    const msgNum = (msg as any).msgNumber || msg.id;
+    const bodyLines: string[] = (msg.body || '').split('\n');
+
+    // Set up messageEntry to feed the existing body editor flow.
+    session.tempData.messageEntry = {
+      toUser: msg.toUser || 'ALL',
+      subject: msg.subject || '',
+      body: bodyLines,
+      currentLine: bodyLines.length + 1,
+      isPrivate: !!msg.isPrivate,
+      // Marker for saveMessage: overwrite this msg's body instead of
+      // creating a new entry. Reader returns to nav prompt afterwards.
+      editingExistingMsgId: msgNum,
+      editingReturnIndex: currentIndex,
+      // Disable file-attach during body edit (express.e:11144 fileattach:=FALSE)
+      attachedFiles: [],
+    };
+    session.inputBuffer = '';
+
+    // Use the existing promptForMessageBody flow — it shows the header,
+    // ruler, existing lines, then drops to POST_MESSAGE_BODY.
+    const { promptForMessageBody } = require('./message-entry.handler');
+    if (typeof promptForMessageBody === 'function') {
+      promptForMessageBody(socket, session);
+    } else {
+      // Fallback: emit prompt manually if the helper isn't exposed.
+      emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');
+      session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    }
     return;
   }
 
