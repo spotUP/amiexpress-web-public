@@ -2058,11 +2058,25 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_WAITING state');
     // Allow user to cancel with CTRL+C (code 3), Q, /QUIT, or /CANCEL
     // express.e checks for stat=3 (CTRL+C) and shows "Aborted!"
     if (data === '\x03' || input === 'Q' || input === '/QUIT' || input === '/CANCEL') {
+      // Resolve the repository through the database (the same path every other
+      // OperatorChat caller uses — index.ts, config-routes, and the
+      // OPERATOR_CHAT_ACTIVE branch below). The previous tsyringe-based
+      // `container.resolve(OperatorChatRepository)` threw "TypeInfo not known"
+      // because the class isn't decorated with @injectable() — every cancel
+      // attempt crashed the command handler, the [ERROR] message got printed
+      // and the user was eventually disconnected.
       const { handleUserCancelPage } = require('./operator-chat.handler');
-      const { container } = require('../container');
-      const { OperatorChatRepository } = require('../database/operator-chat.repository');
-      const repository = container.resolve(OperatorChatRepository);
-      await handleUserCancelPage(socket.server, repository, session, socket);
+      const { getDatabase } = require('./command-handler/dependency-injection');
+      const db = getDatabase();
+      const repository = db?.getOperatorChatRepository();
+      if (repository) {
+        await handleUserCancelPage(socket.server, repository, session, socket);
+      } else {
+        // Database unavailable — fall back to clearing the session state so
+        // the user isn't stuck in OPERATOR_CHAT_WAITING forever.
+        emitText(socket, '\r\n\x1b[33mAborted!\x1b[0m\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+      }
     } else if (input) {
       // Any other input while waiting - remind user they're waiting
       emitText(socket, '\r\n\x1b[33mWaiting for sysop... Press CTRL+C or Q to cancel.\x1b[0m\r\n');
