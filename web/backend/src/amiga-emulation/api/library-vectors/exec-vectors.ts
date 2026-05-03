@@ -5,12 +5,17 @@
 
 import { LibraryVector } from "./types";
 import { ExecLibrary } from "../ExecLibrary";
+import { debugLog } from "../../../utils/debug-log";
 import * as fs from "fs";
 import * as path from "path";
 import { getSystemTime } from '../../../utils/date-time.util';
 
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const TRAP_DEBUG_ENABLED = process.env.DEBUG_TRAP === '1';
+
+// Cached at module load — read by per-message hot paths (FindPort/PutMsg/
+// GetMsg/CreateMsgPort) hundreds of times per second during door execution.
+const DEBUG_ENABLED = process.env.DEBUG_68K === '1' || process.env.DEBUG_68K === 'true';
 
 // File-based debug logging for trap handlers
 function logTrap(message: string): void {
@@ -425,6 +430,8 @@ console.log(
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(9); // A1
       const result = lib.findPort(nameAddr);
+      // Hot path — fires per door message. Gated to keep latency low.
+      debugLog(`[exec-vectors] FindPort TRAP: name=0x${nameAddr.toString(16)} result=0x${result.toString(16)}`);
       return result;
     },
   },
@@ -434,6 +441,8 @@ console.log(
     handler: (emu, lib: ExecLibrary) => {
       const portAddr = emu.getRegister(8); // A0
       const msgAddr = emu.getRegister(9); // A1
+      // Hot path — fires per door message. Gated to keep latency low.
+      debugLog(`[exec-vectors] PutMsg TRAP: port=0x${portAddr.toString(16)} msg=0x${msgAddr.toString(16)}`);
       lib.putMsg(portAddr, msgAddr);
       return 0;
     },
@@ -445,7 +454,9 @@ console.log(
       const portAddr = emu.getRegister(8); // A0
       const portName = portAddr ? lib.getPortName(portAddr) : "";
       logTrap(`GetMsg TRAP HIT! port=0x${portAddr.toString(16)} name=${portName}`);
-console.log(
+      // Hot path — fires per door message round-trip. Gated to avoid the
+      // ~3-5ms per-call disk-I/O cost on a busy backend.log.
+      debugLog(
         `[ExecLibrary][Trap][GetMsg] port=0x${portAddr.toString(
           16
         )} name=${portName}`
@@ -453,9 +464,10 @@ console.log(
       const result = lib.getMsg(portAddr);
       logTrap(`GetMsg returning 0x${result.toString(16)}`);
 
-      // Debug: dump reply message contents when door receives a message
-      // jhMessage structure: Message(20) + String[200](20) + Data(220) + Command(224)
-      if (result !== 0) {
+      // Debug: dump reply message contents when door receives a message.
+      // Skip the entire message-parse + 5 console.logs unless DEBUG_68K
+      // is on — saves ~1ms per receive on a hot inbox.
+      if (result !== 0 && DEBUG_ENABLED) {
         const msgType = emu.readMemory(result + 8); // ln_Type
         const command = emu.readMemory32(result + 0xE0); // Command at offset 224
         const data = emu.readMemory32(result + 0xDC); // Data at offset 220
@@ -466,11 +478,11 @@ console.log(
           if (ch === 0) break;
           str += String.fromCharCode(ch);
         }
-console.log(`[ExecLibrary][GetMsg] Door received message:`);
-console.log(`  msgAddr=0x${result.toString(16)} ln_Type=${msgType} (6=NT_REPLYMSG)`);
-console.log(`  Command=${command} (at 0xE0)`);
-console.log(`  Data=${data} (at 0xDC)`);
-console.log(`  String="${str}" (at 0x14)`);
+        debugLog(`[ExecLibrary][GetMsg] Door received message:`);
+        debugLog(`  msgAddr=0x${result.toString(16)} ln_Type=${msgType} (6=NT_REPLYMSG)`);
+        debugLog(`  Command=${command} (at 0xE0)`);
+        debugLog(`  Data=${data} (at 0xDC)`);
+        debugLog(`  String="${str}" (at 0x14)`);
         // DEBUG dRE!WAll: dump raw bytes at offsets 0x00, 0x14, 0x100 to rule out field confusion
         if (process.env.DREWALL_TRACE === '1' && command === 100) {
           const dump = (off: number, len: number) => {
@@ -593,7 +605,7 @@ console.log(
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(8); // A0 = name pointer
       const priority = emu.getRegister(0); // D0 = priority
-console.log(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}, priority=${priority}`);
+      debugLog(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}, priority=${priority}`);
       return lib.createPort(nameAddr, priority);
     },
   },
@@ -601,7 +613,9 @@ console.log(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}
     offset: -666, // LVO -666 (0xFFFFFD66)
     name: "CreateMsgPort",
     handler: (emu, lib: ExecLibrary) => {
-      return lib.createMsgPort();
+      const result = lib.createMsgPort();
+      debugLog(`[exec-vectors] CreateMsgPort TRAP: result=0x${result.toString(16)}`);
+      return result;
     },
   },
   {

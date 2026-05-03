@@ -30,9 +30,15 @@ import { BsdSocketLibrary } from "./BsdSocketLibrary";
 import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./AmiSSLLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import { getLvoName } from "../constants/lvo-names.generated";
+import { debugLog } from "../../utils/debug-log";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
+
+// Cache the env-var check at module load. Hot-path conditional logging
+// (handleTrap fires per Amiga library call) reads this hundreds of times
+// per second; reading process.env each time would be slower.
+const DEBUG_ENABLED = process.env.DEBUG_68K === '1' || process.env.DEBUG_68K === 'true';
 
 // Import all library vectors from separate files
 import {
@@ -1204,16 +1210,27 @@ console.log(
   handleTrap(pc: number): boolean {
     const vector = this.trapMap.get(pc);
 
-    // DEBUG: Log AEDoor-related calls to trace trap matching
-    const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
-    if (aedoorBase !== 0) {
-      const offset = pc - aedoorBase;
-      // Check if PC is in the AEDoor vector range (-30 to -200)
-      if (offset >= -200 && offset <= 0) {
-        const a6 = this.emulator.getRegister(14); // A6
-        const instrAtPC = this.emulator.readMemory16(pc);
-        const matched = vector ? "MATCHED" : "NOT IN TRAPMAP";
-console.log(`[LibraryTraps] AEDoor call? PC=0x${pc.toString(16)} offset=${offset} A6=0x${a6.toString(16)} instr=0x${instrAtPC.toString(16)} [${matched}]`);
+    // Trace ALL trap calls — fires per-library-call, very hot path. Gated
+    // behind DEBUG_68K so normal mode doesn't pay the disk-I/O cost.
+    // Was previously unconditional ("TEMP" for DM door debugging) and
+    // contributed to the ~118ms gap conftop saw between banner #1 and the
+    // form-feed clear-screen.
+    if (vector) {
+      debugLog(`[TRAP] ${vector.name} at PC=0x${pc.toString(16)}`);
+    }
+
+    // DEBUG: Log AEDoor-related calls to trace trap matching. Same hot-path
+    // concerns as above — gated.
+    if (DEBUG_ENABLED) {
+      const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
+      if (aedoorBase !== 0) {
+        const offset = pc - aedoorBase;
+        if (offset >= -200 && offset <= 0) {
+          const a6 = this.emulator.getRegister(14); // A6
+          const instrAtPC = this.emulator.readMemory16(pc);
+          const matched = vector ? "MATCHED" : "NOT IN TRAPMAP";
+          debugLog(`[LibraryTraps] AEDoor call? PC=0x${pc.toString(16)} offset=${offset} A6=0x${a6.toString(16)} instr=0x${instrAtPC.toString(16)} [${matched}]`);
+        }
       }
     }
 
