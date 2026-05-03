@@ -34,50 +34,12 @@ import { debugLog } from "../../utils/debug-log";
 const DEBUG_68K = process.env.DEBUG_68K === "1";
 const TRACE_PC_JUMPS = process.env.TRACE_PC_JUMPS === "1";
 
-export interface ExecutionState {
-  iterationCount: number;
-  totalCycles: number;
-  cycleCount: number;
-  isRunning: boolean;
-  startupMessageSent: boolean;
-  trapVerified: boolean;
-  mainExecutionReached: boolean;
-  initializationComplete: boolean;
-  romReturnAttempts: number;
-  lastSignificantPC: number;
-  progressCheckCount: number;
-  stuckInLoop: boolean;
-  loopDetectionCount: number;
-  writeCallCount: number;
-  aedoorCallCount: number;
-  libraryCallsInLoop: number;
-  lastInterceptedTrap: number;
-  lastInterceptedIteration: number;
-  loggedMoveaStack: boolean;
-  startTime: number | null;
-  progressCheckCountGlobal: number;
-  loopStartPC: number;
-  lastProgressIteration: number;
-  lastProgressTime: number;
-  gapJumpLogged: boolean;
-  stuckLoopCount: number;
-  lastJumpSize: number;
-  lastAedoorTracePc: number;
-  lastJumpSizes: number[];
-  sameJumpCount: number;
-}
-
-export interface LifecycleConfig {
-  timeout: number;
-  loopGuardLimit: number;
-  cycleTarget: number;
-  debugLevel: "minimal" | "normal" | "verbose" | "comprehensive";
-  disableGuard?: boolean;
-  disableInputWaitExtension?: boolean;
-  progressTimeoutMs: number;
-  pcProbeRanges?: Array<{ start: number; end: number }>;
-  pcProbeMaxHits?: number;
-}
+// ExecutionState and LifecycleConfig live in ./lifecycle/lifecycle-types so
+// the helper modules in that directory can import them without forming a
+// cycle through this file. Re-exported here so existing
+// `from "../DoorLifecycleManager.js"` imports keep working.
+export type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
+import type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
 
 export class DoorLifecycleManager {
   private emulator: MoiraEmulator;
@@ -986,6 +948,58 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         }
 
         const pcAfterBatch = this.emulator.getRegister(16);
+
+        // TEMP DEBUG: register PC=0x32e8 (DOORSMENU main() entry) as a hard
+        // trap-stop in MOIRA so executeUntilTrap halts there before link.w runs.
+        // No ILLEGAL is written. We just dump argc/argv state, remove the
+        // trap-stop, and let execution continue normally into main().
+        if (!(this as any)._mainTrapInstalled) {
+          (this as any)._mainTrapInstalled = true;
+          this.emulator.addTrapAddress(0x32e8);
+          console.log(`[DIAG] Registered trap-stop at 0x32e8 for main() probe`);
+        }
+        if ((pcBeforeBatch === 0x32e8 || pcAfterBatch === 0x32e8) && !(this as any)._mainDumped) {
+          (this as any)._mainDumped = true;
+          const probePC = pcAfterBatch === 0x32e8 ? pcAfterBatch : pcBeforeBatch;
+          const sp = this.emulator.getRegister(15);
+          const a5 = this.emulator.getRegister(13);
+          // At main() entry (BEFORE link.w runs): SP -> retaddr, SP+4 -> argc, SP+8 -> argv, SP+12 -> envp
+          const retAddr = this.emulator.readMemory32(sp);
+          const argcOnStack = this.emulator.readMemory32(sp + 4);
+          const argvOnStack = this.emulator.readMemory32(sp + 8);
+          const envpOnStack = this.emulator.readMemory32(sp + 12);
+          // Read ___argc directly from BSS (0x206c relocated by BSS base 0x7808 = 0x9874)
+          const argcFromBSS = this.emulator.readMemory32(0x9874);
+          const argvFromBSS = this.emulator.readMemory32(0x985c);
+          console.log(`[DIAG] main() entry! PC=0x${probePC.toString(16)} SP=0x${sp.toString(16)} A5=0x${a5.toString(16)}`);
+          console.log(`[DIAG]   Stack: ret=0x${retAddr.toString(16)} argc=${argcOnStack} (0x${argcOnStack.toString(16)}) argv=0x${argvOnStack.toString(16)} envp=0x${envpOnStack.toString(16)}`);
+          console.log(`[DIAG]   BSS ___argc (0x9874) = ${argcFromBSS} (0x${argcFromBSS.toString(16)})`);
+          console.log(`[DIAG]   BSS ___argv (0x985c) = 0x${argvFromBSS.toString(16)}`);
+          // Inspect argv[] (the actual argv value pushed onto stack)
+          if (argvOnStack !== 0 && argvOnStack >= 0x1000 && argvOnStack < 0x1000000) {
+            for (let i = 0; i < 4; i++) {
+              const argvI = this.emulator.readMemory32(argvOnStack + i * 4);
+              let str = '';
+              if (argvI !== 0 && argvI >= 0x1000 && argvI < 0x1000000) {
+                for (let j = 0; j < 30; j++) {
+                  const c = this.emulator.readMemory(argvI + j);
+                  if (c === 0) break;
+                  str += (c >= 32 && c < 127) ? String.fromCharCode(c) : `\\x${c.toString(16).padStart(2, '0')}`;
+                }
+              }
+              console.log(`[DIAG]   argv[${i}]=0x${argvI.toString(16)} "${str}"`);
+            }
+          }
+          // Dump the relocated startup move.l instruction at memory 0x205c.
+          // Should be: 2f 39 00 00 98 74 (move.l 0x9874.l, -(a7)) if reloc OK
+          // Or:        2f 39 00 00 20 6c (move.l 0x206c.l, -(a7)) if reloc MISSING
+          const startupBytes = [];
+          for (let i = 0; i < 6; i++) startupBytes.push(this.emulator.readMemory(0x205c + i));
+          console.log(`[DIAG]   startup@0x205c: ${startupBytes.map(b=>b.toString(16).padStart(2,'0')).join(' ')} (expect '2f 39 00 00 98 74' if argc reloc OK)`);
+          // Remove trap-stop so execution continues into main()
+          this.emulator.removeTrapAddress(0x32e8);
+          console.log(`[DIAG] Removed trap-stop at 0x32e8; execution continues`);
+        }
 
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
         if (TRACE_PC_JUMPS && pcBeforeBatch > 0 && pcAfterBatch > 0) {
