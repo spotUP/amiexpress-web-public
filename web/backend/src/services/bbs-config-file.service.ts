@@ -422,8 +422,9 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       }
     }
 
-    // Build new .info file content
-    // For now, we'll use a simple format - can enhance later with icon.library format
+    // The actual binary .info is written below via writeInfoFile() (icon.library
+    // format). Build a companion plain-text file (bbsConfig.info.txt) for humans
+    // and tooling that can't parse Amiga icon files.
     const tooltypes: string[] = [];
     for (const [key, value] of existing.entries()) {
       if (value === '') {
@@ -432,9 +433,6 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
         tooltypes.push(`${key}=${value}`);
       }
     }
-
-    // Write tooltypes as simple text format for now
-    // TODO: Use proper .info file format with icon.library
     const content = tooltypes.join('\n') + '\n';
 
     // Backup existing file

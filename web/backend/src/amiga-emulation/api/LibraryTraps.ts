@@ -1812,9 +1812,11 @@ console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
       return false;
     }
 
-    // Multiple vectors can share the same offset (collision)
-    // For now, use the first one (Exec.library functions installed first)
-    // TODO: More sophisticated collision resolution if needed
+    // Multiple vectors can share the same offset (collision). When A6 is
+    // corrupted we can't disambiguate by base address, so we fall back to the
+    // first registered handler (Exec is installed first, so its functions win).
+    // No real-world door has tripped this path in a way that needed a smarter
+    // resolver; if one ever does, fix it here based on what the trace shows.
     const vector = vectors[0];
     const library = libraries![0];
     const libraryName = this.getLibraryName(library);

@@ -202,16 +202,19 @@ export class ExecLibrary {
     this.instanceId = ++ExecLibrary.instanceCounter;
     debugLog(`[ExecLibrary] Created instance #${this.instanceId}`);
 
-    // Initialize ExecBase structure
+    // Initialize ExecBase structure. idString/libList/taskReady are stubbed
+    // as NULL — AmiExpress doors don't walk lib_IdString or the system library
+    // / task lists, so populating them buys nothing. Wire up real values only
+    // if a real door is ever observed dereferencing them.
     this.execBase = {
       address: this.EXEC_BASE_ADDR,
       version: 40, // Kickstart 3.1 exec.library 40.10
       revision: 10,
-      idString: 0, // TODO: Create version string
+      idString: 0,
       softVer: 40, // Kickstart 3.1
       thisTask: 0, // Will be set when creating task
-      libList: 0, // TODO: Create list
-      taskReady: 0, // TODO: Create list
+      libList: 0,
+      taskReady: 0,
       eclockFrequency: 709379, // PAL E-clock frequency
     };
 
@@ -5732,15 +5735,8 @@ debugLog(
     //
     // Original fix (2026-01-16) was for trapped/TIM doors that might call ReplyMsg incorrectly.
     // But native XIM doors know what they're doing - respect their mn_ReplyPort setting!
-    //
-    // TODO: If we encounter doors with the infinite loop issue, add a check to only
-    // overwrite mn_ReplyPort for non-XIM doors or trapped aedoor.library usage.
-    //
-    // const aeDoorPort = this.getDoorPortAddress();
-    // if (aeDoorPort !== 0) {
-    //   this.emulator.writeMemory32(msgAddr + 14, aeDoorPort); // mn_ReplyPort = AEDoorPort
-    //   this.logExecDebug(`ReplyMsg: Updated mn_ReplyPort to AEDoorPort 0x${aeDoorPort.toString(16)}`);
-    // }
+    // (If a trapped/TIM door is ever observed in an infinite reply loop, gate the
+    // mn_ReplyPort overwrite on that door type rather than re-enabling it globally.)
 
     // Track replies so host-side polling can skip them on AEDoorPort.
     this.markMessageAsReplied(msgAddr);

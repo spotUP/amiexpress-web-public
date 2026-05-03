@@ -1000,17 +1000,6 @@ export class ShapeAsciiRenderer {
   }
 
   /**
-   * Get cache statistics (for debugging/monitoring)
-   */
-  public getCacheStats(): { size: number; hitRate: number } {
-    // Simple cache size for now; hit rate tracking would require counters
-    return {
-      size: this.cache.size,
-      hitRate: 0, // TODO: Track hits/misses if needed
-    };
-  }
-
-  /**
    * Clear cache (useful for memory management)
    */
   public clearCache(): void {

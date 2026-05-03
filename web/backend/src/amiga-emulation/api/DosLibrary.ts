@@ -6328,11 +6328,11 @@ debugLog(
       case -456: // SetFileSize - P2 (V36+) - CORRECT
         this.SetFileSize();
         return true;
-      case -564: // GetCliCurrentDirName - CORRECTED from -462
-        this.GetCurrentDirName(); // TODO: Rename function to GetCliCurrentDirName
+      case -564: // GetCurrentDirName (V36+) — NDK 3.2R4 dos.library/GetCurrentDirName
+        this.GetCurrentDirName();
         return true;
-      case -576: // GetCliProgramName - CORRECTED from -474
-        this.GetProgramName(); // TODO: Rename function to GetCliProgramName
+      case -576: // GetProgramName (V36+) — NDK 3.2R4 dos.library/GetProgramName
+        this.GetProgramName();
         return true;
       case -594: // SetProgramDir - CORRECTED from -492 (off by 102!)
         this.SetProgramDir();
@@ -6672,12 +6672,10 @@ console.error(`[dos.library] DeleteVar: EnvironmentManager not initialized`);
   }
 
   /**
-   * GetCurrentDirName (-462) - Get current directory name string
-   * Input: D1 = APTR to buffer
-   *        D2 = buffer size
-   * Output: D0 = success (BOOL), buffer filled with directory name
-   *
-   * P1 function - Returns the current directory as a path string
+   * GetCurrentDirName (-564, V36+) - Get current directory name string
+   * NDK 3.2R4 autodocs: dos.library/GetCurrentDirName
+   *   BOOL GetCurrentDirName(STRPTR buf, LONG len)
+   *   D1 = buffer addr, D2 = buffer size, D0 = success
    */
   public GetCurrentDirName(): void {
     const bufferAddr = this.emulator.getRegister(CPURegister.D1);
@@ -6703,12 +6701,10 @@ debugLog(`[dos.library] GetCurrentDirName → "${currentDir}"`);
   }
 
   /**
-   * GetProgramName (-474) - Get program name string
-   * Input: D1 = APTR to buffer
-   *        D2 = buffer size
-   * Output: D0 = success (BOOL), buffer filled with program name
-   *
-   * P1 function - Returns the name of the current program
+   * GetProgramName (-576, V36+) - Get program name string
+   * NDK 3.2R4 autodocs: dos.library/GetProgramName
+   *   BOOL GetProgramName(STRPTR buf, LONG len)
+   *   D1 = buffer addr, D2 = buffer size, D0 = success
    */
   public GetProgramName(): void {
     const bufferAddr = this.emulator.getRegister(CPURegister.D1);
