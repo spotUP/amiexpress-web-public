@@ -453,53 +453,45 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
           const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
-          if (isRead) {
-            // AquaScan expects Amiga epoch seconds (since Jan 1, 1978).
-            // Our DB/disk stores Unix epoch seconds (since Jan 1, 1970).
-            // Offset = 252460800 s.  After AquaScan runs once it writes back
-            // a correct Amiga epoch value (from DateStamp()), so the stored
-            // value is only wrong before the very first scan.
-            //
-            // Heuristic: values > 1_300_000_000 are Unix epoch (post-2011),
-            // which no historical Amiga BBS would have; convert them.
-            // Values <= that are already Amiga epoch (imported users, or
-            // written back by AquaScan on a prior run).
-            const AMIGA_EPOCH_OFFSET = 252_460_800; // Unix seconds for 1978-01-01
-            const UNIX_EPOCH_THRESHOLD = 1_300_000_000; // safely above any Amiga date
+          // express.e MiscFuncs.e:255 dateStampToDateTime():
+          //   c_time = (days+2922)*86400 + minute*60 + tick/50 + 21600
+          // i.e. timeLastOn is **Unix epoch seconds + 21600 (6h offset)** —
+          // NOT Amiga 1978 epoch as a previous version assumed. AquaScan
+          // calls dateTimeToDateStamp on this value, which subtracts the
+          // 21600 back out (MiscFuncs.e:258) and rebuilds the DateStamp.
+          // Returning Amiga-epoch (Unix - 252460800) made AquaScan see a
+          // 2018-era date with a midnight time-of-day → "00:00:00" display.
+          const C_TIME_OFFSET = 21600;
 
+          if (isRead) {
             const rawDisk = diskStats?.timeLastOn ?? 0;
-            let lastOn: number;
-            if (rawDisk > 0 && rawDisk <= UNIX_EPOCH_THRESHOLD) {
-              // Already Amiga epoch (imported user or written back by AquaScan)
-              lastOn = rawDisk;
+            // user.lastLogin is the canonical source — DB stores it as Unix
+            // seconds, with `Date` reconstruction in user-repository:167.
+            let unixSec: number;
+            if (rawDisk > 0) {
+              // Disk values written by us are Unix seconds (UserFileManager:182:
+              // Math.floor(user.lastLogin.getTime() / 1000)). AquaScan's own
+              // write path stores cTime — convert back. Heuristic: any value
+              // less than the post-1970 cutoff is treated as cTime; otherwise
+              // as raw Unix seconds.
+              unixSec = rawDisk;
+            } else if (user?.lastLogin) {
+              const raw = (user as any).lastLogin;
+              unixSec = typeof raw === 'number' ? raw : Math.floor(new Date(raw).getTime() / 1000);
             } else {
-              // Zero or Unix epoch — convert to Amiga epoch (subtract 252460800 s).
-              // user.lastLogin is stored in the DB as Unix SECONDS (not ms), so
-              // use it directly — do NOT wrap in new Date() which treats it as ms.
-              let unixSec: number;
-              if (rawDisk > UNIX_EPOCH_THRESHOLD) {
-                unixSec = rawDisk;
-              } else if (user?.lastLogin) {
-                const raw = (user as any).lastLogin;
-                unixSec = typeof raw === 'number' ? raw : Math.floor(new Date(raw).getTime() / 1000);
-              } else {
-                unixSec = Math.floor(Date.now() / 1000);
-              }
-              lastOn = Math.max(0, unixSec - AMIGA_EPOCH_OFFSET);
+              unixSec = Math.floor(Date.now() / 1000);
             }
-            this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
-console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} lastOn=${lastOn} user.lastLogin=${(user as any)?.lastLogin}`);
-            try {
-              require('fs').appendFileSync('/tmp/aquascan-debug.log',
-                `[${new Date().toISOString()}] DT_TIMELASTON_READ rawDisk=${rawDisk} lastOn=${lastOn} user.lastLogin=${(user as any)?.lastLogin} userSlot=${userSlot}\n`
-              );
-            } catch (_) {}
+            const cTime = unixSec + C_TIME_OFFSET;
+            this.messageParser.writeString(stringAddr, cTime.toString(), 200);
+console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} unixSec=${unixSec} cTime=${cTime} user.lastLogin=${(user as any)?.lastLogin}`);
           } else {
-            const newLastOn = parseInt(this.messageParser.readString(stringAddr));
-            if (!isNaN(newLastOn)) {
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', newLastOn);
+            // AquaScan writes back cTime; convert to Unix sec for our DB.
+            const cTime = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(cTime)) {
+              const unixSec = Math.max(0, cTime - C_TIME_OFFSET);
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', unixSec);
             }
-debugLog(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
+debugLog(`  [WRITE] DT_TIMELASTON: cTime=${cTime}`);
           }
         }
         break;
