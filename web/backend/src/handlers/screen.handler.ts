@@ -12,11 +12,12 @@ import * as path from 'path';
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { BBSPaths } from '../utils/bbs-paths.util';
-// iconv-lite for character encoding conversion
-// Auto-detects between CP437 (PC ANSI) and ISO-8859-1 (Amiga ANSI)
-// Also supports iCE colors from SAUCE metadata (16 background colors)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const iconv = require('iconv-lite');
+import {
+  readAmigaTextFile,
+  readAmigaTextFileWithTransforms,
+  stripSauceMetadata,
+  type AmigaTextResult,
+} from '../utils/amiga-text-decode.util';
 import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
@@ -163,344 +164,28 @@ function getScreenDirType(screenName: string): ScreenDirType | null {
 }
 
 /**
- * SAUCE metadata structure (Standard Architecture for Universal Comment Extensions)
- * Used primarily by PC ANSI art to store metadata
+ * SAUCE metadata + encoding-aware decode + iCE colors transform live in
+ * `utils/amiga-text-decode.util.ts` so bulletins/screens/help files share one
+ * pipeline. The wrappers below preserve the original screen.handler call
+ * sites; do not duplicate the decode logic here.
  */
-interface SauceInfo {
-  hasSauce: boolean;
-  dataType?: number;    // 1=Character, 2=Graphics, etc
-  fileType?: number;    // For dataType 1: 0=ASCII, 1=ANSI, 2=ANSiMation, etc
-  tInfo1?: number;      // Width in characters
-  tInfo2?: number;      // Height in characters
-  tInfoFlags?: number;  // Flags: bit 0 = non-blink (iCE colors), bits 1-2 = letter spacing, bits 3-4 = aspect ratio
-  iceColors?: boolean;  // True if iCE colors (blink disabled, 16 bg colors)
-}
-
-function parseSauceMetadata(buffer: Buffer): SauceInfo {
-  const sauceMarker = Buffer.from('SAUCE00', 'ascii');
-  const markerIndex = buffer.lastIndexOf(sauceMarker);
-
-  if (markerIndex === -1) {
-    return { hasSauce: false };
-  }
-
-  // SAUCE record is 128 bytes starting at marker
-  // Offset 94: DataType (1 byte)
-  // Offset 95: FileType (1 byte)
-  // Offset 96: TInfo1 (2 bytes, little endian) - width
-  // Offset 97: TInfo2 (2 bytes, little endian) - height
-  // Offset 104: TInfoFlags (1 byte) - bit 0 = iCE colors
-  try {
-    const dataType = buffer[markerIndex + 94];
-    const fileType = buffer[markerIndex + 95];
-    const tInfo1 = buffer.readUInt16LE(markerIndex + 96);
-    const tInfo2 = buffer.readUInt16LE(markerIndex + 98);
-    const tInfoFlags = buffer[markerIndex + 104] || 0;
-
-    // iCE colors: bit 0 of TInfoFlags (also called ANSiFlags)
-    // When set, blink attribute becomes high-intensity background
-    const iceColors = (tInfoFlags & 0x01) !== 0;
-
-    return {
-      hasSauce: true,
-      dataType,
-      fileType,
-      tInfo1,
-      tInfo2,
-      tInfoFlags,
-      iceColors
-    };
-  } catch (e) {
-    return { hasSauce: true }; // Has SAUCE but couldn't parse details
-  }
-}
-
-function stripSauceMetadata(buffer: Buffer): Buffer {
-  const sauceMarker = Buffer.from('SAUCE00', 'ascii');
-  const markerIndex = buffer.lastIndexOf(sauceMarker);
-  if (markerIndex === -1) {
-    return buffer;
-  }
-  // Remove any leading SUB (0x1A) preceding the SAUCE block
-  const subIndex = buffer.lastIndexOf(0x1A, markerIndex);
-  const cutIndex = subIndex === -1 ? markerIndex : subIndex;
-  return buffer.slice(0, cutIndex);
-}
-
-/**
- * Auto-detect encoding from buffer content
- *
- * Detection strategy:
- * 1. If has SAUCE metadata -> CP437 (PC ANSI standard)
- * 2. If contains CP437 box-drawing characters (0xB0-0xDF range patterns) -> CP437
- * 3. If file extension is .ans -> CP437 (PC ANSI convention)
- * 4. Default -> ISO-8859-1 (Amiga convention)
- *
- * Key character differences:
- * - 0xB0: CP437 = light shade (░), ISO-8859-1 = degree (°)
- * - 0xB1: CP437 = medium shade (▒), ISO-8859-1 = plus-minus (±)
- * - 0xB2: CP437 = dark shade (▓), ISO-8859-1 = superscript 2 (²)
- * - 0xB3-0xDA: CP437 = box drawing characters, ISO-8859-1 = various symbols
- * - 0xDB-0xDF: CP437 = block elements (█▄▌▐▀), ISO-8859-1 = letters
- */
-function detectEncoding(buffer: Buffer, filePath: string, sauceInfo: SauceInfo): 'cp437' | 'iso-8859-1' {
-  // Rule 1: SAUCE metadata indicates PC ANSI -> CP437
-  if (sauceInfo.hasSauce) {
-    return 'cp437';
-  }
-
-  // Rule 2: .ans extension is PC ANSI convention -> CP437
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.ans') {
-    return 'cp437';
-  }
-
-  // Rule 3: Detect CP437 box-drawing patterns
-  // CP437 box-drawing chars (0xB3-0xDA) often appear in sequences
-  // Count occurrences of likely CP437 characters
-  let cp437Score = 0;
-  let latin1Score = 0;
-
-  for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i];
-
-    // Skip ANSI escape sequences
-    if (byte === 0x1B && i + 1 < buffer.length && buffer[i + 1] === 0x5B) {
-      // Skip past the escape sequence
-      while (i < buffer.length && buffer[i] !== 0x6D && buffer[i] !== 0x48 &&
-             buffer[i] !== 0x4A && buffer[i] !== 0x4B && buffer[i] !== 0x41 &&
-             buffer[i] !== 0x42 && buffer[i] !== 0x43 && buffer[i] !== 0x44) {
-        i++;
-      }
-      continue;
-    }
-
-    // CP437 box-drawing and block characters (very common in PC ANSI)
-    // Exclude ISO-8859-1 fractions: 0xBC (¼), 0xBD (½), 0xBE (¾)
-    // These are commonly used in Amiga ANSI art as decorative characters
-    if (byte >= 0xB3 && byte <= 0xDA && byte !== 0xBC && byte !== 0xBD && byte !== 0xBE) {
-      cp437Score += 3; // Strong indicator
-    }
-    // CP437 shading characters
-    if (byte >= 0xB0 && byte <= 0xB2) {
-      cp437Score += 2;
-    }
-    // CP437 block elements
-    if (byte >= 0xDB && byte <= 0xDF) {
-      cp437Score += 3;
-    }
-
-    // ISO-8859-1 fraction characters (common in Amiga ANSI art)
-    // 0xBC = ¼, 0xBD = ½, 0xBE = ¾
-    if (byte === 0xBC || byte === 0xBD || byte === 0xBE) {
-      latin1Score += 3; // Strong indicator for ISO-8859-1
-    }
-
-    // ISO-8859-1 accented letters (common in European text)
-    // Lowercase accented: 0xE0-0xFF (àáâ...ÿ)
-    // Uppercase accented: 0xC0-0xDF (ÀÁÂ...ß) but overlaps with CP437 blocks
-    if (byte >= 0xE0 && byte <= 0xFF) {
-      latin1Score += 1; // Weaker indicator since these could be CP437 graphics too
-    }
-
-    // ISO-8859-1 specific non-letter symbols that aren't common in ANSI art
-    // 0xA0-0xBF range has punctuation in ISO-8859-1
-    if (byte === 0xA9 || byte === 0xAE || byte === 0xB7) { // ©, ®, ·
-      latin1Score += 2;
-    }
-  }
-
-  // Decision based on scores
-  // CP437 box-drawing is very distinctive, so even a moderate score suggests CP437
-  if (cp437Score >= 10 && cp437Score > latin1Score * 2) {
-    return 'cp437';
-  }
-
-  // Default to ISO-8859-1 for Amiga compatibility
-  return 'iso-8859-1';
-}
-
-interface ReadScreenResult {
-  text: string;
-  encoding: 'cp437' | 'iso-8859-1' | 'utf-8';
-  iceColors: boolean;
-  width?: number;
-  height?: number;
-}
 
 function readScreenBuffer(filePath: string): Buffer {
-  // Use file cache for better performance (70-90% reduction in disk I/O)
-  // Cache returns raw buffer, we process SAUCE metadata after
-  const rawBuffer = fileCache.readBuffer(filePath);
-  return stripSauceMetadata(rawBuffer);
+  // Raw bytes (SAUCE stripped) — used by the PETSCII path. The cache hit
+  // remains hot for subsequent decoded reads via readAmigaTextFile().
+  return stripSauceMetadata(fileCache.readBuffer(filePath));
 }
 
-function readScreenTextWithMetadata(filePath: string): ReadScreenResult {
-  // Use file cache for better performance (70-90% reduction in disk I/O)
-  // Cache automatically invalidates when file modified (maintains express.e behavior)
-  const rawBuffer = fileCache.readBuffer(filePath);
-  const sauceInfo = parseSauceMetadata(rawBuffer);
-  const buffer = stripSauceMetadata(rawBuffer);
-  const ext = path.extname(filePath).toLowerCase();
-
-  // PETSCII .seq files stay UTF-8 so downstream PETSCII handling is preserved
-  if (ext === '.seq') {
-    return {
-      text: buffer.toString('utf-8'),
-      encoding: 'utf-8',
-      iceColors: false
-    };
-  }
-
-  // Auto-detect encoding
-  const encoding = detectEncoding(buffer, filePath, sauceInfo);
-
-  try {
-    const text = iconv.decode(buffer, encoding);
-    return {
-      text,
-      encoding,
-      iceColors: sauceInfo.iceColors || false,
-      width: sauceInfo.tInfo1,
-      height: sauceInfo.tInfo2
-    };
-  } catch (error) {
-console.warn(`[SCREEN] ${encoding} decode failed, falling back to utf-8:`, (error as Error).message);
-    return {
-      text: buffer.toString('utf-8'),
-      encoding: 'utf-8',
-      iceColors: false
-    };
-  }
+function readScreenTextWithMetadata(filePath: string): AmigaTextResult {
+  return readAmigaTextFile(filePath);
 }
 
-// Legacy function for backward compatibility
 function readScreenText(filePath: string): string {
-  return readScreenTextWithMetadata(filePath).text;
+  return readAmigaTextFile(filePath).text;
 }
 
-/**
- * Smart screen file reader with auto-detection and transformation
- * - Auto-detects encoding (CP437 vs ISO-8859-1)
- * - Applies iCE colors transformation when detected in SAUCE metadata
- * - Logs encoding detection results for debugging
- */
-function readScreenWithTransforms(filePath: string): ReadScreenResult {
-  const result = readScreenTextWithMetadata(filePath);
-  const debugEnabled = process.env.SCREEN_DEBUG !== '0';
-
-  // Log encoding detection
-  if (debugEnabled) {
-console.log(`[SCREEN] readScreenWithTransforms: ${filePath}`);
-console.log(`[SCREEN]   Encoding: ${result.encoding}, iCE: ${result.iceColors}`);
-    if (result.width || result.height) {
-console.log(`[SCREEN]   SAUCE dimensions: ${result.width}x${result.height}`);
-    }
-  }
-
-  // Apply iCE colors transformation if needed
-  if (result.iceColors) {
-    if (debugEnabled) {
-console.log(`[SCREEN]   Applying iCE colors transformation`);
-    }
-    result.text = transformIceColors(result.text);
-  }
-
-  return result;
-}
-
-/**
- * Transform ANSI for iCE colors mode
- *
- * In iCE colors mode (common in PC ANSI art):
- * - The blink attribute (SGR 5) becomes high-intensity background instead of blinking
- * - This gives 16 background colors (8 normal + 8 bright)
- *
- * Standard ANSI backgrounds: 40-47 (black, red, green, yellow, blue, magenta, cyan, white)
- * iCE bright backgrounds: 100-107 (same colors but bright)
- *
- * Transformation rules:
- * - When SGR 5 (blink) is combined with background 40-47:
- *   Replace with bright background 100-107 and remove the blink
- * - Track state to handle sequences like: ESC[5m (enable blink) then ESC[44m (set bg)
- */
-function transformIceColors(content: string): string {
-  // Track ANSI state
-  let blinkEnabled = false;
-  let currentBg = -1; // -1 = default, 40-47 = normal bg, 100-107 = bright bg
-
-  // Process the content, transforming SGR sequences
-  return content.replace(/\x1b\[([0-9;]*)m/g, (match, params) => {
-    if (!params) {
-      // ESC[m = reset all
-      blinkEnabled = false;
-      currentBg = -1;
-      return match;
-    }
-
-    const codes = params.split(';').map((c: string) => parseInt(c, 10) || 0);
-    const newCodes: number[] = [];
-    let needsBrightBg = false;
-
-    for (let i = 0; i < codes.length; i++) {
-      const code = codes[i];
-
-      if (code === 0) {
-        // Reset - clear state
-        blinkEnabled = false;
-        currentBg = -1;
-        newCodes.push(code);
-      } else if (code === 5) {
-        // Blink attribute - in iCE mode, this enables bright background
-        blinkEnabled = true;
-        // Don't add blink to output - we'll convert to bright bg instead
-        if (currentBg >= 40 && currentBg <= 47) {
-          needsBrightBg = true;
-        }
-      } else if (code === 25) {
-        // Turn off blink
-        blinkEnabled = false;
-        newCodes.push(code);
-      } else if (code >= 40 && code <= 47) {
-        // Background color
-        currentBg = code;
-        if (blinkEnabled) {
-          // Convert to bright background (100-107)
-          newCodes.push(code + 60);
-        } else {
-          newCodes.push(code);
-        }
-      } else if (code >= 100 && code <= 107) {
-        // Already bright background
-        currentBg = code;
-        newCodes.push(code);
-      } else if (code === 49) {
-        // Default background
-        currentBg = -1;
-        newCodes.push(code);
-      } else {
-        // Other codes pass through unchanged
-        newCodes.push(code);
-      }
-    }
-
-    // If we need to apply bright background to existing bg
-    if (needsBrightBg && currentBg >= 40 && currentBg <= 47) {
-      // Find and replace background code in newCodes
-      for (let i = 0; i < newCodes.length; i++) {
-        if (newCodes[i] >= 40 && newCodes[i] <= 47) {
-          newCodes[i] = newCodes[i] + 60;
-          currentBg = newCodes[i];
-        }
-      }
-    }
-
-    if (newCodes.length === 0) {
-      return ''; // Remove empty sequence
-    }
-
-    return `\x1b[${newCodes.join(';')}m`;
-  });
+function readScreenWithTransforms(filePath: string): AmigaTextResult {
+  return readAmigaTextFileWithTransforms(filePath);
 }
 
 // Screen/MCI debugging: always log unless explicitly disabled

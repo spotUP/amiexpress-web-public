@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
-import { readBulletinFile } from '../../utils/file-cache.util';
+import { readAmigaTextFileWithTransforms } from '../../utils/amiga-text-decode.util';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { ParamsUtil } from '../../utils/params.util';
@@ -86,8 +86,10 @@ async function displayBullHelpScreen(socket: any, session: any, baseDirs: string
   if (bullHelpPath) {
     // Load and display the file
     try {
-      // Use file cache for better performance (70-90% reduction in disk I/O)
-      let content = readBulletinFile(bullHelpPath);
+      // Encoding-aware decode (CP437 / ISO-8859-1 / iCE colors). Reading via
+      // utf-8 here would silently turn standalone high-bit bytes (0xB7 ·,
+      // 0xA9 ©, 0xAE ®) into U+FFFD, corrupting Amiga ANSI art.
+      let content = readAmigaTextFileWithTransforms(bullHelpPath).text;
 
       // Parse MCI codes
       if (_parseMciCodes) {
@@ -144,8 +146,8 @@ async function displayBulletin(
   if (bulletinPath) {
     // Load and display the file
     try {
-      // Use file cache for better performance (70-90% reduction in disk I/O)
-      let content = readBulletinFile(bulletinPath);
+      // Encoding-aware decode (see displayBullHelp comment above).
+      let content = readAmigaTextFileWithTransforms(bulletinPath).text;
 
       // Parse MCI codes
       if (_parseMciCodes) {
