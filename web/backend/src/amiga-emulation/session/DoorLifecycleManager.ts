@@ -949,6 +949,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
 
         const pcAfterBatch = this.emulator.getRegister(16);
 
+
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
         if (TRACE_PC_JUMPS && pcBeforeBatch > 0 && pcAfterBatch > 0) {
           const pcDelta = pcAfterBatch - pcBeforeBatch;

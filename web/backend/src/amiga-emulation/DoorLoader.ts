@@ -229,20 +229,6 @@ debugLog(
       )}`
     );
     this.logger?.info(`Entry point: 0x${hunkFile.entryPoint.toString(16)}`);
-    // TEMP DEBUG: dump col_x_1/col_x_2/col_x_3 contents and the pre-relocation
-    // immediate operand at code offset 0x1b82 (DOORSMENU SMult32-pattern bug).
-    if (hunkFile.entryPoint === 0x2008 && hunkFile.segments[0]?.size === 21844) {
-      const col1 = this.emulator.readMemory32(0x3cc6);
-      const col2_0 = this.emulator.readMemory32(0x3cca);
-      const col2_1 = this.emulator.readMemory32(0x3cce);
-      const col3_0 = this.emulator.readMemory32(0x3cba);
-      const col3_1 = this.emulator.readMemory32(0x3cbe);
-      const col3_2 = this.emulator.readMemory32(0x3cc2);
-      const movImm = this.emulator.readMemory32(0x3b8a);
-      console.log(`[DM-DIAG] col_x_1[0]=${col1} (expect 30); col_x_2={${col2_0},${col2_1}} (expect 6,54)`);
-      console.log(`[DM-DIAG] col_x_3={${col3_0},${col3_1},${col3_2}} (expect 6,30,54)`);
-      console.log(`[DM-DIAG] move.l #imm at 0x3b8a = 0x${movImm.toString(16)} (expect 0x3cc6 if col_x_1 reloc OK)`);
-    }
 
     // Initialize SharedBBSData for CommandsStructure access
     // RTW and other XIM doors expect A5-88 to point to CommandsStructure
