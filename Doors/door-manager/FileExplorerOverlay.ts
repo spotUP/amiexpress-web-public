@@ -182,8 +182,17 @@ export class FileExplorerOverlay {
     let entries: fs.Dirent[] = [];
     try {
       entries = fs.readdirSync(absDir, { withFileTypes: true });
-    } catch {
-      this.listWidget.setItems(['{red-fg}Cannot read directory{/red-fg}']);
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      // Surface the actual reason — sysops were getting a generic "Cannot read directory"
+      // with no clue why (path missing? permission denied? not a directory?).
+      const code = e?.code ?? 'ERR';
+      const msg = e?.message ?? String(err);
+      this.listWidget.setItems([
+        `{red-fg}Cannot read directory: ${code}{/red-fg}`,
+        `{gray-fg}${absDir}{/gray-fg}`,
+        `{gray-fg}${msg}{/gray-fg}`,
+      ]);
       this.screen.render();
       return;
     }
