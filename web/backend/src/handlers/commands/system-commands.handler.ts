@@ -165,6 +165,18 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   // Normal logout - express.e:8284-8289
   session.state = BBSState.AWAIT;
 
+  // express.e:8222 + 8230-8231 — sysop lifecycle hooks on disconnect.
+  // Fire 'LOGOFF' (global) then 'LOGOFF<nodeId>' (per-node). Sysops use
+  // these to run cleanup scripts, rotate logs, etc. The same command
+  // resolver handles both global and per-node by suffixing the node.
+  try {
+    const { processSysCommand } = require('../../utils/syscommand.util');
+    await processSysCommand(socket, session, 'LOGOFF');
+    await processSysCommand(socket, session, `LOGOFF${session.nodeId || 0}`);
+  } catch (err) {
+    console.error('[LOGOFF] Error processing LOGOFF sys-commands:', err);
+  }
+
   // express.e:8191 aePuts('\b\nClick...') — express.e relies on the modem to print
   // "NO CARRIER" when the line drops. WEB_: there's no modem in our path, so we
   // append the conventional "NO CARRIER" string ourselves so users get the same

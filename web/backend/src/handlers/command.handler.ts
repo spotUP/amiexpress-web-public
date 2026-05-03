@@ -1420,18 +1420,33 @@ console.log(' PETSCII mode enabled: 40x25 terminal');
 
 console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ansiEnabled ? 'ANSI/RIP' : 'None');
 
-        // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE
-        // Web connections never carry the STEALTH_MODE node tooltype, so we always run the
-        // Not(STEALTH_MODE) branch: gate fires after ANSI prompt, before BBSTITLE display.
+        // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE.
+        // STEALTH_MODE is a per-node tooltype (Node{N}.info) that suppresses the
+        // system password gate for trusted nodes. Sysops use this on internal/LAN
+        // node configs where the system password is already vouched for at the
+        // network layer.
         session.tempData.inputBuffer = ''; // Clear buffer
         {
           const { loadBBSConfig } = require('../services/bbs-config-file.service');
           const path = require('path');
+          const fsSync = require('fs');
           const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..');
           let diskCfg: any = {};
           try { diskCfg = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
           const sysPass = (diskCfg.system_password || '').trim();
-          if (sysPass.length > 0) {
+          // express.e:29548 IF (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE')))
+          // Read the per-node icon's tooltype set; presence of STEALTH_MODE bypasses the gate.
+          let stealthMode = false;
+          try {
+            const nodeId = session.nodeId || 0;
+            const nodeIconPath = path.join(bbsRoot, `Node${nodeId}.info`);
+            if (fsSync.existsSync(nodeIconPath)) {
+              const buf = fsSync.readFileSync(nodeIconPath);
+              // Cheap scan — STEALTH_MODE appears as ASCII in the tooltype block
+              if (buf.includes(Buffer.from('STEALTH_MODE'))) stealthMode = true;
+            }
+          } catch { /* tooltype probe failed — treat as not-stealth */ }
+          if (sysPass.length > 0 && !stealthMode) {
             // System password configured — enter gate (express.e:29329-29356)
             session.tempData.systemPasswordAttempts = 0;
             session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;

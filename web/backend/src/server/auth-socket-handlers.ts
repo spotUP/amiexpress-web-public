@@ -309,9 +309,38 @@ console.log('Too many login errors, disconnecting');
           return;
         }
 
-        // express.e:29605-29631 - Check if user exists first, then authenticate
+        // express.e:29605-29631 - Check if user exists first, then authenticate.
+        // express.e:29598-29602 — when USERNUMBER_LOGIN node tooltype is set
+        // AND the input is a positive integer, treat it as a slot number and
+        // load that account directly (loadAccount(userNum)) instead of by name.
         const passwordValue = data.password ?? '';
-        const existingUser = await db.getUserByUsername(safeUsername);
+        let existingUser: any = null;
+        const userNumMatch = /^\d+$/.exec(safeUsername);
+        if (userNumMatch) {
+          try {
+            const fsSync = require('fs');
+            const path = require('path');
+            const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../..');
+            const nodeIconPath = path.join(bbsRoot, `Node${session.nodeId || 0}.info`);
+            let userNumberLogin = false;
+            if (fsSync.existsSync(nodeIconPath)) {
+              const buf = fsSync.readFileSync(nodeIconPath);
+              if (buf.includes(Buffer.from('USERNUMBER_LOGIN'))) userNumberLogin = true;
+            }
+            if (userNumberLogin) {
+              const slotNum = parseInt(safeUsername, 10);
+              if (slotNum > 0) {
+                // Look up by slot number — most repos expose this via a custom getter.
+                if (typeof (db as any).getUserBySlotNumber === 'function') {
+                  existingUser = await (db as any).getUserBySlotNumber(slotNum);
+                }
+              }
+            }
+          } catch { /* tooltype probe / lookup failed — fall through to name lookup */ }
+        }
+        if (!existingUser) {
+          existingUser = await db.getUserByUsername(safeUsername);
+        }
 
         if (!existingUser) {
 console.log('User not found, prompting for new user creation');
