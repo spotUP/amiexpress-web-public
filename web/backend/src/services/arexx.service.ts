@@ -1884,10 +1884,28 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
   }
 
   /**
-   * Evaluate expression
+   * Evaluate expression — REXX semantics, with explicit `||` concat
+   * recognized BEFORE the string-literal pass so that
+   *   "Welcome back, " || username || "!"
+   * doesn't get misclassified as a single quoted string spanning the whole
+   * expression. Concatenation splits respect quotes and parens so
+   *   "a||b" || foo("x||y")
+   * tokenizes correctly.
    */
   private async evaluateExpression(expr: string): Promise<any> {
     expr = expr.trim();
+    if (expr.length === 0) return '';
+
+    // FIRST: split on top-level `||` (outside quotes / parens). This catches
+    // common REXX strings like `"x" || y || "z"` where the whole expression
+    // happens to start and end with `"`.
+    const concatParts = this.splitTopLevel(expr, '||');
+    if (concatParts.length > 1) {
+      const evaluated = await Promise.all(
+        concatParts.map(p => this.evaluateExpression(p.trim())),
+      );
+      return evaluated.map(v => (v === undefined || v === null) ? '' : String(v)).join('');
+    }
 
     // String literal
     if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
@@ -1909,15 +1927,41 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
       return await this.evaluateFunction(expr);
     }
 
-    // Concatenation
-    if (expr.includes('||')) {
-      const parts = expr.split('||');
-      const evaluated = await Promise.all(parts.map(p => this.evaluateExpression(p.trim())));
-      return evaluated.join('');
-    }
-
     // Default: return as string
     return expr;
+  }
+
+  /**
+   * Split `s` on `delim` at the top level — ignores delim inside single
+   * or double quotes and inside balanced parens. Returns an array of
+   * substrings. If no top-level delim found, returns [s] unchanged.
+   */
+  private splitTopLevel(s: string, delim: string): string[] {
+    const out: string[] = [];
+    let buf = '';
+    let inS = false;     // inside '
+    let inD = false;     // inside "
+    let depth = 0;       // paren depth
+    const dlen = delim.length;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (!inS && !inD) {
+        if (c === "'" ) { inS = true; buf += c; continue; }
+        if (c === '"' ) { inD = true; buf += c; continue; }
+        if (c === '(') { depth++; buf += c; continue; }
+        if (c === ')') { depth = Math.max(0, depth - 1); buf += c; continue; }
+        if (depth === 0 && s.substr(i, dlen) === delim) {
+          out.push(buf);
+          buf = '';
+          i += dlen - 1;
+          continue;
+        }
+      } else if (inS && c === "'") { inS = false; buf += c; continue; }
+      else if (inD && c === '"') { inD = false; buf += c; continue; }
+      buf += c;
+    }
+    out.push(buf);
+    return out;
   }
 
   /**

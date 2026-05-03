@@ -27,7 +27,10 @@ import {
   trackPendingDisconnect
 } from './session-manager';
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
-import { nodeManager, arexxEngine } from '../services/node-manager.service';
+import { nodeManager } from '../services/node-manager.service';
+// Use the real interpreter (full REXX semantics) instead of the simulated
+// stub that previously lived in node-manager.service.ts.
+import { arexxEngine } from '../services/arexx.service';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { userFileManager } from '../services/UserFileManager';
 import { runLogoffBatches, runExecuteOn } from '../services/batch-scheduler';

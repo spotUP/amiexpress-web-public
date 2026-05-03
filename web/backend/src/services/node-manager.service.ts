@@ -705,5 +705,14 @@ console.error('FTP transfer initialization error:', error);
 
 // Export singleton instances
 export const nodeManager = new NodeManager();
-export const arexxEngine = new AREXXEngine();
+// arexxEngine: the AREXXEngine class above is the legacy SIMULATED stub
+// (executeScript only logs "Simulate script execution" and returns hardcoded
+// strings keyed off filename). The REAL interpreter lives in
+// services/arexx.service.ts (EnhancedAREXXEngine — full REXX semantics
+// with procedures, SIGNAL, trace, ARG, BBS bindings).
+//
+// We deliberately do NOT export the simulated AREXXEngine. All callers
+// import { arexxEngine } from '../services/arexx.service' instead. The
+// class is kept here so existing test imports of `AREXXEngine` (if any)
+// don't break, but new code should not instantiate it.
 export const protocolManager = new ProtocolManager();

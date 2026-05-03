@@ -19,9 +19,13 @@ import { config } from "./config";
 import { qwkManager, ftnManager } from "./services/qwk.service";
 import {
   nodeManager,
-  arexxEngine,
   protocolManager,
 } from "./services/node-manager.service";
+// Real AREXX interpreter (services/arexx.service.ts) — full REXX semantics
+// with procedures, SIGNAL, trace, ARG, BBS function bindings. The stub
+// previously imported from node-manager.service.ts only logged
+// "Simulate script execution" — it didn't run the script body.
+import { arexxEngine } from "./services/arexx.service";
 import { nodeFileManager } from "./services/NodeFileManager";
 import { callersLogManager } from "./services/CallersLogManager";
 import { doorDropFileManager } from "./services/DoorDropFileManager";
