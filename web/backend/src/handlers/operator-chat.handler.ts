@@ -27,7 +27,7 @@ import {
 import { OperatorChatRepository } from '../database/operator-chat.repository';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { getGrumpySysopResponse, getGrumpyBotIntroMessage, simulateNaturalTyping } from './grumpy-sysop-bot.handler';
+import { getGrumpySysopResponse, getGrumpyBotIntroMessage } from './grumpy-sysop-bot.handler';
 import {
   renderPicker,
   handlePickerInput,
@@ -729,9 +729,12 @@ async function sendChatMessage(
   if (senderType === 'user') (chatSession as any).userTypingBuffer = '';
   if (senderType === 'sysop') (chatSession as any).sysopTypingBuffer = '';
 
-  // If bot-controlled and message is from user, generate bot response
-console.log(`[Operator Chat] Checking bot response: isBotControlled=${(chatSession as any).isBotControlled}, senderType=${senderType}`);
-  if ((chatSession as any).isBotControlled && senderType === 'user') {
+  // If bot-controlled and the user just sent a non-empty line, trigger a bot
+  // reply. express.e:5966-6028 chat() is char-echo + line-flush on Enter —
+  // there is no "double enter" signal. Previously this required an empty
+  // message before responding, which is non-obvious; users typed a question
+  // and waited indefinitely.
+  if ((chatSession as any).isBotControlled && senderType === 'user' && message.trim() !== '') {
     const page = repository.getPageRequest(pageId);
     if (page) {
       const context = {
@@ -741,34 +744,20 @@ console.log(`[Operator Chat] Checking bot response: isBotControlled=${(chatSessi
         timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
         messageHistory: (chatSession as any).botMessageHistory || []
       };
+      context.messageHistory.push({ role: 'user', content: message });
+      (chatSession as any).botMessageHistory = context.messageHistory;
 
-      // Add user message to history if it has content
-      if (message.trim() !== '') {
-        context.messageHistory.push({ role: 'user', content: message });
+      getGrumpySysopResponse(message, context).then(botResponse => {
+        context.messageHistory.push({ role: 'bot', content: botResponse });
         (chatSession as any).botMessageHistory = context.messageHistory;
-console.log(`[Operator Chat] Added user message to history: "${message}"`);
-      }
-
-      // Trigger bot reply ONLY if user sent an empty message (Double Enter signal)
-      if (message.trim() === '') {
-console.log(`[Operator Chat] User sent double-enter (empty message), triggering bot response...`);
-        
-        getGrumpySysopResponse(message, context).then(botResponse => {
-          // Add bot message to history
-          context.messageHistory.push({ role: 'bot', content: botResponse });
-          (chatSession as any).botMessageHistory = context.messageHistory;
-
-          // Send bot response with natural typing after short delay
-          setTimeout(() => {
-            simulateNaturalTyping(io, pageId, botResponse, () => {
-              // After typing animation completes, save message to database
-              sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', botResponse, nodeId);
-            });
-          }, 500 + Math.random() * 500); // 0.5-1.0s delay
-        }).catch(err => {
+        // Persist + emit immediately. The previous 0.5-1.0s setTimeout +
+        // simulateNaturalTyping (20-80ms/char with typo simulation) added
+        // 3-5s of artificial latency on top of the LLM round-trip; express.e
+        // has no such delay — sysop chars echo at line speed.
+        sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', botResponse, nodeId);
+      }).catch(err => {
 console.error('[Operator Chat] Bot response error:', err);
-        });
-      }
+      });
     }
   }
 
@@ -962,12 +951,11 @@ console.log(`[Operator Chat] Set isBotControlled=true for page ${page.id}`);
 console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${page.id}`);
       }
 
-      // Send intro message with natural typing simulation
+      // Send intro message immediately (express.e has no typing simulation;
+      // sysop chars echo at line speed). The user sees the intro the moment
+      // the bot is activated rather than 2-4s later.
       const introMsg = getGrumpyBotIntroMessage();
-      await simulateNaturalTyping(io, page.id, introMsg, () => {
-        // After typing animation completes, save message to database
-        sendChatMessage(io, repository, page.id, 'bot', 'GrumpyBot', 'sysop', introMsg, page.nodeId);
-      });
+      sendChatMessage(io, repository, page.id, 'bot', 'GrumpyBot', 'sysop', introMsg, page.nodeId);
 
 console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
     }
