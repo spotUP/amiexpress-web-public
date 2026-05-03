@@ -867,11 +867,13 @@ console.error('[saveMessage] Error:', error);
 
   // Force the menu prompt to render. The debounce in displayMainMenu/displayMenuPrompt
   // could swallow the post-save prompt if any earlier code path bumped the timestamps;
-  // forceMenuDisplay=true bypasses that. saveMessage is one place where we are CERTAIN
-  // we want the menu prompt — no race.
+  // bypassDebounce=true sidesteps that. We deliberately leave forceMenuDisplay=false so
+  // expert-mode users (user.expert='X', set by the X command) don't get the full ANSI
+  // menu redrawn over their preference — express.e suppresses the menu screen in expert
+  // mode but still shows the trailing prompt (express.e:28586+ displayMenu).
   try {
     const { displayMainMenu } = require('../command-handler/menu');
-    await displayMainMenu(socket, session, true /* forceMenuDisplay */);
+    await displayMainMenu(socket, session, false /* forceMenuDisplay */, true /* bypassDebounce */);
   } catch (_) { /* swallow — advanceDisplayFlow is the fallback */ }
 }
 

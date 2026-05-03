@@ -25,8 +25,16 @@ import { EnvStat } from '../../constants/env-codes';
  * Display main menu (express.e:28586)
  * menuPause controls whether we show a pause prompt before the menu; display is gated by expert/door flags.
  * forceMenuDisplay bypasses expert-mode suppression (used by ? command).
+ * bypassDebounce skips the 500ms anti-double-render guard but still respects expert mode —
+ * use this when you want to GUARANTEE the prompt re-renders (e.g. after saving a message)
+ * without overriding the user's "expert" preference, which would draw the full ANSI menu.
  */
-export async function displayMainMenu(socket: any, session: BBSSession, forceMenuDisplay: boolean = false) {
+export async function displayMainMenu(
+  socket: any,
+  session: BBSSession,
+  forceMenuDisplay: boolean = false,
+  bypassDebounce: boolean = false,
+) {
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu once after the entire scan finishes
   if ((session as any).inConfScan && !forceMenuDisplay) {
@@ -34,10 +42,12 @@ console.log('[menu] displayMainMenu SKIPPED (in confScan)');
     return;
   }
 
-  // WEB_: MODERN_* — 500ms debounce prevents duplicate menu display on rapid door-completion/state-transition races; no express.e equivalent
+  // WEB_: MODERN_* — 500ms debounce prevents duplicate menu display on rapid door-completion/state-transition races; no express.e equivalent.
+  // forceMenuDisplay implies bypassDebounce (callers that need to override the expert check
+  // are also asserting "show this regardless"), but bypassDebounce can be set on its own.
   const now = Date.now();
   const lastMenuTime = (session as any)._lastMainMenuTime || 0;
-  if (now - lastMenuTime < 500 && !forceMenuDisplay) {
+  if (now - lastMenuTime < 500 && !forceMenuDisplay && !bypassDebounce) {
 console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - lastMenuTime, 'ms ago)');
     return;
   }
