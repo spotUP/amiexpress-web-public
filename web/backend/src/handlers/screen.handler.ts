@@ -147,6 +147,9 @@ function getScreenFileName(screenName: string): string {
   // DOWNLOADMSG, UPLOADMSG -> DownloadMsg, UploadMsg
   if (upper === 'DOWNLOADMSG') return 'DownloadMsg';
   if (upper === 'UPLOADMSG') return 'UploadMsg';
+  // express.e:6639-6641 — SCREEN_LOGON24 looks up 'Logon24hrs', not 'LOGON24'.
+  // Sysops with original reference-board files use that name.
+  if (upper === 'LOGON24') return 'Logon24hrs';
   return screenName;
 }
 
