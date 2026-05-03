@@ -64,6 +64,11 @@ export class XIMIOHandler {
   private lineInputMessage: XIMMessage | null = null;
   private lineInputBuffer: string = '';
   private lineInputMaxLen: number = DoorConstants.MESSAGE_STRING_CAPACITY;
+  // express.e:1504-1548 (getPass2) — when SIG_LI is active, echo '*' instead of
+  // the typed character. express.e also caps secure input at 30 chars regardless
+  // of msg.data (line 1548: `UNTIL (c=13) OR (c=12) OR (j>=30)`).
+  private secureLineInput: boolean = false;
+  private static readonly SECURE_LINE_INPUT_MAX = 30;
 
   // Hotkey/pause state
   private waitingForHotkey: boolean = false;
@@ -244,9 +249,10 @@ export class XIMIOHandler {
         // For line input, add token to buffer (even if it's an escape sequence)
         if (this.lineInputBuffer.length < this.lineInputMaxLen) {
           this.lineInputBuffer += token;
-          // Echo typed character (only for single visible characters)
+          // Echo typed character (only for single visible characters).
+          // express.e:1543-1544 — SIG_LI echoes '*' instead of the literal char.
           if (token.length === 1 && token >= ' ' && token <= '~') {
-            this.directEmit('ansi-output', token);
+            this.directEmit('ansi-output', this.secureLineInput ? '*' : token);
           }
         }
         continue;
@@ -412,10 +418,10 @@ export class XIMIOHandler {
         }
         continue;
       }
-      // Add to buffer and echo
+      // Add to buffer and echo (SIG_LI echoes '*' per express.e:1543-1544).
       this.lineInputBuffer += token;
       if (token.length === 1 && token >= ' ' && token <= '~') {
-        this.directEmit('ansi-output', token);
+        this.directEmit('ansi-output', this.secureLineInput ? '*' : token);
       }
     }
 
@@ -424,6 +430,77 @@ export class XIMIOHandler {
     // which then take precedence in queueInput() causing characters to be
     // treated as hotkey responses instead of accumulating in line buffer.
     // This caused Dre!Wall and other doors to "submit after 1-2 characters".
+    this.emulator.pause();
+  }
+
+  /**
+   * Handle secure line input request (SIG_LI / 912)
+   *
+   * express.e:4205-4207:
+   *   CASE SIG_LI
+   *     getPass2(msg.string, NIL, 0, msg.data, tempstring)
+   *     AstrCopy(msg.string, tempstring, 200)
+   *
+   * Per getPass2 (express.e:1504-1548):
+   *  - msg.string is the **prompt** (not default text — unlike JH_LI).
+   *  - msg.data is the requested max length, but the loop is hard-capped at
+   *    30 chars (line 1548: `UNTIL (c=13) OR (c=12) OR (j>=30)`).
+   *  - Each typed visible char is echoed as '*' (line 1544: `conPuts('*')`),
+   *    not the literal character.
+   *  - Backspace handling and Enter-terminator are identical to JH_LI.
+   *
+   * We reuse the existing line-input plumbing but flip `secureLineInput`
+   * so the echo path emits '*' instead of the literal char.
+   */
+  handleSecureLineInput(msg: XIMMessage): void {
+    debugLog(`[XIMIOHandler] SIG_LI (Secure Line Input) received - setting usedXimInput=true`);
+    this.state.usedXimInput = true;
+
+    if (this.state.carrierDropped) {
+      this.reply(msg, -1, '');
+      this.emulator.resume();
+      return;
+    }
+
+    // express.e:1548 caps secure input at 30 chars regardless of msg.data.
+    const requestedMax = msg.data && msg.data > 0
+      ? msg.data
+      : XIMIOHandler.SECURE_LINE_INPUT_MAX;
+    const maxLen = Math.min(requestedMax, XIMIOHandler.SECURE_LINE_INPUT_MAX);
+
+    // express.e:1517 — getPass2 starts by writing the prompt via aePuts.
+    const prompt = this.getMessageString(msg);
+    if (prompt && prompt.length > 0) {
+      this.directEmit('ansi-output', prompt);
+    }
+
+    this.waitingForLineInput = true;
+    this.secureLineInput = true;
+    this.lineInputMessage = msg;
+    this.lineInputBuffer = '';
+    this.lineInputMaxLen = maxLen;
+
+    // Drain any input that arrived before we set the flags. Echo '*' for
+    // visible chars (matches express.e:1544 conPuts('*')).
+    while (this.inputQueue.length > 0 && this.lineInputBuffer.length < maxLen) {
+      const token = this.inputQueue.shift()!;
+      if (token === '\r' || token === '\n') {
+        this.completeLineInput();
+        return;
+      }
+      if (token === '\b' || token === '\x7f') {
+        if (this.lineInputBuffer.length > 0) {
+          this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
+          this.directEmit('ansi-output', '\b \b');
+        }
+        continue;
+      }
+      this.lineInputBuffer += token;
+      if (token.length === 1 && token >= ' ' && token <= '~') {
+        this.directEmit('ansi-output', '*');
+      }
+    }
+
     this.emulator.pause();
   }
 
@@ -480,6 +557,7 @@ debugLog(
     this.lineInputMessage = null;
     this.lineInputBuffer = '';
     this.lineInputMaxLen = DoorConstants.MESSAGE_STRING_CAPACITY;
+    this.secureLineInput = false;
 
 debugLog('[XIMIOHandler] Line input completed, reply sent, resuming emulator');
     this.emulator.resume();
@@ -1545,6 +1623,7 @@ debugLog(`  Data: ${data}`);
       this.waitingForLineInput = false;
       this.lineInputMessage = null;
       this.lineInputBuffer = '';
+      this.secureLineInput = false;
     }
 
     if (this.waitingForHotkey && this.hotkeyMessage) {
@@ -1629,6 +1708,7 @@ debugLog(`[XIMIOHandler] Clearing input buffer (requestMore=${requestMoreInput})
 debugLog('[XIMIOHandler] Aborting pending line input');
       this.waitingForLineInput = false;
       this.lineInputMessage = null;
+      this.secureLineInput = false;
     }
 
     if (this.waitingForHotkey && this.hotkeyMessage) {

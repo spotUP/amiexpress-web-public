@@ -83,6 +83,10 @@ describe('Conference Tooltypes Utility', () => {
           noConfBulls: false,
           freeDownloads: false,
           menuPrompt: '',
+          requireUsername: false,
+          requireRealname: false,
+          requireUsernameMsgBases: new Set<number>(),
+          requireRealnameMsgBases: new Set<number>(),
         });
       });
 

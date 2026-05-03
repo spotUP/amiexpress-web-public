@@ -1661,27 +1661,6 @@ debugLog(`[XIMSystem] SETMCIOFF: ${off}`);
   }
 
   /**
-   * Handle SIG_LI (912)
-   * express.e:4205-4207: Secure line input (password mode, no echo)
-   * This is like JH_LI but the input is not echoed to screen
-   */
-  handleSecureLineInput(msg: XIMMessage): void {
-    const maxLen = msg.data > 0 ? msg.data : 80;
-debugLog(`[XIMSystem] SIG_LI: maxLen=${maxLen} (secure input, no echo)`);
-
-    // For now, return empty string - actual implementation would need
-    // frontend support for password input mode
-    // The door expects the result in msg.string
-    this.messageParser.writeMessageString(msg.msgAddr, '');
-
-    // TODO: Implement actual secure line input via socket event
-    // This would emit 'door:password-input' and wait for response
-debugLog(`[XIMSystem]   NOTE: SIG_LI not fully implemented - returning empty string`);
-
-    this.reply(msg, 0);
-  }
-
-  /**
    * Handle GET_MENU_COMMAND_CHAR (623)
    * express.e:4049-4050: Get menu command character
    */

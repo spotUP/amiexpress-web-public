@@ -1462,7 +1462,10 @@ debugLog(
         break;
 
       case XIMCommand.SIG_LI:
-        this.systemCommandsHandler.handleSecureLineInput(msg);
+        // express.e:4205-4207 — SIG_LI mirrors JH_LI but echoes '*' instead
+        // of the literal char. Routed through the IO handler so it shares
+        // the line-input pause/resume + queue-drain plumbing.
+        this.ioHandler.handleSecureLineInput(msg);
         break;
 
       case XIMCommand.GET_MENU_COMMAND_CHAR:
