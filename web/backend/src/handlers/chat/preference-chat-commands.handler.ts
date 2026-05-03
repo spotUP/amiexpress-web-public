@@ -146,20 +146,47 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
 console.log('[ENV] Mail');
 
   // express.e:8779-8783 commentToSYSOP():
-  // separator box, To: sysopName line, then Subject prompt
+  // separator box, To: sysopName line, then Subject prompt.
+  // express.e:8792 mailHeader.status:="R" — comments are always Private.
+  // express.e:8793 comment:=1 → enterMSG JUMPs to skipAll, bypassing To/
+  //  Subject/Private prompts. Our state machine emits Subject prompt here
+  //  directly (since toUser is pre-set), then handleMessageSubjectInput
+  //  routes via the isComment flag below straight to the body editor —
+  //  matching express.e's "no Private prompt for comments" semantic.
   const sysopName = session.tempData?.sysopName || 'sysop';
   socket.emit('ansi-output', '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
   socket.emit('ansi-output', `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m'\x1b[33mALL\x1b[32m'\x1b[32m?\x1b[0m ${sysopName}\r\n`);
-  socket.emit('ansi-output', '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
 
-  // Set up message entry with recipient pre-set to sysop
+  // Set up message entry with recipient pre-set to sysop. isComment=true
+  // signals the post-Subject handler to skip the Private prompt and force
+  // isPrivate=true (express.e:8792 status='R').
   session.inputBuffer = '';
   session.tempData = {
     isPrivate: true,
     messageEntry: {
-      toUser: 'sysop'  // Pre-set recipient to sysop
+      toUser: sysopName,
+      isComment: true,
+      isPrivate: true,  // express.e:8792 status='R'
     }
   };
+
+  // express.e:8782 checkToForward(str, mailHeader.toName, 0) — apply
+  // FORWARDMAIL on the conf icon. The check=0 path (express.e:9934-9947)
+  // unconditionally redirects to the FORWARDMAIL target if any.
+  try {
+    const confId = (session.currentConf as number) || 1;
+    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+    const flags = getConferenceToolFlags(confId);
+    const fwdUser = flags?.forwardMail || '';
+    if (fwdUser) {
+      socket.emit('ansi-output', `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`);
+      session.tempData.messageEntry.toUser = fwdUser;
+    }
+  } catch {
+    /* tooltype lookup failed — proceed without forward */
+  }
+
+  socket.emit('ansi-output', '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
   // Go directly to subject input since recipient is already set
   session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
 }

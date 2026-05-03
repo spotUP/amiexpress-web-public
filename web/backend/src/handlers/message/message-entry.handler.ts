@@ -895,6 +895,17 @@ function promptForSubject(socket: any, session: BBSSession): void {
 function promptForPrivate(socket: any, session: BBSSession): void {
   const toUser = session.tempData.messageEntry.toUser.toUpperCase();
 
+  // express.e:10760 IF(comment=1) THEN JUMP skipAll — comments to sysop
+  // skip ALL prompts (including Private) and go directly to the body editor.
+  // express.e:8792 forces mailHeader.status:='R' so comments are always
+  // Private. handleCommentToSysopCommand sets isComment=true to mark this
+  // path.
+  if (session.tempData.messageEntry.isComment) {
+    session.tempData.messageEntry.isPrivate = true;
+    promptForMessageBody(socket, session);
+    return;
+  }
+
   // Messages to ALL/EALL cannot be private - express.e:10850
   if (toUser === 'ALL' || toUser === 'EALL') {
     session.tempData.messageEntry.isPrivate = false;
@@ -1217,25 +1228,133 @@ function promptForMessageBody(socket: any, session: BBSSession): void {
  */
 
 /**
- * Handle recipient input for message forwarding (express.e:9817-9821)
+ * Handle recipient input for message forwarding (express.e:9817-9823)
+ *
+ * Mirrors handleMessageToInput's resolution path (#27):
+ *   - blank → 'ALL'
+ *   - 'eall' + EXTSEND on this msgbase → "Can't use EALL in external message bases!!"
+ *   - 'eall' without ACS_EALL_MESSAGES → "User does not exist!!"
+ *   - 'sysop' → 'SYSOP' (then FORWARDMAIL kicks in)
+ *   - regular → DB lookup, normalize to canonical name per confNameType,
+ *     checkConfAccess gate
+ *   - unconditionally apply applyConfForwardMail (express.e:9823 checkToForward)
  */
 export async function handleForwardMessageToInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  // Default to 'ALL' if empty (express.e:9817)
-  const recipient = input || 'ALL';
+  const trimmed = (input || '').trim().substring(0, 30);
+  // Stash a temporary messageEntry so the existing isExtSendMsgBase /
+  // applyConfForwardMail helpers (which read session.tempData.messageEntry)
+  // work in the forward context too.
+  session.tempData.messageEntry = session.tempData.messageEntry || {};
 
-  // Validate recipient name
-  const user = await _db.getUserByUsername(recipient.toUpperCase());
-  if (!user && recipient.toUpperCase() !== 'ALL') {
-    emitText(socket, '\r\nUser not found.\r\n');
-    emitPrompt(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
-    return; // Stay in same state
+  if (trimmed === '') {
+    session.tempData.forwardData.toUser = 'ALL';
+    session.tempData.messageEntry.toUser = 'ALL';
+    emitText(socket, '\r\n');
+    applyConfForwardMail(socket, session);
+    if (session.tempData.messageEntry.toUser !== 'ALL') {
+      session.tempData.forwardData.toUser = session.tempData.messageEntry.toUser;
+    }
+    promptForwardSubject(socket, session);
+    return;
   }
 
-  // Store recipient
-  session.tempData.forwardData.toUser = recipient.toUpperCase();
-  emitText(socket, '\r\n');
+  const lower = trimmed.toLowerCase();
+  if (lower === 'eall') {
+    if (isExtSendMsgBase(session)) {
+      emitText(socket, "\r\nCan't use EALL in external message bases!!\r\n\r\n");
+      // Bail back to reader rather than dropping to menu — forward was cancelled
+      const messages = session.tempData.msgReaderMessages || [];
+      const currentIndex = session.tempData.forwardOriginalIndex || 0;
+      session.subState = LoggedOnSubState.MSG_READER_NAV;
+      delete session.tempData.forwardData;
+      delete session.tempData.forwardOriginalMessage;
+      const { displaySingleMessage } = require('./messaging.handler');
+      await displaySingleMessage(socket, session, currentIndex);
+      return;
+    }
+    if (!checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
+      emitText(socket, '\r\nUser does not exist!!\r\n\r\n');
+      const messages = session.tempData.msgReaderMessages || [];
+      const currentIndex = session.tempData.forwardOriginalIndex || 0;
+      session.subState = LoggedOnSubState.MSG_READER_NAV;
+      delete session.tempData.forwardData;
+      delete session.tempData.forwardOriginalMessage;
+      const { displaySingleMessage } = require('./messaging.handler');
+      await displaySingleMessage(socket, session, currentIndex);
+      return;
+    }
+    session.tempData.forwardData.toUser = 'EALL';
+    session.tempData.messageEntry.toUser = 'EALL';
+    emitText(socket, '\r\n');
+    applyConfForwardMail(socket, session);
+    promptForwardSubject(socket, session);
+    return;
+  }
 
-  // Prompt for subject (express.e:9825-9826: lineInput pre-fills with mailHeader.subject)
+  if (lower === 'sysop') {
+    session.tempData.forwardData.toUser = 'SYSOP';
+    session.tempData.messageEntry.toUser = 'SYSOP';
+    emitText(socket, '\r\n');
+    applyConfForwardMail(socket, session);
+    if (session.tempData.messageEntry.toUser !== 'SYSOP') {
+      session.tempData.forwardData.toUser = session.tempData.messageEntry.toUser;
+    }
+    promptForwardSubject(socket, session);
+    return;
+  }
+
+  // express.e:10822-10841 — chooseAName + canonical name + checkConfAccess.
+  // Forward path uses the same logic as enterMSG.
+  let resolved = trimmed;
+  let resolvedUser: any = null;
+  try {
+    if (_db?.getUserByUsername) {
+      resolvedUser = await _db.getUserByUsername(trimmed);
+    }
+  } catch {
+    /* fall through — accept as-is */
+  }
+
+  if (resolvedUser) {
+    const confId = session.currentConf || 1;
+    const msgBaseId = session.currentMsgBase || 1;
+    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+    const flags = getConferenceToolFlags(confId);
+    const requireRealname = flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId);
+    const requireUsername = flags?.requireUsername || flags?.requireUsernameMsgBases?.has?.(msgBaseId);
+    if (requireRealname && resolvedUser.realName) {
+      resolved = String(resolvedUser.realName).substring(0, 26);
+    } else if (requireUsername && resolvedUser.username) {
+      resolved = String(resolvedUser.username).substring(0, 31);
+    } else if (resolvedUser.username) {
+      resolved = String(resolvedUser.username).substring(0, 31);
+    }
+    const { checkConfAccess } = require('./message-scan.handler');
+    if (typeof checkConfAccess === 'function' && !checkConfAccess(resolvedUser, confId)) {
+      emitText(socket, '\r\nUser does not have access to this conference!\r\n\r\n');
+      const messages = session.tempData.msgReaderMessages || [];
+      const currentIndex = session.tempData.forwardOriginalIndex || 0;
+      session.subState = LoggedOnSubState.MSG_READER_NAV;
+      delete session.tempData.forwardData;
+      delete session.tempData.forwardOriginalMessage;
+      const { displaySingleMessage } = require('./messaging.handler');
+      await displaySingleMessage(socket, session, currentIndex);
+      return;
+    }
+  }
+
+  session.tempData.forwardData.toUser = resolved;
+  session.tempData.messageEntry.toUser = resolved;
+  emitText(socket, '\r\n');
+  applyConfForwardMail(socket, session);
+  if (session.tempData.messageEntry.toUser !== resolved) {
+    session.tempData.forwardData.toUser = session.tempData.messageEntry.toUser;
+  }
+  promptForwardSubject(socket, session);
+}
+
+function promptForwardSubject(socket: any, session: BBSSession): void {
+  // express.e:9825-9826: Subject prompt with default = original subject.
   const originalSubject = session.tempData.forwardOriginalMessage?.subject || '';
   emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
   if (originalSubject) {
@@ -1273,20 +1392,16 @@ export async function handleForwardMessageSubjectInput(socket: any, session: BBS
 
 /**
  * Handle privacy choice for message forwarding (express.e:9837-9851)
+ *
+ * yesNo(2) semantics: y/Y/n/N exit; CR defaults to N; anything else loops.
  */
 export async function handleForwardMessagePrivateInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  let isPrivate = false;
-
-  // Handle Y/N input (express.e yesNo function)
-  if (input === 'Y') {
-    isPrivate = true;
-    emitText(socket, 'Yes\r\n');
-  } else if (input === 'N') {
-    isPrivate = false;
-    emitText(socket, 'No\r\n');
-  } else {
-    return; // Wait for valid input
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+    return; // loop — yesNo(2) waits for valid char
   }
+  const isPrivate = ch === 'Y';
+  emitText(socket, isPrivate ? 'Yes\r\n' : 'No\r\n');
 
   // Store privacy setting
   session.tempData.forwardData.isPrivate = isPrivate;
@@ -1304,20 +1419,16 @@ export async function handleForwardMessagePrivateInput(socket: any, session: BBS
 
 /**
  * Handle delete original confirmation for message forwarding (express.e:9853-9860)
+ *
+ * yesNo(2) semantics: y/Y/n/N exit; CR defaults to N; anything else loops.
  */
 export async function handleForwardMessageDeleteOriginalInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  let deleteOriginal = false;
-
-  // Handle Y/N input
-  if (input === 'Y') {
-    deleteOriginal = true;
-    emitText(socket, 'Yes\r\n');
-  } else if (input === 'N') {
-    deleteOriginal = false;
-    emitText(socket, 'No\r\n');
-  } else {
-    return; // Wait for valid input
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+    return; // loop
   }
+  const deleteOriginal = ch === 'Y';
+  emitText(socket, deleteOriginal ? 'Yes\r\n' : 'No\r\n');
 
   // Save forwarded message and optionally delete original
   await saveForwardedMessage(socket, session, deleteOriginal);
@@ -1352,6 +1463,11 @@ export async function handleReplyDeleteOriginalInput(socket: any, session: BBSSe
 
 /**
  * Save the forwarded message (express.e:9862-9871)
+ *
+ * Goes through writeMessageFile so the forwarded message gets the same
+ * lockMsgBase + canonical-status + attachment-list treatment as enterMSG
+ * outputs. Status follows express.e:9843-9851 — 'R' if Private, 'p' if
+ * censored or original was 'p', else 'P'.
  */
 async function saveForwardedMessage(socket: any, session: BBSSession, deleteOriginal: boolean): Promise<void> {
   emitText(socket, '\r\nSaving...');
@@ -1360,25 +1476,69 @@ async function saveForwardedMessage(socket: any, session: BBSSession, deleteOrig
     const originalMsg = session.tempData.forwardOriginalMessage;
     const forwardData = session.tempData.forwardData;
 
-    // Create new message with original body but new headers
-    const newMessage = {
+    // express.e:9843-9851 status computation:
+    //   Private → 'R'
+    //   Public + (ACS_CENSORED OR original was 'p') → 'p'
+    //   Public                                       → 'P'
+    const { MsgStatus } = require('../../services/MessageIndexManager');
+    const wasOriginalCensored = originalMsg?.status === 'p' ||
+                                originalMsg?.status === MsgStatus.CENSORED ||
+                                originalMsg?.censored === true;
+    const userIsCensored = checkSecurity(session.user, ACSPermission.CENSORED);
+    let status: number;
+    if (forwardData.isPrivate) {
+      status = MsgStatus.PRIVATE; // 'R'
+    } else if (userIsCensored || wasOriginalCensored) {
+      status = MsgStatus.CENSORED; // 'p'
+    } else {
+      status = MsgStatus.NORMAL; // 'P'
+    }
+
+    const { writeMessageFile, formatMessageDate } = require('../../utils/message-file.util');
+    const messageDate = getSystemTime();
+    const confId = originalMsg.conferenceId || session.currentConf || 1;
+    const msgBaseId = originalMsg.messageBaseId || session.currentMsgBase || 1;
+    // express.e:10707-10711 — forwarded messages also write A<N> attachment
+    // list when present (forward inherits attachments from original).
+    const inheritedAttachments: string[] = (originalMsg as any)?.attachments || [];
+    const msgNum = await writeMessageFile(
+      confId,
+      msgBaseId,
+      {
+        from: session.user.username,
+        to: forwardData.toUser,
+        subject: forwardData.subject,
+        date: formatMessageDate(messageDate),
+        body: originalMsg.body || '',
+        status,
+        attachments: inheritedAttachments.length > 0
+          ? { filenames: inheritedAttachments, deleteOnMessageDelete: false }
+          : undefined,
+      } as any,
+      config.get('dataDir'),
+      session.nodeId || 0,
+    );
+
+    // express.e:10692-10705: aePuts('Message Number N...done!\b\n\b\n')
+    emitText(socket, `Message Number ${msgNum}...done!`);
+
+    // Mirror to DB for web UI / search index — disk has the canonical copy.
+    await _db.createMessage({
       subject: forwardData.subject,
-      body: originalMsg.body, // Copy original message body
+      body: originalMsg.body,
       author: session.user.username,
-      timestamp: getSystemTime(),
-      conferenceId: originalMsg.conferenceId,
-      messageBaseId: originalMsg.messageBaseId,
+      timestamp: messageDate,
+      conferenceId: confId,
+      messageBaseId: msgBaseId,
       isPrivate: forwardData.isPrivate,
       toUser: forwardData.toUser,
       parentId: null,
-      attachments: [],
+      attachments: inheritedAttachments,
       edited: false,
       editedBy: null,
-      editedAt: null
-    };
-
-    // Save the forwarded message
-    await _db.createMessage(newMessage);
+      editedAt: null,
+      censored: status === MsgStatus.CENSORED,
+    } as any, { skipDiskWrite: true });
 
     // Delete original if requested
     if (deleteOriginal) {

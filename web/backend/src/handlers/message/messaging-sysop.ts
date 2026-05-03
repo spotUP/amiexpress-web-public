@@ -328,6 +328,32 @@ async function saveEditedHeader(socket: any, session: BBSSession): Promise<void>
       receivedAt: null
     });
 
+    // express.e:11643 saveOverHeader(gfh) — persist edited header to the
+    // canonical HeaderFile on disk. Without this, doors reading messages
+    // directly from disk would still see the old from/to/subject. The
+    // status flag follows our enterMSG rules: PRIVATE if isPrivate else
+    // CENSORED if poster has ACS_CENSORED else NORMAL. We don't have the
+    // editor's ACS context here so we just preserve the existing status,
+    // toggling only the PRIVATE bit.
+    try {
+      const { messageIndexManager, MsgStatus } = require('../../services/MessageIndexManager');
+      const confId = session.tempData.msgReaderConfId || session.currentConf || 1;
+      const msgNum = (msg.msgNumber || msg.id);
+      const newStatus = editHeader.isPrivate
+        ? MsgStatus.PRIVATE
+        : (msg.status === MsgStatus.CENSORED || msg.status === 'p' ? MsgStatus.CENSORED : MsgStatus.NORMAL);
+      messageIndexManager.updateMessageHeader(confId, msgNum, {
+        toName: (editHeader.to || '').substring(0, 31),
+        fromName: (editHeader.from || '').substring(0, 31),
+        subject: (editHeader.subject || '').substring(0, 31),
+        status: newStatus,
+        recv: 0,
+      });
+    } catch (e) {
+      console.error('[MSG_EDIT] Failed to update HeaderFile on disk:', e);
+      // Continue — DB has the changes, doors will be out of sync until next sync.
+    }
+
     const messages = session.tempData.msgReaderMessages;
     if (messages[currentIndex]) {
       messages[currentIndex].author = editHeader.from;
