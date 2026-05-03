@@ -27,7 +27,7 @@ import * as amigafs from '../../src/utils/amigafs';
 
 describe('File Cache Utility', () => {
   let cache: FileCache;
-  let mockFiles: Map<string, { content: string; mtime: number }>;
+  let mockFiles: Map<string, { content: string | Buffer; mtime: number }>;
 
   beforeEach(() => {
     cache = new FileCache(1); // 1MB for testing
@@ -51,10 +51,15 @@ describe('File Cache Utility', () => {
       if (!file) {
         throw new Error(`File not found: ${path}`);
       }
+      // Mirror real fs.readFileSync semantics: with encoding => string; without => Buffer.
+      // Accept both string and Buffer test fixtures so high-bit bytes can be preserved
+      // (a string fixture cannot represent raw 0xB7 standalone; a Buffer can).
       if (encoding) {
-        return file.content;
+        return Buffer.isBuffer(file.content)
+          ? file.content.toString(encoding as BufferEncoding)
+          : file.content;
       }
-      return Buffer.from(file.content);
+      return Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
     });
   });
 
@@ -221,6 +226,88 @@ describe('File Cache Utility', () => {
         const content = cache.readBuffer('/text.txt');
 
         expect(Buffer.isBuffer(content)).toBe(true);
+      });
+
+      // Regression tests for cache poisoning when the same path is read both as
+      // a UTF-8 string (e.g. via readBulletinFile) and as raw bytes (via the
+      // screen render pipeline). Standalone high-bit bytes such as 0xB7 (`·`)
+      // are invalid UTF-8: decoding to a JS string replaces them with U+FFFD,
+      // and a subsequent Buffer.from(string) re-encodes those replacements as
+      // EF BF BD — corrupting the raw bytes returned to the screen renderer.
+      // See web/backend/src/utils/file-cache.util.ts:122 (readBuffer guard).
+      describe('high-bit byte preservation (regression)', () => {
+        it('preserves a standalone 0xB7 byte when read directly as buffer', () => {
+          // Realistic Amiga ANSI fixture: ESC [50H · ESC [16H — a cursor
+          // positioning sequence with a literal middle-dot, exactly the shape
+          // that broke flt.txt rendering.
+          const bytes = Buffer.from([0x1b, 0x5b, 0x35, 0x30, 0x48, 0xb7, 0x1b, 0x5b, 0x31, 0x36, 0x48]);
+          mockFiles.set('/Conf2/Screens/flt.txt', { content: bytes, mtime: 1000 });
+
+          const buf = cache.readBuffer('/Conf2/Screens/flt.txt');
+
+          expect(Buffer.isBuffer(buf)).toBe(true);
+          expect(buf.length).toBe(bytes.length);
+          expect(buf.equals(bytes)).toBe(true);
+          // No UTF-8 replacement bytes leaked in
+          expect(buf.indexOf(Buffer.from([0xef, 0xbf, 0xbd]))).toBe(-1);
+          // The 0xB7 byte is intact and singular
+          expect(buf[5]).toBe(0xb7);
+        });
+
+        it('returns the original raw bytes from readBuffer even when an earlier readString poisoned the cache', () => {
+          const bytes = Buffer.from([0x1b, 0x5b, 0x35, 0x30, 0x48, 0xb7, 0x1b, 0x5b, 0x31, 0x36, 0x48]);
+          mockFiles.set('/Conf2/Screens/flt.txt', { content: bytes, mtime: 1000 });
+
+          // Simulates readBulletinFile() running first — caches the file as
+          // a UTF-8 string, which loses 0xB7 to U+FFFD.
+          const asString = cache.readString('/Conf2/Screens/flt.txt', 'utf8');
+          expect(asString).toContain('�'); // confirms the poison
+
+          // Without the readBuffer guard, the cache returns the lossy string
+          // and Buffer.from(string) yields EF BF BD instead of 0xB7.
+          const buf = cache.readBuffer('/Conf2/Screens/flt.txt');
+
+          expect(buf.equals(bytes)).toBe(true);
+          expect(buf[5]).toBe(0xb7);
+          expect(buf.indexOf(Buffer.from([0xef, 0xbf, 0xbd]))).toBe(-1);
+        });
+
+        it('after readBuffer recovers the bytes, they remain intact across repeated readBuffer calls', () => {
+          const bytes = Buffer.from([0xb7, 0xa9, 0xae]); // ·, ©, ®
+          mockFiles.set('/screen.txt', { content: bytes, mtime: 1000 });
+
+          // Poison via readString
+          cache.readString('/screen.txt', 'utf8');
+          // First readBuffer triggers the recovery path
+          const buf1 = cache.readBuffer('/screen.txt');
+          // Subsequent readBuffer must keep returning correct bytes
+          const buf2 = cache.readBuffer('/screen.txt');
+          const buf3 = cache.readBuffer('/screen.txt');
+
+          expect(buf1.equals(bytes)).toBe(true);
+          expect(buf2.equals(bytes)).toBe(true);
+          expect(buf3.equals(bytes)).toBe(true);
+        });
+
+        it('preserves all common Amiga ANSI high-bit bytes through readBuffer', () => {
+          // Sample of high-bit bytes the BBS legitimately ships in screen art:
+          //   0xA9 ©, 0xAE ®, 0xB0-B2 ░▒▓ shading, 0xB3 │, 0xB7 ·,
+          //   0xBC-BE ¼½¾, 0xC4 ─, 0xCD ═, 0xDA ┌, 0xDB █, 0xDF ▀.
+          const bytes = Buffer.from([
+            0xa9, 0xae, 0xb0, 0xb1, 0xb2, 0xb3, 0xb7, 0xbc, 0xbd, 0xbe,
+            0xc4, 0xcd, 0xda, 0xdb, 0xdf,
+          ]);
+          mockFiles.set('/art.txt', { content: bytes, mtime: 1000 });
+
+          // Both before and after a poisoning readString
+          const direct = cache.readBuffer('/art.txt');
+          expect(direct.equals(bytes)).toBe(true);
+
+          cache.invalidate('/art.txt');
+          cache.readString('/art.txt', 'utf8'); // poison
+          const recovered = cache.readBuffer('/art.txt');
+          expect(recovered.equals(bytes)).toBe(true);
+        });
       });
     });
 

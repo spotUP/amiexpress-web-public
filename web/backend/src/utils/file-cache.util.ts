@@ -114,14 +114,25 @@ export class FileCache {
   }
 
   /**
-   * Read file as buffer with caching
+   * Read file as buffer with caching.
    *
-   * @param filePath - Path to file
-   * @returns File content as buffer
+   * If a previous call cached this path as a string (e.g. via readString
+   * with 'utf8'), the cached entry is byte-lossy for any non-UTF-8 file
+   * content — going string → Buffer would replace each invalid byte (e.g.
+   * 0xB7 standalone) with the 3-byte UTF-8 replacement EF BF BD. To avoid
+   * that corruption, re-read from disk and overwrite the cache entry with
+   * the authoritative Buffer when we detect a string-cached entry.
    */
   readBuffer(filePath: string): Buffer {
     const content = this.read(filePath);
-    return Buffer.isBuffer(content) ? content : Buffer.from(content);
+    if (Buffer.isBuffer(content)) return content;
+    // String cached — re-read from disk as raw bytes so we don't lose
+    // high-bit content via the UTF-8 round-trip.
+    const buf = amigafs.readFileSync(filePath);
+    const realBuf = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+    const stats = amigafs.statSync(filePath);
+    this.set(filePath, realBuf, stats.mtimeMs, realBuf.length);
+    return realBuf;
   }
 
   /**
@@ -262,33 +273,29 @@ export class FileCache {
 export const fileCache = new FileCache(); // Uses constructor default (4MB or FILE_CACHE_MB)
 
 /**
- * Helper: Read screen file with caching
- * Drop-in replacement for fs.readFileSync for screen files
- *
- * @param filePath - Screen file path
- * @param encoding - Encoding (default: 'utf8')
- * @returns File content
+ * @deprecated Use `readAmigaTextFileWithTransforms` from
+ * `utils/amiga-text-decode.util.ts` instead. Reading Amiga screen content via
+ * `'utf8'` corrupts standalone high-bit bytes (0xB7 ·, 0xA9 ©, 0xAE ®) by
+ * replacing them with U+FFFD, which renders as `ï¿½` mojibake.
  */
 export function readScreenFile(filePath: string, encoding: BufferEncoding = 'utf8'): string {
   return fileCache.readString(filePath, encoding);
 }
 
 /**
- * Helper: Read bulletin file with caching
- *
- * @param filePath - Bulletin file path
- * @param encoding - Encoding (default: 'utf8')
- * @returns File content
+ * @deprecated Use `readAmigaTextFileWithTransforms` from
+ * `utils/amiga-text-decode.util.ts` instead. See readScreenFile note for the
+ * encoding-loss problem this introduces.
  */
 export function readBulletinFile(filePath: string, encoding: BufferEncoding = 'utf8'): string {
   return fileCache.readString(filePath, encoding);
 }
 
 /**
- * Helper: Read .info configuration file with caching
- *
- * @param filePath - .info file path
- * @returns File content as string
+ * @deprecated `.info` files are Amiga binary icons, not UTF-8 text. Use
+ * `fileCache.readBuffer(path)` and parse with the appropriate Amiga icon
+ * parser. The string version here is footgun-prone because Amiga binaries
+ * contain arbitrary high-bit bytes that UTF-8 decode mangles.
  */
 export function readInfoFile(filePath: string): string {
   return fileCache.readString(filePath, 'utf8');
