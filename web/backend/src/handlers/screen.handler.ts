@@ -21,7 +21,9 @@ import {
 import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
-import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
+import { ANSI } from '../utils/terminal-utils';
+const HIDE_CURSOR = ANSI.HIDE_CURSOR;
+const SHOW_CURSOR = ANSI.SHOW_CURSOR;
 import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/amigafs';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime, formatLongDate, formatLongTime, formatLongDateTime } from '../utils/date-time.util';
