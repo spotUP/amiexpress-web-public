@@ -87,6 +87,8 @@ describe('Conference Tooltypes Utility', () => {
           requireRealname: false,
           requireUsernameMsgBases: new Set<number>(),
           requireRealnameMsgBases: new Set<number>(),
+          forwardMail: '',
+          extSendMsgBases: new Set<number>(),
         });
       });
 

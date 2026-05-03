@@ -29,6 +29,14 @@ export interface ConferenceToolFlags {
   requireRealname: boolean;
   requireUsernameMsgBases: Set<number>;
   requireRealnameMsgBases: Set<number>;
+  // express.e:9909-9950 checkToForward — when sysop receives mail, forward
+  // to this username instead. Empty string = no forwarding.
+  forwardMail: string;
+  // express.e:10787-10788 EXTSEND.<n> per-msgbase tooltype.
+  // When set: EALL is forbidden in this msgbase (10805-10808) and the
+  // Private prompt is skipped (10860). Set holds the msgbase numbers
+  // that have EXTSEND set.
+  extSendMsgBases: Set<number>;
 }
 
 const defaultFlags: ConferenceToolFlags = {
@@ -46,6 +54,8 @@ const defaultFlags: ConferenceToolFlags = {
   requireRealname: false,
   requireUsernameMsgBases: new Set<number>(),
   requireRealnameMsgBases: new Set<number>(),
+  forwardMail: '',
+  extSendMsgBases: new Set<number>(),
 };
 
 const conferenceTooltypeCache = new Map<number, ConferenceToolFlags>();
@@ -175,6 +185,24 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     if (tooltypeMap.has('MENU_PROMPT')) {
       result.menuPrompt = tooltypeMap.get('MENU_PROMPT')!;
     }
+
+    // express.e:9915 readToolType(TOOLTYPE_CONF, currentConf, 'FORWARDMAIL', str)
+    // — when set, mail addressed to sysop (slot 1) is forwarded to this user.
+    if (tooltypeMap.has('FORWARDMAIL')) {
+      // express.e:9916 strips trailing newline; the parser already gives us
+      // a clean value, just trim trailing whitespace defensively.
+      result.forwardMail = (tooltypeMap.get('FORWARDMAIL') || '').replace(/[\r\n]+$/, '').trim();
+    }
+
+    // express.e:10787-10788 — per-msgbase EXTSEND.<n> flag. Presence-only
+    // (the value is ignored). When set, the msgbase is "external" — EALL
+    // is forbidden and Private prompt is skipped during enterMSG.
+    const extSet = new Set<number>();
+    for (const key of flagSet) {
+      const m = /^EXTSEND\.(\d+)$/.exec(key);
+      if (m) extSet.add(parseInt(m[1]!, 10));
+    }
+    if (extSet.size > 0) result.extSendMsgBases = extSet;
 
     // express.e:4081-4084 — USERNAME / REALNAME tooltypes (conf-wide, plus
     // per-msgbase variants USERNAME.<n> / REALNAME.<n>).

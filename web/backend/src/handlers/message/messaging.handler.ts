@@ -13,7 +13,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
-import { getAllMessageIds, readMessageFile, markMessageReceived, unmarkMessageReceived } from '../../utils/message-file.util';
+import { getAllMessageIds, readMessageFile, markMessageReceived, unmarkMessageReceived, readAttachList } from '../../utils/message-file.util';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { config } from '../../config';
 import { ACSPermission as ACSPerm } from '../../constants/acs-permissions';
@@ -128,6 +128,35 @@ console.log('[ENV] Mail - Read');
   const bbsDataPath = config.get('dataDir');
   const username = session.user?.username.toLowerCase();
 
+  // express.e:11989-12005 — parse params:
+  //   NS               nonStopMail = TRUE — auto-advance through every msg
+  //   S                skip-to-new — error out with "No new messages." if past end
+  //   +                forward direction (default)
+  //   -                backward direction
+  //   <digit>          jump to that absolute message number
+  //   <digit>+, <digit>-  jump + set direction
+  // The token list is space- or comma-separated; we split on either.
+  const paramTokens = (params || '').split(/[\s,]+/).filter(Boolean);
+  const upperParams = paramTokens.map(t => t.toUpperCase());
+  const nonStopMail = upperParams.includes('NS');
+  const skipToNew = upperParams.includes('S');
+  // First non-flag token controls jump/direction (express.e:12000-12005)
+  const firstParam = paramTokens.find(t => /^[+\-]$|^\d+[+\-]?$/.test(t)) || '';
+  let jumpMsgNum: number | null = null;
+  let initialDir: 1 | -1 = 1;
+  if (firstParam === '+') {
+    initialDir = 1;
+  } else if (firstParam === '-') {
+    initialDir = -1;
+  } else if (firstParam) {
+    const m = /^(\d+)([+\-]?)$/.exec(firstParam);
+    if (m) {
+      jumpMsgNum = parseInt(m[1]!, 10);
+      if (m[2] === '-') initialDir = -1;
+      else if (m[2] === '+') initialDir = 1;
+    }
+  }
+
   // Get all message IDs from disk
   const messageIds = await getAllMessageIds(confId, bbsDataPath);
   const messages: any[] = [];
@@ -180,14 +209,39 @@ console.log('[ENV] Mail - Read');
     startIndex = 0;
   }
 
+  // express.e:11991-11997 — 'S' param: error out if past end (no new messages)
+  if (skipToNew) {
+    const lastMsgNum = (messages[messages.length - 1].msgNumber || messages[messages.length - 1].id);
+    if (lastRead >= lastMsgNum) {
+      emitText(socket, 'No new messages.\r\n\r\n');
+      finalizeCommand(socket, session, '');
+      return;
+    }
+  }
+
+  // express.e:12000-12005 — explicit jump target overrides default startIndex
+  if (jumpMsgNum !== null) {
+    const idx = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) === jumpMsgNum);
+    if (idx >= 0) {
+      startIndex = idx;
+    }
+  }
+
   // Initialize message reader state
   session.tempData = session.tempData || {};
   session.tempData.msgReaderMessages = messages;
   session.tempData.msgReaderIndex = startIndex;
   session.tempData.msgReaderHighestRead = lastRead;
+  session.tempData.msgReaderFwdDir = initialDir;
+  session.tempData.nonStopMail = nonStopMail;
 
-  // Display first (unread) message
-  await displaySingleMessage(socket, session, startIndex);
+  // Display first message (or burst-display in nonstop mode)
+  if (nonStopMail) {
+    // express.e:12080-12085 — NS mode skips the prompt loop, runs through messages
+    await displaySingleMessage(socket, session, startIndex);
+  } else {
+    await displaySingleMessage(socket, session, startIndex);
+  }
 }
 
 /**
@@ -254,6 +308,27 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   const bodyForDisplay = (msg.body || '').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
   emitText(socket, `${bodyForDisplay}\r\n`);
   emitText(socket, '\r\n');
+
+  // express.e:8964 checkAttachedFile(msgNumb, 1) — display the attachment list
+  // for this message. Express.e additionally offers download/list actions; we
+  // surface the filenames here as an informational notice. Attachment download
+  // flows through the F file-attach handler at compose time and the standard
+  // file commands at read time, so users can still grab the file by name.
+  try {
+    const attachConfId = session.currentConf || 1;
+    const attachBbsPath = config.get('dataDir');
+    const attachList = await readAttachList(attachConfId, msgNumber, attachBbsPath);
+    if (attachList && attachList.filenames.length > 0) {
+      emitText(socket, '\x1b[36mFiles attached\x1b[33m:\x1b[0m\r\n');
+      for (const fname of attachList.filenames) {
+        emitText(socket, `   ${fname}\r\n`);
+      }
+      emitText(socket, '\r\n');
+    }
+  } catch {
+    // Read errors here are non-fatal — log via console but don't block the reader
+    console.error('[messaging] readAttachList failed');
+  }
 
   // express.e:8943-8949 - Mark message as received if addressed to current user
   // IF(stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)
@@ -500,7 +575,23 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
     // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
     emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
-    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${msg.author}\r\n`);
+
+    // express.e:9882: AstrCopy(mailHeader.toName, mailHeader.fromName, 31)
+    // — toName seeded from the original sender. checkToForward (express.e:9885)
+    //   then redirects sysop replies via FORWARDMAIL tooltype.
+    let toUser = msg.author;
+    const confId = session.currentConf || 1;
+    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+    const flags = getConferenceToolFlags(confId);
+    const fwdUser = flags?.forwardMail || '';
+    let forwardingNotice = '';
+    if (fwdUser && (toUser || '').toUpperCase() === 'SYSOP') {
+      forwardingNotice = `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`;
+      toUser = fwdUser;
+    }
+
+    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${toUser}\r\n`);
+    if (forwardingNotice) emitText(socket, forwardingNotice);
 
     // express.e:9886-9890: Subject prompt pre-filled with original subject (no "Re: " prefix)
     // blank = abort (RETURN RESULT_SUCCESS = return to reading)
@@ -509,7 +600,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
     session.inputBuffer = msg.subject; // pre-fill for line editing
     session.tempData.messageEntry = {
-      toUser: msg.author,
+      toUser,
       subject: msg.subject,
       body: [],
       currentLine: 1,

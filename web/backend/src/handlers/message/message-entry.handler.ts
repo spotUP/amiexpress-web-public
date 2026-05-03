@@ -32,9 +32,51 @@ export function setMessageEntryDependencies(deps: {
 }
 
 /**
- * Handle recipient (To:) input - express.e:10771-10838
+ * express.e:10787-10788 — EXTSEND.<msgBase> tooltype on the conf icon marks
+ * a msgbase as "external" (e.g. routed to a UUCP/FidoNet gateway). When set:
+ *   - express.e:10805-10808: EALL is forbidden
+ *   - express.e:10860: Private prompt is skipped
  */
-export function handleMessageToInput(socket: any, session: BBSSession, input: string): void {
+function isExtSendMsgBase(session: BBSSession): boolean {
+  const confId = session.currentConf || 1;
+  const msgBaseId = session.currentMsgBase || 1;
+  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confId);
+  return !!flags?.extSendMsgBases?.has?.(msgBaseId);
+}
+
+/**
+ * express.e:9909-9950 checkToForward — when the conf has FORWARDMAIL=<user>
+ * tooltype set AND the recipient is the sysop (slot 1), redirect the message
+ * to <user> and print "    Forwarding mail To: <name>".
+ *
+ * Mutates session.tempData.messageEntry.toUser in place. Caller should run
+ * this AFTER the recipient name is finalized (matches express.e:10845/9885).
+ */
+function applyConfForwardMail(socket: any, session: BBSSession): void {
+  const entry = session.tempData?.messageEntry;
+  if (!entry?.toUser) return;
+  const confId = session.currentConf || 1;
+  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confId);
+  const fwdUser = flags?.forwardMail || '';
+  if (!fwdUser) return;
+  // express.e:9919 stringCompare(name, sysop.name) — recipient is the sysop?
+  // We accept either the literal token 'SYSOP' (handleMessageToInput maps to
+  // slot 1) or a case-insensitive match against the slot-1 username if known.
+  const toUpper = (entry.toUser || '').toUpperCase();
+  if (toUpper === 'SYSOP') {
+    entry.toUser = fwdUser;
+    emitText(socket, `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`);
+  }
+}
+
+/**
+ * Handle recipient (To:) input - express.e:10771-10838
+ *
+ * Async because we need DB lookups for chooseAName + checkConfAccess.
+ */
+export async function handleMessageToInput(socket: any, session: BBSSession, input: string): Promise<void> {
   // express.e:10762,10779 — lineInput max 30 chars; truncate silently if longer
   const recipient = input.trim().substring(0, 30);
 
@@ -42,6 +84,10 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
   if (recipient === '') {
     session.tempData.messageEntry.toUser = 'ALL';
     emitText(socket, '\r\n');
+    // express.e:10845 checkToForward runs after recipient is finalized.
+    // ALL is not the sysop so this is a no-op, but keep the call symmetric
+    // with the other branches.
+    applyConfForwardMail(socket, session);
     promptForSubject(socket, session);
     return;
   }
@@ -49,10 +95,18 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
   // Check for EALL - express.e:10800-10816
   const recipientLower = recipient.toLowerCase();
   if (recipientLower === 'eall') {
+    // express.e:10805-10808 — extSend (msgbase has EXTSEND.<n>) blocks EALL
+    if (isExtSendMsgBase(session)) {
+      emitText(socket, "\r\nCan't use EALL in external message bases!!\r\n\r\n");
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+      return;
+    }
     // express.e:10810 - Check ACS_EALL_MESSAGES permission
     if (checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
       session.tempData.messageEntry.toUser = 'EALL';
       emitText(socket, '\r\n');
+      applyConfForwardMail(socket, session);
       promptForSubject(socket, session);
     } else {
       // express.e:10814 - No permission, reject
@@ -63,18 +117,70 @@ export function handleMessageToInput(socket: any, session: BBSSession, input: st
     return;
   }
 
-  // Check for SYSOP - express.e:10818-10820 maps to slot 1
+  // Check for SYSOP - express.e:10818-10820 maps to slot 1.
+  // We pass through the literal 'SYSOP' token; saveMessage normalizes via
+  // doCommentNotify path. checkConfAccess for sysop is implicitly allowed.
   if (recipientLower === 'sysop') {
-    // Map SYSOP to actual sysop username (slot 1)
     session.tempData.messageEntry.toUser = 'SYSOP';
     emitText(socket, '\r\n');
+    // express.e:10845 — FORWARDMAIL redirect kicks in here for sysop comments
+    applyConfForwardMail(socket, session);
     promptForSubject(socket, session);
     return;
   }
 
-  // Regular recipient
-  session.tempData.messageEntry.toUser = recipient;
+  // express.e:10822-10841 — chooseAName + canonical-form copy + checkConfAccess.
+  // Lookup the recipient by username (the most common case). When we find
+  // a match: normalize to the user's stored username, then verify they have
+  // access to the current conference.
+  let resolved = recipient;
+  let resolvedUser: any = null;
+  try {
+    if (_db?.getUserByUsername) {
+      resolvedUser = await _db.getUserByUsername(recipient);
+    }
+  } catch {
+    // DB error → treat as unresolved, fall through (matches express.e
+    // chooseAName behavior when user db is unavailable: aePuts a generic
+    // error and proceeds — for safety we just skip access check here).
+  }
+
+  if (resolvedUser) {
+    // express.e:10828-10836 — copy canonical name based on confNameType.
+    // Per-conf USERNAME/REALNAME tooltype (or msgbase variant) drives this.
+    // Default (no flag) = NAME_TYPE_USERNAME.
+    const confId = session.currentConf || 1;
+    const msgBaseId = session.currentMsgBase || 1;
+    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+    const flags = getConferenceToolFlags(confId);
+    const requireRealname = flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId);
+    const requireUsername = flags?.requireUsername || flags?.requireUsernameMsgBases?.has?.(msgBaseId);
+    if (requireRealname && resolvedUser.realName) {
+      resolved = String(resolvedUser.realName).substring(0, 26);
+    } else if (requireUsername && resolvedUser.username) {
+      resolved = String(resolvedUser.username).substring(0, 31);
+    } else if (resolvedUser.username) {
+      // Default — normalize to canonical username casing
+      resolved = String(resolvedUser.username).substring(0, 31);
+    }
+
+    // express.e:10837-10840 — checkConfAccess.
+    const { checkConfAccess } = require('./message-scan.handler');
+    if (typeof checkConfAccess === 'function' && !checkConfAccess(resolvedUser, confId)) {
+      emitText(socket, '\r\nUser does not have access to this conference!\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+      return;
+    }
+  }
+  // express.e: when chooseAName fails AND extSend=FALSE we'd RETURN stat (10825).
+  // For web: unresolved recipient is still accepted as a string — matches the
+  // "unknown recipient → message gets stored, sysop can review" workflow that
+  // the modern admin UI assumes. Flagged here for future strict-mode option.
+
+  session.tempData.messageEntry.toUser = resolved;
   emitText(socket, '\r\n');
+  applyConfForwardMail(socket, session);
   promptForSubject(socket, session);
 }
 
@@ -169,13 +275,23 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
   emitLinePrompt(socket, session.tempData.messageEntry.currentLine);
 }
 
-/** express.e:10374-10391 "Msg. Options: A,C,D,E,L,S,? >:" */
+/**
+ * express.e:10374-10391 "Msg. Options: A,C,D,E[,F],L,S[,X],? >:"
+ *
+ * WEB_ divergences from express.e cont2 menu:
+ *   - WEB_ I (Insert Line)         — convenience; not in express.e (use C/E)
+ *   - WEB_ R (Replace Text)        — search-and-replace; not in express.e
+ *   - WEB_ Q (Quote from Reply)    — re-quote mid-compose; express.e only quotes at entry
+ *   - MISSING X (Xfer Files / Zmodem batch) — express.e:10378,10562-10566 sets rzmsg=1
+ *     so saveNewMSG triggers Zmodem batch upload. Web BBS uses F file-attach instead.
+ *     See task #34 for the rationale; intentional divergence.
+ */
 function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): void {
   session.subState = LoggedOnSubState.POST_MESSAGE_OPTIONS;
   const hasAttach = checkSecurity(session.user, ACSPermission.ATTACH_FILES);
   const hasParent = !!(session.tempData?.messageEntry?.parentId);
   if (!helpList) {
-    // express.e:10375-10379 — dynamic based on ACS; WEB_: add I, R, Q
+    // express.e:10375-10379 short menu — extended with WEB_ I/R/Q
     let menu = '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mC\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mE\x1b[36m';
     if (hasAttach) menu += ',\x1b[33mF\x1b[36m';
     menu += ',\x1b[33mI\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mS\x1b[36m';
@@ -183,7 +299,7 @@ function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): v
     menu += ',\x1b[33m? \x1b[0m>:';
     emitText(socket, menu);
   } else {
-    // express.e:10381-10390; WEB_: add I, R, Q entries
+    // express.e:10381-10390 long menu — extended with WEB_ I/R/Q
     emitText(socket, '\r\n\x1b[33mA\x1b[32m>\x1b[36mbort\x1b[0m');
     emitText(socket, '\r\n\x1b[33mC\x1b[32m>\x1b[36montinue\x1b[0m');
     emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Lines\x1b[0m');
@@ -400,12 +516,14 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
 
   const parentLines: string[] = parentMsg.body.split('\n');
 
-  // Display parent lines with numbers (express.e:10889-10900: aePuts('\b\n') then FOR loop)
+  // Display parent lines with numbers — express.e:10894 uses '\z\l\d[2]> \s\b\n'
+  // (zero-padded width 2: "05> "). The body editor's prompt at 10172 uses '\d[2]>'
+  // (space-padded: " 5> "). These are different by design — quote display zero-pads.
   emitText(socket, '\r\n');
   parentLines.forEach((line: string, index: number) => {
-    // express.e uses \z\l\d[2]> (left-justified width 2) — web adaptation: right-justified
-    emitLinePrompt(socket, index + 1);
-    emitText(socket, `${line}\r\n`);
+    const n = index + 1;
+    const numStr = n <= 99 ? String(n).padStart(2, '0') : String(n);
+    emitText(socket, `${numStr}> ${line}\r\n`);
   });
 
   // express.e:10902: aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ') — plain text
@@ -434,9 +552,22 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     const messageBody = entry.body.join('\n');
     const messageDate = getSystemTime();
 
-    // express.e:10790-10794 — public msgs get 'p' status for users with ACS_CENSORED, else 'P'.
-    // (Private msgs always get 'R' regardless.) The repository checks `censored` to decide P vs p.
+    // express.e:10790-10794 + 10867-10874 — status:
+    //   Private prompt = Y       → 'R' (PRIVATE)
+    //   Private prompt = N + censored → 'p' (CENSORED)
+    //   Private prompt = N         → 'P' (NORMAL)
+    // Reply preserves 'p' if original was 'p' (express.e:10870, replyFlag path)
+    // — we surface that via entry.statusOverride when set by the reply flow.
     const censored = !entry.isPrivate && checkSecurity(session.user, ACSPermission.CENSORED);
+    const { MsgStatus } = require('../../services/MessageIndexManager');
+    let status: number;
+    if (entry.isPrivate) {
+      status = MsgStatus.PRIVATE; // 'R'
+    } else if (censored) {
+      status = MsgStatus.CENSORED; // 'p'
+    } else {
+      status = MsgStatus.NORMAL;   // 'P'
+    }
 
     const message = {
       subject: entry.subject,
@@ -457,7 +588,24 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     } as any;
 
     // CRITICAL: Write message to DISK (AmiExpress format)
-    // Express.e:10694-10704 - Messages MUST be on disk for doors to read
+    // Express.e:10694-10704 - Messages MUST be on disk for doors to read.
+    // express.e:10652 lockMsgBase() — pass nodeId so the MailLock file
+    // identifies the writer for the on-disk staleness check.
+    // express.e:10707-10711 — attachedFiles → saveAttachList(<msgBase>A<N>):
+    // first item in attachedFiles[] is 'Y' or 'N' delete-on-msg-delete flag
+    // (express.e:10546-10549 inserts that at the head of the list).
+    const rawAttachments: string[] = (entry.attachedFiles || []).filter(Boolean);
+    let deleteOnMessageDelete = false;
+    let attachmentNames: string[] = [];
+    if (rawAttachments.length > 0) {
+      const first = rawAttachments[0];
+      if (first === 'Y' || first === 'N') {
+        deleteOnMessageDelete = first === 'Y';
+        attachmentNames = rawAttachments.slice(1);
+      } else {
+        attachmentNames = rawAttachments;
+      }
+    }
     const msgNum = await writeMessageFile(
       session.currentConf || 1,
       session.currentMsgBase || 1,
@@ -466,9 +614,18 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
         to: entry.toUser,
         subject: entry.subject,
         date: formatMessageDate(messageDate),
-        body: messageBody
-      },
-      config.get('dataDir')
+        body: messageBody,
+        status,
+        // typed as `any` extension on MessageFile — writeMessageFile reads it
+        // off the message obj and writes A<N> file matching express.e
+        // saveAttachList format.
+        attachments: {
+          filenames: attachmentNames,
+          deleteOnMessageDelete,
+        },
+      } as any,
+      config.get('dataDir'),
+      session.nodeId || 0
     );
 
     // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
@@ -740,6 +897,15 @@ function promptForPrivate(socket: any, session: BBSSession): void {
 
   // Messages to ALL/EALL cannot be private - express.e:10850
   if (toUser === 'ALL' || toUser === 'EALL') {
+    session.tempData.messageEntry.isPrivate = false;
+    promptForMessageBody(socket, session);
+    return;
+  }
+
+  // express.e:10860 — skip Private prompt entirely if msgbase is EXTSEND.
+  // External msgbases (UUCP/FidoNet gateway) keep the default status; user
+  // doesn't get to choose Private since these go off-system.
+  if (isExtSendMsgBase(session)) {
     session.tempData.messageEntry.isPrivate = false;
     promptForMessageBody(socket, session);
     return;

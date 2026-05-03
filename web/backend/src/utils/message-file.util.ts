@@ -42,6 +42,14 @@ export interface MessageFile {
   body: string;
   isPrivate?: boolean;
   receivedAt?: Date;        // mh.recv as Date (0 → undefined)
+  /**
+   * express.e mailHeader.status — single byte:
+   *   'P' (0x50) public, 'p' (0x70) public-censored,
+   *   'R' (0x52) private, 'D' (0x44) deleted.
+   * Caller (enterMSG flow) computes this; do NOT re-derive from toUser
+   * (express.e:10790-10794, 10867-10874 — Private prompt + ACS_CENSORED).
+   */
+  status?: MsgStatus;
 }
 
 /**
@@ -51,6 +59,16 @@ export interface MessageFile {
 export function getMessagesDir(confNum: number, bbsDataPath: string): string {
   const confPath = getConferenceDir(confNum, bbsDataPath);
   return path.join(confPath, 'MsgBase');
+}
+
+/**
+ * express.e:10708 saveAttachList path — `<msgBaseLocation>A<msgNumb>` (no
+ * extension, capital A). One filename per line. The optional first line is
+ * a Y/N flag indicating whether attachments should be deleted when the
+ * message is deleted (express.e:10546-10549).
+ */
+export function getAttachListPath(confNum: number, msgNum: number, bbsDataPath: string): string {
+  return path.join(getMessagesDir(confNum, bbsDataPath), `A${msgNum}`);
 }
 
 /**
@@ -140,53 +158,120 @@ export async function writeMessageFile(
   confNum: number,
   msgBaseNum: number,
   message: Omit<MessageFile, 'msgNum'>,
-  bbsDataPath: string
+  bbsDataPath: string,
+  nodeId: number = 0
 ): Promise<number> {
-  const msgNum = messageIndexManager.getNextMessageNumber(confNum);
-  const dir = getMessagesDir(confNum, bbsDataPath);
-  const msgFilePath = getMessageFilePath(confNum, msgNum, bbsDataPath);
-
-  await fs.mkdir(dir, { recursive: true });
-
-  // express.e:10700-10703 — body lines only, no header
-  const bodyLines = message.body.split('\n');
-  const content = bodyLines.map(l => l + '\n').join('');
-
-  // Atomic write — utf-8 to preserve any non-ASCII chars in the body
-  const tempPath = msgFilePath + '.tmp';
-  try {
-    await fs.writeFile(tempPath, content, 'utf-8');
-    await fs.rename(tempPath, msgFilePath);
-  } catch (err) {
-    try { await fs.unlink(tempPath); } catch {}
-    throw err;
+  // express.e:10652 saveNewMSG calls lockMsgBase() before reading mailStat
+  // and writing the header. Concurrent posts in the same conf without this
+  // lock could both read the same highMsgNum and clobber each other's body
+  // file. Match express.e: acquire → assign msgNum → write body → append
+  // header (which bumps stats) → release. If we can't acquire within a few
+  // attempts, surface as failure (caller prints "ERROR! Another task has
+  // the MsgBase locked!" — express.e:10744).
+  const LOCK_RETRY_MS = 200;
+  const LOCK_MAX_ATTEMPTS = 25; // ~5s total — same order as express.e's 30s stale window
+  let acquired = false;
+  for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt++) {
+    if (messageIndexManager.acquireMailLock(confNum, nodeId)) {
+      acquired = true;
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, LOCK_RETRY_MS));
+  }
+  if (!acquired) {
+    throw new Error(
+      `MsgBase locked for Conf${confNum} (waited ${LOCK_MAX_ATTEMPTS * LOCK_RETRY_MS}ms) — message not saved`,
+    );
   }
 
-  // Build HeaderFile entry — express.e:10790-10794 status: 'P' public,
-  // 'p' censored public, 'R' private, 'D' deleted
-  const isPrivate = (message.to || '').toUpperCase() !== 'ALL';
-  const status: number = isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL;
+  try {
+    // express.e:10688 — msgNumb = current highMsgNum (before bump)
+    const msgNum = messageIndexManager.getNextMessageNumber(confNum);
+    const dir = getMessagesDir(confNum, bbsDataPath);
+    const msgFilePath = getMessageFilePath(confNum, msgNum, bbsDataPath);
 
-  // msgDate as Amiga seconds — express.e stores Unix-epoch-equivalent LONG.
-  // Parse the formatted date back to a Date and convert to seconds.
-  const msgDateSec = parseMessageDateToUnixSec(message.date);
+    await fs.mkdir(dir, { recursive: true });
 
-  const header: MsgHeader = {
-    status,
-    msgNumb: msgNum,
-    toName: message.to || 'ALL',
-    fromName: message.from,
-    subject: message.subject,
-    msgDate: msgDateSec,
-    recv: 0,                   // unread
-    extMsgNum: -1,             // express.e:10689
-  };
+    // express.e:10700-10703 — body lines only, no header
+    const bodyLines = message.body.split('\n');
+    const content = bodyLines.map(l => l + '\n').join('');
 
-  // appendMessageHeader bumps highMsgNum by 1 (express.e:12418-12419)
-  messageIndexManager.appendMessageHeader(confNum, header);
+    // Atomic write — utf-8 to preserve any non-ASCII chars in the body
+    const tempPath = msgFilePath + '.tmp';
+    try {
+      await fs.writeFile(tempPath, content, 'utf-8');
+      await fs.rename(tempPath, msgFilePath);
+    } catch (err) {
+      try { await fs.unlink(tempPath); } catch {}
+      throw err;
+    }
+
+    // Build HeaderFile entry — express.e:10790-10794 status: 'P' public,
+    // 'p' censored public, 'R' private, 'D' deleted.
+    // Caller (saveMessage in message-entry.handler.ts) supplies the status it
+    // computed from the Private prompt + ACS_CENSORED check; only fall back
+    // to the toUser==ALL heuristic when status is omitted (legacy callers).
+    let status: number;
+    if (typeof message.status === 'number') {
+      status = message.status;
+    } else {
+      const isPrivate = (message.to || '').toUpperCase() !== 'ALL';
+      status = isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL;
+    }
+
+    // msgDate as Amiga seconds — express.e stores Unix-epoch-equivalent LONG.
+    // Parse the formatted date back to a Date and convert to seconds.
+    const msgDateSec = parseMessageDateToUnixSec(message.date);
+
+    const header: MsgHeader = {
+      status,
+      msgNumb: msgNum,
+      toName: message.to || 'ALL',
+      fromName: message.from,
+      subject: message.subject,
+      msgDate: msgDateSec,
+      recv: 0,                   // unread
+      extMsgNum: -1,             // express.e:10689
+    };
+
+    // appendMessageHeader bumps highMsgNum by 1 (express.e:12418-12419)
+    messageIndexManager.appendMessageHeader(confNum, header);
+
+    // express.e:10707-10711 — saveAttachList: when the message has attached
+    // files, write `<msgBaseLocation>A<msgNumb>` with one filename per line.
+    // First line: 'Y' or 'N' indicating delete-on-message-delete (10546-9).
+    // We persist this so 68K doors that read attachments by checking A<N>
+    // see them through the canonical AmiExpress path.
+    const attachments = (message as any).attachments as
+      | { filenames?: string[]; deleteOnMessageDelete?: boolean }
+      | string[]
+      | undefined;
+    let filenames: string[] = [];
+    let deleteOnMsgDelete = false;
+    if (Array.isArray(attachments)) {
+      filenames = attachments.filter(f => typeof f === 'string' && f.length > 0);
+    } else if (attachments && typeof attachments === 'object') {
+      filenames = (attachments.filenames || []).filter(f => typeof f === 'string' && f.length > 0);
+      deleteOnMsgDelete = !!attachments.deleteOnMessageDelete;
+    }
+    if (filenames.length > 0) {
+      const attachPath = getAttachListPath(confNum, msgNum, bbsDataPath);
+      const lines = [deleteOnMsgDelete ? 'Y' : 'N', ...filenames];
+      const tempAttachPath = attachPath + '.tmp';
+      try {
+        await fs.writeFile(tempAttachPath, lines.join('\n') + '\n', 'utf-8');
+        await fs.rename(tempAttachPath, attachPath);
+      } catch (err) {
+        try { await fs.unlink(tempAttachPath); } catch {}
+        throw err;
+      }
+    }
 
 console.log(`[Message] Wrote Conf${confNum} msg ${msgNum}: ${message.subject}`);
-  return msgNum;
+    return msgNum;
+  } finally {
+    messageIndexManager.releaseMailLock(confNum, nodeId);
+  }
 }
 
 /**
@@ -223,6 +308,34 @@ export async function readMessageFile(
     body,
     isPrivate: header.toName.toUpperCase() !== 'ALL',
     receivedAt: header.recv > 0 ? new Date(header.recv * 1000) : undefined,
+  };
+}
+
+/**
+ * Read the attachment list for a message — express.e:8964 checkAttachedFile.
+ * Returns null if no attachments file exists. First line is Y/N delete-flag,
+ * remaining lines are filenames.
+ */
+export async function readAttachList(
+  confNum: number,
+  msgNum: number,
+  bbsDataPath: string,
+): Promise<{ deleteOnMessageDelete: boolean; filenames: string[] } | null> {
+  const attachPath = getAttachListPath(confNum, msgNum, bbsDataPath);
+  let raw: string;
+  try {
+    raw = await fs.readFile(attachPath, 'utf-8');
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return null;
+  const first = lines[0];
+  const hasFlag = first === 'Y' || first === 'N';
+  return {
+    deleteOnMessageDelete: hasFlag ? first === 'Y' : false,
+    filenames: hasFlag ? lines.slice(1) : lines,
   };
 }
 
