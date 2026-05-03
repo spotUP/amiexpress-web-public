@@ -161,10 +161,66 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
   {
     offset: -186, // LVO -186
     name: "Allocate",
-    handler: (_emu, _lib: ExecLibrary) => {
+    handler: (emu, _lib: ExecLibrary) => {
       // Allocate(memHeader, byteSize) -> memBlock or NULL
-      // SAS/C runtime calls this to sub-allocate from its own pools.
-      // Return 0 (NULL) to force fallback to AllocMem which we handle properly.
+      //
+      // Low-level chunk allocator. Walks the MemHeader's free-chunk list
+      // (mh_First at A0+16) and returns the first chunk >= byteSize, splitting
+      // off the remainder. Required by SAS/C's __MERGE pool runtime — when
+      // this returns NULL, the SAS/C ctor at startup calls __exit(20)/FAIL.
+      //
+      // MemHeader layout (exec/memory.h):
+      //   +0   mh_Node (LN_SIZE = 14 bytes)
+      //   +14  mh_Attributes (UWORD)
+      //   +16  mh_First   (APTR -> MemChunk)
+      //   +20  mh_Lower   (APTR)
+      //   +24  mh_Upper   (APTR)
+      //   +28  mh_Free    (ULONG)
+      //
+      // MemChunk layout:
+      //   +0   mc_Next  (APTR -> MemChunk)
+      //   +4   mc_Bytes (ULONG)
+      const memHeader = emu.getRegister(8); // A0
+      let byteSize = emu.getRegister(0) >>> 0; // D0
+      if (memHeader === 0 || byteSize === 0) return 0;
+
+      // Round up to multiple of 8 (MEM_BLOCKSIZE for AmigaOS 1.x; 2.0+ uses 16
+      // but exec internally still aligns to 8 for compatibility with old code).
+      byteSize = (byteSize + 7) & ~7;
+
+      const mhFirstAddr = memHeader + 16;
+      const mhFreeAddr = memHeader + 28;
+
+      // Walk the chunk list. prevPtrAddr is the address of the pointer that
+      // currently references the candidate chunk — either mh_First (initial)
+      // or the previous chunk's mc_Next field.
+      let prevPtrAddr = mhFirstAddr;
+      let chunk = emu.readMemory32(prevPtrAddr) >>> 0;
+      while (chunk !== 0) {
+        const chunkBytes = emu.readMemory32(chunk + 4) >>> 0;
+        if (chunkBytes >= byteSize) {
+          if (chunkBytes === byteSize) {
+            // Exact fit — unlink the chunk
+            const nextChunk = emu.readMemory32(chunk) >>> 0;
+            emu.writeMemory32(prevPtrAddr, nextChunk);
+          } else {
+            // Split: leave a smaller chunk at chunk+byteSize
+            const newChunkAddr = chunk + byteSize;
+            const nextChunk = emu.readMemory32(chunk) >>> 0;
+            emu.writeMemory32(newChunkAddr, nextChunk);          // mc_Next
+            emu.writeMemory32(newChunkAddr + 4, chunkBytes - byteSize); // mc_Bytes
+            emu.writeMemory32(prevPtrAddr, newChunkAddr);
+          }
+          // Update mh_Free
+          const oldFree = emu.readMemory32(mhFreeAddr) >>> 0;
+          emu.writeMemory32(mhFreeAddr, (oldFree - byteSize) >>> 0);
+          return chunk >>> 0;
+        }
+        prevPtrAddr = chunk; // mc_Next is at offset 0 of chunk
+        chunk = emu.readMemory32(chunk) >>> 0;
+      }
+
+      // No chunk fits — return NULL
       return 0;
     },
   },
