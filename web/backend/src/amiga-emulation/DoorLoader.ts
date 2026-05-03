@@ -50,6 +50,37 @@ export class DoorLoader {
   }
 
   /**
+   * Compute where the door's stack should live, given the loaded hunk
+   * segments and the user-configured (or default) stack size.
+   *
+   * The stack is placed AFTER the highest-address segment so the door's
+   * local-variable frame can grow downward without trampling any segment.
+   * This MUST consider the BSS hunk: SAS/C-style binaries place BSS at a
+   * higher address than DATA (e.g. CODE@0x2008, DATA@0x7608, BSS@0x7808),
+   * and the BSS holds the SAS/C startup's saved ExecBase/argc/argv at
+   * fixed offsets near the top. If the stack overlaps BSS, large local
+   * frames (DOORSMENU's `Config cfg` is ~25KB) will overwrite those
+   * variables — the next library JSR through the corrupted ExecBase then
+   * jumps to garbage and the door silently dies after parsing its config
+   * but before any output.
+   */
+  static computeStackBounds(
+    segments: Array<{ address: number; size?: number; data?: { length: number }; type?: string }>,
+    configStack?: number,
+  ): { stackBaseAddr: number; stackSizeBytes: number } {
+    const stackSizeBytes = Math.max(4096, configStack || 65536);
+    let lastSegmentEnd = 0x10000; // fallback for tiny single-segment binaries
+    for (const seg of segments) {
+      const segEnd =
+        seg.address + (seg.size || (seg.data ? seg.data.length : 0));
+      if (segEnd > lastSegmentEnd) lastSegmentEnd = segEnd;
+    }
+    // Align to 8 bytes and add small gap (vamos uses ~20 bytes gap)
+    const stackBaseAddr = ((lastSegmentEnd + 32) + 7) & ~7;
+    return { stackBaseAddr, stackSizeBytes };
+  }
+
+  /**
    * Load door executable into emulator memory
    */
   async loadDoor(): Promise<void> {
@@ -198,6 +229,20 @@ debugLog(
       )}`
     );
     this.logger?.info(`Entry point: 0x${hunkFile.entryPoint.toString(16)}`);
+    // TEMP DEBUG: dump col_x_1/col_x_2/col_x_3 contents and the pre-relocation
+    // immediate operand at code offset 0x1b82 (DOORSMENU SMult32-pattern bug).
+    if (hunkFile.entryPoint === 0x2008 && hunkFile.segments[0]?.size === 21844) {
+      const col1 = this.emulator.readMemory32(0x3cc6);
+      const col2_0 = this.emulator.readMemory32(0x3cca);
+      const col2_1 = this.emulator.readMemory32(0x3cce);
+      const col3_0 = this.emulator.readMemory32(0x3cba);
+      const col3_1 = this.emulator.readMemory32(0x3cbe);
+      const col3_2 = this.emulator.readMemory32(0x3cc2);
+      const movImm = this.emulator.readMemory32(0x3b8a);
+      console.log(`[DM-DIAG] col_x_1[0]=${col1} (expect 30); col_x_2={${col2_0},${col2_1}} (expect 6,54)`);
+      console.log(`[DM-DIAG] col_x_3={${col3_0},${col3_1},${col3_2}} (expect 6,30,54)`);
+      console.log(`[DM-DIAG] move.l #imm at 0x3b8a = 0x${movImm.toString(16)} (expect 0x3cc6 if col_x_1 reloc OK)`);
+    }
 
     // Initialize SharedBBSData for CommandsStructure access
     // RTW and other XIM doors expect A5-88 to point to CommandsStructure
@@ -236,19 +281,13 @@ debugLog("[DoorLoader] Setting up CPU registers...");
       (s: any) => s.type.toUpperCase() === "DATA"
     );
     const dataBase = dataSegment ? dataSegment.address : 0;
-    this.stackSizeBytes = Math.max(4096, this.config.stack || 65536);
-    // Place stack AFTER last segment (like vamos does), not at hardcoded address
-    // This prevents startup code from zeroing our stack/exit trap
-    // For CODE+DATA programs: after DATA. For CODE-only: after CODE.
-    let lastSegmentEnd = 0x10000; // fallback
-    if (dataSegment) {
-      lastSegmentEnd = dataSegment.address + dataSegment.data.length;
-    } else if (codeSegment) {
-      lastSegmentEnd = codeSegment.address + codeSegment.data.length;
-    }
-    // Align to 8 bytes and add small gap (vamos uses ~20 bytes gap)
-    this.stackBaseAddr = ((lastSegmentEnd + 32) + 7) & ~7;
-debugLog(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)} (after segment end 0x${lastSegmentEnd.toString(16)})`);
+    const bounds = DoorLoader.computeStackBounds(
+      hunkFile.segments,
+      this.config.stack,
+    );
+    this.stackSizeBytes = bounds.stackSizeBytes;
+    this.stackBaseAddr = bounds.stackBaseAddr;
+debugLog(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)}`);
 
     // Match vamos startup: user mode, Z flag set from zeroed D registers
     this.emulator.setRegister(17, 0x0000); // SR (Status Register)
