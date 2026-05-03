@@ -560,12 +560,32 @@ debugLog(
     const resetAnsiIfNeeded = (text: string): string =>
       ANSI_SGR.test(text) && !ANSI_RESET_SUFFIX.test(text) ? text + '\x1b[0m' : text;
 
+    // XIM-protocol doors (XIM/AIM/TIM/IIM/MCI/AEM — anything that's not
+    // SIM/SUP) talk to the user via AEDoor.library JH_PUTSTR / JH_PUTCH
+    // messages. On real Amiga, AmiExpress launches them with stdout pointed
+    // at NIL: so any DOS Write(Output(), ...) the door does goes nowhere.
+    // Without this filter Conftop's printf banner leaks through ahead of the
+    // real JH_PUTSTR banner — user sees two rows draw, then \f clear, then
+    // the proper banner. Real reference-board BBS shows banner ONCE.
+    //
+    // Originally landed as commit 8abcb608 (2026-05-03). Was reverted by
+    // 44411707b on the hypothesis that both banners came via JH_SM and
+    // form-feed translation alone was the root cause. Live testing post-
+    // revert shows banner #1 IS still pre-rendered — re-applying the
+    // suppression alongside the form-feed translation. Both fixes are
+    // independent and both contribute to 1:1 fidelity with real Amiga.
+    //
+    // SIM/SUP doors that DO use stdout legitimately (no AEDoor messages)
+    // keep their forwarding. Transfer-raw passthrough still applies in both
+    // cases (binary file transfers route through stdout).
+    const stdoutGoesToUser = !useXimProtocol;
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {
         this.socket.emit('transfer-raw:echo', buf);
         return;
       }
+      if (!stdoutGoesToUser) return;
       const text = resetAnsiIfNeeded(normalizeAnsiNewlines(buf.toString('latin1')));
       this.socket.emit("ansi-output", text);
     });
@@ -575,9 +595,10 @@ debugLog(
         this.socket.emit('transfer-raw:echo', Buffer.from(text, 'latin1'));
         return;
       }
+      if (!stdoutGoesToUser) return;
       this.socket.emit("ansi-output", resetAnsiIfNeeded(normalizeAnsiNewlines(text)));
     });
-debugLog("[LibraryManager] DOS.library output callback configured");
+debugLog(`[LibraryManager] DOS.library output callback configured (stdoutGoesToUser=${stdoutGoesToUser}, doorType=${doorType})`);
 
     // Expose raw input hook to the session so socket-handlers can feed transfer-raw data
     const bbsSession: any = this.config.bbsSession || {};
