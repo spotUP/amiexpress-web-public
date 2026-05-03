@@ -1720,8 +1720,13 @@ console.warn(
   }
 
   /**
-   * Handle library function calls (for trap handling)
-   * This allows ExecLibrary to be called from AmigaDosEnvironment trap handler
+   * Handle library function calls (legacy trap-handling path).
+   *
+   * The live trap dispatch is `LibraryTraps.handleTrapByOffset` —
+   * `handleCall` was originally driven by AmigaDosEnvironment but that
+   * class has been deleted. Some early loader codepaths still fall back
+   * here when a library hasn't been wired into the trap set yet, so this
+   * dispatcher remains as a backstop.
    */
   handleCall(offset: number): boolean {
 debugLog(`[ExecLibrary] handleCall(offset=${offset})`);
