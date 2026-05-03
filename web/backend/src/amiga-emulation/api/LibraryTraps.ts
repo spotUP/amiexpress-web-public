@@ -1582,39 +1582,22 @@ console.error(`  THIS IS THE BUG! ${vector.name}() corrupted SP!`);
     // M68K calling convention requires A6 to be preserved across function calls
     // For library calls, A6 MUST contain the library base address
     // Determine which library this offset belongs to and restore A6 to that library's base
-    // This fixes crash at iteration 35,444 where A6=0x0 caused jump to 0xffffd6
-    let properA6 = a6Before; // Default: restore to original value
-
-    // Determine library base from the library instance
-    // Fallback addresses must match ExecLibrary.ts memory layout (0x080000+)
-    // CRITICAL: ALL libraries with trap handlers must be included here
-    if (library === this.execLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x080000;
-    } else if (library === this.dosLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x0B0000;
-    } else if (library === this.aedoorLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x0C0000;
-    } else if (library === this.iconLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("icon.library") || 0x0D0000;
-    } else if (library === this.utilityLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("utility.library") || 0x0E0000;
-    } else if (library === this.mathFFPLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathffp.library") || 0x0F0000;
-    } else if (library === this.mathTransLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathtrans.library") || 0x100000;
-    } else if (library === this.mathIEEEDoubBasLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeedoubbas.library") || 0x110000;
-    } else if (library === this.mathIEEEDoubTransLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeedoubtrans.library") || 0x120000;
-    } else if (library === this.mathIEEESingBasLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeesingbas.library") || 0x130000;
-    } else if (library === this.mathIEEESingTransLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeesingtrans.library") || 0x140000;
-    } else if (library === this.intuitionLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("intuition.library") || 0x150000;
-    }
-
-    this.emulator.setRegister(14, properA6);
+    // M68K Amiga ABI: A6 is callee-saved across library calls. Real
+    // exec/utility/etc. functions preserve A6 — the autodocs guarantee
+    // they only touch D0/D1 (and sometimes A0/A1). Restoring A6 to the
+    // value at trap entry honors that contract for both call patterns
+    // we see in compiled doors:
+    //   1. `move.l a6,-(sp); movea.l <base>,a6; jsr -X(a6); movea.l (sp)+,a6`
+    //      — caller has already set A6 = lib base, so a6Before == lib base.
+    //   2. SAS/C optimized `jsr (an)` via a function-pointer register
+    //      (e.g. A2 = SDivMod32 vector) WITHOUT touching A6. A6 holds
+    //      application state (DOORSMENU's draw_menu uses A6 as a pointer
+    //      to a `static const int *col_x` array). Forcing A6 = lib base
+    //      after the trap stomps that value and the next array index
+    //      reads from the library jump table → all `col_x[col]` came
+    //      back as 0 because it dereferenced utility.library@0xF0000.
+    this.emulator.setRegister(14, a6Before);
+    const properA6 = a6Before;
     if (DEBUG_LIBRARY_TRAPS) {
       const a6AfterRestore = this.emulator.getRegister(14);
 console.log(
@@ -1864,39 +1847,22 @@ console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
     // M68K calling convention requires A6 to be preserved across function calls
     // For library calls, A6 MUST contain the library base address
     // Determine which library this offset belongs to and restore A6 to that library's base
-    // This fixes crash at iteration 35,444 where A6=0x0 caused jump to 0xffffd6
-    let properA6 = a6Before; // Default: restore to original value
-
-    // Determine library base from the library instance
-    // Fallback addresses must match ExecLibrary.ts memory layout (0x080000+)
-    // CRITICAL: ALL libraries with trap handlers must be included here
-    if (library === this.execLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x080000;
-    } else if (library === this.dosLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x0B0000;
-    } else if (library === this.aedoorLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x0C0000;
-    } else if (library === this.iconLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("icon.library") || 0x0D0000;
-    } else if (library === this.utilityLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("utility.library") || 0x0E0000;
-    } else if (library === this.mathFFPLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathffp.library") || 0x0F0000;
-    } else if (library === this.mathTransLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathtrans.library") || 0x100000;
-    } else if (library === this.mathIEEEDoubBasLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeedoubbas.library") || 0x110000;
-    } else if (library === this.mathIEEEDoubTransLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeedoubtrans.library") || 0x120000;
-    } else if (library === this.mathIEEESingBasLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeesingbas.library") || 0x130000;
-    } else if (library === this.mathIEEESingTransLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("mathieeesingtrans.library") || 0x140000;
-    } else if (library === this.intuitionLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("intuition.library") || 0x150000;
-    }
-
-    this.emulator.setRegister(14, properA6);
+    // M68K Amiga ABI: A6 is callee-saved across library calls. Real
+    // exec/utility/etc. functions preserve A6 — the autodocs guarantee
+    // they only touch D0/D1 (and sometimes A0/A1). Restoring A6 to the
+    // value at trap entry honors that contract for both call patterns
+    // we see in compiled doors:
+    //   1. `move.l a6,-(sp); movea.l <base>,a6; jsr -X(a6); movea.l (sp)+,a6`
+    //      — caller has already set A6 = lib base, so a6Before == lib base.
+    //   2. SAS/C optimized `jsr (an)` via a function-pointer register
+    //      (e.g. A2 = SDivMod32 vector) WITHOUT touching A6. A6 holds
+    //      application state (DOORSMENU's draw_menu uses A6 as a pointer
+    //      to a `static const int *col_x` array). Forcing A6 = lib base
+    //      after the trap stomps that value and the next array index
+    //      reads from the library jump table → all `col_x[col]` came
+    //      back as 0 because it dereferenced utility.library@0xF0000.
+    this.emulator.setRegister(14, a6Before);
+    const properA6 = a6Before;
     if (DEBUG_LIBRARY_TRAPS) {
       const a6After = this.emulator.getRegister(14);
 console.log(
