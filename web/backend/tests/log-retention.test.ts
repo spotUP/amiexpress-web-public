@@ -31,7 +31,7 @@ describe('LogRetentionService', () => {
     }
   });
 
-  test('files over maxBytes are tail-trimmed to ~maxBytes at a newline', async () => {
+  test('files over maxBytes are truncated to zero bytes (in-place)', async () => {
     const tmp = makeTmpDir('logret-big-');
     try {
       const p = path.join(tmp, 'backend.log');
@@ -42,17 +42,19 @@ describe('LogRetentionService', () => {
       const beforeBytes = fs.statSync(p).size;
       expect(beforeBytes).toBeGreaterThan(1024 * 100);
 
+      // Capture the inode so we can verify in-place truncate doesn't replace
+      // the file (commit bb394a9f0 — preserves open FDs by avoiding rename).
+      const beforeIno = fs.statSync(p).ino;
+
       const svc = new LogRetentionService();
       svc.configure({ filePaths: [p], maxBytes: 100 * 1024 }); // 100 KB cap
       const res = await svc.runOnce();
 
       expect(res[0].trimmed).toBe(true);
-      const afterBytes = fs.statSync(p).size;
-      expect(afterBytes).toBeLessThanOrEqual(beforeBytes);
-      expect(afterBytes).toBeLessThan(110 * 1024); // within 10% of cap
-      // First byte after trim should start a fresh entry (no mid-line cut).
-      const tail = fs.readFileSync(p, 'utf8');
-      expect(tail.startsWith('x')).toBe(true);
+      expect(res[0].afterBytes).toBe(0);
+      const afterStat = fs.statSync(p);
+      expect(afterStat.size).toBe(0);
+      expect(afterStat.ino).toBe(beforeIno); // same inode → open FDs survive
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

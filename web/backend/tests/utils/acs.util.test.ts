@@ -1,7 +1,18 @@
 /**
  * Unit tests for ACS (Access Control System) Utility
  * Tests security permission system from express.e:8455-8497
+ *
+ * Post-c316ada1e (fix(security): file-based ACS): checkSecurity no longer
+ * uses secLevel-based fallbacks (`secLevel >= 10` etc.) — those were
+ * vulnerabilities that granted ALL permissions to any user level 10+.
+ * The real check delegates to acs-access-loader (Default.info +
+ * ACS.<level>.info on disk). We mock that module so tests can drive the
+ * exact ACS state each scenario expects.
  */
+
+// Mock acs-access-loader so checkSecurity's file-backed lookups become
+// programmable per-test rather than depending on a real Access/ directory.
+jest.mock('../../src/utils/acs-access-loader');
 
 import {
   checkSecurity,
@@ -23,9 +34,22 @@ import {
   setACSConfig,
   getACSConfig,
 } from '../../src/utils/acs.util';
+import {
+  loadAcsAccessFiles,
+  isAcsLoaded,
+  findAcsLevel,
+  checkDefaultAccess,
+  checkAcsPermission,
+} from '../../src/utils/acs-access-loader';
 import { ACSPermission } from '../../src/constants/acs-permissions';
 import { EnvStat } from '../../src/constants/env-codes';
 import type { User } from '../../src/database';
+
+const mockLoadAcsAccessFiles = loadAcsAccessFiles as jest.MockedFunction<typeof loadAcsAccessFiles>;
+const mockIsAcsLoaded = isAcsLoaded as jest.MockedFunction<typeof isAcsLoaded>;
+const mockFindAcsLevel = findAcsLevel as jest.MockedFunction<typeof findAcsLevel>;
+const mockCheckDefaultAccess = checkDefaultAccess as jest.MockedFunction<typeof checkDefaultAccess>;
+const mockCheckAcsPermission = checkAcsPermission as jest.MockedFunction<typeof checkAcsPermission>;
 
 describe('ACS Utility', () => {
   // Mock user factory
@@ -68,7 +92,43 @@ describe('ACS Utility', () => {
       overrideDefaultAccess: false,
       userSpecificAccess: false,
     });
+
+    // Reset acs-access-loader mocks. Default = "ACS files loaded but every
+    // permission denied" so each test opts in to the grants it cares about.
+    // findAcsLevel still rounds secLevel down to the nearest multiple of 5
+    // (the natural test setup matches the real findAcsLevel behaviour for
+    // a fully-populated Access/ directory; isAcsLoaded=true short-circuits
+    // initializeSecurity's loadAcsAccessFiles call).
+    mockLoadAcsAccessFiles.mockReset();
+    mockIsAcsLoaded.mockReset().mockReturnValue(true);
+    mockFindAcsLevel.mockReset().mockImplementation((secLevel: number) => {
+      if (secLevel < 0) return -1;
+      return Math.floor(secLevel / 5) * 5;
+    });
+    mockCheckDefaultAccess.mockReset().mockReturnValue(false);
+    mockCheckAcsPermission.mockReset().mockReturnValue(false);
   });
+
+  /**
+   * Test helper: mark a list of permissions as granted in the mocked
+   * Access/Default.info file. Subsequent calls add to the set.
+   */
+  const grantInDefault = (...perms: string[]) => {
+    const grantSet = new Set(perms);
+    mockCheckDefaultAccess.mockImplementation(p => grantSet.has(p));
+  };
+
+  /**
+   * Test helper: mark a list of permissions as granted in the mocked
+   * Access/ACS.<level>.info file. acsLevel of -1 always denies (matches
+   * real checkAcsPermission). Different levels are independent.
+   */
+  const grantAtAcsLevel = (level: number, ...perms: string[]) => {
+    const grantSet = new Set(perms);
+    mockCheckAcsPermission.mockImplementation((l, p) =>
+      l === level && grantSet.has(p)
+    );
+  };
 
   describe('checkSecurity', () => {
     it('should return false for null user', () => {
@@ -110,7 +170,10 @@ describe('ACS Utility', () => {
         securityFlags: '?'.repeat(87),
       });
 
-      // Should fall through to default logic (secLevel >= 100)
+      // "?" entries fall through to the file-based ACS check. Default.info
+      // grants DOWNLOAD here, so checkSecurity should hit the
+      // checkDefaultAccess branch (express.e:8487-8489) and return true.
+      grantInDefault('ACS.DOWNLOAD');
       expect(checkSecurity(user, ACSPermission.DOWNLOAD)).toBe(true);
     });
 
@@ -251,9 +314,10 @@ describe('ACS Utility', () => {
       expect(checkSecurity(user, ACSPermission.JOIN_SUB_CONFERENCE)).toBe(true);
     });
 
-    it('should grant permission if secLevel >= 10 and no overrideDefaultAccess', () => {
-      // express.e:8487-8489 - default access
+    it('should grant via Default.info if overrideDefaultAccess=false', () => {
+      // express.e:8487-8489 - default access lookup
       const user = createUser({ secLevel: 10 });
+      grantInDefault('ACS.DOWNLOAD');
       expect(checkSecurity(user, ACSPermission.DOWNLOAD)).toBe(true);
     });
 
@@ -268,24 +332,31 @@ describe('ACS Utility', () => {
       expect(checkSecurity(user, ACSPermission.DOWNLOAD)).toBe(false);
     });
 
-    it('should grant all permissions to sysop (level 255) if userSpecificAccess enabled', () => {
-      // express.e:8493-8495
+    it('should grant all permissions to sysop (level 255) via ACS.255.info', () => {
+      // express.e:8497 - final fallback hits checkAcsPermission against
+      // the ACS.<level>.info for the user's findAcsLevel. A real sysop
+      // BBS has ACS.255.info that grants every ACS.* tooltype.
       setACSConfig({
         acLvl: new Array(51).fill(0),
         toggles: new Array(20).fill(false),
-        overrideDefaultAccess: false,
+        overrideDefaultAccess: true, // skip Default.info path so we test the ACS.<level> branch
         userSpecificAccess: true,
       });
+
+      grantAtAcsLevel(255, 'ACS.SYSOP_COMMANDS', 'ACS.REMOTE_SHELL');
 
       const sysop = createUser({ secLevel: 255 });
       expect(checkSecurity(sysop, ACSPermission.SYSOP_COMMANDS)).toBe(true);
       expect(checkSecurity(sysop, ACSPermission.REMOTE_SHELL)).toBe(true);
     });
 
-    it('should use secLevel >= 100 fallback for final check', () => {
-      // express.e:8497 - final fallback
-      // Need to disable default access to test the final fallback
-      setACSConfig({ overrideDefaultAccess: true });
+    it('should defer to ACS.<level>.info for the final fallback check', () => {
+      // express.e:8497 - final fallback hits checkAcsPermission against
+      // the ACS.<level>.info file for the user's findAcsLevel.
+      setACSConfig({ overrideDefaultAccess: true }); // skip Default.info path
+
+      // Simulate: ACS.100.info grants UPLOAD, ACS.50.info does not.
+      grantAtAcsLevel(100, 'ACS.UPLOAD');
 
       const highLevelUser = createUser({ secLevel: 100 });
       const lowLevelUser = createUser({ secLevel: 50 });
@@ -301,6 +372,7 @@ describe('ACS Utility', () => {
   describe('checkSecurityByName', () => {
     it('should check permission by name', () => {
       const user = createUser({ secLevel: 100 });
+      grantInDefault('ACS.DOWNLOAD');
       expect(checkSecurityByName(user, 'ACS.DOWNLOAD')).toBe(true);
     });
 
@@ -594,6 +666,11 @@ describe('ACS Utility', () => {
         const user = createUser({ secLevel: 150 });
         const session = createSession(user);
 
+        // Simulate: Default.info exists and lists ACS.OVERRIDE_DEFAULTS,
+        // but ACS.150.info does NOT grant OVERRIDE_DEFAULTS — so the
+        // default-access check still applies for this user.
+        grantInDefault('ACS.OVERRIDE_DEFAULTS');
+
         initializeSecurity(session);
 
         expect(session.acsLevel).toBe(150);
@@ -609,6 +686,11 @@ describe('ACS Utility', () => {
       it('should set overrideDefaultAccess for sysop', () => {
         const sysop = createUser({ secLevel: 255 });
         const session = createSession(sysop);
+
+        // Default.info has OVERRIDE_DEFAULTS *and* ACS.255.info grants it,
+        // so the sysop's overrideDefaultAccess resolves to TRUE.
+        grantInDefault('ACS.OVERRIDE_DEFAULTS');
+        grantAtAcsLevel(255, 'ACS.OVERRIDE_DEFAULTS');
 
         initializeSecurity(session);
 
@@ -670,18 +752,27 @@ describe('ACS Utility', () => {
       expect(checkSecurity(guest, ACSPermission.MSG_LEVEL)).toBe(true);
     });
 
-    it('should handle new user (basic permissions)', () => {
+    it('should handle new user (basic permissions, no sysop access)', () => {
       const newUser = createUser({ secLevel: 10 });
+
+      // Default.info grants the everyday user permissions.
+      grantInDefault('ACS.READ_BULLETINS', 'ACS.DOWNLOAD');
 
       expect(checkSecurity(newUser, ACSPermission.READ_BULLETINS)).toBe(true);
       expect(checkSecurity(newUser, ACSPermission.DOWNLOAD)).toBe(true);
-      // Default access grants permissions to secLevel >= 10
-      // To restrict sysop commands, use securityFlags or secOverride
-      expect(checkSecurity(newUser, ACSPermission.SYSOP_COMMANDS)).toBe(true);
+      // SECURITY (c316ada1e): Pre-fix, the broken `secLevel >= 10` fallback
+      // granted SYSOP_COMMANDS to every user level 10+. Post-fix the file-
+      // based check denies it because Default.info doesn't grant it and
+      // there's no ACS.10.info entry for SYSOP_COMMANDS.
+      expect(checkSecurity(newUser, ACSPermission.SYSOP_COMMANDS)).toBe(false);
     });
 
     it('should handle power user (elevated permissions)', () => {
       const powerUser = createUser({ secLevel: 150 });
+
+      // ACS.150.info (or any same-tier file via findAcsLevel) grants the
+      // power-user perms; UPLOAD comes through Default.info as well.
+      grantInDefault('ACS.UPLOAD', 'ACS.ENTER_MESSAGE', 'ACS.FILE_LISTINGS');
 
       expect(checkSecurity(powerUser, ACSPermission.UPLOAD)).toBe(true);
       expect(checkSecurity(powerUser, ACSPermission.ENTER_MESSAGE)).toBe(true);
@@ -691,6 +782,9 @@ describe('ACS Utility', () => {
     it('should handle sysop (all permissions)', () => {
       setACSConfig({ userSpecificAccess: true });
       const sysop = createUser({ secLevel: 255 });
+
+      // Sysop perms come from ACS.255.info, not Default.info.
+      grantAtAcsLevel(255, 'ACS.SYSOP_COMMANDS', 'ACS.REMOTE_SHELL', 'ACS.SYSOP_DOWNLOAD');
 
       expect(checkSecurity(sysop, ACSPermission.SYSOP_COMMANDS)).toBe(true);
       expect(checkSecurity(sysop, ACSPermission.REMOTE_SHELL)).toBe(true);

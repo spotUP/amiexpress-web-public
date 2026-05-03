@@ -19,10 +19,21 @@ describe('download accounting integration (per-conference + credit tracking)', (
 
   it('increments conference stats when ACS conference accounting is enabled', async () => {
     const confBefore = await repo.getConferenceById(1);
+
+    // Post c316ada1e fix(security), checkSecurity uses file-based ACS lookups
+    // (no more secLevel >= 100 fallback). Grant CONFERENCE_ACCOUNTING via the
+    // user's securityFlags string — that path doesn't require Access/ files.
+    // ACSPermission.CONFERENCE_ACCOUNTING = 57. securityFlags is indexed by
+    // permission number; "T" grants, "F" denies, "?" defers to default logic.
+    const securityFlags = '?'.repeat(87).split('');
+    securityFlags[57] = 'T';
+
     const session: any = {
       user: {
         username: 'tester',
         secLevel: 50, // non-sysop
+        securityFlags: securityFlags.join(''),
+        secOverride: '',
       },
       conferences: await repo.getConferences(),
       nodeId: 1,

@@ -70,15 +70,29 @@ describe('handleMessageToInput', () => {
     expect(session.tempData.messageEntry.toUser).toBe('Alice');
   });
 
-  test('EALL accepted when user has secLevel >= 10', () => {
+  test('EALL accepted when user has EALL_MESSAGES permission', () => {
+    // Post c316ada1e fix(security): no more secLevel >= 10 fallback. Grant
+    // EALL_MESSAGES (ACS index 34) via securityFlags so the check resolves
+    // without depending on ACS files on disk.
+    const securityFlags = '?'.repeat(87).split('');
+    securityFlags[34] = 'T';
     const socket = makeSocket();
-    const session = makeSession({ user: { username: 'Op', secLevel: 20, confAccess: 'X' } });
+    const session = makeSession({
+      user: {
+        username: 'Op',
+        secLevel: 20,
+        confAccess: 'X',
+        securityFlags: securityFlags.join(''),
+        secOverride: '',
+      },
+    });
     handleMessageToInput(socket, session, 'eall');
     expect(session.tempData.messageEntry.toUser).toBe('EALL');
   });
 
-  test('EALL rejected when user secLevel < 10', () => {
+  test('EALL rejected when user lacks EALL_MESSAGES permission', () => {
     const socket = makeSocket();
+    // No securityFlags grant + no ACS files → checkSecurity denies.
     const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
     handleMessageToInput(socket, session, 'EALL');
     // Should be rejected: tempData cleared and state changed to DISPLAY_MENU
