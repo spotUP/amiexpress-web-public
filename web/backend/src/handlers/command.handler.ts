@@ -23,7 +23,6 @@ import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { displayDoorMenu, executeDoor } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
-  displayFileList,
   displayFileMaintenance,
   displayFileStatus,
   displayNewFiles,
@@ -31,13 +30,9 @@ import {
   displayDownloadInterface,
   startFileUpload,
   startFileDownload,
-  handleFileDownload,
-  displayFileAreaContents,
   handleFileDeleteConfirmation,
   handleFileMoveConfirmation,
   matchesWildcard,
-  displaySelectedFileAreas,
-  displayNewFilesInDirectories
 } from './file/file.handler';
 import {
   displayAccountEditingMenu,
@@ -349,14 +344,54 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         session.inputBuffer = '';
         emitText(socket, '\r\n'); // Move to the next line like express.e
         await handleMessageBodyInput(socket, session, line);
+      } else if (data === '\x1e' || data === '\x18') {
+        // express.e:10195-10205 — Ctrl-X (code 30 = 0x1E in 68K AmiExpress;
+        // we also accept ASCII 0x18 / Ctrl-X for modern terminals): clear
+        // current line. Walk back over every echoed char with "\b \b".
+        const len = session.inputBuffer.length;
+        if (len > 0) {
+          let erase = '';
+          for (let i = 0; i < len; i++) erase += '\b \b';
+          emitText(socket, erase);
+          session.inputBuffer = '';
+        }
       } else if (data === '\x7f' || data === '\b') {
+        // express.e:10207-10224 backspace
         if (session.inputBuffer.length > 0) {
           session.inputBuffer = session.inputBuffer.slice(0, -1);
           emitText(socket, '\b \b'); // Erase last char visibly
         }
+      } else if (data === '\t') {
+        // express.e:10242-10257 Tab — expand to next 8-column boundary by
+        // padding spaces. Truncated if it would exceed maxLineLen-3 (=72 for
+        // default 75-char limit).
+        const x = session.inputBuffer.length;
+        const maxLineLen = 75;
+        const tabStop = (Math.floor(x / 8) + 1) * 8;
+        if (tabStop <= maxLineLen - 3) {
+          const pad = ' '.repeat(tabStop - x);
+          session.inputBuffer += pad;
+          emitText(socket, pad);
+        }
+        // else: silently drop — express.e treats over-budget Tab as no-op
+      } else if (data === '\x1b') {
+        // ESC alone — express.e ignores (no abort-via-ESC during edit).
+        // Multi-byte escape sequences (cursor keys etc.) arrive in one
+        // chunk on most terminals; the printable-range check below filters
+        // any tail bytes that aren't valid content.
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer += data;
         emitText(socket, data); // Echo printable characters
+      } else if (data.length > 1) {
+        // express.e:10118 ED_ANSI_ALLOWED — full editor accepts ANSI.
+        // For our line buffer, accept multi-byte escape sequences as a
+        // single token (CSI, SGR etc.) by appending verbatim. Filters
+        // anything with embedded control chars except CSI/ESC.
+        const cleaned = data.replace(/[\x00-\x08\x0a-\x1a\x1c-\x1f\x7f]/g, '');
+        if (cleaned) {
+          session.inputBuffer += cleaned;
+          emitText(socket, cleaned);
+        }
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_OPTIONS:
@@ -2358,97 +2393,6 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     return;
   }
 
-  // Handle file area selection (like getDirSpan in AmiExpress)
-   if (session.subState === LoggedOnSubState.FILES_SELECT_AREA) {
-console.log(' In file area selection state');
-     const input = data.trim();
-     const areaNumber = parseInt(input);
-
-     if (input === '' || (isNaN(areaNumber) && input !== '0')) {
-       // Empty input or invalid - return to menu with error handling
-       emitText(socket, '\r\n\x1b[31mInvalid selection. Returning to main menu...\x1b[0m\r\n');
-       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-       session.menuPause = false;
-       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-       session.tempData = undefined;
-       return;
-     }
-
-    // Handle door selection
-     if (session.tempData?.doorMode) {
-       const availableDoors = session.tempData.availableDoors;
-       const doorNumber = parseInt(input);
-
-       if (isNaN(doorNumber) || doorNumber < 1 || doorNumber > availableDoors.length) {
-         emitText(socket, '\r\n\x1b[31mInvalid door number. Please enter a number between 1 and ' + availableDoors.length + '.\x1b[0m\r\n');
-         emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-         session.menuPause = false;
-         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-         session.tempData = undefined;
-         return;
-       }
-
-       const selectedDoor = availableDoors[doorNumber - 1];
-       await executeDoor(socket, session, selectedDoor);
-       return;
-     }
-
-    // Handle file download selection (when areaFiles are available)
-     if (session.tempData?.areaFiles) {
-       const areaFiles = session.tempData.areaFiles;
-       const fileNumber = parseInt(input);
-
-       if (isNaN(fileNumber) || fileNumber < 1 || fileNumber > areaFiles.length) {
-         emitText(socket, '\r\n\x1b[31mInvalid file number. Please enter a number between 1 and ' + areaFiles.length + '.\x1b[0m\r\n');
-         emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-         session.menuPause = false;
-         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-         session.tempData = undefined;
-         return;
-      }
-
-      // Start file download
-      handleFileDownload(socket, session, fileNumber);
-      return;
-    }
-
-    // Handle file area selection for upload/download
-     if (isNaN(areaNumber) || areaNumber === 0) {
-       emitText(socket, '\r\n\x1b[31mInvalid file area number. Please enter a valid number.\x1b[0m\r\n');
-       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-       session.menuPause = false;
-       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-       session.tempData = undefined;
-       return;
-     }
-
-    // Get file areas for current conference and find by relative number (1,2,3...)
-    const currentFileAreas = getFileAreas().filter(area => area.conferenceId === session.currentConf);
-    const selectedArea = currentFileAreas[areaNumber - 1]; // 1-based indexing
-
-    if (!selectedArea) {
-      emitText(socket, '\r\nInvalid file area number.\r\n');
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-
-    // Check if this is upload mode
-    if (session.tempData?.uploadMode) {
-      // Start upload process for selected area
-      startFileUpload(socket, session, selectedArea);
-    } else if (session.tempData?.downloadMode) {
-      // Start download process for selected area
-      startFileDownload(socket, session, selectedArea);
-    } else {
-      // Display files in selected area (like displayIt in AmiExpress)
-      displayFileAreaContents(socket, session, selectedArea);
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    }
-    return;
-  }
-
   // Handle batch download file selection (FILES_DOWNLOAD_SELECT)
   // Supports: space-separated numbers, ranges (1-5), or filenames
   if (session.subState === LoggedOnSubState.FILES_DOWNLOAD_SELECT) {
@@ -2899,46 +2843,6 @@ console.log(' In file upload state - canceling upload');
     return;
   }
 
-  // Handle continuation of file listing between areas
-  if (session.subState === LoggedOnSubState.FILE_LIST_CONTINUE) {
-console.log(' Continuing file list display');
-    const tempData = session.tempData as {
-      fileAreas: any[],
-      dirSpan: { startDir: number, dirScan: number },
-      reverse: boolean,
-      nonStop: boolean,
-      currentDir: number,
-      searchDate?: Date,
-      isNewFiles?: boolean,
-      userListPage?: number,
-      searchTerm?: string
-    };
-
-    // Handle user list pagination
-    if (tempData.userListPage) {
-      const input = data.trim().toUpperCase();
-      if (input === 'Q') {
-        emitText(socket, '\r\nReturning to main menu...\r\n');
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
-      }
-      // Continue to next page
-      displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
-      return;
-    }
-
-    if (tempData.isNewFiles && tempData.searchDate) {
-      // Continue new files display
-      displayNewFilesInDirectories(socket, session, tempData.searchDate,
-        { startDir: tempData.currentDir, dirScan: tempData.dirSpan.dirScan }, tempData.nonStop);
-    } else {
-      // Continue regular file display
-      displaySelectedFileAreas(socket, session, tempData.fileAreas, tempData.dirSpan, tempData.reverse, tempData.nonStop);
-    }
-    return;
-  }
-
   // Handle conference selection
   if (session.subState === LoggedOnSubState.CONFERENCE_SELECT) {
 console.log(' In conference selection state');
@@ -3035,7 +2939,8 @@ console.log(' In conference selection state');
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
-      handleMessageToInput(socket, session, input);
+      // handleMessageToInput is async (DB lookup for chooseAName + checkConfAccess).
+      void handleMessageToInput(socket, session, input);
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);

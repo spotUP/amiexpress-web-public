@@ -168,11 +168,6 @@ import {
   setHelpers as setHelpersForChatHandler,
 } from "./handlers/chat/chat.handler";
 import {
-  displayFileAreaContents,
-  displayFileList,
-  getDirSpan,
-  displayDirectorySelectionPrompt,
-  displaySelectedFileAreas,
   displayFileMaintenance,
   handleFileDelete,
   handleFileDeleteConfirmation,
@@ -181,7 +176,6 @@ import {
   handleFileSearch,
   displayFileStatus,
   displayNewFiles,
-  displayNewFilesInDirectories,
   displayUploadInterface,
   displayDownloadInterface,
   matchesWildcard,
@@ -189,7 +183,6 @@ import {
   dirLineNewFile,
   startFileUpload,
   startFileDownload,
-  handleFileDownload,
   setFileAreas,
   setDatabase as setDatabaseForFileHandler,
   setCallersLog,
