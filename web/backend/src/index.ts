@@ -518,7 +518,17 @@ const io = new Server(server, {
   // ROBUST CONNECTION SETTINGS - Tolerate temporary network issues
   pingTimeout: 120000, // Wait 2 minutes for pong before considering connection dead (increased from 60s)
   pingInterval: 25000, // Send ping every 25s to keep connection alive
-  maxHttpBufferSize: 1e6, // 1MB max message size
+  // The frontend's BBSTerminal currently emits file uploads through the socket
+  // as a JSON-serialized number array (Array.from(new Uint8Array(buf))). That
+  // encoding inflates each byte to ~3 chars, so a 10MB file (the multer cap
+  // for /api/upload) becomes ~30MB on the wire. With the old 1MB ceiling,
+  // anything larger than ~330KB triggered a socket.io "transport error"
+  // disconnect and the user was bounced back to the login screen — see #11
+  // (regression report 2026-05-04). Bumped to 64MB to comfortably contain the
+  // worst-case JSON-encoded 10MB upload plus protocol overhead.
+  // TODO: switch the frontend uploader to a multipart POST against the
+  // already-wired /api/upload endpoint and shrink this back down.
+  maxHttpBufferSize: 64 * 1024 * 1024, // 64MB — covers JSON-encoded 10MB upload
   // Connection state recovery - helps maintain sessions across brief disconnects
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes - keep session state during brief disconnects
