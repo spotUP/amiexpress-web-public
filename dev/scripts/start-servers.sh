@@ -169,11 +169,21 @@ launch_tmux_session() {
      echo '  Press any key to close'; \
      read -n1"
 
-  # F2 = Restart backend (kill + re-run start-servers in pane 0)
+  # F2 = Restart backend.
+  #
+  # Earlier versions did `send-keys C-c; send-keys "<cmd>" Enter` but the
+  # Ctrl-C raced with start-servers.sh's cleanup trap (which sleeps 2s
+  # waiting for graceful child shutdown). Send-keys for the rerun command
+  # arrived while the trap was still running and the chars were silently
+  # dropped — the result was "server stopped, never restarted".
+  #
+  # Use respawn-pane instead: kill whatever's running in pane 0 atomically
+  # and immediately exec the new command. No keystroke racing, no
+  # interactive shell to time correctly. -k forces respawn even if the
+  # current command hasn't exited yet.
   tmux bind-key -n F2 \
-    send-keys -t "${session}:amiexpress.0" C-c \; \
-    send-keys -t "${session}:amiexpress.0" \
-      "cd '$root' && ./dev/scripts/kill-servers.sh 2>/dev/null; bash '$0' --bbs-only" Enter
+    respawn-pane -k -t "${session}:amiexpress.0" \
+    "bash -c \"cd '$root' && ./dev/scripts/kill-servers.sh 2>/dev/null; bash '$0' --bbs-only; bash\""
 
   # F3 = Open BBS in browser
   tmux bind-key -n F3 \
