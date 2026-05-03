@@ -4149,11 +4149,12 @@ console.log('[CommandPriority] Trying as InternalCommand');
 
 // Process BBS commands (processInternalCommand equivalent)
 export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
-  // Clear screen before showing command output (authentic BBS behavior)
-  // EXCEPTION: Don't clear when called from ~CC_ screen commands - screen is already being displayed
-  if (!session.executingScreenCommand) {
-    emitText(socket, AnsiUtil.clearScreen());
-  }
+  // Real AmiExpress prints command responses inline (no clear-between-commands).
+  // We previously emitted a 30-line "soft clear" here so prior content scrolled
+  // into xterm.js scrollback before the next response — but that left a column
+  // of empty lines between every prompt and its response. Commands that genuinely
+  // need a clear (e.g. menu redraw, CONFTOP banner, screen-file display) emit
+  // their own ~f / ESC[2J / displayScreen() — they don't rely on this.
 
   // Map commands to internalCommandX functions from AmiExpress
   switch (command) {
