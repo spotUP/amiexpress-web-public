@@ -272,54 +272,16 @@ export async function handleReadMessagesCommand(socket: any, session: BBSSession
 /**
  * Handle E command - Enter Message
  * 1:1 port from express.e:24860-24868 internalCommandE() -> express.e:10749+ enterMSG()
+ *
+ * NOTE: this is a thin shim that delegates to messaging.handler.ts'
+ * handleEnterMessageFullCommand. Earlier versions of this function had
+ * an inline copy of the enterMSG flow, but it silently skipped the
+ * skipEntry chain (EALL exact-match, sysop loadAccount, chooseAName
+ * canonical name, checkConfAccess, checkToForward) when params were
+ * pre-filled. The canonical implementation lives in messaging.handler.ts;
+ * keep this export so existing imports keep resolving.
  */
 export function handleEnterMessageCommand(socket: any, session: BBSSession, params: string = ''): void {
-  // express.e:24861 - Check ACS_ENTER_MESSAGE permission
-  if (!checkSecurity(session.user, ACSPermission.ENTER_MESSAGE)) {
-    ErrorHandler.permissionDenied(socket, 'enter message', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  // express.e:24862 - setEnvStat(ENV_MAIL)
-console.log('[ENV] Mail - Enter');
-
-  // express.e:24863 - parseParams(params)
-  const parsedParams = ParamsUtil.parse(params);
-
-  // Initialize message entry state - express.e:10749+ enterMSG()
-  session.tempData = {
-    messageEntry: {
-      toUser: parsedParams.length > 0 ? parsedParams[0] : '',
-      subject: '',
-      isPrivate: false,
-      body: [],
-      currentLine: 0,
-      parentId: null  // Set by Reply command (not yet implemented)
-    }
-  };
-
-  // Start message entry flow - express.e:10749+ enterMSG()
-  // express.e:9998-10000 msgToHeader(): separator box + To: (Enter)='ALL'? prompt
-  const msgToHeader = '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n'
-                    + '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ';
-
-  // If recipient was provided in params (express.e:10765-10772)
-  if (session.tempData.messageEntry.toUser && session.tempData.messageEntry.toUser.length > 0) {
-    socket.emit('ansi-output', msgToHeader + session.tempData.messageEntry.toUser + '\r\n');
-    promptForSubject(socket, session);
-  } else {
-    // Prompt for recipient - express.e:10778-10783
-    socket.emit('ansi-output', msgToHeader);
-    session.subState = LoggedOnSubState.POST_MESSAGE_TO;
-  }
-}
-
-/**
- * Prompt for message subject - express.e:10839-10849
- */
-function promptForSubject(socket: any, session: BBSSession): void {
-  socket.emit('ansi-output', `${AnsiUtil.colorize('Subject:', 'cyan')} ${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Blank', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('abort', 'yellow')}${AnsiUtil.colorize('?', 'green')} `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
+  const { handleEnterMessageFullCommand } = require('../message/messaging.handler');
+  handleEnterMessageFullCommand(socket, session, params);
 }

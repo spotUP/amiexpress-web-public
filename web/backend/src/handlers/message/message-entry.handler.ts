@@ -83,6 +83,50 @@ function isExtSendMsgBase(session: BBSSession): boolean {
 }
 
 /**
+ * Compute the user's display name FOR THIS CONFERENCE — express.e
+ * confMailName (declared at express.e:237, populated at express.e:12459-
+ * 12466 inside the messages PROC):
+ *
+ *   SELECT confNameType
+ *     CASE NAME_TYPE_USERNAME    StrCopy(confMailName, userName, 31)
+ *     CASE NAME_TYPE_REALNAME    StrCopy(confMailName, realName, 26)
+ *     CASE NAME_TYPE_INTERNETNAME StrCopy(confMailName, internetName, 10)
+ *
+ * Express.e then uses confMailName for `mh.fromName` (10649), all
+ * "is this my mail?" checks (8854, 8943, 9854, 9899, 11114, 11125, 11179,
+ * 11202, 11706, 11749, 11918-11919, 12087-12089, 12345-12348). Without
+ * this, REALNAME conferences would store messages under the user's web
+ * username instead of the real name they registered with — breaking
+ * door compatibility AND the sysop's mental model when reading the
+ * conference's HeaderFile.
+ */
+export function getConfMailName(session: BBSSession): string {
+  const username = session.user?.username || '';
+  const confId = session.currentConf || 1;
+  const msgBaseId = session.currentMsgBase || 1;
+  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confId);
+  const requireRealname = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
+  const requireUsername = !!(flags?.requireUsername || flags?.requireUsernameMsgBases?.has?.(msgBaseId));
+  const userMisc: any = (session.user as any) || {};
+  const realName = String(userMisc.realName || userMisc.realname || '').trim();
+  const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
+
+  // INTERNETNAME tooltype isn't yet harvested on ConferenceToolFlags
+  // (separate gap tracked in captureRealAndInternetNames). When/if it
+  // is, plumb a NAME_TYPE_INTERNETNAME branch here that returns
+  // internetName.substring(0, 10).
+  if (requireRealname && realName) {
+    return realName.substring(0, 26);
+  }
+  if (requireUsername && username) {
+    return username.substring(0, 31);
+  }
+  // Default = NAME_TYPE_USERNAME (express.e:12460-12461)
+  return username.substring(0, 31);
+}
+
+/**
  * express.e:9909-9950 checkToForward — when the conf has FORWARDMAIL=<user>
  * tooltype set AND the recipient is the sysop (slot 1), redirect the message
  * to <user> and print "    Forwarding mail To: <name>".
@@ -109,18 +153,27 @@ function applyConfForwardMail(socket: any, session: BBSSession): void {
 }
 
 /**
- * Handle recipient (To:) input - express.e:10771-10838
+ * Run the express.e enterMSG "skipEntry" check sequence on a recipient
+ * (express.e:10785-10845). Used by both the interactive To: prompt
+ * (handleMessageToInput) and the pre-filled `E <name>` entry path
+ * (handleEnterMessageFullCommand). Caller is responsible for emitting the
+ * post-Enter '\r\n' that lineInput would have produced — this function
+ * starts directly at the EALL/sysop/chooseAName logic.
  *
- * Async because we need DB lookups for chooseAName + checkConfAccess.
+ * Express.e:10802 StrCmp(str,'eall',5) requires EXACT 'eall' match (the
+ * length-5 strncmp compares the trailing null too). We mirror that here.
+ *
+ * On success: sets messageEntry.toUser, runs checkToForward, calls
+ * promptForSubject. On failure: emits the express.e error string and
+ * returns the user to DISPLAY_MENU.
  */
-export async function handleMessageToInput(socket: any, session: BBSSession, input: string): Promise<void> {
+export async function processToRecipient(socket: any, session: BBSSession, input: string): Promise<void> {
   // express.e:10762,10779 — lineInput max 30 chars; truncate silently if longer
   const recipient = input.trim().substring(0, 30);
 
-  // Blank = ALL (express.e:10793-10795)
+  // Blank = ALL (express.e:10796-10798)
   if (recipient === '') {
     session.tempData.messageEntry.toUser = 'ALL';
-    emitText(socket, '\r\n');
     // express.e:10845 checkToForward runs after recipient is finalized.
     // ALL is not the sysop so this is a no-op, but keep the call symmetric
     // with the other branches.
@@ -130,6 +183,7 @@ export async function handleMessageToInput(socket: any, session: BBSSession, inp
   }
 
   // Check for EALL - express.e:10800-10816
+  // express.e:10802 StrCmp(str,'eall',5) — exact match only.
   const recipientLower = recipient.toLowerCase();
   if (recipientLower === 'eall') {
     // express.e:10805-10808 — extSend (msgbase has EXTSEND.<n>) blocks EALL
@@ -142,7 +196,6 @@ export async function handleMessageToInput(socket: any, session: BBSSession, inp
     // express.e:10810 - Check ACS_EALL_MESSAGES permission
     if (checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
       session.tempData.messageEntry.toUser = 'EALL';
-      emitText(socket, '\r\n');
       applyConfForwardMail(socket, session);
       promptForSubject(socket, session);
     } else {
@@ -159,7 +212,6 @@ export async function handleMessageToInput(socket: any, session: BBSSession, inp
   // doCommentNotify path. checkConfAccess for sysop is implicitly allowed.
   if (recipientLower === 'sysop') {
     session.tempData.messageEntry.toUser = 'SYSOP';
-    emitText(socket, '\r\n');
     // express.e:10845 — FORWARDMAIL redirect kicks in here for sysop comments
     applyConfForwardMail(socket, session);
     promptForSubject(socket, session);
@@ -216,9 +268,19 @@ export async function handleMessageToInput(socket: any, session: BBSSession, inp
   // the modern admin UI assumes. Flagged here for future strict-mode option.
 
   session.tempData.messageEntry.toUser = resolved;
-  emitText(socket, '\r\n');
   applyConfForwardMail(socket, session);
   promptForSubject(socket, session);
+}
+
+/**
+ * Handle recipient (To:) input - express.e:10771-10838
+ *
+ * Emits the post-Enter '\r\n' (mirrors lineInput's CR/LF on submit), then
+ * delegates to processToRecipient for the express.e:10785+ skipEntry logic.
+ */
+export async function handleMessageToInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  emitText(socket, '\r\n');
+  await processToRecipient(socket, session, input);
 }
 
 /**
@@ -661,10 +723,18 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       status = MsgStatus.NORMAL;   // 'P'
     }
 
+    // express.e:10649 — `AstrCopy(mh.fromName, confMailName, 31)` uses the
+    // per-conference display name (NAME_TYPE_USERNAME/REALNAME/INTERNETNAME),
+    // not the raw login username. In USERNAME conferences the two are equal,
+    // but REALNAME/INTERNETNAME conferences must store the conference-typed
+    // name so the recipient's "Is this my mail?" check (express.e:8943,
+    // 11125, etc., all of which compare against confMailName) sees a match.
+    const fromName = getConfMailName(session);
+
     const message = {
       subject: entry.subject,
       body: messageBody,
-      author: session.user!.username,
+      author: fromName,
       timestamp: messageDate,
       conferenceId: session.currentConf || 1,
       messageBaseId: session.currentMsgBase || 1,
@@ -702,7 +772,9 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       session.currentConf || 1,
       session.currentMsgBase || 1,
       {
-        from: session.user!.username,
+        // express.e:10649 — fromName comes from confMailName, not the raw
+        // login username (matters for REALNAME/INTERNETNAME conferences).
+        from: fromName,
         to: entry.toUser,
         subject: entry.subject,
         date: formatMessageDate(messageDate),
@@ -858,8 +930,22 @@ console.error('[saveMessage] Error:', error);
       },
       DebugSeverity.CRITICAL
     );
-    // express.e:10713 aePuts('Failed!\b\n\b\n')
-    emitText(socket, 'Failed!\r\n\r\n');
+    // express.e differentiates two failure modes here:
+    //   - lockMsgBase() returns 0 (express.e:10744): another task holds the lock.
+    //     Verbatim text: 'ERROR! Another task has the MsgBase locked!\b\n
+    //                     Message has not been saved!\b\n\b\n'
+    //   - saveMessageHeader / Open(<msgNum>, MODE_NEWFILE) fails (10696, 10713):
+    //     'Failed!\b\n\b\n'
+    //
+    // writeMessageFile throws an Error with the prefix "MsgBase locked" when
+    // it exhausts retry attempts; everything else falls through to the
+    // generic "Failed!" text.
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.startsWith('MsgBase locked')) {
+      emitText(socket, '\r\nERROR! Another task has the MsgBase locked!\r\nMessage has not been saved!\r\n\r\n');
+    } else {
+      emitText(socket, 'Failed!\r\n\r\n');
+    }
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;

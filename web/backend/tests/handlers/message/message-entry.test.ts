@@ -3,6 +3,8 @@ import {
   handleMessageToInput,
   handleMessageSubjectInput,
   handleMessagePrivateInput,
+  processToRecipient,
+  getConfMailName,
 } from '../../../src/handlers/message/message-entry.handler';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
 
@@ -134,6 +136,64 @@ describe('handleMessageSubjectInput', () => {
     const session = makeSession();
     handleMessageSubjectInput(socket, session, '   ');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+});
+
+describe('processToRecipient — express.e:10802 EALL exact match', () => {
+  // express.e:10802 `StrCmp(str, 'eall', 5)` requires exact 'eall' (the
+  // length-5 strncmp compares the trailing null too). `eallice` must NOT
+  // be treated as EALL; pre-2026-05-03 the E-command params branch
+  // accepted it via startsWith().
+  test("'eallice' is NOT EALL (no EALL_MESSAGES permission required)", async () => {
+    const socket = makeSocket();
+    // No EALL flag. If startsWith('eall') were used we would early-exit
+    // with "User does not exist!!" — but exact match falls through to
+    // the chooseAName path which (with no _db wired) accepts the literal
+    // recipient.
+    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
+    await processToRecipient(socket, session, 'eallice');
+    expect(session.tempData?.messageEntry?.toUser).toBe('eallice');
+    expect(session.subState).not.toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  test('EALL with extra trailing chars not treated as EALL', async () => {
+    const socket = makeSocket();
+    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
+    await processToRecipient(socket, session, 'eallx');
+    // Falls through to regular-recipient path
+    expect(session.tempData?.messageEntry?.toUser).toBe('eallx');
+  });
+
+  test('exact EALL still triggers permission check (rejected for low sec)', async () => {
+    const socket = makeSocket();
+    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
+    await processToRecipient(socket, session, 'eall');
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(session.tempData).toBeUndefined();
+  });
+});
+
+describe('getConfMailName — express.e:12459-12466 confMailName', () => {
+  // express.e populates confMailName from loggedOnUserKeys.userName /
+  // loggedOnUserMisc.realName / .internetName based on confNameType,
+  // then uses that for mh.fromName (10649) and every "is this my mail?"
+  // comparison. Default (no flag set) is NAME_TYPE_USERNAME.
+  test('default conference returns username verbatim (NAME_TYPE_USERNAME)', () => {
+    const session = makeSession({ user: { username: 'Spot', secLevel: 20, realName: 'Real Name Here' } });
+    expect(getConfMailName(session)).toBe('Spot');
+  });
+
+  test('username field truncated at 31 chars (express.e AstrCopy limit)', () => {
+    const longName = 'A'.repeat(40);
+    const session = makeSession({ user: { username: longName, secLevel: 20 } });
+    expect(getConfMailName(session).length).toBeLessThanOrEqual(31);
+  });
+
+  test('falls back gracefully when user is missing', () => {
+    const session: any = { currentConf: 1, currentMsgBase: 1, user: null };
+    // Should not throw — returns empty string for absent user (matches
+    // express.e behavior where confMailName would just be empty).
+    expect(() => getConfMailName(session)).not.toThrow();
   });
 });
 
