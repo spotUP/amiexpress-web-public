@@ -288,46 +288,62 @@ console.warn('[joinConference] saveMsgPointers error:', err);
     // (advanceDisplayFlow AUTO_REJOIN block) BEFORE joinConference is called.
     // This prevents non-blocking doPause from racing with the "Joining Conference" output.
 
+    // express.e:5008 - QUIET_JOIN suppresses join output (bbsConfig tooltype).
+    // When set, the leading \r\n, "Joining Conference:" / "Auto-ReJoined"
+    // message, and the message-stats block are all skipped.
+    let quietJoin = false;
+    try {
+      const { db: dbRef } = require('../../database');
+      const cfg = dbRef?.getConfigRepository?.()?.getSystemConfig?.();
+      quietJoin = !!cfg?.quiet_join;
+    } catch { /* config unreadable — fall through to noisy default */ }
+
     // express.e:5065 - IF quietJoin=FALSE THEN aePuts('\b\n')
-    // QUIET_JOIN tooltype not set in bbsConfig.info, so always emit
-    socket.emit('ansi-output', '\r\n');
+    if (!quietJoin) socket.emit('ansi-output', '\r\n');
 
     // express.e:5066-5088 - auto-rejoin shows user stats and different message
     if (auto) {
       console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);
       // express.e:5067 - scanHoldDesc() — WEB_: not applicable
       // express.e:5068 - processSysCommand('S') - Display user stats
-      // processSysCommand always allows SYSCMD (express.e:28249)
+      // processSysCommand always allows SYSCMD (express.e:28249).
+      // Note: stats display runs unconditionally — express.e doesn't gate
+      // S command output on QUIET_JOIN; only the verbose strings around it.
       const { processCommand } = require('../command.handler');
       await processCommand(socket, session, 'S', '', true);
 
-      // express.e:5071-5074 - Display "Auto-ReJoined" message
-      const autoReJoinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
-        ? `Conference ${confId}: ${conference.name} [${messageBase.name}] Auto-ReJoined`
-        : `Conference ${confId}: ${conference.name} Auto-ReJoined`;
-      socket.emit('ansi-output', autoReJoinMsg + '\r\n');
+      // express.e:5071-5075,5080,5084,5088 — "Auto-ReJoined" / "Joining
+      // Conference" lines all gated on quietJoin=FALSE.
+      if (!quietJoin) {
+        const autoReJoinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
+          ? `Conference ${confId}: ${conference.name} [${messageBase.name}] Auto-ReJoined`
+          : `Conference ${confId}: ${conference.name} Auto-ReJoined`;
+        socket.emit('ansi-output', autoReJoinMsg + '\r\n');
 
-      // express.e:5092-5113 - Display message stats (only when quietJoin=FALSE)
-      // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
-      const lowestKey = mailStat?.lowestKey || 0;
-      const highMsgNum = mailStat?.highMsgNum || 1;
-      const totalMessages = highMsgNum - 1;
-      if (lowestKey > 1) {
-        socket.emit('ansi-output', `\r\n\x1b[32mMessages range from \x1b[33m( \x1b[0m${lowestKey} \x1b[32m- \x1b[0m${totalMessages} \x1b[33m)\x1b[0m\r\n`);
-      } else {
-        socket.emit('ansi-output', `\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${totalMessages}\r\n`);
+        // express.e:5092-5113 — message-stats block also gated on quietJoin
+        // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
+        const lowestKey = mailStat?.lowestKey || 0;
+        const highMsgNum = mailStat?.highMsgNum || 1;
+        const totalMessages = highMsgNum - 1;
+        if (lowestKey > 1) {
+          socket.emit('ansi-output', `\r\n\x1b[32mMessages range from \x1b[33m( \x1b[0m${lowestKey} \x1b[32m- \x1b[0m${totalMessages} \x1b[33m)\x1b[0m\r\n`);
+        } else {
+          socket.emit('ansi-output', `\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${totalMessages}\r\n`);
+        }
+        const lastScanned = Math.max((session.lastNewReadConf || 1) - 1, 1);
+        const lastRead = session.lastMsgReadConf || 0;
+        socket.emit('ansi-output', `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
+        socket.emit('ansi-output', `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${lastRead}\r\n`);
       }
-      const lastScanned = Math.max((session.lastNewReadConf || 1) - 1, 1);
-      const lastRead = session.lastMsgReadConf || 0;
-      socket.emit('ansi-output', `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
-      socket.emit('ansi-output', `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${lastRead}\r\n`);
       // express.e:5115 - IF (auto) THEN displaySysopULStats() — WEB_: not applicable
     } else {
       // Normal join - express.e:5079-5086 (leading \r\n already emitted above at 5065)
-      const joinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
-        ? `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name} [${messageBase.name}]`
-        : `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name}`;
-      socket.emit('ansi-output', `${joinMsg}\r\n`);
+      if (!quietJoin) {
+        const joinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
+          ? `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name} [${messageBase.name}]`
+          : `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name}`;
+        socket.emit('ansi-output', `${joinMsg}\r\n`);
+      }
     }
 
     console.log(`[JOIN] Loading flagged files and history`);
