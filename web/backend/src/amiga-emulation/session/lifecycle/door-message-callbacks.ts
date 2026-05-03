@@ -94,8 +94,17 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
     return;
   }
   const execLib = libraryManager.execLibrary;
+  // WEB_: Per-call timing (set XIM_TIMING=1 to enable). Captures the gap
+  // between XIMProcessor calls and the time the handler itself spends —
+  // tells us whether per-message latency lives in handler/socket-emit work
+  // or in 68K-execution-between-traps. Disabled by default to keep logs
+  // quiet in normal use.
+  const XIM_TIMING = process.env.XIM_TIMING === '1';
+  let lastCallEnd = 0;
 
   libraryManager.aedoorLibrary.setXIMProcessor((bbsPortAddr: number) => {
+    const callStart = XIM_TIMING ? Date.now() : 0;
+    const gapMs = XIM_TIMING && lastCallEnd > 0 ? callStart - lastCallEnd : 0;
     // Get one message from the BBS port (the message the door just sent)
     const msgAddr = execLib.getMsg(bbsPortAddr);
     const ximProtocol = getXimProtocol();
@@ -103,9 +112,13 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
       if (msgAddr && msgAddr !== 0 && !ximProtocol) {
         console.warn(`[XIMProcessor] msgAddr=0x${msgAddr.toString(16)} but ximProtocol is null — message lost!`);
       }
+      if (XIM_TIMING) lastCallEnd = Date.now();
       return;
     }
     const parsed = ximProtocol.parseMessage(msgAddr);
+    if (XIM_TIMING) {
+      console.log(`[XIM_TIMING] cmd=${parsed.command} gap=${gapMs}ms`);
+    }
     console.log(`[XIMProcessor] cmd=${parsed.command} data=${parsed.data} bbsPort=0x${bbsPortAddr.toString(16)}`);
 
     // CRITICAL FIX: Pre-pause for blocking I/O commands (same as
@@ -213,6 +226,11 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
       console.log(
         `[DoorLifecycleManager] XIMProcessor: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
       );
+    }
+    if (XIM_TIMING) {
+      const callEnd = Date.now();
+      console.log(`[XIM_TIMING] cmd=${parsed.command} handler=${callEnd - callStart}ms`);
+      lastCallEnd = callEnd;
     }
   });
 }
