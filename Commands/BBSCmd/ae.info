@@ -1,9 +1,0 @@
-BBSCMD=AE
-TYPE=TS
-LOCATION=Doors/mail-composer
-DESCRIPTION=ANSI art message editor with color support
-ACCESS=10
-MULTINODE=YES
-PRIORITY=SAME
-CATEGORY=Messaging
-SHOWPRELOADER=YES
