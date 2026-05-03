@@ -19,7 +19,6 @@ import { storeUploadContext } from '../../server/upload-session-store';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
-let fileEntries: any[] = [];
 let db: any;
 let callersLog: (userId: string | null, username: string, action: string, details?: string, nodeId?: number) => Promise<void>;
 let getUserStats: (userId: string) => Promise<any>;
@@ -34,10 +33,6 @@ let _getFileAreas: any;
 // Dependency injection setters
 export function setFileAreas(areas: any[]) {
   fileAreas = areas;
-}
-
-export function setFileEntries(entries: any[]) {
-  fileEntries = entries;
 }
 
 export function setDatabase(database: any) {
@@ -85,8 +80,11 @@ export function displayFileAreaContents(socket: any, session: BBSSession, area: 
   // Show "Scanning directory X" message — express.e:27667-27683 shows only the number, no area name suffix
   emit(`Scanning directory ${area.id}\r\n`);
 
-  // Get files in this area (like reading DIR file in AmiExpress)
-  const areaFiles = fileEntries.filter(file => file.areaId === area.id);
+  // DEPRECATED: this in-memory cache was never populated. The live F-command
+  // path uses FileListingHandler / readDirFile (DIR files on disk). This
+  // function is still imported by command.handler.ts but only reachable from
+  // the dead FILES_SELECT_AREA subState branch.
+  const areaFiles: any[] = [];
 
   if (areaFiles.length === 0) {
     emit('\r\n');
@@ -857,10 +855,9 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
     const areaIndex = currentDir - 1; // Convert to 0-based array index
     if (areaIndex >= 0 && areaIndex < fileAreas.length) {
       const area = fileAreas[areaIndex];
-      const newFilesInArea = fileEntries.filter(file =>
-        file.areaId === area.id &&
-        file.uploadDate > searchDate
-      );
+      // DEPRECATED: see note on areaFiles in displayFileAreaContents above.
+      const newFilesInArea: any[] = [];
+      void searchDate;
 
       if (newFilesInArea.length > 0) {
         foundNewFiles = true;
@@ -1232,8 +1229,10 @@ console.log('startFileDownload called for area:', fileArea.name);
   emitText(socket, '\r\n\x1b[32mDownload Message:\x1b[0m\r\n');
   emitText(socket, 'Please select files to download. Files will be transferred using WebSocket protocol.\r\n\r\n');
 
-  // Display files in the area for selection
-  const areaFiles = fileEntries.filter(file => file.areaId === fileArea.id);
+  // Display files in the area for selection.
+  // DEPRECATED: see note on areaFiles in displayFileAreaContents above.
+  const areaFiles: any[] = [];
+  void fileArea;
   if (areaFiles.length === 0) {
     emitText(socket, 'No files available in this area.\r\n');
     emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');

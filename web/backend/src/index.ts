@@ -191,7 +191,6 @@ import {
   startFileDownload,
   handleFileDownload,
   setFileAreas,
-  setFileEntries,
   setDatabase as setDatabaseForFileHandler,
   setCallersLog,
   setGetUserStats,

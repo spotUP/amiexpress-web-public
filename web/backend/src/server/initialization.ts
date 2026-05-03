@@ -77,7 +77,6 @@ import { setTransferMiscCommandsDependencies } from '../handlers/commands/transf
 import { setMessagingDependencies, setMoveEditDependencies } from '../handlers/message/messaging.handler';
 import {
   setFileAreas,
-  setFileEntries,
   setDatabase as setDatabaseForFileHandler,
   setCallersLog,
   setGetUserStats,
@@ -199,7 +198,6 @@ export let chatState: ChatState = {
 let conferences: any[] = [];
 let messageBases: any[] = [];
 let fileAreas: any[] = [];
-let fileEntries: any[] = [];
 let messages: any[] = [];
 
 /**
@@ -366,12 +364,10 @@ export async function initializeData(io?: SocketIOServer) {
     await ensureRootScreens(bbsRoot);
     await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
 
-    // Load file entries for all file areas
-    fileEntries = []; // TODO: Load file entries per-area as needed
-
-    // Inject dependencies into file handler
+    // Inject dependencies into file handler. The live F-command path reads
+    // DIR files from disk via FileListingHandler / readDirFile — there is no
+    // per-area in-memory file entry cache.
     setFileAreas(fileAreas);
-    setFileEntries(fileEntries);
     setDatabaseForFileHandler(db);
     setCallersLog(callersLog);
     setGetUserStats(getUserStats);
