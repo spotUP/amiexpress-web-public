@@ -183,15 +183,21 @@ export function loadConferenceFileAreas(bbsRoot: string, confId: number): FileAr
 
 /**
  * Ensure root Screens has placeholders for core screens only.
+ *
+ * BULL/NODE_BULL/CONF_BULL are intentionally NOT in this list. Per express.e
+ * (express.e:6539-6550 + 6773-6845), `displayScreen(SCREEN_BULL)` returns
+ * TRUE if the file opens — and `displayFile()` returns TRUE for an empty
+ * file because Open() succeeds. The caller (express.e:28556) then triggers
+ * `doPause()` whenever displayScreen returns TRUE. So a 0-byte BULL.TXT
+ * causes a press-enter prompt with no content above it. The express.e-faithful
+ * way to suppress the pause is to NOT have the file at all (findSecurityScreen
+ * returns FALSE → displayScreen returns FALSE → no pause).
  */
 export async function ensureRootScreens(bbsRoot: string): Promise<void> {
   const screensDir = path.join(bbsRoot, 'Screens');
   const requiredScreens = [
     'BBSTITLE.TXT',
     'LOGON.TXT',
-    'BULL.TXT',
-    'NODE_BULL.TXT',
-    'CONF_BULL.TXT',
     'MENU.TXT',
     'LOGOFF.TXT'
   ];

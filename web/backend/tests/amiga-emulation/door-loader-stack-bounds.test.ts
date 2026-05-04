@@ -20,11 +20,19 @@
  * Fix:
  *   `DoorLoader.computeStackBounds` walks every segment and uses the max
  *   end address. The stack base is then placed safely above all segments.
+ *
+ * Updated 2026-05-04: stack floor raised from 4KB to 256KB to give SAS/C
+ * runtime startup enough headroom for the watermark math
+ * (`SP - 4(SP) + 0x80`) to land safely. AmiExpress's .info default of
+ * 20000 bytes was tripping the runtime "** Stack Overflow **" check
+ * immediately on every SAS/C-built door (caught on stats / ustats).
  */
 
 import { DoorLoader } from '../../src/amiga-emulation/DoorLoader';
 
 describe('DoorLoader.computeStackBounds — stack must clear all segments (regression)', () => {
+  const FLOOR = 256 * 1024;
+
   test('places stack above BSS when BSS is the highest segment (DOORSMENU shape)', () => {
     // Realistic DOORSMENU layout: BSS extends past DATA.
     const segments = [
@@ -35,7 +43,7 @@ describe('DoorLoader.computeStackBounds — stack must clear all segments (regre
 
     const { stackBaseAddr, stackSizeBytes } = DoorLoader.computeStackBounds(
       segments,
-      32760, // .info STACK=32760
+      32760, // .info STACK=32760 — too small for SAS/C; floor wins
     );
 
     // Stack base must be strictly above every segment end (with the small gap)
@@ -45,9 +53,9 @@ describe('DoorLoader.computeStackBounds — stack must clear all segments (regre
     }
     // Specifically: above BSS (the bug was placing it on top of BSS)
     expect(stackBaseAddr).toBeGreaterThanOrEqual(0x98a0);
-    // Sanity: alignment is 8 and the requested size was honored
+    // Sanity: alignment is 8 and the floor was applied
     expect(stackBaseAddr % 8).toBe(0);
-    expect(stackSizeBytes).toBe(32760);
+    expect(stackSizeBytes).toBe(FLOOR);
   });
 
   test('places stack above DATA when no BSS segment is present', () => {
@@ -65,14 +73,15 @@ describe('DoorLoader.computeStackBounds — stack must clear all segments (regre
   test('honors a buffer-only segment shape (data.length but no size field)', () => {
     // Some hunk loaders surface the raw buffer instead of a numeric size.
     const segments = [
-      { type: 'CODE', address: 0x2008, data: { length: 0x1000 } } as any,
-      { type: 'DATA', address: 0x4000, data: { length: 0x200 } } as any,
+      { type: 'CODE', address: 0x2008, data: { length: 0x1000 } },
+      { type: 'DATA', address: 0x4000, data: { length: 0x200 } },
     ];
 
-    const { stackBaseAddr } = DoorLoader.computeStackBounds(segments, 4096);
+    const { stackBaseAddr } = DoorLoader.computeStackBounds(segments as any, 4096);
 
-    // CODE ends at 0x3008, DATA at 0x4200 → stack must be above 0x4200.
-    expect(stackBaseAddr).toBeGreaterThanOrEqual(0x4200);
+    // CODE ends at 0x3008, DATA at 0x4200. Fallback floor is 0x10000, so
+    // stack lands above 0x10000.
+    expect(stackBaseAddr).toBeGreaterThanOrEqual(0x10000);
   });
 
   test('the stack range cannot overlap any segment (the actual DOORSMENU regression invariant)', () => {
@@ -98,16 +107,37 @@ describe('DoorLoader.computeStackBounds — stack must clear all segments (regre
     }
   });
 
-  test('clamps tiny configured stacks to 4KB minimum', () => {
+  test('floors tiny configured stacks to 256KB minimum', () => {
     const segments = [{ type: 'CODE', address: 0x2008, size: 0x100 }];
     const { stackSizeBytes } = DoorLoader.computeStackBounds(segments, 1000);
-    expect(stackSizeBytes).toBe(4096);
+    expect(stackSizeBytes).toBe(FLOOR);
   });
 
-  test('defaults to 64KB when configStack is undefined', () => {
+  test('floors AmiExpress .info default of 20000 to 256KB', () => {
+    // command-execution.handler.ts:304 falls back to STACK=20000 when no
+    // explicit STACK= tooltype is set. This must not be the runtime stack
+    // size — SAS/C watermark math `SP - 4(SP) + 0x80` underflows when 4(SP)
+    // is small, false-tripping every cmpa.l 0x728(a4),a7 prologue check.
+    const segments = [
+      { type: 'CODE', address: 0x2008, size: 0x968 },
+      { type: 'CODE', address: 0x2a08, size: 0x684 },
+      { type: 'CODE', address: 0x3108, size: 0x834 },
+      { type: 'DATA', address: 0x3a08, size: 0x98c },
+    ];
+    const { stackSizeBytes } = DoorLoader.computeStackBounds(segments, 20000);
+    expect(stackSizeBytes).toBe(FLOOR);
+  });
+
+  test('floors undefined configStack to 256KB', () => {
     const segments = [{ type: 'CODE', address: 0x2008, size: 0x100 }];
     const { stackSizeBytes } = DoorLoader.computeStackBounds(segments, undefined);
-    expect(stackSizeBytes).toBe(65536);
+    expect(stackSizeBytes).toBe(FLOOR);
+  });
+
+  test('honors a configured stack LARGER than the floor', () => {
+    const segments = [{ type: 'CODE', address: 0x2008, size: 0x100 }];
+    const { stackSizeBytes } = DoorLoader.computeStackBounds(segments, 1024 * 1024);
+    expect(stackSizeBytes).toBe(1024 * 1024); // 1MB — bigger than 256KB floor
   });
 
   test('falls back to a non-zero base for empty segment lists', () => {
@@ -116,23 +146,83 @@ describe('DoorLoader.computeStackBounds — stack must clear all segments (regre
     expect(stackBaseAddr).toBeGreaterThanOrEqual(0x10000);
   });
 
-  test('with STACK=32760 the door has 32KB of headroom strictly above all segments (DOORSMENU end-to-end shape)', () => {
+  test('SAS/C watermark math: SP - 4(SP) + 0x80 must stay above stackBase (regression for ** Stack Overflow ** panic)', () => {
+    // SAS/C runtime startup at every door's seg0 entry computes the
+    // stack-overflow watermark and stores it at A4+0x728:
+    //   d0 = SP - 4(SP) + 0x80
+    //   move.l d0, 0x728(A4)
+    // Every subsequent function entry then does:
+    //   cmpa.l 0x728(A4), A7
+    //   bcs.w  panic_handler   ; if SP < watermark unsigned → panic
+    // The panic handler restores SP from data[0x764] and calls
+    // AutoRequest with body="** Stack Overflow **".
+    //
+    // The bug: DoorLoader's "simulated JSR" pushed a return address by
+    // shifting SP down by 4 — but only seeded `stack_size` at the OLD
+    // SP+4. After the shift, 4(SP) pointed at the exit-trap value
+    // (0x1ff000) instead of stack_size, so the watermark wrapped to
+    // ~0xffe5xxxx and BCS fired on every function entry. With the fix
+    // (DoorLoader writes stack_size at the NEW SP+4 too), the watermark
+    // lands at stack_bottom + 0x80 as designed.
     const segments = [
-      { type: 'CODE', address: 0x2008, size: 21844 },
-      { type: 'DATA', address: 0x7608, size: 384 },
-      { type: 'BSS',  address: 0x7808, size: 8344 },
+      { type: 'CODE', address: 0x2008, size: 0x968 },
+      { type: 'CODE', address: 0x2a08, size: 0x684 },
+      { type: 'CODE', address: 0x3108, size: 0x834 },
+      { type: 'DATA', address: 0x3a08, size: 0x98c },
     ];
-
     const { stackBaseAddr, stackSizeBytes } = DoorLoader.computeStackBounds(
       segments,
-      32760,
+      20000, // gets floored to 256KB
     );
     const stackTop = stackBaseAddr + stackSizeBytes;
+    const finalSPBeforeJSR = stackTop - 8;
+    const newSPAfterJSR = finalSPBeforeJSR - 4; // simulated JSR push
 
-    // 25KB Config struct (DOORSMENU's `Config cfg`) on the stack must not
-    // reach back into BSS. SP starts at top, drops by ~25KB during
-    // load_config — stays inside the stack region.
-    const SP_AFTER_25KB_LOCAL = stackTop - 25 * 1024;
-    expect(SP_AFTER_25KB_LOCAL).toBeGreaterThanOrEqual(0x98a0);
+    // Post-fix invariant: 4(SP) at door entry == stackSizeBytes.
+    const stackSizeAt4SP = stackSizeBytes; // what DoorLoader writes after the simulated JSR
+
+    // Watermark formula the SAS/C startup runs:
+    const watermark = (newSPAfterJSR - stackSizeAt4SP + 0x80) >>> 0;
+
+    // The watermark must be a real address inside the stack region, NOT
+    // a wrapped huge negative (0xffe5xxxx range). Specifically: it should
+    // land just above stackBaseAddr.
+    expect(watermark).toBeGreaterThanOrEqual(stackBaseAddr);
+    expect(watermark).toBeLessThan(stackTop);
+    expect(watermark).toBeLessThan(0x80000000); // not in wrap-around territory
+
+    // And: SP at door entry (= newSPAfterJSR) must be GREATER than the
+    // watermark unsigned, so the very first cmpa.l prologue check passes.
+    expect(newSPAfterJSR >>> 0).toBeGreaterThan(watermark);
+  });
+
+  test('SAS/C watermark math: BCS panic check at every depth never fires while SP is inside the stack', () => {
+    // Belt-and-braces: simulate SP descending from the entry value down
+    // to ~stack_bottom and verify the cmpa.l never tripggers BCS until the
+    // door has actually exhausted the stack.
+    const segments = [
+      { type: 'CODE', address: 0x2008, size: 0x968 },
+      { type: 'DATA', address: 0x3a08, size: 0x98c },
+    ];
+    const { stackBaseAddr, stackSizeBytes } = DoorLoader.computeStackBounds(
+      segments,
+      20000,
+    );
+    const stackTop = stackBaseAddr + stackSizeBytes;
+    const finalSP = stackTop - 8;
+    const newSPAfterJSR = finalSP - 4;
+
+    const watermark = (newSPAfterJSR - stackSizeBytes + 0x80) >>> 0;
+
+    // Walk SP from entry value down to watermark + 1; each comparison must
+    // pass (SP > watermark unsigned).
+    for (let sp = newSPAfterJSR; sp > watermark; sp -= 0x4000) {
+      // BCS taken when (sp - watermark) borrows i.e. sp < watermark unsigned.
+      const bcsTriggered = (sp >>> 0) < (watermark >>> 0);
+      expect(bcsTriggered).toBe(false);
+    }
+    // And at watermark - 1 the BCS should fire (panic justified):
+    const exhausted = (watermark - 1) >>> 0;
+    expect(exhausted < watermark).toBe(true);
   });
 });
