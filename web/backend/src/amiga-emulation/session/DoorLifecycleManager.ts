@@ -80,12 +80,6 @@ export class DoorLifecycleManager {
   private executionTimer: NodeJS.Timeout | null = null;
   private isPaused: boolean = false;
 
-  // S/stats regression trace — auto-activates when doorId === 'S' or path
-  // contains /ustats/. Logs every non-sequential PC change (JSR/BSR/RTS/branch
-  // targets) to /tmp/stats-trace.log so we can find where the SAS/C runtime
-  // panics into the FAIL=20 exit. ~5-50KB per run; revert when fixed.
-  private statsTraceFile: string | null = null;
-
   // PERFORMANCE FIX: Track if doorMessageCallback is handling XIM messages
   // When active, skip pollXIMMessages to avoid duplicate processing
   private usingDoorMessageCallback: boolean = false;
@@ -136,18 +130,6 @@ export class DoorLifecycleManager {
     this.doorLoader = doorLoader;
     this.messageHandler = messageHandler;
     this.logger = logger || null;
-
-    // S/stats regression diagnostic — auto-activate per door identity.
-    if ((config.doorId || '').toUpperCase() === 'S' ||
-        /\/ustats\//.test(config.executablePath || '')) {
-      this.statsTraceFile = `/tmp/stats-trace-${Date.now()}.log`;
-      try {
-        require('fs').writeFileSync(this.statsTraceFile,
-          `=== STATS TRACE START ${new Date().toISOString()} ===\n` +
-          `door=${config.doorId} path=${config.executablePath}\n`);
-console.log(`[StatsTrace] Logging to ${this.statsTraceFile}`);
-      } catch {}
-    }
 
     // Get loop guard settings from toolTypes (passed by batch-scheduler or run-amiga-door)
     // or fall back to environment variables
@@ -643,31 +625,6 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
           this.lastPCs.shift();
         }
       this.debugMonitor?.setLastPCs(this.lastPCs);
-
-      // S/stats trace — log non-sequential PC changes (JSR/BSR/RTS/branch
-      // targets), filter out the noise of linear straight-line execution.
-      if (this.statsTraceFile && prevPC !== 0) {
-        const delta = pc - prevPC;
-        // Sequential M68K instructions are 2/4/6 bytes; bigger or backwards
-        // moves are control flow.
-        if (delta < 0 || delta > 10) {
-          try {
-            const d0 = this.emulator.getRegister(0);
-            const d1 = this.emulator.getRegister(1);
-            const a0 = this.emulator.getRegister(8);
-            const a6 = this.emulator.getRegister(14);
-            const sp = this.emulator.getRegister(15);
-            const stack0 = this.emulator.readMemory32(sp);
-            require('fs').appendFileSync(this.statsTraceFile,
-              `iter=${this.executionState.iterationCount} ` +
-              `pc=0x${pc.toString(16)} from=0x${prevPC.toString(16)} ` +
-              `Δ=${delta >= 0 ? '+' : ''}${delta} ` +
-              `d0=0x${d0.toString(16)} d1=0x${d1.toString(16)} ` +
-              `a0=0x${a0.toString(16)} a6=0x${a6.toString(16)} ` +
-              `sp=0x${sp.toString(16)} (sp)=0x${stack0.toString(16)}\n`);
-          } catch {}
-        }
-      }
 
       // TRACE: Detect first invalid PC and log what instruction caused it
       if (!this.firstInvalidPCLogged &&

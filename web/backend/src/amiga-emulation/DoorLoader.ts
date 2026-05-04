@@ -68,12 +68,15 @@ export class DoorLoader {
     segments: Array<{ address: number; size?: number; data?: { length: number }; type?: string }>,
     configStack?: number,
   ): { stackBaseAddr: number; stackSizeBytes: number } {
-    // Default 256 KB. We have plenty of host RAM and the cost of a generous
-    // default is one allocation per door launch. The 64 KB default we used
-    // before was just enough that stats / ustats triggered "** Stack
-    // Overflow **" right after AutoRequest setup. Anything explicitly set
-    // via STACK= tooltype still wins.
-    const stackSizeBytes = Math.max(4096, configStack || 256 * 1024);
+    // 256 KB FLOOR. We have plenty of host RAM and the cost of a generous
+    // floor is one allocation per door launch. AmiExpress's .info default of
+    // 20000 (and even larger STACK= tooltypes around 30-50KB) caused stats /
+    // ustats to trip the SAS/C runtime "** Stack Overflow **" check right
+    // after AutoRequest setup, because the watermark math (SP - 4(SP) + 0x80)
+    // lands too close to SP itself when stack_size is small. Floor it to
+    // 256 KB regardless of .info value — anything LARGER than 256 KB still
+    // wins (a door explicitly asking for 1 MB gets 1 MB).
+    const stackSizeBytes = Math.max(256 * 1024, configStack || 0);
     let lastSegmentEnd = 0x10000; // fallback for tiny single-segment binaries
     for (const seg of segments) {
       const segEnd =
@@ -685,19 +688,27 @@ debugLog(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
     // Configure stack FIRST (before setting PC)
     this.setupStack(segListBptr);
 
-    // Simulate JSR call to entry point by manually pushing return address
-    // This is critical: many Amiga programs do MOVEM.L at entry
-    // to save registers. They expect a return address ABOVE those saved registers.
-    // On real Amiga, the C startup code or shell CALLs the program via JSR,
-    // which pushes the return address. We must simulate this.
+    // Simulate JSR call to entry point by manually pushing return address.
+    // Many Amiga programs do MOVEM.L at entry to save registers. They expect
+    // a return address ABOVE those saved registers. On real Amiga, the C
+    // startup code or shell CALLs the program via JSR, which pushes the return
+    // address. We must simulate this.
+    //
+    // CRITICAL: AmigaDOS CLI launch convention also requires that the LONG at
+    // 4(SP) holds the stack size in bytes (vamos amitools/vamos/lib/dos/Process.py:186).
+    // SAS/C runtime startup reads it to compute the stack-overflow watermark
+    // (`SP - 4(SP) + 0x80`). When we shift SP down by 4 for the simulated JSR
+    // return address, the old `mem[finalSP+4] = stack_size` ends up at 8(SP),
+    // not 4(SP) — so we must re-seed stack_size at the NEW 4(SP). Without
+    // this, SAS/C reads exitTrap (0x1ff000) for stack_size, the watermark
+    // wraps to ~0xffe5xxxx, and every cmpa.l 0x728(a4),a7 prologue check
+    // false-trips → "** Stack Overflow **" panic at door startup. (Caught by
+    // [StatsPanic] probe on stats; same path will affect any SAS/C-built door.)
     const currentSP = this.emulator.getRegister(15);
     const newSP = currentSP - 4;
-    this.emulator.writeMemory32(newSP, this.exitTrapAddress);
+    this.emulator.writeMemory32(newSP, this.exitTrapAddress); // (SP)  = return addr
+    this.emulator.writeMemory32(newSP + 4, this.stackSizeBytes); // 4(SP) = stack_size
     this.emulator.setRegister(15, newSP);
-
-    // Update the saved SP value at finalSP+4 to reflect the new SP after JSR
-    // Some doors save/restore SP and expect this value to be correct
-    this.emulator.writeMemory32(currentSP + 4, newSP);
 
 debugLog(
       `[DoorLoader] Simulated JSR: Pushed return address 0x${this.exitTrapAddress.toString(
