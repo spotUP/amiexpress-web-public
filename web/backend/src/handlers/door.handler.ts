@@ -3283,6 +3283,13 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
 console.log(`[executeARexxDoor] Starting ARexx door: ${door.name}`);
 console.log(`[executeARexxDoor] Door path: ${door.path}`);
   disableShortcuts(session);
+  // Enter door-input mode so the BBS's central socket handler routes
+  // command/key-down/key-up keystrokes through session.doorInputHandler.
+  // Without this, the AREXX script's GETCHAR / PROMPT / QUERY hangs
+  // forever because user keystrokes never reach the input promise.
+  // 68K, TypeScript, and now AREXX doors all share this contract.
+  session.inDoorManager = true;
+  session.subState = LoggedOnSubState.DOOR_RUNNING;
 
   // Resolve script path against the BBS root (not process.cwd, which
   // depends on where the server was started from — typically
@@ -3491,6 +3498,10 @@ console.error(`[ARexx Door ${door.id}] Execution error:`, error);
     doorSession.status = 'error';
   }
 
+  // Leave door-input mode so the BBS's command/key handlers go back to
+  // their normal routing. Mirrors executeTypeScriptDoor's exit path.
+  session.inDoorManager = false;
+  delete session.doorInputHandler;
   emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;

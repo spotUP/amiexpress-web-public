@@ -2022,10 +2022,15 @@ console.error('[Showfile] Error:', error);
    * This is kept for compatibility with legacy doors
    */
   async bufferflush(): Promise<void> {
-    // Force socket flush if available
-    if (this.context.socket) {
-      // Socket.io already flushes, but we can trigger a sync point
-      this.context.socket.emit('door:flush');
+    // Real AmiExpress: forces buffered output to flush + clears any
+    // pending input. Socket.io flushes synchronously per emit, so the
+    // output side is already a no-op for us. Drop any pending input
+    // by clearing the doorInputHandler — STNG and other doors call
+    // bufferflush() right before redrawing the menu specifically to
+    // discard a queued keystroke from the previous selection.
+    const session: any = this.context.session;
+    if (session && typeof session.doorInputHandler !== 'undefined') {
+      delete session.doorInputHandler;
     }
     return Promise.resolve();
   }
@@ -2041,16 +2046,19 @@ console.error('[Showfile] Error:', error);
     try {
       await this.BBSLOG('info', `Door shutdown requested by ${this.context.user?.username || 'unknown'}`);
 
-      // Signal door exit via socket
-      if (this.context.socket) {
-        this.context.socket.emit('door:shutdown');
-      }
-
-      // Set shutdown flag in context
+      // Signal the interpreter to terminate. The session.doorShutdown
+      // flag is honored by executeARexxDoor's outer post-script
+      // cleanup; setting returnRequested + exitRequested also
+      // propagates through any DO/SELECT frames so the REXX exit
+      // happens immediately rather than at the next clause boundary.
       if (this.context.session) {
-        this.context.session.doorShutdown = true;
+        (this.context.session as any).doorShutdown = true;
       }
-
+      if (this.context.interpreter) {
+        const ip = this.context.interpreter as any;
+        ip.returnRequested = true;
+        ip.exitRequested = true;
+      }
     } catch (error) {
 console.error('[shutdown] Error:', error);
     }
@@ -2219,6 +2227,11 @@ export class AREXXInterpreter {
 
   constructor(context: any, args: string[] = []) {
     this.context = context;
+    // Self-reference so BBSFunctions.shutdown() can flag exit on the
+    // running interpreter (sets returnRequested/exitRequested to
+    // unwind through nested DO/SELECT frames immediately rather than
+    // waiting for the next clause boundary).
+    this.context.interpreter = this;
     this.variables = new AREXXVariables();
     this.bbsFunctions = new BBSFunctions(context);
     this.commandLineArgs = args;
@@ -2757,6 +2770,11 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       // Input
       HK:          'GETCHAR',      GETCHAR:     'GETCHAR',
       PM:          'PROMPT',       PROMPT:      'PROMPT',       // line input + display
+      // QUERY is a REXX-dialect convenience some AmiExpress doors
+      // (STNG, others) use as `query "prompt"; ans = result`.
+      // Aedoc4 doesn't list it as a host command, but RexxMaster
+      // forwards the prompt+read flow same as PROMPT — alias here.
+      QUERY:       'PROMPT',
       // Misc
       SF:          'SHOWFILE',     SHOWFILE:    'SHOWFILE',
       BUFFERFLUSH: 'BUFFERFLUSH',
