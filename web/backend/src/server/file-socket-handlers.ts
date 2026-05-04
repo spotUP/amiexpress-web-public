@@ -1039,6 +1039,77 @@ console.log("[file-upload] Wrote file to:", filePath);
     }
   );
 
+  // Handle upload-via-multipart-HTTP completion.
+  //
+  // The legacy `file-upload` event above accepts the file body as a
+  // JSON-encoded number array — that path inflates each byte ~3x and
+  // forced maxHttpBufferSize up to 64MB to fit a 10MB upload (#11). The
+  // new path is: frontend POSTs the file to /api/upload (multer saves to
+  // playpen and returns {filename, path, size}) then emits this small
+  // event with just the metadata. No file body on the websocket — buffer
+  // pressure goes away.
+  socket.on(
+    "file-upload-ready",
+    async (data: {
+      filename: string;
+      originalname?: string;
+      size: number;
+      path: string;
+      uploadStartTime?: number;
+    }) => {
+      const receiveTime = Date.now();
+console.log(
+        "[file-upload-ready] HTTP-uploaded file ready:",
+        data.filename,
+        data.size,
+        "bytes at",
+        data.path
+      );
+
+      // Same CPS calculation as the legacy path so download-stats parity holds.
+      let uploadCPS = 0;
+      if (data.uploadStartTime && data.size > 0) {
+        const durationMs = receiveTime - data.uploadStartTime;
+        const durationSec = durationMs / 1000;
+        uploadCPS = durationSec > 0 ? Math.floor(data.size / durationSec) : 0;
+console.log(
+          `[file-upload-ready] Transfer time: ${durationMs}ms, CPS: ${uploadCPS}`
+        );
+      }
+      if (!session.tempData) {
+        session.tempData = {} as any;
+      }
+      session.tempData.lastUploadCPS = uploadCPS;
+
+      try {
+        const fs = require("fs");
+        if (!fs.existsSync(data.path)) {
+          // Defensive: multer should have written it, but if a race or
+          // permission issue dropped the file we don't want processFileUpload
+          // to chase a missing path.
+          socket.emit(
+            "ansi-output",
+            `\r\n\x1b[31mError: uploaded file missing on server: ${data.path}\x1b[0m\r\n`
+          );
+          return;
+        }
+
+        await processFileUpload(socket, session, config, {
+          filename: data.filename,
+          originalname: data.originalname || data.filename,
+          size: data.size,
+          path: data.path,
+        });
+      } catch (error: any) {
+        SysopDebugUtil.debugFileError(socket, session, "process", data.path, error);
+        socket.emit(
+          "ansi-output",
+          `\r\n\x1b[31mError processing uploaded file: ${error.message}\x1b[0m\r\n`
+        );
+      }
+    }
+  );
+
   // Handle upload batch complete from frontend
   // Frontend emits this when all pending files have been uploaded
   socket.on("upload-batch-complete", async () => {

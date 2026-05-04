@@ -1,28 +1,29 @@
 /**
- * Regression for #11: socket.io's maxHttpBufferSize must be large enough to
- * receive a max-size file upload as the frontend currently encodes them.
+ * Regression for #11: socket.io's maxHttpBufferSize must be sane.
  *
- * Background:
- *   The BBSTerminal frontend emits file uploads via:
- *     socket.emit('file-upload', { ..., data: Array.from(new Uint8Array(buf)) })
- *   That serializes each byte as a 1-3 char JSON number plus a comma. Average
- *   inflation factor is ~3x — a 10MB binary becomes ~30MB on the wire.
+ * Background — two-phase history of the upload pipeline:
  *
- *   The configured upload cap is 10MB (config.ts:120 maxFileSize, plus the
- *   multer instance at file-routes.ts:59). Before the fix, socket.io's
- *   maxHttpBufferSize was 1MB, so any file larger than ~330KB triggered a
- *   socket.io "transport error" mid-upload and the user was disconnected
- *   back to the login screen.
+ * 1. Original bug: BBSTerminal emitted file uploads through the socket as
+ *    a JSON-serialized number array (Array.from(new Uint8Array(buf))).
+ *    That inflates each byte to ~3 chars on the wire, so a 10MB file
+ *    became ~30MB. With maxHttpBufferSize at 1MB, anything > ~330KB
+ *    blew the cap mid-upload and socket.io disconnected with a
+ *    "transport error", bouncing the user back to login. Short-term
+ *    fix: bump the buffer to 64MB to fit the JSON-inflated worst case.
  *
- *   The fix bumped maxHttpBufferSize to 64MB so the JSON-encoded worst case
- *   (10MB raw → ~30MB JSON → ~32-40MB after protocol overhead) fits.
+ * 2. Real fix: switch BBSTerminal to multipart HTTP POST against the
+ *    already-wired /api/upload (multer) endpoint. The file body never
+ *    touches the websocket; the frontend only emits a small
+ *    `file-upload-ready` event with the file metadata after multer
+ *    has written it. With binary off the socket the buffer can be
+ *    reasonable (4MB) — large enough for non-file payloads, small
+ *    enough that any binary on the socket is caught early.
  *
- * This test is a source-level guard — it reads the live config and asserts:
- *   maxHttpBufferSize >= 3 * maxFileSize
- *
- * If the upload pipeline is ever refactored to send the file as a binary
- * websocket frame (Uint8Array) instead of a JSON number array, this guard
- * can be relaxed (the inflation factor goes away).
+ * This test asserts the post-migration invariants:
+ *   - maxHttpBufferSize is set to a sane non-pathological value (1-16MB).
+ *   - maxFileSize (HTTP upload cap) can comfortably exceed it because
+ *     uploads no longer go through the socket.
+ *   - The legacy regression case (1MB cap, JSON-array uploads) is gone.
  */
 
 import * as fs from 'fs';
@@ -72,20 +73,54 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
     expect(value!).toBeGreaterThan(0);
   });
 
-  test('maxHttpBufferSize accommodates a JSON-encoded max-size upload (>= 3x maxFileSize)', () => {
+  test('maxHttpBufferSize is at least 1MB (covers ANSI screens, AREXX I/O, etc.)', () => {
     const buffer = extractMaxHttpBufferSize(INDEX_TS)!;
-    const fileCap = extractMaxFileSize(CONFIG_TS)!;
-
-    // Average inflation for Array.from(Uint8Array(...)) → JSON is ~3x.
-    // Anything below this and an upload at the file cap will trip the
-    // socket.io "transport error" disconnect — i.e. resurrect bug #11.
-    expect(buffer).toBeGreaterThanOrEqual(fileCap * 3);
+    expect(buffer).toBeGreaterThanOrEqual(1 * 1024 * 1024);
   });
 
-  test('maxHttpBufferSize is at least 16MB (sanity floor)', () => {
+  test('maxHttpBufferSize is at most 16MB — file bodies must NOT go through the socket', () => {
     const buffer = extractMaxHttpBufferSize(INDEX_TS)!;
-    // The pre-fix value was 1e6 (1MB). Anything below 16MB clearly hasn't
-    // been considered for the JSON-encoded upload path.
-    expect(buffer).toBeGreaterThanOrEqual(16 * 1024 * 1024);
+    // The migration moved file uploads to HTTP /api/upload (multer). The
+    // websocket should never carry a file body. If maxHttpBufferSize creeps
+    // above 16MB, someone may have re-introduced a binary-on-socket pattern
+    // that #11 was meant to permanently eliminate.
+    expect(buffer).toBeLessThanOrEqual(16 * 1024 * 1024);
+  });
+
+  test('frontend BBSTerminal emits file-upload-ready (multipart HTTP path), not file-upload (JSON array)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const bbs = fs.readFileSync(
+      path.resolve(__dirname, '../../../../packages/terminal/src/components/BBSTerminal.tsx'),
+      'utf8'
+    );
+
+    // The multipart path must be present.
+    expect(bbs).toMatch(/socket\.emit\(\s*['"]file-upload-ready['"]/);
+
+    // The legacy JSON-array path (Array.from(new Uint8Array(...))) MUST NOT
+    // appear. Any code that re-introduces it brings #11 right back.
+    expect(bbs).not.toMatch(/Array\.from\s*\(\s*new\s+Uint8Array\s*\([^)]*\)\s*\)/);
+
+    // Must use fetch against the multer endpoint.
+    expect(bbs).toMatch(/fetch\(\s*[^,)]*uploadUrl[\s\S]*?method:\s*['"]POST['"]/);
+  });
+
+  test('backend listens for file-upload-ready and feeds it to processFileUpload', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const handlers = fs.readFileSync(
+      path.resolve(__dirname, '../../src/server/file-socket-handlers.ts'),
+      'utf8'
+    );
+
+    expect(handlers).toMatch(/socket\.on\(\s*['"]file-upload-ready['"]/);
+    // The handler must invoke processFileUpload with the multer-supplied path.
+    const block = handlers.match(
+      /socket\.on\(\s*['"]file-upload-ready['"][\s\S]*?\n\s{2}\}\);?/
+    );
+    expect(block).not.toBeNull();
+    expect(block![0]).toMatch(/processFileUpload\s*\(/);
+    expect(block![0]).toMatch(/path:\s*data\.path/);
   });
 });

@@ -1308,10 +1308,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Track pending files for batch upload - send one at a time
     let pendingUploadFiles: File[] = [];
-    let currentUploadOptions: { accept?: string; maxSize?: number; multiple?: boolean } | null = null;
+    let currentUploadOptions: { accept?: string; maxSize?: number; multiple?: boolean; uploadUrl?: string; fieldName?: string } | null = null;
 
-    // Helper to upload the next file in the queue
-    const uploadNextFile = () => {
+    // Helper to upload the next file in the queue.
+    //
+    // Uploads go via HTTP multipart POST to /api/upload (multer endpoint,
+    // see web/backend/src/server/file-routes.ts). Multer saves the file
+    // to playpen and returns {filename, path, size}; we then emit a small
+    // 'file-upload-ready' socket event with that metadata so the backend
+    // runs processFileUpload on the already-saved file.
+    //
+    // Why not socket.emit the binary directly? socket.io serializes the
+    // payload as JSON, so each byte becomes a 1-3 char number plus a comma
+    // — average ~3x inflation. A 10MB upload became ~30MB on the wire and
+    // tripped maxHttpBufferSize (#11). The HTTP route stays binary the
+    // whole way.
+    const uploadNextFile = async () => {
       if (pendingUploadFiles.length === 0) {
         console.log('[BBSTerminal] No more files to upload, signaling batch complete');
         socket.emit('upload-batch-complete');
@@ -1321,33 +1333,42 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const file = pendingUploadFiles.shift()!;
       console.log(`[BBSTerminal] Uploading file: ${file.name} (${pendingUploadFiles.length} remaining)`);
 
-      // Check file size
       if (currentUploadOptions?.maxSize && file.size > currentUploadOptions.maxSize) {
         socket.emit('ansi-output', `\r\n\x1b[31mFile ${file.name} exceeds maximum size of ${currentUploadOptions.maxSize} bytes\x1b[0m\r\n`);
-        // Try next file
         uploadNextFile();
         return;
       }
 
-      // Read file as ArrayBuffer
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
+      const uploadStartTime = Date.now();
+      const uploadUrl = currentUploadOptions?.uploadUrl || '/api/upload';
+      const fieldName = currentUploadOptions?.fieldName || 'file';
 
-        // Track upload start time for CPS calculation
-        const uploadStartTime = Date.now();
+      const form = new FormData();
+      form.append(fieldName, file, file.name);
 
-        // Send file data to backend
-        socket.emit('file-upload', {
-          filename: file.name,
-          size: file.size,
-          type: file.type,
-          data: Array.from(new Uint8Array(arrayBuffer)),
-          uploadStartTime  // Include start time for CPS tracking
+      try {
+        const res = await fetch(uploadUrl, { method: 'POST', body: form });
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText);
+          socket.emit('ansi-output', `\r\n\x1b[31mUpload failed (${res.status}): ${text}\x1b[0m\r\n`);
+          // Move on so we don't wedge the queue
+          uploadNextFile();
+          return;
+        }
+        const result: { filename: string; originalname: string; size: number; path: string } = await res.json();
+        socket.emit('file-upload-ready', {
+          filename: result.filename,
+          originalname: result.originalname,
+          size: result.size,
+          path: result.path,
+          uploadStartTime,
         });
-        // Backend will emit 'show-file-upload' when ready for next file
-      };
-      reader.readAsArrayBuffer(file);
+        // Backend processes the file then emits 'show-file-upload' for the next
+        // file in the batch (or 'upload-batch-complete' is signaled when empty).
+      } catch (err: any) {
+        socket.emit('ansi-output', `\r\n\x1b[31mUpload error: ${err?.message || err}\x1b[0m\r\n`);
+        uploadNextFile();
+      }
     };
 
     // Handle file upload request from backend
