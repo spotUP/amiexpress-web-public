@@ -459,6 +459,100 @@ export async function getAllMessageIds(
 }
 
 /**
+ * express.e:10654-10685 saveNewMSG EXTSEND dump.
+ *
+ * When a msgbase has the EXTSEND.<n> tooltype set AND the message is NOT
+ * a comment-to-sysop, saveNewMSG writes a parallel copy to
+ *   <msgBaseLocation>/EXT-OUT/<i>.msg
+ * where <i> is the next free integer slot. The file format is:
+ *   line 1: fromName
+ *   line 2: toName
+ *   line 3: subject
+ *   line 4: formatLongDateTime2(msgDate, " ")  — space-separated D/M/Y H:M:S
+ *   line 5: getMsgId() result (or empty if it fails)
+ *   line 6+: body lines (one per line, '\n' terminated)
+ *
+ * Used by UUCP/FidoNet gateway processors to pick up outbound mail. The
+ * canonical save (HeaderFile + body file) still happens in writeMessageFile
+ * regardless; this is purely an additional output path.
+ *
+ * Returns the EXT-OUT file path on success, null on failure / no-op
+ * (msgbase has no EXTSEND.<n> tooltype, or the message is a comment).
+ */
+export async function writeExtSendDumpIfApplicable(
+  confNum: number,
+  msgBaseNum: number,
+  header: { fromName: string; toName: string; subject: string; msgDate: number },
+  bodyLines: string[],
+  isComment: boolean,
+  bbsDataPath: string,
+): Promise<string | null> {
+  if (isComment) return null;
+
+  // express.e:10788 checkToolTypeExists(TOOLTYPE_MSGBASE,currentConf,'EXTSEND.<n>')
+  const { getConferenceToolFlags } = require('./conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confNum);
+  if (!flags?.extSendMsgBases?.has?.(msgBaseNum)) return null;
+
+  const extOutDir = path.join(getMessagesDir(confNum, bbsDataPath), 'EXT-OUT');
+  await fs.mkdir(extOutDir, { recursive: true });
+
+  // express.e:10659-10663 — find next free slot starting at i=1
+  let i = 0;
+  let extPath = '';
+  for (;;) {
+    i++;
+    extPath = path.join(extOutDir, `${i}.msg`);
+    try {
+      await fs.access(extPath);
+      // exists — keep looking
+      continue;
+    } catch {
+      // doesn't exist — use this slot
+      break;
+    }
+  }
+
+  // express.e:10669 formatLongDateTime2(msgDate, " ") — space-separator form.
+  // formatLongDateTime2 in express.e produces "DD MMM YY HH:MM:SS" with
+  // either a space or whatever separator passed; we replicate the space form.
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const d = new Date(header.msgDate * 1000);
+  const dateLine =
+    `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ` +
+    `${String(d.getFullYear()).slice(-2)} ` +
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+
+  // express.e:10671 getMsgId() — FidoNet/UUCP message-id generator. We don't
+  // have a port of that yet so write an empty line (express.e:10675 falls
+  // back to '' on failure), preserving the file shape.
+  const msgIdLine = '';
+
+  const lines = [
+    header.fromName,
+    header.toName,
+    header.subject,
+    dateLine,
+    msgIdLine,
+    ...bodyLines,
+  ];
+  // express.e writes each line via fileWriteLn which appends '\n'.
+  const content = lines.map(l => l + '\n').join('');
+
+  // Atomic write for safety — gateway daemons may scan EXT-OUT mid-write
+  // otherwise.
+  const tempPath = extPath + '.tmp';
+  try {
+    await fs.writeFile(tempPath, content, 'utf-8');
+    await fs.rename(tempPath, extPath);
+  } catch (err) {
+    try { await fs.unlink(tempPath); } catch {}
+    throw err;
+  }
+  return extPath;
+}
+
+/**
  * Parse a formatted message date "DD-MMM-YY HH:MM:SS" back to Unix seconds.
  * Used to build HeaderFile.msgDate when writing a new message.
  */

@@ -829,6 +829,32 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       session.nodeId || 0
     );
 
+    // express.e:10654-10685 — EXTSEND.<n> external mailbox dump. When the
+    // msgbase has the EXTSEND tooltype set AND the message is NOT a comment
+    // to sysop, also write a parallel copy to <msgBaseLocation>/EXT-OUT/<i>.msg
+    // for UUCP/FidoNet gateway processors to pick up. This is independent
+    // of the canonical save above — failure here doesn't block the main
+    // save (gateway is best-effort by design).
+    try {
+      const { writeExtSendDumpIfApplicable } = require('../../utils/message-file.util');
+      const messageDateUnixSec = Math.floor(messageDate.getTime() / 1000);
+      await writeExtSendDumpIfApplicable(
+        session.currentConf || 1,
+        session.currentMsgBase || 1,
+        {
+          fromName,
+          toName: entry.toUser,
+          subject: entry.subject,
+          msgDate: messageDateUnixSec,
+        },
+        messageBody.split('\n'),
+        !!entry.isComment,
+        config.get('dataDir'),
+      );
+    } catch (extErr) {
+console.error('[Message] EXTSEND dump failed (non-fatal):', extErr);
+    }
+
     // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
     emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
 
