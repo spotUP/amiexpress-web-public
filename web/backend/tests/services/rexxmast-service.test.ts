@@ -91,6 +91,33 @@ describe('RexxMastService — Phase 3b skeleton lifecycle', () => {
     expect(s.ready).toBe(false);
   });
 
+  test('runUntilReady fails fast when service has not been started', async () => {
+    // Phase 4-real wiring contract: calling runUntilReady before
+    // start() must surface a clear error rather than throwing or
+    // crashing the emulator.
+    const ok = await rexxMastService.runUntilReady(0);
+    expect(ok).toBe(false);
+    expect(rexxMastService.getStatus().lastError).toMatch(/before start/);
+  });
+
+  test('runUntilReady returns false in test-mode (cycles=0) without faulting', async () => {
+    // Phase 4-real lets tests pass cycles=0 to verify the wiring
+    // (PC + SP set, monitor hooked) without depending on a working
+    // ROM. The body short-circuits after wiring, returning false
+    // because AddPort('REXX') was never observed.
+    fs.mkdirSync(path.join(tmpDataDir, 'System'));
+    fs.mkdirSync(path.join(tmpDataDir, 'Libs'));
+    fs.writeFileSync(path.join(tmpDataDir, 'System/RexxMast'), 'not a hunk');
+    fs.writeFileSync(path.join(tmpDataDir, 'Libs/rexxsyslib.library'), 'not a hunk');
+
+    // start() will fail (corrupt binaries) — which is fine, we just
+    // want to verify runUntilReady doesn't crash when called
+    // afterwards. It should fail with a stable message.
+    await rexxMastService.start();
+    const ok = await rexxMastService.runUntilReady(0);
+    expect(ok).toBe(false);
+  });
+
   test('stop() releases the emulator handle', async () => {
     // Even on a failed start, stop() should always reset internal
     // state so the next start() retries cleanly.

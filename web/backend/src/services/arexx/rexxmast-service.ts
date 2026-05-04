@@ -320,6 +320,125 @@ class RexxMastService {
   }
 
   /**
+   * #78 Phase 4-real — boot RexxMast for setup cycles.
+   *
+   * Sets PC to the loaded RexxMast entry point + SP to a high RAM
+   * address, hooks the LibraryTraps call monitor to watch for an
+   * AddPort('REXX') call (RexxMast's signal that it's done setting
+   * up + parked on its REXX port waiting for messages), and runs the
+   * emulator instruction-by-instruction up to maxCycles.
+   *
+   * Returns true once AddPort('REXX') is observed (status.ready set
+   * to true), false on timeout / fault. Defensive — a missing ROM,
+   * a malformed RexxMast, or a MOIRA fault all surface as a failure
+   * with status.lastError holding the precise message rather than
+   * crashing the BBS.
+   *
+   * Test mode: when `cycles` is 0 we skip the loop entirely and
+   * just return false. Tests that don't need a live emulator pass
+   * 0 to verify the wiring path without depending on a working ROM.
+   */
+  async runUntilReady(maxCycles: number = 1_000_000): Promise<boolean> {
+    if (!this.emulator || !this.libraryTraps || !this.execLibrary) {
+      this.status.lastError = 'runUntilReady called before start() succeeded';
+      return false;
+    }
+    if (this.status.ready) return true;
+    if (this.status.rexxMastBase === 0) {
+      this.status.lastError = 'RexxMast base unset — cannot set PC';
+      return false;
+    }
+
+    // PC = RexxMast first segment address. SP = high in MOIRA RAM
+    // (4MB heap minus 64KB stack, aligned).
+    const memBytes = SINGLETON_MEM_MB * 1024 * 1024;
+    const stackTop = (memBytes - 0x10000) & ~3;
+    try {
+      const { CPURegister } = require('../../amiga-emulation/cpu/MoiraEmulator');
+      this.emulator.setRegister(CPURegister.PC, this.status.rexxMastBase);
+      this.emulator.setRegister(CPURegister.A7, stackTop);
+    } catch (err: any) {
+      this.status.lastError = `setRegister failed: ${err?.message || err}`;
+      return false;
+    }
+
+    // Hook the call monitor to detect AddPort('REXX'). The monitor
+    // fires for every library-trap call; we only flip ready when
+    // we see AddPort with A1 → port whose ln_Name reads as 'REXX'.
+    let observedRexxPort = false;
+    const oldMonitor = (this.libraryTraps as any).onLibraryCall;
+    this.libraryTraps.setLibraryCallMonitor((fnName: string, _pc: number) => {
+      if (oldMonitor) {
+        try { oldMonitor(fnName, _pc); } catch { /* upstream monitor is advisory */ }
+      }
+      if (fnName === 'AddPort' && !observedRexxPort) {
+        // A1 holds the MsgPort pointer; ln_Name lives at port+10.
+        try {
+          const a1 = this.emulator.getRegister(9 /* A1 */) >>> 0;
+          if (a1 === 0) return;
+          const namePtr = this.emulator.readMemory32(a1 + 10) >>> 0;
+          if (namePtr === 0) return;
+          let name = '';
+          for (let i = 0; i < 16; i++) {
+            const b = this.emulator.readMemory(namePtr + i);
+            if (b === 0) break;
+            name += String.fromCharCode(b);
+          }
+          if (name === 'REXX') {
+            observedRexxPort = true;
+          }
+        } catch {
+          /* swallow — monitor must never throw upstream */
+        }
+      }
+    });
+
+    // Test-mode short-circuit.
+    if (maxCycles === 0) {
+      return false;
+    }
+
+    // Slice the run so we can drain inbound messages (RexxMast may
+    // PutMsg into our host port during setup) and bail early once
+    // AddPort('REXX') is seen.
+    const SLICE = 1024;
+    const { serviceInboundMessages } = require('./rexx-host-servicer');
+    let cycles = 0;
+    while (cycles < maxCycles && !observedRexxPort) {
+      try {
+        for (let i = 0; i < SLICE && cycles < maxCycles; i++) {
+          this.emulator.executeInstruction();
+          cycles++;
+          if (observedRexxPort) break;
+        }
+      } catch (err: any) {
+        this.status.lastError = `RexxMast emulator faulted at ~${cycles} cycles: ${err?.message || err}`;
+        return false;
+      }
+      // Drain anything RexxMast PutMsg'd into us during setup.
+      try {
+        await serviceInboundMessages(
+          this.emulator,
+          this.rexxSysLib,
+          this.status.hostPortAddr,
+          { output: [] },
+        );
+      } catch (err) {
+        // Servicer faults shouldn't kill the boot — log via lastError
+        // but keep running until cycle budget exhausts.
+        this.status.lastError = `host servicer faulted during boot: ${(err as any)?.message || err}`;
+      }
+    }
+
+    if (observedRexxPort) {
+      this.status.ready = true;
+      return true;
+    }
+    this.status.lastError = `RexxMast did not call AddPort('REXX') within ${maxCycles} cycles`;
+    return false;
+  }
+
+  /**
    * Test-only: verify the host port was registered with the expected
    * name. Production code never needs this — Phase 4-real reads from
    * status.hostPortAddr directly when servicing inbound messages.
