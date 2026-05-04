@@ -105,7 +105,11 @@ export function registerAuthHandlers(socket: Socket) {
     } catch (error) {
 console.warn('[AUTH] Unable to load max_password_fails from config:', error);
     }
-    return 5;
+    // express.e:29637 — passwordRetries:=3 is the canonical default.
+    // Audit A-6 flagged that we returned 5 here; that was the username-
+    // retry constant accidentally reused (A-5 split them today, see
+    // session.usernameRetryCount).
+    return 3;
   };
 
   // Handle session restoration after reconnect

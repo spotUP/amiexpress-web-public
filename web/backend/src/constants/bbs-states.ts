@@ -6,7 +6,16 @@ export enum BBSState {
   AWAIT = 'await',
   LOGON = 'logon',
   REGISTERING = 'registering',  // New user account creation - express.e:30003+
-  LOGGEDON = 'loggedon'
+  LOGGEDON = 'loggedon',
+  // Audit H-states — express.e tracks distinct states for the
+  // disconnect / shutdown sequence. Modelled here so callers that
+  // need to emit the right transition (logoff → goodbye → final
+  // hangup, or a sysop-initiated server shutdown) have a typed value
+  // instead of an ad-hoc string. See express.e logoff() / shutdown()
+  // for the canonical flow.
+  LOGGING_OFF = 'logging_off',  // user picked G/Goodbye, draining output
+  HANGUP = 'hangup',            // logoff() complete; socket about to close
+  SHUTDOWN = 'shutdown',        // sysop-initiated server shutdown in progress
 }
 
 export enum LoggedOnSubState {
