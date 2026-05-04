@@ -775,6 +775,13 @@ export async function handlePasswordInput(socket: Socket, session: any, input: s
     return;
   }
 
+  // WEB_: strength check runs at first password entry — express.e:30227-
+  // 30254 checks strength only AFTER the confirmation matches. Audit
+  // A-19 flagged the order. Functionally equivalent (failed strength
+  // re-prompts at the same first-password step in both flows); the web
+  // form gives faster feedback to the user typing a weak password
+  // because they don't have to re-type it twice before learning it
+  // failed. Kept the eager check.
   if (!passwordMeetsStrength(password, policy.minStrength)) {
     socket.emit('ansi-output', `\r\nPassword must have at least ${policy.minStrength} of these:\r\n  upper case,lower case, numeric and symbols, try again..\r\n`);
     promptForPassword(socket, session);
@@ -892,7 +899,14 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
 }
 
 /**
- * Prompt for screen clear preference - express.e:30250
+ * Prompt for screen clear preference - express.e:30272-30281.
+ *
+ * **WEB_**: express.e uses `readChar()` so the user answers with a
+ * single keypress (no Enter required). The web terminal pipeline runs
+ * line-buffered for new-user input fields — the Enter key is what
+ * delivers the answer to the server. We accept either Y/N + Enter or
+ * just Enter (defaults to N), which is the closest equivalent.
+ * (Audit A-20.)
  */
 function promptForScreenClear(socket: Socket, session: any) {
   socket.emit('ansi-output', 'You want Screen Clears after Messages ? (y/N) ');
@@ -960,6 +974,11 @@ async function continueRegistrationFlow(socket: Socket, session: any) {
 /**
  * Handle confirmation - create account or go back
  * express.e:30109 - After doNewUser(), calls doNewUserQuestions() for questionnaire
+ *
+ * **WEB_**: express.e:30306-30318 / 30391-30404 read the y/n answer
+ * with `readChar()` (single keypress). Same constraint as A-20 — the
+ * web flow is line-buffered, so the user types Y/N then Enter.
+ * (Audit A-21.)
  */
 export async function handleConfirmInput(socket: Socket, session: any, input: string) {
   const response = input.trim().toUpperCase();

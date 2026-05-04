@@ -16,6 +16,13 @@ export function setDatabase(database: any) {
 
 // ===== Account Editing Menu =====
 
+/**
+ * **WEB_**: 7-option menu wrapper around editInfo (express.e:21211).
+ * Express.e has no equivalent menu — `editInfo` is invoked directly by
+ * the W command and shows individual fields without a numeric chooser.
+ * Web users prefer a menu over typing through every prompt, so this
+ * wrapper sits in front of the per-field editor. (Audit A-24.)
+ */
 export function displayAccountEditingMenu(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '\x1b[36m-= Account Editing Menu =-\x1b[0m\r\n');
   socket.emit('ansi-output', 'Available operations:\r\n\r\n');

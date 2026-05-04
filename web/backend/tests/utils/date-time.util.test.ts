@@ -142,16 +142,35 @@ describe('Date/Time Utility Functions', () => {
   });
 
   describe('formatCDateTime', () => {
-    it('should format as ISO 8601', () => {
-      const date = new Date('2026-01-07T14:32:15.123Z');
+    // Audit H-CDateTime: this used to return ISO 8601, but the spec
+    // (MiscFuncs.e:343-364) is Unix ctime — "DDD MMM DD HH:MM:SS YYYY"
+    // with a space-padded (not zero-padded) day of month. Tests below
+    // run in the local timezone the test machine is in; we assert
+    // structure, not the exact numbers, so the suite stays portable.
+
+    it('should produce the ctime "DDD MMM DD HH:MM:SS YYYY" shape', () => {
+      const date = new Date(2026, 0, 7, 14, 32, 15); // Jan 7, 2026, 14:32:15 local
       const result = formatCDateTime(date);
-      expect(result).toBe('2026-01-07T14:32:15.123Z');
+      // ctime example output: "Wed Jan  7 14:32:15 2026"
+      expect(result).toMatch(/^[A-Z][a-z]{2} [A-Z][a-z]{2} [ 1-3]\d \d{2}:\d{2}:\d{2} \d{4}$/);
+      // Year should be 2026 (last 4 chars).
+      expect(result.endsWith(' 2026')).toBe(true);
+      // Time component fixed.
+      expect(result.includes(' 14:32:15 ')).toBe(true);
     });
 
-    it('should handle dates without milliseconds', () => {
-      const date = new Date('2026-01-07T14:32:15.000Z');
+    it('uses a SPACE-padded (not zero-padded) day of month', () => {
+      const date = new Date(2026, 0, 7, 0, 0, 0); // 7th — single-digit day
       const result = formatCDateTime(date);
-      expect(result).toBe('2026-01-07T14:32:15.000Z');
+      // " 7" with leading space, NEVER "07"
+      expect(result).toMatch(/[A-Z][a-z]{2}  7 /);
+      expect(result).not.toMatch(/[A-Z][a-z]{2} 07 /);
+    });
+
+    it('two-digit day stays two digits (no leading space stripped)', () => {
+      const date = new Date(2026, 0, 25, 0, 0, 0); // Jan 25
+      const result = formatCDateTime(date);
+      expect(result).toMatch(/Jan 25 /);
     });
   });
 

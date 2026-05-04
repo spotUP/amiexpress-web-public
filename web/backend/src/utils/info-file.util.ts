@@ -440,3 +440,34 @@ export function removeTooltype(info: InfoFile, key: string): InfoFile {
   info.tooltypes = info.tooltypes.filter(tt => tt.key !== upperKey);
   return info;
 }
+
+/**
+ * Check whether a tooltype key exists with a specific value (case-
+ * insensitive value comparison). Mirrors AmigaOS `MatchToolValue()`
+ * (tooltypes.e:152-174) which is the canonical helper express.e uses
+ * to test "is this tooltype set to X?".
+ *
+ * Audit H-TTV flagged that callers were doing manual case-insensitive
+ * comparisons inline, sometimes inconsistently (e.g. comparing the raw
+ * Tooltype.value against `value.toUpperCase()` instead of normalising
+ * both sides). This helper centralises the contract.
+ *
+ * Returns true if a tooltype with the given key exists and its value
+ * (case-insensitively) equals the supplied value. Commented-out
+ * tooltypes are ignored — they don't count as "set".
+ *
+ * @param info  - Parsed InfoFile (from parseInfoFile)
+ * @param key   - Tooltype name (case-insensitive — keys are normalised
+ *                to uppercase by the parser)
+ * @param value - Expected value (case-insensitive comparison)
+ */
+export function checkToolTypeValue(info: InfoFile, key: string, value: string): boolean {
+  const upperKey = key.toUpperCase();
+  const expected = value.toLowerCase();
+  for (const tt of info.tooltypes) {
+    if (tt.commented) continue;
+    if (tt.key !== upperKey) continue;
+    if (tt.value.toLowerCase() === expected) return true;
+  }
+  return false;
+}

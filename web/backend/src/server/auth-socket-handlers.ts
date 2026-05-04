@@ -157,6 +157,13 @@ console.log(`[Session Restore] Old socket ${oldSocketId} still alive — refusin
         }
 console.log('[Session Restore] Found existing session for user, rebinding to new socket');
 
+        // WEB_: token-based session restore preserves most session fields
+        // but does NOT carry quickFlag forward (express.e:29853-29855
+        // sets quickFlag from the ANSI prompt at connect time). On
+        // reconnect the user goes through DISPLAY_BULL/etc. like a fresh
+        // login, which is the closer match to express.e behavior than
+        // re-binding a previous quickFlag. (Audit A-12.)
+
         // Update socket mappings
         socketToUser.set(socket.id, String(user.id));
         socketToNodeId.set(socket.id, existingSession.nodeId);

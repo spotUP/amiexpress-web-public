@@ -109,17 +109,36 @@ export function formatLongDateTime(date: Date): string {
 }
 
 /**
- * Format date/time in C-style format (ISO 8601)
- * Equivalent to MiscFuncs.e formatCDateTime()
+ * Format date/time in Unix ctime format ("Mon Jan 07 14:32:00 2026").
+ * 1:1 port of MiscFuncs.e:343-364 formatCDateTime().
  *
- * Express.e usage: 6 instances
- * Used for compatibility with C doors and external programs
+ * Express.e callers feed this into screens / display via ~CT etc.; the
+ * format exactly matches the C `ctime()` output so any door reading the
+ * stamp via the standard Amiga API gets a familiar string.
+ *
+ * Audit H-CDateTime flagged the previous shape (`date.toISOString()` →
+ * "2026-01-07T14:32:00.000Z") as incorrect — useful for logs but wrong
+ * for the AmigaOS-compat surface. Use `date.toISOString()` directly
+ * elsewhere if you need ISO 8601.
  *
  * @param date - Date to format
- * @returns ISO 8601 formatted string
+ * @returns "DDD MMM DD HH:MM:SS YYYY"
  */
 export function formatCDateTime(date: Date): string {
-  return date.toISOString();
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const dayName = dayNames[date.getDay()];
+  const month = monthNames[date.getMonth()];
+  // Day-of-month: ctime uses space-padded, not zero-padded ('Jan  7' not 'Jan 07').
+  const day = String(date.getDate()).padStart(2, ' ');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${dayName} ${month} ${day} ${hours}:${minutes}:${seconds} ${year}`;
 }
 
 /**

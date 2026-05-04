@@ -1,6 +1,13 @@
 /**
  * Authentication Handler
- * Handles login, registration, and token refresh endpoints
+ * Handles login, registration, and token refresh endpoints.
+ *
+ * **ADMIN_**: this is the HTTP REST API used by the admin panel and
+ * the modern web/SSH/Telnet clients. None of these endpoints have an
+ * express.e equivalent — express.e's authentication runs through the
+ * BBS prompt loop (server/auth-socket-handlers.ts is closer to the
+ * canonical 1:1 path). Methods here are admin-side conveniences that
+ * sit alongside the BBS auth flow, not in place of it. (Audit A-23.)
  */
 
 import { Request, Response } from 'express';

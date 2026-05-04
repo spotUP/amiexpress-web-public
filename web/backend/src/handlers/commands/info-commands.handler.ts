@@ -46,6 +46,9 @@ export function setInfoCommandsDependencies(deps: {
 export function handleVersionCommand(socket: any, session: BBSSession): void {
   // express.e:25688-25698 internalCommandVER()
   // StringF(tempStr,'\b\nAmiExpress \s (\s) Copyright \xa22018-2023 Darren Coles\b\n\b\n',expressVer,expressDate)
+  // WEB_: version string is "AmiExpress-Web <semver>" instead of upstream
+  // Darren Coles version. Original Amiga attribution + copyright lines
+  // are preserved unchanged from express.e:25692-25694. (Audit C-VER.)
   emitText(socket, '\r\nAmiExpress-Web 5.6.0 (2025-10-23) Copyright \xa92018-2023 Darren Coles\r\n\r\n');
   // express.e:25692-25694
   emitText(socket, 'Original Version:\r\n');
