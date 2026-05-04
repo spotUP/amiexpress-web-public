@@ -28,7 +28,7 @@ module.exports = {
     // would block all *new* tests on unrelated rot. Skip-list:
     'test/blessed-integration.test.ts',
     'test/blessed-compatibility.test.ts',
-    'tests/unit/graphics-engine.test.ts',
+    // graphics-engine: API drift fixed 2026-05-04 — re-enabled.
     'tests/unit/input-engine.test.ts',
     'tests/unit/physics-engine.test.ts',
     'tests/integration/game-loop.test.ts',
