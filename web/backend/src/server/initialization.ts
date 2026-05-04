@@ -394,6 +394,17 @@ export async function initializeData(io?: SocketIOServer) {
     // round-21 split — same _db reference, separate setter.
     setMessageForwardDependencies({ db });
 
+    // Log AREXX engine selection (#78 Phase 1). Phase 1 always logs
+    // 'ts' because the native engine reports unavailable until later
+    // phases land — the line is a forward-looking marker so sysops
+    // know the toggle exists.
+    try {
+      const { logEngineSelectionAtStartup } = require('../services/arexx/engine-selector');
+      logEngineSelectionAtStartup();
+    } catch (err) {
+      console.warn('[AREXX] engine selector probe failed:', err);
+    }
+
     // Inject messaging (message reader) dependencies
     setMessagingDependencies({
       db,

@@ -114,6 +114,10 @@ export interface BBSConfigData {
   log_level?: string;
   log_retention_days?: number;
   sysop_debug_enabled?: boolean;
+
+  // AREXX engine override — 'auto' (default), 'native', 'ts'.
+  // 'auto' picks native when System/RexxMast is present, TS otherwise.
+  arexx_engine?: string;
 }
 
 /**
@@ -219,6 +223,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'LOG_LEVEL': 'log_level',
   'LOG_RETENTION_DAYS': 'log_retention_days',
   'SYSOP_DEBUG_OUTPUT': 'sysop_debug_enabled',
+  'AREXX_ENGINE': 'arexx_engine',
 };
 
 /**
