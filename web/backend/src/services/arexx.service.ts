@@ -3499,38 +3499,60 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
    * Evaluate condition
    */
   private async evaluateCondition(condition: string): Promise<boolean> {
+    const c = condition.trim();
+    // Unary NOT (`~` / `\` / `^`) — REXX dialects vary; AmiExpress
+    // doors use `~` (e.g. STNG.Rexx's `do while ~eof(STNG)` and
+    // `if ~exists('hiscores')`). Without this, the recursion-style
+    // ~expr was interpreted as a literal symbol followed by garbage,
+    // returning truthy strings forever. Result: STNG's read-loop
+    // never exited, V8's Map maxed out at 16M stem entries, the
+    // script crashed with "Map maximum size exceeded".
+    if (c.length > 1 && (c.startsWith('~') || c.startsWith('\\') || c.startsWith('^')) && c[1] !== '=') {
+      // `~=` is the inequality operator handled below — only treat
+      // as unary NOT when the next char isn't `=`.
+      return !(await this.evaluateCondition(c.substring(1).trim()));
+    }
     // Comparison operators (order matters - check multi-char first)
-    if (condition.includes('>=')) {
-      const [left, right] = condition.split('>=');
+    if (c.includes('>=')) {
+      const [left, right] = c.split('>=');
       return Number(await this.evaluateExpression(left.trim())) >= Number(await this.evaluateExpression(right.trim()));
     }
-    if (condition.includes('<=')) {
-      const [left, right] = condition.split('<=');
+    if (c.includes('<=')) {
+      const [left, right] = c.split('<=');
       return Number(await this.evaluateExpression(left.trim())) <= Number(await this.evaluateExpression(right.trim()));
     }
-    if (condition.includes('~=') || condition.includes('!=') || condition.includes('<>')) {
-      const parts = condition.split(/~=|!=|<>/);
+    if (c.includes('~=') || c.includes('!=') || c.includes('<>') || c.includes('\\=')) {
+      const parts = c.split(/~=|!=|<>|\\=/);
       return await this.evaluateExpression(parts[0].trim()) != await this.evaluateExpression(parts[1].trim());
     }
-    if (condition.includes('==')) {
-      const [left, right] = condition.split('==');
+    if (c.includes('==')) {
+      const [left, right] = c.split('==');
       return await this.evaluateExpression(left.trim()) == await this.evaluateExpression(right.trim());
     }
-    if (condition.includes('=')) {
-      const [left, right] = condition.split('=');
+    if (c.includes('=')) {
+      const [left, right] = c.split('=');
       return await this.evaluateExpression(left.trim()) == await this.evaluateExpression(right.trim());
     }
-    if (condition.includes('>')) {
-      const [left, right] = condition.split('>');
+    if (c.includes('>')) {
+      const [left, right] = c.split('>');
       return Number(await this.evaluateExpression(left.trim())) > Number(await this.evaluateExpression(right.trim()));
     }
-    if (condition.includes('<')) {
-      const [left, right] = condition.split('<');
+    if (c.includes('<')) {
+      const [left, right] = c.split('<');
       return Number(await this.evaluateExpression(left.trim())) < Number(await this.evaluateExpression(right.trim()));
     }
 
     // Boolean value
-    const value = await this.evaluateExpression(condition);
+    const value = await this.evaluateExpression(c);
+    // REXX truthiness: '1' / non-zero numbers are TRUE; '0' / empty
+    // are FALSE. JS Boolean('0') is true (non-empty string), which
+    // would disagree — treat the value as a number when possible.
+    if (typeof value === 'string') {
+      if (value === '' || value === '0') return false;
+      const n = Number(value);
+      if (!isNaN(n)) return n !== 0;
+      return true;
+    }
     return Boolean(value);
   }
 
