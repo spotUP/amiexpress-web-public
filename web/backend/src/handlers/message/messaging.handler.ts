@@ -1061,8 +1061,33 @@ export async function handleMsgListStartInput(socket: any, session: BBSSession, 
   }
 
   // express.e:8845-8878: list messages from startNum
-  // msgReaderMessages is already filtered for this user; apply start number filter
-  const filtered = messages.filter((m: any) => ((m as any).msgNumber || m.id) >= startNum);
+  //
+  // express.e:8854 filter — listMSGs shows ONLY messages where:
+  //   toName == confMailName  (mail addressed to me)
+  //   OR toName == 'eall'     (group-addressed)
+  //   OR toName == 'all' AND conf has MAILSCAN_ALL set
+  //
+  // This is a NARROWER filter than the read-mail "canRead" check upstream
+  // — listMSGs is "what's in MY inbox", not "what can I read at all".
+  // The previous TS port reused the broad msgReaderMessages list, so users
+  // saw every public message in the conference under L instead of just
+  // mail addressed to them.
+  const { getConfMailName } = require('./message-entry.handler');
+  const myConfMailName = getConfMailName(session).toLowerCase();
+  // MAILSCAN_ALL bit on the per-conf cb.handle[0] (express.e:8854) — we
+  // don't yet track this per-conference flag; default to including ALL-
+  // addressed mail in the listing so users always see the conference's
+  // public mail. Tracked as a follow-up if the flag becomes important.
+  const mailscanAllForThisConf = true;
+  const filtered = messages.filter((m: any) => {
+    const num = (m as any).msgNumber || m.id;
+    if (num < startNum) return false;
+    const toL = (m.toUser || '').toLowerCase();
+    if (toL === myConfMailName) return true;
+    if (toL === 'eall') return true;
+    if (toL === 'all' && mailscanAllForThisConf) return true;
+    return false;
+  });
   let wroteHeader = false;
 
   emitText(socket, '\r\n');
