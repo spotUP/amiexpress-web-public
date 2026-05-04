@@ -1,0 +1,30 @@
+ ========================= SYSOP AVAILABLE CHECK V1.1 =========================
+
+COPYRiGHT NOTiCE !!
+
+I HOPE YOU ALL FOLKS CAN COME UPP WHiTH SOME OWN IDEAS AND DONT COPY MINE !
+
+    AVAIL.rexx    = 1238 bytes
+    AVAIL.dox     = 659  bytes
+
+Purpose:
+
+LET USERS SE iF SYSOP iS AVAILABLE.
+
+Requirements:
+
+OS2.0 & AmiExpress 2.x
+
+Installing the door!
+--------------------
+
+Put it into SYS.CMD like this:
+
+------------[CUT HERE]---------------
+*FRONTEND RM050DOORS:AVAIL.rexx
+------------[CUT HERE]---------------
+
+Contacting Author:
+
+Thats all for now folks, Look out for more of my /X utils.
+Call my board, DiSNEYLAND, +46-13-138676 - US ROBOTICS DUAL POWER -

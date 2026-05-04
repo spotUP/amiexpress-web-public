@@ -1,0 +1,67 @@
+=============================================================================
+
+                  /X Clone by Shuyuki Tanaka/ZILLA Hackers
+              An /X Door Converted from C-Net By: LaserMannen
+                 Original C-Net Version By: Unknown Author
+
+=============================================================================
+
+			       WHAT IS STNG?:
+ It is a kind of game like Trivial Pursuit. The game will ask you about 20
+questions of 300 possible,that means that TRIVIA automaticly picks out 20
+questions Randomly of 200. (Sorry for Bad Explanation. Im Tierd of this shit)
+
+INSTALLATION:
+This is real Easy. Just place STNG in a directory called 'STNG' in DOORS:.
+Under /X v2.X, edit your BBS:COMMANDS/CUSTOMCOMMANDS file like this:
+
+TRIVIA        RM020DOORS:STNG/STNG.REXX
+
+or:
+
+With /X v3.X or v3.X, just creat an ICON, and use an AIM tooltype.
+
+Ok.. Since you UnLHAed your Archive, you should have at least the folowing
+files in :STNG/
+
+ "STNG.Rexx" (The Rexx File) 
+ "STNG.Doc   (This Document)  
+ "hiscores"    (high score data; will be created if not present)
+ "STNGdat"     (file with 300 questions)
+
+-----------------------------------------------------------------------------
+
+STNG File Format:
+
+question 1         =
+answer 1           =  The correct answer must be preceded with an "!"
+answer 2           =  Other answers must have a blank (or something except
+answer 3           =  "!" and "-") before the answer.
+answer 4           =  Omitted answers must consist only of a "-"
+  .                =
+  .                =  Here is an example of the questions/answers:
+  .                =
+What is two plus two?
+ 22
+!4
+ 6
+ 8
+Who would you like to have SEX with?
+!Heather Locklear
+!Christy Thom
+ Ralph Nader
+ Ralph Crandon
+                   =
+                   =  NOTE: If there is more than one !, all ! marked
+                   =        answers will be counted correct.
+                   =        If there is no !, the user will always get it
+                   =        wrong.
+                   =
+                   =  You *MUST* have 4 answers per question, and a space
+                   =  or '!' between the first column and the answer.
+
+-------------------------------------------------------------------------
+
+This AIM (AREXX) door is a clone of the 'TRIVIA' arexx door.  MANY THANKS
+to LASERMANNEN!
+
