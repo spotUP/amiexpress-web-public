@@ -82,6 +82,7 @@ describe('Conference Tooltypes Utility', () => {
           noBulls: false,
           noConfBulls: false,
           freeDownloads: false,
+          custom: false,
           menuPrompt: '',
           requireUsername: false,
           requireRealname: false,
@@ -337,6 +338,28 @@ describe('Conference Tooltypes Utility', () => {
         const flags = conferenceTooltypes.getConferenceToolFlags(27);
 
         expect(flags.freeDownloads).toBe(true);
+      });
+
+      // Audit F-2 — CUSTOM tooltype routes the conference through a
+      // non-standard message-base (express.e:5028, 5093, 5121). The
+      // joinConference path uses this flag to skip mail-stat lookup,
+      // mail-stats display, and mail scan.
+      it('should read CUSTOM from icon file', () => {
+        mockAmigafsExistsSync.mockReturnValue(true);
+        mockFsReadFileSync.mockReturnValue(makeBuf('CUSTOM'));
+
+        const flags = conferenceTooltypes.getConferenceToolFlags(127);
+
+        expect(flags.custom).toBe(true);
+      });
+
+      it('CUSTOM defaults to false when the tooltype is absent', () => {
+        mockAmigafsExistsSync.mockReturnValue(true);
+        mockFsReadFileSync.mockReturnValue(makeBuf('FORCE_NEWSCAN'));
+
+        const flags = conferenceTooltypes.getConferenceToolFlags(128);
+
+        expect(flags.custom).toBe(false);
       });
 
       it('should read multiple tooltypes from icon file', () => {

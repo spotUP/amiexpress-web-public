@@ -11,6 +11,7 @@ import { getMailStatFile, loadMsgPointers, saveMsgPointers, validatePointers } f
 import { finalizeCommand } from '../../utils/command-response.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { checkConfAccess, checkMailConfScan } from '../message/message-scan.handler';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 
 import type { BBSSession } from '../../index';
 
@@ -197,9 +198,17 @@ console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
     }
   }
 
+  // express.e:5028 — IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
+  // The CUSTOM tooltype routes the conference through customMsgbaseCmd
+  // (a non-standard message-base implementation) instead of the
+  // MailStats/HeaderFile pipeline. When set, skip the standard
+  // mail-stat lookup, message-range display, and mail scan. Audit F-2.
+  const confFlags = getConferenceToolFlags(confId);
+  const isCustom = confFlags.custom;
+
   // Load message pointers for this conference/msg base (express.e joinConf sets lastMsgReadConf/lastNewReadConf)
   let mailStat: any = null;
-  if (session.user) {
+  if (session.user && !isCustom) {
     try {
       mailStat = await getMailStatFile(confId, msgBaseId);
       const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
@@ -220,6 +229,12 @@ console.error('[joinConference] Failed to load/validate message pointers:', err)
       session.lastMsgReadConf = 0;
       session.lastNewReadConf = 0;
     }
+  } else if (isCustom) {
+    // CUSTOM conference — read pointers don't apply. express.e leaves
+    // them unchanged; we just clear so downstream consumers don't see
+    // stale values from the previous conference.
+    session.lastMsgReadConf = 0;
+    session.lastNewReadConf = 0;
   }
 
   // express.e:5130-5138 - createNodeUserFiles() only runs when !auto AND !confScan
@@ -256,24 +271,34 @@ console.warn('[joinConference] checkMailConfScan error:', err);
       }
     }
     if (shouldScan) {
-      try {
-        // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
-        // In our implementation this is the per-conference mail scan (display new message list)
-        const { performSingleConfMailScan } = require('../message/message-scan.handler');
-        if (performSingleConfMailScan) {
-          await performSingleConfMailScan(socket, session, confId, msgBaseId);
-        }
-      } catch (err) {
+      // express.e:5121-5125 — IF checkToolTypeExists CUSTOM=FALSE THEN
+      //   callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
+      // ELSE
+      //   customMsgbaseCmd(MAIL_SCAN, conf, 0)
+      // ENDIF
+      // We don't have customMsgbaseCmd (no in-tree CUSTOM message base
+      // implementation), so the CUSTOM branch is a no-op — the standard
+      // scan would dump zeroes / scan empty data and confuse the user.
+      if (!isCustom) {
+        try {
+          // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
+          // In our implementation this is the per-conference mail scan (display new message list)
+          const { performSingleConfMailScan } = require('../message/message-scan.handler');
+          if (performSingleConfMailScan) {
+            await performSingleConfMailScan(socket, session, confId, msgBaseId);
+          }
+        } catch (err) {
 console.warn('[joinConference] Mail scan error:', err);
-      }
-      // express.e:5126 - saveMsgPointers(conf, msgBaseNum)
-      try {
-        const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
-        confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
-        confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
-        await saveMsgPointers(confBase);
-      } catch (err) {
+        }
+        // express.e:5126 - saveMsgPointers(conf, msgBaseNum)
+        try {
+          const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
+          confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
+          confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
+          await saveMsgPointers(confBase);
+        } catch (err) {
 console.warn('[joinConference] saveMsgPointers error:', err);
+        }
       }
     }
   }
@@ -320,20 +345,28 @@ console.warn('[joinConference] saveMsgPointers error:', err);
           : `Conference ${confId}: ${conference.name} Auto-ReJoined`;
         socket.emit('ansi-output', autoReJoinMsg + '\r\n');
 
-        // express.e:5092-5113 — message-stats block also gated on quietJoin
-        // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
-        const lowestKey = mailStat?.lowestKey || 0;
-        const highMsgNum = mailStat?.highMsgNum || 1;
-        const totalMessages = highMsgNum - 1;
-        if (lowestKey > 1) {
-          socket.emit('ansi-output', `\r\n\x1b[32mMessages range from \x1b[33m( \x1b[0m${lowestKey} \x1b[32m- \x1b[0m${totalMessages} \x1b[33m)\x1b[0m\r\n`);
-        } else {
-          socket.emit('ansi-output', `\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${totalMessages}\r\n`);
+        // express.e:5092-5113 — message-stats block.
+        //   IF (quietJoin=FALSE)
+        //     IF checkToolTypeExists CUSTOM=FALSE → standard range/total
+        //     ELSE → customMsgbaseCmd(MAIL_STATS, conf, 0)
+        //   ENDIF
+        // We don't have customMsgbaseCmd, so the CUSTOM branch is silent
+        // here too. (Audit F-2.)
+        if (!isCustom) {
+          // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
+          const lowestKey = mailStat?.lowestKey || 0;
+          const highMsgNum = mailStat?.highMsgNum || 1;
+          const totalMessages = highMsgNum - 1;
+          if (lowestKey > 1) {
+            socket.emit('ansi-output', `\r\n\x1b[32mMessages range from \x1b[33m( \x1b[0m${lowestKey} \x1b[32m- \x1b[0m${totalMessages} \x1b[33m)\x1b[0m\r\n`);
+          } else {
+            socket.emit('ansi-output', `\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${totalMessages}\r\n`);
+          }
+          const lastScanned = Math.max((session.lastNewReadConf || 1) - 1, 1);
+          const lastRead = session.lastMsgReadConf || 0;
+          socket.emit('ansi-output', `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
+          socket.emit('ansi-output', `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${lastRead}\r\n`);
         }
-        const lastScanned = Math.max((session.lastNewReadConf || 1) - 1, 1);
-        const lastRead = session.lastMsgReadConf || 0;
-        socket.emit('ansi-output', `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
-        socket.emit('ansi-output', `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${lastRead}\r\n`);
       }
       // express.e:5115 - IF (auto) THEN displaySysopULStats() — WEB_: not applicable
     } else {

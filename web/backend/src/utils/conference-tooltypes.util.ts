@@ -16,6 +16,13 @@ export interface ConferenceToolFlags {
   noBulls: boolean;
   noConfBulls: boolean;
   freeDownloads: boolean;
+  // express.e:5028, 5093, 5121 — CUSTOM tooltype routes the conference
+  // through a different message-base implementation (customMsgbaseCmd)
+  // instead of the standard MailStats/HeaderFile path. When set, the
+  // standard mail-stats lookup, the per-conf message-range display,
+  // and the mail-scan are all skipped — express.e calls the custom
+  // hook instead. Audit F-2.
+  custom: boolean;
   // express.e:5013 / express.e:15269 — MENU_PROMPT tooltype overrides the standard menu prompt
   menuPrompt: string;
   // express.e:4078-4087 — CHECK_REALNAME tooltypes:
@@ -56,6 +63,7 @@ const defaultFlags: ConferenceToolFlags = {
   noBulls: false,
   noConfBulls: false,
   freeDownloads: false,
+  custom: false,
   menuPrompt: '',
   requireUsername: false,
   requireRealname: false,
@@ -189,6 +197,13 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     }
     if (flagSet.has('FREEDOWNLOADS')) {
       result.freeDownloads = true;
+    }
+    // express.e:5028, 5093, 5121 — CUSTOM gates the standard mail
+    // pipeline. Sysops set this on conferences that use a non-standard
+    // message-base format (e.g. the old QWK-only / external-only
+    // bases). Presence-only flag (no value).
+    if (flagSet.has('CUSTOM')) {
+      result.custom = true;
     }
     // express.e:5013 / express.e:15269 — MENU_PROMPT=<string> overrides the standard menu prompt
     if (tooltypeMap.has('MENU_PROMPT')) {
