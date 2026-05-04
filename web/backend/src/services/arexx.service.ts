@@ -1926,12 +1926,6 @@ console.error('BBSCREATEDROPFILE error:', error);
     // for blocking input. The BBS's central socket handler in
     // server/socket-handlers.ts routes incoming user keystrokes through
     // session.doorInputHandler when set, regardless of door type.
-    //
-    // The previous implementation emitted `door:request-char` and waited
-    // for `door:char-input` — neither event has a handler in the BBS
-    // (no frontend code sends `door:char-input` back), so the script
-    // hung forever at the first GETCHAR. STNG.Rexx's title-screen
-    // "Press [RETURN] to Continue.." was unrecoverable.
     const session = this.context.session;
     if (!session) return '';
     return new Promise<string>((resolve) => {
@@ -4382,10 +4376,27 @@ console.log(`Executing AREXX script: ${script.name}`);
         if (choice.choice === 'native' && rexxMastService.isReady()) {
 console.log(`[AREXX] dispatching '${script.name}' via native RexxMast (${choice.reason})`);
           const args = (context.parameters || []) as string[];
+          // Preserve the BBS dispatcher's output callback so TR/SS/BBSWRITE
+          // emissions reach the socket. Previously we hard-overrode
+          // output to an empty array — the bridged interpreter wrote
+          // every byte into that array and the user saw nothing on
+          // screen. emitToTerminal prefers outputCallback over output,
+          // so wiring dispatcherOutput as outputCallback (when it's a
+          // function) preserves the socket emit path AND lets the
+          // array buffer keep collecting for unit-test consumers.
+          const dispatcherOutput = context.output;
+          const nativeCtx = {
+            ...context,
+            output: [],
+            outputCallback:
+              typeof dispatcherOutput === 'function'
+                ? dispatcherOutput
+                : context.outputCallback,
+          };
           const native = await rexxMastService.executeRexxScript(
             script.script || '',
             args,
-            { ...context, output: [] },
+            nativeCtx,
           );
           // Log execution (mirror the TS path so the audit trail
           // is consistent regardless of which engine ran).
