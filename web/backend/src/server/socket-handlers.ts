@@ -385,30 +385,43 @@ console.log('[socket-handlers] Details: inDoorManager=', session.inDoorManager, 
     }
   });
 
+  // Throttle mouse-move-class events (mousemove/drag/hover) per session.
+  // Why: browsers fire mousemove at ~60Hz+ on the client, and BBSTerminal forwards
+  // every one. The SDK's screen.handleMouseEvent walks the whole element tree on
+  // each event, plus emits screen.render() on hover-state transitions. With heavy
+  // mouse activity that saturated the event loop, key events queued up behind it,
+  // and socket.io eventually fired its ping timeout — see #14 (DOORMAN freeze
+  // 2026-05-04). We coalesce position-only events to ~60Hz per session here so
+  // the door stays responsive without the user noticing the cap.
+  const MOUSE_MOVE_THROTTLE_MS = 16; // 60Hz cap
+
+  function shouldEmitPositionMouse(session: any, key: string): boolean {
+    const stamps = session.__mouseLast || (session.__mouseLast = {});
+    const now = Date.now();
+    if ((now - (stamps[key] || 0)) < MOUSE_MOVE_THROTTLE_MS) return false;
+    stamps[key] = now;
+    return true;
+  }
+
   // Handle mouse drag (for continuous drawing in ANSI editor)
   socket.on('mouse-drag', (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
-console.log('[socket-handlers] mouse-drag received:', data);
-
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
-console.log('[socket-handlers] Calling doorInputHandler with mouse drag data');
+      if (!shouldEmitPositionMouse(session, 'drag')) return;
       session.doorInputHandler(JSON.stringify({ type: 'mouse-drag', ...data }));
     }
   });
 
-  // Handle mouse up (end of drag operation)
+  // Handle mouse up (end of drag operation) — never throttled, must always fire.
   socket.on('mouse-up', (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
-console.log('[socket-handlers] mouse-up received:', data);
-
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
-console.log('[socket-handlers] Calling doorInputHandler with mouse up data');
       session.doorInputHandler(JSON.stringify({ type: 'mouse-up', ...data }));
     }
   });
@@ -421,6 +434,7 @@ console.log('[socket-handlers] Calling doorInputHandler with mouse up data');
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     // Don't send to regular doors as they expect text input, not mouse events
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
+      if (!shouldEmitPositionMouse(session, 'hover')) return;
       session.doorInputHandler(JSON.stringify({ type: 'mouse-hover', ...data }));
     }
   });

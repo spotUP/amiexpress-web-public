@@ -1406,8 +1406,14 @@ export class Program extends EventEmitter {
           const chunk = this._inputBuffer.slice(0, endIdx + 1);
           try {
             const json = JSON.parse(chunk);
-            console.log(`[Program._handleData] JSON parsed: type=${json.type} mouseEnabled=${this._mouseEnabled}`);
-            
+            // The 3 console.log calls that used to live here fired on every
+            // mouse event. With browsers emitting mousemove at 60Hz+, that was
+            // ~180 stderr writes/sec — enough to back up the event loop and
+            // contribute to the DOORMAN freeze (#14, 2026-05-04). The actual
+            // routing logic doesn't need them for correctness; gate behind an
+            // env flag for when we genuinely need to debug the mouse path.
+            const verbose = process.env.SDK_LOG_MOUSE === '1';
+
             if (json.type === 'key' || (json.name && !json.type)) {
               // Handle JSON key event
               const keyEvent: KeyEvent = {
@@ -1422,18 +1428,17 @@ export class Program extends EventEmitter {
               processed = true;
             } else if (json.type && this._mouseEnabled) {
               const mouseEvent = this.parseJsonMouseEvent(json);
-              console.log(`[Program._handleData] mouseEvent=${JSON.stringify(mouseEvent)}`);
               if (mouseEvent) {
                 this._lastMouseEvent = mouseEvent;
                 for (const handler of this.mouseHandlers) {
                   handler(mouseEvent);
                 }
                 this.emit('mouse', mouseEvent);
-                console.log(`[Program._handleData] Emitted mouse event`);
               }
+              if (verbose) console.log(`[Program._handleData] mouse type=${json.type} ${mouseEvent ? `x=${mouseEvent.x} y=${mouseEvent.y}` : '(unparsed)'}`);
               processed = true;
             } else if (json.type && !this._mouseEnabled) {
-              console.log(`[Program._handleData] Mouse NOT enabled, ignoring JSON mouse event`);
+              if (verbose) console.log(`[Program._handleData] mouse type=${json.type} dropped (mouse disabled)`);
               processed = true;
             }
             
