@@ -54,6 +54,33 @@ function formatFileSize(bytes) {
         return `${Math.round(bytes / 1024)} KB`;
     return `${Math.round(bytes / (1024 * 1024))} MB`;
 }
+/**
+ * Walk an absolute path component-by-component, matching each segment
+ * case-insensitively against the on-disk entries. Returns the resolved
+ * absolute path or null if any component is missing. Used to bridge the
+ * gap between AmigaDOS-style mixed-case door tooltypes and the
+ * lowercased on-disk dir names many of our doors actually use.
+ */
+function resolveCaseInsensitive(absPath) {
+    if (!path.isAbsolute(absPath))
+        return null;
+    const components = absPath.split(path.sep).filter(Boolean);
+    let current = path.sep;
+    for (const seg of components) {
+        let entries;
+        try {
+            entries = fs.readdirSync(current);
+        }
+        catch {
+            return null;
+        }
+        const match = entries.find((e) => e.toLowerCase() === seg.toLowerCase());
+        if (!match)
+            return null;
+        current = path.join(current, match);
+    }
+    return current;
+}
 function getFileSize(fullPath) {
     try {
         return fs.statSync(fullPath).size;
@@ -79,14 +106,31 @@ class FileExplorerOverlay {
         this.onClose = opts.onClose;
         this.projectRoot = process.cwd();
         // Resolve to absolute path, then if it points to a file (e.g. 68K executable) use parent dir
-        const resolved = path.isAbsolute(opts.doorPath)
+        let resolved = path.isAbsolute(opts.doorPath)
             ? opts.doorPath
             : path.resolve(this.projectRoot, opts.doorPath);
         try {
             this.doorRoot = fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
         }
         catch {
-            this.doorRoot = resolved;
+            // Try case-insensitive resolution per path component — many .info
+            // tooltypes use AmigaDOS conventions (mixed case) but the on-disk
+            // dirs may be all-lowercase or differently-cased (e.g. tooltype says
+            // `Doors/EmP_Tools/Bulls` but on disk it's `Doors/emp_tools/Bulls`).
+            const ciResolved = resolveCaseInsensitive(resolved);
+            if (ciResolved && fs.existsSync(ciResolved)) {
+                try {
+                    this.doorRoot = fs.statSync(ciResolved).isDirectory()
+                        ? ciResolved
+                        : path.dirname(ciResolved);
+                }
+                catch {
+                    this.doorRoot = ciResolved;
+                }
+            }
+            else {
+                this.doorRoot = resolved;
+            }
         }
         this.currentDir = this.doorRoot;
         this.buildUI();

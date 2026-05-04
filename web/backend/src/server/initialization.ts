@@ -86,6 +86,7 @@ import {
   displayNewFiles
 } from '../handlers/file/file.handler';
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
+import { setMessageForwardDependencies } from '../handlers/message/message-forward.handler';
 import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
 import {
   setDoors,
@@ -388,6 +389,10 @@ export async function initializeData(io?: SocketIOServer) {
       db,
       callersLog
     });
+
+    // Forward + reply-delete handlers extracted from message-entry on
+    // round-21 split — same _db reference, separate setter.
+    setMessageForwardDependencies({ db });
 
     // Inject messaging (message reader) dependencies
     setMessagingDependencies({

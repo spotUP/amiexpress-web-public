@@ -222,8 +222,23 @@ async function createApp(session) {
         const door = selectedDoor();
         if (!door)
             return;
-        // resolvedPath (absolute) > location (relative from LOCATION= tooltype) > fallback
-        const doorPath = door.resolvedPath || door.location || `Doors/${door.command}`;
+        // resolvedPath (absolute) > location (relative from LOCATION= tooltype) > fallback.
+        // location may be an AmigaDOS-style assign path like "DOORS:EmP_Tools/Bulls" —
+        // strip the assign prefix so fs.readdirSync doesn't get a literal `:` in the
+        // path (which throws ENOENT and used to look like a frozen BBS to the sysop
+        // since the empty error overlay sat there waiting for ESC).
+        let doorPath = door.resolvedPath || door.location || `Doors/${door.command}`;
+        const assignMatch = /^([A-Za-z][A-Za-z0-9]*):(.*)$/.exec(doorPath);
+        if (assignMatch) {
+            const assign = assignMatch[1].toUpperCase();
+            const subpath = assignMatch[2].replace(/^\/+/, '');
+            if (assign === 'BBS' || assign === 'WORK') {
+                doorPath = subpath;
+            }
+            else if (assign === 'DOORS') {
+                doorPath = `Doors/${subpath}`;
+            }
+        }
         new FileExplorerOverlay_1.FileExplorerOverlay({
             screen,
             doorPath,
