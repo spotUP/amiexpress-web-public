@@ -175,17 +175,25 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
 
 /**
  * Handle Move Message confirmation
- * From express.e:11846-11849
+ * From express.e:11846-11849 — yesNo(0): single char, loop on CR / invalid,
+ * only Y or N exits the prompt. We previously used yesNo(2) semantics
+ * (default N on CR), which silently cancelled moves when users hit Enter
+ * out of habit. Now mirrors express.e: empty input / unknown char → stay
+ * in the prompt; only first char Y or N decides the outcome.
  */
 export async function handleMsgMoveConfirm(socket: any, session: BBSSession, input: string): Promise<void> {
   const { returnToMessageReader, displaySingleMessage, saveMessagePointerAndExit: _saveAndExit } = require('./messaging.handler');
-  const command = input.trim().toUpperCase();
+  const ch = (input[0] || '').toUpperCase();
 
-  if (command !== 'Y' && command !== 'YES') {
-    emitText(socket, '\r\n');
+  // yesNo(0) loops on CR / invalid — caller stays in MSG_MOVE_CONFIRM substate.
+  if (ch !== 'Y' && ch !== 'N') return;
+
+  if (ch === 'N') {
+    emitText(socket, 'No\r\n');
     await returnToMessageReader(socket, session);
     return;
   }
+  emitText(socket, 'Yes\r\n');
 
   const msg = session.tempData.moveMessage;
   const destConf = session.tempData.moveDestConf;
