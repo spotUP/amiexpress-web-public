@@ -415,5 +415,8 @@ backups/
 
 # AmigaOS components — copyrighted Commodore/Hyperion property,
 # sysops supply their own from a legitimate AmigaOS install.
-System/RexxMast
-System/rexxmast
+System/RexxMast*
+System/rexxmast*
+System/Rexxc/
+# FS-UAE / WinUAE attribute sidecars dropped alongside Amiga binaries.
+**/*.uaem
