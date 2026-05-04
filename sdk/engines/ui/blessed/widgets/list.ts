@@ -309,23 +309,37 @@ export class List extends Element {
       return false;
     }
 
-    // Debounce to prevent burst inputs (e.g. from rapid key repeat)
-    const now = Date.now();
-    if (now - this._lastKeyTime < 50) return true; // Handled (ignored)
-    this._lastKeyTime = now;
-
     const vi = (this.options as any).vi;
+
+    // Debounce ONLY for navigation keys (arrows, page, home/end, vi hjkl/gG).
+    // Without this gate, holding the down arrow scrolls past the list's bottom
+    // before the eye can follow. But the same gate must NOT apply to
+    // type-to-search, enter, or escape — fast typists hit those well under
+    // 50ms apart and dropping their input felt like a freeze. (Original code
+    // had a blanket gate at the top of this method that swallowed everything.)
+    const isNavKey =
+      key.name === 'up' || key.name === 'down' ||
+      key.name === 'left' || key.name === 'right' ||
+      key.name === 'pageup' || key.name === 'pagedown' ||
+      key.name === 'home' || key.name === 'end' ||
+      (vi && (key.name === 'k' || key.name === 'j' || key.name === 'g' || key.name === 'G'));
+
+    if (isNavKey) {
+      const now = Date.now();
+      if (now - this._lastKeyTime < 50) return true; // dropped, but handled
+      this._lastKeyTime = now;
+    }
 
     // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
-      console.log(`[List] UP from ${this.selected}`);
+      if (process.env.SDK_LOG_LIST === '1') console.log(`[List] UP from ${this.selected}`);
       this.up();
       this.screen?.render();
       return true;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
-      console.log(`[List] DOWN from ${this.selected}`);
+      if (process.env.SDK_LOG_LIST === '1') console.log(`[List] DOWN from ${this.selected}`);
       this.down();
       this.screen?.render();
       return true;
