@@ -156,6 +156,15 @@ export function createSession(nodeId: number, options: SessionConnectionOptions 
     nodeId: nodeId, // Assign unique virtual node ID - express.e:163
     loginRetryCount: 0, // Initialize retry counter - express.e:29560
 
+    // express.e:29554-29557 reserved-name banner + 28734-28738 connect-time bump.
+    // Per-node reservation lives in node-reservation.service; pulling it here so
+    // the pre-login transitionToBBSTitle warning fires whenever a sysop has
+    // reserved this node for a specific user. (Audit A-3.)
+    reservedFor: (() => {
+      const { getNodeReservation } = require('../services/node-reservation.service');
+      return getNodeReservation(nodeId) ?? undefined;
+    })(),
+
     // Phase 10: Initialize message pointers (express.e:199-200)
     lastMsgReadConf: 0, // Last message manually read
     lastNewReadConf: 0, // Last message auto-scanned

@@ -500,6 +500,23 @@ console.warn(`[LOGIN] User ${safeUsername} has slotNumber=0 (deleted account) â€
         session.loginRetryCount = 0;
         ipBanManager.resetFailures(remoteAddress);
 
+        // express.e:28734-28738 / 29129-29135 â€” Reserved-node bump.
+        // Sysop reserves a node via POST /api/nodes/:nodeId/reserve (Audit
+        // A-3, services/node-reservation.service). Authenticated users whose
+        // username doesn't match the reservation get the express.e:28736
+        // message and disconnect. Case-insensitive match (StriCmp at 29131).
+        // Both auth paths (token + username/password) converge here so a
+        // single check guards both. The reservation itself is cleared on
+        // logoff via handleGoodbyeCommand (express.e:8213).
+        if (typeof session.nodeId === 'number') {
+          const { isReservationMatch } = require('../services/node-reservation.service');
+          if (!isReservationMatch(session.nodeId, user.username)) {
+            socket.emit('ansi-output', '\r\n420 Node is currently reserved for another user.\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+        }
+
         // CRITICAL: Sync user to disk files for 68K door compatibility
         // 68K doors use XIM protocol and read from user.data, not database
         if (user.slotNumber) {

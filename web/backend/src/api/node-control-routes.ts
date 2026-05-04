@@ -22,6 +22,11 @@ import express, { Request, Response } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { sessions, socketToNodeId, getSocketIdByNodeId } from '../server/session-manager';
 import { getSystemTime } from '../utils/date-time.util';
+import {
+  setNodeReservation,
+  getNodeReservation,
+  clearNodeReservation,
+} from '../services/node-reservation.service';
 
 interface NodeStatus {
   nodeId: number;
@@ -141,19 +146,69 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
 
   /**
    * POST /api/nodes/:nodeId/reserve
-   * Reserve node for sysop (SV_RESERVE: 171)
+   * Reserve node for a specific user (SV_RESERVE: 171, audit A-3, express.e:7649-7656).
+   *
+   * Body shape:
+   *   { username: string } — set reservation to that user
+   *   {} or { username: '' } — clear reservation (express.e F4 toggle when set);
+   *                            if no reservation existed, returns 400.
+   *
+   * Persistence is via node-reservation.service so the reservation survives
+   * across the node coming and going. Unlike most supervisor commands this
+   * endpoint does NOT require the node to currently be online — sysops
+   * routinely pre-reserve nodes ahead of expected callers in the web admin.
+   * The supervisor:command is still emitted as a courtesy to any live admin
+   * UI listener but its delivery is not required for the reservation to apply.
    */
   router.post('/:nodeId/reserve', (req: Request, res: Response) => {
     const nodeId = parseInt(req.params.nodeId);
-    const result = sendSupervisorCommand(nodeId, 'SV_RESERVE');
+    const body = req.body || {};
+    const rawUsername = typeof body.username === 'string' ? body.username : '';
+    const trimmedUsername = rawUsername.trim();
 
-    if (!result.success) {
-      return res.status(404).json({ success: false, message: result.error });
+    const existing = getNodeReservation(nodeId);
+
+    if (trimmedUsername.length === 0) {
+      // Toggle / clear path. express.e:7652-7653 only clears when set; the
+      // F4 ELSE branch reads a username via chooseAName before setting,
+      // which the body-with-username path covers.
+      if (!existing) {
+        return res.status(400).json({
+          success: false,
+          message: 'No reservation set; supply { username: "..." } to reserve this node.',
+        });
+      }
+      clearNodeReservation(nodeId);
+      // Best-effort live UI notify; does not affect persistence.
+      sendSupervisorCommand(nodeId, 'SV_RESERVE', { reservedFor: null });
+      return res.json({
+        success: true,
+        message: `Node ${nodeId} reservation cleared`,
+        reservedFor: null,
+        timestamp: getSystemTime().toISOString(),
+      });
     }
 
+    setNodeReservation(nodeId, trimmedUsername);
+    sendSupervisorCommand(nodeId, 'SV_RESERVE', { reservedFor: trimmedUsername });
     res.json({
       success: true,
-      message: `Node ${nodeId} reserved for sysop`,
+      message: `Node ${nodeId} reserved for ${trimmedUsername}`,
+      reservedFor: trimmedUsername,
+      timestamp: getSystemTime().toISOString(),
+    });
+  });
+
+  /**
+   * GET /api/nodes/:nodeId/reserve
+   * Read the current reservation for a node. Returns
+   * { reservedFor: string | null } so the admin UI can show a status.
+   */
+  router.get('/:nodeId/reserve', (req: Request, res: Response) => {
+    const nodeId = parseInt(req.params.nodeId);
+    res.json({
+      success: true,
+      reservedFor: getNodeReservation(nodeId),
       timestamp: getSystemTime().toISOString(),
     });
   });

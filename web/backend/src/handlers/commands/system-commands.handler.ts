@@ -95,6 +95,14 @@ console.error('[LOGOFF] Failed to save command history:', err);
   // express.e:25069 - setEnvStat(ENV_LOGOFF)
 console.log('[ENV] Logoff');
 
+  // express.e:8213 — StrCopy(reservedName,'') after logoff. Drop the
+  // per-node reservation so the next caller isn't blocked by a stale
+  // entry pointing at the user who just logged off. (Audit A-3.)
+  if (typeof session.nodeId === 'number') {
+    const { clearNodeReservation } = require('../../services/node-reservation.service');
+    clearNodeReservation(session.nodeId);
+  }
+
   // Set session state to logoff
   session.subState = LoggedOnSubState.LOGOFF;
 

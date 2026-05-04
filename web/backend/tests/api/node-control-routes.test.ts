@@ -12,6 +12,11 @@ jest.mock('../../src/server/session-manager', () => ({
 import express from 'express';
 import request from 'supertest';
 import { createNodeControlRouter } from '../../src/api/node-control-routes';
+import {
+  resetAllNodeReservations,
+  getNodeReservation,
+  setNodeReservation,
+} from '../../src/services/node-reservation.service';
 
 describe('Node Control Routes', () => {
   let app: express.Application;
@@ -28,6 +33,7 @@ describe('Node Control Routes', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetAllNodeReservations();
   });
 
   describe('GET /api/nodes/status', () => {
@@ -54,10 +60,67 @@ describe('Node Control Routes', () => {
     });
   });
 
-  describe('POST /api/nodes/:nodeId/reserve', () => {
-    it('returns 4xx for offline node', async () => {
-      const res = await request(app).post('/api/nodes/99/reserve');
-      expect(res.status).toBeGreaterThanOrEqual(400);
+  describe('POST /api/nodes/:nodeId/reserve (A-3, express.e:7649-7656)', () => {
+    it('with {username} body persists the reservation, even on offline node', async () => {
+      // Sysop reserves an offline node ahead of an expected caller —
+      // express.e couldn't do this (F4 was node-local) but our admin
+      // dashboard is global; persistence is the audit's literal scope.
+      const res = await request(app)
+        .post('/api/nodes/5/reserve')
+        .send({ username: 'alice' });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.reservedFor).toBe('alice');
+      expect(getNodeReservation(5)).toBe('alice');
+    });
+
+    it('with empty body, when reservation IS set, clears it (F4 toggle)', async () => {
+      setNodeReservation(6, 'alice');
+      const res = await request(app).post('/api/nodes/6/reserve').send({});
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.reservedFor).toBeNull();
+      expect(getNodeReservation(6)).toBeNull();
+    });
+
+    it('with empty body, when no reservation is set, returns 400 (must specify username)', async () => {
+      const res = await request(app).post('/api/nodes/7/reserve').send({});
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('overwrites an existing reservation when given a different username', async () => {
+      setNodeReservation(8, 'alice');
+      const res = await request(app)
+        .post('/api/nodes/8/reserve')
+        .send({ username: 'bob' });
+      expect(res.status).toBe(200);
+      expect(res.body.reservedFor).toBe('bob');
+      expect(getNodeReservation(8)).toBe('bob');
+    });
+
+    it('rejects whitespace-only username with 400 (cannot reserve to nobody)', async () => {
+      const res = await request(app)
+        .post('/api/nodes/9/reserve')
+        .send({ username: '   ' });
+      expect(res.status).toBe(400);
+      expect(getNodeReservation(9)).toBeNull();
+    });
+  });
+
+  describe('GET /api/nodes/:nodeId/reserve (A-3)', () => {
+    it('returns null reservedFor when nothing is set', async () => {
+      const res = await request(app).get('/api/nodes/10/reserve');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.reservedFor).toBeNull();
+    });
+
+    it('returns the reserved username when set', async () => {
+      setNodeReservation(11, 'alice');
+      const res = await request(app).get('/api/nodes/11/reserve');
+      expect(res.status).toBe(200);
+      expect(res.body.reservedFor).toBe('alice');
     });
   });
 

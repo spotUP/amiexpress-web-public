@@ -225,15 +225,14 @@ async function transitionToBBSTitle(socket: any, session: BBSSession): Promise<v
 
   // express.e:29554-29557 — IF(StrLen(reservedName)>0) THEN aePuts(
   //   '*** Node N is reserved right now, for <name> ***'). The reserve-
-  //   for-user feature was used by sysops to keep a node held open for a
-  //   specific caller; the warning told other callers they'd be bumped.
+  //   for-user feature lets sysops hold a node open for a specific
+  //   caller; the warning tells other callers they'll be bumped.
   //
-  // **WEB_**: there's currently no admin route or persistent storage
-  // for this — `session.reservedFor` is wired into the BBSSession
-  // interface so the check fires when it IS set, but it'll always be
-  // undefined until someone adds an admin endpoint that writes it.
-  // Leaving the contract in place so future work just needs the
-  // setter side. (Audit A-3.)
+  // session.reservedFor is populated in createSession() from
+  // services/node-reservation.service (per-node Map). The sysop sets it
+  // via POST /api/nodes/:nodeId/reserve (api/node-control-routes), and
+  // the connect-time bump in auth-socket-handlers fires the express.e
+  // 28734-28738 disconnect for non-matching users.
   const reservedFor = (session as any).reservedFor;
   if (typeof reservedFor === 'string' && reservedFor.length > 0) {
     const node = session.nodeId ?? 0;
