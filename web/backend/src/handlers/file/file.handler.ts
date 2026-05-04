@@ -672,10 +672,21 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // Use first available upload area for this conference (express.e uses configured ULPATH)
   const uploadArea = currentFileAreas[0];
 
-  // express.e:19007: StringF(buff,'\s UPLOADING....\b\n', xprTitle.item(loggedOnUser.xferProtocol))
-  // session.user.protocol is mapped from xferProtocol int via intToProtocol()
+  // express.e:19003-19008 has two header variants:
+  //   ramPen set → '<protocol> UPLOADING to <ramPen>..\b\n'
+  //   else      → '<protocol> UPLOADING....\b\n'
+  // Audit E-8 flagged that we always emit the second form. Web has no
+  // ramPen tooltype concept, but the file area's ulPath is the closest
+  // equivalent — when the area was configured with a non-default
+  // destination, surface it in the header so sysops know files won't
+  // land in the default playpen/Files directory.
   const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
-  emitText(socket, `\r\n${protocolTitle} UPLOADING....\r\n`);
+  const customUlPath = uploadArea.ulPath && uploadArea.ulPath !== process.cwd();
+  if (customUlPath) {
+    emitText(socket, `\r\n${protocolTitle} UPLOADING to ${uploadArea.ulPath}..\r\n`);
+  } else {
+    emitText(socket, `\r\n${protocolTitle} UPLOADING....\r\n`);
+  }
 
   // express.e:19012-19014: formatSpaceValue(tFShi,tFSlo) and formatSpaceValue(fSUploadingHi,fSUploadingLo)
   // tFShi/tFSlo = freeDiskSpace() — total free across configured drives

@@ -318,9 +318,22 @@ export function handleZippySearchInput(socket: any, session: BBSSession, input: 
  * From express.e:26215-26240 (internalCommandZOOM)
  *
  * Original: Downloads messages in QWK or ASCII format for offline reading
- * Uses qwkZoom() or asciiZoom() based on user preference
+ * Uses qwkZoom() or asciiZoom() based on user preference. The transfer
+ * itself is ZMODEM and the LHA-vs-ZIP pack method is an interactive
+ * prompt (express.e:26244).
  *
- * Web implementation: Partially stubbed (QWK generation requires implementation)
+ * **WEB_**: divergence (audit C-ZOOM, P1).
+ *   1. Transfer protocol is HTTP (download URL emitted at line ~390),
+ *      not ZMODEM. The browser doesn't speak ZMODEM and recreating
+ *      that experience over WebSocket adds no value over a click-to-
+ *      download — sysops familiar with ZOOM still get a QWK packet.
+ *   2. Pack method auto-selects ZIP (no LHA binary in the web stack).
+ *      The express.e prompt is preserved as a status line so the
+ *      user-visible flow still mirrors AmiExpress, but the interactive
+ *      LHA / ZIP choice has been removed (the answer is always ZIP).
+ *   3. CONTROL.DAT QWK packet completeness is checked by qwk.service.ts
+ *      when generating the packet — see the QWK utility tests for
+ *      coverage.
  *
  * @param socket - Socket.IO socket
  * @param session - Current BBS session
