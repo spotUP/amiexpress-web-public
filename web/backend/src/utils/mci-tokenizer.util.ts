@@ -9,11 +9,11 @@
  *   - Express.e: scan for `~`, advance past it, eat optional 1-3
  *     digit width prefix, then read until the next space OR `|`. The
  *     extracted cmd is "N." which fails the strict StrCmp("N") check
- *     → no substitution. The `~` IS consumed; the rest ("N.") emits
+ *     -> no substitution. The `~` IS consumed; the rest ("N.") emits
  *     as plain text. Visible output: "N."
  *
  *   - Our previous regex (`~(\d{0,3})N\|`): requires a literal `|`.
- *     For `~N.` no match → entire `~N.` left literal in output.
+ *     For `~N.` no match -> entire `~N.` left literal in output.
  *     Visible output: "~N."
  *
  * Neither produces the username — the screen file author wrote the
@@ -29,9 +29,14 @@
  *      e. Look up the cmd in the dispatch map. If matched, advance
  *         pos past the cmd (and past the terminator if it was `|`),
  *         emit the value (truncated to the width).
- *      f. If no match, do NOT advance past the cmd — only the `~` is
- *         eaten. Subsequent text emits as-is (matches express.e fall-
- *         through behaviour at lines 5290-5404).
+ *      f. If exact match fails, try the prefix dispatch (e.g. `~x10|`
+ *         matches prefix `X` with suffix `"10"`; express.e:5478-5495
+ *         StrCmp(cmd,'x',1) form).
+ *      g. If still no match, fall-through: in soft mode (default), the
+ *         `~` and width digits are re-emitted so downstream regex
+ *         stages can still see the original sequence intact. In strict
+ *         mode (`softFallThrough: false`), the `~` is consumed and the
+ *         cmd content emits as plain text — full express.e parity.
  *
  * Width prefix semantics (express.e:5288): width = `Val(num)`. If
  * `num` is empty, width = -1 (no truncation). If positive, the value
@@ -50,15 +55,35 @@
  *   - `~CL.` / `~CD.` / `~ML.` / `~MD.` (multi-line list builders)
  *     — caller pre-substitutes the rendered list.
  *   - `~D<char>` (terminator change) — caller strips, sets terminator.
+ *   - `~CC_`/`~SS_`/`~SR_`/`~SX_` inline-mode codes — handled by the
+ *     inline-mode pass after the tokenizer (rely on soft fall-through).
  *
  * That split keeps this tokenizer pure: input string + dispatch map +
- * terminator → output string. The big-feature MCI codes already match
+ * terminator -> output string. The big-feature MCI codes already match
  * express.e's flow well enough on their own; the user-info / system-
  * info codes (~N, ~UL, ~TC, ~RN, …) are the ones whose regex-based
  * behaviour diverged.
  */
 
-export type MciHandler = (width: number) => string;
+/**
+ * Handler for an exact-match MCI code. Receives the parsed width (-1
+ * if no width prefix). Return `undefined` to signal "no match" — the
+ * tokenizer treats this identically to a missing dispatch entry and
+ * falls through to the prefix dispatch / fall-through stage. Used by
+ * `~SP` / `~CR` which only match when no width prefix is present
+ * (express.e:5455 / 5462 — `(maxLen=-1) AND (StrCmp(cmd,'SP'))`).
+ */
+export type MciHandler = (width: number) => string | undefined;
+
+/**
+ * Handler for a prefix-match MCI code. The cmd starts with the
+ * dispatch key; everything after is `suffix` (in the ORIGINAL case
+ * from the source — not uppercased). Receives the same width-prefix
+ * value as `MciHandler`. Return `undefined` for the same fall-through
+ * semantics. Models express.e's `StrCmp(cmd,'x',1)` family
+ * (express.e:5478-5495, 5496-5562 SS_/SX_/SR_/CC_).
+ */
+export type MciPrefixHandler = (suffix: string, width: number) => string | undefined;
 
 export interface MciDispatchMap {
   /**
@@ -70,6 +95,44 @@ export interface MciDispatchMap {
    * (express.e mostly truncates via aePuts2).
    */
   [code: string]: MciHandler;
+}
+
+export interface MciPrefixDispatchMap {
+  /**
+   * Map from uppercase prefix to handler. Longest prefix wins on
+   * ambiguous matches. The cmd is uppercased for prefix matching, but
+   * the suffix passed to the handler is sliced from the ORIGINAL cmd
+   * so file paths / case-sensitive args round-trip intact.
+   */
+  [prefix: string]: MciPrefixHandler;
+}
+
+export interface MciDispatchConfig {
+  dispatch: MciDispatchMap;
+  prefixDispatch?: MciPrefixDispatchMap;
+  /**
+   * When `true` (default), unrecognised codes have the `~` and width
+   * digits re-emitted into the output so downstream regex stages can
+   * still see the original sequence. When `false`, the tokenizer
+   * matches express.e exactly: `~` is consumed, cmd content emits as
+   * plain text, no re-emit. Switch to `false` once every MCI code is
+   * dispatched in-band — until then, leaving any out-of-band regex
+   * stage relying on the `~` will silently break under strict mode.
+   */
+  softFallThrough?: boolean;
+  /**
+   * When `true`, dispatch keys are matched byte-exact against the cmd
+   * (express.e `StrCmp` behaviour — lowercase `c0..c7`/`b0..b7`/`f`/
+   * `w`/`x`/`y`/`q`/`h`/`n1..n9` and uppercase `N`/`UL`/`AK`/`SP`/etc
+   * are all distinct). When `false` (default), cmd is uppercased
+   * before dispatch lookup so dispatch keys can use a single case
+   * regardless of how the screen file wrote them — useful as
+   * "author-typo defence" but a divergence from express.e. Real
+   * Amiga screens already use express.e-exact case, so flipping
+   * this on is safe; it only changes behaviour for typo'd code
+   * variants that would have failed on Amiga anyway.
+   */
+  caseSensitive?: boolean;
 }
 
 /**
@@ -86,19 +149,33 @@ export function applyMciWidth(value: string, width: number): string {
  * through behaviour: the leading `~` is consumed, the rest of the
  * supposed-code emits as plain text.
  *
- * @param input    the raw screen / message text containing MCI codes
- * @param dispatch map from cmd code (uppercase) to handler
- * @param terminator MCI terminator character; defaults to `|`. Must
- *                   be a single character (express.e uses one byte).
+ * @param input        the raw screen / message text containing MCI codes
+ * @param dispatchOrConfig either a flat dispatch map (legacy) or an
+ *                     `MciDispatchConfig` with prefix dispatch / fall-
+ *                     through options
+ * @param terminator   MCI terminator character; defaults to `|`. Must
+ *                     be a single character (express.e uses one byte).
  * @returns the rendered string with MCI codes substituted
  */
 export function processMci(
   input: string,
-  dispatch: MciDispatchMap,
+  dispatchOrConfig: MciDispatchMap | MciDispatchConfig,
   terminator: string = '|',
 ): string {
   if (!input || input.length === 0) return input ?? '';
   const term = terminator.length > 0 ? terminator[0] : '|';
+
+  const config: MciDispatchConfig = isDispatchConfig(dispatchOrConfig)
+    ? dispatchOrConfig
+    : { dispatch: dispatchOrConfig };
+  const dispatch = config.dispatch;
+  const prefixDispatch = config.prefixDispatch;
+  const softFallThrough = config.softFallThrough !== false; // default true
+  const caseSensitive = config.caseSensitive === true; // default false
+
+  const sortedPrefixes = prefixDispatch
+    ? Object.keys(prefixDispatch).sort((a, b) => b.length - a.length)
+    : [];
 
   let out = '';
   let pos = 0;
@@ -107,12 +184,10 @@ export function processMci(
   while (pos < len) {
     const tildePos = input.indexOf('~', pos);
     if (tildePos < 0) {
-      // No more MCI markers — emit the tail as-is.
       out += input.slice(pos);
       break;
     }
 
-    // Emit text before the `~`.
     out += input.slice(pos, tildePos);
     pos = tildePos + 1; // Consume the `~`.
 
@@ -144,39 +219,67 @@ export function processMci(
       consumedTerminator = false;
     } else {
       cmdEnd = nextTerm;
-      consumedTerminator = nextTerm < len; // true only if a real terminator was found
+      consumedTerminator = nextTerm < len;
     }
 
-    const cmd = input.slice(pos, cmdEnd).toUpperCase();
-    const handler = cmd.length > 0 ? dispatch[cmd] : undefined;
+    const rawCmd = input.slice(pos, cmdEnd);
+    const cmd = caseSensitive ? rawCmd : rawCmd.toUpperCase();
+    let result: string | undefined;
 
-    if (handler) {
-      // Match. Advance past the cmd (and the terminator if present).
-      pos = cmdEnd + (consumedTerminator ? 1 : 0);
-      try {
-        out += handler(width);
-      } catch (err) {
-        // A failing handler shouldn't tank the whole render. Emit
-        // nothing for this code (matches express.e — handler errors
-        // would silently corrupt buffers, but we'd rather drop).
+    if (cmd.length > 0) {
+      const exact = dispatch[cmd];
+      if (exact) {
+        try {
+          result = exact(width);
+        } catch {
+          result = '';
+        }
       }
-    } else {
-      // No match — re-emit the `~` and any width digits we consumed
-      // so downstream MCI handlers (regexes for ~XC_/~XI/~CR_/color
-      // codes etc.) can still see the original sequence intact. This
-      // is a deliberate divergence from express.e's strict fall-
-      // through (which would consume the `~`): our handler pipeline
-      // is split across multiple stages, and a strict tokenizer here
-      // would eat codes belonging to later stages. The trade-off is
-      // that genuinely-unknown codes like `~N.` remain literal in
-      // output rather than emitting `N.` per express.e — once all
-      // MCI handlers are unified into a single dispatch map, switch
-      // back to strict fall-through (consume `~`, emit cmd as text).
+    }
+
+    if (result === undefined && cmd.length > 0 && prefixDispatch) {
+      for (const prefix of sortedPrefixes) {
+        if (cmd.startsWith(prefix)) {
+          const suffix = rawCmd.slice(prefix.length);
+          try {
+            result = prefixDispatch[prefix](suffix, width);
+          } catch {
+            result = '';
+          }
+          if (result !== undefined) break;
+        }
+      }
+    }
+
+    if (result !== undefined) {
+      pos = cmdEnd + (consumedTerminator ? 1 : 0);
+      out += result;
+    } else if (softFallThrough) {
+      // Soft fall-through: re-emit `~` + width digits so downstream
+      // regex stages can still see the original sequence. The cmd
+      // content stays in the input for the next iteration to emit as
+      // plain text.
       out += '~' + widthDigits;
-      // pos stays at first char after the `~` + digits, so the next
-      // iteration treats the cmd content as plain text.
+      // pos stays at cmd start.
+    } else {
+      // Strict fall-through (express.e exact): consume `~` + width
+      // digits + cmd content (and terminator if it was a `|`). The cmd
+      // text emits as plain.
+      out += rawCmd;
+      pos = cmdEnd + (consumedTerminator ? 1 : 0);
     }
   }
 
   return out;
+}
+
+function isDispatchConfig(
+  v: MciDispatchMap | MciDispatchConfig,
+): v is MciDispatchConfig {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'dispatch' in v &&
+    typeof (v as MciDispatchConfig).dispatch === 'object'
+  );
 }

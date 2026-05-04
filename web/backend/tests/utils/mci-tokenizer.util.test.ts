@@ -24,7 +24,8 @@
 import {
   processMci,
   applyMciWidth,
-  type MciDispatchMap,
+  MciDispatchMap,
+  MciPrefixDispatchMap,
 } from '../../src/utils/mci-tokenizer.util';
 
 describe('processMci tokenizer', () => {
@@ -109,6 +110,152 @@ describe('processMci tokenizer', () => {
       N: () => { throw new Error('boom'); },
     };
     expect(processMci('a~N|b', throwing)).toBe('ab');
+  });
+});
+
+describe('processMci with prefixDispatch', () => {
+  const dispatch: MciDispatchMap = {
+    N: (w) => applyMciWidth('Spot', w),
+  };
+
+  // Mirrors express.e:5478-5495 — `~x<n>|` reads <n> as suffix of cmd
+  // and emits ANSI cursor row-1, column-n. `~y<n>|` row-n, col-1.
+  const prefixDispatch: MciPrefixDispatchMap = {
+    X: (suffix) => {
+      const n = parseInt(suffix, 10);
+      return Number.isFinite(n) && n >= 0 ? `\x1b[;${n}H` : '';
+    },
+    Y: (suffix) => {
+      const n = parseInt(suffix, 10);
+      return Number.isFinite(n) && n >= 0 ? `\x1b[${n};H` : '';
+    },
+    SS_: (suffix) => `<DISPLAY:${suffix}>`,
+  };
+
+  test('parameterised ~x<n>| dispatches via prefix', () => {
+    expect(processMci('~x10|done', { dispatch, prefixDispatch })).toBe('\x1b[;10Hdone');
+  });
+
+  test('parameterised ~y<n>| dispatches via prefix', () => {
+    expect(processMci('go ~y5|here', { dispatch, prefixDispatch })).toBe('go \x1b[5;Hhere');
+  });
+
+  test('prefix preserves original case in suffix (file paths)', () => {
+    // `~SS_FooBar.txt|` — uppercased cmd is "SS_FOOBAR.TXT" but the
+    // suffix passed to the handler must be the original "FooBar.txt"
+    // so case-sensitive paths round-trip.
+    expect(processMci('~SS_FooBar.txt|', { dispatch, prefixDispatch })).toBe('<DISPLAY:FooBar.txt>');
+  });
+
+  test('exact dispatch wins over prefix when both apply', () => {
+    // `~N|` — exact match "N" should win even if a prefix "N" exists.
+    const both: MciPrefixDispatchMap = { N: () => '<PREFIX-N>' };
+    expect(processMci('~N|', { dispatch, prefixDispatch: both })).toBe('Spot');
+  });
+
+  test('longest prefix wins on ambiguous matches', () => {
+    const ambiguous: MciPrefixDispatchMap = {
+      S: (s) => `<S:${s}>`,
+      SS_: (s) => `<SS_:${s}>`,
+    };
+    expect(processMci('~SS_path|', { dispatch: {}, prefixDispatch: ambiguous })).toBe('<SS_:path>');
+  });
+
+  test('prefix handler returning undefined falls through', () => {
+    const fall: MciPrefixDispatchMap = {
+      X: () => undefined,
+    };
+    // With softFallThrough (default), `~xfoo|` re-emits ~ + digits and
+    // leaves cmd content. cmd `xfoo|` -> "~xfoo|" (cmd consumed by
+    // next iteration as plain text).
+    expect(processMci('~xfoo|', { dispatch: {}, prefixDispatch: fall })).toBe('~xfoo|');
+  });
+});
+
+describe('processMci strict fall-through (express.e exact)', () => {
+  const dispatch: MciDispatchMap = { N: () => 'Spot' };
+
+  test('unknown cmd: ~ consumed, cmd emits plain (express.e:5290 fall-through)', () => {
+    expect(
+      processMci('a~10ZZZ|b', { dispatch, softFallThrough: false }),
+    ).toBe('aZZZb');
+  });
+
+  test('unknown cmd at end of string: ~ consumed, cmd as plain', () => {
+    expect(
+      processMci('hello ~XX', { dispatch, softFallThrough: false }),
+    ).toBe('hello XX');
+  });
+
+  test('lone ~ at end of string: consumed', () => {
+    expect(processMci('end ~', { dispatch, softFallThrough: false })).toBe('end ');
+  });
+
+  test('known cmd still works in strict mode', () => {
+    expect(processMci('~N|!', { dispatch, softFallThrough: false })).toBe('Spot!');
+  });
+});
+
+describe('processMci with byte-exact case (express.e StrCmp parity)', () => {
+  // Express.e uses StrCmp (case-sensitive) with mixed-case keys —
+  // lowercase `c0..c7`/`f`/`w`/`x`/`y`/`q`/`h` and uppercase
+  // `N`/`UL`/`SP`/etc. With caseSensitive: true, dispatch keys must
+  // match the cmd byte-exact as written in the screen file.
+  const dispatch: MciDispatchMap = {
+    N: () => 'Spot',         // express.e:5292 StrCmp(cmd,'N')
+    f: () => '<CLS>',        // express.e:5469 StrCmp(cmd,'f')
+    c0: () => '<black>',     // express.e:5651 StrCmp(cmd,'c0')
+  };
+
+  test('uppercase dispatch key matches uppercase cmd', () => {
+    expect(processMci('hi ~N|', { dispatch, caseSensitive: true })).toBe('hi Spot');
+  });
+
+  test('lowercase dispatch key matches lowercase cmd', () => {
+    expect(processMci('~f|done', { dispatch, caseSensitive: true })).toBe('<CLS>done');
+    expect(processMci('~c0|x', { dispatch, caseSensitive: true })).toBe('<black>x');
+  });
+
+  test('case mismatch falls through (~F | does NOT match key f)', () => {
+    expect(
+      processMci('a~F|b', { dispatch, caseSensitive: true, softFallThrough: false }),
+    ).toBe('aFb');
+  });
+
+  test('case mismatch falls through (~C0 | does NOT match key c0)', () => {
+    expect(
+      processMci('a~C0|b', { dispatch, caseSensitive: true, softFallThrough: false }),
+    ).toBe('aC0b');
+  });
+
+  test('caseSensitive: false (default) keeps author-typo defence', () => {
+    const flat: MciDispatchMap = { N: () => 'Spot', F: () => '<CLS>' };
+    expect(processMci('~n|', flat)).toBe('Spot');
+    expect(processMci('~f|', flat)).toBe('<CLS>');
+  });
+});
+
+describe('processMci with width-conditional handlers', () => {
+  // Models `~SP` / `~CR` (express.e:5455, 5462) which only match when
+  // no width prefix is present: `(maxLen=-1) AND (StrCmp(cmd,'SP'))`.
+  // The handler returns undefined for any non-default width so the
+  // tokenizer falls through.
+  test('handler returning undefined for width != -1 falls through', () => {
+    let pauseCount = 0;
+    const dispatch: MciDispatchMap = {
+      SP: (w) => {
+        if (w !== -1) return undefined;
+        pauseCount++;
+        return '';
+      },
+    };
+    expect(processMci('a~SP|b', { dispatch, softFallThrough: false })).toBe('ab');
+    expect(pauseCount).toBe(1);
+    pauseCount = 0;
+    // `~5SP|` width=5 -> handler returns undefined -> strict fall-through
+    // emits "SP" as plain text. Express.e behaves identically.
+    expect(processMci('a~5SP|b', { dispatch, softFallThrough: false })).toBe('aSPb');
+    expect(pauseCount).toBe(0);
   });
 });
 
