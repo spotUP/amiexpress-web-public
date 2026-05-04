@@ -20,19 +20,14 @@ module.exports = {
     '/dist/',
     '/dist-esm/',
     '/dist-cjs/',
-    // TEMPORARILY SKIPPED — stale tests that reference SDK APIs that no
-    // longer exist (Textbox.name, List.ritems, GraphicsEngine.moveCamera,
-    // Question.ask 2-arg form, etc.). These predate the ts-jest config
-    // landing and would fail to compile even before. Fixing them is a
-    // separate cleanup pass; leaving them visible to the test runner
-    // would block all *new* tests on unrelated rot. Skip-list:
-    'test/blessed-integration.test.ts',
-    'test/blessed-compatibility.test.ts',
-    // graphics-engine: API drift fixed 2026-05-04 — re-enabled.
-    // input-engine: rewritten 2026-05-04 against current API — re-enabled.
-    'tests/unit/physics-engine.test.ts',
-    'tests/integration/game-loop.test.ts',
   ],
+  // History note: when this config first landed (2026-05-04), six legacy
+  // test files were skip-listed here because they referenced SDK APIs
+  // that had drifted (Textbox.name, List.ritems, GraphicsEngine.moveCamera,
+  // Question.ask 2-arg form, gravity-as-vector, InputEngine.mapKey/addMacro,
+  // single-arg physics.onCollision). All six were repaired or rewritten the
+  // same day. Four individual `.skip()`'d tests remain in the suites
+  // themselves — see the in-test comments for why.
   // Most SDK tests construct blessed Screens; CJS via ts-jest matches
   // how the package is built (tsconfig.json sets module: 'commonjs').
   // No transformIgnorePatterns override needed for now — the bare
