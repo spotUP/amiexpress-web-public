@@ -577,6 +577,9 @@ console.error(
         }
         this.emulator.pause();
       }
+      if (aquascanTrace.isActive()) {
+        aquascanTrace.dos('Open', filename, `mode=${mode} bptr=${bptr} err=${this.lastError}`);
+      }
       return bptr;
     }
 
@@ -5694,19 +5697,34 @@ debugLog(
   DateToStr(): void {
     const datetimeAddr = this.emulator.getRegister(CPURegister.D1);
 
-    // Read DateTime structure
+    // Read DateTime structure. NDK ordering (dos/dos.h struct DateTime):
+    //   0   ds_Days       LONG
+    //   4   ds_Minute     LONG
+    //   8   ds_Tick       LONG
+    //  12   dat_Format    UBYTE
+    //  13   dat_Flags     UBYTE
+    //  14   dat_StrDay    STRPTR  (4 bytes, 2-byte aligned per Amiga ABI)
+    //  18   dat_StrDate   STRPTR
+    //  22   dat_StrTime   STRPTR
+    // Earlier this code had StrDate/StrTime/StrDay at offsets 14/18/22 —
+    // the order was swapped, which made AquaScan's "Scanning… for X" line
+    // get the *time* string ("00:00:00") written into its date buffer.
     const ds_Days = this.emulator.readMemory32(datetimeAddr);
     const ds_Minute = this.emulator.readMemory32(datetimeAddr + 4);
     const ds_Tick = this.emulator.readMemory32(datetimeAddr + 8);
     const dat_Format = this.emulator.readMemory(datetimeAddr + 12);
     const dat_Flags = this.emulator.readMemory(datetimeAddr + 13);
-    const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 14);
-    const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
-    const dat_StrDay = this.emulator.readMemory32(datetimeAddr + 22);
+    const dat_StrDay  = this.emulator.readMemory32(datetimeAddr + 14);
+    const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 18);
+    const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 22);
 
 debugLog(
       `[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`
     );
+    if (aquascanTrace.isActive()) {
+      aquascanTrace.dos('DateToStr', '',
+        `days=${ds_Days} min=${ds_Minute} tick=${ds_Tick} fmt=${dat_Format} strDay=0x${dat_StrDay.toString(16)} strDate=0x${dat_StrDate.toString(16)} strTime=0x${dat_StrTime.toString(16)}`);
+    }
 
     // Convert Amiga days (since 1978-01-01 UTC) to JavaScript Date
     const epoch = new Date('1978-01-01T00:00:00Z');
@@ -5822,11 +5840,11 @@ debugLog(
   StrToDate(): void {
     const datetimeAddr = this.emulator.getRegister(CPURegister.D1);
 
-    // Read DateTime structure
+    // Read DateTime structure — see DateToStr for the corrected NDK offsets.
     const dat_Format = this.emulator.readMemory(datetimeAddr + 12);
     const dat_Flags = this.emulator.readMemory(datetimeAddr + 13);
-    const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 14);
-    const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
+    const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 18);
+    const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 22);
 
 debugLog(
       `[dos.library] StrToDate(format=${dat_Format}, datePtr=0x${dat_StrDate.toString(
