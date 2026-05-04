@@ -1,5 +1,96 @@
 # AmiExpress-Web Current Status
-**Last updated:** 2026-01-04 (Production readiness: Security audit complete, documentation comprehensive)
+**Last updated:** 2026-05-04
+
+## Headline (May 2026)
+
+The TypeScript port has reached the major milestone of **express.e behavioral
+parity** as audited deviation-by-deviation. Production hardening and the AREXX
+native bring-up are still in flight.
+
+| Area | State |
+|------|-------|
+| express.e command parity (53/53 internal commands) | DONE |
+| Audit-master deviation list (138 items) | 138 / 138 closed (May 2026) |
+| User file binary compat (data/keys/misc) | DONE |
+| Door support (8 types incl. 68K via MOIRA) | DONE for tested doors; door bug backlog tracked separately |
+| AREXX TS interpreter (#77) | DONE |
+| AREXX native bring-up (#78) | Phases 1-5-final landed; Phase 6 (RexxMast main-loop bring-up) in progress |
+| Reserved-node feature (A-3) | Full express.e parity + admin UI panel (May 2026) |
+| Production hardening | CSRF / rate limit / security headers still TODO; SQL injection + CORS done |
+
+**Honest assessment** matches the project CLAUDE.md framing: ~60–70% of the
+distance to a production deployment, ~2–3 months of polish + testing remain.
+Earlier "100% complete / production-ready" claims (sections 7-8 below) reflect
+a January 2026 snapshot — left in place as a historical record but should be
+read alongside the May audit and door-backlog state.
+
+## Major Work Since January 2026 (1,090 commits)
+
+**Core correctness:**
+- Systemic Amiga LE/BE serialization fix (April 2026) — corrected per-conf
+  message pointers, AquaScan dates, and login-day "new files" detection. See
+  CLAUDE.md Rule 0 for the project-wide BE convention.
+- DateStamp ABI fix (D0 propagation per AmigaOS) with regression test.
+- `dos.library` DateTime struct offsets corrected in DateToStr/StrToDate.
+- 138-item audit-master deviation sweep closed end-to-end with structural
+  regression tests pinning each closure shape.
+
+**Reserved-node feature (audit A-3, full express.e parity, May 2026):**
+- New `services/node-reservation.service.ts` — per-node Map with
+  case-insensitive match (express.e:29131 StriCmp).
+- `POST /api/nodes/:nodeId/reserve {username}` with F4 toggle-clear semantics
+  (express.e:7649-7656); new GET endpoint for status.
+- `createSession()` populates `session.reservedFor` from the store; pre-login
+  emits the express.e:29554-29557 banner.
+- Logoff clears reservation (express.e:8213).
+- Auth handler bumps non-matching connects with `420 Node is currently
+  reserved for another user.` (express.e:28734-28738).
+- Admin UI: NodeControlPage Reserve / Clear control with inline editor for
+  both online and offline node cards.
+
+**AREXX native bring-up (#78):**
+- Phases 1–5-final landed: emulator boot, MsgPort allocation, host-port
+  command parser/dispatch, `executeRexxScript`, RexxMast hunk loading.
+- Phase 6 in progress: building Amiga env (dos.library LVO traps, Process /
+  Task synthesis) so RexxMast reaches `AddPort('REXX')`. AREXX_TRACE=1 env
+  added for boot diagnostics.
+
+**Door fixes (April-May 2026, see project_door_bug_backlog memory):**
+- AquaScan FR exits WARN (AEDoorPort startup-message routing)
+- AquaScan false new-mail count (LE/BE root cause)
+- CTOP reset-date corruption (Write() bytes ≥ 0x80 mangling)
+- DOORSMENU stack-above-BSS + Allocate impl
+- zOOsTAT "NOT deleted" (SystemTagList + dos-vectors -606)
+- D-command flagged-files casing mismatch
+- Expert-mode redraw after E
+- Operator-page cancel (tsyringe DI fix)
+- Upload "transport error" on >330KB files (socket.io maxHttpBufferSize)
+- Z command runtime bug (broken `require('./zippy-search.handler')` paths;
+  actual file lives at `./content/zippy-search.handler`)
+
+**TUI / mobile / dev experience:**
+- TUI overhaul: F2 routing, log filter + scrollback, raw-mode leak fix
+- Mobile keyboard wiring (.xterm-screen measurement, injectInput, iOS
+  keyboard suppression, orientation handling)
+
+**Repo hygiene (May 2026):**
+- gitignore extended for runtime BBS data (Conf*/MsgBase/*, *.userkeys,
+  Conf*/Upload/*.LZH, .claude/, .superpowers/, etc.) — was leaking 700+
+  untracked runtime files into git status.
+- 30 stale duplicate sources deleted (*.bak / *.backup / *.fixacs /
+  *.fiximport / *.final) including 7 tracked SDK glue snapshots.
+- DM.info case-only duplicate cleaned up.
+
+## Currently Open
+
+- **#78 Phase 6** — RexxMast main-loop bring-up (active, parallel session).
+- **doorman "Cannot read directory"** — needs user repro to investigate.
+- **MgzListMan** — flagged as "probably not actually broken" by user;
+  parked pending confirmation.
+- **A-3 connect-bump pre-login UX** — currently emits 420 + disconnect via
+  setTimeout(500). Could be reviewed for a tighter state-machine handoff.
+- **Production hardening** — CSRF / rate limiting / security headers still
+  recommended (see SECURITY_AUDIT.md remediation checklist).
 
 ## 1. Documentation & References
 - The reshuffle now leaves exactly the reader-facing summaries in `Documentation/1-6` (User, Sysop, Developer, Door, Reference, Progress) while all other historic `.md` files live inside each directory's `archive/` subfolder.
@@ -75,8 +166,13 @@ Added 2026-01-04: Mail scanning implementation
 - All display flow tests passing
 - System commands tests passing
 
-## Summary
+## Summary (January 2026 snapshot — see headline at top of file for May 2026 status)
 The TypeScript port is **100% complete** relative to express.e (2026-01-04).
+> **May 2026 update**: subsequent audit (138 deviations) found multiple gaps
+> behind this "100%" headline (now closed), and the door bug backlog has
+> remained active. The accurate framing is: command surface is ported, but
+> behavioral parity, door compatibility, and production hardening continued
+> to land between January and May.
 
 What's included:
 - **53/53 internal commands** (100% express.e parity - verified 2026-01-04)
@@ -144,7 +240,7 @@ What's intentionally excluded:
 - ✅ Admin tools enhancement (monitoring, analytics, automation, bulk operations)
 - ✅ End-to-end testing (user journeys, multi-node concurrency)
 
-**Production Status:** Production-ready with comprehensive documentation and optimization roadmap.
+**Production Status (Jan 2026 snapshot):** Documentation and Phase 1 optimization roadmap landed. As of May 2026 the project is **not yet production-ready** — see the headline section at the top of this file. CSRF / rate limiting / security headers and door bug backlog still pending.
 
 **Completed Production Readiness Tasks:**
 1. ✅ Security audit (SQL injection fixed, CORS configured)
