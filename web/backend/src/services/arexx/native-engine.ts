@@ -103,12 +103,49 @@ export function detectNativeAREXX(force = false): NativeAREXXDetection {
     return cachedDetection;
   }
 
-  // Phase 1 stops here — file presence is enough to flip the flag in
-  // log output. Phase 3 will additionally try to load both binaries
-  // under MOIRA before declaring native truly available.
+  // #78 Phase 3a — parse-time validation. We attempt to parse both
+  // binaries as Amiga hunk files BEFORE Phase 5 wires the runtime
+  // dispatch. This catches "sysop dropped a corrupt RexxMast" early
+  // (engine line in backend.log says exactly which binary failed)
+  // without committing any 68K resources. The result is still
+  // available=false because the executeScript path isn't wired yet —
+  // that lands in Phase 5. The new contract: file present + parseable
+  // → reason 'binaries parsed successfully, awaiting Phase 5 wire-up'.
+  let parseError: string | null = null;
+  try {
+    const { HunkLoader } = require('../../amiga-emulation/loader/HunkLoader');
+    const loader = new HunkLoader();
+    try {
+      loader.parse(fs.readFileSync(rexxMastPath));
+    } catch (err: any) {
+      parseError = `RexxMast hunk parse failed at ${rexxMastPath}: ${err?.message || err}`;
+    }
+    if (!parseError) {
+      try {
+        loader.parse(fs.readFileSync(rexxsysLibPath));
+      } catch (err: any) {
+        parseError = `rexxsyslib.library hunk parse failed at ${rexxsysLibPath}: ${err?.message || err}`;
+      }
+    }
+  } catch (err: any) {
+    // HunkLoader import failure — would block any 68K work, so report
+    // it loudly rather than letting the BBS silently fall back to TS.
+    parseError = `HunkLoader unavailable: ${err?.message || err}`;
+  }
+
+  if (parseError) {
+    cachedDetection = {
+      available: false,
+      reason: parseError,
+      rexxMastPath: '',
+      rexxsysLibPath: '',
+    };
+    return cachedDetection;
+  }
+
   cachedDetection = {
-    available: false, // Phase 1: never claim available; TS interpreter handles all scripts
-    reason: 'native AREXX path not yet wired (Phase 1 shim — TS interpreter handles all scripts)',
+    available: false, // Phase 5 flips this once executeScript is wired
+    reason: 'binaries parsed successfully, awaiting Phase 5 wire-up',
     rexxMastPath,
     rexxsysLibPath,
   };
