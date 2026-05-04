@@ -68,7 +68,12 @@ export class DoorLoader {
     segments: Array<{ address: number; size?: number; data?: { length: number }; type?: string }>,
     configStack?: number,
   ): { stackBaseAddr: number; stackSizeBytes: number } {
-    const stackSizeBytes = Math.max(4096, configStack || 65536);
+    // Default 256 KB. We have plenty of host RAM and the cost of a generous
+    // default is one allocation per door launch. The 64 KB default we used
+    // before was just enough that stats / ustats triggered "** Stack
+    // Overflow **" right after AutoRequest setup. Anything explicitly set
+    // via STACK= tooltype still wins.
+    const stackSizeBytes = Math.max(4096, configStack || 256 * 1024);
     let lastSegmentEnd = 0x10000; // fallback for tiny single-segment binaries
     for (const seg of segments) {
       const segEnd =
@@ -773,8 +778,16 @@ console.error(`[DoorLoader] CRITICAL ERROR: Memory[0x4] is NOT ExecBase! Expecte
     // This allows DoorLifecycleManager to detect clean exit at PC=0x1ff000.
     this.emulator.writeMemory32(finalSP, this.exitTrapAddress);
 
-    // Seed old SP at top of new stack (used by door stack switch to restore)
-    this.emulator.writeMemory32(finalSP + 4, savedOriginalSP);
+    // Seed STACK SIZE at SP+4. AmigaDOS CLI launches put the stack size in
+    // bytes here (vamos amitools/vamos/lib/dos/Process.py:186 confirms:
+    // "d2=stack_size. this value is also in 4(sp)"). SAS/C startup reads
+    // it to compute the stack-overflow watermark:
+    //   d0 = SP - 4(a7) + 0x80  =  stack_bottom + 128  (absolute address)
+    // Then runtime checks every function entry: if SP < watermark → panic
+    // "** Stack Overflow **". Earlier we wrote SP itself or stackBaseAddr
+    // here; both broke the calc. With stack_size, the watermark lands
+    // ~128 bytes above stack_bottom which is exactly what's wanted.
+    this.emulator.writeMemory32(finalSP + 4, this.stackSizeBytes);
 
     // Set SP
     this.emulator.setRegister(15, finalSP); // A7 (SP)

@@ -759,10 +759,18 @@ debugLog(
           // vectors the JSR jumps into uninitialized memory at
           // (intuitionBase + LVO) — door faults, runtime longjmps to its
           // recovery exit, and exits FAIL=20.
+          //
+          // syncTrapAddressesToMoira() is also required: MOIRA's batch
+          // executor caches trap addresses and won't dispatch the 0x4AFC
+          // illegal-instruction trap to our handler unless the address set
+          // is re-synced. Without it the door hits the trap, faults, and
+          // PC drifts off into uninitialized memory (we observed an
+          // 8000-byte-stride loop in 0x1d… range — the post-fault drift).
 debugLog(
             "[AmigaDoorSession] intuition.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installIntuitionVectors();
+          this.sharedState.libraryTraps.syncTrapAddressesToMoira();
         }
         if (name.toLowerCase() === "bsdsocket.library") {
 debugLog(
