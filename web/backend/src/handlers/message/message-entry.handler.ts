@@ -34,38 +34,162 @@ export function setMessageEntryDependencies(deps: {
 /**
  * express.e:28151-28230 captureRealAndInternetNames — when the conf or
  * msgbase requires REALNAME / INTERNETNAME (per-conf or per-msgbase
- * tooltype) and the user hasn't filled those fields, block the message
- * entry. Express.e prompts inline with a uniqueness loop; we surface a
- * notice and abort so the user can set the field via the account editor
- * (which is closer to modern web UX) before retrying.
+ * tooltype) and the user hasn't filled those fields, prompt inline for
+ * the missing field(s) before allowing message entry.
  *
- * Returns true if entry should proceed, false if blocked.
+ * Returns:
+ *   true       — fields already set; caller proceeds with command.
+ *   false      — capture in progress (substate set, prompt emitted).
+ *                Caller MUST return; the handler will resume the
+ *                deferred command after the user supplies the value.
+ *                Pass `resume` to schedule what happens on success.
+ *   throws     — none (defensive: never throws).
  */
-export function captureRealAndInternetNames(socket: any, session: BBSSession): boolean {
+export function captureRealAndInternetNames(
+  socket: any,
+  session: BBSSession,
+  resume?: () => void | Promise<void>,
+): boolean {
   const confId = session.currentConf || 1;
   const msgBaseId = session.currentMsgBase || 1;
   if (confId < 1 || msgBaseId < 1) return true;
 
   const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
   const flags = getConferenceToolFlags(confId);
-  // requireUsername / requireRealname are populated from REALNAME, REALNAME.<n>,
-  // INTERNETNAME, INTERNETNAME.<n> tooltypes (see conference-tooltypes.util.ts).
-  // express.e:28159-28164 OR's all four into realNamesUsed/internetNamesUsed.
+  // express.e:28159-28164 OR's all four checks (REALNAME, REALNAME.<n>,
+  // INTERNETNAME, INTERNETNAME.<n>) into realNamesUsed/internetNamesUsed.
   const realNamesUsed = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
+  const internetNamesUsed = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
   const userMisc: any = (session.user as any) || {};
   const realName = String(userMisc.realName || userMisc.realname || '').trim();
   const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
 
+  // express.e:28166-28193 — REALNAME first (matches express.e order).
   if (realNamesUsed && realName.length === 0) {
-    emitText(socket, '\r\nReal Names are required for messages in this conference/msgbase\r\n');
-    emitText(socket, 'Use the account editor to set your real name first.\r\n\r\n');
+    if (!resume) {
+      // Legacy callers that don't pass a resume callback get the previous
+      // blocking-notice fallback. Keeps backwards compat for any path that
+      // hasn't been migrated yet.
+      emitText(socket, '\r\nReal Names are required for messages in this conference/msgbase\r\n');
+      emitText(socket, 'Use the account editor to set your real name first.\r\n\r\n');
+      return false;
+    }
+    if (!session.tempData) session.tempData = {};
+    session.tempData.captureResume = resume;
+    emitText(socket, '\r\n');
+    emitText(socket, 'Real Names are required for messages in this conference/msgbase \r\n');
+    emitText(socket, '\r\n');
+    emitText(socket, 'Real Name (Alpha Numeric): ');
+    session.subState = LoggedOnSubState.MSG_CAPTURE_REAL_NAME;
     return false;
   }
-  // We don't yet model an INTERNETNAME flag separately on ConferenceToolFlags
-  // (the existing tooltype harvester doesn't pull INTERNETNAME). Internet
-  // name enforcement is a follow-up; the realName gate covers the common
-  // sysop config.
+
+  // express.e:28195-28225 — INTERNETNAME after REALNAME.
+  if (internetNamesUsed && internetName.length === 0) {
+    if (!resume) {
+      emitText(socket, '\r\nInternet Names are required for messages in this conference/msgbase\r\n');
+      emitText(socket, 'Use the account editor to set your internet name first.\r\n\r\n');
+      return false;
+    }
+    if (!session.tempData) session.tempData = {};
+    session.tempData.captureResume = resume;
+    emitText(socket, '\r\n');
+    emitText(socket, 'Internet Names are required for messages in this conference/msgbase\r\n');
+    emitText(socket, '\r\n');
+    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+    session.subState = LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME;
+    return false;
+  }
+
   return true;
+}
+
+/**
+ * Handle capture-real-name input — express.e:28173-28191 REPEAT loop.
+ * Empty input → RESULT_FAILURE (return user to safe state).
+ * Otherwise: validate (no wildcards), accept, advance to internet capture
+ * if needed, else call the resume callback.
+ */
+export async function handleCaptureRealNameInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const trimmed = (input || '').trim().substring(0, 25); // express.e:28175 lineInput max=25
+  // express.e:28177 — empty → RESULT_FAILURE → bail to safe state.
+  if (trimmed.length === 0) {
+    emitText(socket, '\r\n');
+    delete session.tempData?.captureResume;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+  // express.e:28181-28185 — wildcards are rejected.
+  if (trimmed.includes('*') || trimmed.includes('?')) {
+    emitText(socket, '\r\nNo wildcards allowed in a name.\r\n');
+    emitText(socket, 'Real Name (Alpha Numeric): ');
+    return; // stay in MSG_CAPTURE_REAL_NAME (express.e REPEAT/UNTIL loop)
+  }
+
+  // Persist on the live user object so subsequent messages don't re-prompt.
+  const userMisc: any = (session.user as any) || {};
+  userMisc.realName = trimmed;
+  // (Sync to disk via UserFileManager / DB happens at logoff; the in-memory
+  // value covers the rest of this session, matching express.e's
+  // loggedOnUserMisc.realName which is also session-scoped.)
+  emitText(socket, '\r\nOk!\r\n');
+
+  // Now check if internet name is also needed (express.e:28195-28225).
+  const confId = session.currentConf || 1;
+  const msgBaseId = session.currentMsgBase || 1;
+  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confId);
+  const internetNamesUsed = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
+  const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
+  if (internetNamesUsed && internetName.length === 0) {
+    emitText(socket, '\r\n');
+    emitText(socket, 'Internet Names are required for messages in this conference/msgbase\r\n');
+    emitText(socket, '\r\n');
+    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+    session.subState = LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME;
+    return;
+  }
+
+  // All captures done — invoke the resume callback.
+  const resume = session.tempData?.captureResume;
+  delete session.tempData?.captureResume;
+  if (typeof resume === 'function') {
+    await resume();
+  }
+}
+
+/**
+ * Handle capture-internet-name input — express.e:28204-28223.
+ */
+export async function handleCaptureInternetNameInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const trimmed = (input || '').trim().substring(0, 9); // express.e:28206 lineInput max=9
+  if (trimmed.length === 0) {
+    emitText(socket, '\r\n');
+    delete session.tempData?.captureResume;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+  if (trimmed.includes('*') || trimmed.includes('?')) {
+    emitText(socket, '\r\nNo wildcards allowed in a name.\r\n');
+    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+    return;
+  }
+  if (/\s/.test(trimmed)) {
+    // express.e:28205 prompt explicitly says "No Spaces" — enforce.
+    emitText(socket, '\r\nNo spaces allowed.\r\n');
+    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+    return;
+  }
+
+  const userMisc: any = (session.user as any) || {};
+  userMisc.internetName = trimmed;
+  emitText(socket, '\r\nOk!\r\n');
+
+  const resume = session.tempData?.captureResume;
+  delete session.tempData?.captureResume;
+  if (typeof resume === 'function') {
+    await resume();
+  }
 }
 
 /**

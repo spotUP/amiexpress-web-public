@@ -683,6 +683,16 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
     case LoggedOnSubState.REPLY_DELETE_ORIGINAL:
       await handleReplyDeleteOriginalInput(socket, session, data.toUpperCase());
       return;
+    case LoggedOnSubState.MSG_CAPTURE_REAL_NAME: {
+      const { handleCaptureRealNameInput } = require('./message/message-entry.handler');
+      await handleCaptureRealNameInput(socket, session, data);
+      return;
+    }
+    case LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME: {
+      const { handleCaptureInternetNameInput } = require('./message/message-entry.handler');
+      await handleCaptureInternetNameInput(socket, session, data);
+      return;
+    }
 
     default:
       return;
@@ -1776,14 +1786,18 @@ console.error(`[LOGIN] Error writing node files:`, error);
               `[${new Date().toISOString()}] LOGIN user="${user.username}" slotNum=${slotNum} newSinceDate=${user.newSinceDate?.toISOString?.()} lastLogin=${user.lastLogin?.toISOString?.()} udExists=${udExists} udSize=${udSize}\n`
             );
           }
-          if (user.slotNumber && user.slotNumber > 0) {
+          // Same precedence as DT_SLOTNUMBER + door.handler post-scan write.
+          // The DB column is `slotnumber` lowercase; some user objects only
+          // have that and not the camelCase `slotNumber`.
+          const seedSlotNum = Number((user as any)?.slotnumber ?? (user as any)?.slotNumber ?? 0);
+          if (seedSlotNum > 0) {
             try {
               const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
               if (fs.existsSync(userDataPath)) {
-                const slotOffset = (user.slotNumber - 1) * 16;
+                const slotOffset = (seedSlotNum - 1) * 16;
                 const stat = fs.statSync(userDataPath);
                 fs.appendFileSync('/tmp/aquascan-debug.log',
-                  `[${new Date().toISOString()}] LOGIN_SEED_CHECK slot=${user.slotNumber} offset=${slotOffset} fileSize=${stat.size} fits=${slotOffset + 12 <= stat.size}\n`
+                  `[${new Date().toISOString()}] LOGIN_SEED_CHECK slot=${seedSlotNum} offset=${slotOffset} fileSize=${stat.size} fits=${slotOffset + 12 <= stat.size}\n`
                 );
                 if (slotOffset + 12 <= stat.size) {
                   const slotBuf = Buffer.alloc(12);
@@ -1805,9 +1819,9 @@ console.error(`[LOGIN] Error writing node files:`, error);
                     fs.writeSync(fdWrite, writeBuf, 0, 12, slotOffset);
                     fs.closeSync(fdWrite);
                     fs.appendFileSync('/tmp/aquascan-debug.log',
-                      `[${new Date().toISOString()}] LOGIN_SEEDED slot=${user.slotNumber} days=${ds.days} min=${ds.minutes}\n`
+                      `[${new Date().toISOString()}] LOGIN_SEEDED slot=${seedSlotNum} days=${ds.days} min=${ds.minutes}\n`
                     );
-console.log(`[LOGIN] Seeded AquaScan.UserData slot ${user.slotNumber} -> days=${ds.days} min=${ds.minutes}`);
+console.log(`[LOGIN] Seeded AquaScan.UserData slot ${seedSlotNum} -> days=${ds.days} min=${ds.minutes}`);
                   }
                 }
               }

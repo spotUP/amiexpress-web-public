@@ -1241,11 +1241,17 @@ export function handleEnterMessageFullCommand(
   _setEnvStat(session, EnvStat.MAIL);
 
   // express.e:12471 captureRealAndInternetNames(conf, msgBaseNum) — gate the
-  // entry on REALNAME/INTERNETNAME tooltype requirements.
+  // entry on REALNAME/INTERNETNAME tooltype requirements. When the user
+  // hasn't filled the required field, captureNames now prompts inline (per
+  // express.e:28166-28225) and resumes by re-invoking this command after
+  // the user supplies the value. We pass `params` through the resume so
+  // the original `E <name>` form keeps its prefilled recipient.
   const { captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
-  if (typeof captureNames === 'function' && !captureNames(socket, session)) {
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
+  if (typeof captureNames === 'function') {
+    const ok = captureNames(socket, session, () => {
+      handleEnterMessageFullCommand(socket, session, params);
+    });
+    if (!ok) return;
   }
 
   // express.e msgToHeader():9998-10001

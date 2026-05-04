@@ -115,6 +115,11 @@ export enum LoggedOnSubState {
   FORWARD_MESSAGE_PRIVATE = 'forward_message_private',          // Forward message privacy choice
   FORWARD_MESSAGE_DELETE_ORIGINAL = 'forward_message_delete_original', // Delete original message confirmation
   REPLY_DELETE_ORIGINAL = 'reply_delete_original',                     // Reply: delete original message confirmation (express.e:9898-9903)
+  // express.e:28166-28225 captureRealAndInternetNames inline prompt loop —
+  // when conf has REALNAME / INTERNETNAME tooltype set AND user has no
+  // realName / internetName, prompt for it before allowing message entry.
+  MSG_CAPTURE_REAL_NAME = 'msg_capture_real_name',
+  MSG_CAPTURE_INTERNET_NAME = 'msg_capture_internet_name',
 
   // Sysop message commands (M/E/EH/EM) - express.e:11105-11148, 12169-12189
   MSG_MOVE_CONF_INPUT = 'msg_move_conf_input',          // Move message: conference number input
