@@ -1,9 +1,21 @@
 /**
- * Unit Tests for Input Engine
+ * Unit tests for the InputEngine — keyboard binding/dispatch system used
+ * by example doors.
+ *
+ * The previous version of this file targeted an older API (mapKey,
+ * clearMapping, addMacro, isMacroTriggered, resetMacro, clearMacro,
+ * clearAllMappings) that no longer exists on the class. The actual
+ * surface is much smaller — bindAction / processInput / unbindAction /
+ * clear / reset / dispose — so the rewrite covers what's there now.
  */
 
+import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { InputEngine } from '../../engines/input/input-engine';
-import { KeyEvent } from '../../core/types';
+import type { KeyEvent } from '../../core/types';
+
+function k(key: string, opts: Partial<KeyEvent> = {}): KeyEvent {
+  return { key, ctrl: false, alt: false, shift: false, code: 0, ...opts };
+}
 
 describe('InputEngine', () => {
   let input: InputEngine;
@@ -12,279 +24,158 @@ describe('InputEngine', () => {
     input = new InputEngine();
   });
 
-  describe('Key Mapping', () => {
-    test('should map key to another key', () => {
-      input.mapKey('w', 'ArrowUp');
-
-      const event: KeyEvent = {
-        key: 'w',
-        ctrl: false,
-        alt: false,
-        shift: false,
-        code: 119
-      };
-
-      const mapped = input.processInput(event);
-      expect(mapped.key).toBe('ArrowUp');
+  describe('bindAction + processInput', () => {
+    test('a key bound once fires its callback when the key is processed', () => {
+      const cb = jest.fn();
+      input.bindAction('move-up', 'ArrowUp', cb);
+      input.processInput(k('ArrowUp'));
+      expect(cb).toHaveBeenCalledTimes(1);
     });
 
-    test('should map multiple keys', () => {
-      input.mapKey('w', 'ArrowUp');
-      input.mapKey('a', 'ArrowLeft');
-      input.mapKey('s', 'ArrowDown');
-      input.mapKey('d', 'ArrowRight');
-
-      const eventW: KeyEvent = { key: 'w', ctrl: false, alt: false, shift: false, code: 119 };
-      const eventA: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 97 };
-
-      expect(input.processInput(eventW).key).toBe('ArrowUp');
-      expect(input.processInput(eventA).key).toBe('ArrowLeft');
+    test('an unbound key does nothing', () => {
+      const cb = jest.fn();
+      input.bindAction('move-up', 'ArrowUp', cb);
+      input.processInput(k('ArrowDown'));
+      expect(cb).not.toHaveBeenCalled();
     });
 
-    test('should clear key mapping', () => {
-      input.mapKey('w', 'ArrowUp');
-      input.clearMapping('w');
-
-      const event: KeyEvent = {
-        key: 'w',
-        ctrl: false,
-        alt: false,
-        shift: false,
-        code: 119
-      };
-
-      const processed = input.processInput(event);
-      expect(processed.key).toBe('w');
+    test('processing the same key multiple times fires the callback each time', () => {
+      const cb = jest.fn();
+      input.bindAction('shoot', ' ', cb);
+      input.processInput(k(' '));
+      input.processInput(k(' '));
+      input.processInput(k(' '));
+      expect(cb).toHaveBeenCalledTimes(3);
     });
 
-    test('should clear all mappings', () => {
-      input.mapKey('w', 'ArrowUp');
-      input.mapKey('a', 'ArrowLeft');
-      input.clearAllMappings();
+    test('multiple actions on the same key all fire (in registration order)', () => {
+      const order: string[] = [];
+      input.bindAction('a', 'x', () => order.push('a'));
+      input.bindAction('b', 'x', () => order.push('b'));
+      input.bindAction('c', 'x', () => order.push('c'));
+      input.processInput(k('x'));
+      expect(order).toEqual(['a', 'b', 'c']);
+    });
 
-      const event: KeyEvent = {
-        key: 'w',
-        ctrl: false,
-        alt: false,
-        shift: false,
-        code: 119
-      };
+    test('two different keys do not collide', () => {
+      const upCb = jest.fn();
+      const downCb = jest.fn();
+      input.bindAction('up', 'ArrowUp', upCb);
+      input.bindAction('down', 'ArrowDown', downCb);
+      input.processInput(k('ArrowUp'));
+      expect(upCb).toHaveBeenCalledTimes(1);
+      expect(downCb).not.toHaveBeenCalled();
+    });
 
-      expect(input.processInput(event).key).toBe('w');
+    test('modifier flags are not part of the key match (only KeyEvent.key is)', () => {
+      // The current implementation indexes by `keyEvent.key` only — it
+      // doesn't look at ctrl/alt/shift. Both events fire the same callback.
+      const cb = jest.fn();
+      input.bindAction('zoom', '+', cb);
+      input.processInput(k('+', { ctrl: true }));
+      input.processInput(k('+', { shift: true }));
+      expect(cb).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('Keyboard Macros', () => {
-    test('should add keyboard macro', () => {
-      input.addMacro('konami', [
-        'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
-        'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
-        'b', 'a'
-      ], 500);
-
-      // Macro should be added
+  describe('unbindAction', () => {
+    test('removes a single action by name and leaves the others on the same key intact', () => {
+      const a = jest.fn();
+      const b = jest.fn();
+      input.bindAction('a', 'x', a);
+      input.bindAction('b', 'x', b);
+      input.unbindAction('a');
+      input.processInput(k('x'));
+      expect(a).not.toHaveBeenCalled();
+      expect(b).toHaveBeenCalledTimes(1);
     });
 
-    test('should trigger macro on sequence', () => {
-      input.addMacro('test', ['a', 'b', 'c'], 1000);
-
-      const eventA: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      const eventB: KeyEvent = { key: 'b', ctrl: false, alt: false, shift: false, code: 66 };
-      const eventC: KeyEvent = { key: 'c', ctrl: false, alt: false, shift: false, code: 67 };
-
-      input.processInput(eventA);
-      input.processInput(eventB);
-      input.processInput(eventC);
-
-      expect(input.isMacroTriggered('test')).toBe(true);
+    test('removes the key entry entirely when the last action is removed', () => {
+      const a = jest.fn();
+      input.bindAction('only', 'x', a);
+      input.unbindAction('only');
+      input.processInput(k('x'));
+      expect(a).not.toHaveBeenCalled();
+      // Internal: actions Map should not retain an empty array under 'x'.
+      expect((input as any).actions.has('x')).toBe(false);
     });
 
-    test('should reset triggered macro', () => {
-      input.addMacro('test', ['x', 'y'], 500);
-
-      const eventX: KeyEvent = { key: 'x', ctrl: false, alt: false, shift: false, code: 88 };
-      const eventY: KeyEvent = { key: 'y', ctrl: false, alt: false, shift: false, code: 89 };
-
-      input.processInput(eventX);
-      input.processInput(eventY);
-
-      expect(input.isMacroTriggered('test')).toBe(true);
-
-      input.resetMacro('test');
-      expect(input.isMacroTriggered('test')).toBe(false);
+    test("unbinding a name that isn't bound is a no-op", () => {
+      const a = jest.fn();
+      input.bindAction('a', 'x', a);
+      input.unbindAction('not-bound');
+      input.processInput(k('x'));
+      expect(a).toHaveBeenCalledTimes(1);
     });
 
-    test('should timeout macro sequence', (done) => {
-      input.addMacro('timeout', ['a', 'b'], 100);
-
-      const eventA: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      input.processInput(eventA);
-
-      // Wait longer than timeout
-      setTimeout(() => {
-        const eventB: KeyEvent = { key: 'b', ctrl: false, alt: false, shift: false, code: 66 };
-        input.processInput(eventB);
-
-        expect(input.isMacroTriggered('timeout')).toBe(false);
-        done();
-      }, 200);
-    });
-
-    test('should clear macro', () => {
-      input.addMacro('test', ['a', 'b'], 500);
-      input.clearMacro('test');
-
-      const eventA: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      const eventB: KeyEvent = { key: 'b', ctrl: false, alt: false, shift: false, code: 66 };
-
-      input.processInput(eventA);
-      input.processInput(eventB);
-
-      expect(input.isMacroTriggered('test')).toBe(false);
+    test('actions bound with the same name on multiple keys all unbind together', () => {
+      // bindAction allows the same action name on multiple keys (e.g., a
+      // "shoot" action mapped to both Space and Enter). unbindAction by
+      // name strips it from every key.
+      const cb = jest.fn();
+      input.bindAction('shoot', ' ', cb);
+      input.bindAction('shoot', 'Enter', cb);
+      input.unbindAction('shoot');
+      input.processInput(k(' '));
+      input.processInput(k('Enter'));
+      expect(cb).not.toHaveBeenCalled();
     });
   });
 
-  describe('Action Binding', () => {
-    test('should bind action to key', () => {
-      let called = false;
-      input.bindAction('jump', ' ', () => { called = true; });
-
-      const event: KeyEvent = { key: ' ', ctrl: false, alt: false, shift: false, code: 32 };
-      input.processInput(event);
-
-      expect(called).toBe(true);
+  describe('clear / reset / dispose', () => {
+    test('clear() removes every binding', () => {
+      const a = jest.fn();
+      const b = jest.fn();
+      input.bindAction('a', 'x', a);
+      input.bindAction('b', 'y', b);
+      input.clear();
+      input.processInput(k('x'));
+      input.processInput(k('y'));
+      expect(a).not.toHaveBeenCalled();
+      expect(b).not.toHaveBeenCalled();
     });
 
-    test('should bind action to key combination', () => {
-      let called = false;
-      input.bindAction('save', 's', () => { called = true; }, { ctrl: true });
-
-      const event: KeyEvent = { key: 's', ctrl: true, alt: false, shift: false, code: 83 };
-      input.processInput(event);
-
-      expect(called).toBe(true);
+    test('reset() is an alias for clear()', () => {
+      const a = jest.fn();
+      input.bindAction('a', 'x', a);
+      input.reset();
+      input.processInput(k('x'));
+      expect(a).not.toHaveBeenCalled();
     });
 
-    test('should not trigger without modifier', () => {
-      let called = false;
-      input.bindAction('test', 's', () => { called = true; }, { ctrl: true });
-
-      const event: KeyEvent = { key: 's', ctrl: false, alt: false, shift: false, code: 83 };
-      input.processInput(event);
-
-      expect(called).toBe(false);
+    test('dispose() is an alias for reset()', () => {
+      const a = jest.fn();
+      input.bindAction('a', 'x', a);
+      input.dispose();
+      input.processInput(k('x'));
+      expect(a).not.toHaveBeenCalled();
     });
 
-    test('should unbind action', () => {
-      let called = false;
-      input.bindAction('test', 'x', () => { called = true; });
-      input.unbindAction('test');
-
-      const event: KeyEvent = { key: 'x', ctrl: false, alt: false, shift: false, code: 88 };
-      input.processInput(event);
-
-      expect(called).toBe(false);
-    });
-
-    test('should clear all actions', () => {
-      let count = 0;
-      input.bindAction('action1', 'a', () => { count++; });
-      input.bindAction('action2', 'b', () => { count++; });
-      input.clearAllActions();
-
-      const eventA: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      const eventB: KeyEvent = { key: 'b', ctrl: false, alt: false, shift: false, code: 66 };
-
-      input.processInput(eventA);
-      input.processInput(eventB);
-
-      expect(count).toBe(0);
+    test('after clear(), new bindings work normally', () => {
+      const a = jest.fn();
+      input.bindAction('a', 'x', jest.fn());
+      input.clear();
+      input.bindAction('a', 'x', a);
+      input.processInput(k('x'));
+      expect(a).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('Input Recording', () => {
-    test('should start recording', () => {
-      input.startRecording();
-      expect(input.isRecording()).toBe(true);
-    });
+  describe('callback errors do not corrupt the action list', () => {
+    test('a callback that throws does not prevent later bindings from firing', () => {
+      // Current behavior: forEach in processInput runs callbacks in order
+      // and a thrown callback propagates out of processInput. The test
+      // must catch the throw to keep the assertion useful — but bindings
+      // for OTHER keys must still be intact afterward.
+      const survivor = jest.fn();
+      input.bindAction('boom', 'x', () => { throw new Error('boom'); });
+      input.bindAction('survivor', 'y', survivor);
 
-    test('should stop recording', () => {
-      input.startRecording();
-      input.stopRecording();
-      expect(input.isRecording()).toBe(false);
-    });
+      expect(() => input.processInput(k('x'))).toThrow('boom');
 
-    test('should record input sequence', () => {
-      input.startRecording();
-
-      const event1: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      const event2: KeyEvent = { key: 'b', ctrl: false, alt: false, shift: false, code: 66 };
-
-      input.processInput(event1);
-      input.processInput(event2);
-
-      const recording = input.stopRecording();
-      expect(recording).toHaveLength(2);
-      expect(recording[0].input.key).toBe('a');
-      expect(recording[1].input.key).toBe('b');
-    });
-
-    test('should playback recording', (done) => {
-      let keys: string[] = [];
-
-      input.bindAction('a', 'a', () => keys.push('a'));
-      input.bindAction('b', 'b', () => keys.push('b'));
-
-      input.startRecording();
-
-      const event1: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      const event2: KeyEvent = { key: 'b', ctrl: false, alt: false, shift: false, code: 66 };
-
-      input.processInput(event1);
-
-      setTimeout(() => {
-        input.processInput(event2);
-        const recording = input.stopRecording();
-
-        keys = [];
-        input.playbackRecording(recording);
-
-        // Give playback time to execute
-        setTimeout(() => {
-          expect(keys).toEqual(['a', 'b']);
-          done();
-        }, 100);
-      }, 50);
-    });
-
-    test('should clear recording', () => {
-      input.startRecording();
-
-      const event: KeyEvent = { key: 'a', ctrl: false, alt: false, shift: false, code: 65 };
-      input.processInput(event);
-      input.clearRecording();
-
-      const recording = input.stopRecording();
-      expect(recording).toHaveLength(0);
-    });
-  });
-
-  describe('Mouse Emulation', () => {
-    test('should emulate mouse click', () => {
-      const mouseEvent = input.emulateMouseClick(40, 12);
-
-      expect(mouseEvent.position.x).toBe(40);
-      expect(mouseEvent.position.y).toBe(12);
-      expect(mouseEvent.button).toBe(1);
-      expect(mouseEvent.type).toBe('click');
-    });
-
-    test('should emulate mouse movement', () => {
-      const mouseEvent = input.emulateMouseMove(10, 5);
-
-      expect(mouseEvent.position.x).toBe(10);
-      expect(mouseEvent.position.y).toBe(5);
-      expect(mouseEvent.type).toBe('move');
+      // The Map shouldn't have been corrupted; 'y' still works.
+      input.processInput(k('y'));
+      expect(survivor).toHaveBeenCalledTimes(1);
     });
   });
 });

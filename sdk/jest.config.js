@@ -29,7 +29,7 @@ module.exports = {
     'test/blessed-integration.test.ts',
     'test/blessed-compatibility.test.ts',
     // graphics-engine: API drift fixed 2026-05-04 — re-enabled.
-    'tests/unit/input-engine.test.ts',
+    // input-engine: rewritten 2026-05-04 against current API — re-enabled.
     'tests/unit/physics-engine.test.ts',
     'tests/integration/game-loop.test.ts',
   ],
