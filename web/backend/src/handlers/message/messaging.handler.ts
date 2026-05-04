@@ -58,16 +58,21 @@ async function _updateReadPointer(userId: number, confId: number, msgBaseId: num
 
 /**
  * Format recipient display for EALL handling
- * From express.e:8902-8910 - When toUser is "EALL", display as "{confName} (ALL)"
+ * From express.e:8902-8910 — when the lower-cased toName StrCmp's 'eall'
+ * (length 5, exact match), the displayed To: shows "{confMailName} (ALL)".
+ * confMailName is the per-conference display name, NOT the raw login
+ * username — REALNAME conferences show the user's real name in the
+ * EALL banner.
  */
 function formatRecipientDisplay(msg: any, session: BBSSession): string {
   if (!msg.isPrivate) {
     return 'ALL';
   }
-  // Check for EALL (case-insensitive) - express.e:8904-8907
-  // confMailName = loggedOnUserKeys.userName (express.e:12461) — the user's own name
   if (msg.toUser && msg.toUser.toLowerCase() === 'eall') {
-    const mailName = (session.user as any)?.username || (session.user as any)?.name || 'User';
+    const { getConfMailName } = require('./message-entry.handler');
+    const mailName = getConfMailName(session) ||
+                     (session.user as any)?.username ||
+                     'User';
     return `${mailName} (ALL)`;
   }
   return msg.toUser || 'ALL';
@@ -378,16 +383,21 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   }
 
   // express.e:8943-8949 - Mark message as received if addressed to current user
-  // IF(stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS)
-  //   IF(mailHeader.recv=0)
-  //     mailHeader.recv:=getSystemTime()
-  //     saveOverHeader(gfh)
+  //   IF(stringCompare(mailHeader.toName, confMailName) = RESULT_SUCCESS)
+  //     IF(mailHeader.recv = 0)
+  //       mailHeader.recv := getSystemTime()
+  //       saveOverHeader(gfh)
+  //     ENDIF
   //   ENDIF
-  // ENDIF
-  const currentUsername = session.user?.username?.toLowerCase();
-  if (currentUsername && msg.toUser && !msg.receivedAt) {
+  // confMailName = per-conference display name (REALNAME / INTERNETNAME /
+  // USERNAME). The previous raw-username comparison meant REALNAME
+  // conferences never auto-marked private mail as read — the toName was
+  // the user's real name, not their login username.
+  if (msg.toUser && !msg.receivedAt) {
+    const { getConfMailName } = require('./message-entry.handler');
+    const myConfMailName = getConfMailName(session).toLowerCase();
     const toUserLower = msg.toUser.toLowerCase();
-    if (toUserLower === currentUsername) {
+    if (myConfMailName && toUserLower === myConfMailName) {
       const confId = session.currentConf || 1;
       const bbsDataPath = config.get('dataDir');
       markMessageReceived(confId, msg.id, bbsDataPath).catch(err => {
