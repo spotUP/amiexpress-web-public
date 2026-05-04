@@ -4,7 +4,7 @@ import { parseHotkeys, dispatchKey } from '../hooks/useHotkeyClick.js';
 import { useMouse, type MouseClick } from '../hooks/useMouse.js';
 import { pageById } from '../pages/registry.js';
 
-const RIGHT_HINT = '[?]help  [q]quit';
+const RIGHT_HINT = '[F2]restart  [?]help  [q]quit';
 
 interface Props {
   activePageId: string;

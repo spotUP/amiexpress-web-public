@@ -32,6 +32,7 @@ import { InfoFilesPage } from './components/tabs/InfoFilesPage.js';
 import { AmiXnetPage } from './components/tabs/AmiXnetPage.js';
 import { OpChatSettingsPage } from './components/tabs/OpChatSettingsPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
+import { RestartDialog } from './components/RestartDialog.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
 
@@ -84,11 +85,14 @@ export function App({ username }: Props) {
   const [activePage, setActivePage] = useState<string>(DEFAULT_PAGE);
   const [backendUp, setBackendUp] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showRestart, setShowRestart] = useState(false);
 
   useInput((input, key) => {
+    if ((key as any).f2) { setShowRestart(s => !s); return; }
+    // Block other global hotkeys while a modal is open so the modal owns input.
+    if (showRestart || showHelp) return;
     if (input === 'q' && !key.ctrl) exit();
     if (input === '?') setShowHelp(s => !s);
-    if (key.escape && showHelp) setShowHelp(false);
   });
 
   useEffect(() => {
@@ -115,7 +119,9 @@ export function App({ username }: Props) {
       <Box flexDirection="row" flexGrow={1}>
         <Sidebar activePageId={activePage} onSelect={setActivePage} />
         <Box flexGrow={1} flexDirection="column" paddingX={1}>
-          {showHelp ? (
+          {showRestart ? (
+            <RestartDialog onClose={() => setShowRestart(false)} />
+          ) : showHelp ? (
             <HelpOverlay activePageId={activePage} onClose={() => setShowHelp(false)} />
           ) : ActiveComponent ? (
             <ActiveComponent />

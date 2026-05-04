@@ -6,6 +6,7 @@ const GLOBAL: Array<[string, string]> = [
   ['1-6',   'Jump to category (Live / Users / Content / Files / System / Comms)'],
   ['↑↓',    'Move sidebar selection'],
   ['?',     'Toggle this help'],
+  ['F2',    'Restart dev stack — pick start-servers.sh flags'],
   ['q',     'Quit the console'],
   ['esc',   'Close any dialog/help'],
   ['click', 'Sidebar items, list rows, and footer hotkeys are all clickable'],
