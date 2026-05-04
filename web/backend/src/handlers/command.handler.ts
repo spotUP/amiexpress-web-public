@@ -907,6 +907,13 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           session.currentConference = confId;
           session.currentMsgBase = msgBaseId;
           if (targetConfName) session.currentConfName = targetConfName;
+          // express.e:5056-5061 — CONF_BULL shows the conference's own
+          // bulletin, NOT a per-menu screen, so currentMenuName must be
+          // empty so MCI codes inside CONF_BULL that reference the menu
+          // name don't render the previous conference's stale value
+          // (audit F-8 — was leaking the prior conf's menu name into the
+          // new conf's CONF_BULL when MCI processed it).
+          session.currentMenuName = '';
           try {
             const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
             if (shown) {
@@ -3920,11 +3927,15 @@ console.log(' In PROCESS_COMMAND state, executing command:', session.commandText
         // Express.e:28244-28256 - Command priority: SysCommand  BbsCommand  InternalCommand
         const result = await processCommand(socket, session, command, params);
         if (result === 'NOT_ALLOWED') {
-          // express.e:28644-28648 higherAccess() — emitted here for sys/bbs commands;
-          // internal commands call ErrorHandler.permissionDenied directly and don't reach this path
+          // express.e:28644-28648: higherAccess() emits the message THEN
+          // the main loop sets menuPause:=TRUE and subState:=DISPLAY_MENU.
+          // Audit B-4 flagged the previous shape (DISPLAY_CONF_BULL with
+          // menuPause=false) — that dropped the user back at the
+          // conference bulletin instead of the menu, and skipped the
+          // menu pause that prevents prompt clobber.
           socket.emit('ansi-output', '\r\nCommand requires higher access.\r\n');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          session.menuPause = true;
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
           return;
         }
       } catch (error) {

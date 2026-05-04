@@ -732,7 +732,10 @@ console.warn('[advanceConferenceScan] no confScanState found');
       socket.emit('ansi-output', '\r\n\r\n');
       socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
       socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
-      socket.emit('ansi-output', '\x1b[0m');
+      // express.e:11715 — `[0m` reset on its own line ends the header
+      // block before the per-message rows. Audit D-9 flagged that the
+      // newline was missing.
+      socket.emit('ansi-output', '\x1b[0m\r\n');
 
       // express.e:11720 - per-message row
       for (const m of scanMsgs) {
@@ -750,6 +753,11 @@ console.warn('[advanceConferenceScan] no confScanState found');
         const num = String(m.msgNum).padStart(6, '0');
         socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
       }
+
+      // express.e:11737 — '\b\nFound Mail!' (banner) before the prompt.
+      // Audit D-9 flagged this as missing; the BBS would jump straight
+      // from the message table to the y/n prompt with no announcement.
+      socket.emit('ansi-output', '\r\nFound Mail!\r\n');
 
       // express.e:11739 — '\b\nWould you like to read it now ' + yesNo(1) + '\b\n'
       socket.emit('ansi-output', '\r\nWould you like to read it now \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');

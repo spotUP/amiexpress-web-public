@@ -274,20 +274,22 @@ console.log('Socket login attempt with JWT token');
         const safeUsername = sanitizeInput(data.username);
 console.log('Socket login attempt with username/password:', safeUsername);
 
-        // express.e:29627-29628 - Empty username counts as retry
+        // express.e:29629-29637 — empty username is a USERNAME failure,
+        // not a password failure. Counts against the fixed 5-try
+        // username budget; password budget is untouched.
         if (safeUsername.length === 0) {
-          session.loginRetryCount++;
-          const maxFails = getMaxPasswordFails();
-console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty username)`);
+          session.usernameRetryCount = (session.usernameRetryCount || 0) + 1;
+          const USERNAME_MAX = 5;
+console.log(`Username retry count: ${session.usernameRetryCount}/${USERNAME_MAX} (empty username)`);
 
-          if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-console.log('Too many login errors, disconnecting');
+          if (session.usernameRetryCount >= USERNAME_MAX) {
+console.log('Too many username errors, disconnecting');
             SysopDebugUtil.debug(
               socket,
               session,
               'AUTH',
-              'Too many login errors - disconnecting',
-              { reason: 'empty username', retries: session.loginRetryCount, maxFails },
+              'Too many username errors - disconnecting',
+              { reason: 'empty username', retries: session.usernameRetryCount, max: USERNAME_MAX },
               DebugSeverity.CRITICAL
             );
             // express.e:29634: plain text
@@ -301,7 +303,7 @@ console.log('Too many login errors, disconnecting');
             session,
             'AUTH',
             'Login attempt with empty username',
-            { retries: session.loginRetryCount, maxFails },
+            { retries: session.usernameRetryCount, max: USERNAME_MAX },
             DebugSeverity.WARNING
           );
           socket.emit('login-failed', 'Username cannot be empty');
@@ -1009,16 +1011,17 @@ console.error('Socket login error:', error);
         const safeUsername = sanitizeInput(data.username);
 console.log('🔍 Checking if username exists:', safeUsername);
 
-      // Empty username check
+      // Empty username check — counts against the username retry
+      // budget (5 fixed) per express.e:29629-29637. See A-5 in audit.
       if (safeUsername.length === 0) {
-        session.loginRetryCount++;
-        if (session.loginRetryCount >= 5) {
+        session.usernameRetryCount = (session.usernameRetryCount || 0) + 1;
+        if (session.usernameRetryCount >= 5) {
           SysopDebugUtil.debug(
             socket,
             session,
             'AUTH',
             'Too many login errors in check-username - disconnecting',
-            { reason: 'empty username', retries: session.loginRetryCount },
+            { reason: 'empty username', retries: session.usernameRetryCount },
             DebugSeverity.CRITICAL
           );
           // express.e:29634: plain text

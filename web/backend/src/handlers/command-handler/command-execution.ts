@@ -420,9 +420,11 @@ console.error("❌ ERROR in handleLiveChatCommand:", error);
       await handleConferenceFlagsCommand(socket, session);
       return;
 
-    case "Q": // Quiet Mode Toggle (internalCommandQ) - express.e:25504-25516
-      handleQuietModeCommand(socket, session);
-      return;
+    // (Removed audit B-5) — duplicate `case "Q"` formerly at this line
+    // was unreachable dead code: switch dispatch already takes the first
+    // match at line 253 (handleQuietCommand from transfer/olm.handler,
+    // which is the express.e:25505-25515 1:1 implementation). The
+    // duplicate routed to a stale handleQuietModeCommand alias.
 
     case "?": // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
       await handleQuestionMarkCommand(socket, session);

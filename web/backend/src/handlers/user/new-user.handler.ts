@@ -1200,8 +1200,13 @@ function loadScriptSteps(scriptPath: string): ScriptStep[] {
         continue;
       }
 
-      if (line.includes('~')) {
-        const prompt = line.replace(/~/g, '').trimEnd();
+      // express.e:30368-30373 — only lines ending in `~` are prompts.
+      // The audit (A-22) flagged that `includes('~')` matched lines with
+      // a `~` anywhere, so questionnaire scripts containing the char in
+      // a sentence were silently turned into input prompts. Match the
+      // express.e contract: only the trailing `~`, and strip exactly one.
+      if (line.endsWith('~')) {
+        const prompt = line.slice(0, -1).trimEnd();
         steps.push({ type: 'prompt', content: prompt });
       } else {
         steps.push({ type: 'text', content: line });
@@ -1490,9 +1495,26 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
 console.error('[BBSEvent] Error emitting new user login event:', error);
     }
 
-    // Show welcome screen and bulletins
-    socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
+    // express.e:30124-30125 — show the sysop-configured JOINED screen
+    // file (BBS:Screens/JOINED.txt) followed by doPause(). Audit A-13
+    // flagged the previous shape (hardcoded "Welcome to the BBS!" emit)
+    // as breaking customisation: every BBS got the same generic line
+    // instead of the sysop's screen. Falls back to the hardcoded text
+    // if no JOINED file exists, so a fresh install still gives the
+    // user *some* feedback.
+    try {
+      const { displayScreen, doPause } = require('../screen.handler');
+      const shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
+      if (shown) {
+        if (typeof doPause === 'function') doPause(socket, session);
+      } else {
+        socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
+      }
+    } catch (_) {
+      socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
+    }
   } catch (error) {
 console.error(' [NEW USER] Account creation error:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');

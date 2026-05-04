@@ -380,7 +380,13 @@ export interface BBSSession {
   queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
   lastScreenFilePath?: string; // Resolved path of last displayed screen (used for .keys lookup)
-  loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
+  // Login retry counters — express.e:29629-29637 keeps these separate.
+  // Conflating them (audit A-5) meant entering several wrong usernames
+  // ate into the password-fail budget and vice versa. Now:
+  //   loginRetryCount     — failed PASSWORD attempts (configurable cap)
+  //   usernameRetryCount  — failed/empty USERNAME attempts (fixed cap of 5)
+  loginRetryCount: number;
+  usernameRetryCount?: number;
   // Password reset flow - express.e:29152-29213
   passwordResetCode?: string; // Generated 10-char reset code sent to email
   passwordResetUsername?: string; // Username attempting password reset
