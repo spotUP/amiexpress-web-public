@@ -412,3 +412,8 @@ logs/preview.log
 logs/xim-amiga.log
 web/backend/debug-screen-loads.log
 backups/
+
+# AmigaOS components — copyrighted Commodore/Hyperion property,
+# sysops supply their own from a legitimate AmigaOS install.
+System/RexxMast
+System/rexxmast
