@@ -556,6 +556,27 @@ class RexxMastService {
       // after the initial executeInstruction() loop starts won't fire.
       this.libraryTraps.syncTrapAddressesToMoira();
 
+      // #78 Phase 7+ — call rexxsyslib's real lib_Init (Resident
+      // tag autoinit table[3]). Without it, rexxsyslib's library-
+      // private state (lists at libBase + 0xb8 / +0xd8 etc) stays
+      // zeroed, and the daemon's dispatch arm dereferences invalid
+      // pointers when it tries to walk its global pending-msg list.
+      // Run it AFTER all infrastructure is up so the init function's
+      // calls to AllocMem / FindTask / etc. all dispatch through
+      // working LVO traps.
+      try {
+        const initOk = this.runLibInit(libBase);
+        if (!initOk) {
+          // Non-fatal — the bridged executeRexxScript path still works
+          // even if LibInit didn't succeed (we fall back to the TS
+          // interpreter for actual execution). Log + continue so the
+          // BBS stays up.
+          console.warn('[AREXX] rexxsyslib LibInit did not complete cleanly; bridged path still active');
+        }
+      } catch (err: any) {
+        console.warn('[AREXX] rexxsyslib LibInit faulted:', err?.message || err);
+      }
+
       this.status.started = true;
       // Phase 4-real flips ready=true once RexxMast actually runs its
       // setup and registers the REXX port. Until then the engine
@@ -683,6 +704,138 @@ class RexxMastService {
     this.status.hostPortAddr = portAddr;
     this.status.hostPortName = name;
     return true;
+  }
+
+  /**
+   * #78 Phase 7+ — invoke rexxsyslib's real lib_Init function in MOIRA
+   * so the library's private state (lists, allocations, version
+   * numbers) is set up by Commodore's own init code rather than left
+   * zeroed by our HunkLoader.
+   *
+   * Mechanics:
+   *   1. Locate the Resident tag at libBase+4 (RTC_MATCHWORD).
+   *   2. Verify RTF_AUTOINIT (0x80) — the tag points to a 4-longword
+   *      autoinit table {posSize, vectors, structure, initFunction}.
+   *   3. Push a sentinel return address on the stack; set up the
+   *      ABI registers (D0=libBase, A0=segList=0 since we have no
+   *      SegList from LoadSeg, A6=execBase).
+   *   4. Set PC=initFunction and run MOIRA cycles (with normal trap
+   *      dispatch) until PC hits the sentinel — the function's
+   *      terminal RTS pops the sentinel back into PC, ending the
+   *      sub-call.
+   *   5. Read D0 — the lib_Init contract returns library base on
+   *      success, 0 on failure.
+   *
+   * Returns true if the function returned a non-zero D0 within the
+   * cycle budget; false otherwise. Either way, control flow returns
+   * cleanly so the caller can fall back to the bridged path.
+   */
+  private runLibInit(libBase: number): boolean {
+    if (!this.emulator || !this.libraryTraps || !this.execLibrary) return false;
+
+    const RTC_MATCHWORD = 0x4afc;
+    const RTF_AUTOINIT = 0x80;
+
+    // Resident tag header is the first thing past the dummy
+    // moveq/rts at libBase. Look for the match word at libBase+4.
+    const matchAddr = (libBase + 4) >>> 0;
+    const matchWord = this.emulator.readMemory16(matchAddr) & 0xffff;
+    if (matchWord !== RTC_MATCHWORD) {
+      console.warn(`[AREXX] LibInit: no RTC_MATCHWORD at 0x${matchAddr.toString(16)} (got 0x${matchWord.toString(16)})`);
+      return false;
+    }
+    const rtFlags = this.emulator.readMemory(matchAddr + 10) & 0xff;
+    if ((rtFlags & RTF_AUTOINIT) === 0) {
+      console.warn(`[AREXX] LibInit: rt_Flags=0x${rtFlags.toString(16)} lacks RTF_AUTOINIT`);
+      return false;
+    }
+
+    // rt_Init points at the 4-longword autoinit table.
+    const rtInit = this.emulator.readMemory32(matchAddr + 22) >>> 0;
+    if (rtInit === 0) {
+      console.warn(`[AREXX] LibInit: rt_Init is NULL`);
+      return false;
+    }
+    const initFunc = this.emulator.readMemory32(rtInit + 12) >>> 0;
+    if (initFunc === 0) {
+      console.warn(`[AREXX] LibInit: autoinit[3] (initFunction) is NULL`);
+      return false;
+    }
+    console.log(`[AREXX] LibInit: calling rexxsyslib init at 0x${initFunc.toString(16)} (libBase=0x${libBase.toString(16)})`);
+
+    // Set up a clean stack for the sub-call. We use the same high-RAM
+    // top runUntilReady will use, so any heap allocations the init
+    // function makes don't collide with the daemon's later activity.
+    const memBytes = SINGLETON_MEM_MB * 1024 * 1024;
+    const stackTop = (memBytes - 0x10000) & ~3;
+    const sentinelAddr = 0xFFFF00; // distinct from MOIRA exit traps used elsewhere
+
+    // Save current MOIRA state so we can restore on completion.
+    const { CPURegister: CPU } = require('../../amiga-emulation/cpu/MoiraEmulator');
+    const savedPC = this.emulator.getRegister(CPU.PC) >>> 0;
+    const savedSP = this.emulator.getRegister(CPU.A7) >>> 0;
+    const savedD0 = this.emulator.getRegister(CPU.D0) >>> 0;
+    const savedA0 = this.emulator.getRegister(8) >>> 0; // A0
+    const savedA6 = this.emulator.getRegister(14) >>> 0; // A6
+
+    try {
+      // Push sentinel as the JSR-style return address. Init will RTS
+      // and pop this into PC, ending our sub-call cleanly.
+      this.emulator.setRegister(CPU.A7, stackTop - 4);
+      this.emulator.writeMemory32(stackTop - 4, sentinelAddr);
+
+      // ABI: D0 = libBase, A0 = segList (BPTR; 0 since we have none),
+      // A6 = ExecBase. Real Amiga init functions read these per RKRM
+      // "Devices and Libraries" §1.2.
+      const execBase = this.execLibrary.getExecBaseAddress();
+      this.emulator.setRegister(CPU.D0, libBase >>> 0);
+      this.emulator.setRegister(8, 0);          // A0 = 0 (no segList)
+      this.emulator.setRegister(14, execBase >>> 0); // A6 = ExecBase
+
+      this.emulator.setRegister(CPU.PC, initFunc >>> 0);
+      this.emulator.refillPrefetch();
+
+      // Drive cycles until PC == sentinel (function's terminal RTS).
+      // Cap at 1M cycles — well above any real init routine's needs
+      // but bounds a runaway init that loops on missing infrastructure.
+      const MAX_INIT_CYCLES = 1_000_000;
+      let cycles = 0;
+      while (cycles < MAX_INIT_CYCLES) {
+        const pc = this.emulator.getRegister(CPU.PC) >>> 0;
+        if (pc === sentinelAddr) break;
+        if (this.libraryTraps.isTrapAddress(pc)) {
+          if (!this.libraryTraps.handleTrap(pc)) {
+            this.emulator.executeInstruction();
+          }
+        } else {
+          this.emulator.executeInstruction();
+        }
+        cycles++;
+      }
+
+      const finalPC = this.emulator.getRegister(CPU.PC) >>> 0;
+      const result = this.emulator.getRegister(CPU.D0) >>> 0;
+      if (finalPC !== sentinelAddr) {
+        console.warn(`[AREXX] LibInit: did not return after ${cycles} cycles (PC=0x${finalPC.toString(16)})`);
+        return false;
+      }
+      if (result === 0) {
+        console.warn(`[AREXX] LibInit: returned NULL (init failed) after ${cycles} cycles`);
+        return false;
+      }
+      console.log(`[AREXX] LibInit: success (D0=0x${result.toString(16)}) after ${cycles} cycles`);
+      return true;
+    } finally {
+      // Restore everything. The init function's side effects on
+      // memory (initialised lists etc) persist, but we don't want
+      // its register state leaking into runUntilReady.
+      this.emulator.setRegister(CPU.PC, savedPC);
+      this.emulator.setRegister(CPU.A7, savedSP);
+      this.emulator.setRegister(CPU.D0, savedD0);
+      this.emulator.setRegister(8, savedA0);
+      this.emulator.setRegister(14, savedA6);
+      this.emulator.refillPrefetch();
+    }
   }
 
   /**

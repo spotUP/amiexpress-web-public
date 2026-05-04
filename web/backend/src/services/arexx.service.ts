@@ -2396,7 +2396,13 @@ console.log(`Label registered: ${label} at line ${i}`);
     const end = endIndex ?? lines.length;
     let i = startIndex;
 
-    while (i < end) {
+    // Loop is `while (true)` — not `while (i < end)` — so SIGNAL set on
+    // the LAST executed line still triggers a jump even when i would
+    // otherwise have walked past `end`. STNG's BEGIN: ... select ...
+    // signal BEGIN pattern fires at script's last line; the old loop
+    // exited before processing the signal, so the menu redraw never
+    // happened and the user saw the whole script run linearly once.
+    while (true) {
       // Handle SIGNAL jump (Phase 4 + condition-trap fallback).
       // RKRM §7: an unmatched SIGNAL target (whether explicit goto
       // or a condition trap whose label doesn't exist in the
@@ -2420,6 +2426,8 @@ console.log(`Label registered: ${label} at line ${i}`);
         this.returnRequested = true;
         break;
       }
+
+      if (i >= end) break;
 
       if (this.breakRequested || this.iterateRequested || this.returnRequested) {
         break;
@@ -2461,7 +2469,7 @@ console.log(`[TRACE] Line ${i}: ${line}`);
         continue;
       }
 
-      if (line.toUpperCase().startsWith('SELECT ')) {
+      if (line.toUpperCase() === 'SELECT' || line.toUpperCase().startsWith('SELECT ')) {
         i = await this.executeSelect(lines, i);
         continue;
       }
@@ -3004,15 +3012,24 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
   }
 
   /**
-   * Find matching END for DO/SELECT
+   * Find matching END for DO/SELECT.
+   *
+   * Also recognises `WHEN expr THEN DO` and `IF expr THEN DO` as block
+   * openers — without that, `select; when X then do; ...; end; ... end`
+   * stops at the first inner END, which is the WHEN body's terminator
+   * rather than the SELECT's. STNG / SPEEDCHK / most AmiExpress AREXX
+   * doors use this pattern heavily.
    */
   private findMatchingEnd(lines: string[], startIndex: number): number {
     let depth = 1;
     for (let i = startIndex + 1; i < lines.length; i++) {
       const line = lines[i].toUpperCase().trim();
-      if (line.startsWith('DO ') || line === 'DO' || line.startsWith('SELECT ')) {
+      if (line.startsWith('DO ') || line === 'DO' || line.startsWith('SELECT ') || line === 'SELECT') {
         depth++;
-      } else if (line === 'END') {
+      } else if (line.endsWith(' THEN DO') || line.endsWith(' THEN DO;')) {
+        // `when X then do` / `if X then do` opens a nested block.
+        depth++;
+      } else if (line === 'END' || line.startsWith('END ') || line.startsWith('END;')) {
         depth--;
         if (depth === 0) {
           return i;
@@ -3035,41 +3052,143 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
     let i = startIndex + 1;
     let matched = false;
 
-    while (i < endIndex) {
-      const line = lines[i].toUpperCase().trim();
+    // Helper: split a `WHEN expr THEN body` line into (condition, action).
+    // Real REXX syntax is `WHEN <expr> THEN <action>` where <action> can
+    // be a single statement OR `DO` (starting a multi-line block ended
+    // by `END`). We must split at THEN, not feed `expr THEN action` to
+    // evaluateCondition. The previous code passed the full tail to
+    // evaluateCondition, which produced truthy results regardless of
+    // the actual expression — every WHEN matched, and STNG-style menu
+    // dispatchers ran every option's body in sequence.
+    const splitWhen = (whenLine: string): { cond: string; action: string } => {
+      const text = whenLine.substring(whenLine.toUpperCase().indexOf('WHEN ') + 5);
+      // Find ` THEN ` outside quoted strings.
+      let inSingle = false, inDouble = false;
+      const upper = text.toUpperCase();
+      for (let k = 0; k < text.length - 4; k++) {
+        const c = text[k];
+        if (!inDouble && c === "'") inSingle = !inSingle;
+        else if (!inSingle && c === '"') inDouble = !inDouble;
+        if (inSingle || inDouble) continue;
+        if (upper.startsWith(' THEN', k) && (k + 5 === text.length || /\s/.test(text[k + 5]))) {
+          return {
+            cond: text.substring(0, k).trim(),
+            action: text.substring(k + 5).trim(),
+          };
+        }
+      }
+      // Malformed WHEN — treat the whole tail as condition.
+      return { cond: text.trim(), action: '' };
+    };
 
-      if (line.startsWith('WHEN ')) {
-        if (!matched) {
-          const condition = lines[i].substring(5).trim();
-          if (await this.evaluateCondition(condition)) {
-            matched = true;
-            i++;
-            // Execute until next WHEN or OTHERWISE or END
+    // Helper: run the body of a WHEN/OTHERWISE clause. Recognises nested
+    // DO/END and IF/THEN/ELSE so a clause body that spans multiple lines
+    // (the `when X then do ... end` shape STNG, AVAIL, SPEEDCHK et al.
+    // use) executes its full contents and returns the index past it.
+    const runClauseBody = async (action: string, bodyStart: number, bodyEnd: number): Promise<number> => {
+      // Inline action (`when expr then SAY 'x'`) — evaluate immediately
+      // and return without consuming any further lines.
+      if (action && action.toUpperCase() !== 'DO') {
+        await this.executeLine(action);
+        return bodyStart;
+      }
+      // Multi-line body: action was DO (or empty + body lines until
+      // next WHEN/OTHERWISE). Recurse through executeLines so DO loops,
+      // SELECTs, IF/ELSE, etc inside the body are honoured.
+      // Find the END that matches our DO.
+      let cursor = bodyStart;
+      if (action.toUpperCase() === 'DO') {
+        // DO ... END block — find the matching END by counting nesting.
+        let depth = 1;
+        let scan = bodyStart;
+        while (scan < bodyEnd && depth > 0) {
+          const u = lines[scan].toUpperCase().trim();
+          if (u === 'DO' || u.startsWith('DO ')) depth++;
+          else if (u.startsWith('SELECT')) depth++;
+          else if (u === 'END' || u.startsWith('END ')) depth--;
+          if (depth === 0) break;
+          scan++;
+        }
+        if (scan < bodyEnd) {
+          // Run through executeLines from bodyStart to scan (exclusive of END).
+          await this.executeLines(lines, bodyStart, scan);
+          cursor = scan + 1; // skip the END line itself
+        } else {
+          cursor = bodyEnd;
+        }
+      } else {
+        // Implicit body: lines from bodyStart up to next WHEN/OTHERWISE/END.
+        let scan = bodyStart;
+        while (scan < bodyEnd) {
+          const u = lines[scan].toUpperCase().trim();
+          if (u.startsWith('WHEN ') || u === 'OTHERWISE') break;
+          scan++;
+        }
+        await this.executeLines(lines, bodyStart, scan);
+        cursor = scan;
+      }
+      return cursor;
+    };
+
+    while (i < endIndex) {
+      const upper = lines[i].toUpperCase().trim();
+
+      // Bail early on signal/return/break — these set on the interpreter
+      // by inner statements (e.g. `signal CRSTNG` from a WHEN body) and
+      // must propagate up to executeLines so the goto fires immediately
+      // instead of after the rest of the SELECT continues to scan.
+      if (this.signalRequested || this.returnRequested || this.breakRequested || this.iterateRequested) {
+        break;
+      }
+
+      if (upper.startsWith('WHEN ')) {
+        const { cond, action } = splitWhen(lines[i]);
+        i++;
+        if (!matched && await this.evaluateCondition(cond)) {
+          matched = true;
+          i = await runClauseBody(action, i, endIndex);
+        } else {
+          // Skip this WHEN's body (matched already, or condition false).
+          if (action.toUpperCase() === 'DO') {
+            // Skip to matching END.
+            let depth = 1;
+            while (i < endIndex && depth > 0) {
+              const u = lines[i].toUpperCase().trim();
+              if (u === 'DO' || u.startsWith('DO ')) depth++;
+              else if (u.startsWith('SELECT')) depth++;
+              else if (u === 'END' || u.startsWith('END ')) depth--;
+              i++;
+              if (depth === 0) break;
+            }
+          } else if (!action) {
+            // Single-clause-per-line shape with body on subsequent lines —
+            // skip to next WHEN/OTHERWISE.
             while (i < endIndex) {
-              const nextLine = lines[i].toUpperCase().trim();
-              if (nextLine.startsWith('WHEN ') || nextLine === 'OTHERWISE') {
-                break;
-              }
-              await this.executeLine(lines[i]);
+              const u = lines[i].toUpperCase().trim();
+              if (u.startsWith('WHEN ') || u === 'OTHERWISE') break;
               i++;
             }
-          } else {
-            i++;
           }
-        } else {
-          i++;
+          // else: inline action already consumed by `i++` above.
         }
-      } else if (line === 'OTHERWISE') {
+      } else if (upper === 'OTHERWISE' || upper.startsWith('OTHERWISE ')) {
+        // OTHERWISE can have an inline action ("otherwise signal BEGIN")
+        // or a multi-line body. Both shapes appear in real AmiExpress doors.
+        const inline = upper === 'OTHERWISE' ? '' : lines[i].substring(lines[i].toUpperCase().indexOf('OTHERWISE') + 9).trim();
+        i++;
         if (!matched) {
-          i++;
-          // Execute until END
-          while (i < endIndex) {
-            await this.executeLine(lines[i]);
-            i++;
+          matched = true;
+          if (inline) {
+            await this.executeLine(inline);
+          } else {
+            // Multi-line OTHERWISE body — run lines until END.
+            await this.executeLines(lines, i, endIndex);
+            i = endIndex;
           }
         }
         break;
       } else {
+        // Stray line inside SELECT (between clauses) — skip.
         i++;
       }
     }
