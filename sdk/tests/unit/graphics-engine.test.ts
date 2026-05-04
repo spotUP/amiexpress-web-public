@@ -201,12 +201,11 @@ describe('GraphicsEngine', () => {
       expect(gfx.isCutscenePlaying()).toBe(false);
     });
 
-    // SKIPPED 2026-05-04: cutscene completion callback never fires under
-    // ts-jest. The other 23 cutscene/graphics tests pass; this one
-    // appears to depend on internal timing that doesn't survive in the
-    // jest environment. Re-enable when the cutscene engine is audited;
-    // the bug (if any) is in the engine, not in the test.
-    test.skip('should call onComplete callback', (done) => {
+    // Was previously skipped — the engine had a use-after-free where
+    // stopCutscene() nulled this.currentCutscene before the optional
+    // chain checked for onComplete. Fixed in graphics-engine.ts:
+    // capture onComplete before stopCutscene(), then invoke it.
+    test('should call onComplete callback', (done) => {
       const cutscene: Cutscene = {
         id: 'test',
         scenes: [

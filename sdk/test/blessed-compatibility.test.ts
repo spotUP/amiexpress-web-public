@@ -226,20 +226,20 @@ describe('Blessed Compatibility Tests', () => {
       expect(list.selected).toBe(1);
     });
 
-    // SKIPPED 2026-05-04: list.select(N) used to fire 'select' as a
-    // side effect; current code reserves 'select' for explicit Enter /
-    // Space keypress in _onKeypress, and select(N) only updates the
-    // selected index without emitting. The behavior is documented (and
-    // arguably correct), but this test relied on the old shape.
-    // Re-enable if the API ever rolls back to firing on programmatic
-    // select.
-    it.skip('should emit select event', (done) => {
+    it('should emit select item event when selection changes programmatically', (done) => {
       const list = new List({
         parent: screen,
         items: ['X', 'Y', 'Z'],
       });
 
-      list.once('select', (item: any, index: number) => {
+      // Two distinct events:
+      //   - 'select item' fires every time the highlighted index changes
+      //     (programmatic select(N), arrow keys, mouse hover-select).
+      //   - 'select' fires on a user commit action (Enter/Space/click).
+      // This test asserts the cursor-move event; a separate test below
+      // could exercise 'select' via Enter, but that's a keyboard-driven
+      // path and not what the compat suite is here for.
+      list.once('select item', (_item: any, index: number) => {
         expect(index).toBe(2);
         done();
       });

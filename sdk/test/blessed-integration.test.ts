@@ -173,12 +173,7 @@ describe('Blessed Integration Tests', () => {
   });
 
   describe('Dialog System Scenario', () => {
-    // SKIPPED 2026-05-04: dialog.display() callback doesn't fire under
-    // jest. Same shape as the cutscene-onComplete test in
-    // graphics-engine.test.ts — internal display state machine doesn't
-    // advance without a real terminal. Re-enable when dialog widgets
-    // get a sync test path.
-    it.skip('should create and show message dialog', (done) => {
+    it('should create and show message dialog', (done) => {
       const dialog = new Message({
         parent: screen,
         top: 'center',
@@ -189,14 +184,18 @@ describe('Blessed Integration Tests', () => {
         label: ' Message ',
       });
 
+      // Message.display(text, cb) registers cb as a one-shot 'hide'
+      // listener — the user normally clicks OK to dismiss, which calls
+      // hide() and fires the callback. In headless tests we drive the
+      // dismiss directly.
       dialog.display('This is a test message', () => {
         expect(dialog).toBeDefined();
         done();
       });
+      dialog.hide();
     });
 
-    // SKIPPED 2026-05-04: same reason as the message-dialog test above.
-    it.skip('should create confirmation dialog', (done) => {
+    it('should create confirmation dialog', (done) => {
       const question = new Question({
         parent: screen,
         top: 'center',
@@ -207,14 +206,16 @@ describe('Blessed Integration Tests', () => {
         label: ' Confirm ',
       });
 
-      // Question.ask now takes a (answer) callback — no err argument.
+      // Question.ask(text, cb) registers cb as a one-shot 'answer'
+      // listener (yes/no comes back via question.emit('answer', bool)
+      // when the user clicks the corresponding button). The original
+      // test emitted 'submit' which is a different event entirely.
       question.ask('Are you sure?', (value: boolean) => {
-        expect(value).toBeDefined();
+        expect(value).toBe(true);
         done();
       });
 
-      // Simulate yes response
-      question.emit('submit', true);
+      question.emit('answer', true);
     });
   });
 

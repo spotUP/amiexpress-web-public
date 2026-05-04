@@ -725,10 +725,13 @@ export class GraphicsEngine {
     const currentScene = this.currentCutscene.scenes[this.cutsceneFrame];
 
     if (!currentScene) {
-      // Cutscene complete
+      // Cutscene complete — capture the onComplete BEFORE stopCutscene()
+      // nulls this.currentCutscene. The previous shape ran the optional
+      // chain after the null, so the callback never fired.
+      const onComplete = this.currentCutscene.onComplete;
       this.stopCutscene();
-      if (this.currentCutscene?.onComplete) {
-        this.currentCutscene.onComplete();
+      if (onComplete) {
+        onComplete();
       }
       return false;
     }
@@ -741,9 +744,11 @@ export class GraphicsEngine {
 
       // Check if we have more scenes
       if (this.cutsceneFrame >= this.currentCutscene.scenes.length) {
+        // Same use-after-free fix as above.
+        const onComplete = this.currentCutscene.onComplete;
         this.stopCutscene();
-        if (this.currentCutscene?.onComplete) {
-          this.currentCutscene.onComplete();
+        if (onComplete) {
+          onComplete();
         }
         return false;
       }
