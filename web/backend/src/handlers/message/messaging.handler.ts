@@ -277,6 +277,33 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
     session.tempData.msgReaderHighestRead = msgNumber;
   }
 
+  // express.e:8888-8892 — defensive status='D' check. The reader's
+  // msgReaderMessages is built with the upstream filter excluding deleted
+  // messages, but a concurrent D command (or a race against another node)
+  // can delete the body file between list-build and display. Re-check the
+  // canonical HeaderFile status before rendering anything; if it's been
+  // tombstoned, show "That message has been deleted." like express.e and
+  // jump to the next nav prompt instead of dumping stale content.
+  try {
+    const { messageIndexManager, MsgStatus } = require('../../services/MessageIndexManager');
+    const confId = session.tempData.msgReaderConfId || session.currentConf || 1;
+    const headers = messageIndexManager.readHeaderFile(confId);
+    const liveHeader = headers.find((h: any) => h.msgNumb === msgNumber);
+    if (liveHeader && liveHeader.status === MsgStatus.DELETED) {
+      emitText(socket, '\r\nThat message has been deleted.\r\n\r\n');
+      // Drop the deleted entry from the local list and advance.
+      messages.splice(messageIndex, 1);
+      session.tempData.msgReaderMessages = messages;
+      if (messages.length === 0) {
+        await saveMessagePointerAndExit(socket, session);
+        return;
+      }
+      const nextIdx = messageIndex < messages.length ? messageIndex : messageIndex - 1;
+      await displaySingleMessage(socket, session, nextIdx);
+      return;
+    }
+  } catch { /* HeaderFile read failure → proceed with the in-memory msg */ }
+
   // express.e:8889 checkScreenClear() — only clears if USER_SCRNCLR flag set
   // If flag not set, just emit \r\n to separate from previous content
   const SCRNCLR_FLAG = 8; // UserFlags.SCRNCLR
