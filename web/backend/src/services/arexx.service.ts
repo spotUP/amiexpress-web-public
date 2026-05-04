@@ -2493,6 +2493,94 @@ console.log(`[TRACE] Line ${i}: ${line}`);
         continue;
       }
 
+      // IF ... THEN DO ... END — handled HERE so we can skip / run a
+      // multi-line block based on the condition. executeIf only handles
+      // the inline form (`IF X THEN single_statement`); when the THEN
+      // action is `DO`, the body extends to the matching END and the
+      // loop must skip it on a false condition. STNG.Rexx hit this:
+      // `if ~exists('STNGdat') then do ... signal BEGIN ... end` —
+      // the IF condition was false, but executeIf returned without
+      // touching `i`, so the next iteration unconditionally ran the
+      // body's signal BEGIN, sending option 3 back to the menu.
+      if (line.toUpperCase().startsWith('IF ')) {
+        const ifMatch = line.match(/^IF\s+(.+?)\s+THEN\s+(.+)$/i);
+        if (ifMatch) {
+          const [, cond, action] = ifMatch;
+          const condTrue = await this.evaluateCondition(cond.trim());
+          const actionUpper = action.trim().toUpperCase();
+          if (actionUpper === 'DO' || actionUpper.startsWith('DO ')) {
+            // Multi-line: find matching END.
+            let depth = 1;
+            let scan = i + 1;
+            while (scan < end && depth > 0) {
+              const u = lines[scan].toUpperCase().trim();
+              if (u === 'DO' || u.startsWith('DO ')) depth++;
+              else if (u.startsWith('SELECT')) depth++;
+              else if (u.endsWith(' THEN DO') || u.endsWith(' THEN DO;')) depth++;
+              else if (u === 'END' || u.startsWith('END ')) depth--;
+              if (depth === 0) break;
+              scan++;
+            }
+            if (scan < end) {
+              if (condTrue) {
+                await this.executeLines(lines, i + 1, scan);
+              }
+              i = scan + 1; // skip past END
+              // After the IF/ELSE block, peek for an ELSE clause.
+              if (i < end) {
+                const peek = lines[i].toUpperCase().trim();
+                if (peek === 'ELSE' || peek.startsWith('ELSE ')) {
+                  // ELSE inline action OR ELSE DO ... END
+                  const elseLine = lines[i].substring(lines[i].toUpperCase().indexOf('ELSE') + 4).trim();
+                  if (elseLine.toUpperCase() === 'DO' || elseLine.toUpperCase().startsWith('DO ')) {
+                    let edepth = 1;
+                    let escan = i + 1;
+                    while (escan < end && edepth > 0) {
+                      const eu = lines[escan].toUpperCase().trim();
+                      if (eu === 'DO' || eu.startsWith('DO ')) edepth++;
+                      else if (eu.startsWith('SELECT')) edepth++;
+                      else if (eu.endsWith(' THEN DO') || eu.endsWith(' THEN DO;')) edepth++;
+                      else if (eu === 'END' || eu.startsWith('END ')) edepth--;
+                      if (edepth === 0) break;
+                      escan++;
+                    }
+                    if (escan < end) {
+                      if (!condTrue) {
+                        await this.executeLines(lines, i + 1, escan);
+                      }
+                      i = escan + 1;
+                    } else {
+                      i++;
+                    }
+                  } else if (elseLine) {
+                    // Inline ELSE statement
+                    if (!condTrue) await this.executeLine(elseLine);
+                    i++;
+                  } else {
+                    i++;
+                  }
+                }
+              }
+              continue;
+            }
+          } else {
+            // Inline THEN — single statement. Run it (or skip).
+            if (condTrue) await this.executeLine(action.trim());
+            i++;
+            // Peek for ELSE.
+            if (i < end) {
+              const peek = lines[i].toUpperCase().trim();
+              if (peek === 'ELSE' || peek.startsWith('ELSE ')) {
+                const elseLine = lines[i].substring(lines[i].toUpperCase().indexOf('ELSE') + 4).trim();
+                if (elseLine && !condTrue) await this.executeLine(elseLine);
+                i++;
+              }
+            }
+            continue;
+          }
+        }
+      }
+
       // Single-line commands
       await this.executeLine(line);
       i++;
@@ -3118,12 +3206,18 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
       let cursor = bodyStart;
       if (action.toUpperCase() === 'DO') {
         // DO ... END block — find the matching END by counting nesting.
+        // Recognise `IF X THEN DO` and `WHEN X THEN DO` as block openers
+        // too — without that, a SELECT body with nested IF/THEN/DO/END
+        // (the STNG.Rexx option-3 shape) finds its END at the inner
+        // IF's terminator, runs only part of the body, then leaks the
+        // rest as top-level statements.
         let depth = 1;
         let scan = bodyStart;
         while (scan < bodyEnd && depth > 0) {
           const u = lines[scan].toUpperCase().trim();
           if (u === 'DO' || u.startsWith('DO ')) depth++;
           else if (u.startsWith('SELECT')) depth++;
+          else if (u.endsWith(' THEN DO') || u.endsWith(' THEN DO;')) depth++;
           else if (u === 'END' || u.startsWith('END ')) depth--;
           if (depth === 0) break;
           scan++;
@@ -3169,12 +3263,14 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
         } else {
           // Skip this WHEN's body (matched already, or condition false).
           if (action.toUpperCase() === 'DO') {
-            // Skip to matching END.
+            // Skip to matching END. Same depth rules as runClauseBody —
+            // count `IF X THEN DO` etc as openers.
             let depth = 1;
             while (i < endIndex && depth > 0) {
               const u = lines[i].toUpperCase().trim();
               if (u === 'DO' || u.startsWith('DO ')) depth++;
               else if (u.startsWith('SELECT')) depth++;
+              else if (u.endsWith(' THEN DO') || u.endsWith(' THEN DO;')) depth++;
               else if (u === 'END' || u.startsWith('END ')) depth--;
               i++;
               if (depth === 0) break;
@@ -3508,8 +3604,6 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
     // never exited, V8's Map maxed out at 16M stem entries, the
     // script crashed with "Map maximum size exceeded".
     if (c.length > 1 && (c.startsWith('~') || c.startsWith('\\') || c.startsWith('^')) && c[1] !== '=') {
-      // `~=` is the inequality operator handled below — only treat
-      // as unary NOT when the next char isn't `=`.
       return !(await this.evaluateCondition(c.substring(1).trim()));
     }
     // Comparison operators (order matters - check multi-char first)
