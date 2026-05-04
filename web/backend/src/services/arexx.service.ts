@@ -2428,10 +2428,25 @@ console.log(`Label registered: ${label} at line ${i}`);
       if (this.signalRequested) {
         const targetLine = this.labels.get(this.signalLabel.toUpperCase());
         if (targetLine !== undefined) {
-          i = targetLine + 1; // Jump to line after label
-          this.signalRequested = false;
-          this.signalLabel = '';
-          continue;
+          // Only consume the signal here if the target is within
+          // OUR line range. When a recursive frame (WHEN body, IF
+          // body, DO body) sees a signal whose label is OUTSIDE
+          // its slice, we MUST let the flag propagate up so the
+          // outer executeLines can jump there. Without this guard
+          // STNG.Rexx's option-3 fired `signal CRSTNG` inside the
+          // SELECT WHEN body; the inner executeLines cleared the
+          // flag while jumping to CRSTNG (which sat past its
+          // endIndex), the outer loop then ran the post-SELECT
+          // `signal BEGIN` statement and overwrote the goto target.
+          if (targetLine >= startIndex && targetLine < end) {
+            i = targetLine + 1; // Jump to line after label
+            this.signalRequested = false;
+            this.signalLabel = '';
+            continue;
+          }
+          // Target is outside this slice — break out, leave flag
+          // set so the parent frame can do the jump.
+          break;
         }
         // No label — clear the request and exit cleanly.
         this.signalRequested = false;
