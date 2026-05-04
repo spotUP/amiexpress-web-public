@@ -5,6 +5,7 @@ import {
   handleMessagePrivateInput,
   processToRecipient,
   getConfMailName,
+  isSysopRecipient,
 } from '../../../src/handlers/message/message-entry.handler';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
 
@@ -170,6 +171,29 @@ describe('processToRecipient — express.e:10802 EALL exact match', () => {
     await processToRecipient(socket, session, 'eall');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     expect(session.tempData).toBeUndefined();
+  });
+});
+
+describe('isSysopRecipient — express.e:9919 stringCompare(name, sysop.name)', () => {
+  // express.e:9918-9919 loadAccount(1, ...) + stringCompare(name, tempUser.name).
+  // The check matches the configured slot-1 user, not just the literal token
+  // 'SYSOP' — so a reply to a sysop-authored message under sysop_name='Spot'
+  // must still trigger FORWARDMAIL redirect.
+  test("literal 'SYSOP' (any case) is recognized", () => {
+    expect(isSysopRecipient('SYSOP')).toBe(true);
+    expect(isSysopRecipient('sysop')).toBe(true);
+    expect(isSysopRecipient('Sysop')).toBe(true);
+  });
+
+  test('whitespace around literal is tolerated', () => {
+    expect(isSysopRecipient('  sysop  ')).toBe(true);
+  });
+
+  test('non-sysop names are rejected', () => {
+    expect(isSysopRecipient('Alice')).toBe(false);
+    expect(isSysopRecipient('')).toBe(false);
+    // bbsConfig.sysop_name lookup may fail in this test env; that's OK,
+    // it falls back to literal-only matching (return false).
   });
 });
 

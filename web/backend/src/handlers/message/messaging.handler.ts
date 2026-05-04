@@ -622,10 +622,15 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     let toUser = msg.author;
     const confId = session.currentConf || 1;
     const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+    const { isSysopRecipient } = require('./message-entry.handler');
     const flags = getConferenceToolFlags(confId);
     const fwdUser = flags?.forwardMail || '';
     let forwardingNotice = '';
-    if (fwdUser && (toUser || '').toUpperCase() === 'SYSOP') {
+    // express.e:9919 stringCompare(name, tempUser.name) — slot 1's userName,
+    // not just the literal token 'SYSOP'. The original mail's fromName for
+    // a sysop-authored message is whatever sysop_name is configured, so the
+    // literal-only check missed those replies.
+    if (fwdUser && isSysopRecipient(toUser)) {
       forwardingNotice = `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`;
       toUser = fwdUser;
     }

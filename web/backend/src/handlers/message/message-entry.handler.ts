@@ -127,8 +127,30 @@ export function getConfMailName(session: BBSSession): string {
 }
 
 /**
- * express.e:9909-9950 checkToForward — when the conf has FORWARDMAIL=<user>
- * tooltype set AND the recipient is the sysop (slot 1), redirect the message
+ * Express.e:9918-9919 — `loadAccount(1, tempUser, ...)` then
+ * `stringCompare(name, tempUser.name)`. The "is this the sysop?" check
+ * matches the slot-1 user (the actual configured sysop), not just the
+ * literal token 'SYSOP'. We accept either the literal 'SYSOP'
+ * (handleMessageToInput maps that to slot 1) OR a case-insensitive
+ * match against bbsConfig.sysop_name (vanilla AmiExpress sets slot 1's
+ * userName from this config field).
+ */
+export function isSysopRecipient(name: string): boolean {
+  const trimmed = (name || '').trim();
+  if (trimmed.toUpperCase() === 'SYSOP') return true;
+  try {
+    const { loadBBSConfig } = require('../../services/bbs-config-file.service');
+    const { config } = require('../../config');
+    const bbsConfig = loadBBSConfig(config.get('dataDir'));
+    const sysopName = String(bbsConfig?.sysop_name || '').trim();
+    if (sysopName && sysopName.toLowerCase() === trimmed.toLowerCase()) return true;
+  } catch { /* config load failed — fall back to literal SYSOP only */ }
+  return false;
+}
+
+/**
+ * express.e:9909-9950 checkToForward(check=1) — when the conf has
+ * FORWARDMAIL=<user> tooltype set AND the recipient is the sysop, redirect
  * to <user> and print "    Forwarding mail To: <name>".
  *
  * Mutates session.tempData.messageEntry.toUser in place. Caller should run
@@ -142,11 +164,7 @@ function applyConfForwardMail(socket: any, session: BBSSession): void {
   const flags = getConferenceToolFlags(confId);
   const fwdUser = flags?.forwardMail || '';
   if (!fwdUser) return;
-  // express.e:9919 stringCompare(name, sysop.name) — recipient is the sysop?
-  // We accept either the literal token 'SYSOP' (handleMessageToInput maps to
-  // slot 1) or a case-insensitive match against the slot-1 username if known.
-  const toUpper = (entry.toUser || '').toUpperCase();
-  if (toUpper === 'SYSOP') {
+  if (isSysopRecipient(entry.toUser)) {
     entry.toUser = fwdUser;
     emitText(socket, `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`);
   }
@@ -900,10 +918,18 @@ console.error('[Webhook] Error sending new message webhook:', error);
 
     // express.e:9898-9903 (replyToMSG): after saving, prompt "Delete original message (y/N)?"
     // only if user has DELETE permission AND original message was addressed to current user.
+    //
+    // express.e compares against confMailName (the per-conference display
+    // name picked by NAME_TYPE_USERNAME/REALNAME/INTERNETNAME — see
+    // express.e:12459-12466 + 9899). For REALNAME conferences the original
+    // mail's `toName` is the user's real name, NOT their login username,
+    // so the previous comparison against session.user.username silently
+    // suppressed the delete-original prompt.
     const replyOriginalToUser: string = entry.replyOriginalToUser || '';
+    const myConfMailName = getConfMailName(session);
     if (
       replyOriginalToUser &&
-      replyOriginalToUser.toLowerCase() === (session.user?.username || '').toLowerCase() &&
+      replyOriginalToUser.toLowerCase() === myConfMailName.toLowerCase() &&
       checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
     ) {
       emitText(socket, 'Delete original message \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
