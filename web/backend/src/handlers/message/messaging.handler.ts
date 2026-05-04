@@ -168,16 +168,29 @@ console.log('[ENV] Mail - Read');
       continue; // Skip corrupted/missing files
     }
 
-    // express.e:12344-12349 — privateFlag logic:
-    // Private if: status R/p AND no SYSOP_READ AND toName≠user AND toName≠eall/all AND fromName≠user
+    // express.e:12344-12349 privateFlag logic:
+    //   IF (status="R" OR status="p") AND Not(SYSOP_READ)
+    //     IF (toName != confMailName)
+    //     AND (toName != 'eall' OR Not(READ_PRIV_EALL))
+    //     AND (toName != 'all'  OR Not(READ_PRIV_ALL))
+    //     AND (fromName != confMailName)
+    //       privateFlag := 1   (suppress this msg)
+    //
+    // confMailName is the per-conference display name, NOT the raw login
+    // username — REALNAME/INTERNETNAME conferences use the user's real or
+    // internet name for the toName/fromName comparison.
     const toL   = (message.to || '').toLowerCase();
     const fromL = (message.from || '').toLowerCase();
+    const { getConfMailName } = require('./message-entry.handler');
+    const myConfMailName = getConfMailName(session).toLowerCase();
     const isSysop = checkSecurity(session.user, ACSPermission.SYSOP_READ);
+    const hasReadPrivEall = checkSecurity(session.user, ACSPermission.READ_PRIV_EALL);
+    const hasReadPrivAll  = checkSecurity(session.user, ACSPermission.READ_PRIV_ALL);
     const canRead = !message.isPrivate ||
                     isSysop ||
-                    (username && (toL === username || fromL === username)) ||
-                    toL === 'eall' ||
-                    toL === 'all';
+                    (myConfMailName && (toL === myConfMailName || fromL === myConfMailName)) ||
+                    (toL === 'eall' && hasReadPrivEall) ||
+                    (toL === 'all'  && hasReadPrivAll);
     if (canRead) {
       messages.push({
         id: msgNum,
@@ -605,13 +618,34 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
   // R - Reply - express.e:9874-9907 replyToMSG()
   if (command === 'R') {
+    const msg = messages[currentIndex];
+
+    // express.e:11201-11211 reply auth gate (parallel to F):
+    //   IF (privateFlag=0)
+    //   OR stringCompare(toName, confMailName)=SUCCESS
+    //   OR StrCmp(toName, 'EALL', 5)
+    //   ...captureRealAndInternetNames + replyToMSG
+    //   ELSE 'Not your message.'
+    // confMailName = per-conf display name (REALNAME/INTERNETNAME/USERNAME).
+    // EALL allowed because it's group-addressed.
+    const { getConfMailName, captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
+    const myConfMailNameR = getConfMailName(session).toLowerCase();
+    const toLowerR = (msg.toUser || '').toLowerCase();
+    const canReply = !msg.isPrivate ||
+                     toLowerR === myConfMailNameR ||
+                     toLowerR === 'all' ||
+                     toLowerR === 'eall';
+    if (!canReply) {
+      emitText(socket, '\r\nNot your message.\r\n');
+      displayMessageNavigationPrompt(socket, session);
+      return;
+    }
+
     // express.e:12162 captureRealAndInternetNames before replyToMSG
-    const { captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
     if (typeof captureNames === 'function' && !captureNames(socket, session)) {
       displayMessageNavigationPrompt(socket, session);
       return;
     }
-    const msg = messages[currentIndex];
 
     // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
     emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
@@ -681,10 +715,14 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   if (command === 'K') {
     const msg = messages[currentIndex];
     const msgNum = (msg as any).msgNumber || msg.id;
-    const username = (session.user?.username || '').toLowerCase();
+    const { getConfMailName } = require('./message-entry.handler');
+    const myConfMailName = getConfMailName(session).toLowerCase();
 
     // express.e:11125: IF((privateFlag=0) OR (stringCompare(mailHeader.toName,confMailName)=SUCCESS))
-    const authorised = !msg.isPrivate || (msg.toUser || '').toLowerCase() === username;
+    // confMailName is the per-conference display name (NAME_TYPE_USERNAME/
+    // REALNAME/INTERNETNAME), NOT the raw login username. In REALNAME
+    // conferences the original mail's toName is the user's real name.
+    const authorised = !msg.isPrivate || (msg.toUser || '').toLowerCase() === myConfMailName;
     if (!authorised) {
       // express.e:11134: aePuts('Not your message.\b\n') then JUMP contloop
       emitText(socket, '\r\nNot your message.\r\n');
@@ -729,18 +767,27 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       return;
     }
     const msg = messages[currentIndex];
-    // Check if user can forward this message:
-    // - Public messages (not private)
-    // - Private messages to you
-    // - Messages to ALL
-    if (!msg.isPrivate || msg.toUser === session.user.username || msg.toUser === 'ALL') {
+    // express.e:11179 forward auth:
+    //   IF (privateFlag=0)
+    //   OR stringCompare(toName, confMailName)=SUCCESS
+    //   OR StrCmp(toName, 'EALL', 5)
+    // confMailName = per-conf display name (REALNAME / INTERNETNAME / USERNAME).
+    // EALL is allowed because it's a group recipient, not a single user.
+    const { getConfMailName } = require('./message-entry.handler');
+    const myConfMailName = getConfMailName(session).toLowerCase();
+    const toLower = (msg.toUser || '').toLowerCase();
+    const isEallAddressed = toLower === 'eall';
+    const isAddressedToMe = toLower === myConfMailName;
+    const isAddressedToAll = toLower === 'all';
+    const canForward = !msg.isPrivate || isAddressedToMe || isAddressedToAll || isEallAddressed;
+    if (canForward) {
       // Store original message for forwarding
       session.tempData.forwardOriginalMessage = msg;
       session.tempData.forwardOriginalIndex = currentIndex;
       session.tempData.forwardData = {
         originalToUser: msg.toUser,
         originalSubject: msg.subject,
-        canDeleteOriginal: msg.toUser === session.user.username && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
+        canDeleteOriginal: isAddressedToMe && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
       };
 
       // Prompt for recipient (express.e:9816: msgToHeader())
@@ -760,13 +807,20 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   if (command === 'D' && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     const msg = messages[currentIndex];
 
-    // express.e deleteMSG:11917-11921: secStatus<210 requires fromName=user OR toName=user
-    // (sysop secStatus≥210 bypasses check)
-    const username = session.user.username.toLowerCase();
+    // express.e:11114 prompt-level check:
+    //   IF (privateFlag=0) OR (stringCompare(toName, confMailName)=SUCCESS)
+    // express.e:11917-11921 deleteMSG inner check (secStatus<210):
+    //   IF stringCompare(fromName, confMailName)=SUCCESS THEN goAheadDel
+    //   IF stringCompare(toName,   confMailName)=SUCCESS THEN goAheadDel
+    //   ELSE 'Message not deleted, not your mail.'
+    // Both compare against confMailName (per-conf display name), not the
+    // raw login username — REALNAME/INTERNETNAME conferences need this.
+    const { getConfMailName } = require('./message-entry.handler');
+    const myConfMailName = getConfMailName(session).toLowerCase();
     const canDelete = (checkSecurity(session.user, ACSPermission.SYSOP_READ)) ||
       !msg.isPrivate ||
-      (msg.author || '').toLowerCase() === username ||
-      (msg.toUser || '').toLowerCase() === username;
+      (msg.author || '').toLowerCase() === myConfMailName ||
+      (msg.toUser || '').toLowerCase() === myConfMailName;
     if (canDelete) {
       // Delete the message
       const msgNum = (msg as any).msgNumber || msg.id;
