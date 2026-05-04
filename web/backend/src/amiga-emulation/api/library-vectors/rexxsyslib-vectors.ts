@@ -92,6 +92,29 @@ export const REXXSYSLIB_VECTORS: LibraryVector[] = [
     },
   },
   {
+    // Commodore rexxsyslib's private MsgPort initialiser. Generated LVO
+    // tables mislabel this as utility.library AllocNamedObjectA; in the
+    // shipped AmiExpress RexxMast binary it's a "build named MsgPort"
+    // helper that takes A0=port-struct-buffer + A1=name string, sets
+    // ln_Type/ln_Name/mp_*, and returns the port pointer in BOTH D0
+    // and A1 so the immediately-following JSR -354(A6) AddPort sees
+    // the port in A1. Without this the daemon's AREXX port never lands
+    // in publicPorts.
+    offset: -228,
+    name: 'InitRexxPort',
+    handler: (emu, lib: RexxSysLibLibrary) => {
+      const portAddr = emu.getRegister(8) >>> 0; // A0
+      const nameAddr = emu.getRegister(9) >>> 0; // A1
+      const sigBit = lib.initRexxPort(portAddr, nameAddr);
+      // Side effect: AmiExpress's RexxMast expects A1 = port on return
+      // so the next AddPort fires with the correct register layout.
+      // (D0 = sigbit per initRexxPort's contract — the daemon does
+      // `BSET D0,D7` to build its Wait mask.)
+      emu.setRegister(9, portAddr); // A1 = port
+      return sigBit; // D0 = sigbit
+    },
+  },
+  {
     offset: -450,
     name: 'LockRexxBase',
     handler: (emu, lib: RexxSysLibLibrary) => {

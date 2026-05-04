@@ -1774,6 +1774,18 @@ console.log(
           )} (exit trap), not setting return address`
         );
       }
+    } else if (vector.name === "CreateProc" && currentPC !== pc) {
+      // CreateProc with a registered override (e.g. RexxMastService
+      // trampolining the rexxmaster daemon SegList) sets PC itself to
+      // the new "process" entry. Skip the returnAddr overwrite so the
+      // daemon actually runs instead of returning into the launcher.
+      // Default door-side CreateProc returns 0 + leaves PC == pc, so
+      // it falls through to the normal else-branch below.
+      if (DEBUG_LIBRARY_TRAPS) {
+console.log(
+          `[LibraryTraps] CreateProc: PC trampolined to 0x${currentPC.toString(16)}, not setting return address`
+        );
+      }
     } else {
       if (DEBUG_LIBRARY_TRAPS) {
 console.log(
@@ -1897,6 +1909,7 @@ console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
     }
 
     // Call the handler
+    const pcBeforeHandler = this.emulator.getRegister(16);
     const result = (vector.handler as any)(this.emulator, library, returnAddr);
 
     // Set return value in D0
@@ -1984,6 +1997,14 @@ console.log(
           `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
             16
           )} (exit trap), not setting return address`
+        );
+      }
+    } else if (vector.name === "CreateProc" && currentPC !== pcBeforeHandler) {
+      // CreateProc trampoline (RexxMastService) — handler set PC; skip
+      // returnAddr overwrite. See matching block in handleTrap.
+      if (DEBUG_LIBRARY_TRAPS) {
+console.log(
+          `[LibraryTraps] CreateProc: PC trampolined to 0x${currentPC.toString(16)}, not setting return address`
         );
       }
     } else {

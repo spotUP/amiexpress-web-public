@@ -36,6 +36,7 @@ import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe.util';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
+import { processMci as processMciTokenizer, type MciDispatchMap, applyMciWidth } from '../utils/mci-tokenizer.util';
 
 /**
  * Detect if content is an ANSI animation that should play at modem speed
@@ -604,29 +605,17 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
     parsed = parsed.replace(/%NODELIST/g, nodeList);
   }
 
-  // User Information Codes (express.e:5291-5400)
-  // All replacements use replacer functions to support optional numeric field widths (~10N etc.)
-  parsed = parsed.replace(mciRegex('N'), (_, d) => applyWidth(username, d));
-  parsed = parsed.replace(/~N(?=\s|$)/g, username);
-  parsed = parsed.replace(mciRegex('P'), '');
-  parsed = parsed.replace(mciRegex('UL'), (_, d) => applyWidth(user.location || '', d));
-  parsed = parsed.replace(mciRegex('#'), (_, d) => applyWidth(user.phoneNumber || '', d));
-  parsed = parsed.replace(mciRegex('TC'), (_, d) => applyWidth(timesCalled.toString(), d));
-  parsed = parsed.replace(mciRegex('TT'), (_, d) => applyWidth((user.callsToday || 0).toString(), d));
+  // User Information + System Info Codes (express.e:5290-5410)
+  // Routed through the 1:1 processMci tokenizer port. The previous
+  // regex pipeline required an explicit `|` terminator (`~N|`); real
+  // express.e accepts space OR `|` OR end-of-line as the terminator,
+  // so screens like Logon24hrs.txt's `~N.` produced wrong output.
+  // The tokenizer also handles fall-through behaviour: unknown codes
+  // leave the suffix as plain text instead of preserving the `~`.
+
   const lcRaw = user.lastLogin || user.timeLastOn;
   const lcDate: Date | null = lcRaw instanceof Date ? lcRaw : (lcRaw ? new Date(lcRaw) : null);
-  parsed = parsed.replace(mciRegex('LC'), (_, d) => applyWidth(lcDate ? formatLongDateTime(lcDate) : 'Never', d));
-  parsed = parsed.replace(mciRegex('M'), (_, d) => applyWidth(messagesPosted.toString(), d));
-  parsed = parsed.replace(mciRegex('A'), (_, d) => applyWidth(secLevel.toString(), d));
-  parsed = parsed.replace(mciRegex('S'), (_, d) => applyWidth(user.id?.toString() || '0', d));
-  parsed = parsed.replace(mciRegex('CA'), (_, d) => applyWidth(user.confAccess || 'XXX', d));
-  parsed = parsed.replace(mciRegex('BR'), (_, d) => applyWidth('57600', d));
-  parsed = parsed.replace(mciRegex('HW'), (_, d) => applyWidth('Web Browser', d));
-  parsed = parsed.replace(mciRegex('TL'), (_, d) => applyWidth(Math.floor((user.dailyTimeLimit || 120) / 60).toString(), d));
-  parsed = parsed.replace(mciRegex('TR'), (_, d) => applyWidth(Math.floor(session.timeRemaining / 60).toString(), d));
-  // express.e:5351-5358: ~UB/~DB use formatBCD() which comma-formats the byte count
-  parsed = parsed.replace(mciRegex('UB'), (_, d) => applyWidth(formatWithCommas(uploadBytes), d));
-  parsed = parsed.replace(mciRegex('DB'), (_, d) => applyWidth(formatWithCommas(downloadBytes), d));
+
   // ~SU / ~SD - Upload/Download Size (express.e:5359-5366) - calcSizeText()
   // express.e calcSizeText() divides by 1024 repeatedly until value < 1024,
   // appending lowercase unit suffix: b, kb, mb, gb, tb, pb (MiscFuncs.e:3336-3370)
@@ -640,25 +629,9 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
     }
     return `${val}${units[i]}`;
   };
-  parsed = parsed.replace(mciRegex('SU'), (_, d) => applyWidth(calcSizeText(uploadBytes), d));
-  parsed = parsed.replace(mciRegex('SD'), (_, d) => applyWidth(calcSizeText(downloadBytes), d));
-  parsed = parsed.replace(mciRegex('FU'), (_, d) => applyWidth(uploads.toString(), d));
-  parsed = parsed.replace(mciRegex('FD'), (_, d) => applyWidth(downloads.toString(), d));
-  parsed = parsed.replace(mciRegex('BD'), (_, d) => applyWidth((user.byteLimit || 0).toString(), d));
-  const nodeNumStr = (session.nodeId || 1).toString();
-  parsed = parsed.replace(mciRegex('ON'), (_, d) => applyWidth(nodeNumStr, d));
-  parsed = parsed.replace(mciRegex('LG'), (_, d) => applyWidth(nodeNumStr, d));
-  parsed = parsed.replace(mciRegex('IN'), (_, d) => applyWidth(user.email || '', d));
-  parsed = parsed.replace(mciRegex('RN'), (_, d) => applyWidth(user.realName || username, d));
-
-  // Conference Information (express.e:5413-5427)
-  parsed = parsed.replace(mciRegex('CF'), (_, d) => applyWidth(((session.currentConf || 0) + 1).toString(), d));
-  parsed = parsed.replace(mciRegex('CN'), (_, d) => applyWidth(session.currentConfName || 'Main', d));
-
-  const currentMsgBase = session.currentMsgBase || 1;
-  parsed = parsed.replace(mciRegex('MB'), (_, d) => applyWidth(currentMsgBase.toString(), d));
 
   let msgBaseName = 'Default';
+  const currentMsgBase = session.currentMsgBase || 1;
   try {
     const messageBases = await db.getMessageBases(session.currentConf);
     if (messageBases.length > 0 && currentMsgBase <= messageBases.length) {
@@ -669,22 +642,60 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     SysopDebugUtil.debug(null, session, 'MCI', 'Error parsing ~MN| (message base name)',
       { error: (error as Error).message }, DebugSeverity.WARNING);
   }
-  parsed = parsed.replace(mciRegex('MN'), (_, d) => applyWidth(msgBaseName, d));
 
-  parsed = parsed.replace(mciRegex('CT'), (_, d) => applyWidth(formatLongTime(logonDate), d));
-  parsed = parsed.replace(mciRegex('VD'), (_, d) => applyWidth('2.00', d));
-  parsed = parsed.replace(mciRegex('VE'), (_, d) => applyWidth('AmiExpress-Web 2.0', d));
-
-  parsed = parsed.replace(mciRegex('ND'), (_, d) => applyWidth((session.nodeId || 1).toString(), d));
-  parsed = parsed.replace(mciRegex('DT'), (_, d) => applyWidth(formatLongDate(now), d));
-  parsed = parsed.replace(mciRegex('OT'), (_, d) => applyWidth(formatLongTime(logonDate), d));
-  parsed = parsed.replace(mciRegex('OD'), (_, d) => applyWidth(formatLongDate(logonDate), d));
-
-  // ~SC - System Calls Today (express.e:5407)
-  // Use SystemStatsService to get real call count
   const { systemStats } = await import('../services/SystemStatsService');
   const todayCalls = systemStats.getTodayCalls();
-  parsed = parsed.replace(mciRegex('SC'), (_, d) => applyWidth(todayCalls.toString(), d));
+  const nodeNumStr = (session.nodeId || 1).toString();
+
+  const userInfoDispatch: MciDispatchMap = {
+    // User core (express.e:5292-5306)
+    N:  (w) => applyMciWidth(username, w),
+    P:  ()  => '',                                     // password — never substitute
+    UL: (w) => applyMciWidth(user.location || '', w),
+    '#':(w) => applyMciWidth(user.phoneNumber || '', w),
+    // Counts + history (express.e:5307-5330)
+    TC: (w) => applyMciWidth(timesCalled.toString(), w),
+    TT: (w) => applyMciWidth((user.callsToday || 0).toString(), w),
+    LC: (w) => applyMciWidth(lcDate ? formatLongDateTime(lcDate) : 'Never', w),
+    M:  (w) => applyMciWidth(messagesPosted.toString(), w),
+    A:  (w) => applyMciWidth(secLevel.toString(), w),
+    S:  (w) => applyMciWidth(user.id?.toString() || '0', w),
+    CA: (w) => applyMciWidth(user.confAccess || 'XXX', w),
+    BR: (w) => applyMciWidth('57600', w),
+    HW: (w) => applyMciWidth('Web Browser', w),
+    // Time (express.e:5343-5350)
+    TL: (w) => applyMciWidth(Math.floor((user.dailyTimeLimit || 120) / 60).toString(), w),
+    TR: (w) => applyMciWidth(Math.floor(session.timeRemaining / 60).toString(), w),
+    // Bytes / files (express.e:5351-5378)
+    UB: (w) => applyMciWidth(formatWithCommas(uploadBytes), w),
+    DB: (w) => applyMciWidth(formatWithCommas(downloadBytes), w),
+    SU: (w) => applyMciWidth(calcSizeText(uploadBytes), w),
+    SD: (w) => applyMciWidth(calcSizeText(downloadBytes), w),
+    FU: (w) => applyMciWidth(uploads.toString(), w),
+    FD: (w) => applyMciWidth(downloads.toString(), w),
+    BD: (w) => applyMciWidth((user.byteLimit || 0).toString(), w),
+    // Node + identity (express.e:5379-5390)
+    ON: (w) => applyMciWidth(nodeNumStr, w),
+    LG: (w) => applyMciWidth(nodeNumStr, w),
+    IN: (w) => applyMciWidth(user.email || '', w),
+    RN: (w) => applyMciWidth(user.realName || username, w),
+    // Conference info (express.e:5413-5427)
+    CF: (w) => applyMciWidth(((session.currentConf || 0) + 1).toString(), w),
+    CN: (w) => applyMciWidth(session.currentConfName || 'Main', w),
+    MB: (w) => applyMciWidth(currentMsgBase.toString(), w),
+    MN: (w) => applyMciWidth(msgBaseName, w),
+    // Logon / system clocks (express.e:5391-5402)
+    CT: (w) => applyMciWidth(formatLongTime(logonDate), w),
+    VD: (w) => applyMciWidth('2.00', w),
+    VE: (w) => applyMciWidth('AmiExpress-Web 2.0', w),
+    ND: (w) => applyMciWidth((session.nodeId || 1).toString(), w),
+    DT: (w) => applyMciWidth(formatLongDate(now), w),
+    OT: (w) => applyMciWidth(formatLongTime(logonDate), w),
+    OD: (w) => applyMciWidth(formatLongDate(logonDate), w),
+    SC: (w) => applyMciWidth(todayCalls.toString(), w),
+  };
+
+  parsed = processMciTokenizer(parsed, userInfoDispatch, mciTerminator);
 
   // File Area Codes - Flagged Files (express.e:5439-5454)
   // ~FC - Flagged Files Count (express.e:5442-5445 returns flagFilesList.count())

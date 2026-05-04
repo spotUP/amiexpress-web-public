@@ -144,8 +144,8 @@ export function detectNativeAREXX(force = false): NativeAREXXDetection {
   }
 
   cachedDetection = {
-    available: false, // Phase 5 flips this once executeScript is wired
-    reason: 'binaries parsed successfully, awaiting Phase 5 wire-up',
+    available: true,
+    reason: 'binaries parsed; native engine wired (real ABI + bridged dispatch)',
     rexxMastPath,
     rexxsysLibPath,
   };

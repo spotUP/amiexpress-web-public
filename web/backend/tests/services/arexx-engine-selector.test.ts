@@ -27,13 +27,12 @@ describe('AREXX engine selector — #78 Phase 1', () => {
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
   });
 
-  test('Phase 1 contract: available=false even when binaries present + parseable', () => {
-    // Phase 3a upgrade: detection now ALSO parses the hunks. Synthesise
-    // a minimal valid hunk file (HUNK_HEADER + 1-longword HUNK_CODE +
-    // HUNK_END). Parsing must succeed; the engine STILL reports
-    // unavailable because Phase 5 dispatch isn't wired yet. Locks the
-    // no-regression contract — no future change should flip the flag
-    // before Phase 5 lands.
+  test('Phase 7 contract: available=true once binaries parse (native engine wired)', () => {
+    // Phase 3a parses the hunks; Phase 7 wires the native dispatch
+    // through bridged execution (real CreateRexxMsg / PutMsg ABI
+    // handshake against rexxsyslib + RexxMast, script body run via
+    // TS interpreter, real ReplyMsg). With both binaries present and
+    // parsing cleanly, the engine selector should pick native.
     const buf = Buffer.alloc(40);  // exactly enough; trailing zeros are
                                     // read as unknown hunk types after HUNK_END
     let o = 0;
@@ -56,8 +55,8 @@ describe('AREXX engine selector — #78 Phase 1', () => {
     fs.writeFileSync(path.join(tmpDataDir, 'Libs/rexxsyslib.library'), buf);
 
     const det = detectNativeAREXX(true);
-    expect(det.available).toBe(false);
-    expect(det.reason).toMatch(/Phase 5/);
+    expect(det.available).toBe(true);
+    expect(det.reason).toMatch(/native engine wired/);
     expect(det.rexxMastPath).toContain('System/RexxMast');
     expect(det.rexxsysLibPath).toContain('rexxsyslib.library');
   });

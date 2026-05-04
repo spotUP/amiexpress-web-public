@@ -154,3 +154,147 @@ describe('RexxMastService — Phase 3b skeleton lifecycle', () => {
     expect(s.lastError).toMatch(/hunk parse failed/);
   });
 });
+
+/**
+ * #78 Phase 6 — Amiga env wiring around RexxMast.
+ *
+ * These assertions only fire when start() succeeds — i.e. when the dev
+ * machine has both a Kickstart ROM and the sysop-supplied RexxMast +
+ * rexxsyslib.library binaries on disk. CI without those skips the
+ * assertions but still exercises the path so a regression in start()
+ * still trips the existing top-level suite.
+ *
+ * Why this is the right shape: Phase 6 is "wire the missing Amiga env"
+ * — every assertion below pins one concrete invariant that, if broken,
+ * would re-introduce the original bug (RexxMast running but not
+ * trapping any library calls). Together they lock the contract that:
+ *   1. ExecBase + low-memory pointers are written
+ *   2. dos.library is opened and its trap vectors are armed
+ *   3. RexxMast has a Process struct that FindTask(0) resolves
+ *   4. The Process is tagged NT_PROCESS (not NT_TASK) and pr_TaskNum=1
+ *   5. The MOIRA trap address set is synced (catches the
+ *      syncTrapAddressesToMoira-not-called regression specifically)
+ */
+describe('RexxMastService — #78 Phase 6 env wiring', () => {
+  let tmpDataDir: string;
+  let rexxBootSucceeded = false;
+
+  beforeAll(async () => {
+    // Use the project root as dataDir so the sysop's actual RexxMast +
+    // rexxsyslib.library + Kickstart ROM are picked up. The repo ships
+    // these files in System/, Libs/, and data/amiga-roms/.
+    const repoRoot = path.resolve(__dirname, '../../../..');
+    const { config } = require('../../src/config');
+    config.set('dataDir', repoRoot);
+    tmpDataDir = repoRoot;
+    _resetNativeAREXXDetectionCache();
+    rexxMastService._reset();
+    rexxBootSucceeded = await rexxMastService.start();
+  });
+
+  afterAll(async () => {
+    await rexxMastService.stop();
+  });
+
+  test('ExecBase pointer is written at low-memory 0x4 (regression: initialize() not called)', () => {
+    if (!rexxBootSucceeded) return;
+    const emu = rexxMastService._getEmulator();
+    expect(emu).not.toBeNull();
+    // ExecBase lives at 0x80000; the low-memory pointer at 0x4 must
+    // resolve to it so RexxMast's `MOVEA.L 4.W,A6` finds ExecBase.
+    const ptr = emu.readMemory32(0x4) >>> 0;
+    expect(ptr).toBe(0x80000);
+  });
+
+  test('dos.library is registered (regression: dos vectors never armed)', () => {
+    if (!rexxBootSucceeded) return;
+    const status = rexxMastService.getStatus();
+    expect(status.started).toBe(true);
+    // ExecLibrary.libraries is populated by openLibraryHybrid for both
+    // canonical "dos.library" and any case variants.
+    const emu = rexxMastService._getEmulator();
+    expect(emu).not.toBeNull();
+    // dos.library opens at a known stub address; libraryLoader resolves
+    // it to the ROM-resident base (typically 0xb0000) when Kickstart is
+    // available. Either way the LVO trap at -498 (PutStr) must be an
+    // ILLEGAL instruction — otherwise dos.library calls go to garbage.
+    const dosBase = (rexxMastService as any).execLibrary?.getLibraryBase('dos.library') >>> 0;
+    expect(dosBase).toBeGreaterThan(0);
+    const trapInstr = emu.readMemory16(dosBase + (-30 & 0xffffffff)) >>> 0;
+    // -30 = LVO Open. Should be 0x4afc (ILLEGAL) per installDOSVectors.
+    expect(trapInstr).toBe(0x4afc);
+  });
+
+  test('rexxMast Process struct is allocated and tagged NT_PROCESS', () => {
+    if (!rexxBootSucceeded) return;
+    const emu = rexxMastService._getEmulator();
+    const taskAddr = rexxMastService._getRexxMastTaskAddr();
+    expect(taskAddr).toBeGreaterThan(0);
+
+    // ln_Type at +0x08 must be NT_PROCESS (13). Default door pattern
+    // sets NT_TASK (1); Phase 6 patches it to NT_PROCESS so RexxMast's
+    // Process-vs-Task discrimination passes.
+    const lnType = emu.readMemory(taskAddr + 0x08) >>> 0;
+    expect(lnType).toBe(13);
+
+    // pr_TaskNum at +0x8C must be 1 (singleton).
+    const taskNum = emu.readMemory32(taskAddr + 0x8c) >>> 0;
+    expect(taskNum).toBe(1);
+
+    // pr_CLI at +0xAC must be 0 (RexxMast called via Workbench-style
+    // entry, not from CLI).
+    const prCli = emu.readMemory32(taskAddr + 0xac) >>> 0;
+    expect(prCli).toBe(0);
+
+    // ln_Name at +0x0a must point at a non-zero string.
+    const namePtr = emu.readMemory32(taskAddr + 0x0a) >>> 0;
+    expect(namePtr).toBeGreaterThan(0);
+  });
+
+  test('FindTask(NULL) resolves to the rexxMast Process (regression: ExecBase.thisTask not updated)', () => {
+    if (!rexxBootSucceeded) return;
+    const taskAddr = rexxMastService._getRexxMastTaskAddr();
+    const emu = rexxMastService._getEmulator();
+    // ExecBase.thisTask lives at execBase + 276 = 0x80114. RexxMast's
+    // entry sequence does `MOVEA.L 0x114(A6),A4` to find its own task.
+    const thisTask = emu.readMemory32(0x80000 + 276) >>> 0;
+    expect(thisTask).toBe(taskAddr);
+  });
+
+  test('exec.library trap vectors are installed at known LVOs', () => {
+    if (!rexxBootSucceeded) return;
+    const emu = rexxMastService._getEmulator();
+    // FindTask LVO = -294 from execBase 0x80000 = 0x7FEDA. Must be
+    // ILLEGAL (0x4afc) so JSR -294(A6) routes to handleTrap.
+    const findTaskTrap = emu.readMemory16(0x80000 - 294) >>> 0;
+    expect(findTaskTrap).toBe(0x4afc);
+    // OpenLibrary LVO = -552 → 0x7FDD8.
+    const openLibTrap = emu.readMemory16(0x80000 - 552) >>> 0;
+    expect(openLibTrap).toBe(0x4afc);
+  });
+
+  test('AMIEXPRESS host port is published before runUntilReady (regression: hostPort wired late)', () => {
+    if (!rexxBootSucceeded) return;
+    const status = rexxMastService.getStatus();
+    expect(status.hostPortAddr).toBeGreaterThan(0);
+    expect(status.hostPortName).toBe('AMIEXPRESS');
+    expect(rexxMastService._readHostPortName()).toBe('AMIEXPRESS');
+  });
+
+  test('runUntilReady reaches AddPort("AREXX") via the CreateProc trampoline', async () => {
+    if (!rexxBootSucceeded) return;
+    // Bring-up calls a chain of exec/dos primitives. The last one we
+    // care about is AddPort with the daemon's port; for AmiExpress's
+    // RexxMast that name is "AREXX" (Commodore stock uses "REXX" — we
+    // match either). Without the CreateProc trampoline this never
+    // fires (launcher loops in LockRexxBase forever); without the
+    // OpenDevice override the daemon bails on "Can't open
+    // timer.device"; without the prefetch refill the first daemon
+    // instruction decodes wrong.
+    const ready = await rexxMastService.runUntilReady(10_000_000);
+    expect(ready).toBe(true);
+    const s = rexxMastService.getStatus();
+    expect(s.ready).toBe(true);
+    expect(s.lastError).toBeNull();
+  }, 30_000);
+});

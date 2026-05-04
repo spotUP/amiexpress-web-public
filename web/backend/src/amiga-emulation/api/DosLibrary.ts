@@ -2825,6 +2825,32 @@ debugLog(
   }
 
   /**
+   * CreateProc override — singleton emulator (e.g. RexxMastService)
+   * registers a callback to "trampoline" instead of failing. Amiga
+   * CreateProc creates a new Process from a SegList that's already in
+   * memory; in our singleton we can't schedule a real second Task, but
+   * we can switch PC to the seglist's entry point so the daemon code
+   * runs in the same emulator context. The callback is responsible
+   * for setting PC + returning the synthetic "process pointer" D0.
+   *
+   * If the callback handles the call, it returns a non-zero "process
+   * pointer" the parent gets in D0, and the trap dispatcher must NOT
+   * overwrite the new PC the callback set — LibraryTraps recognises
+   * "CreateProc" alongside Supervisor/Exit for that purpose.
+   *
+   * Door processes (XIM/SIM/etc) NEVER set this override, so the
+   * default UNSUPPORTED path keeps the existing door behaviour where
+   * doors that try to fork get a clean failure rather than a hang.
+   */
+  private createProcOverride: ((segListBptr: number, namePtr: number, priority: number, stackSize: number) => number) | null = null;
+
+  setCreateProcOverride(
+    cb: ((segListBptr: number, namePtr: number, priority: number, stackSize: number) => number) | null,
+  ): void {
+    this.createProcOverride = cb;
+  }
+
+  /**
    * CreateProc - Create a new process
    * D1 = name
    * D2 = priority
@@ -2834,7 +2860,20 @@ debugLog(
    */
   CreateProc(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
+    const priority = this.emulator.getRegister(CPURegister.D2) | 0; // signed
+    const segListBptr = this.emulator.getRegister(CPURegister.D3) >>> 0;
+    const stackSize = this.emulator.getRegister(CPURegister.D4) >>> 0;
     const name = this.readString(namePtr);
+
+    if (this.createProcOverride) {
+      // Trampoline path. Callback may set PC; trap dispatcher special-
+      // cases CreateProc to skip the returnAddr overwrite when this
+      // override is in play.
+      const result = this.createProcOverride(segListBptr, namePtr, priority, stackSize) >>> 0;
+      this.emulator.setRegister(CPURegister.D0, result);
+      this.lastError = result === 0 ? DOS_ERRORS.ERROR_NO_FREE_STORE : DOS_ERRORS.ERROR_NO_ERROR;
+      return;
+    }
 
 debugLog(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation not allowed), returning NULL`);
 
@@ -2870,6 +2909,28 @@ debugLog(`[dos.library] Door will now exit cleanly`);
   }
 
   /**
+   * LoadSeg override — singleton emulators (RexxMastService) install
+   * a callback so dynamic code loading actually works. Door binaries
+   * have always rejected LoadSeg for security; the AREXX native path
+   * needs it because RexxMast's daemon does
+   *   segList = LoadSeg('rexxc')
+   *   procPort = CreateProc(name, pri, segList, stackSize)
+   * to spawn the interpreter for each incoming script.
+   *
+   * Callback signature: (filename) → BPTR of loaded segment list, or
+   * 0 on failure. Stores the SegList in a pool the CreateProc
+   * trampoline can match against. Real Amiga returns a BPTR to the
+   * size-and-nextBptr-prefixed first segment.
+   */
+  private loadSegOverride: ((filename: string) => number) | null = null;
+
+  setLoadSegOverride(
+    cb: ((filename: string) => number) | null,
+  ): void {
+    this.loadSegOverride = cb;
+  }
+
+  /**
    * LoadSeg - Load an executable file
    * D1 = name
    * Returns: D0 = segList (or 0 on failure)
@@ -2878,9 +2939,28 @@ debugLog(`[dos.library] Door will now exit cleanly`);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-debugLog(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loading not allowed), returning NULL`);
+    if (this.loadSegOverride) {
+      try {
+        const segList = this.loadSegOverride(name) >>> 0;
+        debugLog(`[dos.library] LoadSeg("${name}") via override → BPTR=0x${segList.toString(16)}`);
+        this.emulator.setRegister(CPURegister.D0, segList);
+        this.lastError = segList === 0
+          ? DOS_ERRORS.ERROR_OBJECT_NOT_FOUND
+          : DOS_ERRORS.ERROR_NO_ERROR;
+        return;
+      } catch (err) {
+        debugLog(`[dos.library] LoadSeg("${name}") override threw: ${(err as Error).message}`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+        return;
+      }
+    }
 
-    // Dynamic code loading not supported (security)
+debugLog(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (no override registered), returning NULL`);
+
+    // Dynamic code loading not supported (security) — door binaries
+    // never need LoadSeg, so the absence of an override is the
+    // correct default.
     this.emulator.setRegister(CPURegister.D0, 0);
     this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
   }
@@ -2889,15 +2969,20 @@ debugLog(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loading n
    * UnLoadSeg - Unload a segment list
    * D1 = segList
    * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
+   *
+   * No-op for our purposes — the segments stay in MOIRA memory for
+   * the singleton's lifetime. RexxMast may UnLoadSeg between script
+   * invocations to reclaim space; on a 4MB emulator we leak it.
    */
   UnLoadSeg(): void {
     const segList = this.emulator.getRegister(CPURegister.D1);
 
 debugLog(
-      `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - No-op (LoadSeg always fails)`
+      `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - No-op (segments stay loaded)`
     );
 
-    // Always success since LoadSeg always returns NULL
+    // Success regardless — see above. Real Amiga frees memory; ours
+    // doesn't, but the daemon doesn't depend on the freed bytes.
     this.emulator.setRegister(CPURegister.D0, -1);
     this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }

@@ -1406,7 +1406,16 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
       case 'SIM': // Standard Internal Module
       case 'TIM': // Text Internal Module
       case 'IIM': // Interactive Internal Module
-        await executeAmigaDoor(socket, session, door, doorSession);
+        // AmiExpress historically reuses the AIM/SIM type marker for
+        // AREXX-controlled doors when the LOCATION points at a .rexx
+        // (or .rx) script — see reference-boardBBS Commands/SysCmd/ANSI.info
+        // for an in-the-wild example. Route those to the AREXX path
+        // instead of LoadSeg-as-68K, which would fail on a text file.
+        if (/\.(rexx|rx)$/i.test(door.path || '')) {
+          await executeARexxDoor(socket, session, door, doorSession);
+        } else {
+          await executeAmigaDoor(socket, session, door, doorSession);
+        }
         break;
       default:
         emitText(socket, `Unknown door type: ${door.type}\r\n`);
@@ -3275,8 +3284,24 @@ console.log(`[executeARexxDoor] Starting ARexx door: ${door.name}`);
 console.log(`[executeARexxDoor] Door path: ${door.path}`);
   disableShortcuts(session);
 
-  // Check if door script exists (use amigafs for case-insensitive matching)
-  const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
+  // Resolve script path against the BBS root (not process.cwd, which
+  // depends on where the server was started from — typically
+  // web/backend, so cwd-relative joins land in the wrong tree).
+  // Pattern matches executeAmigaDoor: bbsRoot from AmigaDoorManager,
+  // then case-insensitive resolution like other Amiga path lookups.
+  let doorPath: string;
+  if (path.isAbsolute(door.path)) {
+    doorPath = door.path;
+  } else {
+    const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
+    const bbsRoot = getAmigaDoorManager().bbsRoot;
+    const normalizedComponents = door.path
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((c: string) => c.length > 0);
+    const fullPath = path.join(bbsRoot, ...normalizedComponents);
+    doorPath = resolveCaseInsensitivePath(fullPath) || fullPath;
+  }
 
   if (!amigafs.existsSync(doorPath)) {
     emitText(socket, `\r\n\x1b[31mError: ARexx script not found: ${door.path}\x1b[0m\r\n`);
@@ -3286,8 +3311,11 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
   }
 
   try {
-    // Import ARexx engine from arexx.ts
-    const { arexxEngine } = require('../arexx');
+    // Import ARexx engine — exported from services/arexx.service.ts.
+    // Older comment said "from arexx.ts"; the file moved to
+    // services/arexx.service.ts and the bare `../arexx` path no
+    // longer resolves under the current module layout.
+    const { arexxEngine } = require('../services/arexx.service');
 
   // Get node ID from session
   const nodeId = session.nodeId || 1;
@@ -3309,9 +3337,19 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
     const { createBBSApi } = require('../doors/BBSApi');
     const bbsApi = createBBSApi(socket, session);
 
-    // Prepare ARexx context with BBS environment and full API
+    // Prepare ARexx context with BBS environment and full API.
+    // `socket`, `session`, and `user` are all referenced by
+    // BBSFunctions (e.g. BBSWRITE emits via socket; GetUser pulls
+    // from user/session). Without them the AREXX host commands
+    // (TR/SS/GU) silently no-op — AVAIL.rexx ran clean but printed
+    // nothing because socket+user weren't reachable.
     const arexxContext = {
-      // User information
+      // Direct refs needed by BBSFunctions
+      socket,
+      session,
+      user: session.user,
+      // User information (legacy flat fields kept for back-compat
+      // with scripts that read these directly off the context).
       username: arexxDoorUser.username,
       userId: arexxDoorUser.id,
       realname: arexxDoorUser.realname,
@@ -3401,9 +3439,49 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
       displayMCI: (text: string) => bbsApi.displayMCI(text)
     };
 
-    // Execute ARexx script through the ARexx engine
-console.log(`[executeARexxDoor] Executing script: ${doorPath}`);
-    await arexxEngine.executeScript(doorPath, arexxContext);
+    // Execute ARexx script through the ARexx engine.
+    // executeScript expects an AREXXScript object whose `.script`
+    // field holds the REXX source — passing a bare file path makes
+    // it run an empty script (`undefined.script || ''`) and emit
+    // nothing. AVAIL.rexx exhibited this: BBS logged "Executing
+    // AREXX script: undefined" then the door reported completed
+    // without running any of the script's clauses. Load the file
+    // contents from disk and synthesize the script struct here.
+    let scriptText = '';
+    try {
+      // AmiExpress AREXX scripts ship with ISO-8859-1 / Amiga
+      // character bytes (box-drawing, accented chars in ASCII art).
+      // Reading as UTF-8 produces replacement-character `�` for any
+      // byte > 0x7F. The downstream terminal pipeline emits the raw
+      // bytes back to the BBS user, so passing through latin1 keeps
+      // the ASCII art intact while still safely handling 7-bit ASCII
+      // identically (latin1 is a superset).
+      scriptText = fs.readFileSync(doorPath, 'latin1');
+    } catch (err) {
+      emitText(socket, `\r\n\x1b[31mError reading ARexx script: ${door.path}\x1b[0m\r\n`);
+      doorSession.status = 'error';
+      throw err;
+    }
+    const arexxScript: any = {
+      id: door.id || `arexx-${Date.now()}`,
+      name: door.name,
+      script: scriptText,
+      enabled: true,
+      // Pass through whatever metadata the door manifest provided so
+      // db.executeAREXXScript's audit log gets a useful entry.
+      command: door.command,
+      path: door.path,
+    };
+console.log(`[executeARexxDoor] Executing script: ${doorPath} (${scriptText.length} bytes)`);
+    // Drop to a fresh line before the script's first emission. The
+    // user's command line ends with `<cmd><enter>`; without an
+    // explicit \r\n here, the script's first TR/SS lands directly
+    // beside the typed command (e.g. "avail  SYSOP AVAILABLE..."
+    // share a row). express.e doors get this for free because the
+    // command echo path emits \r\n on dispatch — the AREXX path
+    // never did.
+    emitText(socket, '\r\n');
+    await arexxEngine.executeScript(arexxScript, arexxContext);
 
     emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
 

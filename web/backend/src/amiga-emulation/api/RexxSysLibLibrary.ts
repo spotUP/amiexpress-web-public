@@ -111,9 +111,29 @@ export class RexxSysLibLibrary {
   /** Same idea for RexxMsg: bookkeeping + leak detection in tests. */
   private rexxMsgRegistry = new Set<number>();
 
+  /**
+   * The rexxsyslib library base — used as the cookie in rm_LibBase
+   * (real Commodore RexxMaster compares to RexxSysBase directly, not
+   * a magic constant). RexxMastService sets this once at boot via
+   * setLibraryBase. For TS-only paths that don't have a real base
+   * loaded, we keep the literal 'REXX' magic as a fallback so
+   * IsRexxMsg still recognises our own messages.
+   */
+  private libraryBase: number = REXXSYSLIB_MAGIC;
+
   constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
+  }
+
+  /**
+   * Tell the helper which rexxsyslib base to stamp in rm_LibBase. Set
+   * by RexxMastService after the library loads — without this the
+   * daemon's own libBase comparison rejects our messages because real
+   * rexxsyslib stamps the actual library base, not a magic constant.
+   */
+  setLibraryBase(base: number): void {
+    this.libraryBase = base >>> 0 || REXXSYSLIB_MAGIC;
   }
 
   // -------------------------------------------------------------------------
@@ -203,8 +223,12 @@ export class RexxSysLibLibrary {
     this.emulator.writeMemory32(msgAddr + MN_REPLYPORT, portAddr >>> 0);
     // mn_Length records the structure size for ReplyMsg() routing.
     this.emulator.writeMemory16(msgAddr + MN_LENGTH, REXXMSG_SIZE);
-    // rm_LibBase = magic so IsRexxMsg has a robust check.
-    this.emulator.writeMemory32(msgAddr + RM_LIBBASE, REXXSYSLIB_MAGIC);
+    // rm_LibBase = rexxsyslib library base. Real Commodore RexxMaster
+    // compares this to its own library base for validity, not against
+    // a magic constant — so we must stamp the real base here for the
+    // daemon to accept our messages. Falls back to 'REXX' magic when
+    // no base is set (e.g. unit-test paths without a loaded library).
+    this.emulator.writeMemory32(msgAddr + RM_LIBBASE, this.libraryBase);
 
     // Duplicate extension into an argstring (rm_FileExt).
     if (extensionAddr !== 0) {
@@ -316,7 +340,13 @@ export class RexxSysLibLibrary {
     try {
       const lnType = this.emulator.readMemory(msgAddr + LN_TYPE);
       const libBase = this.emulator.readMemory32(msgAddr + RM_LIBBASE) >>> 0;
-      return (lnType === NT_REXXMSG && libBase === REXXSYSLIB_MAGIC) ? 1 : 0;
+      // Accept either form: the magic cookie (TS-only path that didn't
+      // load a real library) or the configured library base (live
+      // RexxMast bring-up that stamped the real address).
+      const acceptable =
+        libBase === REXXSYSLIB_MAGIC ||
+        (this.libraryBase !== REXXSYSLIB_MAGIC && libBase === this.libraryBase);
+      return (lnType === NT_REXXMSG && acceptable) ? 1 : 0;
     } catch {
       return 0;
     }
@@ -330,6 +360,73 @@ export class RexxSysLibLibrary {
   // -------------------------------------------------------------------------
   lockRexxBase(_resource: number): number { return 0; }
   unlockRexxBase(_resource: number): number { return 0; }
+
+  // -------------------------------------------------------------------------
+  // initRexxPort (LVO -228) — Commodore rexxsyslib's private MsgPort
+  // initialiser. Our generated LVO table mislabels this as
+  // AllocNamedObjectA (utility.library spec), but the AmiExpress
+  // RexxMast binary actually calls it as a "build a named MsgPort"
+  // helper:
+  //
+  //   IN:  A0 = port struct buffer (caller pre-allocated, zeroed)
+  //        A1 = name string (NUL-terminated)
+  //        A6 = rexxsyslib base
+  //   OUT: A0 = port (unchanged)
+  //        A1 = port (so the next JSR -354(A6) AddPort gets it in A1)
+  //        D0 = sigbit (the daemon does `BSET D0,D7` to build its
+  //             Wait mask — so D0 must be a small bit number, not a
+  //             pointer; pointer-mod-32 was random-bit chaos)
+  //
+  // Side effects on the port struct (offsets per <exec/ports.h>):
+  //   +0x08 ln_Type   = NT_MSGPORT (4)
+  //   +0x0a ln_Name   = A1
+  //   +0x0e mp_Flags  = PA_SIGNAL (0)
+  //   +0x0f mp_SigBit = sigbit (allocated below)
+  //   +0x10 mp_SigTask= ExecBase->ThisTask (so PutMsg signals the
+  //                     RexxMast process the same way real Amiga does)
+  //   +0x14..0x1f mp_MsgList: empty (head→tail, tail=0, tailpred→head)
+  //
+  // Sigbit allocation: each call hands out the next free bit starting
+  // at 13. Real AmigaOS uses AllocSignal(); our singleton has no
+  // contention so a counter is enough. Bits stay below 32 so they fit
+  // in MOIRA's signal-bit conventions, and avoid bits 0/4/8/12 which
+  // are reserved by Exec for system-wide events (CTRL-C, CTRL-D, etc).
+  // -------------------------------------------------------------------------
+  private nextRexxPortSigBit: number = 13;
+  initRexxPort(portAddr: number, nameAddr: number): number {
+    if (!portAddr) return 0;
+    const sigBit = this.nextRexxPortSigBit;
+    this.nextRexxPortSigBit++;
+    if (this.nextRexxPortSigBit > 30) this.nextRexxPortSigBit = 13;
+    // Resolve mp_SigTask via ExecBase->ThisTask (offset +276). Falls
+    // back to 0 if ExecBase isn't set up yet — safe degradation since
+    // putMsg ignores zero sigTask.
+    let sigTask = 0;
+    try {
+      const execBasePtr = this.emulator.readMemory32(0x4) >>> 0;
+      if (execBasePtr) {
+        sigTask = this.emulator.readMemory32(execBasePtr + 276) >>> 0;
+      }
+    } catch { /* leave sigTask = 0 */ }
+    // Node header
+    this.emulator.writeMemory(portAddr + 0x08, 4);              // ln_Type = NT_MSGPORT
+    this.emulator.writeMemory(portAddr + 0x09, 0);              // ln_Pri
+    this.emulator.writeMemory32(portAddr + 0x0a, nameAddr >>> 0); // ln_Name
+    // MsgPort fields
+    this.emulator.writeMemory(portAddr + 0x0e, 0);              // mp_Flags = PA_SIGNAL
+    this.emulator.writeMemory(portAddr + 0x0f, sigBit);
+    this.emulator.writeMemory32(portAddr + 0x10, sigTask);
+    // Empty mp_MsgList: lh_Head -> lh_Tail (=0), lh_TailPred -> lh_Head.
+    this.emulator.writeMemory32(portAddr + 0x14, portAddr + 0x18);
+    this.emulator.writeMemory32(portAddr + 0x18, 0);
+    this.emulator.writeMemory32(portAddr + 0x1c, portAddr + 0x14);
+    this.emulator.writeMemory(portAddr + 0x20, 5);              // lh_Type = NT_MESSAGE
+    this.emulator.writeMemory(portAddr + 0x21, 0);
+    return sigBit;
+  }
+
+  /** Test-only: peek at the next sigbit allocator state. */
+  _peekNextRexxPortSigBit(): number { return this.nextRexxPortSigBit; }
 
   // -------------------------------------------------------------------------
   // Diagnostics — exposed for tests so we can assert on outstanding
