@@ -54,6 +54,10 @@ export interface RexxMastServiceStatus {
   rexxMastBase: number;
   /** Resolved rexxsyslib.library base (0 until LibraryLoader succeeds). */
   rexxSysLibBase: number;
+  /** Address of our 'AMIEXPRESS' host MsgPort (0 until setup runs). */
+  hostPortAddr: number;
+  /** Name registered for the host port (defaults to 'AMIEXPRESS'). */
+  hostPortName: string;
 }
 
 class RexxMastService {
@@ -64,6 +68,8 @@ class RexxMastService {
     lastError: null,
     rexxMastBase: 0,
     rexxSysLibBase: 0,
+    hostPortAddr: 0,
+    hostPortName: 'AMIEXPRESS',
   };
 
   // Lazily-instantiated 68K runtime. Lives for the BBS process
@@ -185,8 +191,19 @@ class RexxMastService {
       const firstSegment = rexxMastHunks.segments && rexxMastHunks.segments[0];
       this.status.rexxMastBase = firstSegment ? firstSegment.address : 0;
 
+      // #78 Phase 4 — set up the BBS host MsgPort. AREXX scripts
+      // address this port via `ADDRESS AMIEXPRESS` then send command
+      // lines like `BBSWRITE "Hello"`. RexxMast packages each line as
+      // an argstring in rm_Args[0] and PutMsg's it here. We service
+      // those messages via dispatchHostCommand (Phase 4-skeleton).
+      const hostOk = this.setupHostPort('AMIEXPRESS');
+      if (!hostOk) {
+        this.status.lastError = 'host port allocation failed';
+        return false;
+      }
+
       this.status.started = true;
-      // Phase 4 flips ready=true once RexxMast actually executes its
+      // Phase 4-real flips ready=true once RexxMast actually runs its
       // setup and registers the REXX port. Until then the engine
       // selector still routes scripts to TS.
       this.status.ready = false;
@@ -202,6 +219,7 @@ class RexxMastService {
       this.kickstartRom = null;
       this.status.rexxMastBase = 0;
       this.status.rexxSysLibBase = 0;
+      this.status.hostPortAddr = 0;
       this.status.started = false;
       return false;
     }
@@ -225,6 +243,98 @@ class RexxMastService {
     this.kickstartRom = null;
     this.status.rexxMastBase = 0;
     this.status.rexxSysLibBase = 0;
+    this.status.hostPortAddr = 0;
+  }
+
+  /**
+   * Allocate + register the BBS host MsgPort that AREXX scripts
+   * target via `ADDRESS <name>`. Real AmiExpress used 'AMIEXPRESS'
+   * as the host port name so scripts written for a real AmiExpress
+   * BBS work unchanged. The name parameter lets sysops override via
+   * future tooltype, but defaults to 'AMIEXPRESS'.
+   *
+   * MsgPort struct layout (struct MsgPort, exec/ports.h, 34 bytes):
+   *   +0   ln_Succ      APTR  (0)
+   *   +4   ln_Pred      APTR  (0)
+   *   +8   ln_Type      UBYTE (NT_MSGPORT = 4)
+   *   +9   ln_Pri       BYTE  (0)
+   *   +10  ln_Name      STRPTR
+   *   +14  mp_Flags     UBYTE (PA_SIGNAL = 0)
+   *   +15  mp_SigBit    UBYTE (signal number — we use 13, exec default)
+   *   +16  mp_SigTask   APTR  (signalled task — 0 = whole-system)
+   *   +20  mp_MsgList   List  (lh_Head, lh_Tail, lh_TailPred + bytes)
+   *
+   * Calls execLibrary.addPort() to register in the public-port list,
+   * which is what FindPort() searches when RexxMast resolves the
+   * 'AMIEXPRESS' destination.
+   *
+   * Returns true on success, false if either allocation fails.
+   */
+  private setupHostPort(name: string): boolean {
+    if (!this.execLibrary || !this.emulator) return false;
+    const MEMF_PUBLIC_CLEAR = 0x10001;
+
+    // 1. Allocate the name string (NUL-terminated) so the port struct
+    //    can reference it by pointer.
+    const nameBytes = Buffer.from(name + '\0', 'utf-8');
+    const nameAddr = this.execLibrary.allocMem(nameBytes.length, MEMF_PUBLIC_CLEAR);
+    if (nameAddr === 0) return false;
+    for (let i = 0; i < nameBytes.length; i++) {
+      this.emulator.writeMemory(nameAddr + i, nameBytes[i]);
+    }
+
+    // 2. Allocate the MsgPort struct (34 bytes for the documented
+    //    layout — round up via allocMem alignment).
+    const portAddr = this.execLibrary.allocMem(34, MEMF_PUBLIC_CLEAR);
+    if (portAddr === 0) {
+      // Roll back the name allocation so we don't leak when the second
+      // alloc fails. freeMem with size=length is conservative here.
+      this.execLibrary.freeMem(nameAddr, nameBytes.length);
+      return false;
+    }
+
+    // 3. Fill in the struct. allocMem already zeroed the block, so we
+    //    only need to set non-zero fields.
+    this.emulator.writeMemory(portAddr + 0x08, 4);              // ln_Type = NT_MSGPORT
+    this.emulator.writeMemory32(portAddr + 0x0a, nameAddr);      // ln_Name
+    this.emulator.writeMemory(portAddr + 0x0e, 0);              // mp_Flags = PA_SIGNAL
+    this.emulator.writeMemory(portAddr + 0x0f, 13);             // mp_SigBit (exec default)
+    this.emulator.writeMemory32(portAddr + 0x10, 0);             // mp_SigTask
+    // Empty message list — lh_Head -> lh_Tail (which is 0), lh_TailPred -> lh_Head.
+    this.emulator.writeMemory32(portAddr + 0x14, portAddr + 0x18);  // lh_Head
+    this.emulator.writeMemory32(portAddr + 0x18, 0);                 // lh_Tail
+    this.emulator.writeMemory32(portAddr + 0x1c, portAddr + 0x14);   // lh_TailPred
+    this.emulator.writeMemory(portAddr + 0x20, 5);                  // lh_Type = NT_MESSAGE
+    this.emulator.writeMemory(portAddr + 0x21, 0);                  // l_pad
+
+    // 4. Register in the public-port list. ExecLibrary.addPort reads
+    //    ln_Name from the struct and adds it to the publicPorts map
+    //    so FindPort('AMIEXPRESS') resolves correctly.
+    if (typeof this.execLibrary.addPort === 'function') {
+      this.execLibrary.addPort(portAddr);
+    }
+
+    this.status.hostPortAddr = portAddr;
+    this.status.hostPortName = name;
+    return true;
+  }
+
+  /**
+   * Test-only: verify the host port was registered with the expected
+   * name. Production code never needs this — Phase 4-real reads from
+   * status.hostPortAddr directly when servicing inbound messages.
+   */
+  _readHostPortName(): string | null {
+    if (!this.emulator || this.status.hostPortAddr === 0) return null;
+    const nameAddr = this.emulator.readMemory32(this.status.hostPortAddr + 0x0a);
+    if (nameAddr === 0) return null;
+    let s = '';
+    for (let i = 0; i < 64; i++) {
+      const b = this.emulator.readMemory(nameAddr + i);
+      if (b === 0) break;
+      s += String.fromCharCode(b);
+    }
+    return s;
   }
 
   isReady(): boolean {
@@ -250,6 +360,8 @@ class RexxMastService {
       lastError: null,
       rexxMastBase: 0,
       rexxSysLibBase: 0,
+      hostPortAddr: 0,
+      hostPortName: 'AMIEXPRESS',
     };
     this.emulator = null;
     this.execLibrary = null;
