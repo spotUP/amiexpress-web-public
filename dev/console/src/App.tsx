@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, useInput, useApp, useStdout } from 'ink';
+import { Box, useInput, useApp, useStdout, useStdin } from 'ink';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
 import { Footer } from './components/Footer.js';
@@ -86,9 +86,34 @@ export function App({ username }: Props) {
   const [backendUp, setBackendUp] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showRestart, setShowRestart] = useState(false);
+  const { stdin } = useStdin();
+
+  // Ink 4.x's useInput swallows F-keys: parse-keypress sets `name='f2'` for
+  // ESC-O-Q / ESC-[12~, but `nonAlphanumericKeys` includes those names and
+  // forces `input=''`, while the public `key` shape exposes no f2 flag. So
+  // useInput cannot see F2 at all. We attach a raw stdin listener instead
+  // and look for the literal escape sequences our terminals emit (xterm /
+  // tmux send `OQ`; vt220-style consoles send `[12~`).
+  useEffect(() => {
+    if (!stdin) return;
+    // Don't call setRawMode(true) here. The useInput() hook below already
+    // does it via Ink's ref-counted setRawMode, and an unmatched call from
+    // here would prevent useInput's cleanup from restoring cooked mode on
+    // exit — leaving the user's terminal in raw mode (LF without CR, no
+    // line buffering) after the TUI quits.
+    const onData = (chunk: Buffer | string) => {
+      const s = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      // F2 raw sequences: xterm/tmux ESC-O-Q, vt220 ESC-[12~, linux ESC-[[B.
+      // Use includes() so a chunk that bundles other bytes still matches.
+      if (s.includes('OQ') || s.includes('[12~') || s.includes('[[B')) {
+        setShowRestart(prev => !prev);
+      }
+    };
+    stdin.on('data', onData);
+    return () => { stdin.off('data', onData); };
+  }, [stdin]);
 
   useInput((input, key) => {
-    if ((key as any).f2) { setShowRestart(s => !s); return; }
     // Block other global hotkeys while a modal is open so the modal owns input.
     if (showRestart || showHelp) return;
     if (input === 'q' && !key.ctrl) exit();

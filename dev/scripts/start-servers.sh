@@ -13,6 +13,11 @@ RESET='\033[0m'
 
 # Usage helper
 print_usage() {
+  # Defensive: if the user's terminal is still in raw mode from a prior TUI
+  # session that didn't restore cooked mode on exit, `cat` output looks like
+  # a staircase (LF without CR). Reset to a sane terminal state before
+  # printing help so --help is always readable. Silent on non-TTY stdin.
+  [ -t 0 ] && stty sane 2>/dev/null
   cat <<'EOF'
 Usage: ./dev/scripts/start-servers.sh [options]
 
@@ -120,14 +125,17 @@ launch_tmux_session() {
 
   # Single window, 3-pane layout:
   #   ┌──────────────────┬───────────────┐
-  #   │  Server log       │  Console TUI  │
-  #   │  (55%)            │  (45%)        │
-  #   ├──────────────────┴───────────────┤
-  #   │  Shell (25%)                      │
-  #   └──────────────────────────────────┘
+  #   │  Stack startup    │  Console TUI  │
+  #   │  (top-left, 75%)  │  (full-height,│
+  #   ├──────────────────┤  45% wide)    │
+  #   │  Backend log tail │               │
+  #   │  (bottom-left)    │               │
+  #   └──────────────────┴───────────────┘
   #   Status bar: keybindings for quit/restart/browser
 
-  # Pane 0: server log (runs start-servers.sh inside tmux)
+  # Pane 0: stack startup output (env setup, port checks, banners).
+  # Runs start-servers.sh recursively in --bbs-only mode; once that returns
+  # (or is killed) the pane drops to a bash prompt for interactive use.
   tmux new-session -d -s "$session" -n amiexpress \
     "cd '$root' && bash '$0' --bbs-only; bash"
 
@@ -135,9 +143,15 @@ launch_tmux_session() {
   tmux split-window -h -p 45 -t "${session}:amiexpress.0" \
     "cd '$root' && sleep 8 && node dev/console/dist/src/index.js; bash"
 
-  # Pane 2: shell (bottom, full width)
+  # Pane 2: live backend log tail (bottom-left). `tail -F` follows the file
+  # across rotation; we wait for the file to appear so tail doesn't error
+  # before start-servers writes the first line. Falls through to bash on
+  # exit so the user can take the pane back if they want.
   tmux split-window -v -p 25 -t "${session}:amiexpress.0" \
-    "cd '$root'; bash"
+    "cd '$root' && \
+     while [ ! -f logs/backend.log ]; do sleep 0.2; done && \
+     tail -n 200 -F logs/backend.log; \
+     bash"
 
   # ── Status bar & keybindings ──────────────────────────────────────────────
   # Style: Amiga-esque blue bar with yellow hotkeys
@@ -156,7 +170,7 @@ launch_tmux_session() {
   tmux bind-key -n F1 display-popup -w 60 -h 18 -T " AmiExpress Hotkeys " \
     "echo ''; \
      echo '  F1   This help'; \
-     echo '  F2   Restart backend'; \
+     echo '  F2   Restart dialog (TUI — pick start-servers flags)'; \
      echo '  F3   Open BBS in browser'; \
      echo '  F4   Open Admin in browser'; \
      echo '  F5   Tail backend log'; \
@@ -169,21 +183,15 @@ launch_tmux_session() {
      echo '  Press any key to close'; \
      read -n1"
 
-  # F2 = Restart backend.
+  # F2 = Forward into the TUI pane so the TUI's restart dialog opens.
   #
-  # Earlier versions did `send-keys C-c; send-keys "<cmd>" Enter` but the
-  # Ctrl-C raced with start-servers.sh's cleanup trap (which sleeps 2s
-  # waiting for graceful child shutdown). Send-keys for the rerun command
-  # arrived while the trap was still running and the chars were silently
-  # dropped — the result was "server stopped, never restarted".
-  #
-  # Use respawn-pane instead: kill whatever's running in pane 0 atomically
-  # and immediately exec the new command. No keystroke racing, no
-  # interactive shell to time correctly. -k forces respawn even if the
-  # current command hasn't exited yet.
+  # Target by direction (`{right}`) rather than pane index — splits made
+  # below this point reshuffle pane indices (the bottom-left log-tail
+  # split bumps the TUI from index 1 to index 2 in the current layout).
+  # Direction targets are stable across layout changes as long as the
+  # TUI stays in the right column.
   tmux bind-key -n F2 \
-    respawn-pane -k -t "${session}:amiexpress.0" \
-    "bash -c \"cd '$root' && ./dev/scripts/kill-servers.sh 2>/dev/null; bash '$0' --bbs-only; bash\""
+    send-keys -t "${session}:amiexpress.{right}" F2
 
   # F3 = Open BBS in browser
   tmux bind-key -n F3 \
