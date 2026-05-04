@@ -178,7 +178,14 @@ export class DownloadHandler {
         if (session.flagManager instanceof FileFlagManager) {
           for (const f of session.flagManager.getAll()) {
             const found = await this.findFilesInConference(dataDir, f.confNum, f.filename);
-            fileList.push(...found);
+            for (const file of found) {
+              // express.e:12736 — checkFIBForFileSize prints one line per file
+              // it accepts into the download set. Without this our pre-load
+              // path was silent: the user pressed `d` and saw only the
+              // filespec prompt with no list of what was queued.
+              this.printFileFound(socket, session, file);
+              fileList.push(file);
+            }
           }
         }
         for (const f of sessionFlaggedFiles) {
@@ -187,7 +194,10 @@ export class DownloadHandler {
           if (name) {
             const found = await this.findFilesInConference(
               dataDir, f?.confNum || session.currentConf || 1, name);
-            fileList.push(...found);
+            for (const file of found) {
+              this.printFileFound(socket, session, file);
+              fileList.push(file);
+            }
           }
         }
       }
@@ -202,7 +212,10 @@ export class DownloadHandler {
             socket.emit('ansi-output', `\r\nFile not found: ${name}\r\n`);
             continue;
           }
-          fileList.push(...found);
+          for (const file of found) {
+            this.printFileFound(socket, session, file);
+            fileList.push(file);
+          }
         }
       }
     }
@@ -316,13 +329,41 @@ export class DownloadHandler {
     }
 
     // Add to list, update count
-    fileList.push(...found);
     if (!session.tempData) session.tempData = { downloadFileList: [], downloadNumFiles: 0 };
+    for (const file of found) {
+      this.printFileFound(socket, session, file);  // express.e:12736
+      fileList.push(file);
+    }
     session.tempData.downloadFileList = fileList;
     session.tempData.downloadNumFiles = fileList.length;
 
     // Show next filespec prompt — stay in DOWNLOAD_FILENAME_INPUT
     this.showFilespecPrompt(socket, session);
+  }
+
+  /**
+   * express.e:12736 — checkFIBForFileSize per-file display, format:
+   *   ' \r{kb}k, {min} mins {secs} secs {filename}\t' + 'Free Download!' or '\b\n'
+   * One line per file accepted into the download set, both for pre-loaded
+   * (flagged + params) and for files entered at the filespec loop.
+   */
+  private static printFileFound(socket: Socket, session: BBSSession, file: any): void {
+    const user = session.user!;
+    const onlineBaud = (session as any).baudRate || (session as any).onlineBaud || 19200;
+    const lastDlCPS = (user as any).topDownloadCPS || 0;
+    const estDlCPS  = lastDlCPS > 0 ? lastDlCPS : Math.floor(onlineBaud / 10);
+    const fsize = file.size || 0;
+    const tsec  = estDlCPS > 0 ? Math.floor(fsize / estDlCPS) : 0;
+    const min   = Math.floor(tsec / 60);
+    const secs  = tsec - min * 60;
+    const kSize = (fsize >>> 10) & 0x003fffff; // express.e:12736 mask
+    const line  = ` ${kSize}k, ${min} mins ${secs.toString().padStart(2, '0')} secs ${file.name}`;
+    socket.emit('ansi-output', line);
+    if (this.isFreeDownload(file)) {
+      socket.emit('ansi-output', '  >>Free Download!\r\n');  // express.e:12741
+    } else {
+      socket.emit('ansi-output', '\r\n');                    // express.e:12745
+    }
   }
 
   /**

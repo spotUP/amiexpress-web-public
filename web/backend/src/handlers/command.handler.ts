@@ -4032,6 +4032,17 @@ console.log('=== handleCommand end ===\n');
 
 // express.e:17794+ — start the actual batch upload transfer after Okay confirm
 function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter: boolean): void {
+  // Set the goodbye flag on tempData BEFORE the batch-length branch.
+  // express.e:25657 — `IF stat=RESULT_GOODBYE THEN modemOffHook()`. The flag
+  // must be honored regardless of whether files were pre-queued or whether
+  // any actually transferred (express.e:19543-19547 checks gstat=2 after
+  // upload completion, and pGoodbye fires whether or not bytes moved).
+  // Earlier the flag was only set in the non-empty-batch path, so a user
+  // who pressed Enter at "FileName 1:" then G saw "Goodbye!" but never
+  // disconnected.
+  if (session.tempData) {
+    session.tempData.goodbyeAfterTransfer = goodbyeAfter;
+  }
   const batch = session.tempData?.uploadBatch || [];
   if (batch.length === 0) {
     // Nothing queued — start Zmodem receive with no expected files (user can send any file)
@@ -4047,7 +4058,6 @@ function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter
     return;
   }
   session.tempData.currentUploadIndex = 0;
-  session.tempData.goodbyeAfterTransfer = goodbyeAfter;
   socket.emit('show-file-upload', {
     accept: '*/*',
     maxSize: 100 * 1024 * 1024,

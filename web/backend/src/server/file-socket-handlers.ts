@@ -777,17 +777,22 @@ console.log("[Upload] No upload context for batch complete");
   }
 
   // Show completion statistics (express.e:18850-18858, 19053-19073)
+  // Default counters to 0: when the batch completes with no files actually
+  // transferred (user picked "Goodbye after transfer" on a blank batch and
+  // closed the picker), uploadedBytes/uploadedFiles can be undefined and
+  // would otherwise produce "NaNk bytes, NaN cps" in the summary line.
   const uploadTime = Math.floor(
     (Date.now() - session.tempData.uploadStartTime) / 1000
   ); // seconds
   const ulFileCount = session.tempData.uploadedFiles || 0;
+  const uploadedBytes = session.tempData.uploadedBytes || 0;
   const ulTTTM = uploadTime; // already in seconds
   const minutes = Math.floor(ulTTTM / 60);
   const seconds = ulTTTM % 60;
-  const bytesKB = Math.floor(session.tempData.uploadedBytes / 1024);
+  const bytesKB = Math.floor(uploadedBytes / 1024);
   const cps =
     uploadTime > 0
-      ? Math.floor(session.tempData.uploadedBytes / uploadTime)
+      ? Math.floor(uploadedBytes / uploadTime)
       : 0;
   // express.e:19071 tTEFF = cps ratio as percentage (approximated as 100% for web transfers)
   const eff = 100;
