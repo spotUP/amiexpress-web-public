@@ -85,8 +85,10 @@ describe('Conference Tooltypes Utility', () => {
           menuPrompt: '',
           requireUsername: false,
           requireRealname: false,
+          requireInternetname: false,
           requireUsernameMsgBases: new Set<number>(),
           requireRealnameMsgBases: new Set<number>(),
+          requireInternetnameMsgBases: new Set<number>(),
           forwardMail: '',
           extSendMsgBases: new Set<number>(),
         });
