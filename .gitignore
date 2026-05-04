@@ -278,7 +278,13 @@ highscores.json
 # Backup files
 *.backup
 *.backup-*
+*.bak
+*.bak[0-9]
 bbsConfig.info.pre-*
+# info-editor.ts auto-backups (.info.backup) — not anchored to a single dir
+**/*.info.backup
+# Node-level answers backups
+Node*/answers.bak*
 
 # C Door development - build artifacts
 dev/c-doors/doors/**/*.o
