@@ -2423,24 +2423,39 @@ console.log(`Executing AREXX script: ${script.name}`);
       // #78 Phase 5 — engine selector. The TS interpreter is always
       // the safe fallback; the native (RexxMast under MOIRA) path is
       // only used when the sysop has supplied the binaries AND the
-      // service has fully booted (status.ready=true). The selector
-      // already handles the bbsConfig.info AREXX_ENGINE override.
+      // service has fully booted (status.ready=true).
       try {
         const { selectAREXXEngine } = require('./arexx/engine-selector');
         const { rexxMastService } = require('./arexx/rexxmast-service');
         const choice = selectAREXXEngine();
         if (choice.choice === 'native' && rexxMastService.isReady()) {
-          // Native path will land in a follow-up commit — once
-          // RexxMast actually parks on its REXX port we PutMsg the
-          // script there + wait for the reply. Until that's in place
-          // (and unit-tested end-to-end with a working ROM), fall
-          // through to the TS interpreter so scripts always run.
-          // The selector having returned 'native' just means we
-          // would have gone there if the dispatch were wired.
-console.log(`[AREXX] selector chose native (${choice.reason}) but native dispatch not yet wired — using TS`);
+console.log(`[AREXX] dispatching '${script.name}' via native RexxMast (${choice.reason})`);
+          const args = (context.parameters || []) as string[];
+          const native = await rexxMastService.executeRexxScript(
+            script.script || '',
+            args,
+            { ...context, output: [] },
+          );
+          // Log execution (mirror the TS path so the audit trail
+          // is consistent regardless of which engine ran).
+          await db.executeAREXXScript(script.id, {
+            user: context.user,
+            sessionId: context.sessionId,
+            command: undefined,
+            parameters: args,
+            variables: {},
+          } as any);
+          return {
+            success: native.success,
+            output: native.output,
+            error: native.error,
+            variables: {},
+          };
         }
-      } catch {
-        // Selector load failure is non-fatal — TS path always works.
+      } catch (err) {
+        // Native dispatch faulted — fall through to TS so the script
+        // still runs. Sysop sees the error in backend.log.
+console.error('[AREXX] native dispatch failed, falling back to TS:', err);
       }
 
       // Create interpreter with context

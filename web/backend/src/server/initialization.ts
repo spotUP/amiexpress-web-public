@@ -394,13 +394,39 @@ export async function initializeData(io?: SocketIOServer) {
     // round-21 split — same _db reference, separate setter.
     setMessageForwardDependencies({ db });
 
-    // Log AREXX engine selection (#78 Phase 1). Phase 1 always logs
-    // 'ts' because the native engine reports unavailable until later
-    // phases land — the line is a forward-looking marker so sysops
-    // know the toggle exists.
+    // #78 Phase 5 — engine selection + boot the native singleton if
+    // the sysop has supplied the binaries. Boot is async and runs
+    // in the background so a slow ROM load doesn't block other init
+    // steps; once start() + runUntilReady() finish, isReady() flips
+    // and subsequent executeScript calls dispatch through native.
     try {
-      const { logEngineSelectionAtStartup } = require('../services/arexx/engine-selector');
+      const { selectAREXXEngine, logEngineSelectionAtStartup } = require('../services/arexx/engine-selector');
       logEngineSelectionAtStartup();
+      const choice = selectAREXXEngine();
+      if (choice.choice === 'native' || choice.reason.startsWith('auto: binaries parsed')) {
+        const { rexxMastService } = require('../services/arexx/rexxmast-service');
+        // Fire-and-forget: backend keeps initializing while RexxMast
+        // boots in the background. start() and runUntilReady() each
+        // complete in a few seconds at most; logged via [AREXX] tag.
+        (async () => {
+          try {
+            const started = await rexxMastService.start();
+            if (!started) {
+              console.warn(`[AREXX] RexxMast service start failed: ${rexxMastService.getStatus().lastError}`);
+              return;
+            }
+            console.log('[AREXX] RexxMast service started, running until ready...');
+            const ready = await rexxMastService.runUntilReady();
+            if (ready) {
+              console.log('[AREXX] RexxMast READY — native dispatch active');
+            } else {
+              console.warn(`[AREXX] RexxMast not ready: ${rexxMastService.getStatus().lastError}`);
+            }
+          } catch (err) {
+            console.warn('[AREXX] RexxMast boot threw:', err);
+          }
+        })();
+      }
     } catch (err) {
       console.warn('[AREXX] engine selector probe failed:', err);
     }

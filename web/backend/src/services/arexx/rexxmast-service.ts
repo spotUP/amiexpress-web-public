@@ -162,19 +162,37 @@ class RexxMastService {
         this.status.lastError = `LibraryLoader returned null for rexxsyslib.library at ${libsDir}`;
         return false;
       }
-      // LibraryLoader registers the base on its own; for the trap
-      // installer we read it back via execLibrary.getLibraryBase
-      // which the loader already populates as part of loadLibrary.
-      // (If that hasn't been wired to the loader yet, surface a
-      // clear error so Phase 4 catches the gap.)
-      const libBase = this.execLibrary.getLibraryBase
-        ? this.execLibrary.getLibraryBase('rexxsyslib.library')
-        : (lib && lib.baseAddress) || 0;
+      // LibraryLoader returns a LoadedLibrary with baseAddress set
+      // to the resolved load address. ExecLibrary doesn't separately
+      // track this — installRexxSysLibVectors reads from execLibrary
+      // via its trap dispatcher, but the install method itself
+      // expects the base to be discoverable. Register it on
+      // execLibrary so getLibraryBase returns the right value
+      // (mirrors what AmigaDoorSession does for AEDoor.library).
+      const libBase = (lib && (lib as any).baseAddress) || 0;
       if (!libBase) {
-        this.status.lastError = 'rexxsyslib.library loaded but base address not registered with execLibrary';
+        this.status.lastError = 'rexxsyslib.library loaded but baseAddress missing from LoadedLibrary';
         return false;
       }
       this.status.rexxSysLibBase = libBase;
+      // Register a LibraryNode in execLibrary's map so the
+      // installRexxSysLibVectors lookup (getLibraryBase) finds the
+      // base. Shape matches LibraryNode in ExecLibrary.ts:
+      //   { address, name, version, revision, openCount, negSize, posSize }
+      const libNode = {
+        address: libBase,
+        name: 'rexxsyslib.library',
+        version: 0,
+        revision: 0,
+        openCount: 1,
+        negSize: 510,   // 10 LVOs × 6 bytes/jump-slot rounded up
+        posSize: 34,
+      };
+      const libsMap = (this.execLibrary as any).libraries;
+      if (libsMap && typeof libsMap.set === 'function') {
+        libsMap.set('rexxsyslib.library', libNode);
+        libsMap.set('RexxSysLib', libNode); // also under canonical case for FindResident
+      }
 
       // Step 8 — install REXXSYSLIB_VECTORS at the resolved base.
       this.libraryTraps.installRexxSysLibVectors();
@@ -436,6 +454,180 @@ class RexxMastService {
     }
     this.status.lastError = `RexxMast did not call AddPort('REXX') within ${maxCycles} cycles`;
     return false;
+  }
+
+  /**
+   * #78 Phase 5-final — execute a script via the native engine.
+   *
+   * Builds a RexxMsg targeting RexxMast's 'REXX' port, drops the
+   * script content into rm_Args[0] as an argstring, PutMsg's it,
+   * runs MOIRA cycles + drains our host port until the reply
+   * lands on our reply port, then unpacks rm_Result1 / rm_Args[1].
+   *
+   * Returns:
+   *   { success, output, error, result1 }
+   * with `output` carrying the BBS-side text dispatch produced
+   * (each BBSWRITE / OUTSTR call appends to ctx.output).
+   *
+   * Cycle budget: capped at 5_000_000 to keep a runaway script
+   * from wedging the BBS. Phase 6 will surface this as a sysop
+   * tooltype (AREXX_CYCLE_BUDGET).
+   */
+  async executeRexxScript(
+    scriptText: string,
+    args: string[],
+    ctx: any,
+  ): Promise<{ success: boolean; output: string[]; error?: string; result1: number }> {
+    if (!this.isReady() || !this.emulator || !this.execLibrary || !this.rexxSysLib) {
+      return {
+        success: false,
+        output: [],
+        error: 'native engine not ready',
+        result1: -1,
+      };
+    }
+
+    const MAX_CYCLES = 5_000_000;
+    const SLICE = 1024;
+    const { serviceInboundMessages } = require('./rexx-host-servicer');
+
+    // Find RexxMast's 'REXX' port — the destination for our msg.
+    const rexxPortAddr = typeof this.execLibrary.findPortByName === 'function'
+      ? this.execLibrary.findPortByName('REXX')
+      : (this.execLibrary as any).publicPorts?.get?.('rexx') || 0;
+    if (!rexxPortAddr) {
+      return { success: false, output: [], error: "REXX port not registered", result1: -1 };
+    }
+
+    // Build a reply port for this script invocation. Reuse the BBS
+    // host port — RexxMast replies will land alongside any host
+    // command messages and the servicer drains both. This keeps
+    // single-port semantics consistent with real Amiga AmiExpress.
+    const replyPort = this.status.hostPortAddr;
+    if (!replyPort) {
+      return { success: false, output: [], error: 'host reply port not initialised', result1: -1 };
+    }
+
+    // Allocate a RexxMsg + put script text in rm_Args[0].
+    const msgAddr = this.rexxSysLib.createRexxMsg(replyPort, 0, 0);
+    if (msgAddr === 0) {
+      return { success: false, output: [], error: 'CreateRexxMsg failed', result1: -1 };
+    }
+
+    // Stage script bytes in MOIRA RAM, then create an argstring of
+    // the same length and patch in the bytes.
+    const MEMF_PUBLIC_CLEAR = 0x10001;
+    const stage = this.execLibrary.allocMem(scriptText.length + 1, MEMF_PUBLIC_CLEAR);
+    for (let i = 0; i < scriptText.length; i++) {
+      this.emulator.writeMemory(stage + i, scriptText.charCodeAt(i) & 0xff);
+    }
+    this.emulator.writeMemory(stage + scriptText.length, 0);
+    const arg0 = this.rexxSysLib.createArgstring(stage, scriptText.length);
+    this.emulator.writeMemory32(msgAddr + 40, arg0); // rm_Args[0]
+    // rm_Action = 0x01000000 (RXCOMM, "interpret as command/script")
+    this.emulator.writeMemory32(msgAddr + 28, 0x01000000);
+
+    // Subsequent rm_Args[1..N] hold script arguments per RKRM.
+    for (let i = 0; i < args.length && i < 15; i++) {
+      const argText = args[i];
+      const argStage = this.execLibrary.allocMem(argText.length + 1, MEMF_PUBLIC_CLEAR);
+      for (let j = 0; j < argText.length; j++) {
+        this.emulator.writeMemory(argStage + j, argText.charCodeAt(j) & 0xff);
+      }
+      this.emulator.writeMemory(argStage + argText.length, 0);
+      const argstring = this.rexxSysLib.createArgstring(argStage, argText.length);
+      this.emulator.writeMemory32(msgAddr + 40 + (i + 1) * 4, argstring);
+    }
+
+    // PutMsg into RexxMast's REXX port.
+    if (typeof this.execLibrary.putMsg === 'function') {
+      this.execLibrary.putMsg(rexxPortAddr, msgAddr);
+    } else {
+      // Fallback: direct list manipulation (matches PutMsg semantics).
+      const tailPred = this.emulator.readMemory32(rexxPortAddr + 0x1c) >>> 0;
+      this.emulator.writeMemory32(msgAddr + 0, 0);
+      this.emulator.writeMemory32(msgAddr + 4, tailPred);
+      this.emulator.writeMemory32(tailPred + 0, msgAddr);
+      this.emulator.writeMemory32(rexxPortAddr + 0x1c, msgAddr);
+    }
+
+    // Drive MOIRA until our msgAddr appears on the reply port (or
+    // budget exhausts). serviceInboundMessages drains BBS-side host
+    // commands the running script issues; the script's terminal
+    // ReplyMsg lands on replyPort's mp_MsgList.
+    const output: string[] = ctx.output || [];
+    const dispatchCtx = { ...ctx, output };
+    let cycles = 0;
+    let replied = false;
+    while (cycles < MAX_CYCLES && !replied) {
+      try {
+        for (let i = 0; i < SLICE && cycles < MAX_CYCLES; i++) {
+          this.emulator.executeInstruction();
+          cycles++;
+        }
+      } catch (err: any) {
+        return {
+          success: false,
+          output,
+          error: `emulator faulted at ~${cycles} cycles: ${err?.message || err}`,
+          result1: -1,
+        };
+      }
+      try {
+        await serviceInboundMessages(this.emulator, this.rexxSysLib, replyPort, dispatchCtx);
+      } catch (err: any) {
+        // Servicer faults shouldn't kill the script — log + keep
+        // running. The worst case is the reply also gets dispatched
+        // and ReplyMsg loops back; we cap iterations to bound that.
+console.warn('[AREXX] servicer fault during executeRexxScript:', err?.message || err);
+      }
+      // Has our message been replied? On reply, mn_ReplyPort is
+      // typically zeroed and the message lands back on our list.
+      // We detect by looking up msgAddr on replyPort's drained
+      // history; serviceInboundMessages already replied any pending
+      // messages, so if the script terminated rm_Action will be 0
+      // and rm_Result1 / rm_Args[1] will be populated.
+      const action = this.emulator.readMemory32(msgAddr + 28) >>> 0;
+      if (action === 0) {
+        // Action cleared by RexxMast on script completion.
+        replied = true;
+        break;
+      }
+    }
+
+    if (!replied) {
+      return {
+        success: false,
+        output,
+        error: `script did not return within ${MAX_CYCLES} cycles`,
+        result1: -1,
+      };
+    }
+
+    const result1 = this.emulator.readMemory32(msgAddr + 32) | 0;
+    let resultStr: string | undefined;
+    const arg1 = this.emulator.readMemory32(msgAddr + 44) >>> 0;
+    if (arg1 !== 0) {
+      const len = this.emulator.readMemory32(arg1 - 4) >>> 0;
+      let s = '';
+      for (let i = 0; i < Math.min(len, 4096); i++) {
+        const b = this.emulator.readMemory(arg1 + i);
+        if (b === 0) break;
+        s += String.fromCharCode(b);
+      }
+      resultStr = s;
+    }
+
+    // Free the message + its argstrings.
+    try { this.rexxSysLib.deleteRexxMsg(msgAddr); } catch { /* best-effort */ }
+    try { this.execLibrary.freeMem(stage, scriptText.length + 1); } catch { /* best-effort */ }
+
+    return {
+      success: result1 === 0,
+      output,
+      error: result1 !== 0 ? (resultStr || `script returned ${result1}`) : undefined,
+      result1,
+    };
   }
 
   /**
