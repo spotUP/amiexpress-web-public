@@ -1921,24 +1921,31 @@ console.error('BBSCREATEDROPFILE error:', error);
    * Special keys: BSPC="08"x (backspace), CR="0d"x (enter)
    */
   async GETCHAR(): Promise<string> {
-    // In a real implementation, this would block waiting for input
-    // For web BBS, we need to handle this asynchronously via socket events
-    // For now, return empty and rely on socket-based input handling
-
-    // Store context for socket handler to resume
-    if (this.context.socket) {
-      // Request single character input via socket
-      this.context.socket.emit('door:request-char');
-
-      // Wait for input via promise (resolved by socket handler)
-      return new Promise((resolve) => {
-        this.context.socket.once('door:char-input', (char: string) => {
-          resolve(char);
-        });
-      });
-    }
-
-    return '';
+    // Use the same session.doorInputHandler mechanism every other door
+    // type (68K via DoorMessageHandler, TypeScript via createBBSApi) uses
+    // for blocking input. The BBS's central socket handler in
+    // server/socket-handlers.ts routes incoming user keystrokes through
+    // session.doorInputHandler when set, regardless of door type.
+    //
+    // The previous implementation emitted `door:request-char` and waited
+    // for `door:char-input` — neither event has a handler in the BBS
+    // (no frontend code sends `door:char-input` back), so the script
+    // hung forever at the first GETCHAR. STNG.Rexx's title-screen
+    // "Press [RETURN] to Continue.." was unrecoverable.
+    const session = this.context.session;
+    if (!session) return '';
+    return new Promise<string>((resolve) => {
+      session.doorInputHandler = (data: string) => {
+        delete session.doorInputHandler;
+        // GETCHAR returns the FIRST character; doors that want a full
+        // line use PROMPT/getLine instead. AmiExpress's GetChar
+        // semantics return one keystroke, with CR mapping to '\r'.
+        const ch = (typeof data === 'string' && data.length > 0)
+          ? data[0]
+          : '';
+        resolve(ch);
+      };
+    });
   }
 
   /**
