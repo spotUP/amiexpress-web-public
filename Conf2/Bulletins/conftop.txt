@@ -1,16 +1,26 @@
-[32mConference: [33mMain                                    [32mDay ([33m0/0 - Final Results[32m)[0m
+[32mConference: [33mMain                           [32m         [32mDay ([33m7/7 - Final Results[32m)[0m
 
-[35mNo# Username (Handle)       Location (Group)         Files Uploaded Bytes
-[34m===-=======================-========================-=====-==================
+[35mNo# Username (Handle)         Location (Group)           Files Uploaded Bytes
+[34m===-=========================-==========================-=====-==============
 [32m 1.
 [32m 2.
 [32m 3.
 [32m 4.
-[32m 5.[0m            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -
+[32m 5.
 [32m 6.
 [32m 7.
 [32m 8.
 [32m 9.
-[32m10.
+[32m10.[0m            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -
+[32m11.
+[32m12.
+[32m13.
+[32m14.
+[32m15.
+[32m16.
+[32m17.
+[32m18.
+[32m19.
+[32m20.
 
-[35mTotal Uploaded Files[36m: [ [0m    0 [36m]   [35mTotal Uploaded Bytes[36m: [ [0m                0 [36m][0m
+[35mTotal Uploaded Files[36m: [ [0m    0[36m ]       [35mTotal Uploaded Bytes[36m: [ [0m            0[36m ][0m
