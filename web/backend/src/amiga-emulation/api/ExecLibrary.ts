@@ -3903,8 +3903,26 @@ debugLog(
     // Set io_Error to 0 (success)
     this.emulator.writeMemory(ioReqAddr + 31, 0);
 
-    // In a real system, would send reply message to port when complete
-    // For now, we just mark as complete
+    // The IORequest is a struct Message at offset 0 — mn_ReplyPort lives
+    // at +14, same as any other message. To match real exec.library
+    // semantics (the driver ReplyMsg's the IO when it completes),
+    // route through replyMsg() so the waiting task's port-sigBit fires.
+    // Without this the AmiExpress RexxMast daemon's Wait(0x6000) on
+    // its master + AREXX ports never wakes after the timer.device
+    // SendIO it issues during message dispatch, and the script never
+    // returns. Doors that SendIO + WaitIO/CheckIO are unaffected
+    // because we already mark io_Error=0 above (CheckIO returns -1,
+    // WaitIO finds the reply on the port).
+    const replyPort = this.emulator.readMemory32(ioReqAddr + 14) >>> 0;
+    if (replyPort !== 0) {
+      try {
+        this.replyMsg(ioReqAddr);
+      } catch (err) {
+debugLog(
+          `[ExecLibrary]   SendIO: replyMsg faulted - ${(err as any)?.message || err}`
+        );
+      }
+    }
 debugLog(
       `[ExecLibrary]   SendIO: Stubbed - simulating immediate completion`
     );
@@ -5687,6 +5705,19 @@ debugLog(
   replyMsg(msgAddr: number): void {
     // File-based debug logging for visibility
     this.logExecDebug(`ReplyMsg called: msg=0x${msgAddr.toString(16)}`);
+
+    // ReplyMsg(NULL): real exec.library faults; we silently no-op so
+    // a daemon that conditionally zeroes A1 (e.g. AmiExpress RexxMast's
+    // dispatch arm with no immediate reply) doesn't trick us into
+    // reading bogus memory at address +14 and auto-registering a
+    // garbage port. Without this guard the AREXX trace floods with
+    // zero-msg autoRegisterPort entries that allocate the wrong
+    // sigBit (16/17) for the daemon's master port (real sigBit 13),
+    // and the daemon's Wait(0x6000) never wakes from timer.device.
+    if (msgAddr === 0) {
+debugLog(`[ExecLibrary] ReplyMsg(NULL) - ignoring (defensive)`);
+      return;
+    }
 
     // Read reply port from message header
     const replyPortAddr = this.emulator.readMemory32(msgAddr + 14);

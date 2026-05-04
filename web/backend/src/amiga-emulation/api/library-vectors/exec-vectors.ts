@@ -282,6 +282,48 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
     },
   },
   {
+    offset: -270, // LVO -270
+    name: "Enqueue",
+    // Enqueue(list, node): insert node into priority-sorted list. Real
+    // exec walks lh_Head and stops at the first node whose ln_Pri is
+    // LESS than the inserted node's ln_Pri, then links in front of it.
+    // The AmiExpress RexxMast daemon uses Enqueue to drop received
+    // RexxMsgs onto its global pending list before dispatching them
+    // to the (in-rexxsyslib) interpreter — without a working impl
+    // the list stays empty and the daemon's RemHead loop spins on
+    // garbage list pointers.
+    handler: (emu, lib: ExecLibrary) => {
+      const listAddr = emu.getRegister(8) >>> 0; // A0
+      const nodeAddr = emu.getRegister(9) >>> 0; // A1
+      if (listAddr === 0 || nodeAddr === 0) return emu.getRegister(0);
+      // ln_Pri is a signed BYTE at +9.
+      const newPriRaw = emu.readMemory(nodeAddr + 9) & 0xff;
+      const newPri = newPriRaw > 0x7f ? newPriRaw - 0x100 : newPriRaw;
+      // Walk list: head is at +0, tail sentinel is +4 (lh_Tail = 0).
+      const tailAddr = listAddr + 4;
+      let curr = emu.readMemory32(listAddr) >>> 0;
+      while (curr !== 0 && curr !== tailAddr) {
+        const currPriRaw = emu.readMemory(curr + 9) & 0xff;
+        const currPri = currPriRaw > 0x7f ? currPriRaw - 0x100 : currPriRaw;
+        if (currPri < newPri) break;
+        curr = emu.readMemory32(curr) >>> 0; // ln_Succ
+      }
+      // Insert node BEFORE curr (or at tail if list is empty / all
+      // higher priority). Equivalent to standard exec Enqueue.
+      if (curr === 0 || curr === tailAddr) {
+        // Append to tail.
+        lib.addTail(listAddr, nodeAddr);
+      } else {
+        const prev = emu.readMemory32(curr + 4) >>> 0; // ln_Pred
+        emu.writeMemory32(nodeAddr + 0, curr);          // ln_Succ
+        emu.writeMemory32(nodeAddr + 4, prev);          // ln_Pred
+        emu.writeMemory32(curr + 4, nodeAddr);          // curr.ln_Pred
+        emu.writeMemory32(prev + 0, nodeAddr);          // prev.ln_Succ
+      }
+      return emu.getRegister(0);
+    },
+  },
+  {
     offset: -558, // LVO -558
     name: "InitSemaphore",
     handler: (emu, _lib: ExecLibrary) => {
