@@ -129,6 +129,36 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
     return this.mapUserFromDb(user);
   }
 
+  /**
+   * Lookup a user by realName — express.e:11505-11514 findUserFromName
+   * with NAME_TYPE_REALNAME. Used by captureRealAndInternetNames'
+   * uniqueness check (express.e:28184 "Already in use!, try another.")
+   * and by enterMSG's chooseAName resolution in REALNAME conferences.
+   * Case-insensitive match. Returns null when no row matches.
+   */
+  async getUserByRealname(realname: string): Promise<User | null> {
+    const trimmed = (realname || '').trim();
+    if (trimmed.length === 0) return null;
+    const normalized = normalizeForComparison(trimmed);
+    const user = this.get<any>('SELECT * FROM users WHERE LOWER(realname) = ?', [normalized]);
+    if (!user) return null;
+    return this.mapUserFromDb(user);
+  }
+
+  /**
+   * Lookup a user by internetName — express.e:11512-11514 findUserFromName
+   * with NAME_TYPE_INTERNETNAME. Used by captureRealAndInternetNames'
+   * uniqueness check on the internet-name field. Case-insensitive.
+   */
+  async getUserByInternetname(internetname: string): Promise<User | null> {
+    const trimmed = (internetname || '').trim();
+    if (trimmed.length === 0) return null;
+    const normalized = normalizeForComparison(trimmed);
+    const user = this.get<any>('SELECT * FROM users WHERE LOWER(internetname) = ?', [normalized]);
+    if (!user) return null;
+    return this.mapUserFromDb(user);
+  }
+
   async getUserById(id: string): Promise<User | null> {
     const user = this.get<any>('SELECT * FROM users WHERE id = ?', [id]);
 
@@ -149,6 +179,8 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       username: user.username,
       passwordHash: user.passwordhash,
       realname: user.realname,
+      // express.e loggedOnUserMisc.internetName — column added by migration.
+      internetName: user.internetname || undefined,
       location: user.location,
       phone: user.phone,
       email: user.email,

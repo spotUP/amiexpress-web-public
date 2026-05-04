@@ -459,6 +459,81 @@ export async function getAllMessageIds(
 }
 
 /**
+ * express.e:10576-10624 getMsgId — FidoNet/UUCP MSGID generator.
+ *
+ * Maintains a monotonic 32-bit counter at `<bbsLoc>/msgidnr.nxt` (8-hex
+ * uppercase + LF) under a sibling lockfile `<bbsLoc>/msgidnr.lck`. Each
+ * call returns the current counter then advances. If the stored value
+ * is older than the current Unix time, the counter is jumped forward
+ * to the time floor (express.e:10614 `IF c>v THEN v:=c`).
+ *
+ * Returns the assigned ID as an 8-char uppercase hex string on success,
+ * null on lock contention / I/O failure (matches express.e returning
+ * FALSE/0 on lockMsgBase failure → caller writes empty line per
+ * express.e:10675).
+ */
+export async function getNextMsgId(bbsDataPath: string): Promise<string | null> {
+  const lockPath = path.join(bbsDataPath, 'msgidnr.lck');
+  const counterPath = path.join(bbsDataPath, 'msgidnr.nxt');
+
+  // express.e:10583-10593 — Lock retry loop, 30 × 120ms ≈ 3.6s budget.
+  let lockHandle: fsSync.PathLike | null = null;
+  let lockFd: number | null = null;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      lockFd = fsSync.openSync(lockPath, fsSync.constants.O_CREAT | fsSync.constants.O_EXCL | fsSync.constants.O_RDWR);
+      lockHandle = lockPath;
+      break;
+    } catch (err: any) {
+      if (err.code === 'EEXIST') {
+        await new Promise(r => setTimeout(r, 120));
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!lockHandle || lockFd === null) {
+    // express.e:10595-10599 fallback — caller proceeds with empty id line.
+    return null;
+  }
+
+  try {
+    // express.e:10601-10615 — read current value, parse as hex, advance.
+    let stored = 0;
+    try {
+      const raw = (await fs.readFile(counterPath, 'utf-8')).trim();
+      // express.e treats `$<hex>` as hex literal; the file format is plain
+      // 8-hex-digit + LF (express.e:10618 \z\h[8]). We accept both forms.
+      const hex = raw.startsWith('$') ? raw.slice(1) : raw;
+      const parsed = parseInt(hex, 16);
+      if (Number.isFinite(parsed) && hex.length === 8) {
+        stored = parsed >>> 0;
+      }
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') throw err;
+      // First call ever — counter file not yet created.
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    // express.e:10611 `IF r<>9 THEN v:=c` — the parse returned r==9 only when
+    // exactly "$XXXXXXXX" was read (1 + 8 chars). We replicate by treating
+    // any unparseable / wrong-length input as stale and reseeding from now.
+    if (stored === 0) stored = nowSec;
+    const assigned = stored;          // returned to caller (express.e:r)
+    let nextValue = assigned + 1;     // express.e:10613 v++
+    if (nowSec > nextValue) nextValue = nowSec; // express.e:10614 time floor
+
+    const nextHex = (nextValue >>> 0).toString(16).toUpperCase().padStart(8, '0');
+    await fs.writeFile(counterPath, `${nextHex}\n`, 'utf-8');
+
+    return (assigned >>> 0).toString(16).toUpperCase().padStart(8, '0');
+  } finally {
+    try { fsSync.closeSync(lockFd); } catch {}
+    try { await fs.unlink(lockPath); } catch {}
+  }
+}
+
+/**
  * express.e:10654-10685 saveNewMSG EXTSEND dump.
  *
  * When a msgbase has the EXTSEND.<n> tooltype set AND the message is NOT
@@ -523,10 +598,16 @@ export async function writeExtSendDumpIfApplicable(
     `${String(d.getFullYear()).slice(-2)} ` +
     `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 
-  // express.e:10671 getMsgId() — FidoNet/UUCP message-id generator. We don't
-  // have a port of that yet so write an empty line (express.e:10675 falls
-  // back to '' on failure), preserving the file shape.
-  const msgIdLine = '';
+  // express.e:10671-10676 getMsgId() — FidoNet/UUCP MSGID generator.
+  // Returns 8-hex uppercase counter file ID, or empty string on lock
+  // contention / I/O failure (matches express.e:10675 fallback).
+  let msgIdLine = '';
+  try {
+    const id = await getNextMsgId(bbsDataPath);
+    if (id) msgIdLine = id;
+  } catch (err) {
+    console.error('[ExtSend] getMsgId failed (proceeding with empty id):', err);
+  }
 
   const lines = [
     header.fromName,

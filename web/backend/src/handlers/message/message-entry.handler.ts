@@ -126,6 +126,23 @@ export async function handleCaptureRealNameInput(socket: any, session: BBSSessio
     return; // stay in MSG_CAPTURE_REAL_NAME (express.e REPEAT/UNTIL loop)
   }
 
+  // express.e:28184 findUserFromName(NAME_TYPE_REALNAME, ...) — duplicate
+  // name rejection. "Already in use!, try another." stays in the prompt.
+  emitText(socket, '\r\nChecking for duplicate name...');
+  if (_db?.getUserByRealname) {
+    try {
+      const existing = await _db.getUserByRealname(trimmed);
+      if (existing && existing.id !== session.user?.id) {
+        emitText(socket, '\r\nAlready in use!, try another.\r\n\r\n');
+        emitText(socket, 'Real Name (Alpha Numeric): ');
+        return; // loop
+      }
+    } catch (err) {
+      console.error('[CaptureRealName] Duplicate-check failed:', err);
+      // Fall through — accept the value rather than block on a DB hiccup.
+    }
+  }
+
   // Persist on the live user object so subsequent messages don't re-prompt.
   const userMisc: any = (session.user as any) || {};
   userMisc.realName = trimmed;
@@ -179,6 +196,22 @@ export async function handleCaptureInternetNameInput(socket: any, session: BBSSe
     emitText(socket, '\r\nNo spaces allowed.\r\n');
     emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
     return;
+  }
+
+  // express.e:28216 findUserFromName(NAME_TYPE_INTERNETNAME, ...) —
+  // duplicate-name rejection on internetName.
+  emitText(socket, '\r\nChecking for duplicate name...');
+  if (_db?.getUserByInternetname) {
+    try {
+      const existing = await _db.getUserByInternetname(trimmed);
+      if (existing && existing.id !== session.user?.id) {
+        emitText(socket, '\r\nAlready in use!, try another.\r\n\r\n');
+        emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+        return;
+      }
+    } catch (err) {
+      console.error('[CaptureInternetName] Duplicate-check failed:', err);
+    }
   }
 
   const userMisc: any = (session.user as any) || {};

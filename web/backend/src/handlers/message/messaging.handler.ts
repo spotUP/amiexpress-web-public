@@ -678,59 +678,59 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       return;
     }
 
-    // express.e:12162 captureRealAndInternetNames before replyToMSG
-    if (typeof captureNames === 'function' && !captureNames(socket, session)) {
-      displayMessageNavigationPrompt(socket, session);
-      return;
-    }
+    // The post-capture body of the R command — extracted as a local async
+    // function so captureRealAndInternetNames can resume here after an
+    // inline REALNAME / INTERNETNAME prompt completes.
+    const continueReply = () => {
+      // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
+      emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
 
-    // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
-    emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+      // express.e:9882: AstrCopy(mailHeader.toName, mailHeader.fromName, 31)
+      // — toName seeded from the original sender. checkToForward (express.e:9885)
+      //   then redirects sysop replies via FORWARDMAIL tooltype.
+      let toUser = msg.author;
+      const confId = session.currentConf || 1;
+      const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+      const { isSysopRecipient } = require('./message-entry.handler');
+      const flags = getConferenceToolFlags(confId);
+      const fwdUser = flags?.forwardMail || '';
+      let forwardingNotice = '';
+      // express.e:9919 stringCompare(name, tempUser.name) — slot 1's userName,
+      // not just the literal token 'SYSOP'.
+      if (fwdUser && isSysopRecipient(toUser)) {
+        forwardingNotice = `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`;
+        toUser = fwdUser;
+      }
 
-    // express.e:9882: AstrCopy(mailHeader.toName, mailHeader.fromName, 31)
-    // — toName seeded from the original sender. checkToForward (express.e:9885)
-    //   then redirects sysop replies via FORWARDMAIL tooltype.
-    let toUser = msg.author;
-    const confId = session.currentConf || 1;
-    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-    const { isSysopRecipient } = require('./message-entry.handler');
-    const flags = getConferenceToolFlags(confId);
-    const fwdUser = flags?.forwardMail || '';
-    let forwardingNotice = '';
-    // express.e:9919 stringCompare(name, tempUser.name) — slot 1's userName,
-    // not just the literal token 'SYSOP'. The original mail's fromName for
-    // a sysop-authored message is whatever sysop_name is configured, so the
-    // literal-only check missed those replies.
-    if (fwdUser && isSysopRecipient(toUser)) {
-      forwardingNotice = `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`;
-      toUser = fwdUser;
-    }
+      emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${toUser}\r\n`);
+      if (forwardingNotice) emitText(socket, forwardingNotice);
 
-    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${toUser}\r\n`);
-    if (forwardingNotice) emitText(socket, forwardingNotice);
+      // express.e:9886-9890: Subject prompt pre-filled with original subject
+      emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
+      emitText(socket, msg.subject);
 
-    // express.e:9886-9890: Subject prompt pre-filled with original subject (no "Re: " prefix)
-    // blank = abort (RETURN RESULT_SUCCESS = return to reading)
-    emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
-    emitText(socket, msg.subject);
-
-    session.inputBuffer = msg.subject; // pre-fill for line editing
-    session.tempData.messageEntry = {
-      toUser,
-      subject: msg.subject,
-      body: [],
-      currentLine: 1,
-      parentId: msg.id,
-      // express.e:9880: frm = mailHeader.toName; used for delete-original eligibility (9898-9903)
-      replyOriginalToUser: msg.toUser,
-      // express.e:10870 — replying to a censored ('p') public message keeps
-      // the reply at 'p' even when user picks Public. Capture parent status
-      // here so saveMessage can OR it into the censored decision.
-      parentMsgStatus: (msg as any).status ?? null,
+      session.inputBuffer = msg.subject; // pre-fill for line editing
+      if (!session.tempData) session.tempData = {};
+      session.tempData.messageEntry = {
+        toUser,
+        subject: msg.subject,
+        body: [],
+        currentLine: 1,
+        parentId: msg.id,
+        replyOriginalToUser: msg.toUser,
+        parentMsgStatus: (msg as any).status ?? null,
+      };
+      session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
     };
-    // express.e:9894 replyFlag=1 → enterMSG skips To:/Subject: and jumps to skipBegin
-    // We go to POST_MESSAGE_SUBJECT to capture any subject edit; handler will proceed to Private
-    session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
+
+    // express.e:12162 captureRealAndInternetNames before replyToMSG.
+    // Pass the resume callback so REALNAME / INTERNETNAME prompts (when
+    // triggered) seamlessly hand off back into the reply flow.
+    if (typeof captureNames === 'function') {
+      const ok = captureNames(socket, session, continueReply);
+      if (!ok) return; // capture in progress (or blocked); resume will fire if successful
+    }
+    continueReply();
     return;
   }
 
@@ -797,12 +797,6 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
   // F - Forward message - express.e:11178-11191, forwardMSG:9807-9871
   if (command === 'F') {
-    // express.e:12154 captureRealAndInternetNames before forwardMSG
-    const { captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
-    if (typeof captureNames === 'function' && !captureNames(socket, session)) {
-      displayMessageNavigationPrompt(socket, session);
-      return;
-    }
     const msg = messages[currentIndex];
     // express.e:11179 forward auth:
     //   IF (privateFlag=0)
@@ -810,14 +804,21 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     //   OR StrCmp(toName, 'EALL', 5)
     // confMailName = per-conf display name (REALNAME / INTERNETNAME / USERNAME).
     // EALL is allowed because it's a group recipient, not a single user.
-    const { getConfMailName } = require('./message-entry.handler');
+    const { getConfMailName, captureRealAndInternetNames: captureNames } = require('./message-entry.handler');
     const myConfMailName = getConfMailName(session).toLowerCase();
     const toLower = (msg.toUser || '').toLowerCase();
     const isEallAddressed = toLower === 'eall';
     const isAddressedToMe = toLower === myConfMailName;
     const isAddressedToAll = toLower === 'all';
     const canForward = !msg.isPrivate || isAddressedToMe || isAddressedToAll || isEallAddressed;
-    if (canForward) {
+    if (!canForward) {
+      // express.e:11920: '\b\nMessage not deleted, not your mail.\b\n\b\n'
+      emitText(socket, '\r\nMessage not deleted, not your mail.\r\n\r\n');
+      displayMessageNavigationPrompt(socket, session);
+      return;
+    }
+
+    const continueForward = () => {
       // Store original message for forwarding
       session.tempData.forwardOriginalMessage = msg;
       session.tempData.forwardOriginalIndex = currentIndex;
@@ -832,11 +833,17 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       emitPrompt(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
 
       session.subState = LoggedOnSubState.FORWARD_MESSAGE_TO;
-    } else {
-      // express.e:11920: '\b\nMessage not deleted, not your mail.\b\n\b\n'
-      emitText(socket, '\r\nMessage not deleted, not your mail.\r\n\r\n');
-      displayMessageNavigationPrompt(socket, session);
+    };
+
+    // express.e:12154 captureRealAndInternetNames before forwardMSG.
+    // Pass continueForward as the resume so an inline REALNAME /
+    // INTERNETNAME prompt (when triggered) hands off back into the
+    // forward flow once the field is captured.
+    if (typeof captureNames === 'function') {
+      const ok = captureNames(socket, session, continueForward);
+      if (!ok) return;
     }
+    continueForward();
     return;
   }
 

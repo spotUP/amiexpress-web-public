@@ -421,6 +421,15 @@ console.log('✓ Added erased_at column (GDPR erasure timestamp)');
 console.log('✓ Added slotnumber column');
       }
 
+      // express.e loggedOnUserMisc.internetName — populated by
+      // captureRealAndInternetNames when a conf has the INTERNETNAME
+      // tooltype. Stored separately from realname so lookups via
+      // findUserFromName(NAME_TYPE_INTERNETNAME, ...) work.
+      if (!columnNames.includes('internetname')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN internetname TEXT DEFAULT NULL');
+console.log('✓ Added internetname column');
+      }
+
       // Populate slotnumber for any user where it is 0 or NULL.
       // express.e:29624 — slotNumber is the permanent 1-indexed user.data slot.
       // After the migration above, existing rows are 0; assign sequential slots
@@ -2187,6 +2196,14 @@ console.error('Error creating indexes:', error);
 
   async getUserByUsername(...args: Parameters<UserRepository['getUserByUsername']>) {
     return this.userRepo!.getUserByUsername(...args);
+  }
+
+  async getUserByRealname(...args: Parameters<UserRepository['getUserByRealname']>) {
+    return this.userRepo!.getUserByRealname(...args);
+  }
+
+  async getUserByInternetname(...args: Parameters<UserRepository['getUserByInternetname']>) {
+    return this.userRepo!.getUserByInternetname(...args);
   }
 
   async getUserById(...args: Parameters<UserRepository['getUserById']>) {
