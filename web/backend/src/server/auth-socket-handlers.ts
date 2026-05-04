@@ -537,6 +537,21 @@ console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sy
       // Update last login
       await db.updateUser(user.id, { lastLogin: getSystemTime(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
 
+      // Seed AquaScan.UserData slot if it's still zero — without this, a
+      // first-time user runs AquaScan and sees "Scanning dir 1 for 00:00:00".
+      // Idempotent: no-op once the slot has any non-zero days/minute. The
+      // websocket login path was missing this; the BBS-prompt path in
+      // command.handler.ts already has it. Both now share aquascan-slot.util.
+      try {
+        const { seedAquaScanSlot } = require('../utils/aquascan-slot.util');
+        const seeded = seedAquaScanSlot({ ...user, lastLogin: getSystemTime() });
+        if (seeded) {
+console.log(`[LOGIN] Seeded AquaScan.UserData for ${user.username}: days=${seeded.days} min=${seeded.minutes}`);
+        }
+      } catch (err) {
+console.warn('[LOGIN] AquaScan slot seed failed:', err);
+      }
+
       // Set session user data
       // ... (existing code continues) ...
       session.state = BBSState.LOGGEDON;

@@ -2577,7 +2577,17 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     //  so subsequent N-command runs show only files added since this scan.)
     {
       // --- AQUASCAN DEBUG ---
-      const slotNum = session.user?.slotNumber ?? 0;
+      // Resolve slot number using the same precedence as DT_SLOTNUMBER (the
+      // value AquaScan itself reads). Older code only checked .slotNumber
+      // (camelCase) and missed users where the DB column .slotnumber
+      // (lowercase) hadn't been mirrored yet — which left the post-scan
+      // write going to slot 0 even though AquaScan was reading slot N.
+      const userAny: any = session.user;
+      const sessionSlot = Number((session as any)?.userSlotNumber);
+      const slotNum =
+        Number.isFinite(sessionSlot) && sessionSlot > 0
+          ? sessionSlot
+          : Number(userAny?.slotnumber ?? userAny?.slotNumber ?? 0);
       const isAquaScan = /aquascan/i.test(doorPath);
       const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
       let beforeHex = '(unreadable)';
