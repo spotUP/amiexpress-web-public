@@ -266,7 +266,7 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
       return RESULT_SUCCESS;
 
     case 'Z': // Zippy Text Search (internalCommandZ) - express.e:26123-26213
-      const { ZippySearchHandler } = require('../zippy-search.handler');
+      const { ZippySearchHandler } = require('../content/zippy-search.handler');
       await ZippySearchHandler.handleZippySearchCommand(socket, session, params);
       return RESULT_SUCCESS;
 

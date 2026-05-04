@@ -432,14 +432,24 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
     emitText(socket, '\r\n');
   }
 
-  // Option 16: Background File Check - express.e:25821-25829
-  // Simplified for web version - always show as available
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, ' 16');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('BACKGROUND FILE CHECK... ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize('NO', 'white'));
-  emitText(socket, '\r\n');
+  // Option 16: Background File Check — express.e:25872-25879
+  // express.e gates display on Node tooltype BGFILECHECK existing AND
+  // FORCE_BGFILECHECK NOT existing; web has no per-node tooltype gating
+  // (no bg checker process runs), so we always show the toggle so the user
+  // can persist their preference. Bit is USER_BGFILECHECK from axconsts.e:71.
+  // WEB_: dropped Node BGFILECHECK / FORCE_BGFILECHECK tooltype gates;
+  //       feature is preference-only in web until a bg-check service exists.
+  {
+    const { UserFlag } = require('../../constants/express-flags');
+    const bgfc = (currentUser.userFlags || 0) & UserFlag.BGFILECHECK;
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 16');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('BACKGROUND FILE CHECK... ', 'magenta'));
+    // express.e:25875 [32mYES[0m / express.e:25877 [37mNO[0m
+    emitText(socket, bgfc ? '\x1b[32mYES\x1b[0m' : '\x1b[37mNO\x1b[0m');
+    emitText(socket, '\r\n');
+  }
 
   // WEB_: MODERN_* — option 17: modem emulation speed throttle, no express.e counterpart; web terminal setting
   emitText(socket, AnsiUtil.colorize('[', 'blue'));
@@ -681,7 +691,11 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       _displayWCommandMenu(socket, session);
       break;
 
-    case 15: // Edit Translator - express.e:26015-26019
+    case 15: // Edit Translator — express.e:26081-26082 chooseTranslator()
+      // WEB_: chooseTranslator() loops through configured translator
+      //       library files (TR_*.library); web has no translator system,
+      //       userLanguage is fixed at 'English'. Prompt + accept-input is
+      //       kept for parity with express.e flow, but selection is a no-op.
       if (!checkSecurity(session.user, ACSPermission.TRANSLATION)) {
         _displayWCommandMenu(socket, session);
         return;
@@ -690,9 +704,17 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       session.subState = LoggedOnSubState.W_EDIT_TRANSLATOR;
       break;
 
-    case 16: // Toggle Background File Check - express.e:26020-26028
-      // Simplified for web version - just toggle a flag
-      _displayWCommandMenu(socket, session);
+    case 16: // Toggle Background File Check — express.e:26083-26087
+      // express.e: loggedOnUserKeys.userFlags := Eor(loggedOnUserKeys.userFlags, USER_BGFILECHECK)
+      // Web version has no Node BGFILECHECK / FORCE_BGFILECHECK tooltype gating
+      // (the bg-checker thread doesn't run server-side), so we always allow
+      // the toggle so user preference round-trips through the menu.
+      {
+        const { UserFlag } = require('../../constants/express-flags');
+        session.user.userFlags = (session.user.userFlags || 0) ^ UserFlag.BGFILECHECK;
+        await db.updateUser(session.user.id, { userFlags: session.user.userFlags });
+        _displayWCommandMenu(socket, session);
+      }
       break;
 
     case 17: // WEB_: MODERN_* — modem emulation speed; no express.e:25712-26092 counterpart

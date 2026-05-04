@@ -93,87 +93,33 @@ export function handleRelogonConfirm(socket: any, session: BBSSession, _input: s
  *
  * From express.e:25675-25687 (internalCommandV)
  *
- * Original: Prompts for filename and displays it
- * Uses viewAFile() function to handle file viewing
+ * Forwards to ViewFileHandler in content/view-file.handler.ts which is the
+ * canonical implementation: searches BBS file areas via DLPATH (Dir1..DirN),
+ * emits RIP-mode bracket sequences (express.e:25679-25685), validates
+ * filename/binary/restricted-path, and paginates with flagPause.
+ *
+ * The legacy implementation here used to search a flat BBS:TEXT/ directory
+ * and emit no RIP brackets. It is unreachable today (every dispatcher routes
+ * through ViewFileHandler) but kept as a forwarder so the export contract
+ * stays stable for downstream importers and so an accidental re-wire can
+ * never silently regress to the old, narrower behavior. (Audit C-V, 2026-05-04.)
  *
  * @param socket - Socket.IO socket
  * @param session - Current BBS session
  * @param params - Optional filename parameter
  */
-export function handleViewFileCommand(socket: any, session: BBSSession, params: string = ''): void {
-  // Check security - express.e:25676
-  if (!checkSecurity(session.user, ACSPermission.VIEW_A_FILE)) {
-    ErrorHandler.permissionDenied(socket, 'view files', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  console.log('[ENV] Viewing');
-
-  // express.e:25675-25682 internalCommandV - no header, calls viewAFile()
-  socket.emit('ansi-output', '\r\n');
-
-  // If params provided, try to view file immediately
-  if (params.trim()) {
-    _viewFile(socket, session, params.trim());
-    return;
-  }
-
-  // express.e:20413: 'Enter filename of file to view? ' — plain text
-  socket.emit('ansi-output', 'Enter filename of file to view? ');
-
-  session.subState = LoggedOnSubState.VIEW_FILE_INPUT;
-  session.tempData = { viewFileCommand: true };
+export async function handleViewFileCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
+  const { ViewFileHandler } = await import('../content/view-file.handler');
+  await ViewFileHandler.handleViewFileCommand(socket, session, params);
 }
 
 /**
- * Handle V command input
+ * Handle V command input — forwards to ViewFileHandler.handleFilenameInput.
+ * See handleViewFileCommand above for the rationale.
  */
-export function handleViewFileInput(socket: any, session: BBSSession, input: string): void {
-  const filename = input.trim();
-
-  socket.emit('ansi-output', '\r\n');
-
-  if (!filename) {
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    delete session.tempData;
-    return;
-  }
-
-  _viewFile(socket, session, filename);
-  delete session.tempData;
-}
-
-/**
- * Internal: View a file
- */
-function _viewFile(socket: any, session: BBSSession, filename: string): void {
-  // Try to find file in various locations
-  // Original AmiExpress searches BBS:TEXT/ directory
-  const textDir = path.join(_confScreenDir, '..', 'TEXT');
-  const filePath = path.join(textDir, filename);
-
-  if (fs.existsSync(filePath)) {
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', content);
-      socket.emit('ansi-output', '\r\n');
-    } catch (error) {
-      // express.e:20429: 'File N not found.\b\n\b\n'
-      socket.emit('ansi-output', `File ${filename} not found.\r\n\r\n`);
-    }
-  } else {
-    // express.e:20429: 'File \s not found.\b\n\b\n'
-    socket.emit('ansi-output', `File ${filename} not found.\r\n\r\n`);
-  }
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+export async function handleViewFileInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const { ViewFileHandler } = await import('../content/view-file.handler');
+  await ViewFileHandler.handleFilenameInput(socket, session, input);
 }
 
 /**
@@ -181,135 +127,37 @@ function _viewFile(socket: any, session: BBSSession, filename: string): void {
  *
  * From express.e:26123-26213 (internalCommandZ)
  *
- * Original: Searches file descriptions for text pattern
- * Can search specific directories or all directories
- * Supports NS (non-stop display) flag
+ * Forwards to ZippySearchHandler in content/zippy-search.handler.ts which
+ * is the canonical implementation: prompts via getDirSpan
+ * (express.e:26162-26168), iterates DIR1..DIRN per conference emitting
+ * "Scanning directory N" headers (express.e:26185-26192), and uses
+ * context-buffered output to display the full file-description block on
+ * any line that matches the search pattern (express.e:27574-27586).
  *
- * Web implementation: Stubbed (requires file database)
+ * The legacy implementation here did a flat database search via
+ * _searchFileDescriptions, ignored the dir-span param, and never emitted
+ * the per-directory headers. It is unreachable today (every dispatcher
+ * routes through ZippySearchHandler) but kept as a forwarder so the
+ * export contract stays stable for downstream importers and so an
+ * accidental re-wire can never silently regress to the flatter,
+ * non-paginated database query. (Audit C-Z, 2026-05-04.)
  *
  * @param socket - Socket.IO socket
  * @param session - Current BBS session
  * @param params - Search pattern and optional directory range
  */
 export async function handleZippySearchCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
-  // Check security - express.e:26126
-  if (!checkSecurity(session.user, ACSPermission.ZIPPY_TEXT_SEARCH)) {
-    ErrorHandler.permissionDenied(socket, 'search file descriptions', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  console.log('[ENV] Files');
-
-  // express.e:26129-26137 internalCommandZ - no header, just processes search
-  socket.emit('ansi-output', '\r\n');
-
-  // Parse params - express.e:26134-26137
-  const parsedParams = ParamsUtil.parse(params);
-
-  if (parsedParams.length > 0) {
-    const searchPattern = parsedParams[0].toUpperCase();
-    const dirRange = parsedParams.length > 1 ? parsedParams[1] : 'A';
-    const nonStop = ParamsUtil.hasFlag(parsedParams, 'NS');
-
-    socket.emit('ansi-output', AnsiUtil.colorize(`Searching for: `, 'cyan'));
-    socket.emit('ansi-output', `${searchPattern}\r\n`);
-    socket.emit('ansi-output', '\r\n');
-
-    // Perform database search - express.e:26151-26165 (zippy function call)
-    try {
-      const results = await _searchFileDescriptions(searchPattern, session.currentConf || 0);
-
-      if (results.length === 0) {
-        socket.emit('ansi-output', AnsiUtil.warningLine('No files found matching your search'));
-        socket.emit('ansi-output', '\r\n');
-      } else {
-        socket.emit('ansi-output', AnsiUtil.successLine(`Found ${results.length} file(s)`));
-        socket.emit('ansi-output', '\r\n');
-
-        // Display results - express.e:26165-26200 (zippy display logic)
-        results.forEach((file: any, index: number) => {
-          socket.emit('ansi-output', AnsiUtil.colorize(`[${index + 1}] `, 'yellow'));
-          socket.emit('ansi-output', AnsiUtil.colorize(file.filename, 'green'));
-          socket.emit('ansi-output', AnsiUtil.colorize(` (${formatFileSize(file.size)})`, 'cyan'));
-          socket.emit('ansi-output', '\r\n');
-
-          if (file.description) {
-            socket.emit('ansi-output', `    ${file.description}\r\n`);
-          }
-
-          socket.emit('ansi-output', AnsiUtil.colorize(`    Area: `, 'white'));
-          socket.emit('ansi-output', `${file.areaname || 'Unknown'}\r\n`);
-          socket.emit('ansi-output', AnsiUtil.colorize(`    Uploaded by: `, 'white'));
-          socket.emit('ansi-output', `${file.uploader} on ${formatDate(file.uploaddate)}\r\n`);
-          socket.emit('ansi-output', AnsiUtil.colorize(`    Downloads: `, 'white'));
-          socket.emit('ansi-output', `${file.downloads}\r\n`);
-          socket.emit('ansi-output', '\r\n');
-
-          // Pause after each page if not in non-stop mode - express.e:26192-26197
-          if (!nonStop && (index + 1) % 5 === 0 && (index + 1) < results.length) {
-            socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-            // Note: In a real implementation, would need to pause here
-          }
-        });
-      }
-    } catch (error) {
-console.error('[Z Command] Database error:', error);
-      socket.emit('ansi-output', AnsiUtil.errorLine('An error occurred during search'));
-      socket.emit('ansi-output', '\r\n');
-    }
-
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // No params - prompt for search pattern - express.e:26142
-  socket.emit('ansi-output', AnsiUtil.complexPrompt([
-    { text: 'Enter string to search for ', color: 'white' },
-    { text: '(or press Enter to cancel)', color: 'cyan' },
-    { text: ': ', color: 'white' }
-  ]));
-
-  session.subState = LoggedOnSubState.ZIPPY_SEARCH_INPUT;
-  session.tempData = { zippySearchCommand: true };
+  const { ZippySearchHandler } = await import('../content/zippy-search.handler');
+  await ZippySearchHandler.handleZippySearchCommand(socket, session, params);
 }
 
 /**
- * Format file size for display
+ * Handle Z command input — forwards to ZippySearchHandler.handleSearchInput.
+ * See handleZippySearchCommand above for the rationale.
  */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} bytes`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// formatDate imported from '../../utils/date-format.util' as formatDateSlash
-// Wrapper to accept string argument (original signature)
-function formatDate(dateString: string): string {
-  return formatDateSlash(dateString);
-}
-
-/**
- * Handle Z command input
- */
-export function handleZippySearchInput(socket: any, session: BBSSession, input: string): void {
-  const searchPattern = input.trim();
-
-  socket.emit('ansi-output', '\r\n');
-
-  if (!searchPattern) {
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    delete session.tempData;
-    return;
-  }
-
-  // Recursively call with params
-  handleZippySearchCommand(socket, session, searchPattern);
-  delete session.tempData;
+export async function handleZippySearchInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const { ZippySearchHandler } = await import('../content/zippy-search.handler');
+  await ZippySearchHandler.handleSearchInput(socket, session, input);
 }
 
 /**
