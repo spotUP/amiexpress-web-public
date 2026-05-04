@@ -20,6 +20,9 @@ import {
   Zap,
   MessageCircle,
   VolumeX,
+  Lock,
+  X,
+  Check,
 } from 'lucide-react';
 
 interface NodeStatus {
@@ -34,6 +37,11 @@ interface NodeStatus {
   connectionType?: string;
   lastActivity?: string;
   timeRemaining?: number;
+  /**
+   * Username this node is reserved for (audit A-3, express.e:7649-7656).
+   * null when the node is not reserved.
+   */
+  reservedFor: string | null;
 }
 
 interface ApiResponse<T> {
@@ -51,6 +59,12 @@ export function NodeControlPage() {
   const queryClient = useQueryClient();
   const [chatEnabled, setChatEnabled] = useState(true);
   const [quietMode, setQuietMode] = useState(false);
+
+  // Audit A-3: reservation control state.
+  // - editingReserveNodeId: which node card has its inline input open
+  // - reserveInput: the typed username while editing
+  const [editingReserveNodeId, setEditingReserveNodeId] = useState<number | null>(null);
+  const [reserveInput, setReserveInput] = useState('');
 
   // Fetch node status with auto-refresh
   const { data: nodeStatusData, isLoading, error } = useQuery<NodeStatusResponse>({
@@ -90,6 +104,42 @@ export function NodeControlPage() {
     } catch (error) {
       console.error(`Failed to send ${command} to node ${nodeId}:`, error);
     }
+  };
+
+  /**
+   * Audit A-3: reserve a node for a specific user.
+   * Empty/whitespace username clears (toggle, matches express.e:7652-7653 F4).
+   * Backend persists in node-reservation.service; pre-login emits the
+   * "*** Node N is reserved right now, for X ***" banner; auth handler
+   * bumps non-matching connects with the express.e:28736 420 message.
+   */
+  const handleReserveSave = async (nodeId: number) => {
+    const username = reserveInput.trim();
+    try {
+      await sendNodeCommand.mutateAsync({
+        nodeId,
+        command: 'reserve',
+        data: username.length > 0 ? { username } : {},
+      });
+      setEditingReserveNodeId(null);
+      setReserveInput('');
+    } catch (error) {
+      console.error(`Failed to reserve node ${nodeId}:`, error);
+    }
+  };
+
+  const handleReserveClear = async (nodeId: number) => {
+    try {
+      // Empty body triggers the F4 toggle-clear path on the backend.
+      await sendNodeCommand.mutateAsync({ nodeId, command: 'reserve', data: {} });
+    } catch (error) {
+      console.error(`Failed to clear reservation on node ${nodeId}:`, error);
+    }
+  };
+
+  const handleReserveCancel = () => {
+    setEditingReserveNodeId(null);
+    setReserveInput('');
   };
 
   const handleToggleChat = async () => {
@@ -248,6 +298,15 @@ export function NodeControlPage() {
                     >
                       {node.online ? 'ONLINE' : 'OFFLINE'}
                     </span>
+                    {node.reservedFor && (
+                      <span
+                        className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-amber-600 text-white"
+                        title={`Reserved for ${node.reservedFor} (express.e:7649-7656)`}
+                      >
+                        <Lock className="w-3 h-3" />
+                        Reserved: {node.reservedFor}
+                      </span>
+                    )}
                   </div>
 
                   {node.online && (
@@ -361,11 +420,66 @@ export function NodeControlPage() {
                     <LogOut className="w-3.5 h-3.5" />
                     Exit
                   </button>
+
+                  {/* Audit A-3: Reserve / Clear control. Mirrors express.e
+                      F4 toggle (express.e:7649-7656). Editing-mode shows an
+                      inline username input. */}
+                  {node.reservedFor ? (
+                    <button
+                      onClick={() => handleReserveClear(node.nodeId)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-amber-700 hover:bg-amber-800 text-white rounded transition-colors"
+                      title={`Clear reservation (currently for ${node.reservedFor})`}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      Clear Reservation
+                    </button>
+                  ) : editingReserveNodeId === node.nodeId ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={reserveInput}
+                        onChange={(e) => setReserveInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleReserveSave(node.nodeId);
+                          if (e.key === 'Escape') handleReserveCancel();
+                        }}
+                        placeholder="username"
+                        className="px-2 py-1 text-sm bg-gray-900 border border-gray-600 rounded text-white"
+                      />
+                      <button
+                        onClick={() => handleReserveSave(node.nodeId)}
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+                        title="Save reservation"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={handleReserveCancel}
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditingReserveNodeId(node.nodeId);
+                        setReserveInput('');
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+                      title="Reserve node for a specific user (SV_RESERVE)"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      Reserve
+                    </button>
+                  )}
                 </div>
               )}
 
               {!node.online && (
-                <div className="flex gap-2 pt-3 border-t border-gray-700">
+                <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-700">
                   <button
                     onClick={() => handleNodeCommand(node.nodeId, 'start')}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
@@ -374,6 +488,60 @@ export function NodeControlPage() {
                     <Play className="w-3.5 h-3.5" />
                     Start Node
                   </button>
+
+                  {/* Audit A-3: pre-reserve an offline node so the next
+                      caller is matched against this username. */}
+                  {node.reservedFor ? (
+                    <button
+                      onClick={() => handleReserveClear(node.nodeId)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-amber-700 hover:bg-amber-800 text-white rounded transition-colors"
+                      title={`Clear reservation (currently for ${node.reservedFor})`}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      Clear Reservation
+                    </button>
+                  ) : editingReserveNodeId === node.nodeId ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={reserveInput}
+                        onChange={(e) => setReserveInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleReserveSave(node.nodeId);
+                          if (e.key === 'Escape') handleReserveCancel();
+                        }}
+                        placeholder="username"
+                        className="px-2 py-1 text-sm bg-gray-900 border border-gray-600 rounded text-white"
+                      />
+                      <button
+                        onClick={() => handleReserveSave(node.nodeId)}
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+                        title="Save reservation"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={handleReserveCancel}
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditingReserveNodeId(node.nodeId);
+                        setReserveInput('');
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+                      title="Reserve node for a specific user (SV_RESERVE)"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      Reserve
+                    </button>
+                  )}
                 </div>
               )}
             </div>

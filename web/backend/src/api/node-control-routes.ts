@@ -40,6 +40,13 @@ interface NodeStatus {
   connectionType?: string;
   lastActivity?: string;
   timeRemaining?: number;
+  /**
+   * Username this node is reserved for, or null if unreserved.
+   * Driven by node-reservation.service (audit A-3, express.e:7649-7656).
+   * Surfaced here so the admin UI can show the badge + Reserve/Clear
+   * control without a per-node round-trip.
+   */
+  reservedFor: string | null;
 }
 
 export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof express.Router> {
@@ -352,6 +359,9 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
         connectionType: session.connectionType,
         lastActivity: session.lastActivity ? new Date(session.lastActivity).toISOString() : undefined,
         timeRemaining: session.timeRemaining,
+        // Audit A-3: surface the per-node reservation in the status row so
+        // the admin UI doesn't need to round-trip per node.
+        reservedFor: getNodeReservation(nodeId),
       };
 
       nodeStatuses.push(status);

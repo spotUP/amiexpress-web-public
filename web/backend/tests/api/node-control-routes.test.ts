@@ -43,6 +43,36 @@ describe('Node Control Routes', () => {
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.data)).toBe(true);
     });
+
+    it('includes reservedFor field per node row (A-3 admin UI hook)', async () => {
+      // Inject a fake online session so the status loop emits a row.
+      const sessionMgr = require('../../src/server/session-manager');
+      sessionMgr.sessions.set('12', {
+        nodeId: 12,
+        state: 'LOGGEDON',
+        subState: 'IDLE',
+        user: { id: 'u-12', username: 'alice' },
+        connectionType: 'web',
+        lastActivity: Date.now(),
+        timeRemaining: 30,
+      });
+
+      try {
+        // No reservation — reservedFor should be null on every row.
+        const res1 = await request(app).get('/api/nodes/status');
+        const row1 = res1.body.data.find((r: any) => r.nodeId === 12);
+        expect(row1).toBeDefined();
+        expect(row1).toHaveProperty('reservedFor', null);
+
+        // With reservation — reservedFor should reflect the stored username.
+        setNodeReservation(12, 'bob');
+        const res2 = await request(app).get('/api/nodes/status');
+        const row2 = res2.body.data.find((r: any) => r.nodeId === 12);
+        expect(row2.reservedFor).toBe('bob');
+      } finally {
+        sessionMgr.sessions.delete('12');
+      }
+    });
   });
 
   describe('POST /api/nodes/:nodeId/kick', () => {
