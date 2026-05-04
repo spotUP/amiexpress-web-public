@@ -30,27 +30,52 @@ export const app = express();
  * (X-Frame-Options DENY, X-Content-Type-Options nosniff, HSTS,
  * Referrer-Policy, etc.) without per-route plumbing.
  *
- * Two of helmet's defaults are intentionally OFF:
+ * CSP is shipped in REPORT-ONLY mode. Browsers honour the policy and
+ * post violations to /api/csp-report (see endpoint below) but don't
+ * block resources. Once a few production sessions confirm zero
+ * violations, flip `reportOnly: false` to enforce.
  *
- * 1. contentSecurityPolicy: false
- *    A restrictive default-src 'self' CSP would blackbox-break the BBS
- *    terminal — xterm.js / socket.io / inline-styled React components
- *    need a per-directive audit before CSP can ship. Tracked as a
- *    follow-up production-hardening pass; pinned absent in
- *    tests/server/security-headers.test.ts.
+ * Directive choices (per asset audit 2026-05-05):
+ *  - default-src 'self' — backend serves frontend in prod, all assets
+ *    same-origin via /assets/* and /fonts/*.
+ *  - script-src 'self' — bundled React/xterm/socket.io, no CDNs, no
+ *    inline <script>, no eval / dangerouslySetInnerHTML.
+ *  - style-src 'self' 'unsafe-inline' — index.html has an inline
+ *    <style> block; React components use the style={{...}} prop
+ *    (DOM style attribute, requires unsafe-inline in CSP2).
+ *  - img-src 'self' data: — favicon is a data: URI SVG.
+ *  - connect-src 'self' — socket.io connects to same-origin in prod;
+ *    'self' covers WebSocket on same origin per CSP3.
+ *  - frame-ancestors 'none' — modern X-Frame-Options DENY equivalent.
+ *  - object-src 'none', base-uri 'self' — defang plugin / base-tag
+ *    injection attacks even though we don't use plugins.
  *
- * 2. crossOriginEmbedderPolicy: false
- *    'require-corp' blocks any subresource that doesn't carry a
- *    Cross-Origin-Resource-Policy header — would need every static
- *    asset (xterm fonts, lucide icons, etc.) re-served with CORP. Same
- *    reasoning as CSP: separate hardening pass.
+ * crossOriginEmbedderPolicy: false stays disabled (separate hardening
+ * pass — would require CORP headers on every static asset).
  *
  * Everything else (frameguard / hsts / noSniff / referrerPolicy /
  * permissionsPolicy / dnsPrefetchControl / hidePoweredBy / etc.) runs
  * with helmet defaults.
  */
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      workerSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      reportUri: ['/api/csp-report'],
+    },
+    reportOnly: true,
+  },
   crossOriginEmbedderPolicy: false,
 }));
 
@@ -116,6 +141,34 @@ app.use((req: Request & { originalUrl?: string; ip?: string }, res: Response, ne
 
 // Parse JSON bodies
 app.use(express.json());
+
+// CSP violation reporter — browsers POST violations here while the
+// policy is in report-only mode. Accept both legacy (CSP2)
+// `application/csp-report` bodies and the new (Reporting API)
+// `application/reports+json` arrays so we don't drop reports based on
+// browser version. Logged to logs/csp-violations.log for the post-
+// deploy audit; once the log shows zero violations across real
+// sessions, flip reportOnly:false in helmet config above.
+app.use(
+  '/api/csp-report',
+  express.json({
+    type: ['application/csp-report', 'application/reports+json', 'application/json'],
+    limit: '64kb',
+  }),
+);
+app.post('/api/csp-report', (req, res) => {
+  try {
+    const reports = Array.isArray(req.body) ? req.body : [req.body];
+    const cspLogPath = path.join(logsDir, 'csp-violations.log');
+    for (const report of reports) {
+      const line = `[CSP-VIOLATION] ${getSystemTime().toISOString()} ${JSON.stringify(report)}\n`;
+      fs.appendFileSync(cspLogPath, line, { encoding: 'utf8' });
+    }
+  } catch (_) {
+    /* never let a malformed report propagate as a 5xx */
+  }
+  res.status(204).end();
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
