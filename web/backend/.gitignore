@@ -15,3 +15,7 @@ src/amiga-emulation/cpu/moira-source/
 # Development files
 *.dev.ts
 *.tmp
+
+# Runtime cache: BBS uptime list polled from the T: assign. Was accidentally
+# committed in `2d09ffa48`; every BBS run produces a fresh diff.
+T:jsondata
