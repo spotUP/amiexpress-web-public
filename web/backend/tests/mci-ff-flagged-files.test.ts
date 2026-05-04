@@ -8,45 +8,47 @@
  *   - if maxLen = -1, emits full list
  *   - decrements maxLen as it emits each space and filename; stops when no room
  *
- * Our implementation at screen.handler.ts:697-698:
- *   - builds the full space-separated string
- *   - applyWidth() truncates to width param (maxLen > 0 → substring(0, maxLen))
+ * Our implementation pipes the value through the shared MCI tokenizer
+ * (`src/utils/mci-tokenizer.util.ts`) via the `userInfoDispatch.FF`
+ * entry. The tokenizer's `applyMciWidth(value, w)` matches the
+ * maxLen > 0 → substring(0, w) path.
  *
- * For both paths the resulting character output is identical for the
- * cases users actually hit in screen files (~FF or ~FF<digits>).
- *
- * Pinning the join+truncate shape so a future refactor can't silently
- * regress to comma-joined or non-truncated output.
+ * Pinning:
+ *   1. The dispatch entry exists and routes through applyMciWidth.
+ *   2. The space-join still happens (not comma/empty).
+ *   3. applyMciWidth itself uses substring with width.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 
 describe('~FF flagged-files MCI output (G-FF, express.e:5439-5441 / 2830-2853)', () => {
-  const src = fs.readFileSync(
+  const screenSrc = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'handlers', 'screen.handler.ts'),
     'utf8'
   );
+  const tokenizerSrc = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'utils', 'mci-tokenizer.util.ts'),
+    'utf8'
+  );
 
-  test('~FF replaces with a space-separated filename join', () => {
-    // Find the FF MCI replace site
-    const ff = src.match(/mciRegex\(['"]FF['"]\)[\s\S]{0,300}/);
-    expect(ff).not.toBeNull();
-    // Must use a join with single space, not comma or empty
-    const block = src.match(
-      /flaggedFilesSpaceSep\s*=\s*[\s\S]{0,200}?\.map\([\s\S]{0,80}?\.join\(['"] ['"]\)/
-    );
-    expect(block).not.toBeNull();
-  });
-
-  test('~FF applies width-truncation via applyWidth (matches showFlaggedFiles maxLen)', () => {
-    expect(src).toMatch(
-      /mciRegex\(['"]FF['"]\)[\s\S]{0,80}?applyWidth\(flaggedFilesSpaceSep,\s*\w+\)/
+  test('FF dispatch entry exists and applies width via applyMciWidth on the space-separated join', () => {
+    // Dispatch shape: `FF: (w) => applyMciWidth(flaggedFilesSpaceSep, w),`
+    expect(screenSrc).toMatch(
+      /FF:\s*\(\s*w\s*\)\s*=>\s*applyMciWidth\(\s*flaggedFilesSpaceSep\s*,\s*w\s*\)/,
     );
   });
 
-  test('applyWidth truncates to N chars when N > 0 (matches express.e maxLen>0 stop condition)', () => {
-    const block = src.match(/applyWidth\s*=\s*\([\s\S]{0,300}?substring\(0,\s*maxLen\)/);
-    expect(block).not.toBeNull();
+  test('flaggedFilesSpaceSep uses a space join (not comma / empty / list builder)', () => {
+    expect(screenSrc).toMatch(
+      /flaggedFilesSpaceSep\s*=\s*[\s\S]{0,200}?\.map\([\s\S]{0,80}?\.join\(['"] ['"]\)/,
+    );
+  });
+
+  test('applyMciWidth truncates to N chars when N > 0 (matches express.e maxLen>0 stop condition)', () => {
+    // applyMciWidth lives in the shared tokenizer utility now.
+    expect(tokenizerSrc).toMatch(
+      /export function applyMciWidth\([\s\S]{0,200}?substring\(0,\s*width\)/,
+    );
   });
 });

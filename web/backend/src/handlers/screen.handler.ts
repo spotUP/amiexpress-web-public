@@ -647,6 +647,28 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   const todayCalls = systemStats.getTodayCalls();
   const nodeNumStr = (session.nodeId || 1).toString();
 
+  // Flagged files (express.e:5439-5454) — pre-compute so the dispatch
+  // map closes over the rendered values rather than calling the manager
+  // on every code lookup.
+  const userId = session.user?.id || 0;
+  const sessionFlaggedFiles = flaggedFilesManager.getFiles(userId);
+  const flaggedFilesSpaceSep = sessionFlaggedFiles.map(f => f.fileName).join(' ');
+  let flaggedFilesList = '';
+  for (const file of sessionFlaggedFiles) {
+    flaggedFilesList += `                     ${file.fileName}\b\r\n`;
+  }
+
+  // AK - Access Keys display (express.e:5428-5430 + 29863-29871)
+  const accessKeysDisplay = [
+    '         \x1b[44;33m F1 \x1b[40;35m  }- \x1b[33mSysop Login             \x1b[44;33m F2 \x1b[40;35m  }- \x1b[33mLocal Login',
+    '         \x1b[44;33m F3 \x1b[40;35m  }- \x1b[33mInstant Remote Logon    \x1b[44;33m F4 \x1b[40;35m  }- \x1b[33mReserve for a user',
+    '         \x1b[44;33m F5 \x1b[40;35m  }- \x1b[33mConference Maintenance  \x1b[44;33m F6 \x1b[40;35m  }- \x1b[33mAccount Editing',
+    '       \x1b[44;33m SH+F5 \x1b[40;35m }- \x1b[33mOpen Shell            \x1b[44;33m SH+F6 \x1b[40;35m }- \x1b[33mView Callerslog',
+    '         \x1b[44;33m F7 \x1b[40;35m  }- \x1b[33mChat Toggle             \x1b[44;33m F8 \x1b[40;35m  }- \x1b[33mReprogram modem',
+    '         \x1b[44;33m F9 \x1b[40;35m  }- \x1b[33mExit BBS               \x1b[44;33m F10 \x1b[40;35m  }- \x1b[33mExit BBS \x1b[33m(\x1b[37moff hook\x1b[33m)\x1b[0m',
+    '                                       \x1b[44;33m SH+F10 \x1b[40;35m }- \x1b[33mClear tooltype cache\x1b[0m'
+  ].join('\r\n');
+
   const userInfoDispatch: MciDispatchMap = {
     // User core (express.e:5292-5306)
     N:  (w) => applyMciWidth(username, w),
@@ -693,99 +715,68 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     OT: (w) => applyMciWidth(formatLongTime(logonDate), w),
     OD: (w) => applyMciWidth(formatLongDate(logonDate), w),
     SC: (w) => applyMciWidth(todayCalls.toString(), w),
+    // Flagged files (express.e:5439-5454)
+    FC: (w) => applyMciWidth(sessionFlaggedFiles.length.toString(), w),
+    FF: (w) => applyMciWidth(flaggedFilesSpaceSep, w),
+    FL: (w) => applyMciWidth(flaggedFilesList, w),
+    // AK - Access Keys (express.e:5428-5430)
+    AK: () => accessKeysDisplay,
+    // ~CR - Keypress wait (express.e:5462-5468). Express.e does
+    // readChar(INPUT_TIMEOUT); we can't perform an async read mid-
+    // substitution, so we emit \r\n. WEB_ deviation; inline-mode with
+    // a socket is the right place to implement a real keypress wait.
+    CR: () => '\r\n',
+    // ~NS - Non-Stop display flag. Side-effect: suppresses subsequent
+    // pause prompts for this file render.
+    NS: () => {
+      if (session) {
+        (session as any).nonStopText = true;
+      }
+      return '';
+    },
+    // Foreground colors (express.e:5651-5674) — keys must be uppercase
+    // because the tokenizer uppercases every cmd before lookup. That
+    // matches express.e's StriCmp behaviour: ~c0 and ~C0 both render
+    // as black (the previous case-sensitive regex was a divergence).
+    C0: () => '\x1b[30m', C1: () => '\x1b[31m', C2: () => '\x1b[32m',
+    C3: () => '\x1b[33m', C4: () => '\x1b[34m', C5: () => '\x1b[35m',
+    C6: () => '\x1b[36m', C7: () => '\x1b[37m',
+    // Background colors (express.e:5675-5698)
+    B0: () => '\x1b[40m', B1: () => '\x1b[41m', B2: () => '\x1b[42m',
+    B3: () => '\x1b[43m', B4: () => '\x1b[44m', B5: () => '\x1b[45m',
+    B6: () => '\x1b[46m', B7: () => '\x1b[47m',
+    // z0-z7 = b0-b7 alias (express.e same dispatch, kept for screen files
+    // that pre-date the unification)
+    Z0: () => '\x1b[40m', Z1: () => '\x1b[41m', Z2: () => '\x1b[42m',
+    Z3: () => '\x1b[43m', Z4: () => '\x1b[44m', Z5: () => '\x1b[45m',
+    Z6: () => '\x1b[46m', Z7: () => '\x1b[47m',
+    // Blank lines (express.e:5699-5725) — ~n1..~n9 emit 1-9 \r\n
+    N1: () => '\r\n',
+    N2: () => '\r\n\r\n',
+    N3: () => '\r\n\r\n\r\n',
+    N4: () => '\r\n\r\n\r\n\r\n',
+    N5: () => '\r\n\r\n\r\n\r\n\r\n',
+    N6: () => '\r\n\r\n\r\n\r\n\r\n\r\n',
+    N7: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
+    N8: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
+    N9: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
+    // Misc (express.e:5571-5576)
+    Q: () => '\x1b[0m', // ~q - reset attributes
+    H: () => '\x08',    // ~h - backspace
   };
 
   parsed = processMciTokenizer(parsed, userInfoDispatch, mciTerminator);
 
-  // File Area Codes - Flagged Files (express.e:5439-5454)
-  // ~FC - Flagged Files Count (express.e:5442-5445 returns flagFilesList.count())
-  // ~FF - Flagged Files display space-separated (express.e:5439-5441 calls showFlaggedFiles)
-  // ~FL - Flagged Files List one per line (express.e:5446-5454)
-  const userId = session.user?.id || 0;
-  const sessionFlaggedFiles = flaggedFilesManager.getFiles(userId);
-
-  parsed = parsed.replace(mciRegex('FC'), (_, d) => applyWidth(sessionFlaggedFiles.length.toString(), d));
-  const flaggedFilesSpaceSep = sessionFlaggedFiles.map(f => f.fileName).join(' ');
-  parsed = parsed.replace(mciRegex('FF'), (_, d) => applyWidth(flaggedFilesSpaceSep, d));
-  let flaggedFilesList = '';
-  for (const file of sessionFlaggedFiles) {
-    flaggedFilesList += `                     ${file.fileName}\b\r\n`;
-  }
-  parsed = parsed.replace(mciRegex('FL'), (_, d) => applyWidth(flaggedFilesList, d));
-
-  // AK - Access Keys (express.e:5428-5430 calls displayKeys())
-  // express.e:29863-29871 - Displays sysop function key shortcuts
-  const accessKeysDisplay = [
-    '         \x1b[44;33m F1 \x1b[40;35m  }- \x1b[33mSysop Login             \x1b[44;33m F2 \x1b[40;35m  }- \x1b[33mLocal Login',
-    '         \x1b[44;33m F3 \x1b[40;35m  }- \x1b[33mInstant Remote Logon    \x1b[44;33m F4 \x1b[40;35m  }- \x1b[33mReserve for a user',
-    '         \x1b[44;33m F5 \x1b[40;35m  }- \x1b[33mConference Maintenance  \x1b[44;33m F6 \x1b[40;35m  }- \x1b[33mAccount Editing',
-    '       \x1b[44;33m SH+F5 \x1b[40;35m }- \x1b[33mOpen Shell            \x1b[44;33m SH+F6 \x1b[40;35m }- \x1b[33mView Callerslog',
-    '         \x1b[44;33m F7 \x1b[40;35m  }- \x1b[33mChat Toggle             \x1b[44;33m F8 \x1b[40;35m  }- \x1b[33mReprogram modem',
-    '         \x1b[44;33m F9 \x1b[40;35m  }- \x1b[33mExit BBS               \x1b[44;33m F10 \x1b[40;35m  }- \x1b[33mExit BBS \x1b[33m(\x1b[37moff hook\x1b[33m)\x1b[0m',
-    '                                       \x1b[44;33m SH+F10 \x1b[40;35m }- \x1b[33mClear tooltype cache\x1b[0m'
-  ].join('\r\n');
-  parsed = parsed.replace(mciRegex('AK'), accessKeysDisplay);
-  parsed = parsed.replace(mciRegex('SP'), ' ');  // SP - Space
-  // ~CR - Keypress wait (express.e:5462-5468) - readChar(INPUT_TIMEOUT) — waits for any key
-  // WEB_: express.e:5462 does readChar(INPUT_TIMEOUT); in string-replace mode we cannot
-  // perform an async character read mid-substitution. Emit \r\n as a visible line break.
-  // Inline mode with a socket is the correct place to implement a real keypress wait (future work).
-  parsed = parsed.replace(mciRegex('CR'), '\r\n');  // CR - line break (WEB_ deviation: should be keypress wait)
-  // ~NS - Non-Stop display flag (express.e uses nonStopText/nonStopDisplayFlag)
-  // Setting this suppresses all subsequent pause prompts for this file display.
-  parsed = parsed.replace(mciRegex('NS'), () => {
-    if (session) {
-      (session as any).nonStopText = true;
-    }
-    return '';
-  });  // NS - set nonStopText flag, no output
-  // Some screens use bare ~SP (no delimiter) to pause; strip and mark pause
+  // SP - Space (express.e:5469). NOT in the dispatch map because the
+  // bare-`~SP` (no terminator) form is a pause marker, handled by the
+  // regex below. Once this form is migrated, both can collapse into the
+  // dispatch.
+  parsed = parsed.replace(mciRegex('SP'), ' ');
+  // Some screens use bare ~SP (no delimiter) to pause; strip and mark.
   parsed = parsed.replace(/~SP(\s|$)/g, () => {
     hasPause = true;
     return '';
   });
-
-  // Color codes (c0-c7, b0-b7/z0-z7, n1-n9) (express.e:5651-5735)
-  // NOTE: Using dynamic MCI terminator from Phase 5 implementation
-  // Foreground colors (c0-c7) - express.e:5651-5674
-  parsed = parsed.replace(mciRegex('c0'), '\x1b[30m');  // Black
-  parsed = parsed.replace(mciRegex('c1'), '\x1b[31m');  // Red (express.e:5655)
-  parsed = parsed.replace(mciRegex('c2'), '\x1b[32m');  // Green
-  parsed = parsed.replace(mciRegex('c3'), '\x1b[33m');  // Yellow (express.e:5661)
-  parsed = parsed.replace(mciRegex('c4'), '\x1b[34m');  // Blue (express.e:5664)
-  parsed = parsed.replace(mciRegex('c5'), '\x1b[35m');  // Magenta
-  parsed = parsed.replace(mciRegex('c6'), '\x1b[36m');  // Cyan (express.e:5670)
-  parsed = parsed.replace(mciRegex('c7'), '\x1b[37m');  // White
-
-  // Background colors (b0-b7, z0-z7) - express.e:5675-5698
-  parsed = parsed.replace(mciRegex('b0'), '\x1b[40m');  // Black bg
-  parsed = parsed.replace(mciRegex('b1'), '\x1b[41m');  // Red bg (express.e:5679)
-  parsed = parsed.replace(mciRegex('b2'), '\x1b[42m');  // Green bg
-  parsed = parsed.replace(mciRegex('b3'), '\x1b[43m');  // Yellow bg (express.e:5685)
-  parsed = parsed.replace(mciRegex('b4'), '\x1b[44m');  // Blue bg (express.e:5688)
-  parsed = parsed.replace(mciRegex('b5'), '\x1b[45m');  // Magenta bg
-  parsed = parsed.replace(mciRegex('b6'), '\x1b[46m');  // Cyan bg (express.e:5694)
-  parsed = parsed.replace(mciRegex('b7'), '\x1b[47m');  // White bg
-  parsed = parsed.replace(mciRegex('z0'), '\x1b[40m');  // z0-z7 same as b0-b7
-  parsed = parsed.replace(mciRegex('z1'), '\x1b[41m');  // Red bg
-  parsed = parsed.replace(mciRegex('z2'), '\x1b[42m');  // Green bg
-  parsed = parsed.replace(mciRegex('z3'), '\x1b[43m');  // Yellow bg
-  parsed = parsed.replace(mciRegex('z4'), '\x1b[44m');  // Blue bg
-  parsed = parsed.replace(mciRegex('z5'), '\x1b[45m');  // Magenta bg
-  parsed = parsed.replace(mciRegex('z6'), '\x1b[46m');  // Cyan bg
-  parsed = parsed.replace(mciRegex('z7'), '\x1b[47m');
-
-  // Blank lines (express.e:5699-5725) - ~n1 through ~n9 output 1-9 blank lines
-  // These call blankLines(n) which outputs n newlines
-  parsed = parsed.replace(mciRegex('n1'), '\r\n');                    // 1 blank line
-  parsed = parsed.replace(mciRegex('n2'), '\r\n\r\n');                // 2 blank lines
-  parsed = parsed.replace(mciRegex('n3'), '\r\n\r\n\r\n');            // 3 blank lines
-  parsed = parsed.replace(mciRegex('n4'), '\r\n\r\n\r\n\r\n');        // 4 blank lines
-  parsed = parsed.replace(mciRegex('n5'), '\r\n\r\n\r\n\r\n\r\n');    // 5 blank lines
-  parsed = parsed.replace(mciRegex('n6'), '\r\n\r\n\r\n\r\n\r\n\r\n');              // 6 blank lines
-  parsed = parsed.replace(mciRegex('n7'), '\r\n\r\n\r\n\r\n\r\n\r\n\r\n');          // 7 blank lines
-  parsed = parsed.replace(mciRegex('n8'), '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n');      // 8 blank lines
-  parsed = parsed.replace(mciRegex('n9'), '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n');  // 9 blank lines
 
   // ~f - Fill character (express.e:5471-5480)
   // Format: ~f or ~f<char> - clears screen or fills with character
@@ -826,13 +817,9 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     return '';
   });
 
-  // ~q - Query/Prompt reset (express.e:5571-5573)
-  // Sends ANSI reset code [0m
-  parsed = parsed.replace(mciRegex('q'), '\x1b[0m');
-
-  // ~h - Hotkey/Backspace (express.e:5574-5576)
-  // Sends backspace character
-  parsed = parsed.replace(mciRegex('h'), '\x08');
+  // ~q (reset, express.e:5571-5573) and ~h (backspace, express.e:5574-5576)
+  // are dispatched via the tokenizer above (Q / H entries in
+  // userInfoDispatch).
 
   // === INLINE MODE: SEQUENTIAL MCI PROCESSING ===
   // express.e:5768-5802 processMci() iterates through content sequentially:

@@ -8,6 +8,7 @@ import { generateMultiTop } from '../utils/multitop-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { InfoFileParser } from './info-file-parser';
 import { getSystemTime } from '../utils/date-time.util';
+import { processMci as processMciTokenizer, type MciDispatchMap } from '../utils/mci-tokenizer.util';
 
 /**
  * Get door type from .info file (TYPE tooltype)
@@ -166,8 +167,16 @@ console.error(`[BatchScheduler] Error executing ${asyncKey}:`, error);
 }
 
 /**
- * Process MCI codes in command string (express.e:6675 processMci)
- * Basic MCI substitution for common codes used in EXECUTE_ON commands.
+ * Process MCI codes in command string (express.e:6675 processMci).
+ * Subset of the screen.handler.ts dispatch — only the codes that
+ * EXECUTE_ON commands typically reference. Unknown codes fall through
+ * intact (tokenizer's soft fall-through behaviour).
+ *
+ * Was 9 separate `replace(/~N/gi, ...)` regexes which had the same
+ * bug as the old screen.handler regex pipeline: required no terminator,
+ * so `~N1` would match `~N` first and emit `<username>1`. The shared
+ * tokenizer reads cmd until a space/terminator/end and dispatches
+ * exactly once, matching express.e behaviour.
  */
 function processMciInCommand(
   cmd: string,
@@ -179,47 +188,30 @@ function processMciInCommand(
     confNum?: number;
   }
 ): string {
-  let result = cmd;
-
-  // Express.e MCI codes (express.e:5258-5850)
-  // IMPORTANT: Order matters - longer codes must come before shorter ones
-  // to avoid partial matches (e.g., ~ND before ~N)
-
-  // ~ND = node number (express.e:5409-5412)
-  result = result.replace(/~ND/gi, nodeId.toString());
-
-  // ~N = username (express.e:5292-5295)
-  if (context?.username) {
-    result = result.replace(/~N/g, context.username);
-  }
-
-  // ~UL = user location (express.e:5296-5299)
-  if (context?.location) {
-    result = result.replace(/~UL/gi, context.location);
-  }
-
-  // ~CF = conference number (express.e:5413-5416)
-  if (context?.confNum !== undefined) {
-    result = result.replace(/~CF/gi, context.confNum.toString());
-  }
-
-  // ~CN = conference name (express.e:5417-5419)
-  if (context?.confName) {
-    result = result.replace(/~CN/gi, context.confName);
-  }
-
-  // ~DT = date (express.e:5435-5438)
   const now = getSystemTime();
-  result = result.replace(/~DT/gi, now.toLocaleDateString());
-
-  // ~OT = time (express.e:5395-5398)
-  result = result.replace(/~OT/gi, now.toLocaleTimeString());
-
-  // ~LG / ~ON = node number (express.e:5379-5382) - alias for ~ND
-  result = result.replace(/~LG/gi, nodeId.toString());
-  result = result.replace(/~ON/gi, nodeId.toString());
-
-  return result;
+  const nodeIdStr = nodeId.toString();
+  const dispatch: MciDispatchMap = {
+    // Node number aliases (express.e:5379-5382, 5409-5412)
+    ND: () => nodeIdStr,
+    LG: () => nodeIdStr,
+    ON: () => nodeIdStr,
+    // System clocks (express.e:5435-5438, 5395-5398)
+    DT: () => now.toLocaleDateString(),
+    OT: () => now.toLocaleTimeString(),
+  };
+  if (context?.username) {
+    dispatch.N = () => context.username!;
+  }
+  if (context?.location) {
+    dispatch.UL = () => context.location!;
+  }
+  if (context?.confNum !== undefined) {
+    dispatch.CF = () => context.confNum!.toString();
+  }
+  if (context?.confName) {
+    dispatch.CN = () => context.confName!;
+  }
+  return processMciTokenizer(cmd, dispatch);
 }
 
 /**
