@@ -25,7 +25,6 @@ import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
-import { aquascanTrace } from '../utils/aquascan-trace';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
 
@@ -2566,14 +2565,8 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID")
     logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
 
-    aquascanTrace.startIfAquaScan(doorPath);
-
     // Start the door execution
-    try {
-      await amigaSession.start();
-    } finally {
-      aquascanTrace.stop(`door-exit ${path.basename(doorPath)}`);
-    }
+    await amigaSession.start();
 
     // Log door exit to Node{N}/DoorLog
     logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');

@@ -11,7 +11,6 @@ import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
 import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
-import { aquascanTrace } from "../../utils/aquascan-trace";
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
 const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'fgets-debug.log');
@@ -577,9 +576,6 @@ console.error(
         }
         this.emulator.pause();
       }
-      if (aquascanTrace.isActive()) {
-        aquascanTrace.dos('Open', filename, `mode=${mode} bptr=${bptr} err=${this.lastError}`);
-      }
       return bptr;
     }
 
@@ -712,9 +708,6 @@ console.error(
     }
 
 debugLog(`[dos.library] Open returned: ${fileId}`);
-    if (aquascanTrace.isActive()) {
-      aquascanTrace.dos('Open', filename, `mode=${mode} handle=${fileId} err=${this.lastError}`);
-    }
     return fileId;
   }
 
@@ -886,11 +879,6 @@ debugLog(
       }
 
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      if (aquascanTrace.isActive()) {
-        const hex = Array.from(dataBuffer.slice(0, 32))
-          .map(b => b.toString(16).padStart(2, '0')).join('');
-        aquascanTrace.dos('Read', `handle=${handle}`, `req=${length} got=${bytesRead} hex=${hex}`);
-      }
       return bytesRead;
     }
 
@@ -963,12 +951,6 @@ debugLog(
     this.logDoorFile(
       `READ handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" bytes=${bytesToRead}`
     );
-    if (aquascanTrace.isActive()) {
-      const hex = fileHandle.buffer
-        .slice(fileHandle.position - bytesToRead, fileHandle.position - bytesToRead + 32)
-        .toString('hex');
-      aquascanTrace.dos('Read', fileHandle.name, `req=${length} got=${bytesToRead} pos=${fileHandle.position - bytesToRead} hex=${hex}`);
-    }
     return bytesToRead;
   }
 
@@ -5721,10 +5703,6 @@ debugLog(
 debugLog(
       `[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`
     );
-    if (aquascanTrace.isActive()) {
-      aquascanTrace.dos('DateToStr', '',
-        `days=${ds_Days} min=${ds_Minute} tick=${ds_Tick} fmt=${dat_Format} strDay=0x${dat_StrDay.toString(16)} strDate=0x${dat_StrDate.toString(16)} strTime=0x${dat_StrTime.toString(16)}`);
-    }
 
     // Convert Amiga days (since 1978-01-01 UTC) to JavaScript Date
     const epoch = new Date('1978-01-01T00:00:00Z');
