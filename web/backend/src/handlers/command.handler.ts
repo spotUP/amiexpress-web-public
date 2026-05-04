@@ -2573,11 +2573,12 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
   if (session.subState === LoggedOnSubState.UPLOAD_FILENAME_INPUT) {
     const input = data.trim();
 
-    // Check for abort (A or a alone) - express.e:17667-17671
+    // Check for abort (A or a alone) - express.e:17668-17670
+    // express.e: aePuts('\b\n'); RETURN RESULT_FAILURE -> caller cleanItUp + return -> main loop redisplays menu
     if ((input === 'A' || input === 'a') && input.length === 1) {
       emitText(socket, '\r\n');
       session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
       return;
     }

@@ -453,7 +453,16 @@ export async function displayFileStatus(socket: any, session: BBSSession, params
   const ratioDisplay = userRatio > 0 ? `${userRatio}:1` : 'DSBLD';
 
   emitText(socket, '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n\r\n');
-  emitText(socket, '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail  Ratio\x1b[0m\r\n\r\n');
+  // express.e:24156-24160 — header switches on TOGGLES_CREDITBYKB.
+  // Active FS command routes through file-status.handler.ts; this duplicate
+  // is currently dead but kept consistent in case it gets re-wired.
+  const { getACSConfig: _getACSConfig, ToggleFlags: _ToggleFlags } = require('../../utils/acs.util');
+  const _creditByKB = !!(_getACSConfig().toggles as any)?.[_ToggleFlags.CREDITBYKB];
+  if (_creditByKB) {
+    emitText(socket, '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\x1b[0m\r\n\r\n');
+  } else {
+    emitText(socket, '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n\r\n');
+  }
   emitText(socket, '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
 
   // Note: This would normally reference a conferences array from parent scope
