@@ -223,10 +223,15 @@ async function getMessagesForConfScan(
   userId: string,
   conferenceId: number,
   messageBaseId: number,
-  username: string,
+  user: any,
   bbsDataPath: string
 ): Promise<ScanMessage[]> {
-  const safeName = (username || '').toLowerCase();
+  // express.e:11706 — toName == confMailName (per-conf display name selected
+  // by NAME_TYPE_USERNAME/REALNAME/INTERNETNAME). Previously we used
+  // user.username directly, which silently hid mail addressed to the user's
+  // realName / internetName in REALNAME / INTERNETNAME conferences.
+  const { getConfMailNameFor } = require('./message-entry.handler');
+  const safeName = String(getConfMailNameFor(user, conferenceId, messageBaseId) || '').toLowerCase();
   const results: ScanMessage[] = [];
 
   try {
@@ -311,9 +316,11 @@ async function countNewMessages(
   userId: string,
   conferenceId: number,
   messageBaseId: number,
-  username: string
+  user: any
 ): Promise<{ newPublic: number; newPrivate: number; lastScanned: number; mailStatHigh: number }> {
-  const safeName = (username || '').toLowerCase();
+  // Same per-conf confMailName plumbing as getMessagesForConfScan above.
+  const { getConfMailNameFor } = require('./message-entry.handler');
+  const safeName = String(getConfMailNameFor(user, conferenceId, messageBaseId) || '').toLowerCase();
   let newPublic = 0;
   let newPrivate = 0;
   let lastScanned = 0;
@@ -475,12 +482,14 @@ export async function performSingleConfMailScan(socket: any, session: any, conf:
   if (!user) return;
 
   const confName = _conferences.find((c: any) => c.id === conf)?.name || `Conf ${conf}`;
-  const username = user.username || '';
   const bbsDataPath = config.get('dataDir');
 
-  const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);
+  // express.e:11706 — getMessagesForConfScan / countNewMessages now derive
+  // confMailName per-conference internally from the user object, so REALNAME
+  // / INTERNETNAME conferences pick up the right toName for the filter.
+  const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, user, bbsDataPath);
 
-  const { newPublic, newPrivate, lastScanned } = await countNewMessages(user.id, conf, msgBaseId, username);
+  const { newPublic, newPrivate, lastScanned } = await countNewMessages(user.id, conf, msgBaseId, user);
   session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
   session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
   session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
@@ -640,7 +649,6 @@ console.warn('[advanceConferenceScan] no confScanState found');
   const { LoggedOnSubState: SubState } = require('../../constants/bbs-states');
   const bbsDataPath = config.get('dataDir');
   const user = session.user;
-  const username = user?.username || 'Unknown';
   const confAccess = user?.confAccess || user?.conferenceAccess || '';
   const numConf = _conferences?.length || 0;
 
@@ -698,12 +706,14 @@ console.warn('[advanceConferenceScan] no confScanState found');
       // express.e:11670: inside searchNewMail, print header per conf
       socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
 
-      // Get mail-scan messages (matching username, eall, all)
-      const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, username, bbsDataPath);
+      // Get mail-scan messages (matching confMailName, eall, all).
+      // express.e:11706 uses confMailName (per-conf display name), not raw
+      // username — getMessagesForConfScan derives this internally now.
+      const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, user, bbsDataPath);
 
       // Update scan counters
       const { newPublic, newPrivate, lastScanned } = await countNewMessages(
-        user.id, conf, msgBaseId, username
+        user.id, conf, msgBaseId, user
       );
       session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
       session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;

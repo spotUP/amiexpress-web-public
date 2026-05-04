@@ -111,14 +111,23 @@ function isExtSendMsgBase(session: BBSSession): boolean {
  * 11179, 11202, 11706, 11749, 11918-11919, 12087-12089, 12345-12348).
  */
 export function getConfMailName(session: BBSSession): string {
-  const username = session.user?.username || '';
-  const confId = session.currentConf || 1;
-  const msgBaseId = session.currentMsgBase || 1;
+  return getConfMailNameFor(session.user, session.currentConf || 1, session.currentMsgBase || 1);
+}
+
+/**
+ * Session-less variant of getConfMailName — pass user + conf/msgbase
+ * explicitly. Used by mail-scan helpers that iterate multiple conferences
+ * outside of a single session context (countNewMessages,
+ * getMessagesForConfScan). Same express.e semantics as getConfMailName;
+ * see that JSDoc for the full rules.
+ */
+export function getConfMailNameFor(user: any, confId: number, msgBaseId: number): string {
+  const username = user?.username || '';
   const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
   const flags = getConferenceToolFlags(confId);
   const requireRealname = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
   const requireInternetname = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
-  const userMisc: any = (session.user as any) || {};
+  const userMisc: any = user || {};
   const realName = String(userMisc.realName || userMisc.realname || '').trim();
   const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
 
