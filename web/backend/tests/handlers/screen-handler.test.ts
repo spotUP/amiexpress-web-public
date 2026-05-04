@@ -100,6 +100,138 @@ describe('parseMciCodes — result shape', () => {
   });
 });
 
+describe('parseMciCodes — migrated dispatch codes (express.e parity)', () => {
+  // Pins the express.e behaviour after the MCI tokenizer migration.
+  // Pre-migration these codes ran as post-tokenizer regexes; the tests
+  // below catch any silent re-divergence.
+
+  test('~SP| sets hasPause and emits no visible space (express.e:5455)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~SP|b', session);
+    expect(result.hasPause).toBe(true);
+    expect(result.parsed).toBe('ab');
+  });
+
+  test('~SP\\n bare form sets hasPause (real-screen extension)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~SP\nb', session);
+    expect(result.hasPause).toBe(true);
+    expect(result.parsed).toContain('a');
+    expect(result.parsed).toContain('b');
+  });
+
+  test('~5SP| with width prefix does NOT pause (express.e width-gate)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~5SP|b', session);
+    // Express.e:5455 — `(maxLen=-1) AND (StrCmp(cmd,'SP'))`. Width=5
+    // fails the gate, falls through. Soft fall-through re-emits `~`
+    // and width digits while the cmd content stays as plain text.
+    expect(result.hasPause).toBe(false);
+  });
+
+  test('~f| clears screen (express.e:5469-5471 sendCLS)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~f|b', session);
+    expect(result.parsed).toBe('a\x1b[2J\x1b[Hb');
+  });
+
+  test('~F| (uppercase) does NOT clear in byte-exact mode (express.e:5469)', async () => {
+    // Express.e StrCmp(cmd,'f') is case-sensitive — `~F` mismatches
+    // the lowercase 'f' key and falls through. Strict tokenizer
+    // emits "F" plain.
+    const session = makeSession();
+    const result = await parseMciCodes('a~F|b', session);
+    expect(result.parsed).toBe('aFb');
+  });
+
+  test('~x10| emits row-1 col-10 cursor (express.e:5478-5486 [;Nh)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~x10|b', session);
+    // Express.e StringF format `[;\dH` — empty row defaults to 1.
+    // Pre-migration our build emitted `\x1b[<n>G` (column-only) which
+    // was a divergence; the dispatch path now matches express.e.
+    expect(result.parsed).toBe('a\x1b[;10Hb');
+  });
+
+  test('~y5| emits row-5 col-1 cursor (express.e:5487-5495 [N;H)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~y5|b', session);
+    expect(result.parsed).toBe('a\x1b[5;Hb');
+  });
+
+  test('~5w| (width-prefix delay form) is a no-op (express.e:5472-5477)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~5w|b', session);
+    expect(result.parsed).toBe('ab');
+  });
+
+  test('~w5| (Web-divergent suffix form) is also a no-op', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~w5|b', session);
+    expect(result.parsed).toBe('ab');
+  });
+
+  test('strict fall-through: unknown ~ZZZ| is consumed (express.e exact)', async () => {
+    // Express.e:5290-5402 ELSEIF chain has no final ELSE, so cmd that
+    // matches no branch advances pos past `~` only and the cmd content
+    // emits as plain text via the outer aePuts2 in processMci. Strict
+    // tokenizer matches: `~ZZZ|` -> "ZZZ" (no leading `~`).
+    const session = makeSession();
+    const result = await parseMciCodes('a~ZZZ|b', session);
+    expect(result.parsed).toBe('aZZZb');
+  });
+
+  test('~CR_<prompt>|| pre-tokenizer: prompt + hasPause (express.e:5571-5580)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('start~CR_Press a key||end', session);
+    expect(result.parsed).toContain('Press a key');
+    expect(result.hasPause).toBe(true);
+  });
+
+  test('~CR_ prompt with embedded ~N| substitutes username', async () => {
+    const session = makeSession({ user: { username: 'Spot', secLevel: 20 } });
+    const result = await parseMciCodes('~CR_Hi ~N|||end', session);
+    expect(result.parsed).toContain('Hi Spot');
+    expect(result.hasPause).toBe(true);
+  });
+
+  test('~SM_<menu>|| sets currentMenuName', async () => {
+    const session = makeSession();
+    await parseMciCodes('~SM_MAIN||', session);
+    expect(session.currentMenuName).toBe('MAIN');
+  });
+
+  test('~NSF sets nonStopText flag', async () => {
+    const session = makeSession();
+    await parseMciCodes('header~NSFbody', session);
+    expect((session as any).nonStopText).toBe(true);
+  });
+
+  test('~SP. sets hasPause and emits empty', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~SP.b', session);
+    expect(result.hasPause).toBe(true);
+    expect(result.parsed).toBe('ab');
+  });
+
+  test('~SMC| clears slow mode', async () => {
+    const session = makeSession({ slowmo: 3, slowmoCount: 60 });
+    const result = await parseMciCodes('~SMC|', session);
+    expect(result.slowmo).toBe(0);
+    expect(result.slowmoCount).toBe(0);
+  });
+
+  test('~~ literal tilde escape preserves ~ in output', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('cost: 5~~|hr', session);
+    // Either soft fall-through followed by `~~ -> ~` cleanup or
+    // strict-mode emitting cmd content as plain text — both render
+    // the literal tilde.
+    expect(result.parsed).toContain('~');
+    expect(result.parsed).toContain('hr');
+  });
+});
+
 let _socketCounter = 0;
 function makeFullSocket() {
   return { emit: jest.fn(), on: jest.fn(), id: `pause-socket-${++_socketCounter}` };

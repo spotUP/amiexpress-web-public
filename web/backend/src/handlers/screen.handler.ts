@@ -36,7 +36,7 @@ import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe.util';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
-import { processMci as processMciTokenizer, type MciDispatchMap, applyMciWidth } from '../utils/mci-tokenizer.util';
+import { processMci as processMciTokenizer, type MciDispatchMap, type MciPrefixDispatchMap, applyMciWidth } from '../utils/mci-tokenizer.util';
 
 /**
  * Detect if content is an ANSI animation that should play at modem speed
@@ -378,24 +378,6 @@ export async function parseMciCodes(
     });
   }
 
-  // Helper function to escape special regex characters
-  const escapeRegex = (char: string): string => {
-    return char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  // express.e:5272-5288: optional 1-3 digit width prefix before MCI code
-  // ~N  → full value; ~10N → truncated to 10 chars (aePuts2 semantics)
-  const mciRegex = (code: string): RegExp => {
-    const escapedTerm = escapeRegex(mciTerminator);
-    return new RegExp(`~(\\d{0,3})${code}${escapedTerm}`, 'g');
-  };
-
-  // Apply optional field width: positive maxLen truncates, -1 = no limit
-  const applyWidth = (value: string, digits: string): string => {
-    const maxLen = digits.length > 0 ? parseInt(digits, 10) : -1;
-    return maxLen > 0 ? value.substring(0, maxLen) : value;
-  };
-
   // Format a number with commas (express.e formatBCD / formatUnsignedLong style)
   const formatWithCommas = (n: number): string =>
     n.toLocaleString('en-US');
@@ -734,88 +716,212 @@ console.error('[parseMciCodes] Error getting message base name:', error);
       }
       return '';
     },
-    // Foreground colors (express.e:5651-5674) — keys must be uppercase
-    // because the tokenizer uppercases every cmd before lookup. That
-    // matches express.e's StriCmp behaviour: ~c0 and ~C0 both render
-    // as black (the previous case-sensitive regex was a divergence).
-    C0: () => '\x1b[30m', C1: () => '\x1b[31m', C2: () => '\x1b[32m',
-    C3: () => '\x1b[33m', C4: () => '\x1b[34m', C5: () => '\x1b[35m',
-    C6: () => '\x1b[36m', C7: () => '\x1b[37m',
-    // Background colors (express.e:5675-5698)
-    B0: () => '\x1b[40m', B1: () => '\x1b[41m', B2: () => '\x1b[42m',
-    B3: () => '\x1b[43m', B4: () => '\x1b[44m', B5: () => '\x1b[45m',
-    B6: () => '\x1b[46m', B7: () => '\x1b[47m',
-    // z0-z7 = b0-b7 alias (express.e same dispatch, kept for screen files
-    // that pre-date the unification)
-    Z0: () => '\x1b[40m', Z1: () => '\x1b[41m', Z2: () => '\x1b[42m',
-    Z3: () => '\x1b[43m', Z4: () => '\x1b[44m', Z5: () => '\x1b[45m',
-    Z6: () => '\x1b[46m', Z7: () => '\x1b[47m',
-    // Blank lines (express.e:5699-5725) — ~n1..~n9 emit 1-9 \r\n
-    N1: () => '\r\n',
-    N2: () => '\r\n\r\n',
-    N3: () => '\r\n\r\n\r\n',
-    N4: () => '\r\n\r\n\r\n\r\n',
-    N5: () => '\r\n\r\n\r\n\r\n\r\n',
-    N6: () => '\r\n\r\n\r\n\r\n\r\n\r\n',
-    N7: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
-    N8: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
-    N9: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
-    // Misc (express.e:5571-5576)
-    Q: () => '\x1b[0m', // ~q - reset attributes
-    H: () => '\x08',    // ~h - backspace
+    // ~SP - Pause (express.e:5455-5461). Express.e: `(maxLen=-1) AND
+    // (StrCmp(cmd,'SP'))` — only matches when no width prefix; calls
+    // doPause(). We can't pause synchronously mid-render so we set
+    // hasPause and let the caller drive the pause state machine.
+    //
+    // Inline-mode gate: when rendering for a live socket, defer to
+    // the inline regex pass below — it owns sequential pause-and-
+    // resume semantics (early-return with `pendingInlineContent`),
+    // which a string-returning handler can't express. Returning
+    // `undefined` keeps soft fall-through, leaving `~SP|` intact for
+    // the inline regex to find.
+    SP: (w) => {
+      if (inlineMode) return undefined;
+      if (w !== -1) return undefined; // express.e width-gate
+      hasPause = true;
+      return '';
+    },
+    // ~f - Clear screen (express.e:5469-5471 sendCLS, lowercase). The
+    // tokenizer runs in byte-exact case mode, so `~F` (uppercase) is
+    // treated as an unrecognised code per express.e — falls through.
+    // Inline-mode gate: ~f in inline mode emits CLS to the socket
+    // directly so it lands in document order alongside ~CC_/~SS_
+    // side-effects; defer.
+    f: () => (inlineMode ? undefined : '\x1b[2J\x1b[H'),
+    // ~w - Delay (express.e:5472-5477, lowercase). On Amiga:
+    // Delay(maxLen) ticks. No equivalent on the Node / WebSocket
+    // path — emit empty. Both `~5w|` (width=5, cmd='w') and the
+    // WEB-divergent `~w5|` form (cmd='w5', via prefix dispatch
+    // below) collapse to no-op.
+    w: () => '',
+    // Foreground colors (express.e:5651-5674) — express.e StrCmp keys
+    // are lowercase. With caseSensitive: true the tokenizer matches
+    // the cmd byte-exact, so `~C0` (uppercase) no longer substitutes —
+    // a sysop typo'd it on Amiga and got "C0" plain text.
+    c0: () => '\x1b[30m', c1: () => '\x1b[31m', c2: () => '\x1b[32m',
+    c3: () => '\x1b[33m', c4: () => '\x1b[34m', c5: () => '\x1b[35m',
+    c6: () => '\x1b[36m', c7: () => '\x1b[37m',
+    // Background colors (express.e:5675-5698, lowercase).
+    b0: () => '\x1b[40m', b1: () => '\x1b[41m', b2: () => '\x1b[42m',
+    b3: () => '\x1b[43m', b4: () => '\x1b[44m', b5: () => '\x1b[45m',
+    b6: () => '\x1b[46m', b7: () => '\x1b[47m',
+    // z0-z7 = b0-b7 alias (express.e:5675 same dispatch line —
+    // `StrCmp(cmd,'b0') OR StrCmp(cmd,'z0')`).
+    z0: () => '\x1b[40m', z1: () => '\x1b[41m', z2: () => '\x1b[42m',
+    z3: () => '\x1b[43m', z4: () => '\x1b[44m', z5: () => '\x1b[45m',
+    z6: () => '\x1b[46m', z7: () => '\x1b[47m',
+    // Blank lines (express.e:5699-5725, lowercase) — ~n1..~n9 emit 1-9 \r\n
+    n1: () => '\r\n',
+    n2: () => '\r\n\r\n',
+    n3: () => '\r\n\r\n\r\n',
+    n4: () => '\r\n\r\n\r\n\r\n',
+    n5: () => '\r\n\r\n\r\n\r\n\r\n',
+    n6: () => '\r\n\r\n\r\n\r\n\r\n\r\n',
+    n7: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
+    n8: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
+    n9: () => '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n',
+    // Misc (express.e:5571-5576, lowercase)
+    q: () => '\x1b[0m', // ~q - reset attributes
+    h: () => '\x08',    // ~h - backspace
   };
 
-  parsed = processMciTokenizer(parsed, userInfoDispatch, mciTerminator);
+  // Prefix dispatch — parameterised codes whose argument is part of
+  // the cmd suffix rather than a width prefix. Mirrors express.e's
+  // `StrCmp(cmd,'x',1)` family (express.e:5478-5495). Keys are
+  // lowercase to match express.e StrCmp byte-exact.
+  const prefixDispatch: MciPrefixDispatchMap = {
+    // ~x<n>| - cursor to row 1, col n. Express.e:5478-5486 emits
+    // `[;<n>H` (default row, explicit col). Note: previous Web build
+    // emitted `[<n>G` (column-only move) — that was a divergence;
+    // express.e moves to row 1 col n.
+    x: (suffix) => {
+      const n = parseInt(suffix, 10);
+      return Number.isFinite(n) && n >= 0 ? `\x1b[;${n}H` : '';
+    },
+    // ~y<n>| - cursor to row n, col 1. Express.e:5487-5495 emits
+    // `[<n>;H` (explicit row, default col).
+    y: (suffix) => {
+      const n = parseInt(suffix, 10);
+      return Number.isFinite(n) && n >= 0 ? `\x1b[${n};H` : '';
+    },
+    // ~w<n>| - WEB-divergent form preserved (express.e only knows
+    // `~<n>w|` width-prefix form; that one matches the exact 'w'
+    // entry above with width=n). Both collapse to no-op since Amiga
+    // tick delay has no Node equivalent.
+    w: () => '',
+  };
 
-  // SP - Space (express.e:5469). NOT in the dispatch map because the
-  // bare-`~SP` (no terminator) form is a pause marker, handled by the
-  // regex below. Once this form is migrated, both can collapse into the
-  // dispatch.
-  parsed = parsed.replace(mciRegex('SP'), ' ');
-  // Some screens use bare ~SP (no delimiter) to pause; strip and mark.
-  parsed = parsed.replace(/~SP(\s|$)/g, () => {
+  // ============================================================
+  // Pre-tokenizer side-effecting MCI passes
+  // ============================================================
+  //
+  // These codes either need their `~` intact (so strict fall-through
+  // doesn't eat them), or have multi-word arguments that the
+  // tokenizer's space-or-terminator boundary doesn't capture. They
+  // run BEFORE the tokenizer so the strict-fall-through tokenizer
+  // (non-inline mode) can safely consume any `~` it doesn't dispatch
+  // — at this point every side-effecting form has already been
+  // resolved.
+  //
+  // Inline mode runs the tokenizer in soft fall-through; the
+  // sequential regex below picks up `~CC_`, `~SS_`, `~SR_`, `~SX_`,
+  // `~f`, and `~SP` in document order with full pause-and-resume
+  // semantics, so those forms must NOT be pre-substituted in inline
+  // mode.
+
+  if (!inlineMode) {
+    // ~CR_<prompt>|| - prompted keypress (express.e:5571-5580).
+    // Multi-word prompt; the tokenizer's space boundary would split
+    // it, so handle here before the tokenizer.
+    parsed = parsed.replace(/~CR_([^|]+)\|\|/g, (_match, promptText) => {
+      hasPause = true;
+      return promptText;
+    });
+
+    // ~SM_<menuname>|| - set current menu name (express.e:5575-5585).
+    parsed = parsed.replace(/~SM_([^|]+)\|\|/g, (_match, menuName) => {
+      session.currentMenuName = menuName.trim();
+      screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
+      return '';
+    });
+
+    // ~CC_<cmd>| / ~CC_<cmd>|| — non-inline command queue
+    // (express.e:5555-5563). Inline mode runs ~CC_ synchronously in
+    // the sequential pass below.
+    parsed = parsed.replace(/~CC_([^\s|~\r\n]+)(\|{1,2})?/g, (_full, commandStr) => {
+      commandsToExecute.push(commandStr.trim());
+      return '';
+    });
+  }
+
+  // ~SMO<n>| - slow mode on (express.e:5726-5736). Width prefix
+  // semantics differ from the tokenizer's <digits>before-cmd model
+  // (negative numbers, optional width), so handle as a regex.
+  parsed = parsed.replace(/~SMO(-?\d*)\|/gi, (_m, digits) => {
+    slowmoCount += 60;
+    let speed = parseInt(digits, 10);
+    if (!speed || Number.isNaN(speed)) speed = 1;
+    if (speed > 5) speed = 1;
+    if (speed === 0) speed = 1;
+    if (speed < -3) speed = -3;
+    slowmo = speed;
+    slowmoApplied = slowmo;
+    slowmoAppliedCount = slowmoCount;
+    return '';
+  });
+
+  // ~SMC| - slow mode clear (express.e:5737-5739).
+  parsed = parsed.replace(/~SMC\|/gi, () => {
+    slowmo = 0;
+    slowmoCount = 0;
+    slowmoApplied = 0;
+    slowmoAppliedCount = 0;
+    return '';
+  });
+
+  // ~SP. - period-suffix pause variant. Tokenizer would parse cmd
+  // as "SP." (period not a boundary); easier to handle as a regex.
+  parsed = parsed.replace(/~SP\./g, () => {
     hasPause = true;
     return '';
   });
 
-  // ~f - Fill character (express.e:5471-5480)
-  // Format: ~f or ~f<char> - clears screen or fills with character
-  // For now, implement ~f as screen clear
-  parsed = parsed.replace(/~f(\||(?=\s|$))/g, '\x1b[2J\x1b[H');  // Clear screen + home cursor
+  // Bare `~SP\r` / `~SP\n` — tokenizer only treats ASCII space and
+  // the active terminator as cmd boundaries (express.e:5278), so
+  // `~SP\n` parses as cmd="SP\n" and falls through. Real screens use
+  // this form.
+  parsed = parsed.replace(/~SP(?=[\r\n])/g, () => {
+    hasPause = true;
+    return '';
+  });
 
-  // Standalone ~ - Clear screen (common shorthand in Amiga BBS files)
-  // When ~ appears alone (not followed by a code), it clears the screen
-  parsed = parsed.replace(/^~\s*$/gm, '\x1b[2J\x1b[H');  // Clear screen if ~ is alone on a line
-  parsed = parsed.replace(/^~$/gm, '\x1b[2J\x1b[H');  // Clear screen if ~ is the only content
+  // ~CR. - silent character read (express.e:5462-5468). Web has no
+  // mid-render keypress wait; the period suffix dodges the tokenizer
+  // boundary so a regex is the simplest match.
+  parsed = parsed.replace(/~CR\./g, () => '');
 
-  // ~w - Word wrap / Delay (express.e:5481-5489)
-  // WEB_: express.e:5481-5489 — Amiga tick-based delay; no equivalent on Node.js/WebSocket path; ~w is a no-op (stripped from output)
-  const escapedTerm = escapeRegex(mciTerminator);
-  parsed = parsed.replace(new RegExp(`~w\\d*${escapedTerm}`, 'g'), '');
-
-  // ~x - X position (cursor column) (express.e:5491-5500)
-  // Format: ~x<number>| - moves cursor to column <number>
-  // ANSI: ESC[<col>G (move to column)
-  const xRegex = new RegExp(`~x(\\d+)${escapedTerm}`, 'g');
-  parsed = parsed.replace(xRegex, (match, col) => {
-    const colNum = parseInt(col, 10);
-    if (colNum >= 0) {
-      return `\x1b[${colNum}G`;  // ANSI: Move to column
+  // ~NSF - non-stop flag (sets nonStopText to suppress further pauses).
+  parsed = parsed.replace(/~NSF/g, () => {
+    if (session) {
+      (session as any).nonStopText = true;
     }
     return '';
   });
 
-  // ~y - Y position (cursor row) (express.e:5501-5510)
-  // Format: ~y<number>| - moves cursor to row <number>
-  // ANSI: ESC[<row>;H (move to row, column 1)
-  const yRegex = new RegExp(`~y(\\d+)${escapedTerm}`, 'g');
-  parsed = parsed.replace(yRegex, (match, row) => {
-    const rowNum = parseInt(row, 10);
-    if (rowNum >= 0) {
-      return `\x1b[${rowNum};H`;  // ANSI: Move to row
-    }
-    return '';
-  });
+  // Standalone ~ on a line — WEB extension for clear screen
+  // (express.e has no equivalent). Pre-tokenizer so the strict
+  // fall-through doesn't eat the lone `~`.
+  parsed = parsed.replace(/^~\s*$/gm, '\x1b[2J\x1b[H');
+  parsed = parsed.replace(/^~$/gm, '\x1b[2J\x1b[H');
+
+  // Strict fall-through (express.e exact: consume `~`, emit cmd as
+  // plain text — express.e:5290-5402 ELSEIF chain) for non-inline
+  // rendering. Inline mode keeps soft fall-through so the sequential
+  // regex below can still match `~CC_`/`~SS_`/`~SR_`/`~SX_`/`~SP`/
+  // `~f` — those handlers emit to the socket / pause / launch doors
+  // and can't be expressed as string-returning dispatch entries.
+  parsed = processMciTokenizer(
+    parsed,
+    {
+      dispatch: userInfoDispatch,
+      prefixDispatch,
+      softFallThrough: inlineMode,
+      caseSensitive: true,
+    },
+    mciTerminator,
+  );
 
   // ~q (reset, express.e:5571-5573) and ~h (backspace, express.e:5574-5576)
   // are dispatched via the tokenizer above (Q / H entries in
@@ -831,9 +937,15 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   if (inlineMode) {
     const { processCommand } = require('./command.handler');
 
-    // Regex to find inline MCI codes that need immediate execution
-    // ~f, ~SP (pause), ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
-    const inlineMciRegex = /~([fF]|SP(?:\.|[\s|]|$)|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
+    // Inline regex — byte-exact express.e parity. Matches lowercase
+    // `f` (express.e:5469 StrCmp(cmd,'f')), uppercase `SP`/`CC_`/
+    // `SS_`/`SR_` (express.e:5455/5555/5496/5533). The `2S` legacy
+    // form has been dropped (it was a typo for `SX_`; express.e has
+    // no `2S` branch and the inline path doesn't currently handle
+    // SX_ — that runs via the unconditional post-tokenizer pass).
+    // `~F` (uppercase) no longer matches — sysop screens use
+    // lowercase `~f` exclusively per the tree-wide screen sweep.
+    const inlineMciRegex = /~(f|SP(?:\.|[\s|]|$)|CC_[^\s|~\r\n]+|SS_[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
 
     // Regex to find ~SP codes - express.e:5455-5461
     // ~SP followed by . (SP.), | (mciterminator), whitespace, or end of string
@@ -907,8 +1019,9 @@ console.error('[parseMciCodes] Error getting message base name:', error);
       lastIndex = match.index + fullMatch.length;
 
       // Process the MCI code immediately (express.e:5799 processMciCmd)
-      if (code === 'f' || code === 'F') {
-        // express.e:5469-5471 - sendCLS()
+      if (code === 'f') {
+        // express.e:5469-5471 - sendCLS() (lowercase 'f' only per
+        // express.e StrCmp byte-exact)
         emitText(socket, '\x1b[2J\x1b[H');
         screenDebug('[MCI] Sequential: ~f sendCLS()');
       } else if (code.startsWith('SP')) {
@@ -934,10 +1047,9 @@ console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', sessio
           session.subState = subStateBeforeInlineCmd;
         }
 console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
-      } else if (code.startsWith('SS_') || code.startsWith('2S')) {
+      } else if (code.startsWith('SS_')) {
         // express.e:5496-5504 - displayFile()
-        const prefix = code.startsWith('SS_') ? 3 : 2;
-        const filename = code.substring(prefix).replace(/\|+$/, '').trim();
+        const filename = code.substring(3).replace(/\|+$/, '').trim();
         screenDebug('[MCI] Sequential: ~SS_ displayFile:', filename);
         await displayScreen(socket, session, filename, false);
       } else if (code.includes('SR_')) {
@@ -1130,97 +1242,9 @@ console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
     }
   }
 
-  // ~SP. - Stop Pause (express.e:5455-5461)
-  // Displays pause prompt and waits for keypress
-  parsed = parsed.replace(/~SP\./g, () => {
-    hasPause = true;
-    // Pause is enforced by pagination; no extra inline prompt to avoid duplicates
-    return '';
-  });
-
-  // ~NSF - Non-Stop Flag (express.e pause control)
-  parsed = parsed.replace(/~NSF/g, () => {
-    if (session) {
-      (session as any).nonStopText = true;
-    }
-    return '';
-  });
-
-  // ~CR. - Character Read (express.e:5462-5468)
-  // Waits for single keypress without prompt
-  parsed = parsed.replace(/~CR\./g, () => {
-    // Set session state to wait for character
-    // Note: In web version, this is silent - no visible output
-    // The actual character read handling needs to be implemented in the command handler
-    return '';
-  });
-
-  // ~F / ~f - Form feed / clear screen (common in legacy screens)
-  // NOTE: In inline mode, ~f is handled in sequential processing above (express.e:5469-5471)
-  if (!inlineMode) {
-    parsed = parsed.replace(/~[Ff]/g, '\x1b[2J\x1b[H');
-  }
-
-  // ~CC_ - Custom Command Execution (express.e:5555-5563)
-  // Format: ~CC_<command>| or ~CC_<command>|| - executes a BBS command from the screen,
-  // and some classic files only include a single trailing pipe (e.g. the reference-board V-AWAIT trigger),
-  // so we accept either delimiter length like express.e did.
-  // reference-board screens sometimes omit the pipe and just terminate with whitespace/~SP.
-  // Accept either a pipe delimiter or whitespace/end of line.
-  // NOTE: In inline mode, ~CC_ is handled in sequential processing above (express.e:5555-5563)
-  const ccRegex = /~CC_([^\s|~\r\n]+)(\|{1,2})?/g;
-
-  if (!inlineMode) {
-    // String mode: Queue commands for later execution
-    parsed = parsed.replace(ccRegex, (_fullMatch: string, commandStr: string) => {
-      commandsToExecute.push(commandStr.trim());
-      return '';
-    });
-  }
-
-  // ~CR_ - Prompted keypress (express.e:5571-5580)
-  // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
-  const crRegex = /~CR_([^|]+)\|\|/g;
-  parsed = parsed.replace(crRegex, (match, promptText) => {
-    hasPause = true;
-    return promptText;
-  });
-
-  // ~SM_ - Set Mode / Menu Name (express.e:5575-5585)
-  // Format: ~SM_<menuname>|| - sets current menu name for context tracking
-  const smRegex = /~SM_([^|]+)\|\|/g;
-  parsed = parsed.replace(smRegex, (match, menuName) => {
-    // Store current menu name in session for context
-    session.currentMenuName = menuName.trim();
-    screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
-    return ''; // Code doesn't display anything
-  });
-
-  // ~SMO - Screen Mode On / Slow Mode On (express.e:5726-5736)
-  // Format: ~SMO<speed>| where speed is 1-5
-  // Note: Slow mode is a display effect, not applicable to web
-  parsed = parsed.replace(/~SMO(-?\d*)\|/gi, (_m: string, digits: string) => {
-    // express.e sets slowmo:=1, slowmoCount+=60*slowmo before reading value
-    slowmoCount += 60;
-    let speed = parseInt(digits, 10);
-    if (!speed || Number.isNaN(speed)) speed = 1;
-    // AmiExpress valid range 1-5; allow web extension -1..-3 for slower-than-1
-    if (speed > 5) speed = 1;
-    if (speed === 0) speed = 1;
-    if (speed < -3) speed = -3;
-    slowmo = speed;
-    slowmoApplied = slowmo;
-    slowmoAppliedCount = slowmoCount;
-    return '';
-  });
-
-  // ~SMC - Screen Mode Clear / Slow Mode Clear (express.e:5737-5739)
-  // Disables slow mode
-  parsed = parsed.replace(/~SMC\|/gi, () => {
-    slowmo = 0;
-    slowmoCount = 0;
-    return '';
-  });
+  // ~SP. / ~NSF / ~CR. / ~F / ~CC_ / ~CR_ / ~SM_ / ~SMO / ~SMC are
+  // handled in the pre-tokenizer side-effecting block above so the
+  // strict-fall-through tokenizer doesn't eat their `~`.
 
   // Legacy % codes (for compatibility)
   parsed = parsed.replace(/%B/g, bbsName);
