@@ -374,6 +374,15 @@ console.error(`[Database] Failed to delete message file from disk:`, error);
       attachList = await readAttachList(srcConferenceId, srcMsgNumber, bbsDataPath);
     } catch { /* missing A<N> is normal for messages with no attachments */ }
 
+    // express.e:11879 calls saveNewMSG(gfh, mh, FALSE) — update=FALSE preserves
+    // mh.recv (read state), mh.msgDate, mh.fromName from the source mailHeader.
+    // writeMessageFile (which mirrors saveNewMSG with update=TRUE) zeroes recv,
+    // so capture the source recv here and re-stamp the destination header
+    // after the write so a moved-but-already-read message stays read.
+    const srcHeaders = messageIndexManager.readHeaderFile(srcConferenceId);
+    const srcHeader = srcHeaders.find(h => h.msgNumb === srcMsgNumber);
+    const srcRecv = srcHeader?.recv || 0;
+
     // STEP 1: Write to destination through the canonical path. writeMessageFile
     // acquires the dest mailLock, picks the next free msgNum, writes the body
     // file, appends to HeaderFile (bumping highMsgNum), and writes A<destNum>
@@ -396,6 +405,13 @@ console.error(`[Database] Failed to delete message file from disk:`, error);
       bbsDataPath,
       0, // nodeId — server-side move, no specific node holds the lock
     );
+
+    // express.e:11879 update=FALSE — preserve source recv (read state) on dest.
+    // writeMessageFile zeroed recv; restore it now so a previously-read
+    // message stays marked read after the move.
+    if (srcRecv !== 0) {
+      messageIndexManager.updateMessageHeader(destConferenceId, destMsgNumber, { recv: srcRecv });
+    }
 
     // STEP 2: Update DB to point at dest. The DB id stays the same — we only
     // re-locate which canonical conf/msgbase it lives in. (Web search/UI
