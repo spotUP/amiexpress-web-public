@@ -219,6 +219,74 @@ describe('getConfMailName — express.e:12459-12466 confMailName', () => {
     // express.e behavior where confMailName would just be empty).
     expect(() => getConfMailName(session)).not.toThrow();
   });
+
+  test('USERNAME tooltype does NOT change confMailName (it gates TO: only)', () => {
+    // Simulate flags with requireUsername=true. USERNAME / USERNAME.<n> is
+    // express.e:4078-4087 CHECK_REALNAME (TO: field validation), NOT
+    // express.e:5017-5024 confNameType. confMailName must stay at the
+    // default NAME_TYPE_USERNAME branch.
+    jest.resetModules();
+    jest.doMock('../../../src/utils/conference-tooltypes.util', () => ({
+      getConferenceToolFlags: () => ({
+        requireUsername: true,
+        requireRealname: false,
+        requireInternetname: false,
+        requireUsernameMsgBases: new Set(),
+        requireRealnameMsgBases: new Set(),
+        requireInternetnameMsgBases: new Set(),
+      }),
+    }));
+    const { getConfMailName: gcm } = require('../../../src/handlers/message/message-entry.handler');
+    const session = makeSession({
+      user: { username: 'Bob', realName: 'Robert', internetName: 'bob@x' },
+    });
+    expect(gcm(session)).toBe('Bob');
+    jest.dontMock('../../../src/utils/conference-tooltypes.util');
+    jest.resetModules();
+  });
+
+  test('REALNAME wins over INTERNETNAME when both tooltypes set', () => {
+    jest.resetModules();
+    jest.doMock('../../../src/utils/conference-tooltypes.util', () => ({
+      getConferenceToolFlags: () => ({
+        requireUsername: false,
+        requireRealname: true,
+        requireInternetname: true,
+        requireUsernameMsgBases: new Set(),
+        requireRealnameMsgBases: new Set(),
+        requireInternetnameMsgBases: new Set(),
+      }),
+    }));
+    const { getConfMailName: gcm } = require('../../../src/handlers/message/message-entry.handler');
+    const session = makeSession({
+      user: { username: 'Bob', realName: 'Robert Smith', internetName: 'bob@x' },
+    });
+    // express.e:5020-5023 IF/ELSEIF — REALNAME branch fires first.
+    expect(gcm(session)).toBe('Robert Smith');
+    jest.dontMock('../../../src/utils/conference-tooltypes.util');
+    jest.resetModules();
+  });
+
+  test('INTERNETNAME truncates to 10 chars (express.e:12465 AstrCopy 10)', () => {
+    jest.resetModules();
+    jest.doMock('../../../src/utils/conference-tooltypes.util', () => ({
+      getConferenceToolFlags: () => ({
+        requireUsername: false,
+        requireRealname: false,
+        requireInternetname: true,
+        requireUsernameMsgBases: new Set(),
+        requireRealnameMsgBases: new Set(),
+        requireInternetnameMsgBases: new Set(),
+      }),
+    }));
+    const { getConfMailName: gcm } = require('../../../src/handlers/message/message-entry.handler');
+    const session = makeSession({
+      user: { username: 'Bob', internetName: 'verylonginternet@example.com' },
+    });
+    expect(gcm(session).length).toBeLessThanOrEqual(10);
+    jest.dontMock('../../../src/utils/conference-tooltypes.util');
+    jest.resetModules();
+  });
 });
 
 describe('handleMessagePrivateInput', () => {

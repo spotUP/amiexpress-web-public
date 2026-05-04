@@ -92,13 +92,23 @@ function isExtSendMsgBase(session: BBSSession): boolean {
  *     CASE NAME_TYPE_REALNAME    StrCopy(confMailName, realName, 26)
  *     CASE NAME_TYPE_INTERNETNAME StrCopy(confMailName, internetName, 10)
  *
+ * confNameType itself is resolved per express.e:5017-5024:
+ *   - REALNAME (or REALNAME.<msgBaseNum>)        → NAME_TYPE_REALNAME
+ *   - ELSEIF INTERNETNAME (or INTERNETNAME.<n>)  → NAME_TYPE_INTERNETNAME
+ *   - ELSE                                       → NAME_TYPE_USERNAME (default)
+ * REALNAME wins over INTERNETNAME if both are configured.
+ *
+ * Note: USERNAME / USERNAME.<n> is a SEPARATE tooltype that gates the
+ * TO: field validation (captureRealAndInternetNames, express.e:4078-
+ * 4087); it does NOT change confNameType. Earlier versions of this
+ * helper conflated the two and used `requireUsername` to short-circuit
+ * to the username branch, which is wrong but harmless because
+ * USERNAME without REALNAME/INTERNETNAME yields the default
+ * NAME_TYPE_USERNAME anyway.
+ *
  * Express.e then uses confMailName for `mh.fromName` (10649), all
- * "is this my mail?" checks (8854, 8943, 9854, 9899, 11114, 11125, 11179,
- * 11202, 11706, 11749, 11918-11919, 12087-12089, 12345-12348). Without
- * this, REALNAME conferences would store messages under the user's web
- * username instead of the real name they registered with — breaking
- * door compatibility AND the sysop's mental model when reading the
- * conference's HeaderFile.
+ * "is this my mail?" checks (8854, 8943, 9854, 9899, 11114, 11125,
+ * 11179, 11202, 11706, 11749, 11918-11919, 12087-12089, 12345-12348).
  */
 export function getConfMailName(session: BBSSession): string {
   const username = session.user?.username || '';
@@ -107,20 +117,17 @@ export function getConfMailName(session: BBSSession): string {
   const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
   const flags = getConferenceToolFlags(confId);
   const requireRealname = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
-  const requireUsername = !!(flags?.requireUsername || flags?.requireUsernameMsgBases?.has?.(msgBaseId));
+  const requireInternetname = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
   const userMisc: any = (session.user as any) || {};
   const realName = String(userMisc.realName || userMisc.realname || '').trim();
   const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
 
-  // INTERNETNAME tooltype isn't yet harvested on ConferenceToolFlags
-  // (separate gap tracked in captureRealAndInternetNames). When/if it
-  // is, plumb a NAME_TYPE_INTERNETNAME branch here that returns
-  // internetName.substring(0, 10).
+  // express.e:5017-5024 priority: REALNAME wins over INTERNETNAME.
   if (requireRealname && realName) {
     return realName.substring(0, 26);
   }
-  if (requireUsername && username) {
-    return username.substring(0, 31);
+  if (requireInternetname && internetName) {
+    return internetName.substring(0, 10);
   }
   // Default = NAME_TYPE_USERNAME (express.e:12460-12461)
   return username.substring(0, 31);
@@ -254,20 +261,23 @@ export async function processToRecipient(socket: any, session: BBSSession, input
 
   if (resolvedUser) {
     // express.e:10828-10836 — copy canonical name based on confNameType.
-    // Per-conf USERNAME/REALNAME tooltype (or msgbase variant) drives this.
-    // Default (no flag) = NAME_TYPE_USERNAME.
+    //   NAME_TYPE_USERNAME    → tempUserKeys.userName(31)
+    //   NAME_TYPE_REALNAME    → tempUserMisc.realName(26)
+    //   NAME_TYPE_INTERNETNAME → tempUserMisc.internetName(10)
+    // confNameType resolves per express.e:5017-5024 — REALNAME wins over
+    // INTERNETNAME, INTERNETNAME wins over default USERNAME.
     const confId = session.currentConf || 1;
     const msgBaseId = session.currentMsgBase || 1;
     const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
     const flags = getConferenceToolFlags(confId);
     const requireRealname = flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId);
-    const requireUsername = flags?.requireUsername || flags?.requireUsernameMsgBases?.has?.(msgBaseId);
+    const requireInternetname = flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId);
     if (requireRealname && resolvedUser.realName) {
       resolved = String(resolvedUser.realName).substring(0, 26);
-    } else if (requireUsername && resolvedUser.username) {
-      resolved = String(resolvedUser.username).substring(0, 31);
+    } else if (requireInternetname && (resolvedUser.internetName || resolvedUser.internetname)) {
+      resolved = String(resolvedUser.internetName || resolvedUser.internetname).substring(0, 10);
     } else if (resolvedUser.username) {
-      // Default — normalize to canonical username casing
+      // Default NAME_TYPE_USERNAME — normalize to canonical username casing
       resolved = String(resolvedUser.username).substring(0, 31);
     }
 

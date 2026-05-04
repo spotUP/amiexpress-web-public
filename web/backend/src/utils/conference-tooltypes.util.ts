@@ -29,6 +29,13 @@ export interface ConferenceToolFlags {
   requireRealname: boolean;
   requireUsernameMsgBases: Set<number>;
   requireRealnameMsgBases: Set<number>;
+  // express.e:5017-5024 — confNameType resolution. INTERNETNAME (or
+  // INTERNETNAME.<msgBaseNum>) makes confMailName use loggedOnUserMisc
+  // .internetName truncated to 10 chars; takes precedence over the default
+  // NAME_TYPE_USERNAME but loses to REALNAME if both are set
+  // (express.e IF/ELSEIF order).
+  requireInternetname: boolean;
+  requireInternetnameMsgBases: Set<number>;
   // express.e:9909-9950 checkToForward — when sysop receives mail, forward
   // to this username instead. Empty string = no forwarding.
   forwardMail: string;
@@ -54,6 +61,8 @@ const defaultFlags: ConferenceToolFlags = {
   requireRealname: false,
   requireUsernameMsgBases: new Set<number>(),
   requireRealnameMsgBases: new Set<number>(),
+  requireInternetname: false,
+  requireInternetnameMsgBases: new Set<number>(),
   forwardMail: '',
   extSendMsgBases: new Set<number>(),
 };
@@ -205,11 +214,16 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     if (extSet.size > 0) result.extSendMsgBases = extSet;
 
     // express.e:4081-4084 — USERNAME / REALNAME tooltypes (conf-wide, plus
-    // per-msgbase variants USERNAME.<n> / REALNAME.<n>).
+    // per-msgbase variants USERNAME.<n> / REALNAME.<n>) used by
+    // captureRealAndInternetNames to gate the TO: field.
+    // express.e:5017-5024 also harvests INTERNETNAME / INTERNETNAME.<n>
+    // for confNameType resolution.
     if (flagSet.has('USERNAME')) result.requireUsername = true;
     if (flagSet.has('REALNAME')) result.requireRealname = true;
+    if (flagSet.has('INTERNETNAME')) result.requireInternetname = true;
     const msgBaseUserSet = new Set<number>();
     const msgBaseRealSet = new Set<number>();
+    const msgBaseInetSet = new Set<number>();
     for (const key of flagSet) {
       const usernameMatch = /^USERNAME\.(\d+)$/.exec(key);
       if (usernameMatch) {
@@ -219,10 +233,16 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
       const realnameMatch = /^REALNAME\.(\d+)$/.exec(key);
       if (realnameMatch) {
         msgBaseRealSet.add(parseInt(realnameMatch[1]!, 10));
+        continue;
+      }
+      const internetnameMatch = /^INTERNETNAME\.(\d+)$/.exec(key);
+      if (internetnameMatch) {
+        msgBaseInetSet.add(parseInt(internetnameMatch[1]!, 10));
       }
     }
     if (msgBaseUserSet.size > 0) result.requireUsernameMsgBases = msgBaseUserSet;
     if (msgBaseRealSet.size > 0) result.requireRealnameMsgBases = msgBaseRealSet;
+    if (msgBaseInetSet.size > 0) result.requireInternetnameMsgBases = msgBaseInetSet;
 
     return result;
   } catch (error) {
