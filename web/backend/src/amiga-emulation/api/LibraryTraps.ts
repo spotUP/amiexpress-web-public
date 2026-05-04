@@ -59,8 +59,10 @@ import {
   AMISSLMASTER_VECTORS,
   AMISSL_VECTORS,
   DREAMDOOR_VECTORS,
+  REXXSYSLIB_VECTORS,
 } from "./library-vectors";
 import { DreamDoorLibrary } from "./DreamDoorLibrary";
+import { RexxSysLibLibrary } from "./RexxSysLibLibrary";
 
 // Performance: Verbose logging is disabled by default
 // Set DEBUG_LIBRARY_TRAPS=1 to enable detailed library call tracing
@@ -94,6 +96,10 @@ export class LibraryTraps {
   private amisslMasterLibrary: AmiSSLMasterLibrary | null = null;
   private amisslLibrary: AmiSSLLibrary | null = null;
   private dreamDoorLibrary: DreamDoorLibrary | null = null;
+  // #78 Phase 3b — rexxsyslib.library trap target. Lives next to the
+  // other library handles so the trap dispatcher can route 10 LVO
+  // offsets to the same RexxSysLibLibrary instance.
+  private rexxSysLibLibrary: any = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -1110,6 +1116,59 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
   /**
    * Install dreamdoor.library vectors (DayDream BBS compatibility)
    */
+  /**
+   * #78 Phase 3b — set the RexxSysLibLibrary instance. Called from
+   * RexxMastService.start() after the library is constructed, before
+   * installRexxSysLibVectors() resolves the base address and writes
+   * the trap markers.
+   */
+  setRexxSysLibLibrary(lib: RexxSysLibLibrary): void {
+    this.rexxSysLibLibrary = lib;
+  }
+
+  /**
+   * #78 Phase 3b — install REXXSYSLIB_VECTORS at rexxsyslib.library's
+   * base. Mirrors installDreamDoorVectors: writes the 0x4AFC ILLEGAL
+   * marker at base+offset for each of the 10 LVO entries and registers
+   * the vector + library with the trap dispatcher.
+   *
+   * Caller must have already called LibraryLoader.loadLibrary(
+   * 'rexxsyslib.library') so execLibrary.getLibraryBase returns a
+   * non-zero address.
+   */
+  installRexxSysLibVectors(): void {
+    if (!this.rexxSysLibLibrary) {
+      console.error("[LibraryTraps] Cannot install rexxsyslib vectors: library not set");
+      return;
+    }
+
+    const rexxBase = this.execLibrary.getLibraryBase("rexxsyslib.library");
+    if (rexxBase === 0) {
+      console.error("[LibraryTraps] Cannot install rexxsyslib vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing rexxsyslib.library vectors at base 0x${rexxBase.toString(16)}`);
+
+    for (const vector of REXXSYSLIB_VECTORS) {
+      const trapAddr = rexxBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.rexxSysLibLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.rexxSysLibLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${REXXSYSLIB_VECTORS.length} rexxsyslib.library vectors`);
+  }
+
   installDreamDoorVectors(): void {
     if (!this.dreamDoorLibrary) {
       console.error("[LibraryTraps] Cannot install dreamdoor vectors: library not set");

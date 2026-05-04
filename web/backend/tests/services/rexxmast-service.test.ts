@@ -38,36 +38,11 @@ describe('RexxMastService — Phase 3b skeleton lifecycle', () => {
     expect(s.lastError).toMatch(/RexxMast binary not found/);
   });
 
-  test('start() returns true when detection passes parse-time validation', async () => {
-    // Drop a minimal valid hunk file (matches Phase 3a contract test).
-    const buf = Buffer.alloc(40);
-    let o = 0;
-    buf.writeUInt32BE(0x000003F3, o); o += 4;   // HUNK_HEADER
-    buf.writeUInt32BE(0x00000000, o); o += 4;   // resident terminator
-    buf.writeUInt32BE(0x00000001, o); o += 4;   // table_size
-    buf.writeUInt32BE(0x00000000, o); o += 4;   // first
-    buf.writeUInt32BE(0x00000000, o); o += 4;   // last
-    buf.writeUInt32BE(0x00000001, o); o += 4;   // hunk[0] size = 1 longword
-    buf.writeUInt32BE(0x000003E9, o); o += 4;   // HUNK_CODE
-    buf.writeUInt32BE(0x00000001, o); o += 4;   // 1 longword of code
-    buf.writeUInt32BE(0x4E714E71, o); o += 4;   // NOPs
-    buf.writeUInt32BE(0x000003F2, o); o += 4;   // HUNK_END
-    fs.mkdirSync(path.join(tmpDataDir, 'System'));
-    fs.mkdirSync(path.join(tmpDataDir, 'Libs'));
-    fs.writeFileSync(path.join(tmpDataDir, 'System/RexxMast'), buf);
-    fs.writeFileSync(path.join(tmpDataDir, 'Libs/rexxsyslib.library'), buf);
-
-    const ok = await rexxMastService.start();
-    expect(ok).toBe(true);
-    const s = rexxMastService.getStatus();
-    expect(s.started).toBe(true);
-    // Phase 3b-skeleton intentionally leaves ready=false — only
-    // Phase 3b-real flips it once the 68K runtime is actually up.
-    expect(s.ready).toBe(false);
-    expect(s.lastError).toBeNull();
-  });
-
-  test('start() is idempotent — calling twice is a no-op when already started', async () => {
+  test('start() reports a no-ROM environment cleanly', async () => {
+    // Phase 3b-real attempts to boot a MoiraEmulator + Kickstart ROM
+    // when binaries are present. In a clean test sandbox neither the
+    // ROM nor a real RexxMast is available, so start() should fail
+    // with a precise reason rather than crashing or hanging.
     const buf = Buffer.alloc(40);
     let o = 0;
     buf.writeUInt32BE(0x000003F3, o); o += 4;
@@ -85,36 +60,48 @@ describe('RexxMastService — Phase 3b skeleton lifecycle', () => {
     fs.writeFileSync(path.join(tmpDataDir, 'System/RexxMast'), buf);
     fs.writeFileSync(path.join(tmpDataDir, 'Libs/rexxsyslib.library'), buf);
 
-    await rexxMastService.start();
-    const ok = await rexxMastService.start();
-    expect(ok).toBe(true);
-    expect(rexxMastService.getStatus().started).toBe(true);
+    // Force ROM_DIR to a non-existent path so the lookup fails
+    // deterministically regardless of the dev machine's setup.
+    const oldRomDir = process.env.ROM_DIR;
+    process.env.ROM_DIR = path.join(tmpDataDir, 'no-rom-here');
+    try {
+      const ok = await rexxMastService.start();
+      // Either path is acceptable: detection failure (parsed binaries
+      // can't satisfy the ROM dependency), or a structured error
+      // message naming the missing ROM.
+      expect(ok).toBe(false);
+      const s = rexxMastService.getStatus();
+      expect(s.started).toBe(false);
+      // Match both message shapes the bring-up can emit when the ROM
+      // is absent (KickstartRom logs but keeps going; we then
+      // surface the empty getRomData() ourselves).
+      expect(s.lastError).toMatch(/ROM|RexxMast bring-up|hunk parse|loadLibrary|rexxsyslib/);
+    } finally {
+      if (oldRomDir === undefined) delete process.env.ROM_DIR;
+      else process.env.ROM_DIR = oldRomDir;
+    }
   });
 
-  test('stop() resets started/ready flags', async () => {
-    const buf = Buffer.alloc(40);
-    let o = 0;
-    buf.writeUInt32BE(0x000003F3, o); o += 4;
-    buf.writeUInt32BE(0x00000000, o); o += 4;
-    buf.writeUInt32BE(0x00000001, o); o += 4;
-    buf.writeUInt32BE(0x00000000, o); o += 4;
-    buf.writeUInt32BE(0x00000000, o); o += 4;
-    buf.writeUInt32BE(0x00000001, o); o += 4;
-    buf.writeUInt32BE(0x000003E9, o); o += 4;
-    buf.writeUInt32BE(0x00000001, o); o += 4;
-    buf.writeUInt32BE(0x4E714E71, o); o += 4;
-    buf.writeUInt32BE(0x000003F2, o); o += 4;
-    fs.mkdirSync(path.join(tmpDataDir, 'System'));
-    fs.mkdirSync(path.join(tmpDataDir, 'Libs'));
-    fs.writeFileSync(path.join(tmpDataDir, 'System/RexxMast'), buf);
-    fs.writeFileSync(path.join(tmpDataDir, 'Libs/rexxsyslib.library'), buf);
-
-    await rexxMastService.start();
-    expect(rexxMastService.isStarted()).toBe(true);
+  test('stop() is safe to call when never started', async () => {
+    // Defensive: stop() before start() should be a clean no-op.
     await rexxMastService.stop();
-    expect(rexxMastService.isStarted()).toBe(false);
-    expect(rexxMastService.isReady()).toBe(false);
-    expect(rexxMastService.getStatus().stopped).toBe(true);
+    const s = rexxMastService.getStatus();
+    expect(s.stopped).toBe(true);
+    expect(s.started).toBe(false);
+    expect(s.ready).toBe(false);
+  });
+
+  test('stop() releases the emulator handle', async () => {
+    // Even on a failed start, stop() should always reset internal
+    // state so the next start() retries cleanly.
+    fs.mkdirSync(path.join(tmpDataDir, 'System'));
+    fs.mkdirSync(path.join(tmpDataDir, 'Libs'));
+    fs.writeFileSync(path.join(tmpDataDir, 'System/RexxMast'), 'not a hunk');
+    fs.writeFileSync(path.join(tmpDataDir, 'Libs/rexxsyslib.library'), 'not a hunk');
+
+    await rexxMastService.start();
+    await rexxMastService.stop();
+    expect(rexxMastService._getEmulator()).toBeNull();
   });
 
   test('start() captures the detection failure reason on a corrupt binary', async () => {
