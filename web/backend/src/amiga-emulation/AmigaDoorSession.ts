@@ -750,6 +750,20 @@ debugLog(
           );
           this.sharedState.libraryTraps.installIconVectors();
         }
+        if (name.toLowerCase() === "intuition.library") {
+          // S/stats regression: this callback overrides LibraryManager's
+          // (LibraryManager.ts:715), so any library not handled here gets
+          // its base back from openLibraryStub but never has its TRAP
+          // VECTORS installed. The stats door's SAS/C panic handler opens
+          // intuition.library, calls AutoRequest at LVO -348, and without
+          // vectors the JSR jumps into uninitialized memory at
+          // (intuitionBase + LVO) — door faults, runtime longjmps to its
+          // recovery exit, and exits FAIL=20.
+debugLog(
+            "[AmigaDoorSession] intuition.library opened, installing vectors..."
+          );
+          this.sharedState.libraryTraps.installIntuitionVectors();
+        }
         if (name.toLowerCase() === "bsdsocket.library") {
 debugLog(
             "[AmigaDoorSession] bsdsocket.library opened, installing vectors..."
