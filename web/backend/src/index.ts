@@ -284,6 +284,12 @@ export interface BBSSession {
   skipNextDisplayFlowMenu?: boolean;
   manualMenuTargetState?: LoggedOnSubState;
   user?: any; // Will be User from database (expert stored as "X"/"N")
+  // express.e:29554-29557 — when a sysop reserves a node for a specific
+  // user, callers see "*** Node N is reserved right now, for <name> ***"
+  // after BBSTITLE. We surface the field on the session so pre-login can
+  // emit the warning even though there's no admin route to set it yet
+  // (see WEB_ note at the call site in pre-login.ts). Audit A-3.
+  reservedFor?: string;
   currentConf: number;
   currentConference?: number; // Current conference ID (GlobalStructures parity)
   conferenceId: number; // XIM doors read this property for current conference

@@ -1385,6 +1385,15 @@ console.log(`[MCI] File not found, removing placeholder: ${filename}`);
  * Searches in priority order: Conference  Node  Global BBS screens
  * Like express.e await displayScreen() - loads from BBS:Node{X}/Screens/ or BBS:Conf{X}/Screens/
  *
+ * **WEB_**: express.e:6814-6830 wraps non-MCI screen-file lines at
+ * 79 columns and calls checkForPause() at each wrap. We don't, because
+ * (a) modern terminals reflow on resize, (b) ANSI screens that the BBS
+ * uses commonly contain wide invisible escape sequences which a naive
+ * char-count wrap would split mid-attribute, and (c) the per-screen
+ * fix-up risk (existing ANSI art breaks on wrap) outweighs the gain.
+ * Sysops who really want hard-wrap behavior should generate their
+ * screen files pre-wrapped. (Audit G-wrap, P3.)
+ *
  * @param screenName - Name of screen file (without .TXT extension)
  * @param conferenceId - Optional conference ID for conference-specific screens
  * @param nodeId - Node ID (default 0)

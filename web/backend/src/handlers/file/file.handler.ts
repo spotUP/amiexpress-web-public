@@ -913,6 +913,21 @@ export function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
 
 // ===== File Upload/Download WebSocket Handlers =====
 
+/**
+ * **WEB_**: web upload bypasses the express.e:17769 "Okay: (Enter) to
+ * Start, (G)oodbye after transfer, (A)bort?" prompt — the WebSocket
+ * file picker shows up directly and the upload begins on file select.
+ * Three reasons:
+ *   1. The file picker is the equivalent of "I'm ready to send" — adding
+ *      another keypress is friction without information value.
+ *   2. There is no "abort after typing filenames" workflow on web; the
+ *      user just doesn't pick a file in the chooser.
+ *   3. "Goodbye after transfer" is a multi-call modem-era convenience
+ *      that has no equivalent in a session-per-page web client.
+ * The terminal-mode UPLOAD_OKAY_CONFIRM state (command.handler.ts:2628)
+ * still emits the express.e prompt for raw telnet/SSH callers; only the
+ * WebSocket startFileUpload path skips it. (Audit E-11.)
+ */
 export function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
 console.log('startFileUpload called for area:', fileArea.name);
 
