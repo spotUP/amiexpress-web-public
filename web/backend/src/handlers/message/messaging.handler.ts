@@ -834,7 +834,24 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     if (canDelete) {
       // Delete the message
       const msgNum = (msg as any).msgNumber || msg.id;
-      await _deleteMessage(msg.id);
+      try {
+        await _deleteMessage(msg.id);
+      } catch (err: any) {
+        // express.e:11940 — when lockMsgBase fails, deleteMSG prints
+        // 'Can't Lock MsgBase, Message not Deleted!' and returns failure
+        // without touching DB or disk. message-repository.deleteMessage
+        // throws "MsgBase locked for Conf<N> — Message not Deleted!" in
+        // that case; surface it to the user verbatim and stay in the
+        // reader so they can retry.
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.startsWith('MsgBase locked')) {
+          emitText(socket, "\r\nCan't Lock MsgBase, Message not Deleted!\r\n");
+        } else {
+          emitText(socket, `\r\nError deleting message: ${errMsg}\r\n`);
+        }
+        displayMessageNavigationPrompt(socket, session);
+        return;
+      }
 
       // express.e:11936: '\b\nMessage N deleted...\b\n'
       emitText(socket, `\r\nMessage ${msgNum} deleted...\r\n`);

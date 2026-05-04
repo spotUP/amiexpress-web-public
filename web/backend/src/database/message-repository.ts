@@ -224,103 +224,109 @@ console.error(`[Database] Failed to sync updated message to disk:`, error);
   }
 
   async deleteMessage(id: number): Promise<void> {
-
     // Get message info before deleting for file cleanup
     const selectStmt = this.prepare('SELECT conferenceid, id FROM messages WHERE id = ?');
     const row = selectStmt.get(id) as any;
 
-    const stmt = this.prepare('DELETE FROM messages WHERE id = ?');
-    stmt.run(id);
+    if (!row) {
+      // Message already gone in DB — nothing to do.
+      return;
+    }
 
-    // CRITICAL: Delete from disk files for Amiga door compatibility.
-    // express.e deleteMSG (11913-11942) wraps the on-disk operations in
-    // lockMsgBase() so concurrent deletes/saves can't race on MailStats
-    // and HeaderFile. Match that pattern via acquireMailLock.
-    if (row) {
-      const conferenceId: number = row.conferenceid;
-      const msgNumber: number = row.id;
+    const conferenceId: number = row.conferenceid;
+    const msgNumber: number = row.id;
 
-      // Lazy-require to dodge circular imports.
-      const { readAttachList, getAttachListPath } = require('../utils/message-file.util');
-      const fs = require('fs').promises;
-      const { config } = require('../config');
-      const bbsDataPath = config.get('dataDir');
+    // Lazy-require to dodge circular imports.
+    const { readAttachList, getAttachListPath } = require('../utils/message-file.util');
+    const fs = require('fs').promises;
+    const { config } = require('../config');
+    const bbsDataPath = config.get('dataDir');
 
-      // Snapshot attachment list BEFORE we try to acquire the lock —
-      // readAttachList only reads, so it's safe outside.
-      let attachList: { deleteOnMessageDelete: boolean; filenames: string[] } | null = null;
-      try {
-        attachList = await readAttachList(conferenceId, msgNumber, bbsDataPath);
-      } catch { /* no A<N> file is normal for unattached messages */ }
+    // Snapshot attachment list BEFORE locking — readAttachList only
+    // reads from disk, so it's safe to do outside the critical section.
+    let attachList: { deleteOnMessageDelete: boolean; filenames: string[] } | null = null;
+    try {
+      attachList = await readAttachList(conferenceId, msgNumber, bbsDataPath);
+    } catch { /* no A<N> file is normal for unattached messages */ }
 
-      // Best-effort lock; matches express.e:11925 — if we can't acquire,
-      // log + still proceed (DB delete already happened, leaving disk in
-      // sync is best-effort). The 200ms × 25-attempt budget mirrors the
-      // writeMessageFile path.
-      const LOCK_RETRY_MS = 200;
-      const LOCK_MAX_ATTEMPTS = 25;
-      let acquired = false;
-      for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt++) {
-        if (messageIndexManager.acquireMailLock(conferenceId, 0)) {
-          acquired = true;
-          break;
-        }
-        await new Promise(r => setTimeout(r, LOCK_RETRY_MS));
+    // express.e deleteMSG (11925-11941) acquires lockMsgBase BEFORE any
+    // mutating work. If the lock fails it shows
+    //   "Can't Lock MsgBase, Message not Deleted!"
+    // and returns failure — neither disk NOR header is touched. Previously
+    // this method DELETE'd from the DB before attempting the lock, so on
+    // lock failure the DB and disk diverged (DB row gone, disk file still
+    // present). Now matches express.e: lock first, fail fast on lock
+    // contention, only mutate state once we hold the lock.
+    const LOCK_RETRY_MS = 200;
+    const LOCK_MAX_ATTEMPTS = 25; // ~5s — same as writeMessageFile budget
+    let acquired = false;
+    for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt++) {
+      if (messageIndexManager.acquireMailLock(conferenceId, 0)) {
+        acquired = true;
+        break;
       }
-      if (!acquired) {
-        console.warn(
-          `[Database] deleteMessage: could not acquire MailLock for Conf${conferenceId} — proceeding without lock (DB row already removed)`,
-        );
-      }
+      await new Promise(r => setTimeout(r, LOCK_RETRY_MS));
+    }
+    if (!acquired) {
+      // express.e:11940 verbatim — caller (D command handler) surfaces this
+      // text to the user. Prefix matches MsgBase-locked detection in
+      // saveMessage's catch block so the same string shows up in either
+      // direction.
+      throw new Error(
+        `MsgBase locked for Conf${conferenceId} — Message not Deleted! (waited ${LOCK_MAX_ATTEMPTS * LOCK_RETRY_MS}ms)`,
+      );
+    }
 
-      try {
-        // express.e:11931 checkAttachedFile(delMsgNum, 0) — if A<N> exists
-        // and the delete-on-msg-delete flag (Y) is set, delete each
-        // attachment file from disk. Then always remove A<N> itself
-        // (express.e:11900 DeleteFile path on the move-attached case
-        // serves the same role on the source side).
-        if (attachList) {
-          if (attachList.deleteOnMessageDelete) {
-            for (const fname of attachList.filenames) {
-              try {
-                await fs.unlink(fname);
-              } catch { /* attachment may already be missing — best-effort */ }
-            }
+    try {
+      // Now safely under the lock — delete DB row + disk files atomically.
+      const stmt = this.prepare('DELETE FROM messages WHERE id = ?');
+      stmt.run(id);
+
+      // express.e:11931 checkAttachedFile(delMsgNum, 0) — if A<N> exists
+      // and the delete-on-msg-delete flag (Y) is set, delete each
+      // attachment file from disk. Then always remove A<N> itself.
+      if (attachList) {
+        if (attachList.deleteOnMessageDelete) {
+          for (const fname of attachList.filenames) {
+            try {
+              await fs.unlink(fname);
+            } catch { /* attachment may already be missing — best-effort */ }
           }
-          try {
-            await fs.unlink(getAttachListPath(conferenceId, msgNumber, bbsDataPath));
-          } catch { /* A<N> already gone — best-effort */ }
         }
+        try {
+          await fs.unlink(getAttachListPath(conferenceId, msgNumber, bbsDataPath));
+        } catch { /* A<N> already gone — best-effort */ }
+      }
 
-        // Delete .msg body file (express.e:11933-11934 SetProtection +
-        // DeleteFile)
-        messageFileManager.deleteMessageFile(conferenceId, msgNumber);
+      // Delete .msg body file (express.e:11933-11934 SetProtection +
+      // DeleteFile)
+      messageFileManager.deleteMessageFile(conferenceId, msgNumber);
 
-        // Mark as deleted in HeaderFile (express.e:11930 status:='D' +
-        // 11935 saveOverHeader). deleteMessageHeader also updates
-        // mailStat.lowestNotDel via updateMailStatsAfterDelete.
-        messageIndexManager.deleteMessageHeader(conferenceId, msgNumber);
+      // Mark as deleted in HeaderFile (express.e:11930 status:='D' +
+      // 11935 saveOverHeader). deleteMessageHeader also updates
+      // mailStat.lowestNotDel via updateMailStatsAfterDelete.
+      messageIndexManager.deleteMessageHeader(conferenceId, msgNumber);
 
 console.log(`[Database] Deleted message ${id} from .msg, A<N>, and marked status='D' in HeaderFile`);
-      } catch (error) {
+    } catch (error) {
 console.error(`[Database] Failed to delete message file from disk:`, error);
-        SysopDebugUtil.debug(
-          null,
-          null,
-          'Database',
-          `Failed to delete message from disk files (.msg, A<N>, HeaderFile)`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-            messageId: id,
-            conferenceId,
-          },
-          DebugSeverity.WARNING
-        );
-      } finally {
-        if (acquired) {
-          messageIndexManager.releaseMailLock(conferenceId, 0);
-        }
-      }
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to delete message from disk files (.msg, A<N>, HeaderFile)`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: id,
+          conferenceId,
+        },
+        DebugSeverity.WARNING
+      );
+      // Re-throw so the caller can surface the failure rather than
+      // silently swallowing a half-deleted message.
+      throw error;
+    } finally {
+      messageIndexManager.releaseMailLock(conferenceId, 0);
     }
   }
 
