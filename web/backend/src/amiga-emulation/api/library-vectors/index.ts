@@ -22,3 +22,4 @@ export { EXEC_VECTORS } from "./exec-vectors";
 export { BSDSOCKET_VECTORS } from "./bsdsocket-vectors";
 export { AMISSLMASTER_VECTORS, AMISSL_VECTORS } from "./amissl-vectors";
 export { DREAMDOOR_VECTORS } from "./dreamdoor-vectors";
+export { REXXSYSLIB_VECTORS } from "./rexxsyslib-vectors";

@@ -16,6 +16,7 @@ import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
+import { aquascanTrace } from '../../utils/aquascan-trace';
 
 const DATE_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DATE_WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -642,11 +643,6 @@ debugLog(`  [READ] DT_HOSTIP: "${hostip}"`);
           }
           this.messageParser.writeString(stringAddr, amigaDate, 200);
 debugLog(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
-          try {
-            require('fs').appendFileSync('/tmp/aquascan-debug.log',
-              `[${new Date().toISOString()}] DT_STAMP_LASTON_READ "${amigaDate}" user.lastLogin=${(user as any)?.lastLogin} user.timeLastOn=${(user as any)?.timeLastOn}\n`
-            );
-          } catch (_) {}
         }
         break;
 
@@ -1083,6 +1079,25 @@ debugLog(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
 
       default:
 debugLog(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
+    }
+
+    if (aquascanTrace.isActive()) {
+      const cmdName = this.messageParser.getCommandName(msg.command);
+      let info: string;
+      if (isRead) {
+        const bytes: number[] = [];
+        for (let i = 0; i < 48; i++) {
+          const b = this.emulator.readMemory(stringAddr + i);
+          if (b === 0) break;
+          bytes.push(b);
+        }
+        const str = bytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+        const hex = bytes.slice(0, 24).map(b => b.toString(16).padStart(2, '0')).join('');
+        info = `replyData=${replyData} str="${str}" hex=${hex}`;
+      } else {
+        info = `dataIn=${msg.data}`;
+      }
+      aquascanTrace.xim(cmdName, isRead, info);
     }
 
     this.reply(msg, replyData);

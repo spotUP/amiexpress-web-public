@@ -25,6 +25,7 @@ import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
+import { aquascanTrace } from '../utils/aquascan-trace';
 import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
 
@@ -2565,71 +2566,17 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID")
     logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
 
+    aquascanTrace.startIfAquaScan(doorPath);
+
     // Start the door execution
-    await amigaSession.start();
+    try {
+      await amigaSession.start();
+    } finally {
+      aquascanTrace.stop(`door-exit ${path.basename(doorPath)}`);
+    }
 
     // Log door exit to Node{N}/DoorLog
     logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
-
-    // After AquaScan exits, advance the user's UserData slot to now.
-    // AquaScan has no Write() LVO calls; the BBS must own this file.
-    // (Login seeds the slot from newSinceDate; here we advance it post-scan
-    //  so subsequent N-command runs show only files added since this scan.)
-    {
-      // --- AQUASCAN DEBUG ---
-      // Resolve slot number using the same precedence as DT_SLOTNUMBER (the
-      // value AquaScan itself reads). Older code only checked .slotNumber
-      // (camelCase) and missed users where the DB column .slotnumber
-      // (lowercase) hadn't been mirrored yet — which left the post-scan
-      // write going to slot 0 even though AquaScan was reading slot N.
-      const userAny: any = session.user;
-      const sessionSlot = Number((session as any)?.userSlotNumber);
-      const slotNum =
-        Number.isFinite(sessionSlot) && sessionSlot > 0
-          ? sessionSlot
-          : Number(userAny?.slotnumber ?? userAny?.slotNumber ?? 0);
-      const isAquaScan = /aquascan/i.test(doorPath);
-      const userDataPath = path.join(config.get('dataDir'), 'Doors', 'AquaScan', 'AquaScan.UserData');
-      let beforeHex = '(unreadable)';
-      try {
-        if (fs.existsSync(userDataPath) && slotNum > 0) {
-          const fd2 = fs.openSync(userDataPath, 'r');
-          const pre = Buffer.alloc(12);
-          fs.readSync(fd2, pre, 0, 12, (slotNum - 1) * 16);
-          fs.closeSync(fd2);
-          beforeHex = `days=${pre.readUInt32BE(0)} min=${pre.readUInt32BE(4)} ticks=${pre.readUInt32BE(8)}`;
-        }
-      } catch (_) {}
-      fs.appendFileSync('/tmp/aquascan-debug.log',
-        `[${new Date().toISOString()}] DOOR_EXIT door="${doorPath}" isAquaScan=${isAquaScan} user="${session.user?.username}" slotNum=${slotNum} udPath_exists=${fs.existsSync(userDataPath)} slot_before=[${beforeHex}]\n`
-      );
-      // --- END DEBUG ---
-
-      if (isAquaScan && slotNum > 0) {
-        try {
-          const ds = dateTimeToDateStamp(new Date());
-          const slotOffset = (slotNum - 1) * 16;
-          const buf = Buffer.alloc(12);
-          buf.writeUInt32BE(ds.days, 0);
-          buf.writeUInt32BE(ds.minutes, 4);
-          buf.writeUInt32BE(ds.ticks, 8);
-          const fdUs = fs.openSync(userDataPath, 'r+');
-          fs.writeSync(fdUs, buf, 0, 12, slotOffset);
-          fs.closeSync(fdUs);
-          fs.appendFileSync('/tmp/aquascan-debug.log',
-            `[${new Date().toISOString()}] WROTE slot ${slotNum} -> days=${ds.days} min=${ds.minutes} ticks=${ds.ticks}\n`
-          );
-console.log(`[AquaScan] Wrote UserData slot ${slotNum}: days=${ds.days} min=${ds.minutes}`);
-        } catch (err) {
-          fs.appendFileSync('/tmp/aquascan-debug.log', `[${new Date().toISOString()}] WRITE_ERROR ${err}\n`);
-console.error('[AquaScan] Failed to advance UserData:', err);
-        }
-      } else {
-        fs.appendFileSync('/tmp/aquascan-debug.log',
-          `[${new Date().toISOString()}] SKIPPED write: isAquaScan=${isAquaScan} slotNum=${slotNum}\n`
-        );
-      }
-    }
 
 console.log(`[executeAmigaDoor] Door execution completed`);
 

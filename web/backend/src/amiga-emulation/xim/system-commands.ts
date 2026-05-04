@@ -1102,17 +1102,6 @@ debugLog(
     const miscBuf = miscPtr ? this.readSlot(this.userMiscPath(), slot, 256) : null;
 
     // AQUASCAN_DEBUG: log loadAccount calls — AquaScan uses this to read user struct
-    try {
-      const fsLog = require('fs');
-      let nameField = '';
-      if (userBuf) {
-        nameField = userBuf.slice(0, 31).toString('latin1').replace(/\0+.*$/, '');
-      }
-      fsLog.appendFileSync('/tmp/aquascan-debug.log',
-        `[${new Date().toISOString()}] LOAD_ACCOUNT slot=${slot} userPtr=0x${userPtr.toString(16)} userBuf?=${!!userBuf} name="${nameField}"\n`
-      );
-    } catch (_) {}
-
     if (userBuf && userPtr) {
       this.writeBuffer(userPtr, userBuf);
     }
