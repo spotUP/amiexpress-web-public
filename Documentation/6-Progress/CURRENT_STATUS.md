@@ -89,8 +89,14 @@ read alongside the May audit and door-backlog state.
   parked pending confirmation.
 - **A-3 connect-bump pre-login UX** — currently emits 420 + disconnect via
   setTimeout(500). Could be reviewed for a tighter state-machine handoff.
-- **Production hardening** — CSRF / rate limiting / security headers still
-  recommended (see SECURITY_AUDIT.md remediation checklist).
+- **Production hardening** — partial:
+  - **Security headers (helmet)**: ✓ shipped May 2026, mounted first in
+    `src/server/app.ts`. CSP and Cross-Origin-Embedder-Policy intentionally
+    deferred (xterm.js / socket.io / inline-styled React audit needed).
+    Pinned by `tests/server/security-headers.test.ts`.
+  - **CSRF protection**: still TODO.
+  - **Rate limiting**: still TODO.
+  - **Content-Security-Policy**: still TODO (separate audit pass).
 
 ## 1. Documentation & References
 - The reshuffle now leaves exactly the reader-facing summaries in `Documentation/1-6` (User, Sysop, Developer, Door, Reference, Progress) while all other historic `.md` files live inside each directory's `archive/` subfolder.

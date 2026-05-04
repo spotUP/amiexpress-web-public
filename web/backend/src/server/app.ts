@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
@@ -20,6 +21,38 @@ import { getSystemTime } from '../utils/date-time.util';
  */
 
 export const app = express();
+
+/**
+ * Security headers via helmet.
+ *
+ * Mounted FIRST so every response — including CORS preflights, /health,
+ * static assets, and /api/* — gets the standard hardening headers
+ * (X-Frame-Options DENY, X-Content-Type-Options nosniff, HSTS,
+ * Referrer-Policy, etc.) without per-route plumbing.
+ *
+ * Two of helmet's defaults are intentionally OFF:
+ *
+ * 1. contentSecurityPolicy: false
+ *    A restrictive default-src 'self' CSP would blackbox-break the BBS
+ *    terminal — xterm.js / socket.io / inline-styled React components
+ *    need a per-directive audit before CSP can ship. Tracked as a
+ *    follow-up production-hardening pass; pinned absent in
+ *    tests/server/security-headers.test.ts.
+ *
+ * 2. crossOriginEmbedderPolicy: false
+ *    'require-corp' blocks any subresource that doesn't carry a
+ *    Cross-Origin-Resource-Policy header — would need every static
+ *    asset (xterm fonts, lucide icons, etc.) re-served with CORP. Same
+ *    reasoning as CSP: separate hardening pass.
+ *
+ * Everything else (frameguard / hsts / noSniff / referrerPolicy /
+ * permissionsPolicy / dnsPrefetchControl / hidePoweredBy / etc.) runs
+ * with helmet defaults.
+ */
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 
 // Configure CORS with centralized origin list (includes production domains)
 // Uses config.corsOrigins which already includes https://bbs.uprough.net
