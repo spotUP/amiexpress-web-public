@@ -383,11 +383,44 @@ class RexxMastService {
     // Hook the call monitor to detect AddPort('REXX'). The monitor
     // fires for every library-trap call; we only flip ready when
     // we see AddPort with A1 → port whose ln_Name reads as 'REXX'.
+    //
+    // AREXX_TRACE=1 also logs the first 100 library calls so a sysop
+    // can see exactly what RexxMast tried before getting stuck.
     let observedRexxPort = false;
+    const trace = process.env.AREXX_TRACE === '1';
+    let traceCount = 0;
+    const TRACE_LIMIT = 100;
     const oldMonitor = (this.libraryTraps as any).onLibraryCall;
     this.libraryTraps.setLibraryCallMonitor((fnName: string, _pc: number) => {
       if (oldMonitor) {
         try { oldMonitor(fnName, _pc); } catch { /* upstream monitor is advisory */ }
+      }
+      if (trace && traceCount < TRACE_LIMIT) {
+        // Capture A0 + A1 + D0 for context — most library functions
+        // pass arguments through these registers.
+        try {
+          const a0 = this.emulator.getRegister(8) >>> 0;
+          const a1 = this.emulator.getRegister(9) >>> 0;
+          const d0 = this.emulator.getRegister(0) >>> 0;
+          // For string-arg calls (like OpenLibrary) read the name.
+          let extra = '';
+          if (fnName === 'OpenLibrary' || fnName === 'OldOpenLibrary' || fnName === 'FindTask') {
+            try {
+              let s = '';
+              const ptr = fnName === 'FindTask' ? a1 : a1;
+              if (ptr !== 0) {
+                for (let i = 0; i < 32; i++) {
+                  const b = this.emulator.readMemory(ptr + i);
+                  if (b === 0) break;
+                  s += String.fromCharCode(b);
+                }
+              }
+              extra = ` "${s}"`;
+            } catch { /* ignore */ }
+          }
+          console.log(`[AREXX-TRACE] ${String(traceCount).padStart(3)} ${fnName}${extra} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} D0=0x${d0.toString(16)} pc=0x${_pc.toString(16)}`);
+          traceCount++;
+        } catch { /* trace must never throw */ }
       }
       if (fnName === 'AddPort' && !observedRexxPort) {
         // A1 holds the MsgPort pointer; ln_Name lives at port+10.
@@ -402,6 +435,7 @@ class RexxMastService {
             if (b === 0) break;
             name += String.fromCharCode(b);
           }
+          if (trace) console.log(`[AREXX-TRACE] AddPort name="${name}"`);
           if (name === 'REXX') {
             observedRexxPort = true;
           }
