@@ -1074,11 +1074,27 @@ export async function handleMsgListStartInput(socket: any, session: BBSSession, 
   // mail addressed to them.
   const { getConfMailName } = require('./message-entry.handler');
   const myConfMailName = getConfMailName(session).toLowerCase();
-  // MAILSCAN_ALL bit on the per-conf cb.handle[0] (express.e:8854) — we
-  // don't yet track this per-conference flag; default to including ALL-
-  // addressed mail in the listing so users always see the conference's
-  // public mail. Tracked as a follow-up if the flag becomes important.
-  const mailscanAllForThisConf = true;
+  // express.e:8854 cb.handle[0] AND MAILSCAN_ALL — bit 7 (0x80) of the
+  // user's per-msgbase scanFlags byte (axconsts.e:48). When set, ALL-
+  // addressed messages are included in the L listing for this conf;
+  // otherwise they're hidden (unless they happen to be addressed to me
+  // or EALL). The same gate is already applied to mail scan via
+  // getMessagesForConfScan; we now mirror it here so L behaviour
+  // matches express.e exactly.
+  const { loadMsgPointers, validatePointers } = require('../../utils/message-pointers.util');
+  const MAILSCAN_ALL_BIT = 1 << 7;
+  let mailscanAllForThisConf = false;
+  try {
+    const confId = session.currentConf || 1;
+    const msgBaseId = session.currentMsgBase || 1;
+    const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
+    const mailStat = require('../../services/MessageIndexManager').messageIndexManager.readMailStats(confId);
+    const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
+    mailscanAllForThisConf = (validated.scanFlags & MAILSCAN_ALL_BIT) !== 0;
+  } catch {
+    // Pointer load failure → leave as false (most-restrictive default,
+    // matching the common "user hasn't enabled all-scan" case).
+  }
   const filtered = messages.filter((m: any) => {
     const num = (m as any).msgNumber || m.id;
     if (num < startNum) return false;
