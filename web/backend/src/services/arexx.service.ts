@@ -2030,7 +2030,15 @@ console.error('BBSCREATEDROPFILE error:', error);
       // Read with latin1 — Amiga screen files are ISO-8859-1 with
       // box-drawing / accented bytes. UTF-8 decode would replace
       // those with � and corrupt the ANSI art.
-      const content = await fs.readFile(realPath, 'latin1');
+      let content = await fs.readFile(realPath, 'latin1');
+      // Amiga text files end lines with bare \n; xterm/socket-side
+      // terminal needs \r\n to reset the cursor column. Without
+      // this every line after the first wraps at whatever column
+      // the previous one ended on, producing the cascade-indent
+      // ASCII-art garbage we saw on KickBox's KB.Intro screen.
+      // Normalise \r\n → \n first so we don't double-CR mixed-EOL
+      // files (some Amiga doors saved screens with both).
+      content = content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
       await this.BBSWRITE(content);
 
     } catch (error) {
