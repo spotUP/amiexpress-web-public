@@ -722,6 +722,39 @@ export function stripRexxBlockComments(src: string): string {
   return out;
 }
 
+/**
+ * Mark the interpreter for immediate abort. Sets returnRequested +
+ * exitRequested so any DO/SELECT/CALL frames unwind on the next
+ * statement boundary, then breaks out of the script entirely.
+ *
+ * Used by Ctrl+C handling at every input-blocking surface
+ * (GETCHAR / Prompt / context.input). Real-Amiga AREXX uses the
+ * HALT condition for the same purpose; we don't model conditions
+ * separately yet, so direct flag-set is the equivalent. If the
+ * script has `signal on halt` and a HALT: label is registered,
+ * route the abort there too — that mirrors Cooper REXX semantics
+ * where Ctrl+C jumps to the halt trap rather than killing the
+ * interpreter outright.
+ */
+function maybeAbortInterpreter(context: any, reason: string): void {
+  const ip: any = context?.interpreter;
+  if (!ip) return;
+  const haltLabel = ip.signalTraps?.get?.('HALT');
+  if (haltLabel && ip.labels?.has?.(haltLabel.toUpperCase())) {
+    // Trap-based abort: jump to the halt-handler label.
+    ip.signalRequested = true;
+    ip.signalLabel = haltLabel;
+    return;
+  }
+  // No trap: hard exit. exitRequested propagates through CALL frames
+  // (RETURN doesn't), so a Ctrl+C inside a subroutine exits the
+  // whole door instead of just returning to the caller.
+  ip.returnRequested = true;
+  ip.exitRequested = true;
+  ip.variables?.set?.('RC', '-1');
+  void reason;
+}
+
 export function splitRexxStatements(line: string): string[] {
   const out: string[] = [];
   let buf = '';
@@ -1628,7 +1661,15 @@ console.error('BBSCREATEDROPFILE error:', error);
     if (typeof this.context.input === 'function') {
       try {
         const line = await this.context.input(''); // empty extra prompt
-        return String(line ?? '');
+        const s = String(line ?? '');
+        // Ctrl+C anywhere in the line → abort. (Some terminals send
+        // \x03 alone without flushing the rest of the buffer; some
+        // send the line up to ETX.) Same semantics as GETCHAR.
+        if (s.charCodeAt(0) === 3 || s.includes('\x03')) {
+          maybeAbortInterpreter(this.context, 'CTRLC');
+          return '';
+        }
+        return s;
       } catch {
         return '';
       }
@@ -1639,7 +1680,13 @@ console.error('BBSCREATEDROPFILE error:', error);
         const session: any = this.context.session;
         session.doorInputHandler = (data: string) => {
           delete session.doorInputHandler;
-          resolve(String(data ?? ''));
+          const s = String(data ?? '');
+          if (s.charCodeAt(0) === 3 || s.includes('\x03')) {
+            maybeAbortInterpreter(this.context, 'CTRLC');
+            resolve('');
+            return;
+          }
+          resolve(s);
         };
       });
     }
@@ -1942,12 +1989,23 @@ console.error('BBSCREATEDROPFILE error:', error);
     return new Promise<string>((resolve) => {
       session.doorInputHandler = (data: string) => {
         delete session.doorInputHandler;
-        // GETCHAR returns the FIRST character; doors that want a full
-        // line use PROMPT/getLine instead. AmiExpress's GetChar
-        // semantics return one keystroke, with CR mapping to '\r'.
         const ch = (typeof data === 'string' && data.length > 0)
           ? data[0]
           : '';
+        // Ctrl+C (ETX, 0x03) — abort the running script. Mirrors real
+        // AmiExpress AREXX `signal on halt` behavior: the interpreter
+        // unwinds through any DO/SELECT/CALL frames immediately and
+        // the door exits. Without this, a user stuck in KickBox's
+        // match loop or STNG's question loop has no escape until the
+        // script's own quit option fires.
+        if (ch.charCodeAt(0) === 3) {
+          maybeAbortInterpreter(this.context, 'CTRLC');
+          resolve('');
+          return;
+        }
+        // GETCHAR returns the FIRST character; doors that want a full
+        // line use PROMPT/getLine instead. AmiExpress's GetChar
+        // semantics return one keystroke, with CR mapping to '\r'.
         resolve(ch);
       };
     });
