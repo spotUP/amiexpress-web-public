@@ -1828,9 +1828,20 @@ console.error('BBSCREATEDROPFILE error:', error);
       case 113: return user.lastLogin                                                  // DT_TIMELASTON (express.e:5317 formatLongDateTime)
         ? formatDate(new Date(user.lastLogin)) + ' ' + formatTime(new Date(user.lastLogin))
         : 'Never';
-      case 114: return String(u.timeUsed ?? u.timeOnline ?? 0);                        // DT_TIMEUSED — minutes used today
-      case 115: return String(Math.floor((user.timeLimit ?? 60) / 60));                // DT_TIMELIMIT (express.e:5345 Div(timeLimit,60))
-      case 116: return String(Math.floor((u.timeTotal ?? user.timeLimit ?? 60) / 60)); // DT_TIMETOTAL — express.e timeLimit/60
+      // Time fields return raw SECONDS. Aedoc4 §Cap1101114-116 says
+      // "in seconds"; express.e:3595-3614 returns the raw
+      // `loggedOnUser.timeUsed` / `timeLimit` / `timeTotal` fields
+      // without dividing. Storage matches: time-tracking.util.ts:145
+      // computes `(timeTotal - timeUsed) / 60` to display minutes,
+      // so the underlying user fields are seconds.
+      //
+      // Earlier divide-by-60 logic broke doors that do their own
+      // seconds→minutes math. KickBox.Rexx: `timet=timel-timeu;
+      // timet=timet/60; if timet<15` — with already-divided minutes
+      // the user needed 15 hours instead of 15 minutes to play.
+      case 114: return String(user.timeUsed ?? u.timeUsed ?? u.timeOnline ?? 0);        // DT_TIMEUSED — seconds used today
+      case 115: return String(user.timeLimit ?? 3600);                                  // DT_TIMELIMIT — seconds total allowed
+      case 116: return String(user.timeTotal ?? user.timeLimit ?? 3600);                // DT_TIMETOTAL — seconds total daily allowance
       case 125: return String(Math.floor((session?.timeRemaining ?? 0) / 60));         // DT_TIMEOUT — minutes remaining
       case 143: return user.lastLogin                                                  // DT_STAMP_LASTON
         ? formatDate(new Date(user.lastLogin)) + ' ' + formatTime(new Date(user.lastLogin))
