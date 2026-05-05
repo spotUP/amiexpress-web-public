@@ -902,7 +902,12 @@ export async function displayMailScanScreen(socket: any, session: any): Promise<
       let parsed = screenData.content;
 
       if (_parseMciCodes) {
-        parsed = _parseMciCodes(parsed, session);
+        // parseMciCodes is async — was previously assigned without
+        // await, leaving `parsed` as a Promise that subsequent
+        // .replace() calls coerced to "[object Promise]". Audit
+        // 2026-05-05.
+        const result = await _parseMciCodes(parsed, session);
+        parsed = result?.parsed ?? parsed;
       }
 
       // Replace scan-specific MCI codes

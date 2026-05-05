@@ -1028,13 +1028,21 @@ console.error('[BBSApi] Error posting message:', error);
   }
 
   /**
-   * Display text with MCI codes processed
-   * Equivalent to express.e processMci() function
+   * Display text with MCI codes processed.
+   * Equivalent to express.e processMci() function.
+   *
+   * NOTE: parseMciCodes is async (returns a Promise<{ parsed, ... }>)
+   * because it does database lookups for some user-info codes.
+   * Previously this method called it without `await`, treating the
+   * Promise as a string — broken since async parseMciCodes landed.
+   * No live caller in the repo (audit 2026-05-05), so this returns
+   * a Promise now; if a caller appears, it must `await` the result.
    */
-  displayMCI(text: string): void {
+  async displayMCI(text: string): Promise<void> {
     const { parseMciCodes, addAnsiEscapes } = require('../handlers/screen.handler');
 
-    let processed = parseMciCodes(text, this.session);
+    const result = await parseMciCodes(text, this.session);
+    let processed = result?.parsed ?? '';
     processed = addAnsiEscapes(processed);
     processed = processed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
