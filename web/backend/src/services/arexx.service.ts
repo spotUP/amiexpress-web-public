@@ -3114,6 +3114,15 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       SENDFILE:    'SHOWFILE',
       BUFFERFLUSH: 'BUFFERFLUSH',
       SHUTDOWN:    'SHUTDOWN',
+      // REMOVERESERVED <expr> — replace AmigaDOS-reserved characters
+      // (space, /, :, *, ?, ", <, >, |, +) in the input string with
+      // empty so the result is filename-safe. Sets RESULT. Used by
+      // KickBox.Rexx line 43 (`RemoveReserved NAME;FNAME=RESULT`) to
+      // turn user names into per-user filenames. Without this the
+      // script's RESULT held its prior value (often "RESULT" itself
+      // since uninitialized symbols evaluate to their uppercased
+      // name), so every user shared the same Fighters/RESULT record.
+      REMOVERESERVED: 'REMOVERESERVED',
     };
     const resolved = HOST_CMD_ALIASES[first];
     if (resolved) {
@@ -3605,6 +3614,18 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
       if (!m) return;
       const envName = m[1];
       const tail = (m[2] || '').trim();
+      // ADDRESS COMMAND <shell-command> dispatches to AmigaDOS shell.
+      // We don't have a Workbench shell, but the typical use is
+      // post-game cleanup (`address command 'C:Delete <file>'` in
+      // KickBox.Rexx, etc.) — silently succeed. Swallow the command
+      // text but DON'T attempt to run it as a REXX statement (which
+      // would error on the leading `C:Delete` colon-prefixed string).
+      if (envName.toUpperCase() === 'COMMAND') {
+        // Ignore the command text. Set RC=0 so doors that test it
+        // think the operation succeeded.
+        this.variables.set('RC', '0');
+        return;
+      }
       if (tail) {
         // One-shot dispatch: run tail as a host command in this scope
         // by feeding it back into executeLine. The value of tail is
@@ -3848,7 +3869,35 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
    * Evaluate condition
    */
   private async evaluateCondition(condition: string): Promise<boolean> {
-    const c = condition.trim();
+    let c = condition.trim();
+    // Strip a single layer of outer parens. KickBox.Rexx writes
+    // `if (nowday > oldday) then do` and `if (daysleft <= 0) then ...`;
+    // without stripping, the operator-split below splits at the `>` /
+    // `<=` and feeds `(nowday ` / `oldday)` as halves of the
+    // comparison, which evaluateExpression rejects, making the
+    // condition silently false. Loop in case scripts wrap multiply.
+    while (c.length >= 2 && c.startsWith('(') && c.endsWith(')')) {
+      // Verify the outer parens balance — `(a) || (b)` shouldn't
+      // be stripped naively. Walk and check that the open paren at
+      // index 0 closes at the LAST char, not earlier.
+      let depth = 0;
+      let inSingle = false, inDouble = false;
+      let stripOK = true;
+      for (let k = 0; k < c.length; k++) {
+        const ch = c[k];
+        if (!inDouble && ch === "'") inSingle = !inSingle;
+        else if (!inSingle && ch === '"') inDouble = !inDouble;
+        else if (!inSingle && !inDouble) {
+          if (ch === '(') depth++;
+          else if (ch === ')') {
+            depth--;
+            if (depth === 0 && k !== c.length - 1) { stripOK = false; break; }
+          }
+        }
+      }
+      if (!stripOK || depth !== 0) break;
+      c = c.substring(1, c.length - 1).trim();
+    }
     // Logical OR (`|`) and AND (`&`) — quote/paren-aware top-level
     // split with short-circuit eval. REXX precedence: `&` binds
     // tighter than `|` (RKRM Table 2-3), so split on `|` first then
@@ -4486,6 +4535,16 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
     if (funcName === 'SHUTDOWN') {
       await this.bbsFunctions.shutdown();
       return;
+    }
+    if (funcName === 'REMOVERESERVED') {
+      // Strip AmigaDOS-reserved characters from the input. Result
+      // goes into REXX RESULT (the host-command caller path sets it
+      // for us). Used to derive filename-safe per-user identifiers.
+      const input = String(args[0] || '');
+      const safe = input.replace(/[\s\/:*?"<>|+,;]/g, '');
+      this.variables.set('RESULT', safe);
+      this.variables.set('result', safe);
+      return safe;
     }
     if (funcName === 'ADDRESS') {
       await this.bbsFunctions.Address(String(args[0] || ''));
