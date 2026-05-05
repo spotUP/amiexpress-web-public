@@ -1966,50 +1966,71 @@ console.error('BBSCREATEDROPFILE error:', error);
       const fs = await import('fs/promises');
       const path = await import('path');
 
-      // Resolve Amiga-style assigns to actual paths
+      // Resolve Amiga-style assigns through the same code path as
+      // file I/O (open/exists/etc) so behavior is consistent across
+      // every AREXX call. Previously Showfile rolled its own resolver
+      // that anchored to `cwd/data/bbs/BBS` (a path that doesn't exist
+      // in our layout), then a directory-traversal check rejected
+      // every Doors:* lookup. KickBox's first line — `Showfile
+      // 'doors:Kickboxing/KB.Intro'` — printed "Access denied"
+      // instead of the title screen.
       let resolvedPath = filename;
-      const bbsRoot = process.env.BBS_ROOT || path.join(process.cwd(), 'data', 'bbs', 'BBS');
+      let bbsRoot = '';
+      try {
+        const { config } = require('../config');
+        bbsRoot = String(config.get('dataDir') || '');
+      } catch { /* config unavailable in test contexts */ }
+      if (!bbsRoot) bbsRoot = process.env.BBS_DATA_DIR || process.cwd();
 
-      // Map Amiga assigns to actual directories
-      if (filename.includes(':')) {
+      // Use AREXXFileIO's resolver if we have one — same Amiga-assign
+      // mapping as open()/exists() (doors: → bbsRoot/Doors/, etc).
+      // Fall back to the inline mapping for unit-test contexts that
+      // construct BBSFunctions without an interpreter wrapper.
+      const fileIO = (this.context.interpreter as any)?.fileIO;
+      if (fileIO && typeof fileIO.resolveAmigaPath === 'function') {
+        resolvedPath = fileIO.resolveAmigaPath(filename);
+      } else if (filename.includes(':')) {
         const [assign, ...pathParts] = filename.split(':');
         const relativePath = pathParts.join(':');
-
         switch (assign.toLowerCase()) {
-          case 'doors':
-            resolvedPath = path.join(bbsRoot, 'Doors', relativePath);
-            break;
+          case 'doors':    resolvedPath = path.join(bbsRoot, 'Doors',    relativePath); break;
           case 'conf':
-          case 'conf1':
-            resolvedPath = path.join(bbsRoot, 'Conf1', relativePath);
-            break;
-          case 'screens':
-            resolvedPath = path.join(bbsRoot, 'Screens', relativePath);
-            break;
-          case 'bulletins':
-            resolvedPath = path.join(bbsRoot, 'Bulletins', relativePath);
-            break;
-          case 'utils':
-            resolvedPath = path.join(bbsRoot, 'Utils', relativePath);
-            break;
-          default:
-            // Unknown assign, try relative to BBS root
-            resolvedPath = path.join(bbsRoot, relativePath);
+          case 'conf1':    resolvedPath = path.join(bbsRoot, 'Conf1',    relativePath); break;
+          case 'screens':  resolvedPath = path.join(bbsRoot, 'Screens',  relativePath); break;
+          case 'bulletins':resolvedPath = path.join(bbsRoot, 'Bulletins',relativePath); break;
+          case 'utils':    resolvedPath = path.join(bbsRoot, 'Utils',    relativePath); break;
+          case 'system':   resolvedPath = path.join(bbsRoot, 'System',   relativePath); break;
+          case 'libs':     resolvedPath = path.join(bbsRoot, 'Libs',     relativePath); break;
+          case 'bbs':      resolvedPath = path.join(bbsRoot,             relativePath); break;
+          default:         resolvedPath = path.join(bbsRoot, assign,     relativePath); break;
         }
-      } else {
-        // No assign, relative to BBS root
+      } else if (!path.isAbsolute(filename)) {
         resolvedPath = path.join(bbsRoot, filename);
       }
 
-      // Security check - prevent directory traversal
+      // Security: confirm the resolved path is inside the BBS root.
+      // realpath fails if the file doesn't exist — that's a "not
+      // found" error, not a security issue. Don't print "Access
+      // denied" in that case; either silently return (real AmiExpress
+      // does this for missing optional screens) or surface the I/O
+      // error via BBSWRITE for diagnostics.
       const realPath = await fs.realpath(resolvedPath).catch(() => null);
-      if (!realPath || !realPath.startsWith(bbsRoot)) {
+      if (!realPath) {
+        // File doesn't exist or isn't readable. Silent skip mirrors
+        // express.e displayScreen() behavior — missing screens just
+        // don't display, no error to the user.
+        return;
+      }
+      const realRoot = await fs.realpath(bbsRoot).catch(() => bbsRoot);
+      if (!realPath.startsWith(realRoot)) {
         await this.BBSWRITE(`[ERROR] Access denied: ${filename}\r\n`);
         return;
       }
 
-      // Read and display file
-      const content = await fs.readFile(realPath, 'utf-8');
+      // Read with latin1 — Amiga screen files are ISO-8859-1 with
+      // box-drawing / accented bytes. UTF-8 decode would replace
+      // those with � and corrupt the ANSI art.
+      const content = await fs.readFile(realPath, 'latin1');
       await this.BBSWRITE(content);
 
     } catch (error) {
@@ -2772,10 +2793,60 @@ console.log(`[TRACE] Line ${i}: ${line}`);
     // CALL EXIT — see AVAIL.rexx). We previously only routed to
     // callFunction, which threw "Unknown function: ON".
     if (line.toUpperCase().startsWith('CALL ')) {
-      const parts = line.substring(5).trim().split(/\s+/);
-      const target = parts[0];
-      const upperTarget = target.toUpperCase();
-      const args = parts.slice(1);
+      const callRest = line.substring(5).trim();
+      // Two CALL syntaxes both appear in real AmiExpress doors:
+      //   1. CALL labelName arg1 arg2     — label invocation, space-sep args
+      //   2. CALL func(arg1, arg2)        — function-call form, the same
+      //                                     way the door would write `func(...)`
+      //                                     standalone. KickBox.Rexx uses
+      //                                     this for every file-IO call:
+      //                                     `call open(file,'path','W')`.
+      // Without `(` the first token is the target and the rest are
+      // space-separated args (form #1). With `(...)` we strip the
+      // parens and split the args expression on top-level commas
+      // (form #2) so each argument can be evaluated as a REXX
+      // expression — string literals, variable concatenations, the
+      // works.
+      let target: string;
+      let upperTarget: string;
+      let args: string[];
+      const parenIdx = callRest.indexOf('(');
+      if (parenIdx > 0 && callRest.endsWith(')')) {
+        target = callRest.substring(0, parenIdx).trim();
+        upperTarget = target.toUpperCase();
+        const argText = callRest.substring(parenIdx + 1, callRest.length - 1);
+        // Top-level comma split — respects quotes and nested parens
+        // so `'a,b'` and `f(x,y)` aren't broken apart.
+        const splitArgs: string[] = [];
+        let depth = 0, start = 0, inSingle = false, inDouble = false;
+        for (let k = 0; k < argText.length; k++) {
+          const ch = argText[k];
+          if (!inDouble && ch === "'") inSingle = !inSingle;
+          else if (!inSingle && ch === '"') inDouble = !inDouble;
+          else if (!inSingle && !inDouble) {
+            if (ch === '(') depth++;
+            else if (ch === ')') depth--;
+            else if (ch === ',' && depth === 0) {
+              splitArgs.push(argText.substring(start, k).trim());
+              start = k + 1;
+            }
+          }
+        }
+        if (start < argText.length) splitArgs.push(argText.substring(start).trim());
+        // Evaluate each arg expression so callee receives values, not text.
+        const evalArgs: any[] = [];
+        for (const a of splitArgs) {
+          if (a === '') { evalArgs.push(''); continue; }
+          try { evalArgs.push(await this.evaluateExpression(a)); }
+          catch { evalArgs.push(a); }
+        }
+        args = evalArgs as any;
+      } else {
+        const parts = callRest.split(/\s+/);
+        target = parts[0];
+        upperTarget = target.toUpperCase();
+        args = parts.slice(1);
+      }
       // Prefer label-as-subroutine: jump to it, run until RETURN /
       // EXIT, restore caller's position. The runtime's signal-jump
       // path already handles resuming after the label, so we drive
