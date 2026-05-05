@@ -2850,10 +2850,50 @@ console.log(`[TRACE] Line ${i}: ${line}`);
         }
         args = evalArgs as any;
       } else {
-        const parts = callRest.split(/\s+/);
-        target = parts[0];
-        upperTarget = target.toUpperCase();
-        args = parts.slice(1);
+        // Form #1: `CALL routine arg1[, arg2[, ...]]`. REXX uses commas
+        // as arg separators, not spaces — `call writeln file, wins`
+        // means writeln(file, wins), NOT writeln('file,', 'wins').
+        // KickBox.Rexx has 18 such call lines (file I/O + drawing).
+        // Previously our space-split kept the comma attached to the
+        // token before it, the callee got `'file,'` as handle name,
+        // every writeln failed silently, and the user's stats record
+        // ended up empty when Setup: read it back.
+        const firstSpace = callRest.search(/\s/);
+        if (firstSpace < 0) {
+          target = callRest;
+          upperTarget = target.toUpperCase();
+          args = [];
+        } else {
+          target = callRest.substring(0, firstSpace);
+          upperTarget = target.toUpperCase();
+          const argText = callRest.substring(firstSpace + 1).trim();
+          // Top-level comma split, quote/paren aware (same logic as
+          // the parens-form above).
+          const splitArgs: string[] = [];
+          let depth = 0, start = 0, inSingle = false, inDouble = false;
+          for (let k = 0; k < argText.length; k++) {
+            const ch = argText[k];
+            if (!inDouble && ch === "'") inSingle = !inSingle;
+            else if (!inSingle && ch === '"') inDouble = !inDouble;
+            else if (!inSingle && !inDouble) {
+              if (ch === '(') depth++;
+              else if (ch === ')') depth--;
+              else if (ch === ',' && depth === 0) {
+                splitArgs.push(argText.substring(start, k).trim());
+                start = k + 1;
+              }
+            }
+          }
+          if (start < argText.length) splitArgs.push(argText.substring(start).trim());
+          // Evaluate each argument as a REXX expression.
+          const evalArgs: any[] = [];
+          for (const a of splitArgs) {
+            if (a === '') { evalArgs.push(''); continue; }
+            try { evalArgs.push(await this.evaluateExpression(a)); }
+            catch { evalArgs.push(a); }
+          }
+          args = evalArgs as any;
+        }
       }
       // Prefer label-as-subroutine: jump to it, run until RETURN /
       // EXIT, restore caller's position. The runtime's signal-jump
