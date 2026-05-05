@@ -204,6 +204,36 @@ describe('inline-mode sentinel walker', () => {
     expect(joined).toContain('aSPb');
   });
 
+  test('regression: ~f\\n + ~CC_<cmd>\\n (no | terminators) parses correctly', async () => {
+    // Conf2/bull20.txt and similar real screens use `~f\n` and
+    // `~CC_CONFTOP\n` — newline-terminated rather than `|`-terminated.
+    // The tokenizer's whitespace boundary treats \r and \n as cmd
+    // boundaries (matches the leniency of the previous inline regex
+    // pipeline) so these forms parse correctly. Without the \r/\n
+    // boundary the cmd would extend across multiple lines and
+    // strict fall-through would emit them as plain text — exact
+    // regression observed 2026-05-05 after f97e5a33d landed.
+    const { socket, emitted } = makeMockSocket();
+    const session = makeSession();
+    let cmdRan = false;
+    const result = await parseMciCodes(
+      'banner~SP\n~f\n~CC_TESTCMD\n',
+      session,
+      undefined,
+      undefined,
+      undefined,
+      socket,
+    );
+    drainBuffer(socket);
+    expect(result.hasPause).toBe(true);
+    expect(result.pendingInlineContent).toBeDefined();
+    // pendingInlineContent should carry sentinels for the post-SP
+    // codes; the literal `~f` and `~CC_TESTCMD` must NOT appear.
+    expect(result.pendingInlineContent).not.toContain('~f');
+    expect(result.pendingInlineContent).not.toContain('~CC_');
+    expect(result.pendingInlineContent).toContain('\x00'); // sentinel marker
+  });
+
   test('~F (uppercase) does NOT clear in byte-exact mode', async () => {
     const { socket, emitted } = makeMockSocket();
     const session = makeSession();

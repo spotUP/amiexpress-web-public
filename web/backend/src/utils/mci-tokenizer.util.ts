@@ -204,18 +204,30 @@ export function processMci(
     }
     const width = widthDigits.length > 0 ? parseInt(widthDigits, 10) : -1;
 
-    // Find the smaller of (next space, next terminator, end) past pos.
-    // Express.e:5278-5285 — `nval` is next space, `maxLen` is next
-    // terminator; cmd extends from pos to whichever comes first. If
-    // the terminator wins, `t = 1` so the consumer also skips it.
-    let nextSpace = input.indexOf(' ', pos);
-    if (nextSpace < 0) nextSpace = len;
+    // Find the smaller of (next whitespace, next terminator, end)
+    // past pos. Express.e:5278-5285 uses `InStr(mcidata,' ',pos)` —
+    // ASCII space only — but real BBS screen files routinely use
+    // CRLF as the boundary too (`~f\n`, `~CC_CONFTOP\n`, etc.).
+    // Treating \r and \n as boundaries matches the leniency of the
+    // pre-tokenizer regex pipeline and keeps those screens working
+    // while staying byte-exact-compatible with express.e on every
+    // form that does use space or `|` (since \r/\n only matter when
+    // there's no earlier space/term).
+    let nextWs = -1;
+    for (let i = pos; i < len; i++) {
+      const c = input.charCodeAt(i);
+      if (c === 0x20 || c === 0x0a || c === 0x0d) {
+        nextWs = i;
+        break;
+      }
+    }
+    if (nextWs < 0) nextWs = len;
     let nextTerm = input.indexOf(term, pos);
     if (nextTerm < 0) nextTerm = len;
     let cmdEnd: number;
     let consumedTerminator: boolean;
-    if (nextSpace < nextTerm) {
-      cmdEnd = nextSpace;
+    if (nextWs < nextTerm) {
+      cmdEnd = nextWs;
       consumedTerminator = false;
     } else {
       cmdEnd = nextTerm;

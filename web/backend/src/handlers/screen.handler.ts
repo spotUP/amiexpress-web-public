@@ -992,19 +992,22 @@ console.error('[parseMciCodes] Error getting message base name:', error);
 
   // ~SP. - period-suffix pause variant. Tokenizer would parse cmd
   // as "SP." (period not a boundary); easier to handle as a regex.
+  // Inline mode emits a SP sentinel so the walker triggers the same
+  // pause-and-resume semantics as `~SP|` / `~SP\n`; non-inline sets
+  // hasPause directly.
   parsed = parsed.replace(/~SP\./g, () => {
+    if (inlineMode) return SENTINEL_SP;
     hasPause = true;
     return '';
   });
 
-  // Bare `~SP\r` / `~SP\n` — tokenizer only treats ASCII space and
-  // the active terminator as cmd boundaries (express.e:5278), so
-  // `~SP\n` parses as cmd="SP\n" and falls through. Real screens use
-  // this form.
-  parsed = parsed.replace(/~SP(?=[\r\n])/g, () => {
-    hasPause = true;
-    return '';
-  });
+  // Note: `~SP\n` / `~SP\r` (bare-newline pause variant) used to be
+  // pre-processed here, but the tokenizer's whitespace boundary now
+  // treats \r and \n as cmd terminators (matches the leniency of
+  // the previous inline-regex pipeline), so `~SP` followed by a
+  // newline parses as cmd="SP" and is handled by the SP entry in
+  // userInfoDispatch — sentinel for inline mode, hasPause flag for
+  // non-inline.
 
   // ~CR. - silent character read (express.e:5462-5468). Web has no
   // mid-render keypress wait; the period suffix dodges the tokenizer
