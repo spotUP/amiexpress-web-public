@@ -333,6 +333,34 @@ const SCREENS_REQUIRE_CLEAR = new Set([
  * @param location - BBS location for %L variable
  * @returns Parsed content with MCI codes replaced
  */
+
+// ============================================================
+// Inline-mode sentinels — NUL-delimited markers emitted by the MCI
+// tokenizer dispatch when running for a live socket. The post-
+// tokenizer walker splits on them, emits the surrounding text, and
+// applies side effects (CLS, pause, command exec, file display) in
+// document order. NUL bytes never appear in real BBS content
+// (textual ASCII / ANSI sequences, no null terminators), so they're
+// a safe in-band marker that survives across pendingInlineContent
+// resume boundaries (the resumed content is run through the
+// tokenizer again — sentinels look like plain text since they
+// contain no `~`).
+//
+// Format: `\x00<TYPE>[:<args>]\x00`. Args grammar per type:
+//   F        — clear screen, no args
+//   SP       — pause, no args
+//   CC:cmd   — run command (cmd may contain spaces)
+//   SS:file  — displayScreen(file)
+//   SR:max|path — random numbered file from path, max=count or -1
+// ============================================================
+const SENTINEL_F = '\x00F\x00';
+const SENTINEL_SP = '\x00SP\x00';
+const SENTINEL_CC = '\x00CC:';
+const SENTINEL_SS = '\x00SS:';
+const SENTINEL_SR = '\x00SR:';
+const SENTINEL_END = '\x00';
+const SENTINEL_REGEX = /\x00([^\x00]*)\x00/g;
+
 /**
  * Parse MCI codes and return both parsed content and commands to execute
  * Returns tuple: [parsedContent, commandsToExecute]
@@ -355,6 +383,12 @@ export async function parseMciCodes(
   let slowmoCount = session?.slowmoCount || 0;
   let slowmoApplied = slowmo;
   let slowmoAppliedCount = slowmoCount;
+  // Files to display (~SS_, ~SX_, ~SR_) collected during the pre-
+  // tokenizer pass and substituted later. Inline mode handles these
+  // via sentinel dispatch + walker; non-inline emits
+  // `{{DISPLAY_FILE:N}}` placeholders that get replaced after MCI
+  // parsing completes.
+  const filesToDisplay: string[] = [];
 
   // Helper: formatBytes imported from '../utils/byte-format.util'
   const formatBytes = formatBytesUtil;
@@ -718,28 +752,24 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     },
     // ~SP - Pause (express.e:5455-5461). Express.e: `(maxLen=-1) AND
     // (StrCmp(cmd,'SP'))` — only matches when no width prefix; calls
-    // doPause(). We can't pause synchronously mid-render so we set
-    // hasPause and let the caller drive the pause state machine.
-    //
-    // Inline-mode gate: when rendering for a live socket, defer to
-    // the inline regex pass below — it owns sequential pause-and-
-    // resume semantics (early-return with `pendingInlineContent`),
-    // which a string-returning handler can't express. Returning
-    // `undefined` keeps soft fall-through, leaving `~SP|` intact for
-    // the inline regex to find.
+    // doPause(). Both modes route through this dispatch entry now:
+    //   - Non-inline: set hasPause flag, emit empty.
+    //   - Inline: emit a SP sentinel; the post-tokenizer walker
+    //     splits on it, emits text-before to the socket, then
+    //     early-returns with pendingInlineContent so the pause
+    //     state machine can resume the rest of the screen.
     SP: (w) => {
-      if (inlineMode) return undefined;
       if (w !== -1) return undefined; // express.e width-gate
+      if (inlineMode) return SENTINEL_SP;
       hasPause = true;
       return '';
     },
-    // ~f - Clear screen (express.e:5469-5471 sendCLS, lowercase). The
-    // tokenizer runs in byte-exact case mode, so `~F` (uppercase) is
-    // treated as an unrecognised code per express.e — falls through.
-    // Inline-mode gate: ~f in inline mode emits CLS to the socket
-    // directly so it lands in document order alongside ~CC_/~SS_
-    // side-effects; defer.
-    f: () => (inlineMode ? undefined : '\x1b[2J\x1b[H'),
+    // ~f - Clear screen (express.e:5469-5471 sendCLS, lowercase).
+    //   - Non-inline: emit ANSI CLS into the parsed buffer directly.
+    //   - Inline: emit a CLS sentinel; the walker emits text-before
+    //     first, then sends CLS to the socket so document order
+    //     matches express.e.
+    f: () => (inlineMode ? SENTINEL_F : '\x1b[2J\x1b[H'),
     // ~w - Delay (express.e:5472-5477, lowercase). On Amiga:
     // Delay(maxLen) ticks. No equivalent on the Node / WebSocket
     // path — emit empty. Both `~5w|` (width=5, cmd='w') and the
@@ -803,6 +833,26 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     w: () => '',
   };
 
+  // Inline-mode-only sentinel emitters. These convert the inline
+  // side-effecting codes (~CC_, ~SS_, ~SR_) into NUL-delimited
+  // sentinels in the output string. The post-tokenizer walker
+  // splits on them and runs the side effect (process command,
+  // displayScreen, random file) in document order — preserving
+  // express.e's sequential semantics (express.e:5768-5802) without
+  // a separate post-tokenizer regex pass.
+  if (inlineMode) {
+    // ~CC_<cmd> - run a BBS command synchronously (express.e:5555-5563).
+    // Suffix is the trimmed command string (any trailing `|` already
+    // consumed by the tokenizer's terminator handling).
+    prefixDispatch['CC_'] = (suffix) => SENTINEL_CC + suffix.replace(/\|+$/, '') + SENTINEL_END;
+    // ~SS_<filename> - displayScreen sub-file (express.e:5496-5504).
+    prefixDispatch['SS_'] = (suffix) => SENTINEL_SS + suffix.replace(/\|+$/, '') + SENTINEL_END;
+    // ~<n>SR_<basePath> - random numbered file (express.e:5533-5554).
+    // Width prefix is the max-count; <basePath> is the suffix.
+    prefixDispatch['SR_'] = (suffix, width) =>
+      SENTINEL_SR + (Number.isFinite(width) && width > 0 ? width : -1) + '|' + suffix.replace(/\|+$/, '') + SENTINEL_END;
+  }
+
   // ============================================================
   // Pre-tokenizer side-effecting MCI passes
   // ============================================================
@@ -844,6 +894,75 @@ console.error('[parseMciCodes] Error getting message base name:', error);
       commandsToExecute.push(commandStr.trim());
       return '';
     });
+
+    // ~SS_<file> / ~2S<file> — non-inline file-display queue
+    // (express.e:5496-5504). Replaces with `{{DISPLAY_FILE:N}}`
+    // placeholders that pass through the tokenizer untouched and
+    // get substituted with the loaded file content later. Pre-
+    // tokenizer because strict fall-through would otherwise consume
+    // the leading `~`. (Inline mode handles ~SS_ via sentinel
+    // dispatch instead.)
+    parsed = parsed.replace(/~(?:SS_|2S)([^\s|~\r\n]+)(?:\|{1,2})?/g, (_match, ref) => {
+      const filename = String(ref).trim();
+      filesToDisplay.push(filename);
+      return `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
+    });
+
+    // ~<n>SR_<basePath> — non-inline random numbered file
+    // (express.e:5533-5554). Same pre-tokenizer placeholder pattern
+    // as ~SS_. (Inline mode handles ~SR_ via sentinel dispatch.)
+    parsed = parsed.replace(/~(\d*)SR_([^\s|~\r\n]+)(?:\|{1,2})?/g, (_full, maxCountRaw, refRaw) => {
+      let basePath = String(refRaw).trim();
+      if (basePath.includes(':')) {
+        const { config: cfgMod } = require('../config');
+        const baseDir = cfgMod.getConfig().dataDir;
+        const bbsPaths = new BBSPaths(baseDir);
+        basePath = bbsPaths.resolveAmigaPath(basePath, session?.nodeId || 0);
+      }
+      const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
+      const randomNum = Math.floor(Math.random() * maxCount) + 1;
+      const randomFile = formatNumberedFilename(basePath, randomNum);
+      filesToDisplay.push(randomFile);
+      return `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
+    });
+  }
+
+  // ~SX_<basePath>|| — sequential numbered file (express.e:5505-
+  // 5530). Runs in BOTH modes (inline mode lets it through to the
+  // walker, since the post-tokenizer pass is gone but the walker
+  // doesn't know about SX_; we treat SX_ as a non-inline-style
+  // placeholder substitution that runs in document order via the
+  // loaded file content). Pre-tokenizer for the same reason as
+  // ~SS_/~SR_ above.
+  {
+    const sxRegex = /~SX_([^|]+)\|\|/g;
+    let sxMatch;
+    while ((sxMatch = sxRegex.exec(parsed)) !== null) {
+      let basePath = String(sxMatch[1]).trim();
+      if (basePath.includes(':')) {
+        const { config: cfgMod } = require('../config');
+        const baseDir = cfgMod.getConfig().dataDir;
+        const bbsPaths = new BBSPaths(baseDir);
+        basePath = bbsPaths.resolveAmigaPath(basePath, session?.nodeId || 0);
+      }
+      const nextFile = sequentialFileManager.getNextFile(basePath);
+      let foundFile = false;
+      if (loadScreenFile(nextFile.filename, session.currentConf, 0, session)) {
+        filesToDisplay.push(nextFile.filename);
+        foundFile = true;
+      } else {
+        sequentialFileManager.resetCounter(basePath);
+        const firstFile = sequentialFileManager.getNextFile(basePath);
+        if (loadScreenFile(firstFile.filename, session.currentConf, 0, session)) {
+          filesToDisplay.push(firstFile.filename);
+          foundFile = true;
+        }
+      }
+      const replacement = foundFile ? `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}` : '';
+      parsed = parsed.replace(sxMatch[0], replacement);
+      // Reset regex lastIndex since we mutated parsed
+      sxRegex.lastIndex = 0;
+    }
   }
 
   // ~SMO<n>| - slow mode on (express.e:5726-5736). Width prefix
@@ -906,18 +1025,19 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   parsed = parsed.replace(/^~\s*$/gm, '\x1b[2J\x1b[H');
   parsed = parsed.replace(/^~$/gm, '\x1b[2J\x1b[H');
 
-  // Strict fall-through (express.e exact: consume `~`, emit cmd as
-  // plain text — express.e:5290-5402 ELSEIF chain) for non-inline
-  // rendering. Inline mode keeps soft fall-through so the sequential
-  // regex below can still match `~CC_`/`~SS_`/`~SR_`/`~SX_`/`~SP`/
-  // `~f` — those handlers emit to the socket / pause / launch doors
-  // and can't be expressed as string-returning dispatch entries.
+  // Strict fall-through, byte-exact case (both modes). express.e:
+  // 5290-5402 ELSEIF chain has no final ELSE — unmatched cmds have
+  // their `~` consumed and the cmd content emits as plain text.
+  // Inline-mode side-effecting codes (~CC_/~SS_/~SR_/~SP/~f) ride
+  // through the dispatch as NUL-delimited sentinels (see
+  // SENTINEL_* constants above) rather than staying intact for a
+  // separate regex pass.
   parsed = processMciTokenizer(
     parsed,
     {
       dispatch: userInfoDispatch,
       prefixDispatch,
-      softFallThrough: inlineMode,
+      softFallThrough: false,
       caseSensitive: true,
     },
     mciTerminator,
@@ -927,324 +1047,160 @@ console.error('[parseMciCodes] Error getting message base name:', error);
   // are dispatched via the tokenizer above (Q / H entries in
   // userInfoDispatch).
 
-  // === INLINE MODE: SEQUENTIAL MCI PROCESSING ===
-  // express.e:5768-5802 processMci() iterates through content sequentially:
-  // 1. Find next ~ character
-  // 2. Output text before it (aePuts2)
-  // 3. Call processMciCmd to handle the MCI code immediately
-  // 4. Continue from new position
-  // We must process MCI codes in EXACT DOCUMENT ORDER like express.e does.
+  // === INLINE MODE: SENTINEL WALKER ===
+  // express.e:5768-5802 processMci() iterates through content
+  // sequentially, emitting text-before each MCI code, then running
+  // the side effect, then continuing. We achieve the same flow
+  // post-tokenizer: the inline-only dispatch entries above replaced
+  // each side-effecting code with a NUL-delimited sentinel, so we
+  // walk `parsed` splitting on those, emitting the surrounding text
+  // chunks via emitText (in document order), and applying side
+  // effects (CLS/pause/cmd/displayFile/random file) as they appear.
+  //
+  // ~SP triggers an early-return with `pendingInlineContent`
+  // populated: the rest of the post-tokenizer string (sentinels and
+  // all). When the pagination state machine resumes, displayScreen
+  // calls back into parseMciCodes with that content. The tokenizer
+  // pass is idempotent for already-substituted text — no `~` left
+  // for it to consume — and the sentinels look like plain bytes to
+  // the tokenizer (no `~`), so they ride through to the next walk
+  // intact.
   if (inlineMode) {
     const { processCommand } = require('./command.handler');
 
-    // Inline regex — byte-exact express.e parity. Matches lowercase
-    // `f` (express.e:5469 StrCmp(cmd,'f')), uppercase `SP`/`CC_`/
-    // `SS_`/`SR_` (express.e:5455/5555/5496/5533). The `2S` legacy
-    // form has been dropped (it was a typo for `SX_`; express.e has
-    // no `2S` branch and the inline path doesn't currently handle
-    // SX_ — that runs via the unconditional post-tokenizer pass).
-    // `~F` (uppercase) no longer matches — sysop screens use
-    // lowercase `~f` exclusively per the tree-wide screen sweep.
-    const inlineMciRegex = /~(f|SP(?:\.|[\s|]|$)|CC_[^\s|~\r\n]+|SS_[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
-
-    // Regex to find ~SP codes - express.e:5455-5461
-    // ~SP followed by . (SP.), | (mciterminator), whitespace, or end of string
-    const spRegex = /~SP(?:\.|[\s|]|$)/;
-
-    let lastIndex = 0;
-    let match;
-
-    // Helper to emit text, checking for ~SP and handling immediate pause
-    // express.e:5455-5461 - ~SP causes immediate doPause(), then continues
-    // Returns: { emitted: boolean, foundSp: boolean, textAfterSp: string }
-    const emitTextWithSpCheck = (text: string): { emitted: boolean; foundSp: boolean; remainingContent: string } => {
-      const spMatch = text.match(spRegex);
-      if (spMatch && spMatch.index !== undefined) {
-        // Found ~SP - emit text before it, then stop
-        const textBeforeSp = text.substring(0, spMatch.index);
-        const spCodeLen = spMatch[0].length;
-        const textAfterSp = text.substring(spMatch.index + spCodeLen);
-
-        if (textBeforeSp.length > 0) {
-          let toEmit = addAnsiEscapes(textBeforeSp);
-          toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-          emitText(socket, toEmit);
-        }
-
-        // Return remaining content (text after ~SP + rest of parsed content)
-        return { emitted: textBeforeSp.length > 0, foundSp: true, remainingContent: textAfterSp };
-      } else {
-        // No ~SP - emit all text
-        if (text.length > 0) {
-          let toEmit = addAnsiEscapes(text);
-          toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-          emitText(socket, toEmit);
-        }
-        return { emitted: text.length > 0, foundSp: false, remainingContent: '' };
-      }
+    const emitChunk = (chunk: string): boolean => {
+      if (chunk.length === 0) return false;
+      let toEmit = addAnsiEscapes(chunk);
+      toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+      emitText(socket, toEmit);
+      return true;
     };
 
-    while ((match = inlineMciRegex.exec(parsed)) !== null) {
-      const fullMatch = match[0];
-      const code = match[1];
+    let lastIndex = 0;
+    SENTINEL_REGEX.lastIndex = 0;
+    let match: RegExpExecArray | null;
 
-      // express.e:5793-5794 - Output text before this MCI code
-      const textBefore = parsed.substring(lastIndex, match.index);
-      if (textBefore.length > 0) {
-        // Check for ~SP and emit text up to it (express.e:5455-5461)
-        const result = emitTextWithSpCheck(textBefore);
-        if (result.foundSp) {
-          // express.e:5455-5461 - ~SP causes immediate pause
-          hasPause = true;
-          // Store remaining content for processing after pause
-          // Remaining = text after ~SP + current MCI code + rest of parsed content
-          const remainingParsed = result.remainingContent + parsed.substring(match.index);
-          screenDebug('[MCI] Sequential: ~SP found, pausing with remaining content');
-          inlineEmitted = true;
-          // Return with pending content - caller will handle pause and continuation
-          return {
-            parsed: '',
-            commands: commandsToExecute,
-            hasPause: true,
-            slowmo: slowmoApplied,
-            slowmoCount: slowmoAppliedCount,
-            inlineEmitted: true,
-            pendingInlineContent: remainingParsed
-          };
-        }
-        screenDebug('[MCI] Sequential: emitted text before ~' + code.substring(0, 10));
+    while ((match = SENTINEL_REGEX.exec(parsed)) !== null) {
+      const sentinel = match[1];
+
+      // express.e:5793-5794 — emit text BEFORE the side effect.
+      if (emitChunk(parsed.substring(lastIndex, match.index))) {
+        inlineEmitted = true;
+      }
+      lastIndex = match.index + match[0].length;
+
+      if (sentinel === 'F') {
+        // express.e:5469-5471 — sendCLS()
+        emitText(socket, '\x1b[2J\x1b[H');
+        inlineEmitted = true;
+        screenDebug('[MCI] Sentinel: ~f sendCLS()');
+        continue;
       }
 
-      // Update position to after this match
-      lastIndex = match.index + fullMatch.length;
-
-      // Process the MCI code immediately (express.e:5799 processMciCmd)
-      if (code === 'f') {
-        // express.e:5469-5471 - sendCLS() (lowercase 'f' only per
-        // express.e StrCmp byte-exact)
-        emitText(socket, '\x1b[2J\x1b[H');
-        screenDebug('[MCI] Sequential: ~f sendCLS()');
-      } else if (code.startsWith('SP')) {
-        // express.e:5455-5461 - doPause() — stop and wait for Space key
-        // Mark hasPause so displayScreen triggers the pagination state machine.
-        // Do NOT emit the ~SP text — it must be silently consumed.
+      if (sentinel === 'SP') {
+        // express.e:5455-5461 — doPause(). Stop here, return the
+        // unprocessed remainder so the pause state machine can
+        // resume the rest of the screen after keypress.
         hasPause = true;
-        screenDebug('[MCI] Sequential: ~SP doPause()');
-      } else if (code.startsWith('CC_')) {
-        // express.e:5555-5563 - processSysCommand()
-        const commandStr = code.substring(3).replace(/\|+$/, '').trim();
-console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', session.state, 'subState:', session.subState);
-        screenDebug('[MCI] Sequential: ~CC_ processSysCommand:', commandStr);
+        inlineEmitted = true;
+        const remainingParsed = parsed.substring(lastIndex);
+        screenDebug('[MCI] Sentinel: ~SP — pausing, ' + remainingParsed.length + ' bytes pending');
+        return {
+          parsed: '',
+          commands: commandsToExecute,
+          hasPause: true,
+          slowmo: slowmoApplied,
+          slowmoCount: slowmoAppliedCount,
+          inlineEmitted: true,
+          pendingInlineContent: remainingParsed,
+        };
+      }
+
+      if (sentinel.startsWith('CC:')) {
+        // express.e:5555-5563 — processSysCommand()
+        const commandStr = sentinel.substring(3).trim();
         const spacePos = commandStr.indexOf(' ');
         const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
         const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
-        // Save subState so any door launched here (68K or TS) can't clobber it.
-        // Door executors set DOOR_RUNNING and may not restore it on early exit.
         const subStateBeforeInlineCmd = session.subState;
-        // express.e:5555-5563 calls processSysCommand() which always allows SYSCMD
+        // Save subState so any door launched here (68K or TS) can't
+        // clobber it. Door executors set DOOR_RUNNING and may not
+        // restore it on early exit.
         const result = await processCommand(socket, session, cmdCode, cmdParams, true);
         if (session.subState !== subStateBeforeInlineCmd) {
           session.subState = subStateBeforeInlineCmd;
         }
-console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
-      } else if (code.startsWith('SS_')) {
-        // express.e:5496-5504 - displayFile()
-        const filename = code.substring(3).replace(/\|+$/, '').trim();
-        screenDebug('[MCI] Sequential: ~SS_ displayFile:', filename);
+        screenDebug('[MCI] Sentinel: ~CC_ ' + commandStr + ' → ' + result);
+        inlineEmitted = true;
+        continue;
+      }
+
+      if (sentinel.startsWith('SS:')) {
+        // express.e:5496-5504 — displayFile()
+        const filename = sentinel.substring(3).trim();
+        screenDebug('[MCI] Sentinel: ~SS_ displayFile: ' + filename);
         await displayScreen(socket, session, filename, false);
-      } else if (code.includes('SR_')) {
-        // express.e:5533-5554 - display random file
-        const srMatch = code.match(/(\d*)SR_(.+)/);
-        if (srMatch) {
-          const maxCountRaw = srMatch[1];
-          let basePath = srMatch[2].replace(/\|+$/, '').trim();
-          screenDebug('[MCI] Sequential: ~SR_ random file:', basePath);
+        inlineEmitted = true;
+        continue;
+      }
 
-          // Resolve Amiga assign paths
-          if (basePath.includes(':')) {
-            const { config } = require('../config');
-            const baseDir = config.getConfig().dataDir;
-            const colonIdx = basePath.indexOf(':');
-            const assign = basePath.substring(0, colonIdx).toUpperCase();
-            const subpath = basePath.substring(colonIdx + 1);
+      if (sentinel.startsWith('SR:')) {
+        // express.e:5533-5554 — display random numbered file.
+        // Sentinel format: SR:<width>|<basePath>. width=-1 means
+        // "no width prefix" (caller's default of 99 applies).
+        const body = sentinel.substring(3);
+        const pipePos = body.indexOf('|');
+        const widthRaw = pipePos >= 0 ? body.substring(0, pipePos) : '';
+        let basePath = (pipePos >= 0 ? body.substring(pipePos + 1) : body).trim();
+        const widthVal = parseInt(widthRaw, 10);
 
-            if (assign === 'WORK' || assign === 'BBS') {
-              let resolvedSubpath = subpath;
-              if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
-                resolvedSubpath = resolvedSubpath.substring(4);
-              }
-              basePath = path.join(baseDir, resolvedSubpath);
-            } else if (assign === 'SCREENS') {
-              basePath = path.join(baseDir, 'Screens', subpath);
+        if (basePath.includes(':')) {
+          const { config: cfgMod } = require('../config');
+          const baseDir = cfgMod.getConfig().dataDir;
+          const colonIdx = basePath.indexOf(':');
+          const assign = basePath.substring(0, colonIdx).toUpperCase();
+          const subpath = basePath.substring(colonIdx + 1);
+          if (assign === 'WORK' || assign === 'BBS') {
+            let resolvedSubpath = subpath;
+            if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
+              resolvedSubpath = resolvedSubpath.substring(4);
             }
+            basePath = path.join(baseDir, resolvedSubpath);
+          } else if (assign === 'SCREENS') {
+            basePath = path.join(baseDir, 'Screens', subpath);
           }
-
-          const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
-          const randomNum = Math.floor(Math.random() * maxCount) + 1;
-          const randomFile = formatNumberedFilename(basePath, randomNum);
-          screenDebug('[MCI] Sequential: ~SR_ selected:', randomFile);
-          // ~SR_ always shows a full-screen art file — clear before drawing
-          // so previous door output (e.g. dRE!WAll) doesn't bleed through
-          socket.emit('ansi-output', '\x1b[2J\x1b[H');
-          await displayScreen(socket, session, randomFile, false);
         }
+
+        const maxCount = Math.max(1, Number.isFinite(widthVal) && widthVal > 0 ? widthVal : 99);
+        const randomNum = Math.floor(Math.random() * maxCount) + 1;
+        const randomFile = formatNumberedFilename(basePath, randomNum);
+        screenDebug('[MCI] Sentinel: ~SR_ selected: ' + randomFile);
+        // ~SR_ always shows a full-screen art file — clear before
+        // drawing so previous door output doesn't bleed through.
+        socket.emit('ansi-output', '\x1b[2J\x1b[H');
+        await displayScreen(socket, session, randomFile, false);
+        inlineEmitted = true;
+        continue;
       }
+
+      // Unknown sentinel type — emit nothing, log for visibility.
+      screenDebug('[MCI] Sentinel: unknown type ' + JSON.stringify(sentinel));
     }
 
-    // Output any remaining text after the last MCI code
-    if (lastIndex < parsed.length) {
-      const remaining = parsed.substring(lastIndex);
-      if (remaining.length > 0) {
-        // Check for ~SP and emit text up to it (express.e:5455-5461)
-        const result = emitTextWithSpCheck(remaining);
-        if (result.foundSp) {
-          // express.e:5455-5461 - ~SP causes immediate pause
-          hasPause = true;
-          screenDebug('[MCI] Sequential: ~SP found in remaining text, pausing');
-          inlineEmitted = true;
-          // Return with pending content for processing after pause
-          return {
-            parsed: '',
-            commands: commandsToExecute,
-            hasPause: true,
-            slowmo: slowmoApplied,
-            slowmoCount: slowmoAppliedCount,
-            inlineEmitted: true,
-            pendingInlineContent: result.remainingContent
-          };
-        }
-        if (result.emitted) {
-          screenDebug('[MCI] Sequential: emitted remaining text');
-          inlineEmitted = true;
-        }
-      }
-    }
-
-    // Mark that we've emitted content inline (even if just executing codes)
-    // This tells displayScreen to skip its frame buffer emission
-    if (lastIndex > 0) {
+    // Emit any tail text after the last sentinel (or all of it if
+    // no sentinels were found).
+    if (emitChunk(parsed.substring(lastIndex))) {
       inlineEmitted = true;
     }
 
-    // Clear parsed since we've already emitted everything
+    // Clear parsed since everything has been emitted to the socket.
     parsed = '';
   }
 
-  // Advanced File Display Codes (express.e:5490-5560)
-  // NOTE: In inline mode, these are already handled above in sequential processing
-  // ~SS_ - Show String / Display File (express.e:5490-5500)
-  // Format: ~SS_<filename>| or ~SS_<filename>|| - displays another screen file
-  // express.e uses single | as mciterminator, some screens use || for compatibility
-  screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
-  // Support both ~SS_ and ~2S (short form)
-  // Path stops at whitespace, tilde (next MCI code), or newline
-  // Terminator is | or || (optional, consumed by regex if present)
-  const ssRegex = /~(?:SS_|2S)([^\s|~\r\n]+)(?:\|{1,2})?/g;
-  const filesToDisplay: string[] = [];
-
-  // Keep provided extensions; only trim whitespace/terminators.
-  const normalizeScreenReference = (screenRef: string): string => screenRef.trim();
-
-  // NOTE: Inline mode is fully handled in sequential processing above (parsed is empty)
-  // String mode: Create placeholders for later replacement
-  if (!inlineMode) {
-    parsed = parsed.replace(ssRegex, (_match, ref) => {
-      const filename = normalizeScreenReference(ref.trim());
-      screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
-      filesToDisplay.push(filename);
-      return `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
-    });
-    screenDebug('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
-  }
-
-  // ~SX_ - String Exact / Sequential File Display (express.e:5505-5530)
-  // Format: ~SX_<path>/<basename>|| - displays files sequentially (file.1, file.2, file.3...)
-  // Reads counter from persistent file, increments, displays next file in sequence
-  const sxRegex = /~SX_([^|]+)\|\|/g;
-  let sxMatch;
-  while ((sxMatch = sxRegex.exec(parsed)) !== null) {
-    let basePath = sxMatch[1].trim();
-    screenDebug('[MCI] Found ~SX_ sequential file request:', basePath);
-
-    // Resolve Amiga assign paths using centralized resolver
-    if (basePath.includes(':')) {
-      const { config } = require('../config');
-      const baseDir = config.getConfig().dataDir;
-      const bbsPaths = new BBSPaths(baseDir);
-      basePath = bbsPaths.resolveAmigaPath(basePath, session?.nodeId || 0);
-      screenDebug('[MCI] ~SX_ resolved path to:', basePath);
-    }
-
-    // Get next sequential file
-    const nextFile = sequentialFileManager.getNextFile(basePath);
-    screenDebug('[MCI] ~SX_ next file:', nextFile.filename, '(counter:', nextFile.number + ')');
-
-    // Try to load the file - if it doesn't exist, reset counter and try file.1
-    let foundFile = false;
-    if (loadScreenFile(nextFile.filename, session.currentConf, 0, session)) {
-      filesToDisplay.push(nextFile.filename);
-      foundFile = true;
-    } else {
-      // File doesn't exist - reset to 1 and try again
-      screenDebug('[MCI] ~SX_ file not found, resetting to 1');
-      sequentialFileManager.resetCounter(basePath);
-      const firstFile = sequentialFileManager.getNextFile(basePath);
-      if (loadScreenFile(firstFile.filename, session.currentConf, 0, session)) {
-        filesToDisplay.push(firstFile.filename);
-        foundFile = true;
-      }
-    }
-
-    if (foundFile) {
-      parsed = parsed.replace(sxMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
-    } else {
-      // No files found - remove code
-      parsed = parsed.replace(sxMatch[0], '');
-    }
-  }
-
-  // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
-  // Format: ~<max>SR_<path>/<basename> - displays random file from numbered set (max optional, defaults to 99)
-  // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays 001.logoff.txt, 002.logoff.txt, etc.
-  // Note: Path stops at whitespace, tilde (next MCI code), or newline
-  // Terminator is | or || (optional, consumed by regex if present)
-  const srRegex = /~(\d*)SR_([^\s|~\r\n]+)(?:\|{1,2})?/g;
-
-  // NOTE: Inline mode is fully handled in sequential processing above (parsed is empty)
-  // String mode: Create placeholders for later replacement
-  if (!inlineMode) {
-    let srMatch;
-    while ((srMatch = srRegex.exec(parsed)) !== null) {
-      const maxCountRaw = srMatch[1];
-      let basePath = srMatch[2].trim();
-      screenDebug('[MCI] Found ~SR_ random file request:', basePath);
-
-      // Resolve Amiga assign paths using centralized resolver
-      if (basePath.includes(':')) {
-        const { config } = require('../config');
-        const baseDir = config.getConfig().dataDir;
-        const bbsPaths = new BBSPaths(baseDir);
-        basePath = bbsPaths.resolveAmigaPath(basePath, session?.nodeId || 0);
-        screenDebug('[MCI] ~SR_ resolved path to:', basePath);
-      }
-
-      const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
-      const randomNum = Math.floor(Math.random() * maxCount) + 1;
-      const randomFile = formatNumberedFilename(basePath, randomNum);
-
-      screenDebug('[MCI] ~SR_ selected random file:', randomFile);
-
-      // String mode: Create placeholder for later replacement
-      filesToDisplay.push(randomFile);
-      const placeholder = `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
-console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
-      parsed = parsed.replace(srMatch[0], placeholder);
-    }
-  }
-
-  // ~SP. / ~NSF / ~CR. / ~F / ~CC_ / ~CR_ / ~SM_ / ~SMO / ~SMC are
-  // handled in the pre-tokenizer side-effecting block above so the
-  // strict-fall-through tokenizer doesn't eat their `~`.
+  // ~SS_/~SR_/~SX_/~SP./~NSF/~CR./~F/~CC_/~CR_/~SM_/~SMO/~SMC all
+  // handled in the pre-tokenizer block above so the strict-fall-
+  // through tokenizer doesn't eat their `~`. Inline-mode CC_/SS_/SR_
+  // ride through the dispatch as sentinels (executed by the walker).
 
   // Legacy % codes (for compatibility)
   parsed = parsed.replace(/%B/g, bbsName);

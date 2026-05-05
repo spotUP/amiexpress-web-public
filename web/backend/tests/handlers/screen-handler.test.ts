@@ -232,6 +232,52 @@ describe('parseMciCodes — migrated dispatch codes (express.e parity)', () => {
   });
 });
 
+describe('parseMciCodes — non-inline mode file-display codes', () => {
+  // ~SS_/~SR_/~SX_ in non-inline mode pre-process pre-tokenizer and
+  // emit `{{DISPLAY_FILE:N}}` placeholders that get substituted with
+  // file content at the end of parseMciCodes. For tests that don't
+  // mock file loading the placeholder ends up replaced with empty
+  // string, so the assertions here pin the absence of the raw MCI
+  // code in the output (which proves the pre-tokenizer regex
+  // matched). Pinned because the pre-tokenizer move was required
+  // when strict fall-through was enabled — previously the post-
+  // tokenizer regex would have been silently broken by the
+  // tokenizer consuming the leading `~`.
+
+  test('~SS_<file> is consumed by pre-tokenizer (not leaked as plain text)', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~SS_BANNER|b', session);
+    expect(result.parsed).not.toContain('~SS_');
+    expect(result.parsed).not.toContain('SS_BANNER');
+    // File doesn't exist → placeholder collapses to empty → output "ab".
+    expect(result.parsed).toContain('a');
+    expect(result.parsed).toContain('b');
+  });
+
+  test('~2S<file> short form also gets consumed', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~2SBANNER|b', session);
+    expect(result.parsed).not.toContain('~2S');
+    expect(result.parsed).not.toContain('2SBANNER');
+  });
+
+  test('~SR_<path>| is consumed by pre-tokenizer', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('a~SR_/tmp/foo|b', session);
+    expect(result.parsed).not.toContain('~SR_');
+    expect(result.parsed).not.toContain('SR_/tmp');
+  });
+
+  test('multiple ~SS_ entries all get consumed', async () => {
+    const session = makeSession();
+    const result = await parseMciCodes('~SS_A| then ~SS_B|', session);
+    expect(result.parsed).not.toContain('~SS_');
+    expect(result.parsed).not.toContain('SS_A');
+    expect(result.parsed).not.toContain('SS_B');
+    expect(result.parsed).toContain('then');
+  });
+});
+
 let _socketCounter = 0;
 function makeFullSocket() {
   return { emit: jest.fn(), on: jest.fn(), id: `pause-socket-${++_socketCounter}` };
