@@ -3012,6 +3012,12 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       QUERY:       'PROMPT',
       // Misc
       SF:          'SHOWFILE',     SHOWFILE:    'SHOWFILE',
+      // SENDFILE is a synonym some doors use for SHOWFILE (KickBox.Rexx
+      // line 4 does `Sendfile=Showfile` — the REXX-level "alias by
+      // assigning the function name" doesn't actually rewrite the
+      // host-command lookup, so the SENDFILE invocations later in
+      // the script need a direct route. Same target as SHOWFILE.
+      SENDFILE:    'SHOWFILE',
       BUFFERFLUSH: 'BUFFERFLUSH',
       SHUTDOWN:    'SHUTDOWN',
     };
