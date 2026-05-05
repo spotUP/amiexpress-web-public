@@ -249,12 +249,25 @@ writePidFile();
 // Start initial backend
 startBackend();
 
-// Watch door directories
-// Includes both source files AND compiled dist files for hybrid doors
+// Watch door directories AND backend source.
+//
+// Door files: TypeScript / compiled-JS for both Doors/ and sdk/doors/.
+//   Triggers a restart when a sysop edits or rebuilds a door, since
+//   Node ESM cannot hot-reload the door modules.
+//
+// Backend src: web/backend/src/**/*.ts. tsx itself doesn't watch
+//   files in our usual launch line, so source edits to handlers,
+//   services, utilities etc. would otherwise require a manual
+//   kill-servers + start-servers cycle. Including the backend tree
+//   here gives us tsx-watch-equivalent behaviour: edit a TS file,
+//   the watcher debounces, then respawns the backend with the new
+//   code. Excludes dist/ and tests so a `tsc --noEmit` or `npm
+//   test` sweep doesn't bounce the server unnecessarily.
 watcher = watch(
   [
     'Doors/**/*.{ts,js}',
     'sdk/doors/**/*.{ts,js}',
+    'web/backend/src/**/*.ts',
   ],
   {
     cwd: PROJECT_ROOT,
@@ -262,6 +275,11 @@ watcher = watch(
       '**/node_modules/**',
       // Don't ignore dist/ - hybrid doors need dist/ changes to trigger restart
       '**/.git/**',
+      // Don't restart on test edits — they're isolated.
+      '**/*.test.ts',
+      '**/__tests__/**',
+      // Don't restart on backend dist or build artifacts.
+      '**/web/backend/dist/**',
     ],
     persistent: true,
     ignoreInitial: true,
