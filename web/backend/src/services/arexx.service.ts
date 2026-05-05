@@ -2834,8 +2834,16 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       }
     }
 
-    // Function call (standalone)
-    if (line.includes('(') && line.includes(')')) {
+    // Function call (standalone). Only fire when the line's first
+    // identifier is IMMEDIATELY followed by `(` — `name(args)` shape.
+    // `name SPACE something(x)` is a host-command call whose argument
+    // expression contains a function call, not a bare function-call
+    // statement. The previous "any line with parens" check
+    // misclassified `transmit ... substr(ans.i.index,2)` as a bare
+    // function call and swallowed it via evaluateExpression — STNG's
+    // option-3 answer-display `transmit MAG"[..."substr(...)` hit this
+    // path and the answer text never reached the terminal.
+    if (/^[A-Za-z_][A-Za-z0-9_]*\(/.test(line)) {
       await this.evaluateExpression(line);
       return;
     }
