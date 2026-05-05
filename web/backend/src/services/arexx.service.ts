@@ -723,6 +723,42 @@ export function stripRexxBlockComments(src: string): string {
 }
 
 /**
+ * Split a condition string on a top-level logical operator (`|` or
+ * `&`), respecting quoted strings and parenthesised sub-expressions.
+ * Used by evaluateCondition to honour REXX's compound condition
+ * syntax (`a=1 | b=2 & c='x'`). Returns the original string as a
+ * single-element array if no top-level occurrences are found.
+ *
+ * Skips `||` (REXX concat operator) so `'a' || 'b' = 'ab'` doesn't
+ * accidentally split. Same care for `&&` (which isn't standard REXX
+ * but appears in some dialects).
+ */
+function splitTopLevelLogical(s: string, op: '|' | '&'): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (!inDouble && ch === "'") inSingle = !inSingle;
+    else if (!inSingle && ch === '"') inDouble = !inDouble;
+    else if (!inSingle && !inDouble) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      else if (ch === op && depth === 0) {
+        // Skip doubled forms (|| concat, && conjunction synonym).
+        if (s[i + 1] === op) { i++; continue; }
+        parts.push(s.substring(start, i));
+        start = i + 1;
+      }
+    }
+  }
+  if (start < s.length) parts.push(s.substring(start));
+  return parts.length === 0 ? [s] : parts;
+}
+
+/**
  * Mark the interpreter for immediate abort. Sets returnRequested +
  * exitRequested so any DO/SELECT/CALL frames unwind on the next
  * statement boundary, then breaks out of the script entirely.
@@ -3813,6 +3849,30 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
    */
   private async evaluateCondition(condition: string): Promise<boolean> {
     const c = condition.trim();
+    // Logical OR (`|`) and AND (`&`) — quote/paren-aware top-level
+    // split with short-circuit eval. REXX precedence: `&` binds
+    // tighter than `|` (RKRM Table 2-3), so split on `|` first then
+    // each operand is recursively split on `&`. KickBox.Rexx hit
+    // this on `if op=4 | op='Q' | op='' then signal main` — without
+    // this branch the `=` split below would treat `4 | op='Q' | op=''`
+    // as the right-hand operand of `op=...`, garbling the comparison
+    // and the `op=4` quit option silently fell through.
+    {
+      const orParts = splitTopLevelLogical(c, '|');
+      if (orParts.length > 1) {
+        for (const part of orParts) {
+          if (await this.evaluateCondition(part.trim())) return true;
+        }
+        return false;
+      }
+      const andParts = splitTopLevelLogical(c, '&');
+      if (andParts.length > 1) {
+        for (const part of andParts) {
+          if (!(await this.evaluateCondition(part.trim()))) return false;
+        }
+        return true;
+      }
+    }
     // Unary NOT (`~` / `\` / `^`) — REXX dialects vary; AmiExpress
     // doors use `~` (e.g. STNG.Rexx's `do while ~eof(STNG)` and
     // `if ~exists('hiscores')`). Without this, the recursion-style
