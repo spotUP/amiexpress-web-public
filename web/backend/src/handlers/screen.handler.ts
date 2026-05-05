@@ -359,7 +359,12 @@ const SENTINEL_CC = '\x00CC:';
 const SENTINEL_SS = '\x00SS:';
 const SENTINEL_SR = '\x00SR:';
 const SENTINEL_END = '\x00';
-const SENTINEL_REGEX = /\x00([^\x00]*)\x00/g;
+// Sentinel scanning uses indexOf (NOT a /g regex) because the walker
+// awaits async side effects that can recursively re-enter
+// parseMciCodes (e.g. SS sentinel → displayScreen → inner
+// parseMciCodes). A module-level /g regex would have its lastIndex
+// clobbered by the inner call, causing the outer walker to restart
+// from the top and re-process the same sentinel forever.
 
 /**
  * Parse MCI codes and return both parsed content and commands to execute
@@ -1079,18 +1084,22 @@ console.error('[parseMciCodes] Error getting message base name:', error);
       return true;
     };
 
+    // indexOf-based scanner (see SENTINEL_REGEX_SOURCE comment above —
+    // a stateful /g regex would be clobbered by recursive
+    // parseMciCodes calls from inside the SS_/SR_ handlers).
     let lastIndex = 0;
-    SENTINEL_REGEX.lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = SENTINEL_REGEX.exec(parsed)) !== null) {
-      const sentinel = match[1];
+    while (true) {
+      const startNul = parsed.indexOf('\x00', lastIndex);
+      if (startNul < 0) break;
+      const endNul = parsed.indexOf('\x00', startNul + 1);
+      if (endNul < 0) break;
+      const sentinel = parsed.substring(startNul + 1, endNul);
 
       // express.e:5793-5794 — emit text BEFORE the side effect.
-      if (emitChunk(parsed.substring(lastIndex, match.index))) {
+      if (emitChunk(parsed.substring(lastIndex, startNul))) {
         inlineEmitted = true;
       }
-      lastIndex = match.index + match[0].length;
+      lastIndex = endNul + 1;
 
       if (sentinel === 'F') {
         // express.e:5469-5471 — sendCLS()

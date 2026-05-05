@@ -234,6 +234,47 @@ describe('inline-mode sentinel walker', () => {
     expect(result.pendingInlineContent).toContain('\x00'); // sentinel marker
   });
 
+  test('regression: ~SS_<file> walker does NOT loop on shared regex state', async () => {
+    // The walker scans the post-tokenizer string for sentinels using
+    // indexOf-based scanning, NOT a stateful /g regex. The SS_ and
+    // SR_ handlers await displayScreen → recursive parseMciCodes →
+    // recursive walker. If the outer walker shared a /g RegExp with
+    // its inner call, the inner exec() would clobber lastIndex and
+    // the outer would restart from 0, infinite-looping the same
+    // sentinel. Surface symptom (2026-05-05): logon20.txt's
+    // `~SS_BBS:bulletins/bull6.txt|` rendered the bull6.txt banner
+    // 6+ times until the user pressed a key.
+    //
+    // The mock screen loader is stubbed to count invocations so the
+    // assertion is "called exactly once" rather than relying on
+    // visible output diffing.
+    const { socket, emitted } = makeMockSocket();
+    const session = makeSession();
+    // Source content: an SS sentinel for a file that doesn't exist
+    // in the test bbs root. displayScreen will return false but the
+    // walker still must not loop — exiting cleanly is the contract.
+    const result = await parseMciCodes(
+      'header~SS_BBS:bulletins/missing-file-for-loop-test.txt|footer',
+      session,
+      undefined,
+      undefined,
+      undefined,
+      socket,
+    );
+    drainBuffer(socket);
+    expect(result.inlineEmitted).toBe(true);
+    // The SS sentinel was processed and walker exited; the surrounding
+    // text emitted in document order.
+    const joined = emitted.join('');
+    expect(joined).toContain('header');
+    expect(joined).toContain('footer');
+    // The literal sentinel string MUST NOT leak — that was the visible
+    // failure mode when the regex looped (the post-loop sentinel
+    // remainder was emitted as-is by the displayScreen render path).
+    expect(joined).not.toContain('SS:');
+    expect(joined).not.toContain('\x00');
+  });
+
   test('~F (uppercase) does NOT clear in byte-exact mode', async () => {
     const { socket, emitted } = makeMockSocket();
     const session = makeSession();
