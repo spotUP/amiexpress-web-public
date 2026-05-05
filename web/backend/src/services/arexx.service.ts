@@ -95,6 +95,47 @@ class AREXXFunctions {
     return char.charCodeAt(0);
   }
 
+  // B2C — binary string ('01010101' …) to chars. Each 8-bit group
+  // becomes one byte. Padding ignored if string isn't a multiple of 8.
+  static B2C(bin: string): string {
+    const s = String(bin ?? '').replace(/[^01]/g, '');
+    let out = '';
+    for (let i = 0; i + 8 <= s.length; i += 8) {
+      out += String.fromCharCode(parseInt(s.substring(i, i + 8), 2));
+    }
+    return out;
+  }
+
+  // C2B — chars to binary string (8 bits per char, MSB first).
+  static C2B(str: string): string {
+    let out = '';
+    const s = String(str ?? '');
+    for (let i = 0; i < s.length; i++) {
+      out += s.charCodeAt(i).toString(2).padStart(8, '0');
+    }
+    return out;
+  }
+
+  // XRANGE([start [, end]]) — return string of chars from start to end
+  // inclusive. RKRM default: '\x00' to '\xff'. Used occasionally for
+  // building character-class strings or test data.
+  static XRANGE(start?: string, end?: string): string {
+    const lo = start === undefined || start === '' ? 0 : String(start).charCodeAt(0);
+    const hi = end === undefined || end === '' ? 0xff : String(end).charCodeAt(0);
+    if (hi < lo) return '';
+    let out = '';
+    for (let c = lo; c <= hi; c++) out += String.fromCharCode(c);
+    return out;
+  }
+
+  // DIGITS() — current numeric precision setting (default 9 per
+  // RKRM §5.1). NUMERIC DIGITS adjusts; we don't fully model
+  // arbitrary-precision arithmetic, so the value is decorative for
+  // doors that read it back to format numbers.
+  static DIGITS(): number {
+    return 9;
+  }
+
   static D2X(num: number): string {
     return num.toString(16).toUpperCase();
   }
@@ -2278,9 +2319,13 @@ export class AREXXInterpreter {
   // would dlopen the .library; we just remember the name.
   private loadedLibraries: Set<string> = new Set();
   // SIGL — the line number at which the most recent SIGNAL fired
-  // (RKRM §7). Updated on every condition trap so error handlers
-  // can read it. Defaults to 0.
+  // (RKRM §7). Updated on every SIGNAL statement so error handlers
+  // can read it via `a = SIGL` (KickBox.Rexx:945 does exactly this).
+  // Defaults to 0.
   private siglLine: number = 0;
+  // Current line being executed — updated each clause by executeLines.
+  // Powers SIGL on SIGNAL, plus useful for diagnostics.
+  private currentLineIndex: number = 0;
 
   /**
    * Resolve a (possibly compound) symbol to its concrete variable
@@ -2327,8 +2372,18 @@ export class AREXXInterpreter {
   }
 
   /** Stem-aware variable getter. Returns undefined for unknown symbols
-   * (caller falls back to UPPERCASE-symbol convention). */
+   * (caller falls back to UPPERCASE-symbol convention).
+   *
+   * Special-cases REXX automatic variables that the runtime owns
+   * (SIGL, RC, RESULT) — the script-side `variables` map gets them
+   * synced on update, but we read directly from the runtime field so
+   * a script can't accidentally clobber the value with a manual
+   * assignment that doesn't propagate.
+   */
   private getVariable(name: string): any {
+    // Automatic variables — return the runtime-owned value first.
+    const upper = name.toUpperCase();
+    if (upper === 'SIGL') return String(this.siglLine);
     if (name.includes('.')) {
       const resolved = this.resolveCompoundName(name);
       const v = this.variables.get(resolved);
@@ -2596,6 +2651,13 @@ console.log(`Label registered: ${label} at line ${i}`);
         break;
       }
 
+      // Track which line we're about to run so SIGNAL can stamp SIGL
+      // and any diagnostics can report a clause number. The index is
+      // 0-based on the preprocessed-line array; doors that read SIGL
+      // for human-readable line numbers see the same shape express.e
+      // produces (1-based, see siglLine setter).
+      this.currentLineIndex = i;
+
       const line = lines[i];
 
       // Skip labels (they're just markers)
@@ -2781,6 +2843,49 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       return;
     }
 
+    // DROP <var> [<var2> ...] — undefine variables (RKRM §6.4). Some
+    // doors use this to clean up between game rounds. Restores the
+    // REXX rule that an undefined symbol evaluates to its uppercased
+    // name. Multiple vars allowed; stem-form `a.` drops the entire
+    // stem.
+    if (line.toUpperCase() === 'DROP' || line.toUpperCase().startsWith('DROP ')) {
+      const rest = line.substring(4).trim();
+      const names = rest.split(/[\s,]+/).filter(s => s.length > 0);
+      for (const name of names) {
+        if (name.endsWith('.')) {
+          // Drop entire stem: clear stem default and any `STEM.x` entries.
+          const stem = name.slice(0, -1).toUpperCase();
+          this.stemDefaults.delete(stem);
+          for (const key of Array.from(this.variables.getAll().keys())) {
+            if (key.toUpperCase().startsWith(stem + '.')) {
+              this.variables.delete(key);
+            }
+          }
+        } else {
+          this.variables.delete(name);
+        }
+      }
+      return;
+    }
+
+    // INTERPRET <expr> — evaluate <expr> as REXX source then run.
+    // Rare but a few advanced doors use it for menu-dispatch tables.
+    // We evaluate the expression to a string, split it on `;` like
+    // any line, and run each fragment through executeLine.
+    if (line.toUpperCase() === 'INTERPRET' || line.toUpperCase().startsWith('INTERPRET ')) {
+      const rest = line.substring(9).trim();
+      if (rest) {
+        try {
+          const code = String(await this.evaluateExpression(rest) ?? '');
+          for (const stmt of splitRexxStatements(code)) {
+            const t = stmt.trim();
+            if (t) await this.executeLine(t);
+          }
+        } catch { /* swallow — RKRM permits silent fail */ }
+      }
+      return;
+    }
+
     // SIGNAL command (RKRM "Using ARexx" §7.1).
     //
     //   SIGNAL labelname                    — goto label
@@ -2819,11 +2924,15 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       if (upper.startsWith('VALUE ')) {
         const expr = rest.substring('VALUE '.length).trim();
         const v = String(await this.evaluateExpression(expr));
+        this.siglLine = this.currentLineIndex + 1;
         this.signalRequested = true;
         this.signalLabel = v;
         return;
       }
-      // Bare goto
+      // Bare goto. Stamp SIGL with the 1-based source line index so
+      // error handlers can `a = SIGL; transmit 'Error line ' a` (the
+      // exact pattern KickBox.Rexx:945 uses).
+      this.siglLine = this.currentLineIndex + 1;
       this.signalRequested = true;
       this.signalLabel = rest;
       return;
@@ -4621,6 +4730,50 @@ console.log(`[TRACE] Trace mode: ${traceArg}`);
           const st = require('fs').statSync(fp);
           return funcName === 'CHARS' ? st.size : 1; // 1 = "lines available"
         } catch { return 0; }
+      }
+      // RKRM-standard line/char I/O API. Some AmiExpress doors use these
+      // instead of OPEN/READLN/WRITELN/CLOSE — semantically equivalent,
+      // and rexxsupport implements them as wrappers around the same
+      // file machinery. Map them here onto our existing AREXXFileIO so
+      // a door using the LINEIN flow sees the same handle registry.
+      case 'LINEIN':  return this.fileIO.readln(String(args[0] ?? ''));
+      case 'LINEOUT': {
+        // LINEOUT(stream [, line [, lineno]]) — write a line. Returns 0
+        // on success, count of unwritten chars on failure.
+        const handle = String(args[0] ?? '');
+        const line = args[1] === undefined ? '' : String(args[1]);
+        return this.fileIO.writeln(handle, line) > 0 ? 0 : line.length;
+      }
+      case 'CHARIN':  return this.fileIO.readch(String(args[0] ?? ''), Number(args[1] ?? 1));
+      case 'CHAROUT': {
+        const handle = String(args[0] ?? '');
+        const text = args[1] === undefined ? '' : String(args[1]);
+        return this.fileIO.writech(handle, text) > 0 ? 0 : text.length;
+      }
+      case 'STREAM': {
+        // STREAM(stream [, command [, args]]) — file-state queries.
+        // Common forms:
+        //   STREAM('file', 'C', 'OPEN R')  — control: open for read
+        //   STREAM('file', 'C', 'CLOSE')   — close
+        //   STREAM('file', 'D')            — describe state
+        //   STREAM('file', 'S')            — short state ('READY' / 'NOTREADY')
+        const handle = String(args[0] ?? '');
+        const cmd = String(args[1] ?? 'S').toUpperCase().charAt(0);
+        if (cmd === 'C') {
+          // Control. Parse the operation.
+          const op = String(args[2] ?? '').toUpperCase().trim();
+          if (op.startsWith('OPEN')) {
+            const mode = op.includes('WRITE') ? 'W' : op.includes('APPEND') ? 'A' : 'R';
+            return this.fileIO.open(handle, handle, mode) ? 'READY' : 'NOTREADY';
+          }
+          if (op === 'CLOSE') return this.fileIO.close(handle) ? 'READY' : 'NOTREADY';
+          if (op === 'QUERY EXISTS') return this.fileIO.exists(handle) ? 'EXISTS' : '';
+          return '';
+        }
+        // Default: state query. If the handle is open in our registry,
+        // return READY; otherwise check existence on disk.
+        if (this.fileIO.exists(handle)) return 'READY';
+        return 'NOTREADY';
       }
     }
 
