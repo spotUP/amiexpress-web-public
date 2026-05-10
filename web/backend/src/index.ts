@@ -339,6 +339,11 @@ export interface BBSSession {
   pendingDoorUploadCallback?: ((result: { path: string; filename: string }) => void) | null;
   pendingDoorUploadReject?: ((reason: Error) => void) | null;
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
+  // Out-of-band Ctrl+C abort hook installed by long-running script engines
+  // (e.g. AREXX). Invoked on incoming 0x03 bytes regardless of whether a
+  // doorInputHandler is currently registered, so a script stuck in a
+  // tight loop between input prompts can still be killed by the user.
+  scriptAbortHandler?: (() => void) | null;
   clientDoorActive?: boolean; // Client (browser) door session active; suppress command handler input
   doorKeyStateHandler?:
     | ((data: {
@@ -1104,6 +1109,18 @@ console.log(
     // Must use SAME routing logic as socket-handlers.ts:641-656
     if (connection.session) {
       const session = connection.session;
+
+      // Out-of-band Ctrl+C abort for long-running script engines (AREXX).
+      // Mirrors the socket-handlers Ctrl+C interceptor so telnet users can
+      // also break out of a tight AREXX loop with no input prompt active.
+      if (
+        (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) &&
+        session.scriptAbortHandler &&
+        input.length > 0 &&
+        input.charCodeAt(0) === 3
+      ) {
+        try { session.scriptAbortHandler(); } catch { /* never throw out of telnet handler */ }
+      }
 
       // Check if door is active and needs input (socket-handlers.ts:641-656)
       if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {

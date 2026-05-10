@@ -656,6 +656,23 @@ console.log('🎯 F1 pressed during chat - exiting chat');
       return;
     }
 
+    // Out-of-band Ctrl+C abort for long-running script engines (AREXX).
+    // The script may be in a tight loop with no doorInputHandler installed —
+    // the regular GETCHAR/Prompt path can't see Ctrl+C in that window.
+    // scriptAbortHandler fires regardless of any other routing; the engine
+    // honours the flag at the next clause boundary. We do NOT return; the
+    // byte still falls through to whatever routing applies, so a Ctrl+C
+    // pressed at an actual input prompt also delivers an empty/abort
+    // character to the prompt handler.
+    if (
+      (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) &&
+      session.scriptAbortHandler &&
+      data.length > 0 &&
+      data.charCodeAt(0) === 3
+    ) {
+      try { session.scriptAbortHandler(); } catch { /* never throw out of socket handler */ }
+    }
+
     if (session.clientDoorActive) {
       // Exception: if a server-side blessed modal has installed a doorInputHandler
       // (e.g., chat-only login modal during hybrid-door startup), route input there.

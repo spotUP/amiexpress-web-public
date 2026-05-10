@@ -5059,8 +5059,28 @@ console.error('[AREXX] native dispatch failed, falling back to TS:', err);
             : context.outputCallback,
       }, scriptArgs);
 
+      // Install a session-scoped Ctrl+C abort hook for the duration of
+      // the script. The existing GETCHAR/Prompt input paths catch Ctrl+C
+      // only while a doorInputHandler is registered; in tight loops
+      // between prompts (KickBox match loop, STNG question loop, any
+      // CPU-bound math), no handler is installed and Ctrl+C bytes were
+      // dropped on the floor. socket-handlers / index.ts now route 0x03
+      // through scriptAbortHandler regardless of input-handler state, so
+      // the interpreter picks up the flag at the next clause boundary.
+      const session = context.session;
+      const prevAbort = session?.scriptAbortHandler;
+      if (session) {
+        session.scriptAbortHandler = () =>
+          maybeAbortInterpreter({ interpreter }, 'CTRLC');
+      }
+
       // Execute script code
-      const result = await interpreter.execute(script.script || '');
+      let result;
+      try {
+        result = await interpreter.execute(script.script || '');
+      } finally {
+        if (session) session.scriptAbortHandler = prevAbort;
+      }
 
       // Log execution
       await db.executeAREXXScript(script.id, {
