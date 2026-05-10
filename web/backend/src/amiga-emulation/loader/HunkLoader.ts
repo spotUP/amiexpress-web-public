@@ -140,13 +140,17 @@ export class HunkLoader {
    * @returns Parsed hunk file structure
    * @throws HunkLoaderError on invalid or unsupported hunks
    */
-  parse(buffer: Buffer): HunkFile {
+  parse(buffer: Buffer, baseAddress?: number): HunkFile {
     this.buffer = buffer;
     this.position = 0;
 
     // Verify magic and read header
     const header = this.readHeader();
-    const segmentAddresses = this.allocateSegmentAddresses(header.segmentSizes, header.memFlags);
+    const segmentAddresses = this.allocateSegmentAddresses(
+      header.segmentSizes,
+      header.memFlags,
+      baseAddress,
+    );
     const segments: HunkSegment[] = [];
     const relocations = new Map<number, Relocation[]>();
     const symbols: HunkSymbol[][] = Array.from(
@@ -722,10 +726,15 @@ console.log(
    */
   private allocateSegmentAddresses(
     segmentSizes: number[],
-    memFlags: number[]
+    memFlags: number[],
+    baseAddress?: number,
   ): { headerAddress: number; dataAddress: number; bptr: number }[] {
     const addresses: { headerAddress: number; dataAddress: number; bptr: number }[] = [];
-    let currentAddress = 0x2000; // Start at 8KB - closer to vamos (which uses ~0x2104)
+    // Default 0x2000 matches vamos's load layout (~0x2104). Callers
+    // that need to load multiple binaries side-by-side (e.g. the
+    // AREXX service preloading rexxc after RexxMast) pass an explicit
+    // baseAddress to avoid overwriting the prior binary.
+    let currentAddress = (baseAddress ?? 0x2000) >>> 0;
 
     for (let i = 0; i < segmentSizes.length; i++) {
       const sizeBytes = segmentSizes[i] * 4;

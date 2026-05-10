@@ -113,6 +113,45 @@ class RexxMastService {
     segments: Array<{ address: number; bptr: number; size: number }>;
   }> = [];
 
+  // Pre-loaded rexxc seg-0 BPTR (recorded by populateTaskSpawnFields).
+  // The CreateProc override compares incoming D3 against this value to
+  // recognise daemon-driven script spawns and route them through the
+  // HLE bridge instead of executing rexxc's 372 bytes (RXC is a CLI
+  // helper, not the interpreter — see thoughts/shared/research/
+  // 2026-05-10_arexx-daemon-dispatch-wedge.md §"Step 4 CRITICAL FINDING").
+  private rexxcSegListBptr: number = 0;
+
+  // HLE bridge state. When the daemon's RXCOMM handler reaches
+  // `dos.library CreateProc(D3=rl_TaskSeg)` at file 0x6E0, the
+  // CreateProc override stashes A2 (the daemon's RexxMsg pointer)
+  // here and returns the phantom rexxc MsgPort + 0x5C so the daemon's
+  // post-CreateProc PutMsg lands in our phantom port. executeRexxScript
+  // then drains the phantom port, runs the TS interpreter
+  // (asynchronously — can't be done inside the sync CreateProc trap),
+  // writes rm_Result1/2 + optional rm_Args[1], and ReplyMsg's back to
+  // rm_ReplyPort.
+  private pendingHleScript:
+    | {
+        msgAddr: number;
+        scriptText: string;
+        args: string[];
+        ctx: any;
+        daemonMsgAddr: number;
+        hleHandled: boolean;
+      }
+    | null = null;
+  // Phantom MsgPort that stands in for the rexxc task's pr_MsgPort.
+  // Layout: a 0x80-byte block where bytes 0..0x5B are a pseudo-Task
+  // (ln_Type = NT_PROCESS so FindTask-style probes don't crash) and
+  // bytes 0x5C..0x80 are the MsgPort struct itself. The daemon does
+  // `lea -0x5c(a0),a0` after CreateProc to convert the returned
+  // process pointer (= phantomRexxcPort) to the task base address,
+  // so phantomRexxcTaskBase = phantomRexxcPort - 0x5C must be valid
+  // memory. addPort() registers the port in messagePorts so the
+  // daemon's PutMsg(phantomRexxcPort, msg) lands in our queue.
+  private phantomRexxcPort: number = 0;
+  private phantomRexxcTaskBase: number = 0;
+
   /**
    * Boot the singleton. Phase 3b-real:
    *   1. Pass detection (Phase 3a — file present, hunk-parseable)
@@ -379,6 +418,16 @@ class RexxMastService {
       this.emulator.writeMemory32(taskAddr + 0x90, stackTop >>> 2);     // pr_StackBase (BPTR)
       this.execLibrary.setStackBounds(stackTop - stackSize, stackSize);
 
+      // Allocate the phantom rexxc MsgPort now that rexxMastTaskAddr
+      // is populated (mp_SigTask must point at the daemon task so
+      // PutMsg's signal contract is well-formed even though no one
+      // currently Wait's on the phantom port).
+      const phantomOk = this.setupPhantomRexxcPort();
+      if (!phantomOk) {
+        this.status.lastError = 'phantom rexxc port allocation failed';
+        return false;
+      }
+
       // #78 Phase 6+ — register the CreateProc trampoline. RexxMast.exe
       // is a two-segment binary: seg 0 (launcher) opens libraries then
       // CreateProc's seg 1 (rexxmaster daemon) as a separate Process.
@@ -404,6 +453,33 @@ class RexxMastService {
           // BPTR the script passes equals seg 0's bptr. Match against
           // either pool; whichever found, jump to its entry.
           const wanted = segListBptr >>> 0;
+
+          // HLE bridge for daemon-driven script dispatch. When the
+          // daemon's RXCOMM handler calls dos.library CreateProc(D3 =
+          // rl_TaskSeg) at file 0x6E0 to spawn the interpreter, route
+          // it through the TS AREXXInterpreter instead of running
+          // rexxc's 372 bytes (which is a CLI helper, not the
+          // interpreter — see research note for full disasm). We
+          // capture A2 (the daemon's RexxMsg pointer per spawn-rexxc
+          // subroutine at file 0x6A8) and return the phantom rexxc
+          // port so the daemon's post-CreateProc PutMsg lands in our
+          // queue. PC stays where the daemon left it — we do NOT
+          // switch into rexxc's bogus code. executeRexxScript drains
+          // the phantom port + runs the TS interpreter asynchronously
+          // once control returns to its driver loop.
+          if (this.rexxcSegListBptr !== 0 && wanted === this.rexxcSegListBptr) {
+            const a2 = this.emulator.getRegister(10) >>> 0; // A2 = RexxMsg
+            if (this.pendingHleScript) {
+              this.pendingHleScript.daemonMsgAddr = a2;
+              this.pendingHleScript.hleHandled = true;
+            }
+            // Return &pr_MsgPort (phantom port). Daemon's
+            // `lea -0x5c(a0),a0` after CreateProc resolves back to
+            // phantomRexxcTaskBase, where ln_Type=NT_PROCESS keeps
+            // any defensive task-block probes from faulting.
+            return this.phantomRexxcPort >>> 0;
+          }
+
           let entryAddr = 0;
           let found = this.rexxMastSegments.find(s => s.bptr === wanted);
           if (found) {
@@ -440,86 +516,7 @@ class RexxMastService {
       // MOIRA memory, then return seg 0's BPTR. The CreateProc
       // trampoline above picks that BPTR up.
       this.dosLibrary.setLoadSegOverride((filename: string): number => {
-        try {
-          // Resolve the Amiga-style path. RexxMast typically passes
-          // bare names like "rexxc" (current dir = system rexx path)
-          // or "REXX:rexxc". For robustness, search a few candidate
-          // locations in order: as-given, System/Rexxc/, System/.
-          const dataDir = config.get('dataDir');
-          const candidates: string[] = [];
-          if (filename.includes(':')) {
-            // Amiga assign (BBS:, REXX:, SYSTEM:, etc.)
-            const parts = filename.split(':');
-            const assign = parts[0].toLowerCase();
-            const rest = parts.slice(1).join('/').replace(/:/g, '/');
-            if (assign === 'rexx' || assign === 'rexxc') {
-              candidates.push(path.join(dataDir, 'System', 'Rexxc', rest || 'rx'));
-            } else if (assign === 'bbs') {
-              candidates.push(path.join(dataDir, rest));
-            } else if (assign === 'system') {
-              candidates.push(path.join(dataDir, 'System', rest));
-            } else {
-              candidates.push(path.join(dataDir, rest));
-            }
-          } else if (path.isAbsolute(filename)) {
-            candidates.push(filename);
-          } else {
-            // Bare name — search rexx-relevant dirs.
-            candidates.push(
-              path.join(dataDir, 'System', 'Rexxc', filename),
-              path.join(dataDir, 'System', filename),
-              path.join(dataDir, filename),
-            );
-          }
-          let resolvedPath = '';
-          for (const cand of candidates) {
-            try {
-              if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-                resolvedPath = cand;
-                break;
-              }
-            } catch { /* try next */ }
-          }
-          if (!resolvedPath) {
-            console.warn(`[AREXX] LoadSeg failed: "${filename}" not found in ${candidates.join(', ')}`);
-            return 0;
-          }
-
-          // Parse the hunk binary.
-          const { HunkLoader } = require('../../amiga-emulation/loader/HunkLoader');
-          const hunkLoader = new HunkLoader();
-          const bytes = fs.readFileSync(resolvedPath);
-          const hunks = hunkLoader.parse(bytes);
-          if (!hunks?.segments?.length) {
-            console.warn(`[AREXX] LoadSeg failed: ${resolvedPath} parsed to 0 segments`);
-            return 0;
-          }
-          // Load into emulator memory + apply relocations.
-          hunkLoader.load(this.emulator, hunks, path.basename(filename));
-          const segs = (hunks.segments as Array<{ address: number; bptr: number; size: number }>).map(s => ({
-            address: s.address >>> 0,
-            bptr: s.bptr >>> 0,
-            size: s.size >>> 0,
-          }));
-          const seg0 = segs[0];
-          this.dynamicSegLists.push({
-            filename,
-            bptr: seg0.bptr,
-            entryAddr: seg0.address,
-            segments: segs,
-          });
-          // Sync any new ILLEGAL traps (segments may overlap with our
-          // LVO trap addresses; install would have been a no-op if so,
-          // but resync MOIRA's batch set so any new traps register).
-          if (typeof this.libraryTraps?.syncTrapAddressesToMoira === 'function') {
-            this.libraryTraps.syncTrapAddressesToMoira();
-          }
-          console.log(`[AREXX] LoadSeg("${filename}") → ${segs.length} seg(s), bptr=0x${seg0.bptr.toString(16)} entry=0x${seg0.address.toString(16)}`);
-          return seg0.bptr;
-        } catch (err) {
-          console.error(`[AREXX] LoadSeg("${filename}") faulted:`, err);
-          return 0;
-        }
+        return this.loadHunkBinary(filename);
       });
 
       // #78 Phase 6+ — RexxMast daemon calls OpenDevice('timer.device')
@@ -573,6 +570,32 @@ class RexxMastService {
           // BBS stays up.
           console.warn('[AREXX] rexxsyslib LibInit did not complete cleanly; bridged path still active');
         }
+
+        // Zero the RxsLib counter fields LibInit doesn't touch. These
+        // are 16-bit counts paired with the lists at +0xA8/+0xB8/+0xC8/
+        // +0xD8/+0xE8; the daemon's dispatch arm reads rl_NumMsg as a
+        // dbra count when draining its deferred-reply list, so leaving
+        // them at allocMem-handout garbage (one observed pattern:
+        // rl_NumMsg=0x5268) produces 21K spurious RemHead(rl_MsgList)
+        // calls before the daemon reaches GetMsg on the REXX port.
+        // See thoughts/shared/research/2026-05-10_arexx-daemon-dispatch-wedge.md.
+        // rl_TraceFH (+0xA4) is also zeroed so a later TRACE-on toggle
+        // doesn't deref a garbage FileHandle.
+        if (this.emulator) {
+          this.emulator.writeMemory32((libBase + 0xA4) >>> 0, 0); // rl_TraceFH
+          this.emulator.writeMemory16((libBase + 0xB6) >>> 0, 0); // rl_NumTask
+          this.emulator.writeMemory16((libBase + 0xC6) >>> 0, 0); // rl_NumLib
+          this.emulator.writeMemory16((libBase + 0xD6) >>> 0, 0); // rl_NumClip
+          this.emulator.writeMemory16((libBase + 0xE6) >>> 0, 0); // rl_NumMsg
+          this.emulator.writeMemory16((libBase + 0xF6) >>> 0, 0); // rl_NumPgm
+        }
+
+        // Pre-load rexxc and populate the task-spawn fields. The
+        // daemon's RXCOMM handler does dos.library CreateProc using
+        // rl_TaskSeg as the segList; with rl_TaskSeg = 0 (LibInit
+        // doesn't set it) CreateProc returns NULL → daemon error
+        // path. See research note for the full handler disassembly.
+        this.populateTaskSpawnFields(libBase);
       } catch (err: any) {
         console.warn('[AREXX] rexxsyslib LibInit faulted:', err?.message || err);
       }
@@ -631,6 +654,10 @@ class RexxMastService {
     this.rexxMastTaskAddr = 0;
     this.rexxMastSegments = [];
     this.dynamicSegLists = [];
+    this.rexxcSegListBptr = 0;
+    this.phantomRexxcPort = 0;
+    this.phantomRexxcTaskBase = 0;
+    this.pendingHleScript = null;
   }
 
   /**
@@ -707,6 +734,90 @@ class RexxMastService {
   }
 
   /**
+   * Allocate the phantom rexxc MsgPort. This port stands in for the
+   * interpreter task's pr_MsgPort. Real Amiga ARexx has the daemon
+   * `CreateProc("rexx", pri, rl_TaskSeg, stack)` which returns the
+   * spawned Process's pr_MsgPort address; the daemon then PutMsg's
+   * the script's RexxMsg into that port so the new interpreter task
+   * picks it up via WaitPort/GetMsg.
+   *
+   * In our HLE bridge, the CreateProc override returns this phantom
+   * port's address as the "process pointer". The daemon's subsequent
+   * PutMsg(D0, A2) lands the msg in this port's mp_MsgList. The
+   * daemon's later `lea -0x5c(a0),a0` (converting process ptr to
+   * task base for AddTail-style task-list bookkeeping) needs valid
+   * memory at phantomPort - 0x5C, so we allocate one block with
+   * the task fields padded in front of the port struct:
+   *
+   *   block + 0x00 .. 0x5B   : pseudo-Task header (ln_Type=NT_PROCESS,
+   *                            ln_Name string ptr — rest zero-init)
+   *   block + 0x5C .. 0x7D   : MsgPort struct (34 bytes)
+   *
+   * Returns true on success.
+   */
+  private setupPhantomRexxcPort(): boolean {
+    if (!this.execLibrary || !this.emulator) return false;
+    const MEMF_PUBLIC_CLEAR = 0x10001;
+
+    const nameStr = 'RexxcHLE';
+    const nameBytes = Buffer.from(nameStr + '\0', 'utf-8');
+    const nameAddr = this.execLibrary.allocMem(nameBytes.length, MEMF_PUBLIC_CLEAR);
+    if (nameAddr === 0) return false;
+    for (let i = 0; i < nameBytes.length; i++) {
+      this.emulator.writeMemory(nameAddr + i, nameBytes[i]);
+    }
+
+    // Single block: 0x80 bytes covers pseudo-Task (0x5C) + MsgPort (34)
+    // with a few bytes of slack for alignment.
+    const blockSize = 0x80;
+    const blockAddr = this.execLibrary.allocMem(blockSize, MEMF_PUBLIC_CLEAR);
+    if (blockAddr === 0) {
+      try { this.execLibrary.freeMem(nameAddr, nameBytes.length); } catch { /* best-effort */ }
+      return false;
+    }
+    const portAddr = (blockAddr + 0x5c) >>> 0;
+
+    // Pseudo-Task fields. Daemon's task-block bookkeeping at file
+    // 0x6CC..0x6D4 walks a MinNode embedded in its own AllocMem'd
+    // TaskBlock (rm_Result1 := TaskBlock), not this phantom, so we
+    // only need NT_PROCESS + ln_Name to satisfy any defensive probe.
+    this.emulator.writeMemory(blockAddr + 0x08, 13);             // ln_Type = NT_PROCESS
+    this.emulator.writeMemory32(blockAddr + 0x0a, nameAddr);      // ln_Name
+
+    // MsgPort fields. ln_Type=NT_MSGPORT(4), PA_SIGNAL flag so PutMsg
+    // honours the signal contract, fresh sigBit (15 — outside the
+    // exec default of 13 used by the daemon's own port).
+    this.emulator.writeMemory(portAddr + 0x08, 4);                // ln_Type = NT_MSGPORT
+    this.emulator.writeMemory32(portAddr + 0x0a, nameAddr);        // ln_Name (shared with task name)
+    this.emulator.writeMemory(portAddr + 0x0e, 2);                // mp_Flags = PA_SIGNAL
+    this.emulator.writeMemory(portAddr + 0x0f, 15);               // mp_SigBit
+    this.emulator.writeMemory32(portAddr + 0x10, this.rexxMastTaskAddr); // mp_SigTask
+    // Empty MinList: lh_Head -> &lh_Tail (sentinel at +0x18); lh_TailPred -> &lh_Head.
+    this.emulator.writeMemory32(portAddr + 0x14, portAddr + 0x18); // lh_Head
+    this.emulator.writeMemory32(portAddr + 0x18, 0);                // lh_Tail
+    this.emulator.writeMemory32(portAddr + 0x1c, portAddr + 0x14); // lh_TailPred
+    this.emulator.writeMemory(portAddr + 0x20, 5);                // lh_Type = NT_MESSAGE
+    this.emulator.writeMemory(portAddr + 0x21, 0);
+
+    // Register with addPort so execLibrary.putMsg(portAddr, msg) finds
+    // the port and runs proper FIFO mp_MsgList linking. addPort reads
+    // ln_Name from the port struct + adds to publicPorts AND
+    // messagePorts; both are fine — phantom port name is unique so it
+    // doesn't collide with real names.
+    if (typeof this.execLibrary.addPort === 'function') {
+      this.execLibrary.addPort(portAddr);
+    }
+
+    this.phantomRexxcPort = portAddr;
+    this.phantomRexxcTaskBase = blockAddr;
+    console.log(
+      `[AREXX] phantom rexxc port: block=0x${blockAddr.toString(16)} ` +
+      `port=0x${portAddr.toString(16)} sigTask=0x${this.rexxMastTaskAddr.toString(16)}`,
+    );
+    return true;
+  }
+
+  /**
    * #78 Phase 7+ — invoke rexxsyslib's real lib_Init function in MOIRA
    * so the library's private state (lists, allocations, version
    * numbers) is set up by Commodore's own init code rather than left
@@ -730,6 +841,153 @@ class RexxMastService {
    * cycle budget; false otherwise. Either way, control flow returns
    * cleanly so the caller can fall back to the bridged path.
    */
+  /**
+   * Load a hunk binary into emulator memory and return seg-0 BPTR.
+   * Shared by the LoadSeg override (called when the daemon does its
+   * own LoadSeg) and the post-LibInit rexxc preload (which writes the
+   * BPTR straight into rl_TaskSeg so CreateProc can spawn rexxc
+   * without ever calling LoadSeg). Returns 0 on any failure.
+   */
+  private loadHunkBinary(filename: string, baseAddressHint?: number): number {
+    if (!this.emulator) return 0;
+    try {
+      const dataDir = config.get('dataDir');
+      const candidates: string[] = [];
+      if (filename.includes(':')) {
+        const parts = filename.split(':');
+        const assign = parts[0].toLowerCase();
+        const rest = parts.slice(1).join('/').replace(/:/g, '/');
+        if (assign === 'rexx' || assign === 'rexxc') {
+          candidates.push(path.join(dataDir, 'System', 'Rexxc', rest || 'rx'));
+        } else if (assign === 'bbs') {
+          candidates.push(path.join(dataDir, rest));
+        } else if (assign === 'system') {
+          candidates.push(path.join(dataDir, 'System', rest));
+        } else {
+          candidates.push(path.join(dataDir, rest));
+        }
+      } else if (path.isAbsolute(filename)) {
+        candidates.push(filename);
+      } else {
+        candidates.push(
+          path.join(dataDir, 'System', 'Rexxc', filename),
+          path.join(dataDir, 'System', filename),
+          path.join(dataDir, filename),
+        );
+      }
+      let resolvedPath = '';
+      for (const cand of candidates) {
+        try {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            resolvedPath = cand;
+            break;
+          }
+        } catch { /* try next */ }
+      }
+      if (!resolvedPath) {
+        console.warn(`[AREXX] LoadSeg failed: "${filename}" not found in ${candidates.join(', ')}`);
+        return 0;
+      }
+
+      const { HunkLoader } = require('../../amiga-emulation/loader/HunkLoader');
+      const hunkLoader = new HunkLoader();
+      const bytes = fs.readFileSync(resolvedPath);
+      const hunks = hunkLoader.parse(bytes, baseAddressHint);
+      if (!hunks?.segments?.length) {
+        console.warn(`[AREXX] LoadSeg failed: ${resolvedPath} parsed to 0 segments`);
+        return 0;
+      }
+      hunkLoader.load(this.emulator, hunks, path.basename(filename));
+      const segs = (hunks.segments as Array<{ address: number; bptr: number; size: number }>).map(s => ({
+        address: s.address >>> 0,
+        bptr: s.bptr >>> 0,
+        size: s.size >>> 0,
+      }));
+      const seg0 = segs[0];
+      this.dynamicSegLists.push({
+        filename,
+        bptr: seg0.bptr,
+        entryAddr: seg0.address,
+        segments: segs,
+      });
+      if (typeof this.libraryTraps?.syncTrapAddressesToMoira === 'function') {
+        this.libraryTraps.syncTrapAddressesToMoira();
+      }
+      console.log(`[AREXX] LoadSeg("${filename}") → ${segs.length} seg(s), bptr=0x${seg0.bptr.toString(16)} entry=0x${seg0.address.toString(16)}`);
+      return seg0.bptr;
+    } catch (err) {
+      console.error(`[AREXX] LoadSeg("${filename}") faulted:`, err);
+      return 0;
+    }
+  }
+
+  /**
+   * Pre-populate the RxsLib task-spawn fields so the daemon can
+   * CreateProc() rexxc without ever calling LoadSeg. RKRM RxsLib
+   * fields used by the daemon's spawn-rexxc subroutine (file 0x6A4):
+   *
+   *   rl_TaskName  (libBase + 0x64)  APTR  — Task name string
+   *   rl_TaskPri   (libBase + 0x68)  LONG  — Task priority
+   *   rl_TaskSeg   (libBase + 0x6C)  BPTR  — segList of rexxc
+   *   rl_StackSize (libBase + 0x70)  LONG  — Stack size in bytes
+   *
+   * Real ARexx populates these once at boot via LoadSeg("REXX:rexxc")
+   * and reuses the segList for every script spawn. Without this,
+   * dos.library CreateProc gets segList=0 and returns NULL, the
+   * daemon hits the error path (file 0x73A), and rm_Result1 comes
+   * back with a non-zero error code.
+   */
+  private populateTaskSpawnFields(libBase: number): void {
+    if (!this.emulator || !this.execLibrary) return;
+
+    // 1. LoadSeg rexxc. Try RXC first, then RX. AmiExpress sysops
+    // typically have both; either one works as the interpreter image.
+    // Place rexxc well above RexxMast's load region (RexxMast occupies
+    // ~0x2008..0x2970) and rexxsyslib's static data (libBase=0x200000).
+    // 0x4000 leaves a 4KB gap past RexxMast for safety; the BPTR
+    // (address >> 2) stays small enough to fit in a 32-bit word.
+    const REXXC_LOAD_BASE = 0x4000;
+    let segListBptr = this.loadHunkBinary('REXX:RXC', REXXC_LOAD_BASE);
+    if (segListBptr === 0) segListBptr = this.loadHunkBinary('REXX:RX', REXXC_LOAD_BASE);
+    if (segListBptr === 0) {
+      console.warn('[AREXX] populateTaskSpawnFields: no rexxc binary loaded; daemon-driven dispatch will fail');
+      return;
+    }
+
+    // 2. Allocate + populate the task-name string. "rexx" is what
+    // real ARexx uses (per RKRM Cooper §6.3); the daemon doesn't
+    // require an exact match but writes it into the spawned task's
+    // tc_Node.ln_Name for FindTask lookups.
+    const MEMF_PUBLIC_CLEAR = 0x10001;
+    const taskName = 'rexx';
+    const nameAddr = this.execLibrary.allocMem(taskName.length + 1, MEMF_PUBLIC_CLEAR);
+    if (nameAddr) {
+      for (let i = 0; i < taskName.length; i++) {
+        this.emulator.writeMemory(nameAddr + i, taskName.charCodeAt(i) & 0xff);
+      }
+      this.emulator.writeMemory(nameAddr + taskName.length, 0);
+    }
+
+    // 3. Stamp the four fields.
+    this.emulator.writeMemory32((libBase + 0x64) >>> 0, nameAddr >>> 0);    // rl_TaskName
+    this.emulator.writeMemory32((libBase + 0x68) >>> 0, 0);                  // rl_TaskPri  = 0
+    this.emulator.writeMemory32((libBase + 0x6C) >>> 0, segListBptr >>> 0);  // rl_TaskSeg
+    this.emulator.writeMemory32((libBase + 0x70) >>> 0, 8192);               // rl_StackSize = 8KB
+
+    // Record the BPTR so the CreateProc override can pick up the
+    // daemon's rexxc spawn and route through the HLE bridge instead
+    // of executing rexxc's 372 bytes (which is a CLI helper, not the
+    // interpreter — see thoughts/shared/research/
+    // 2026-05-10_arexx-daemon-dispatch-wedge.md §"Step 4 CRITICAL").
+    this.rexxcSegListBptr = segListBptr >>> 0;
+
+    console.log(
+      `[AREXX] task-spawn fields populated: ` +
+      `name=0x${nameAddr.toString(16)}("${taskName}") pri=0 ` +
+      `seg=0x${segListBptr.toString(16)} stack=8192`,
+    );
+  }
+
   private runLibInit(libBase: number): boolean {
     if (!this.emulator || !this.libraryTraps || !this.execLibrary) return false;
 
@@ -1137,30 +1395,34 @@ class RexxMastService {
       this.emulator.writeMemory32(rexxPortAddr + 0x1c, msgAddr);
     }
 
-    // The AmiExpress RexxMast 36.5 daemon's dispatch arm uses a
-    // libBase-relative static pointer (libBase + 0xb8) as a "msg" —
-    // some leftover relocation we don't yet understand without
-    // assembly-level RE of the 33KB rexxsyslib hunk. The boot path
-    // (RexxMast launcher → daemon spawn → AddPort('AREXX') →
-    // Wait(0x6000)) all works correctly via the real binaries; what
-    // doesn't work is the daemon's post-Wait dispatch loop, which
-    // enters a RemHead/ReplyMsg cycle on uninitialised rexxsyslib
-    // data instead of executing our script.
+    // Daemon-driven dispatch path.
     //
-    // What we do instead — keep the real-ABI handshake (real
-    // CreateRexxMsg, real PutMsg into the daemon's mp_MsgList, real
-    // signal fired) so any door observing the daemon sees a faithful
-    // dispatch trail, then execute the actual script bytes via the
-    // TS interpreter and write the result straight back into the
-    // message + reply manually. The script's BBSWRITE/OUTSTR host
-    // commands still flow through serviceInboundMessages on our
-    // host port, so AmiExpress AREXX scripts dispatch BBS-side
-    // commands identically to a real Amiga.
+    // The msg now sits on the AREXX port's mp_MsgList. Driving the
+    // emulator forward runs the daemon's WaitPort → GetMsg → action-
+    // dispatch arm → RXCOMM handler → spawn-rexxc subroutine
+    // (file 0x6A4). At file 0x6E0 the subroutine calls
+    // `dos.library CreateProc(D3 = rl_TaskSeg)`. Our CreateProc
+    // override recognises rexxcSegListBptr, stashes A2 (the RexxMsg)
+    // in pendingHleScript, and returns phantomRexxcPort — so the
+    // daemon's post-CreateProc PutMsg at file 0x732 lands the same
+    // msg in our phantom port's mp_MsgList.
     //
-    // This is the same boundary OS-level emulators draw all the
-    // time: real binaries handle data structures + ABI; specific
-    // unimplemented kernel-side dispatch is HLE-bridged to native
-    // code. We keep the door-visible side authentic.
+    // From there we (acting as the spawned interpreter task)
+    // GetMsg from the phantom port, run the TS AREXXInterpreter
+    // against the script source extracted from rm_Args[0], write
+    // rm_Result1/rm_Result2 plus the optional rm_Args[1] result
+    // string, and ReplyMsg the msg back to rm_ReplyPort (our host
+    // port). The daemon's RXCOMM handler RTSes back to its outer
+    // dispatch loop and parks on WaitPort waiting for the next
+    // RexxMsg — i.e. authentic Amiga ARexx round-trip.
+    //
+    // Bridged fallback: if the daemon-driven path is unavailable
+    // (no rexxc binary, or rl_TaskSeg wasn't populated, or the
+    // daemon doesn't reach CreateProc within the cycle budget), we
+    // fall back to running the TS interpreter inline and writing
+    // results manually — the same approach this service used before
+    // the HLE bridge landed. Every shipped door verifies via either
+    // path; the bridge is a parity goal, not a correctness one.
     const output: string[] = ctx.output || [];
     const dispatchCtx = { ...ctx, output };
     // Drain any pending host-port messages so the script starts
@@ -1168,10 +1430,99 @@ class RexxMastService {
     try {
       await serviceInboundMessages(this.emulator, this.rexxSysLib, replyPort, dispatchCtx);
     } catch { /* drain is best-effort */ }
-    void MAX_CYCLES; void SLICE;
 
-    // Run the script via the TS interpreter.
     const { AREXXInterpreter } = require('../arexx.service');
+    const daemonDispatchAvailable =
+      this.rexxcSegListBptr !== 0 && this.phantomRexxcPort !== 0;
+
+    // Register the pending HLE entry so the CreateProc override
+    // recognises this script and stashes A2. Reset hleHandled per run.
+    this.pendingHleScript = {
+      msgAddr,
+      scriptText,
+      args,
+      ctx: dispatchCtx,
+      daemonMsgAddr: 0,
+      hleHandled: false,
+    };
+
+    const phantomHasMsg = (): boolean => {
+      if (!this.phantomRexxcPort) return false;
+      // Most reliable: ExecLibrary tracks port queue in its own map.
+      const port = (this.execLibrary as any).messagePorts?.get?.(this.phantomRexxcPort);
+      if (port && Array.isArray(port.messages) && port.messages.length > 0) return true;
+      // Fallback: walk mp_MsgList head — non-sentinel means a msg is queued.
+      const head = this.emulator.readMemory32(this.phantomRexxcPort + 0x14) >>> 0;
+      const tailSentinel = (this.phantomRexxcPort + 0x18) >>> 0;
+      return head !== 0 && head !== tailSentinel;
+    };
+
+    let daemonDelivered = false;
+    if (daemonDispatchAvailable) {
+      // Drive the daemon until our msg lands in the phantom port.
+      // Budget chosen well above the observed dispatch cost
+      // (post-fix trace runs in ~250 cycles; we add slack for any
+      // future per-LVO branches the daemon may take).
+      const { CPURegister: CPU } = require('../../amiga-emulation/cpu/MoiraEmulator');
+      let driven = 0;
+      while (driven < MAX_CYCLES && !daemonDelivered) {
+        try {
+          for (let i = 0; i < SLICE && driven < MAX_CYCLES; i++) {
+            const pc = this.emulator.getRegister(CPU.PC) >>> 0;
+            if (this.libraryTraps.isTrapAddress(pc)) {
+              if (!this.libraryTraps.handleTrap(pc)) {
+                this.emulator.executeInstruction();
+              }
+            } else {
+              this.emulator.executeInstruction();
+            }
+            driven++;
+            if (this.pendingHleScript.hleHandled && phantomHasMsg()) {
+              daemonDelivered = true;
+              break;
+            }
+          }
+        } catch (err: any) {
+          console.warn(
+            `[AREXX] daemon dispatch faulted at ~${driven} cycles: ${err?.message || err}; falling back to bridged path`,
+          );
+          break;
+        }
+        // Allow the daemon to push host commands during dispatch
+        // (unlikely in pure RXCOMM, but cheap to drain).
+        try {
+          await serviceInboundMessages(this.emulator, this.rexxSysLib, replyPort, dispatchCtx);
+        } catch { /* drain is best-effort */ }
+      }
+      if (!daemonDelivered) {
+        console.warn(
+          `[AREXX] daemon did not deliver to phantom port within ${MAX_CYCLES} cycles ` +
+          `(hleHandled=${this.pendingHleScript.hleHandled}); falling back to bridged path`,
+        );
+      }
+    }
+
+    let dispatchedMsg = 0;
+    if (daemonDelivered) {
+      // Pull the daemon-dispatched msg off the phantom port. This
+      // should be the same msgAddr we PutMsg'd into the AREXX port —
+      // the daemon ferries it through unchanged.
+      try {
+        dispatchedMsg = (this.execLibrary.getMsg(this.phantomRexxcPort) >>> 0) || 0;
+      } catch (err: any) {
+        console.warn(`[AREXX] phantom GetMsg faulted: ${err?.message || err}`);
+      }
+      if (dispatchedMsg && dispatchedMsg !== msgAddr) {
+        console.warn(
+          `[AREXX] phantom port delivered unexpected msg 0x${dispatchedMsg.toString(16)} ` +
+          `(expected 0x${msgAddr.toString(16)}); treating as our msg anyway`,
+        );
+      }
+    }
+
+    // Run the script via the TS interpreter regardless of which
+    // path delivered the msg — daemon-driven dispatch wires the ABI
+    // handshake, but the interpreter itself is HLE.
     const interpreter = new AREXXInterpreter(dispatchCtx, args);
     const tsResult = await interpreter.execute(scriptText);
 
@@ -1180,12 +1531,12 @@ class RexxMastService {
     try {
       await serviceInboundMessages(this.emulator, this.rexxSysLib, replyPort, dispatchCtx);
     } catch (err: any) {
-console.warn('[AREXX] servicer fault during executeRexxScript:', err?.message || err);
+      console.warn('[AREXX] servicer fault during executeRexxScript:', err?.message || err);
     }
 
-    // Write the result back into the RexxMsg the way real RexxMast
+    // Write the result back into the RexxMsg the way real rexxc
     // does on script completion: rm_Action=0, rm_Result1=exit code,
-    // rm_Args[1]=optional result string (allocated as an argstring).
+    // rm_Args[1]=optional result string (argstring).
     const result1 = tsResult.success ? 0 : 1;
     this.emulator.writeMemory32(msgAddr + 28, 0);          // rm_Action = 0 (done)
     this.emulator.writeMemory32(msgAddr + 32, result1 >>> 0); // rm_Result1
@@ -1218,6 +1569,44 @@ console.warn('[AREXX] servicer fault during executeRexxScript:', err?.message ||
       this.emulator.writeMemory32(tailPred + 0, msgAddr);
       this.emulator.writeMemory32(replyPort + 0x1c, msgAddr);
     }
+
+    // Daemon-faithful path: drive a short post-reply burst so the
+    // daemon's RXCOMM handler RTSes back to its outer WaitPort, then
+    // remove our reply from the host port (we already have the
+    // result in memory — leaving the msg on the port would leak it
+    // into the next executeRexxScript run's drain).
+    if (daemonDelivered) {
+      const { CPURegister: CPU } = require('../../amiga-emulation/cpu/MoiraEmulator');
+      const POST_BUDGET = 50_000;
+      let post = 0;
+      try {
+        while (post < POST_BUDGET) {
+          for (let i = 0; i < SLICE && post < POST_BUDGET; i++) {
+            const pc = this.emulator.getRegister(CPU.PC) >>> 0;
+            if (this.libraryTraps.isTrapAddress(pc)) {
+              if (!this.libraryTraps.handleTrap(pc)) {
+                this.emulator.executeInstruction();
+              }
+            } else {
+              this.emulator.executeInstruction();
+            }
+            post++;
+          }
+          try {
+            await serviceInboundMessages(this.emulator, this.rexxSysLib, replyPort, dispatchCtx);
+          } catch { /* drain is best-effort */ }
+        }
+      } catch (err: any) {
+        // Post-burst is best-effort cleanup; failures here don't
+        // affect the script result.
+        console.warn(`[AREXX] post-reply burst faulted: ${err?.message || err}`);
+      }
+      // Pop our reply off the host port so it doesn't accumulate.
+      try { this.execLibrary.getMsg(replyPort); } catch { /* best-effort */ }
+    }
+
+    // Clear pending HLE state so subsequent invocations start clean.
+    this.pendingHleScript = null;
 
     // Free the message + its argstrings. resultStr (if any) lives
     // in rm_Args[1] until DeleteRexxMsg cleans up the argstring.
@@ -1286,6 +1675,10 @@ console.warn('[AREXX] servicer fault during executeRexxScript:', err?.message ||
     this.rexxMastTaskAddr = 0;
     this.rexxMastSegments = [];
     this.dynamicSegLists = [];
+    this.rexxcSegListBptr = 0;
+    this.phantomRexxcPort = 0;
+    this.phantomRexxcTaskBase = 0;
+    this.pendingHleScript = null;
   }
 
   /** Test-only accessor for the loaded emulator (null until started). */
@@ -1293,6 +1686,12 @@ console.warn('[AREXX] servicer fault during executeRexxScript:', err?.message ||
 
   /** Test-only accessor for the synthesised RexxMast Process address. */
   _getRexxMastTaskAddr(): number { return this.rexxMastTaskAddr; }
+
+  /** Test-only accessor: phantom rexxc MsgPort (0 until populateTaskSpawnFields). */
+  _getPhantomRexxcPort(): number { return this.phantomRexxcPort; }
+
+  /** Test-only accessor: rexxc seg-0 BPTR recorded for the HLE bridge. */
+  _getRexxcSegListBptr(): number { return this.rexxcSegListBptr; }
 }
 
 export const rexxMastService = new RexxMastService();
