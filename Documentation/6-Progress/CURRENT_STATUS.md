@@ -1,11 +1,12 @@
 # AmiExpress-Web Current Status
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-11
 
 ## Headline (May 2026)
 
 The TypeScript port has reached the major milestone of **express.e behavioral
-parity** as audited deviation-by-deviation. Production hardening and the AREXX
-native bring-up are still in flight.
+parity** as audited deviation-by-deviation. AREXX (both TS and native daemon-
+driven dispatch) is complete. Only CSP-enforcing rollout and a couple of
+deployment-gated items remain in production hardening.
 
 | Area | State |
 |------|-------|
@@ -14,9 +15,9 @@ native bring-up are still in flight.
 | User file binary compat (data/keys/misc) | DONE |
 | Door support (8 types incl. 68K via MOIRA) | DONE for tested doors; door bug backlog tracked separately |
 | AREXX TS interpreter (#77) | DONE |
-| AREXX native bring-up (#78) | Phases 1-5-final landed; Phase 6 (RexxMast main-loop bring-up) in progress |
+| AREXX native bring-up (#78) | DONE end-to-end (HLE bridge landed 2026-05-11) |
 | Reserved-node feature (A-3) | Full express.e parity + admin UI panel (May 2026) |
-| Production hardening | CSRF / rate limit / security headers still TODO; SQL injection + CORS done |
+| Production hardening | helmet + CSP report-only shipped; CSRF / rate-limit intentionally not pursued (see notes) |
 
 **Honest assessment** matches the project CLAUDE.md framing: ~60–70% of the
 distance to a production deployment, ~2–3 months of polish + testing remain.
@@ -48,12 +49,29 @@ read alongside the May audit and door-backlog state.
 - Admin UI: NodeControlPage Reserve / Clear control with inline editor for
   both online and offline node cards.
 
-**AREXX native bring-up (#78):**
-- Phases 1–5-final landed: emulator boot, MsgPort allocation, host-port
-  command parser/dispatch, `executeRexxScript`, RexxMast hunk loading.
-- Phase 6 in progress: building Amiga env (dos.library LVO traps, Process /
-  Task synthesis) so RexxMast reaches `AddPort('REXX')`. AREXX_TRACE=1 env
-  added for boot diagnostics.
+**AREXX native bring-up (#78) — DONE end-to-end (May 2026):**
+- Phases 1–6: emulator boot, MsgPort allocation, host-port command parser/
+  dispatch, `executeRexxScript`, RexxMast hunk loading, Amiga env (dos.library
+  LVO traps, Process/Task synthesis), `AddPort('AREXX')` observation.
+- Daemon-driven dispatch (2026-05-11 HLE bridge): real RexxMast/rexxsyslib
+  daemon now dispatches scripts end-to-end. Three composing fixes —
+  counter zeroing post-LibInit (rl_NumMsg + 5 siblings), pre-LoadSeg of
+  rexxc with task-spawn field stamping (`rl_TaskName/Pri/Seg/StackSize`),
+  and a phantom rexxc MsgPort + CreateProc HLE override that captures
+  the daemon's RexxMsg via A2 and runs the TS interpreter from
+  executeRexxScript's driver loop. Verified: `CreateProc(seg=0x1000)
+  A2=msg → phantomPort`, `RETURN 42` round-trips in 974ms with
+  `rm_Result1=0`. Bridged-interpretation fallback preserved when
+  binaries are missing.
+- Ctrl+C abort (2026-05-11): session-scoped `scriptAbortHandler`
+  routes 0x03 through `executeScript` so tight CPU loops between
+  prompts (KickBox match loop, STNG question loop) abort at the next
+  clause boundary.
+- 114 rexx/arexx tests across 10 suites green in 2.77s; new
+  `tests/services/native-arexx-daemon.test.ts` gates on real binaries.
+- Diagnostics under `dev/scripts/`: `arexx-libinit-probe.ts`,
+  `arexx-daemon-trace.ts`, `arexx-hle-probe.ts` — kept as long-lived
+  debugging tools.
 
 **Door fixes (April-May 2026, see project_door_bug_backlog memory):**
 - AquaScan FR exits WARN (AEDoorPort startup-message routing)
@@ -83,20 +101,23 @@ read alongside the May audit and door-backlog state.
 
 ## Currently Open
 
-- **#78 Phase 6** — RexxMast main-loop bring-up (active, parallel session).
 - **doorman "Cannot read directory"** — needs user repro to investigate.
 - **MgzListMan** — flagged as "probably not actually broken" by user;
   parked pending confirmation.
 - **A-3 connect-bump pre-login UX** — currently emits 420 + disconnect via
   setTimeout(500). Could be reviewed for a tighter state-machine handoff.
-- **Production hardening** — partial:
-  - **Security headers (helmet)**: ✓ shipped May 2026, mounted first in
-    `src/server/app.ts`. CSP and Cross-Origin-Embedder-Policy intentionally
-    deferred (xterm.js / socket.io / inline-styled React audit needed).
-    Pinned by `tests/server/security-headers.test.ts`.
-  - **CSRF protection**: still TODO.
-  - **Rate limiting**: still TODO.
-  - **Content-Security-Policy**: still TODO (separate audit pass).
+- **Production hardening**:
+  - **helmet defaults**: ✓ shipped May 2026, mounted first in
+    `src/server/app.ts`. Pinned by `tests/server/security-headers.test.ts`.
+  - **CSP**: ✓ shipped 2026-05-05 in `reportOnly: true` mode. Reporter at
+    `/api/csp-report` writes to `logs/csp-violations.log`. **Next step**:
+    deploy, tail violations for a few real sessions, then flip
+    `reportOnly: false` in `web/backend/src/server/app.ts` if log stays
+    empty (deployment-gated, not codeable).
+  - **CSRF protection / rate limiting**: not pursued. Rate limiters lock
+    out legitimate BBS users (long sessions, telnet/SSH retries, doors);
+    CSRF is unnecessary with the JWT-in-Authorization-header auth flow.
+    See memory `feedback_no_rate_limiting.md`.
 
 ## 1. Documentation & References
 - The reshuffle now leaves exactly the reader-facing summaries in `Documentation/1-6` (User, Sysop, Developer, Door, Reference, Progress) while all other historic `.md` files live inside each directory's `archive/` subfolder.
