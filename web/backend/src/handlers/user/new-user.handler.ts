@@ -22,6 +22,7 @@ import { ConfigService } from '../../services/config.service';
 import { userFileManager } from '../../services/UserFileManager';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { emitUserLogin } from '../../services/bbs-event-emitter';
+import { beginLogoff } from '../../server/logoff';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
@@ -343,8 +344,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
   if (name === '') {
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount > 5) {
-      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      // express.e:30148-30154 — STATE_LOGGING_OFF; RETURN.
+      beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
       return;
     }
     socket.emit('ansi-output', '\r\n');
@@ -358,8 +359,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     // express.e:30159 JUMP floopc - counts toward the retry limit
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount >= 5) {
-      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      // express.e:30148-30154 — STATE_LOGGING_OFF; RETURN.
+      beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
       return;
     }
     promptForName(socket, session);
@@ -373,8 +374,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     // express.e:30164 JUMP floopc - counts toward retry limit
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount >= 5) {
-      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      // express.e:30148-30154 — STATE_LOGGING_OFF; RETURN.
+      beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
       return;
     }
     promptForName(socket, session);
@@ -387,8 +388,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     // express.e:30174 JUMP floopc - counts toward retry limit
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount >= 5) {
-      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      // express.e:30148-30154 — STATE_LOGGING_OFF; RETURN.
+      beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
       return;
     }
     promptForName(socket, session);
@@ -405,8 +406,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     // express.e:30180 JUMP floopc - counts toward retry limit
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount >= 5) {
-      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      // express.e:30148-30154 — STATE_LOGGING_OFF; RETURN.
+      beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
       return;
     }
     promptForName(socket, session);

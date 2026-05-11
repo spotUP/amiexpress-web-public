@@ -37,6 +37,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
 import { emitUserLogin } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
+import { beginLogoff } from './logoff';
 
 /**
  * Check password strength against MIN_PASSWORD_LENGTH and MIN_PASSWORD_STRENGTH tooltypes.
@@ -303,9 +304,8 @@ console.log('Too many username errors, disconnecting');
               { reason: 'empty username', retries: session.usernameRetryCount, max: USERNAME_MAX },
               DebugSeverity.CRITICAL
             );
-            // express.e:29634: plain text
-            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            // express.e:29634: plain text — STATE_LOGGING_OFF; RETURN.
+            beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
 
@@ -391,9 +391,8 @@ console.log('Too many login errors, disconnecting');
               { reason: 'empty password', username: safeUsername, retries: session.loginRetryCount, maxFails },
               DebugSeverity.CRITICAL
             );
-            // express.e:29634: plain text
-            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            // express.e:29634: plain text — STATE_LOGGING_OFF; RETURN.
+            beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
 
@@ -451,10 +450,9 @@ console.log('Too many login errors, disconnecting');
               return;
             }
 
-            // No reset available - disconnect
-            // express.e:29634: plain text
-            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            // No reset available - disconnect.
+            // express.e:29634: plain text — STATE_LOGGING_OFF; RETURN.
+            beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
 
@@ -486,9 +484,8 @@ console.warn(`[LOGIN] User ${safeUsername} has slotNumber=0 (deleted account) �
           // express.e:29703: 'That account has been deleted.\b\n'
           socket.emit('ansi-output', 'That account has been deleted.\r\n');
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-            // express.e:29634: '\b\nToo Many Errors, Goodbye!\b\n' — plain text
-            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            // express.e:29634: '\b\nToo Many Errors, Goodbye!\b\n' — STATE_LOGGING_OFF.
+            beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
           socket.emit('login-failed', { reason: 'deleted account', retryFrom: 'username' });
@@ -511,8 +508,10 @@ console.warn(`[LOGIN] User ${safeUsername} has slotNumber=0 (deleted account) �
         if (typeof session.nodeId === 'number') {
           const { isReservationMatch } = require('../services/node-reservation.service');
           if (!isReservationMatch(session.nodeId, user.username)) {
-            socket.emit('ansi-output', '\r\n420 Node is currently reserved for another user.\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            // express.e:28736-28742 — telnetSend + STATE_LOGGING_OFF; RETURN.
+            beginLogoff(socket, session, {
+              message: '\r\n420 Node is currently reserved for another user.\r\n',
+            });
             return;
           }
         }
@@ -736,8 +735,10 @@ console.error(`[LOGIN] Error writing node files:`, error);
       if (user.secLevel <= 1) {
         const lockScreen = user.secLevel === 0 ? 'LOCKOUT0' : 'LOCKOUT1';
         await displayScreen(socket, session, lockScreen, false);
-        session.state = BBSState.AWAIT; // prevent further BBS processing
-        setTimeout(() => socket.disconnect(), 1500);
+        // Pre-LOGGEDON bump: AWAIT (not LOGGING_OFF) since we never
+        // entered the post-login state machine. 1500ms gives the
+        // LOCKOUT screen time to render.
+        beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
         return;
       }
 
@@ -763,9 +764,11 @@ console.warn(`[LOGIN] Could not read user.misc for slot ${user.slotNumber}:`, er
         socket.emit('ansi-output', 'Leave a comment for the sysop...\r\n\r\n');
         const { processCommand } = require('../handlers/command.handler');
         await processCommand(socket, session, 'C', '');
-        socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
-        session.state = BBSState.AWAIT; // prevent further BBS processing
-        setTimeout(() => socket.disconnect(), 1500);
+        beginLogoff(socket, session, {
+          message: '\r\nThanks you will now be disconnected...\r\n\r\n',
+          finalState: BBSState.AWAIT,
+          readDelayMs: 1500,
+        });
         return;
       }
 
@@ -805,9 +808,11 @@ console.warn(`[LOGIN] Could not read user.misc for slot ${user.slotNumber}:`, er
             socket.emit('ansi-output', 'Leave a comment for the sysop...\r\n\r\n');
             const { processCommand } = require('../handlers/command.handler');
             await processCommand(socket, session, 'C', '');
-            socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
-            session.state = BBSState.AWAIT;
-            setTimeout(() => socket.disconnect(), 1500);
+            beginLogoff(socket, session, {
+              message: '\r\nThanks you will now be disconnected...\r\n\r\n',
+              finalState: BBSState.AWAIT,
+              readDelayMs: 1500,
+            });
             return;
           }
 
@@ -1052,9 +1057,8 @@ console.log('🔍 Checking if username exists:', safeUsername);
             { reason: 'empty username', retries: session.usernameRetryCount },
             DebugSeverity.CRITICAL
           );
-          // express.e:29634: plain text
-            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-          setTimeout(() => socket.disconnect(), 500);
+          // express.e:29634: plain text — STATE_LOGGING_OFF; RETURN.
+          beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
           return;
         }
         SysopDebugUtil.debug(
@@ -1139,9 +1143,8 @@ console.log('Too many login errors, disconnecting');
             { reason: 'retry limit exceeded', retries: session.loginRetryCount },
             DebugSeverity.CRITICAL
           );
-          // express.e:29634: plain text
-            socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
-          setTimeout(() => socket.disconnect(), 500);
+          // express.e:29634: plain text — STATE_LOGGING_OFF; RETURN.
+          beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
           return;
         }
 
@@ -1180,16 +1183,16 @@ console.error('New user response error:', error);
           // Get user email
           const user = await db.getUserByUsername(session.passwordResetUsername || '');
           if (!user?.email) {
-            socket.emit('ansi-output', '\r\n\x1b[31mNo email address on file.\x1b[0m\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            beginLogoff(socket, session, { message: '\r\n\x1b[31mNo email address on file.\x1b[0m\r\n' });
             return;
           }
 
           // Send reset code via email - express.e:29169-29172
           const emailSent = await mailOnPwdFail(user.email, resetCode);
           if (!emailSent) {
-            socket.emit('ansi-output', '\r\n\x1b[31mFailed to send reset code. Please contact the sysop.\x1b[0m\r\n');
-            setTimeout(() => socket.disconnect(), 500);
+            beginLogoff(socket, session, {
+              message: '\r\n\x1b[31mFailed to send reset code. Please contact the sysop.\x1b[0m\r\n',
+            });
             return;
           }
 
@@ -1197,9 +1200,8 @@ console.error('New user response error:', error);
           socket.emit('ansi-output', '\r\nEnter reset code: ');
           session.passwordResetState = 'await_code';
         } else {
-          // User declined - disconnect
-          socket.emit('ansi-output', '\r\n\x1b[31mGoodbye!\x1b[0m\r\n');
-          setTimeout(() => socket.disconnect(), 500);
+          // User declined - disconnect.
+          beginLogoff(socket, session, { message: '\r\n\x1b[31mGoodbye!\x1b[0m\r\n' });
         }
       } else if (session.passwordResetState === 'await_code') {
         // express.e:29173-29188 - Verify reset code
@@ -1211,9 +1213,8 @@ console.error('New user response error:', error);
           // Tell client to mask input
           socket.emit('mask-input', true);
         } else {
-          // express.e:29189-29195 - Wrong code, disconnect
-          socket.emit('ansi-output', '\r\n\x1b[31mInvalid reset code.\x1b[0m\r\n');
-          setTimeout(() => socket.disconnect(), 500);
+          // express.e:29189-29195 - Wrong code, disconnect.
+          beginLogoff(socket, session, { message: '\r\n\x1b[31mInvalid reset code.\x1b[0m\r\n' });
         }
       } else if (session.passwordResetState === 'await_new_password') {
         // express.e:29196-29213 - Set new password
@@ -1228,8 +1229,7 @@ console.error('New user response error:', error);
         // Update password in database
         const user = await db.getUserByUsername(session.passwordResetUsername || '');
         if (!user) {
-          socket.emit('ansi-output', '\r\n\x1b[31mUser not found.\x1b[0m\r\n');
-          setTimeout(() => socket.disconnect(), 500);
+          beginLogoff(socket, session, { message: '\r\n\x1b[31mUser not found.\x1b[0m\r\n' });
           return;
         }
 
@@ -1249,8 +1249,9 @@ console.error('New user response error:', error);
           socket.emit('retry-login', {});
         } catch (err) {
 console.error('[AUTH] Failed to update password:', err);
-          socket.emit('ansi-output', '\r\n\x1b[31mFailed to update password. Please try again later.\x1b[0m\r\n');
-          setTimeout(() => socket.disconnect(), 500);
+          beginLogoff(socket, session, {
+            message: '\r\n\x1b[31mFailed to update password. Please try again later.\x1b[0m\r\n',
+          });
         }
       }
     } catch (error) {
@@ -1263,8 +1264,7 @@ console.error('Password reset error:', error);
         { error: (error as Error).message, state: session.passwordResetState },
         DebugSeverity.CRITICAL
       );
-      socket.emit('ansi-output', '\r\n\x1b[31mPassword reset error. Goodbye!\x1b[0m\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      beginLogoff(socket, session, { message: '\r\n\x1b[31mPassword reset error. Goodbye!\x1b[0m\r\n' });
     }
   });
 
@@ -1283,11 +1283,13 @@ console.error('Password reset error:', error);
           // Empty entry — increment retry and loop
           session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
           if ((session.forcedPwdChangeRetry ?? 0) > 3) {
-            // express.e:29840-29844 — exceeded 3 retries, disconnect
+            // express.e:29840-29844 — exceeded 3 retries, disconnect.
             socket.emit('mask-input', false);
-            socket.emit('ansi-output', '\r\nYou have not updated your password so you will now be disconnected...\r\n\r\n');
-            session.state = BBSState.AWAIT;
-            setTimeout(() => socket.disconnect(), 1500);
+            beginLogoff(socket, session, {
+              message: '\r\nYou have not updated your password so you will now be disconnected...\r\n\r\n',
+              finalState: BBSState.AWAIT,
+              readDelayMs: 1500,
+            });
             return;
           }
           socket.emit('ansi-output', 'Enter New Password: ');
@@ -1301,9 +1303,11 @@ console.error('Password reset error:', error);
           session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
           if ((session.forcedPwdChangeRetry ?? 0) > 3) {
             socket.emit('mask-input', false);
-            socket.emit('ansi-output', 'You have not updated your password so you will now be disconnected...\r\n\r\n');
-            session.state = BBSState.AWAIT;
-            setTimeout(() => socket.disconnect(), 1500);
+            beginLogoff(socket, session, {
+              message: 'You have not updated your password so you will now be disconnected...\r\n\r\n',
+              finalState: BBSState.AWAIT,
+              readDelayMs: 1500,
+            });
             return;
           }
           socket.emit('ansi-output', 'Enter New Password: ');
@@ -1323,9 +1327,11 @@ console.error('Password reset error:', error);
           session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
           if ((session.forcedPwdChangeRetry ?? 0) > 3) {
             socket.emit('mask-input', false);
-            socket.emit('ansi-output', 'You have not updated your password so you will now be disconnected...\r\n\r\n');
-            session.state = BBSState.AWAIT;
-            setTimeout(() => socket.disconnect(), 1500);
+            beginLogoff(socket, session, {
+              message: 'You have not updated your password so you will now be disconnected...\r\n\r\n',
+              finalState: BBSState.AWAIT,
+              readDelayMs: 1500,
+            });
             return;
           }
           socket.emit('ansi-output', 'Enter New Password: ');
@@ -1347,9 +1353,11 @@ console.error('Password reset error:', error);
           session.forcedPwdChangeRetry = (session.forcedPwdChangeRetry ?? 0) + 1;
           if ((session.forcedPwdChangeRetry ?? 0) > 3) {
             socket.emit('mask-input', false);
-            socket.emit('ansi-output', 'You have not updated your password so you will now be disconnected...\r\n\r\n');
-            session.state = BBSState.AWAIT;
-            setTimeout(() => socket.disconnect(), 1500);
+            beginLogoff(socket, session, {
+              message: 'You have not updated your password so you will now be disconnected...\r\n\r\n',
+              finalState: BBSState.AWAIT,
+              readDelayMs: 1500,
+            });
             return;
           }
           session.forcedPwdChangeState = 'await_new';
@@ -1469,8 +1477,9 @@ console.error('[AUTH] forced-pwd-change-input error:', error);
         DebugSeverity.CRITICAL
       );
       socket.emit('mask-input', false);
-      socket.emit('ansi-output', '\r\n\x1b[31mPassword change error. Goodbye!\x1b[0m\r\n');
-      setTimeout(() => socket.disconnect(), 500);
+      beginLogoff(socket, session, {
+        message: '\r\n\x1b[31mPassword change error. Goodbye!\x1b[0m\r\n',
+      });
     }
   });
 }

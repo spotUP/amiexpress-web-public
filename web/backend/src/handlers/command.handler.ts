@@ -11,6 +11,7 @@ import { EnvStat } from '../constants/env-codes';
 import { validateFilename, checkForFile } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { setEnvStat } from '../utils/acs.util';
+import { beginLogoff } from '../server/logoff';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
@@ -1803,8 +1804,8 @@ console.error('[SystemStats] Error tracking login:', error);
           if (user.secLevel <= 1) {
             const lockScreen = user.secLevel === 0 ? 'LOCKOUT0' : 'LOCKOUT1';
             await displayScreen(socket, session, lockScreen, false);
-            session.state = BBSState.AWAIT; // prevent further BBS processing
-            setTimeout(() => socket.disconnect(), 1500);
+            // Pre-LOGGEDON bump after LOCKOUT screen — AWAIT, not LOGGING_OFF.
+            beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
             return;
           }
 
@@ -1815,8 +1816,7 @@ console.error('[SystemStats] Error tracking login:', error);
             emitText(socket, 'Leave a comment for the sysop...\r\n\r\n');
             await processCommand(socket, session, 'C', '');
             emitText(socket, '\r\nThanks you will now be disconnected...\r\n\r\n');
-            session.state = BBSState.AWAIT; // prevent further BBS processing
-            setTimeout(() => socket.disconnect(), 1500);
+            beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
             return;
           }
 

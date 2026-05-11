@@ -15,6 +15,8 @@ import type { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
+import { BBSState } from '../../constants/bbs-states';
+import { beginLogoff } from '../../server/logoff';
 import { eraseUserData } from '../../services/gdpr-erasure.service';
 import { db } from '../../database';
 import { config } from '../../config';
@@ -260,7 +262,7 @@ export async function handleGdprBackfillInput(socket: any, session: BBSSession, 
   const user: any = session.user;
   if (!user) {
     emitText(socket, '\r\n\x1b[31mSession error — no user bound. Disconnecting.\x1b[0m\r\n');
-    setTimeout(() => { try { (socket as any).disconnect(true); } catch { socket.disconnect(); } }, 500);
+    beginLogoff(socket, session);
     return;
   }
 
@@ -293,10 +295,9 @@ export async function handleGdprBackfillInput(socket: any, session: BBSSession, 
   if (answer === 'n' || answer === 'no') {
     emitText(socket, '\r\n\x1b[33mConsent is required to use the BBS. Goodbye.\x1b[0m\r\n');
     emitText(socket, '\r\nNO CARRIER\r\n');
-    (session as any).state = 'await';
     session.subState = undefined;
     (session as any).user = undefined;
-    setTimeout(() => { try { (socket as any).disconnect(true); } catch { socket.disconnect(); } }, 500);
+    beginLogoff(socket, session, { finalState: BBSState.AWAIT });
     return;
   }
 
