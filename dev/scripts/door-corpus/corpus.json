@@ -397,6 +397,45 @@
       "command": "ENTER",
       "timeoutMs": 30000,
       "notes": "SvEN/5D 1994 message-entry helper. Exercises one more 5D-family door so we catch shared-library cleanup regressions that show up in the same 5D code patterns."
+    },
+    {
+      "id": "psy_logoff",
+      "name": "PSY LogOff-Comment V1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PSY_LogOff/PSY_LogOff",
+      "doorType": "XIM",
+      "command": "BYE",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' — 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12."
+    },
+    {
+      "id": "warpsearch",
+      "name": "WarpSearch v2.5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/WarpSearch/WarpSearch",
+      "doorType": "XIM",
+      "command": "ZIPPY",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "WarpSearch 2.5 — file-listing search door. Cluster representative for the 6-door 'Enter string to search for:' line-input family (WarpSearch + TurboZ variants). Bare Enter aborts search and exits. Pins the XIM line-input (JH_LI) return path on a second binary distinct from 5D-ZippySearch."
+    },
+    {
+      "id": "aehelp",
+      "name": "AEHelp v0.4",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AEHelp/AEHelp",
+      "doorType": "XIM",
+      "command": "HELP",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 8000, "data": "\\r" }
+      ],
+      "notes": "AEHelp v0.4 by -= Nameless =- of Snarfs' Pub BBS. Renders the full AmiExpress command help index then prompts 'Enter command you want HELP with [press <RETURN> to quit]->'. Bare Enter exits. Cluster representative for the 4-door AEHelp family (cluster mined 2026-05-12). Longer 8 s delay because the help screen takes time to render fully before the prompt appears."
     }
   ]
 }
