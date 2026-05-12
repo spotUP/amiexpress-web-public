@@ -65,18 +65,23 @@ function parseArgs(argv: string[]): {
   only: string | null;
   timeoutOverride: number | null;
   keepAnsi: boolean;
+  concurrency: number;
 } {
   const out = {
     capture: false,
     only: null as string | null,
     timeoutOverride: null as number | null,
     keepAnsi: false,
+    // Each door spawns its own emulator subprocess, so parallelism is
+    // bounded by CPU + RAM rather than emulator state. Default 4 on a
+    // typical dev box; cuts the 36-door corpus from ~3 min serial to
+    // ~50 sec. Drop to 1 if running alongside bulk-probe.
+    concurrency: 4,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--capture") {
       out.capture = true;
-      // Next non-flag token is an optional door id.
       const next = argv[i + 1];
       if (next && !next.startsWith("--")) {
         out.only = next;
@@ -90,9 +95,12 @@ function parseArgs(argv: string[]): {
       i += 1;
     } else if (a === "--keep-ansi") {
       out.keepAnsi = true;
+    } else if (a === "--concurrency" || a === "-j") {
+      out.concurrency = Math.max(1, Number(argv[i + 1]) || 1);
+      i += 1;
     } else if (a === "--help" || a === "-h") {
       process.stdout.write(
-        "Usage: run.ts [--capture [<id>]] [--only <id>] [--timeout <ms>] [--keep-ansi]\n",
+        "Usage: run.ts [--capture [<id>]] [--only <id>] [--timeout <ms>] [--keep-ansi] [--concurrency N | -j N]\n",
       );
       process.exit(0);
     } else if (a.startsWith("--")) {
@@ -260,8 +268,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const results: Result[] = [];
-  for (const entry of entries) {
+  const processOne = async (entry: CorpusEntry): Promise<Result> => {
     const timeoutMs =
       opts.timeoutOverride ?? entry.timeoutMs ?? 15000;
     process.stdout.write(
@@ -270,21 +277,15 @@ async function main(): Promise<void> {
     const run = await runDoor(entry, timeoutMs);
 
     if (run.timedOut) {
-      results.push({ id: entry.id, status: "timeout" });
       process.stdout.write(`  ${entry.id}: TIMEOUT (after ${timeoutMs}ms)\n`);
-      continue;
+      return { id: entry.id, status: "timeout" };
     }
     if (run.code !== 0) {
-      results.push({
-        id: entry.id,
-        status: "error",
-        detail: `exit code ${run.code}`,
-      });
       process.stdout.write(
         `  ${entry.id}: ERROR exit=${run.code}\n` +
         `    stderr-tail: ${run.stderr.split("\n").slice(-5).join(" | ")}\n`,
       );
-      continue;
+      return { id: entry.id, status: "error", detail: `exit code ${run.code}` };
     }
 
     const renderedOutput = opts.keepAnsi
@@ -297,24 +298,22 @@ async function main(): Promise<void> {
       fs.mkdirSync(goldenDir, { recursive: true });
       fs.writeFileSync(path.join(goldenDir, "output.txt"), renderedOutput);
       fs.writeFileSync(path.join(goldenDir, "trace.txt"), traceOutput + "\n");
-      results.push({ id: entry.id, status: "captured" });
       process.stdout.write(
         `  ${entry.id}: CAPTURED ` +
         `output=${renderedOutput.length}B trace=${traceOutput.split("\n").length} lines\n`,
       );
-      continue;
+      return { id: entry.id, status: "captured" };
     }
 
     const outputPath = path.join(goldenDir, "output.txt");
     const tracePath = path.join(goldenDir, "trace.txt");
     if (!fs.existsSync(outputPath)) {
-      results.push({
+      process.stdout.write(`  ${entry.id}: FAIL no golden (run --capture)\n`);
+      return {
         id: entry.id,
         status: "fail",
         detail: `no golden at ${outputPath} — run --capture first`,
-      });
-      process.stdout.write(`  ${entry.id}: FAIL no golden (run --capture)\n`);
-      continue;
+      };
     }
 
     const goldenOutput = fs.readFileSync(outputPath, "utf8");
@@ -346,16 +345,28 @@ async function main(): Promise<void> {
       fs.mkdirSync(gotDir, { recursive: true });
       fs.writeFileSync(path.join(gotDir, "output.txt"), renderedOutput);
       fs.writeFileSync(path.join(gotDir, "trace.txt"), traceOutput);
-      results.push({ id: entry.id, status: "fail", detail: detail.join("; ") });
       process.stdout.write(
         `  ${entry.id}: FAIL ${detail.join("; ")} (got files: ${gotDir})\n`,
       );
-      continue;
+      return { id: entry.id, status: "fail", detail: detail.join("; ") };
     }
 
-    results.push({ id: entry.id, status: "pass" });
     process.stdout.write(`  ${entry.id}: pass\n`);
-  }
+    return { id: entry.id, status: "pass" };
+  };
+
+  // Run doors with bounded concurrency. Each emulator subprocess is
+  // independent (no shared state), so this is purely a CPU/RAM gate.
+  const results: Result[] = [];
+  let nextIdx = 0;
+  const workers = Array.from({ length: Math.min(opts.concurrency, entries.length) }, async () => {
+    while (true) {
+      const i = nextIdx++;
+      if (i >= entries.length) return;
+      results.push(await processOne(entries[i]));
+    }
+  });
+  await Promise.all(workers);
 
   // Summary
   const tally: Record<string, number> = {};
