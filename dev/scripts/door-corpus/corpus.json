@@ -318,6 +318,28 @@
       "notes": "mgs! bulls bulletin-list door — exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output)."
     },
     {
+      "id": "wall_mst",
+      "name": "MST wall.000 (Write-on-Wall)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/wall-mst/wall",
+      "doorType": "XIM",
+      "command": "WALL",
+      "timeoutMs": 30000,
+      "inputScript": [ { "delayMs": 2500, "data": "n" } ],
+      "notes": "MST wall door — prompts 'Write On Wall (y/n)?' — declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster."
+    },
+    {
+      "id": "cdtrans",
+      "name": "CDTrans (CD transfer)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CDTrans/CDTrans",
+      "doorType": "XIM",
+      "command": "CDTRANS",
+      "timeoutMs": 30000,
+      "inputScript": [ { "delayMs": 2500, "data": "\\r" } ],
+      "notes": "CDTrans — CD-ROM file transfer helper. Prompts 'Filename(01):' — bare Enter aborts, door exits. Represents a 5-door 'Filename:' line-input cluster (CDTrans/CD_DL.EXE variants)."
+    },
+    {
       "id": "sim_5d_fileid",
       "name": "5D-FileId (SIM)",
       "category": "SIM",
