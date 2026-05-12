@@ -1,0 +1,8 @@
+- --- -----[ 5D^QuickAnsi v0.05 ]----- --- - --- -- - ----- -----[ sTc/5D ]---
+
+[1] Ansi
+[2] Ansi Quick
+[3] No Ansi
+[4] No Ansi Quick
+
+Choose : ->1

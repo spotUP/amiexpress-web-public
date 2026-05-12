@@ -425,6 +425,71 @@
       "notes": "WarpSearch 2.5 — file-listing search door. Cluster representative for the 6-door 'Enter string to search for:' line-input family (WarpSearch + TurboZ variants). Bare Enter aborts search and exits. Pins the XIM line-input (JH_LI) return path on a second binary distinct from 5D-ZippySearch."
     },
     {
+      "id": "quickansi",
+      "name": "5D^QuickAnsi V0.05",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-QuickAnsi/5D^QuickAnsi",
+      "doorType": "XIM",
+      "command": "QA",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "5D^QuickAnsi 0.05 — tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 — biggest 'Choose : ->' cluster in the universe sample)."
+    },
+    {
+      "id": "listspeeder",
+      "name": "ListSpeeder v1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ListSpeeder/ListSpeeder",
+      "doorType": "XIM",
+      "command": "LS",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "Aqua ListSpeeder 1.2 — file-listing accelerator. Bare '>' prompt is a line-input read; Enter exits. Cluster representative for the 4-door ListSpeeder family (000/020/030/040 CPU variants)."
+    },
+    {
+      "id": "goodbye",
+      "name": "GoodBye 1.1 (DPL)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/GoodBye/GoodBye",
+      "doorType": "XIM",
+      "command": "BYE",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "DPL GoodBye 1.1 (variant 'GoodBye.x'). Prompt 'Do you want to logoff or write a comment? (c/y/N)' — 'n' declines and exits. Cluster representative for the 4-door GoodBye.x family (000/020/030/040 CPU variants)."
+    },
+    {
+      "id": "masterview",
+      "name": "MasterView (DPL)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MasterView/MasterView",
+      "doorType": "XIM",
+      "command": "V",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
+    },
+    {
+      "id": "getanswer",
+      "name": "GetAnswer (HCD)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/GetAnswer/GetAnswer",
+      "doorType": "XIM",
+      "command": "GA",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "HCD GetAnswer. Prompt 'Enter handle/usernr >:' line-input. Bare Enter exits. Cluster representative for the 4-door GetAnswer family (HCD-GA10 + M22-GA11 CPU variants)."
+    },
+    {
       "id": "aehelp",
       "name": "AEHelp v0.4",
       "category": "XIM-BBSCmd",
