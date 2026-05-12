@@ -116,6 +116,16 @@ export class ExecLibrary {
   // Signal allocation tracking (32 signals, bits 0-31)
   private allocatedSignals: number = 0; // Bitmask of allocated signals
 
+  // Set of port addresses currently linked into ExecBase->PortList.
+  // RemPort/AddPort vector handlers consult this BEFORE touching the
+  // ln_Succ/ln_Pred pointers: a door that calls RemPort on a port we
+  // never added (very common — AEDoor libraries do their own port
+  // mgmt, plus some doors mistakenly RemPort their reply port) would
+  // otherwise read garbage at port+0/+4 and overwrite the global list
+  // head/tailPred with junk. The Set is the source of truth; the
+  // emulator memory mirrors it.
+  private portsInExecList: Set<number> = new Set();
+
   // Standard signal bit definitions (from exec/tasks.h)
   private static readonly SIGBREAKB_CTRL_C = 12; // Bit number for CTRL-C
   private static readonly SIGBREAKF_CTRL_C = 1 << 12; // Signal mask (0x1000)
@@ -6216,6 +6226,7 @@ debugLog(
   }
 
   private addPortToExecList(portAddr: number): void {
+    if (portAddr === 0 || this.portsInExecList.has(portAddr)) return;
     const listAddr = this.getPortListAddr();
     const headAddr = listAddr + 0;
     const tailPredAddr = listAddr + 8;
@@ -6235,6 +6246,22 @@ debugLog(
       this.emulator.writeMemory32(currentHead + 4, portAddr);
       this.emulator.writeMemory32(headAddr, portAddr);
     }
+    this.portsInExecList.add(portAddr);
+  }
+
+  // Public wrapper for the RemPort LVO (-360) vector. AmigaOS spec:
+  // unlink the port from ExecBase->PortList (no FreeSignal, no FreeMem
+  // — DeletePort() is the wrapper that does the full teardown).
+  // Membership-guarded: if the port isn't tracked, this is a no-op
+  // rather than a list-corrupting write through bogus succ/pred bytes.
+  public remPort(portAddr: number): void {
+    if (portAddr === 0 || !this.portsInExecList.has(portAddr)) {
+debugLog(
+        `[ExecLibrary] RemPort(0x${portAddr.toString(16)}) — not in PortList, ignoring`,
+      );
+      return;
+    }
+    this.removePortFromExecList(portAddr);
   }
 
   private removePortFromExecList(portAddr: number): void {
@@ -6260,6 +6287,7 @@ debugLog(
     if (this.emulator.readMemory32(headAddr) === 0) {
       this.emulator.writeMemory32(tailPredAddr, 0);
     }
+    this.portsInExecList.delete(portAddr);
 
     const headPtr = this.emulator.readMemory32(headAddr);
     const newTailPred = this.emulator.readMemory32(tailPredAddr);
@@ -6268,6 +6296,14 @@ debugLog(
         16
       )} tailPred=0x${newTailPred.toString(16)}`
     );
+  }
+
+  // Public wrapper for the FreeSignal LVO (-336) vector. Returns the
+  // signal bit to the allocation pool. Safe even if the bit isn't
+  // currently allocated (no-op in that case — matches AmigaOS, which
+  // ANDs the signal mask without error).
+  public freeSignalPublic(signalBit: number): void {
+    this.freeSignal(signalBit);
   }
 
   /**

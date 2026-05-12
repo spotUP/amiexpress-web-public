@@ -4043,6 +4043,23 @@ function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter
   if (session.tempData) {
     session.tempData.goodbyeAfterTransfer = goodbyeAfter;
   }
+  // Telnet/SSH transports can't accept the browser-style `show-file-upload`
+  // socket event (no DOM file picker). Without this guard the BBS sat at
+  // an invisible UPLOAD_OKAY_CONFIRM → FILES_UPLOAD state until the user
+  // killed the connection. Mirror express.e:17776's user-feedback (an
+  // explicit message and a clean return to the menu) until real Zmodem-
+  // over-telnet support lands.
+  const transport = (session as any).connectionType;
+  if (transport === 'telnet' || transport === 'ssh') {
+    emitText(
+      socket,
+      '\r\nUpload over telnet/SSH is not supported on this BBS.\r\n' +
+      'Use the web client to upload files. Aborting.\r\n\r\n',
+    );
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = undefined;
+    return;
+  }
   const batch = session.tempData?.uploadBatch || [];
   if (batch.length === 0) {
     // Nothing queued — start Zmodem receive with no expected files (user can send any file)

@@ -1326,7 +1326,13 @@ class RexxMastService {
       };
     }
 
-    const MAX_CYCLES = 5_000_000;
+    // Daemon-drive budget. Original was 5_000_000 — but at that size the
+    // sync inner loop never yielded to the event loop, so v8 couldn't GC
+    // microtask state between slices and a runaway dispatch would OOM the
+    // backend (Jdn-Csent.rexx on 2026-05-11). The heap watchdog below
+    // bails on growth > HEAP_BAIL_BYTES so a misbehaving dispatch can't
+    // crash the BBS even if the budget is large.
+    const MAX_CYCLES = 1_000_000;
     const SLICE = 1024;
     const { serviceInboundMessages } = require('./rexx-host-servicer');
 
@@ -1464,6 +1470,14 @@ class RexxMastService {
       // (post-fix trace runs in ~250 cycles; we add slack for any
       // future per-LVO branches the daemon may take).
       const { CPURegister: CPU } = require('../../amiga-emulation/cpu/MoiraEmulator');
+      // Heap watchdog — protect the BBS from an unbounded daemon dispatch
+      // (real risk: 5M sync cycles starve v8 GC and accumulate microtask
+      // state until OOM, observed on Jdn-Csent.rexx 2026-05-11). Bail to
+      // the TS fallback path if growth exceeds the budget — quiet by
+      // default, only logs when bailing.
+      const _heap0 = process.memoryUsage().heapUsed;
+      const HEAP_BAIL_BYTES = 300 * 1024 * 1024;
+      let bailedOnHeap = false;
       let driven = 0;
       while (driven < MAX_CYCLES && !daemonDelivered) {
         try {
@@ -1488,13 +1502,20 @@ class RexxMastService {
           );
           break;
         }
-        // Allow the daemon to push host commands during dispatch
-        // (unlikely in pure RXCOMM, but cheap to drain).
+        // Allow the daemon to push host commands during dispatch.
         try {
           await serviceInboundMessages(this.emulator, this.rexxSysLib, replyPort, dispatchCtx);
         } catch { /* drain is best-effort */ }
+        // Per-slice heap watchdog — silent under normal growth, bail loud.
+        if ((process.memoryUsage().heapUsed - _heap0) > HEAP_BAIL_BYTES) {
+          console.warn(
+            `[AREXX] daemon-drive heap grew >${HEAP_BAIL_BYTES/1048576|0}MB at ${driven} cycles — bailing to TS fallback`,
+          );
+          bailedOnHeap = true;
+          break;
+        }
       }
-      if (!daemonDelivered) {
+      if (!daemonDelivered && !bailedOnHeap) {
         console.warn(
           `[AREXX] daemon did not deliver to phantom port within ${MAX_CYCLES} cycles ` +
           `(hleHandled=${this.pendingHleScript.hleHandled}); falling back to bridged path`,

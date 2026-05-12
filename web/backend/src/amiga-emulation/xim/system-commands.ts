@@ -532,22 +532,26 @@ debugLog(`  Message: "${message}"`);
 
   /**
    * Handle PRV_COMMAND (Private Command)
-   * From E sources (express.e:3816-3818)
+   * From E sources (express.e:3816-3818):
+   *   CASE PRV_COMMAND
+   *     StrCopy(tempstring,msg.string)
+   *     processCommand(tempstring,TRUE)
+   * AmiExpress is single-threaded — when the door issues PRV_COMMAND the BBS
+   * acks immediately and runs the chained command only after the door exits.
+   * We mirror that here: just record state.prvCommand and let
+   * door.handler.ts:2617-2677 (the post-door-exit dispatcher) run it via
+   * processCommand(..., allowSyscmd=true). Calling processCommand here as
+   * well caused the chained command to fire twice (two "No such command"
+   * lines for a missing target). express.e:3818's TRUE → allowSyscmd is
+   * honored in door.handler.ts:2656.
    */
   handlePrvCommand(msg: XIMMessage): void {
     const command = this.getMessageString(msg);
 
-debugLog('[XIMSystem] PRV_COMMAND - Execute BBS command');
+debugLog('[XIMSystem] PRV_COMMAND - record for post-exit dispatch');
 debugLog(`  Command: "${command}"`);
 
     this.state.prvCommand = command;
-    // Execute immediately like express.e processCommand
-    try {
-      const { handleCommand } = require('../../handlers/command.handler');
-      handleCommand(this.socket, this.bbsSession as any, command);
-    } catch (err) {
-console.warn('[XIMSystem] PRV_COMMAND execution error:', err);
-    }
     this.reply(msg, 1);
   }
 

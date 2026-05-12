@@ -1,0 +1,360 @@
+{
+  "$schema": "./schema.md",
+  "description": "Regression corpus of representative 68K + AREXX doors. Each entry runs via web/backend/src/scripts/run-amiga-door.ts (or the AREXX-direct path), stdout is captured + diffed against goldens/<id>/output.txt. Adding a door: drop it into Doors/, register here, run with --capture to freeze the golden, then run without --capture to verify it stays green.",
+  "doors": [
+    {
+      "id": "sent_fe",
+      "name": "Sent_FE",
+      "category": "XIM-SysCmd",
+      "binary": "Doors/Sent_FE/Sent_FE",
+      "doorType": "XIM",
+      "command": "Sent_FE",
+      "timeoutMs": 30000,
+      "notes": "Banner-only stub door (EMPiRE/MYSTiC X-DESiGN 1994). Loads, renders ANSI banner, issues PRV_COMMAND 'Sent', shuts down. No input expected — pure outbound trace test for XIM JH_REGISTER → SV_NEWMSG → DT_NAME → DT_SLOTNUMBER → BB_NONSTOPTEXT → JH_SM* → PRV_COMMAND → JH_SHUTDOWN sequence. Verified 2026-05-11."
+    },
+    {
+      "id": "conftop",
+      "name": "Conftop",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Conftop/Conftop020.x",
+      "doorType": "XIM",
+      "command": "CONFTOP",
+      "timeoutMs": 30000,
+      "notes": "Conference Top Uploaders v2.3 (Bobo/Mystic + Looby/Insane). Exercises XIM banner + dos.library file I/O for Conf.DB reads + AEDoor message flow. Without Conf.DB seed data, exits early with 'Reset date is out of range' — stable trace either way. Verified runs to completion + emits banner 2026-05-11."
+    },
+    {
+      "id": "who",
+      "name": "WHO v2.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/who/who",
+      "doorType": "XIM",
+      "command": "WHO",
+      "timeoutMs": 30000,
+      "notes": "WHO v2.0 by Spy/MST. Renders who's-online header banner then queries active nodes. Exercises XIM BB_MAINLINE / ACTIVE_NODES / MULTICOM ops + DT_SECSTATUS user-field path. Non-interactive, exits cleanly. Verified deterministic 2026-05-12."
+    },
+    {
+      "id": "aquawho",
+      "name": "AquaWho",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AquaWho/AquaWho",
+      "doorType": "XIM",
+      "command": "WHO",
+      "timeoutMs": 30000,
+      "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive — renders list and exits."
+    },
+    {
+      "id": "5d_autofree",
+      "name": "5D-AutoFree V0.01",
+      "category": "XIM-SysCmd",
+      "binary": "Doors/5D-AutoFree/5D-AutoFree",
+      "doorType": "XIM",
+      "command": "FILECHECK",
+      "timeoutMs": 30000,
+      "notes": "SvEN/5D 1994 file-check / auto-free door. Without its full .info tooltype set, the door's icon.library GetDiskObject lookup fails and it exits with 'Door hasn't been started fully right!' Pinned here as a deterministic 5-XIM-op trace (JH_REGISTER → SV_NEWMSG → BB_MAINLINE → JH_WRITE × 2 → JH_SHUTDOWN). Surfaced by bulk-probe 2026-05-12."
+    },
+    {
+      "id": "5d_dupecheck",
+      "name": "5D^DupeCheck 0.10",
+      "category": "XIM-SysCmd",
+      "binary": "Doors/5D^DupeCheck/5D^DupeCheck",
+      "doorType": "XIM",
+      "command": "FILECHECK",
+      "timeoutMs": 30000,
+      "notes": "1.7 KB tiny SvEN/5D 1994 upload-dupe detector. Same icon-config exit path as 5D-AutoFree but with a distinct AEDoor message ordering. Pinned to catch any regression in the BB_MAINLINE return path on minimal doors."
+    },
+    {
+      "id": "5d_doormenu",
+      "name": "5D-DoorMenu",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-DoorMenu/5D-DoorMenu",
+      "doorType": "XIM",
+      "command": "DOORMENU",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "5D-DoorMenu — door-selection menu, prompt '<CR>=quit'. Scripted Enter drops out. Exercises XIM JH_HK + JH_SF (Show File)."
+    },
+    {
+      "id": "5d_timebank",
+      "name": "5D-TimeBank",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-TimeBank/5D-TimeBank",
+      "doorType": "XIM",
+      "command": "TIMEBANK",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "q" }
+      ],
+      "notes": "5D-TimeBank — time-deposit/withdraw door. 'Q' hotkey quits per its UI hint. Exercises XIM DT_TIMELIMIT + RAWARROW + JH_HK input path."
+    },
+    {
+      "id": "logoff",
+      "name": "LOGOFF v1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LOGOFF/LOGOFF",
+      "doorType": "XIM",
+      "command": "BYE",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "LogOff v1.2 by Steve and DR. G of Italian Bad Boys '93. Confirms 'do you really want to LogOff (y)es/(N)o/(r)eply ?' — 'n' declines + door exits. First door in corpus to exercise JH_BBSNAME (BBS name query) and DT_NAME together with the hotkey path."
+    },
+    {
+      "id": "5d_zippysearch",
+      "name": "5D-ZippySearch II v0.11",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-ZippySearch/5D-ZippySearch",
+      "doorType": "XIM",
+      "command": "ZIPPY",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "5D-ZippySearch by sTc/5D. Line-input prompt 'Enter string to search for >:'. Bare Enter aborts the search and exits the door. Exercises XIM JH_LI (line-input) path — first corpus door to cover that op."
+    },
+    {
+      "id": "bull",
+      "name": "Bull (5150-B10)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Bull/Bull",
+      "doorType": "XIM",
+      "command": "BULL",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "Bulletin update door from 5150-B10. Prompt 'Update bulletins? (y/N):' — 'n' declines and exits. Minimal 3.9 KB binary — useful for pinning the JH_HK hotkey path in isolation (no other XIM ops fire)."
+    },
+    {
+      "id": "confscan",
+      "name": "ConfScan v2.6 (68000)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ConfScan/ConfScan",
+      "doorType": "XIM",
+      "command": "CS",
+      "timeoutMs": 30000,
+      "notes": "ConfScan v2.6 — conference scanning utility. Exercises ENVSTAT (environment-status query), DT_CONFACCESS (conf access flags), and BB_CONFNUM (current-conf number). Non-interactive, clean exit. Three novel XIM ops in one door."
+    },
+    {
+      "id": "updowninfo",
+      "name": "uPdOWNiNFO v1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/uPdOWNiNFO/uPdOWNiNFO",
+      "doorType": "XIM",
+      "command": "UDI",
+      "timeoutMs": 30000,
+      "notes": "uPdOWNiNFO v1.2 — upload/download stats info screen. Exercises DT_STAMP_CTIME (account creation time) + BB_CONFNUM + the full DT_BYTES* / DT_DAILY* user-data field set. 20-op trace, non-interactive."
+    },
+    {
+      "id": "newinfo",
+      "name": "newinfo (AFL_PACK)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/newinfo/newinfo",
+      "doorType": "XIM",
+      "command": "INFO",
+      "timeoutMs": 30000,
+      "notes": "AFL_PACK newinfo — heaviest XIM trace in the universe sample (27 ops). Covers the entire user-data + sysop + BBS-info query surface. Non-interactive."
+    },
+    {
+      "id": "5d_status",
+      "name": "5D-Status V1.50",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-Status/5D-Status",
+      "doorType": "XIM",
+      "command": "ST",
+      "timeoutMs": 30000,
+      "notes": "5D-Status V1.50 by SvEN/5D — third user-stats variant (23 ops) with NODE_DEVICE query that the others don't issue. Pinning all three (newinfo + easystatus + 5d_status) catches per-variant query-ordering regressions."
+    },
+    {
+      "id": "fucknature",
+      "name": "FuckNature (DIVE-FNA)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FuckNature/FuckNature",
+      "doorType": "XIM",
+      "command": "FN",
+      "timeoutMs": 30000,
+      "notes": "Dive's FuckNature — 20-op trace. Distinct fingerprint from the other status doors; different rendering path. Non-interactive."
+    },
+    {
+      "id": "joincnf",
+      "name": "JoinCnf 3.6",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/JoinCnf/JoinCnf",
+      "doorType": "XIM",
+      "command": "J",
+      "timeoutMs": 30000,
+      "notes": "JoinCnf 3.6 — third-party conference-join helper (independent of the BBS's internal `J` command). Non-interactive — renders + exits."
+    },
+    {
+      "id": "ratiorep",
+      "name": "RatioReport 1.7",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/RATIOREP/RATIOREP",
+      "doorType": "XIM",
+      "command": "RR",
+      "timeoutMs": 30000,
+      "notes": "RatioReport 1.7 by Captain Caveman (30th). Exercises file-ratio reporting path."
+    },
+    {
+      "id": "autoonline",
+      "name": "AutoOnline 1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AutoOnline/AutoOnline",
+      "doorType": "XIM",
+      "command": "AO",
+      "timeoutMs": 30000,
+      "notes": "EMPiRE AutoOnline 1.2 — auto-online activity bulletin. Different category from status doors (status writer not reader)."
+    },
+    {
+      "id": "confsecurity",
+      "name": "Conference Security AmiXDoor V1.30",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ConferenceSecurity/ConferenceSecurity",
+      "doorType": "XIM",
+      "command": "CSEC",
+      "timeoutMs": 30000,
+      "notes": "C+N Conference Security V1.30 — checks access on conference join. Different XIM surface from JoinCnf (access-check vs join-action)."
+    },
+    {
+      "id": "six_status",
+      "name": "S!X Stat V2.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/SiX-Status/Status",
+      "doorType": "XIM",
+      "command": "STATS",
+      "timeoutMs": 30000,
+      "notes": "S!X Stat V2.0 from LGC — 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status."
+    },
+    {
+      "id": "skan_status",
+      "name": "sKAN^4^sTATUs",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/sKAN-Status/sKAN-Status",
+      "doorType": "XIM",
+      "command": "STATS",
+      "timeoutMs": 30000,
+      "notes": "Insanity sKAN^4^sTATUs — 28-op status door, again distinct fingerprint."
+    },
+    {
+      "id": "super_stats",
+      "name": "Super-Stats (Intellect)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Super-Stats/Super-Stats",
+      "doorType": "XIM",
+      "command": "STATS",
+      "timeoutMs": 30000,
+      "notes": "Intellect Super-Stats — 19-op variant. Different from the 5D family — broader Amiga-doors-scene coverage."
+    },
+    {
+      "id": "afl_status",
+      "name": "AFL Status",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/status/status",
+      "doorType": "XIM",
+      "command": "STATS",
+      "timeoutMs": 30000,
+      "notes": "AFL status door — exercises NODE_UNIT + `Unknown (907` (an XIM op our XIMCommand enum doesn't name yet — useful for catching when we DO name it that the trace stays stable). 23 ops total."
+    },
+    {
+      "id": "afl_pager",
+      "name": "AFL Pager",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/pager/pager",
+      "doorType": "XIM",
+      "command": "PAGE",
+      "timeoutMs": 30000,
+      "notes": "AFL pager — exercises JH_SF (Show File) screen-display path + RETURNCOMMAND. First corpus entry covering JH_SF."
+    },
+    {
+      "id": "holdcheck",
+      "name": "HoldCheck (Kero/BTH)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/HoldCheck/HoldCheck",
+      "doorType": "XIM",
+      "command": "HC",
+      "timeoutMs": 30000,
+      "notes": "Kero/BTH HoldCheck — exercises JH_CO (Console Output) + JH_SO (Serial Output) — two distinct XIM output ops the rest of the corpus doesn't cover. Pinned to catch any regression in low-level output routing."
+    },
+    {
+      "id": "diary",
+      "name": "diary (AEXSETU)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/diary/diary",
+      "doorType": "XIM",
+      "command": "DIARY",
+      "timeoutMs": 30000,
+      "notes": "diary door from AEXSETU — exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path."
+    },
+    {
+      "id": "mgs_bulls",
+      "name": "Bulls (mgs!)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/bulls-mgs/bulls",
+      "doorType": "XIM",
+      "command": "B",
+      "timeoutMs": 30000,
+      "notes": "mgs! bulls bulletin-list door — exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output)."
+    },
+    {
+      "id": "sim_5d_fileid",
+      "name": "5D-FileId (SIM)",
+      "category": "SIM",
+      "binary": "Doors/5D-FileId/5D-FileId",
+      "doorType": "SIM",
+      "timeoutMs": 30000,
+      "notes": "5D-FileId — pure SIM batch (no XIM ops, no AEDoor handshake). Exercises dos.library file open/read/write path against the door's config file. First SIM-category corpus entry."
+    },
+    {
+      "id": "sim_makecmd",
+      "name": "MAKECMD (SIM)",
+      "category": "SIM",
+      "binary": "Doors/MAKECMD/MAKECMD",
+      "doorType": "SIM",
+      "timeoutMs": 30000,
+      "notes": "dRE!NEW_PUB MAKECMD — SIM utility for building command sets. Different LVO mix from 5D-FileId."
+    },
+    {
+      "id": "sim_5d_news",
+      "name": "5D-News (SIM)",
+      "category": "SIM",
+      "binary": "Doors/5D-News/5D-News",
+      "doorType": "SIM",
+      "timeoutMs": 30000,
+      "notes": "5D-News — news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point."
+    },
+    {
+      "id": "sim_5d_comment",
+      "name": "5D_Comment (SIM)",
+      "category": "SIM",
+      "binary": "Doors/5D_Comment/5D_Comment",
+      "doorType": "SIM",
+      "timeoutMs": 30000,
+      "notes": "5D_Comment — sysop-comment helper (SIM batch). Fourth SIM corpus entry — different code patterns than the 5D-FileId/News doors."
+    },
+    {
+      "id": "u_stat",
+      "name": "U-Stat V1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/U-Stat/U-Stat",
+      "doorType": "XIM",
+      "command": "STATS",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 4000, "data": "\\r" }
+      ],
+      "notes": "U-Stat v1.0 by S¡eGeL/AFL (graphics by aRGøN/AFL). User-stats info screen — exercises 29 distinct XIM ops in one door including the entire DT_* user-data field family (DT_LOCATION, DT_UPLOADS, DT_BYTESUPLOAD, DT_DOWNLOADS, DT_BYTEDOWNLOAD, DT_SECBOARD, DT_SECLIBRARY, DT_DAILYBYTELIMIT, DT_DAILYBYTEDLD, DT_STAMP_LASTON, DT_TIMESCALLED, DT_MESSAGESPOSTED, DT_TIMETOTAL, DT_TIMEUSED, DT_EXPERT) + JH_SYSOP / EXPRESS_VERSION / BB_CONFNAME / BB_NODEID / BB_TASKPRI / NODE_BAUDRATE. Scripted \\r after 4 s exits cleanly. Pinning this catches any regression across the user-data XIM query surface in one shot. Surfaced by bulk-probe full sweep 2026-05-12."
+    },
+    {
+      "id": "5d_entermsg",
+      "name": "5D-EnterMsg V0.09",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-EnterMsg/5D-EnterMsg",
+      "doorType": "XIM",
+      "command": "ENTER",
+      "timeoutMs": 30000,
+      "notes": "SvEN/5D 1994 message-entry helper. Exercises one more 5D-family door so we catch shared-library cleanup regressions that show up in the same 5D code patterns."
+    }
+  ]
+}

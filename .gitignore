@@ -462,3 +462,10 @@ System/rexxmast*
 System/Rexxc/
 # FS-UAE / WinUAE attribute sidecars dropped alongside Amiga binaries.
 **/*.uaem
+
+# thoughts/ split commit policy (per ~/.claude/CLAUDE.md)
+# - thoughts/<username>/  — per-person scratchpad, GIT-IGNORED
+# - thoughts/shared/       — research/plans/handoffs/prs, COMMITTED
+# - thoughts/searchable/   — hard links for searching, GIT-IGNORED
+thoughts/spot/
+thoughts/searchable/

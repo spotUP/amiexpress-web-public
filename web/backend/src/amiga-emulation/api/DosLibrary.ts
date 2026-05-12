@@ -1671,8 +1671,16 @@ console.warn(`[dos.library] AddDosEntry: STUB implementation - returning success
   /**
    * FindDosEntry() - LVO -684 (V36+)
    *
-   * Find a device list entry by name.
-   * Must be called with DosList locked via LockDosList().
+   * Find a device list entry by name. Returns 0 (not found) — we keep
+   * an empty synthetic DosList (no volumes/devices/assigns registered
+   * via AddDosEntry), so every lookup naturally fails. Doors that use
+   * the canonical lock-walk-unlock pattern get "list is empty" and
+   * exit cleanly. Without this real return (matched to the
+   * autodoc-spec'd 0-on-not-found contract), the door's
+   * `while (dl = FindDosEntry(...))` loop sees the stub's
+   * pass-through D0 = dlist input and never terminates.
+   *
+   * NDK 3.2R4 autodoc: dos.library/FindDosEntry
    *
    * Parameters:
    *   D1 = dlist - Starting DosList entry (or NULL to search from start)
@@ -1681,8 +1689,6 @@ console.warn(`[dos.library] AddDosEntry: STUB implementation - returning success
    *
    * Returns:
    *   D0 = newdlist - Pointer to found DosList entry, or NULL if not found
-   *
-   * Official autodocs: http://amigadev.elowar.com/read/ADCD_2.1/Includes_and_Autodocs_3._guide/node0167.html
    */
   FindDosEntry(): number {
     const dlistPtr = this.emulator.getRegister(CPURegister.D1);
@@ -1690,13 +1696,95 @@ console.warn(`[dos.library] AddDosEntry: STUB implementation - returning success
     const flags = this.emulator.getRegister(CPURegister.D3);
 
     const name = namePtr ? this.emulator.readString(namePtr) : "<null>";
-debugLog(`[dos.library] FindDosEntry(dlist=0x${dlistPtr.toString(16)}, name="${name}", flags=0x${flags.toString(16)})`);
+debugLog(`[dos.library] FindDosEntry(dlist=0x${dlistPtr.toString(16)}, name="${name}", flags=0x${flags.toString(16)}) → 0 (empty list)`);
 
-    // STUB: Proper implementation would search DosList chain
-    // For now, return NULL (not found) to prevent crashes
-console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (not found)`);
     this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-    return 0; // NULL (not found)
+    return 0; // NULL — empty synthetic DosList, no entries to find.
+  }
+
+  /**
+   * LockDosList() - LVO -654 (V36+)
+   *
+   * Lock the DosList for traversal. Spec says the returned pointer is
+   * NOT a valid DosList entry — it's a sentinel that the door passes
+   * to the first NextDosEntry()/FindDosEntry() call. We return a fixed
+   * non-zero sentinel: the door's lock-walk-unlock loop sees a valid
+   * lock, then NextDosEntry returns 0 (empty list), and the door
+   * exits the loop cleanly. The bulk-probe (2026-05-12) caught one
+   * door spinning 367 241 times on the NextDosEntry stub because the
+   * stub returned D0=dlist (pass-through), the door read its non-zero
+   * dlist and looped forever. Real LVOs break that loop in one step.
+   *
+   * NDK 3.2R4 autodoc: dos.library/LockDosList. We model the
+   * Forbid()/Permit() side via the existing exec.library Forbid path
+   * (the door's own Forbid call is intercepted there).
+   *
+   * Parameters:
+   *   D1 = flags - LDF_DEVICES | LDF_VOLUMES | LDF_ASSIGNS | LDF_READ/LDF_WRITE
+   *
+   * Returns:
+   *   D0 = dlist sentinel (non-zero "lock acquired" handle)
+   */
+  LockDosList(): number {
+    const flags = this.emulator.getRegister(CPURegister.D1);
+debugLog(`[dos.library] LockDosList(flags=0x${flags.toString(16)}) → sentinel 0x1 (empty list)`);
+    return 0x1;
+  }
+
+  /**
+   * AttemptLockDosList() - LVO -666 (V36+)
+   *
+   * Same as LockDosList but non-blocking. Since we model the list as
+   * empty + never-busy, success and failure paths converge — return
+   * the same sentinel as LockDosList.
+   *
+   * NDK 3.2R4 autodoc: dos.library/AttemptLockDosList
+   */
+  AttemptLockDosList(): number {
+    const flags = this.emulator.getRegister(CPURegister.D1);
+debugLog(`[dos.library] AttemptLockDosList(flags=0x${flags.toString(16)}) → sentinel 0x1`);
+    return 0x1;
+  }
+
+  /**
+   * UnLockDosList() - LVO -660 (V36+)
+   *
+   * Release the DosList lock. Real spec pairs with LockDosList()'s
+   * Forbid(); we no-op since our exec Forbid stack handles the pair
+   * symmetrically and the synthetic empty list has no shared state.
+   *
+   * NDK 3.2R4 autodoc: dos.library/UnLockDosList
+   */
+  UnLockDosList(): void {
+    const flags = this.emulator.getRegister(CPURegister.D1);
+debugLog(`[dos.library] UnLockDosList(flags=0x${flags.toString(16)})`);
+  }
+
+  /**
+   * NextDosEntry() - LVO -690 (V36+)
+   *
+   * Walk the locked DosList. Since AddDosEntry has never registered
+   * an entry on our side (it's still a stub-returning-success — see
+   * issue track), the list is empty by construction, so every call
+   * must return 0 (no-more-entries). Doors then break out of their
+   * walk loop. Was the worst offender in the 2026-05-12 bulk-probe:
+   * 367 241 calls in a single door (Loops indefinitely because the
+   * old stub returned D0=D1, the same pointer the door passed in).
+   *
+   * NDK 3.2R4 autodoc: dos.library/NextDosEntry
+   *
+   * Parameters:
+   *   D1 = dlist - Current DosList entry
+   *   D2 = flags - LDF_xxx
+   *
+   * Returns:
+   *   D0 = next dlist or NULL
+   */
+  NextDosEntry(): number {
+    const dlistPtr = this.emulator.getRegister(CPURegister.D1);
+    const flags = this.emulator.getRegister(CPURegister.D2);
+debugLog(`[dos.library] NextDosEntry(dlist=0x${dlistPtr.toString(16)}, flags=0x${flags.toString(16)}) → 0 (end of empty list)`);
+    return 0;
   }
 
   /**
@@ -6407,8 +6495,20 @@ debugLog(
       case -678: // AddDosEntry - CORRECTED (was incorrectly FSeek)
         this.emulator.setRegister(CPURegister.D0, this.AddDosEntry());
         return true;
+      case -654: // LockDosList — V36+. Returns a non-zero sentinel.
+        this.emulator.setRegister(CPURegister.D0, this.LockDosList());
+        return true;
+      case -660: // UnLockDosList — V36+. No-op pair to LockDosList.
+        this.UnLockDosList();
+        return true;
+      case -666: // AttemptLockDosList — V36+. Same sentinel as LockDosList.
+        this.emulator.setRegister(CPURegister.D0, this.AttemptLockDosList());
+        return true;
       case -684: // FindDosEntry - CORRECTED (was incorrectly FTell)
         this.emulator.setRegister(CPURegister.D0, this.FindDosEntry());
+        return true;
+      case -690: // NextDosEntry — V36+. Always 0 (empty synthetic list).
+        this.emulator.setRegister(CPURegister.D0, this.NextDosEntry());
         return true;
       case -1302: // FOpen - CORRECTED from -588 (off by 714!)
         this.emulator.setRegister(CPURegister.D0, this.FOpen());

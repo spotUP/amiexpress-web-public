@@ -440,6 +440,15 @@ class AREXXFunctions {
     return s.replace(new RegExp(`^${escC}+|${escC}+$`, 'g'), '');
   }
 
+  // TRIM(str [, char]) — AREXX alias for STRIP(str, 'B' [, char]).
+  // Shipped AmiExpress doors use TRIM (e.g. Jdn-Csent.rexx: `oehh=TRIM(Result)`).
+  // RexxRef §5.4 lists TRIM as a standard string function in AREXX —
+  // distinct from REXX/ANSI which only defines STRIP. Routing through
+  // STRIP keeps one implementation.
+  static TRIM(str: string, char?: string): string {
+    return AREXXFunctions.STRIP(str, 'B', char);
+  }
+
   static SUBWORD(str: string, n: number, length?: number): string {
     const s = String(str ?? '');
     const words = s.trim().split(/\s+/).filter(Boolean);
@@ -1735,36 +1744,72 @@ console.error('BBSCREATEDROPFILE error:', error);
    */
   async Prompt(promptText: string): Promise<string> {
     await this.emitToTerminal(promptText, /*addCrlf=*/false);
-    if (typeof this.context.input === 'function') {
-      try {
-        const line = await this.context.input(''); // empty extra prompt
-        const s = String(line ?? '');
-        // Ctrl+C anywhere in the line → abort. (Some terminals send
-        // \x03 alone without flushing the rest of the buffer; some
-        // send the line up to ETX.) Same semantics as GETCHAR.
-        if (s.charCodeAt(0) === 3 || s.includes('\x03')) {
-          maybeAbortInterpreter(this.context, 'CTRLC');
-          return '';
-        }
-        return s;
-      } catch {
-        return '';
-      }
-    }
-    if (this.context.session && typeof this.context.session.doorInputHandler !== 'undefined') {
-      // Fall back to door-input handler pattern (executeARexxDoor wires this).
+    // NOTE: we intentionally skip context.input here even when set.
+    // executeARexxDoor wires context.input to a Promise that resolves on
+    // the FIRST chunk delivered by session.doorInputHandler — but the
+    // central socket router delivers keystrokes one character at a time,
+    // so context.input returns single chars rather than full lines.
+    // REXX `PROMPT` / `QUERY` semantics demand line-input. The
+    // session.doorInputHandler accumulator below handles that correctly
+    // (echo + backspace + CR-terminated). Once context.input is fixed
+    // upstream to be line-mode, this preference can be restored.
+    // Fall back to the door-input handler pattern that GETCHAR uses
+    // (executeARexxDoor sets session.inDoorManager=true so the central
+    // socket router forwards keystrokes through doorInputHandler).
+    // Previous gate was `typeof session.doorInputHandler !== 'undefined'`
+    // — inverted: the property is intentionally undefined until WE set
+    // it, so the check always failed and Prompt returned '' immediately.
+    //
+    // Inputs from the central socket router arrive ONE CHARACTER AT A
+    // TIME (see [socket-handlers] "ABOUT TO CALL doorInputHandler" log).
+    // PROMPT/QUERY are *line-input* in REXX — accumulate keystrokes
+    // until CR/LF, echo each one (with backspace handling), then resolve
+    // with the final string. Without this loop the very first keystroke
+    // ended the Prompt (Jdn-Csent.rexx: user typed `t`, oehh="t",
+    // script's `IF oehh2='[0m' THEN CALL EMPTY` mis-flowed because the
+    // colour-prefixed comparison string carried only `t\x1b[0m`).
+    if (this.context.session) {
       return await new Promise<string>((resolve) => {
         const session: any = this.context.session;
-        session.doorInputHandler = (data: string) => {
+        let buf = '';
+        const finish = (final: string) => {
           delete session.doorInputHandler;
+          resolve(final);
+        };
+        const onChar = (data: string) => {
           const s = String(data ?? '');
+          // Ctrl+C anywhere → abort (matches GETCHAR semantics).
           if (s.charCodeAt(0) === 3 || s.includes('\x03')) {
             maybeAbortInterpreter(this.context, 'CTRLC');
-            resolve('');
+            finish('');
             return;
           }
-          resolve(s);
+          for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            const cc = ch.charCodeAt(0);
+            // CR or LF terminates the line.
+            if (cc === 13 || cc === 10) {
+              // Echo the newline so the next prompt lands on a fresh line.
+              try { this.emitToTerminal('\r\n', false); } catch { /* best-effort */ }
+              finish(buf);
+              return;
+            }
+            // Backspace / DEL — strip one char and re-echo backspace-space-backspace.
+            if (cc === 8 || cc === 127) {
+              if (buf.length > 0) {
+                buf = buf.slice(0, -1);
+                try { this.emitToTerminal('\b \b', false); } catch { /* best-effort */ }
+              }
+              continue;
+            }
+            // Ignore other non-printing control chars.
+            if (cc < 32) continue;
+            buf += ch;
+            // Echo so the user sees what they typed (terminal is in raw mode).
+            try { this.emitToTerminal(ch, false); } catch { /* best-effort */ }
+          }
         };
+        session.doorInputHandler = onChar;
       });
     }
     return '';
@@ -2265,7 +2310,9 @@ interface Procedure {
  */
 export class AREXXInterpreter {
   private variables: AREXXVariables;
-  private bbsFunctions: BBSFunctions;
+  // Exposed so host-dispatch bridges (rexx-host-dispatch.ts) can delegate
+  // to the same BBS API surface the TS interpreter uses.
+  public bbsFunctions: BBSFunctions;
   private context: any;
   private output: string[] = [];
   private breakRequested: boolean = false;
@@ -2589,7 +2636,44 @@ console.log(`Label registered: ${label} at line ${i}`);
         if (t) out.push(t);
       }
     }
-    return out;
+
+    // Fixup: rejoin `IF expr` clauses that were split from their
+    // following `THEN ...` clause by an extraneous semicolon. Strict
+    // REXX flags `IF expr; THEN action` as a syntax error, but
+    // shipping AmiExpress AREXX doors include this pattern (Jdn-Csent.
+    // rexx: `End=1;IF Open(DF,cfg);  THEN DO;`) and run fine on real
+    // Amiga — Commodore's REXX accepted the stray `;` as decorative.
+    // Match the practical behaviour by stitching them back together.
+    // Also handles cascading IF/THEN/ELSE/THEN sequences.
+    const fixed: string[] = [];
+    for (let i = 0; i < out.length; i++) {
+      let cur = out[i];
+      // Repeatedly merge a following clause that starts with THEN/ELSE
+      // when the current clause is a dangling IF/WHEN or trailing ELSE.
+      while (i + 1 < out.length) {
+        const next = out[i + 1];
+        const curU = cur.toUpperCase();
+        const nextU = next.toUpperCase();
+        const danglingIf  = /^IF\s+/.test(curU) && !/\sTHEN(\s|$)/.test(curU);
+        const danglingWhen= /^WHEN\s+/.test(curU) && !/\sTHEN(\s|$)/.test(curU);
+        const danglingElse= curU === 'ELSE' || curU.endsWith(' ELSE');
+        const nextStartsThen = /^THEN(\s|$)/.test(nextU);
+        const nextStartsElse = /^ELSE(\s|$)/.test(nextU);
+        if ((danglingIf || danglingWhen) && nextStartsThen) {
+          cur = `${cur} ${next}`;
+          i++;
+          continue;
+        }
+        if (danglingElse && (nextStartsThen || /^(IF|DO|CALL|SAY|RETURN|EXIT|SIGNAL)/i.test(nextU))) {
+          cur = `${cur} ${next}`;
+          i++;
+          continue;
+        }
+        break;
+      }
+      fixed.push(cur);
+    }
+    return fixed;
   }
 
   /**
@@ -3105,6 +3189,19 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       // subroutine body.
       const labelLine = this.labels.get(upperTarget);
       if (labelLine !== undefined) {
+        // Bound label-subroutine recursion the same way function-call
+        // recursion is bounded (callProcedure line ~3950). Without this
+        // a script like Jdn-Csent.rexx whose menu loop is
+        // `abfrage:; gc; ... else call abfrage` will recurse forever
+        // when GC doesn't block, building an unbounded Promise chain
+        // through repeated `await executeLines(...)` and OOM'ing v8.
+        // Each `call <label>` is one new frame, mirroring REXX semantics
+        // where label-call IS the recursion unit.
+        this.recursionDepth++;
+        if (this.recursionDepth > this.maxRecursionDepth) {
+          this.recursionDepth--;
+          throw new Error(`Maximum recursion depth exceeded (${this.maxRecursionDepth}) calling label '${upperTarget}'`);
+        }
         // Fresh subroutine frame: snapshot caller's RETURN state so
         // the subroutine's RETURN doesn't leak into the caller.
         const savedReturn = this.returnRequested;
@@ -3114,6 +3211,7 @@ console.log(`[TRACE] Line ${i}: ${line}`);
         try {
           await this.executeLines(this.scriptLines, labelLine + 1, this.scriptLines.length);
         } finally {
+          this.recursionDepth--;
           // After the subroutine returns or exits, the caller
           // continues from the next line. RETURN sets returnValue
           // → expose via REXX's automatic RESULT variable.
@@ -3266,6 +3364,38 @@ console.log(`[TRACE] Line ${i}: ${line}`);
       }
       this.variables.set('RC', '0');
       return;
+    }
+
+    // Variable-as-host-command resolution (RKRM "Using ARexx" §4.2):
+    // an unrecognised bare-symbol clause is evaluated as a REXX
+    // expression and the resulting string is dispatched to the current
+    // ADDRESS. AmiExpress doors use this idiom to alias host commands:
+    //   GC = getchar; ...; gc;
+    // Here `gc` evaluates to the string "GETCHAR" (the value previously
+    // assigned). Without this resolution the clause is a no-op, GETCHAR
+    // never blocks for input, and a menu loop like `else call abfrage`
+    // recurses forever (Jdn-Csent.rexx). Look up via the same alias
+    // table so the resolved name (e.g. "GETCHAR" or "TR") still gets
+    // mapped to the canonical host command.
+    if (/^[A-Za-z_][A-Za-z0-9_.]*$/.test(tokens[0] || '')) {
+      const varName = (tokens[0] || '').toUpperCase();
+      const varValue = this.variables.get(varName);
+      if (typeof varValue === 'string' && varValue.length > 0 && varValue.toUpperCase() !== varName) {
+        const resolved2 = HOST_CMD_ALIASES[varValue.toUpperCase()] || varValue.toUpperCase();
+        const argText2 = line.substring(tokens[0].length).trim();
+        let argValue2: any = '';
+        if (argText2) {
+          try { argValue2 = await this.evaluateExpression(argText2); } catch { argValue2 = argText2; }
+        }
+        const callResult2 = await this.callFunction(resolved2, [String(argValue2 ?? '')]);
+        if (callResult2 !== undefined && callResult2 !== null) {
+          const s = String(callResult2);
+          this.variables.set('RESULT', s);
+          this.variables.set('result', s);
+        }
+        this.variables.set('RC', '0');
+        return;
+      }
     }
 
     // No fallback matched — silently drop. Strict REXX would raise

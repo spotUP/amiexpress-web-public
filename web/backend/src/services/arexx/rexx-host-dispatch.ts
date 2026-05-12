@@ -139,7 +139,7 @@ const defaultRegistry: Record<string, HostCommandHandler> = {
   BBSWRITE: async (args, ctx) => {
     const { AREXXInterpreter } = require('../arexx.service');
     const interp = new AREXXInterpreter(ctx);
-    await interp.bbs.BBSWRITE(args.join(' '));
+    await interp.bbsFunctions.BBSWRITE(args.join(' '));
     return { result1: 0 };
   },
 
@@ -147,7 +147,7 @@ const defaultRegistry: Record<string, HostCommandHandler> = {
   BBSREAD: async (_args, ctx) => {
     const { AREXXInterpreter } = require('../arexx.service');
     const interp = new AREXXInterpreter(ctx);
-    const line = await interp.bbs.BBSREAD();
+    const line = await interp.bbsFunctions.BBSREAD();
     return { result1: 0, resultString: String(line || '') };
   },
 
@@ -156,7 +156,7 @@ const defaultRegistry: Record<string, HostCommandHandler> = {
   OUTSTR: async (args, ctx) => {
     const { AREXXInterpreter } = require('../arexx.service');
     const interp = new AREXXInterpreter(ctx);
-    await interp.bbs.BBSWRITE(args.join(' '));
+    await interp.bbsFunctions.BBSWRITE(args.join(' '));
     return { result1: 0 };
   },
 
@@ -165,7 +165,7 @@ const defaultRegistry: Record<string, HostCommandHandler> = {
   GETCHAR: async (_args, ctx) => {
     const { AREXXInterpreter } = require('../arexx.service');
     const interp = new AREXXInterpreter(ctx);
-    const ch = await interp.bbs.GETCHAR();
+    const ch = await interp.bbsFunctions.GETCHAR();
     return { result1: 0, resultString: String(ch || '') };
   },
   GC: async (_args, ctx) => defaultRegistry.GETCHAR(_args, ctx),
@@ -176,7 +176,7 @@ const defaultRegistry: Record<string, HostCommandHandler> = {
     const message = args.slice(1).join(' ');
     const { AREXXInterpreter } = require('../arexx.service');
     const interp = new AREXXInterpreter(ctx);
-    await interp.bbs.BBSLOG(level, message);
+    await interp.bbsFunctions.BBSLOG(level, message);
     return { result1: 0 };
   },
 };

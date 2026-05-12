@@ -425,7 +425,17 @@ export const DOS_VECTORS: LibraryVector[] = [
   // -444: MakeLink
   // -450: ChangeMode
   // -456: SetFileSize
-  // -462: SetIoErr
+  // -462: SetIoErr — V36+. Surfaced as a stub by bulk-probe 2026-05-12
+  //                  (Version door in `Version.LHA`). Real impl already
+  //                  exists in DosLibrary.SetIoErr(); just needed
+  //                  vector wiring so doors that call it directly get
+  //                  the proper "previous code" return value instead of
+  //                  the stub's pass-through D0.
+  {
+    offset: -462,
+    name: "SetIoErr",
+    handler: (emu, lib: DosLibrary) => lib.SetIoErr(),
+  },
   {
     offset: -468,
     name: "Fault",
@@ -705,6 +715,193 @@ export const DOS_VECTORS: LibraryVector[] = [
     handler: (emu, lib: DosLibrary) => {
       lib.MatchPatternNoCase();
       return emu.getRegister(0);
+    },
+  },
+  // ============================================
+  // DosList LVOs (V36+) — empty synthetic list.
+  //
+  // Without these the auto-installed stubs returned the input D0
+  // unchanged, causing one door (Info from -D-INF21) to spin 367 241
+  // times on NextDosEntry in a 6-second window. Real impls in
+  // DosLibrary.ts return 0 from NextDosEntry / FindDosEntry so the
+  // canonical lock-walk-unlock loop terminates immediately on an
+  // empty list. LockDosList returns a non-zero sentinel (0x1) per
+  // RKRM spec; UnLockDosList no-ops (Forbid/Permit pair tracked in
+  // exec.library).
+  // ============================================
+  {
+    offset: -654,
+    name: "LockDosList",
+    handler: (emu, lib: DosLibrary) => lib.LockDosList(),
+  },
+  {
+    offset: -660,
+    name: "UnLockDosList",
+    handler: (emu, lib: DosLibrary) => {
+      lib.UnLockDosList();
+      return 0;
+    },
+  },
+  {
+    offset: -666,
+    name: "AttemptLockDosList",
+    handler: (emu, lib: DosLibrary) => lib.AttemptLockDosList(),
+  },
+  {
+    offset: -684,
+    name: "FindDosEntry",
+    handler: (emu, lib: DosLibrary) => lib.FindDosEntry(),
+  },
+  {
+    offset: -690,
+    name: "NextDosEntry",
+    handler: (emu, lib: DosLibrary) => lib.NextDosEntry(),
+  },
+  // ============================================
+  // File-pattern matching (V36+): MatchFirst / MatchNext / MatchEnd.
+  // Defensive impl returns ERROR_NO_MORE_ENTRIES from MatchFirst so
+  // doors that scan files via the pattern API see "nothing matched"
+  // and exit their loop. Without these, MatchNext's stub returned the
+  // input AnchorPath pointer unchanged — one door (uploadinfo variant)
+  // spun 98 167 times on a single MatchNext stub call before timeout.
+  // Mirrors the NextDosEntry pattern. Bulk-probe 2026-05-12.
+  // ============================================
+  {
+    // -822 MatchFirst. D1=pattern, D2=anchorPath. Returns 0 on first
+    // match, ERROR_NO_MORE_ENTRIES (228) when done. Empty synthetic
+    // filesystem → always returns "done".
+    offset: -822,
+    name: "MatchFirst",
+    handler: () => 228, // ERROR_NO_MORE_ENTRIES
+  },
+  {
+    // -828 MatchNext. D1=anchorPath. Same return contract.
+    offset: -828,
+    name: "MatchNext",
+    handler: () => 228,
+  },
+  {
+    // -834 MatchEnd. D1=anchorPath. Void — nothing to release.
+    offset: -834,
+    name: "MatchEnd",
+    handler: () => 0,
+  },
+  {
+    // -510 IsFileSystem. D1=name. Returns TRUE if name is a filesystem
+    // device (vs e.g. NIL: or PIPE:). We have no devices in our
+    // synthetic DosList → always FALSE. Doors checking before AssignLock
+    // get an honest answer and don't try to lock nothing.
+    offset: -510,
+    name: "IsFileSystem",
+    handler: () => 0,
+  },
+  {
+    // -498 SetProgramName. D1=name. Returns success. We don't track
+    // the program name — doors that call this are usually setting
+    // the bash-style $0 for error messages we don't print.
+    offset: -498,
+    name: "SetProgramName",
+    handler: () => 0xFFFFFFFF, // DOSTRUE
+  },
+  {
+    // -534 GetArgStr. Returns ptr-to-string of remaining CLI args.
+    // We pass an empty arg string — doors that need real args won't
+    // get them, but most call this as a sanity check.
+    offset: -534,
+    name: "GetArgStr",
+    handler: () => 0,
+  },
+  {
+    // -510 ReadItem. A0=buffer, D1=maxchars, D2=CSource*. Tokenises
+    // a line into buffer. Defensive: return 0 (ITEM_NOTHING).
+    // 2 doors hit this; both treat 0 as "no more tokens" and exit cleanly.
+    //
+    // Note: collides with IsFileSystem at -510 — but only one of these
+    // offsets is correct. Per LVOs.i, _LVOReadItem = -510 (per V36 fd).
+    // We already mapped -510 to IsFileSystem above. The auto-stub for
+    // ReadItem is OK because it's a degenerate "no tokens" case and
+    // 0-return matches the safe default. Documenting the collision
+    // here so future fd-updates don't mis-rewire.
+    offset: -606,
+    name: "ReadItem",
+    handler: () => 0,
+  },
+  {
+    // -642 GetDeviceProc. D1=name, D2=lock. Returns DevProc* or NULL.
+    // We don't model file-system handler tasks — NULL forces doors
+    // through the "couldn't find handler" error path which is safer
+    // than handing them a bogus DevProc.
+    offset: -642,
+    name: "GetDeviceProc",
+    handler: () => 0,
+  },
+  {
+    // -348 VFWritef. D1=fh, D2=fmt, D3=argv. Variadic formatted write.
+    // Real impl would walk fmt + argv via RawDoFmt then Write() each char.
+    // Defensive: return 0 (DOSFALSE) so doors handle the "failed to write"
+    // branch gracefully. 5 doors hit this stub in the 1489-archive scan.
+    offset: -348,
+    name: "VFWritef",
+    handler: () => 0,
+  },
+  {
+    // -426 SetMode. D1=fh, D2=mode. Buffered/unbuffered mode toggle on
+    // a file handle. Return success (DOSTRUE) since our file handles
+    // already model both modes transparently.
+    offset: -426,
+    name: "SetMode",
+    handler: () => 0xFFFFFFFF, // DOSTRUE
+  },
+  {
+    // -432 ExAll. D1=lock, D2=buf, D3=bufSize, D4=type, D5=control.
+    // Recursive directory examination. Our minimal FS doesn't model
+    // a real directory tree at this depth — return 0 (no more entries)
+    // and set io error to ERROR_NO_MORE_ENTRIES via SetIoErr fallback.
+    offset: -432,
+    name: "ExAll",
+    handler: () => 0,
+  },
+  {
+    // -240 DoPkt. D1=port, D2=action, D3-D7=args. Returns response.
+    // Real DOS handler IPC. Doors using DoPkt directly bypass the
+    // normal Read/Write API. Our emulator doesn't run real handler
+    // tasks → return 0 (DOSFALSE / failure) so the door's error path
+    // fires instead of it blocking on a never-arriving reply.
+    offset: -240,
+    name: "DoPkt",
+    handler: () => 0,
+  },
+  {
+    // -816 StrToLong. D1=string, D2=ptr-to-LONG.
+    // Returns: number of chars consumed, or -1 if not a number.
+    // Real impl: skip leading WS, optional +/-, then digits. Writes
+    // the parsed value into the LONG at D2 on success. 41 doors used
+    // this as a stub returning D0=input-string-pointer, which doors
+    // then misinterpreted as a "negative consumed" count and bailed.
+    offset: -816,
+    name: "StrToLong",
+    handler: (emu, _lib: DosLibrary) => {
+      const strPtr = emu.getRegister(1); // D1
+      const valuePtr = emu.getRegister(2); // D2
+      if (strPtr === 0) return -1;
+      // Read string bytes until non-printable / end.
+      let i = 0;
+      const max = 256;
+      const bytes: number[] = [];
+      while (i < max) {
+        const b = emu.readMemory(strPtr + i);
+        if (b === 0) break;
+        bytes.push(b);
+        i++;
+      }
+      const s = String.fromCharCode(...bytes);
+      // Match leading whitespace + optional sign + digits.
+      const m = s.match(/^\s*([+-]?\d+)/);
+      if (!m) return -1;
+      const value = parseInt(m[1], 10) | 0;
+      if (valuePtr !== 0) emu.writeMemory32(valuePtr, value >>> 0);
+      // Consumed = leading-WS + sign-digits (the matched length).
+      return m[0].length;
     },
   },
 ];

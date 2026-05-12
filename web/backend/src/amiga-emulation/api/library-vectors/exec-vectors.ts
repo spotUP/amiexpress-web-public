@@ -33,6 +33,226 @@ console.error(`[TrapDebug] Failed to write log: ${e}`);
 
 export const EXEC_VECTORS: LibraryVector[] = [
   {
+    // LVO -336 FreeSignal (RKRM Libraries §Exec). D0 = signal bit.
+    // Without this vector the LVO falls through to the auto-installed
+    // stub that does nothing — the bit stays allocated, future
+    // AllocSignal calls in the same door run out of bits or get the
+    // wrong one. Bulk-probe (2026-05-12, 50 archives) showed 3 doors
+    // calling FreeSignal as a stub. Safe under all states — the
+    // freeSignal impl already validates the bit range + no-ops on
+    // unallocated bits.
+    offset: -336,
+    name: "FreeSignal",
+    handler: (emu, lib: ExecLibrary) => {
+      const signalBit = emu.getRegister(0); // D0
+      lib.freeSignalPublic(signalBit);
+      return 0;
+    },
+  },
+  {
+    // LVO -360 RemPort (RKRM Libraries §Exec). A1 = port address.
+    // Spec: unlink port from ExecBase->PortList. Membership-guarded
+    // via ExecLibrary.remPort() — silently ignores ports that were
+    // never added (a previous unguarded attempt corrupted the global
+    // list head/tailPred when the door called RemPort on its own
+    // private reply port, which AEDoor.library allocates without
+    // adding to ExecBase->PortList).
+    offset: -360,
+    name: "RemPort",
+    handler: (emu, lib: ExecLibrary) => {
+      const portAddr = emu.getRegister(9); // A1
+      lib.remPort(portAddr);
+      return 0;
+    },
+  },
+  // ============================================
+  // Device / IO request family — defensive impls. Doors typically open
+  // timer.device, console.device, or serial.device and do DoIO for
+  // timing or character output we model elsewhere (XIM protocol). The
+  // door doesn't care about real device behaviour as long as the open
+  // claims success and DoIO returns 0. Pair Open/CloseDevice + Create/
+  // DeleteIORequest + DoIO/WaitIO/CheckIO/AbortIO so any door using
+  // any subset gets a consistent stack. Bulk-probe 2026-05-12 ranked
+  // these (post-FreeSignal/RemPort fix) as the highest-doors-hit stubs:
+  // OpenDevice 51, CloseDevice 21, CreateIORequest 12, DoIO 8.
+  // ============================================
+  {
+    // -444 OpenDevice. A0=devName, D0=unit, A1=ioRequest, D1=flags.
+    // Sets io_Error in the IORequest (offset 31, 1 byte) to 0 and
+    // returns 0 in D0 = "success". Doors then call DoIO which we
+    // also return 0 from.
+    offset: -444,
+    name: "OpenDevice",
+    handler: (emu, _lib: ExecLibrary) => {
+      const ioReq = emu.getRegister(9); // A1
+      if (ioReq !== 0) {
+        emu.writeMemory(ioReq + 31, 0); // io_Error = 0
+      }
+      return 0; // D0 = 0 success
+    },
+  },
+  {
+    // -450 CloseDevice. A1=ioRequest. Void return per autodoc.
+    offset: -450,
+    name: "CloseDevice",
+    handler: () => 0,
+  },
+  {
+    // -456 DoIO. A1=ioRequest. Returns io_Error (we set 0 = ok).
+    offset: -456,
+    name: "DoIO",
+    handler: (emu, _lib: ExecLibrary) => {
+      const ioReq = emu.getRegister(9); // A1
+      if (ioReq !== 0) {
+        emu.writeMemory(ioReq + 31, 0); // io_Error = 0
+      }
+      return 0;
+    },
+  },
+  {
+    // -468 CheckIO. A1=ioRequest. Returns ioRequest if complete else 0.
+    // We always claim complete — our synchronous model has no in-flight IO.
+    offset: -468,
+    name: "CheckIO",
+    handler: (emu, _lib: ExecLibrary) => emu.getRegister(9), // A1
+  },
+  {
+    // -474 WaitIO. A1=ioRequest. Returns io_Error.
+    offset: -474,
+    name: "WaitIO",
+    handler: (emu, _lib: ExecLibrary) => {
+      const ioReq = emu.getRegister(9); // A1
+      if (ioReq !== 0) {
+        emu.writeMemory(ioReq + 31, 0);
+      }
+      return 0;
+    },
+  },
+  {
+    // -480 AbortIO. A1=ioRequest. Void. Our IO is always-complete; no abort needed.
+    offset: -480,
+    name: "AbortIO",
+    handler: () => 0,
+  },
+  {
+    // -654 CreateIORequest. A0=replyPort, D0=size. Allocates a zeroed
+    // block and writes mn_ReplyPort + mn_Length. Returns block addr.
+    // Pair with DeleteIORequest. Real spec is allocMem then memset 0;
+    // we do the same via existing exec.allocMem helper.
+    offset: -654,
+    name: "CreateIORequest",
+    handler: (emu, lib: ExecLibrary) => {
+      const replyPort = emu.getRegister(8); // A0
+      const size = emu.getRegister(0); // D0
+      if (size <= 0) return 0;
+      const addr = (lib as any).allocMem(size, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+      if (addr !== 0) {
+        emu.writeMemory32(addr + 14, replyPort); // mn_ReplyPort
+        emu.writeMemory16(addr + 18, size);      // mn_Length
+        emu.writeMemory(addr + 8, 5);            // ln_Type = NT_REPLYMSG
+      }
+      return addr;
+    },
+  },
+  {
+    // -660 DeleteIORequest. A0=ioRequest. Frees the block.
+    offset: -660,
+    name: "DeleteIORequest",
+    handler: (emu, lib: ExecLibrary) => {
+      const ioReq = emu.getRegister(8); // A0
+      if (ioReq !== 0) {
+        const size = emu.readMemory16(ioReq + 18); // mn_Length
+        try { (lib as any).freeMem(ioReq, size || 64); } catch { /* best-effort */ }
+      }
+      return 0;
+    },
+  },
+  {
+    // -222 AllocEntry. A0=memList. Spec: walk memList allocating each
+    // entry. Defensive impl: return the input MemList unchanged (claim
+    // "no allocations needed"). Doors that pass a MemList with N
+    // entries get back the same pointer; downstream FreeEntry no-ops.
+    // Only correct if doors don't actually USE the .me_Addr fields — most
+    // pass-through cases do work this way. We'll revisit if a real door
+    // breaks. 28 doors hit this stub.
+    offset: -222,
+    name: "AllocEntry",
+    handler: (emu, _lib: ExecLibrary) => emu.getRegister(8), // A0
+  },
+  {
+    // -228 FreeEntry. A0=memList. Void return.
+    offset: -228,
+    name: "FreeEntry",
+    handler: () => 0,
+  },
+  // ============================================
+  // Batch 2 (long-tail stubs — 1–6 doors each from 993-archive sample).
+  // All safe defensive impls: return success/null/no-op per autodoc.
+  // ============================================
+  {
+    // -498 OpenResource. A1=name. Returns NULL = "not found", which is
+    // the spec-correct response when a resource isn't loaded. Doors
+    // handle NULL gracefully via the standard resource error path.
+    offset: -498,
+    name: "OpenResource",
+    handler: () => 0,
+  },
+  {
+    // -420 SetFunction. A1=lib, A0=newFunc, D0=offset. Real impl
+    // replaces an LVO and returns the previous. Defensive: return 0
+    // — doors patching libs (rare) will see "no previous patch" and
+    // mostly do nothing destructive. SetFunction is dangerous; even
+    // a real impl would be risky against our emulated libraries.
+    offset: -420,
+    name: "SetFunction",
+    handler: () => 0,
+  },
+  {
+    // -282 AddTask. A1=task, A2=initPC, A3=finalPC. Spec returns the
+    // task ptr. We don't run multitask, but returning input keeps
+    // doors that just register tasks for later cleanup happy.
+    offset: -282,
+    name: "AddTask",
+    handler: (emu, _lib: ExecLibrary) => emu.getRegister(9), // A1
+  },
+  {
+    // -600 AddSemaphore. A1=sigSem. Void return. We don't lock,
+    // but the door's semaphore-init path needs the call to succeed.
+    offset: -600,
+    name: "AddSemaphore",
+    handler: () => 0,
+  },
+  {
+    // -168 AddIntServer. D0=intNumber, A1=intServer. Void. No real
+    // hardware interrupts in our emulation.
+    offset: -168,
+    name: "AddIntServer",
+    handler: () => 0,
+  },
+  {
+    // -648 CacheControl. D0=cacheBits, D1=cacheMask. Returns previous
+    // cache state. Defensive: return 0 (no cache state).
+    offset: -648,
+    name: "CacheControl",
+    handler: () => 0,
+  },
+  {
+    // -132 RemMemHandler. A1=handler. Void. Pair with AddMemHandler
+    // which we also no-op. Doors that allocate memhandler for low-mem
+    // recovery skip the recovery path entirely.
+    offset: -132,
+    name: "RemMemHandler",
+    handler: () => 0,
+  },
+  {
+    // -162 SetIntVector. D0=vector, A1=interrupt. Returns previous
+    // handler. Real impl installs an interrupt handler — we have no
+    // real interrupts in our emulation. Return 0 (no previous handler).
+    offset: -162,
+    name: "SetIntVector",
+    handler: () => 0,
+  },
+  {
     offset: -552, // LVO -552 (0xFDD8)
     name: "OpenLibrary",
     handler: (emu, lib: ExecLibrary) => {

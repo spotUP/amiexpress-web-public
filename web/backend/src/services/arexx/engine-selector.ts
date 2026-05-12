@@ -25,6 +25,16 @@ let cachedTooltype: 'native' | 'ts' | 'auto' | null = null;
 
 function readEngineTooltype(): 'native' | 'ts' | 'auto' {
   if (cachedTooltype) return cachedTooltype;
+  // Env-var override takes precedence — useful when bbsConfig.info uses
+  // the fallback (non-rewritable) parse path so the tooltype can't be
+  // edited via info-editor, and for ops that needs to force a fallback
+  // without touching binaries (e.g. the 2026-05-11 native daemon-drive
+  // OOM on Jdn-Csent.rexx).
+  const envOverride = String(process.env.AREXX_ENGINE || '').toLowerCase().trim();
+  if (envOverride === 'native' || envOverride === 'ts' || envOverride === 'auto') {
+    cachedTooltype = envOverride as 'native' | 'ts' | 'auto';
+    return cachedTooltype;
+  }
   try {
     const { loadBBSConfig } = require('../bbs-config-file.service');
     const cfg = loadBBSConfig(config.get('dataDir'));

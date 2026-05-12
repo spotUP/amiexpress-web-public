@@ -1,0 +1,23 @@
+c.-[ Dive '95 ]--------------[ Fuck Nature v1.0 ]--------------[ by Mad Moose ]-.
+|                                                                              |
+|                                                                              |
+|                                                                              |
+|   Username  [                     ]     Ul Bytes   [                       ] |
+|   Location  [                     ]     Dl Bytes   [                       ] |
+|   Phone     [                     ]     Ul Files   [                       ] |
+|   Computer  [                     ]     Dl Files   [                       ] |
+|   Baud Rate [                     ]     ByteLimit  [                       ] :
+|   Access    [                     ]     Ratio Type [     ]  Ratio  [   /   ] .
+|   Ax Group  [                     ]     Expert     [     ]  Slot   [       ]
+|   Time Left [                     ]     Time Total [                       ]
+|                                                                              .
+|
+|
+|                                                                              .
+:
+.
+
+.
+
+
+.                                                                              .SysopLocal Console115200255Sysop000000 B DSBL!No00

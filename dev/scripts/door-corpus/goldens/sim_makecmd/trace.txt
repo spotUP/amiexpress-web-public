@@ -1,0 +1,40 @@
+[LibraryTraps] Loaded LVOs from ~/Code/amiexpress-web/Documentation/7-Reference Sources/LVOs.i
+[LibraryTraps] Installing Exec.library vectors at base 0x?
+[LibraryTraps] Installed 83 Exec.library vectors
+[LibraryTraps] Stubbed 44 LVOs for exec.library from LVOs.i
+[LibraryTraps] Synced 126 trap addresses to MOIRA for batch execution
+[LibraryTraps] Installing utility.library vectors at base 0x?
+[LibraryTraps] Installed 39 utility.library vectors
+[LibraryTraps] Installing icon.library vectors at base 0x?
+[LibraryTraps] *** icon.library GetDiskObject at 0x? contains: 0x? (should be 0x?) ***
+[LibraryTraps] *** icon.library FULLY OPERATIONAL - ALL traps installed and ready ***
+[LibraryTraps] Installed 12 icon.library vectors
+[LibraryTraps] Installing dos.library vectors at base 0x?
+[LibraryTraps] Installed 98 dos.library vectors
+[LibraryTraps] Stubbed 62 LVOs for dos.library from LVOs.i
+[LibraryTraps] ============================================
+[LibraryTraps] AEDoor.library vectors: TRAP MODE (TypeScript handlers)
+[LibraryTraps] Base address: 0x?
+[LibraryTraps] Installing 20 trap handlers...
+[LibraryTraps] Installed 20 AEDoor.library vectors
+[LibraryTraps] Registered custom trap 'BBS_API_DISPATCHER' at 0x?
+[LibraryTraps] VERIFICATION: All 357 ILLEGAL instructions verified OK
+[LibraryTraps] Synced 357 trap addresses to MOIRA for batch execution
+[exec-vectors] OpenLibrary TRAP: name="dos.library" version=0
+[ExecLibrary] *** dos.library opened - base=0x? *** Door should store this and use it for all DOS calls
+[exec-vectors] OpenLibrary TRAP result: 0x?
+[exec-vectors] AllocMem TRAP: size=16 (0x?) flags=0x?
+[exec-vectors] AllocMem TRAP result: 0x?
+[exec-vectors] AllocMem TRAP: size=12 (0x?) flags=0x?
+[ExecLibrary] CreatePool(?, ?, ?) - REAL IMPLEMENTATION
+[ExecLibrary] Created pool at 0x?, size ?
+[ExecLibrary] AllocPooled(0x?, 92) - REAL IMPLEMENTATION
+[ExecLibrary] AllocPooled allocated 0x? from pool 0x?
+[exec-vectors] OpenLibrary TRAP: name="utility.library" version=0
+[ExecLibrary] AllocPooled(0x?, 362) - REAL IMPLEMENTATION
+[ExecLibrary] AllocPooled(0x?, 104) - REAL IMPLEMENTATION
+[ExecLibrary] FreePooled(0x?, 0x?, ?)
+[ExecLibrary] Freed memory at 0x? back to pool 0x?
+[ExecLibrary] FreePooled(0x?, 0x?, 5)
+[ExecLibrary] DeletePool(0x?)
+[ExecLibrary] Pool 0x? marked for deletion

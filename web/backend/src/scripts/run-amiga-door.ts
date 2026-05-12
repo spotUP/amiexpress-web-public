@@ -120,7 +120,78 @@ async function main(): Promise<void> {
     },
   });
 
+  // Scripted-input support for the door corpus runner. When stdin is
+  // piped (not a TTY), read lines of the form `<delayMs> <bytes>` and
+  // emit each as a `door:input` socket event after the given delay
+  // from session start. AmigaDoorSession listens for `door:input` and
+  // routes the data through the XIM / TIM / DOS-stdin protocol stack
+  // exactly the way real socket input does (AmigaDoorSession.ts:230).
+  //
+  // Escape sequences supported: `\r` → CR, `\n` → LF, `\t` → TAB,
+  // `\xNN` → hex byte, `\\` → literal backslash. Lines starting with
+  // `#` are comments. Empty lines are ignored. Reading stdin starts
+  // immediately so the first delay is measured from process start
+  // (small skew vs `amigaSession.start()` doesn't matter — XIM doors
+  // don't begin reading input until JH_LI / SIG_LI fires anyway).
+  let inputScript: Array<{ delayMs: number; bytes: string }> | null = null;
+  if (!process.stdin.isTTY) {
+    // Wait for stdin 'end' (the corpus runner / shell pipe closes it
+    // after writing the script). No timeout fallback — a 50 ms cap
+    // raced with jest's higher-latency spawn and resolved before the
+    // pipe delivered data, leaving doors blocked at their first
+    // input prompt. If nothing is piped, 'end' fires effectively
+    // immediately and we proceed with no script.
+    const raw = await new Promise<string>((resolve) => {
+      let buf = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { buf += chunk; });
+      process.stdin.on("end", () => resolve(buf));
+      process.stdin.on("error", () => resolve(buf));
+    });
+    if (raw.trim().length > 0) {
+      inputScript = parseInputScript(raw);
+    }
+  }
+
+  if (inputScript && inputScript.length > 0) {
+    const t0 = Date.now();
+    for (const entry of inputScript) {
+      const fireAt = t0 + entry.delayMs;
+      const wait = Math.max(0, fireAt - Date.now());
+      setTimeout(() => {
+        socket.emit("door:input", entry.bytes);
+      }, wait);
+    }
+  }
+
   await amigaSession.start();
+}
+
+function parseInputScript(
+  text: string,
+): Array<{ delayMs: number; bytes: string }> {
+  const out: Array<{ delayMs: number; bytes: string }> = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) continue;
+    const m = line.match(/^(\d+)\s+(.*)$/);
+    if (!m) continue;
+    const delayMs = Number(m[1]);
+    const bytes = decodeEscapes(m[2]);
+    out.push({ delayMs, bytes });
+  }
+  return out;
+}
+
+function decodeEscapes(s: string): string {
+  return s.replace(/\\(x[0-9a-fA-F]{2}|.)/g, (_, esc: string) => {
+    if (esc === "r") return "\r";
+    if (esc === "n") return "\n";
+    if (esc === "t") return "\t";
+    if (esc === "\\") return "\\";
+    if (esc.startsWith("x")) return String.fromCharCode(parseInt(esc.slice(1), 16));
+    return esc;
+  });
 }
 
 main().catch((error) => {

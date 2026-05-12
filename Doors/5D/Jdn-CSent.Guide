@@ -1,0 +1,138 @@
+@database "=GUILD OF THIEVES= - AN ELITE DREAM COMES TRUE!"
+@Node MAIN "=GuILD oF THIEvES="
+                     /\
+                    //\\
+                   //  \\
+__________________//    \\_________________________________________________
+\ _______ ________/      \________ ______________________________________ /
+ \\      \\                      //                                     //
+  \\      \\                    //      Jordan-Color Autosent 3._!     //
+   \\      \\      JORDAN      //                                     //
+    \\      \\       OF       //    Released on 17.06.94 , Friday    //
+    //      //  5TH DyNASTY   \\                                     \\
+   //      //                  \\       NOW GO FOR THE DOCUMENTATION  \\
+  //      //                    \\                                     \\
+ //______//_______        _______\\_____________________________________\\
+/________  _______\      /_______  _______________________________________\
+         ||       \\    //       ||
+         ||        \\  //        ||  @{" Purpose      ? " link "menu"}
+         ||_____/\  \\//  /\_____||  @{" Installation ? " link "menu2"}
+         |______/\\  \/  //\______|  @{" Requirements ? " link "menu3"}
+                  \\    //           @{" Credits      ? " link "menu4"}
+                   \\  //            @{" Support      ? " link "menu5"}
+                    \\//
+                     \/
+@endnode
+
+@node "menu" "What does it do?"
+@toc "menu"
+
+
+                           =WHAT DOES IT DO???=
+
+                  You all know Newfiles from Byteandy/Mst,
+     One of the greatest Amiexpress tools ever.But there is still one
+      little IMPROVEMENT to be made...all your Personal Sentby Lines
+            ...will NOW be written in a color of your Choice...
+
+      Looks pretty Nice in the Dirlisting and works with Newfiles2.xx
+
+                 It is very simple but unbelievably Coo| !
+
+
+                            @{" BACK TO MAIN MENU? " link "MAIN"}
+
+@endnode
+
+@node "menu2" "Installation"
+@toc "menu"
+
+
+                            ../INSTALLATION\..
+
+          Nice Question ! Just Copy all files to your directories
+                                and go ...
+
+
+                  Put this shit in your startup sequence
+
+                               rpstart >nil:
+                              rexxmast >nil:
+
+                      *do not 4get to copy the libs*
+
+      IF YOU DONT GET THE INSTALLATION JUST *CLOSE* YOUR BBS!DUMMASS!
+
+@endnode
+
+@node "menu3" "What does it require?"
+@toc "menu"
+
+
+                     =WHAT ABOUT THE REQUIREMENTS???=
+
+                       AMIGA 5oo-4ooo (68ooo-68o4o)
+
+                     AMIEXRESS V3.2X+ (C)LIGHTSPEED 94
+
+                 TWO LIBRARIES (SUPPORTED IN THIS PACKAGE)
+
+                 SOME COMMANDS (SUPPORTED IN THIS PACKAGE)
+
+
+
+
+      This Program will run On *ANY* Machine!Execpt PeeCee Clowns :)
+
+
+@endnode
+
+@node "menu4" "Credits!"
+@toc "menu"
+
+                               =THE CREdZ!=
+
+                   Coding - Jordan & Silencio/Interactive
+                         Guide - Jordan Interactive
+
+                            CygnusEd - ASDG Inc
+                          Rexx - C=Commodore Inc
+                         Amiexpress - Joseph Hodge
+                      RpStart - Dineen Edwards Group
+
+                     Greets to all IA MEMBERS ^ to...
+                 Deltaforce/Blue/Coroplex/Ceterus/Sigma Seven
+          Dr.Dre/Siegel/Byteandi/Floppyhans/Kaoz/GEM/Slaze/Exocet
+        Scottie/Maz/Hamster/Irata and all I learned to know through
+                         all the years in scene :)
+
+
+                            @{" BACK TO MAIN MENU? " link "MAIN"}
+
+@endnode
+@node "menu5" "Support"
+@toc "menu"
+
+                     ___                            ___
+                 ___/  /\                          /\  \___              
+             ___/  /  / _\________________________/_ \  \  \___          :
+  |      ___/  /  /  / /_                           \ \  \  \  \___      
+ _|_____/  /  /  /  / //    LASERDANCE BBS FRIENDS   \ \  \  \  \  \_____|_
+/______/__/__/__/__/ /________________________________\ \__\__\__\__\______\
+\      \  \  \  \  \ \________________________________/ /  /  /  /  /      /
+ \______\__\__\__\__\/                                \/__/__/__/__/______/
+  :                                                                      :
+  & 5th Dynasty Boards:                   5th Dynasty Systems:           &
+  | Faceless World    49.o3o.ask!         Funky Trading (ITALY) elite    |
+  | Miami Heate       49.o3o.ask!         World of Wonders (USA) elite   |
+  | Desert Strike     49.22o3.ask!        Antarctica (WHQ) german elite  |
+  | Laserdance        49.21o4.ask!        Laserdance (Ghq) german elite  |
+  :__________________                                  __________________:
+ /      /  /  /  /  /\________________________________/\  \  \  \  \      \
+/______/__/__/__/__/ /________________________________\ \__\__\__\__\______\
+\______\  \  \  \  \ \                              _ / /  /  /  /  /______/
+  :     \__\  \  \  \ \   CALL BACK VERY VERY SOON  // /  /  /  /__/     :
+            \__\  \  \ \____________________________/ /  /  /__/         
+                \__\  \  /                        \  /  /__/             
+                    \__\/                          \/__/                 
+@endnode
