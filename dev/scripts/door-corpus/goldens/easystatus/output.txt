@@ -1,0 +1,29 @@
+
+.-----------------------------------------------------------------------------.
+|                       EasyStatus V1.0 By Charlie^D93                        |
+|                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                        |
++-----------------------------------------------------------------------------+
+|  Handle..........:                    Bytes Uploaded.......:                |
+|  Location/Group..:                    Files Uploaded.......:                |
+|  Phone number....:                    Bytes Downloaded.....:                |
+|  Slot number.....:                    Files Downloaded.....:                |
+|  Access level....:                    Daily Byte Limit.....:                |
+|  Messages Posted.:                    Access Area..........:                |
+|  Times Called....:                    Node number..........:                |
+|  Last Time on....:                    Express Version......:                |
+|  System name.....:                    Sysop................:                |
++-----------------------------------------------------------------------------+
+|  Actual Conf.....:                    Online baud..........:                |
+|  Local Time......:                                                          |
+`-----------------------------------------------------------------------------´
+SysopLocal Console
+025500Thu 01-Jan-1970 00:0
+AmiExpress-Web
+
+00000
+Sysop
+0v5.6
+SysopTue 12-May-2026 16:1Main115200
+
+
+

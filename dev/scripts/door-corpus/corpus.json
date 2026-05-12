@@ -148,6 +148,26 @@
       "notes": "uPdOWNiNFO v1.2 — upload/download stats info screen. Exercises DT_STAMP_CTIME (account creation time) + BB_CONFNUM + the full DT_BYTES* / DT_DAILY* user-data field set. 20-op trace, non-interactive."
     },
     {
+      "id": "easystatus",
+      "name": "easystatus (D93)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/easystatus/easystatus",
+      "doorType": "XIM",
+      "command": "ES",
+      "timeoutMs": 30000,
+      "notes": "Damage93 easystatus — 24-op status renderer with embedded current-time field. Restored 2026-05-12 with the time-mask runner pass."
+    },
+    {
+      "id": "confstats",
+      "name": "ConfStats v1.3 (Tough Stats by Json)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ConfStats/ConfStats",
+      "doorType": "XIM",
+      "command": "CS",
+      "timeoutMs": 30000,
+      "notes": "ConfStats v1.3 'Tough Stats' by Json — 31 XIM ops, highest single-door op-count in the corpus. Renders 'Local time...' line that previously drifted; restored 2026-05-12 with time-mask runner pass."
+    },
+    {
       "id": "newinfo",
       "name": "newinfo (AFL_PACK)",
       "category": "XIM-BBSCmd",

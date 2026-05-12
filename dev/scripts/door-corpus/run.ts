@@ -112,6 +112,29 @@ function stripAnsi(s: string): string {
   return s.replace(ANSI_STRIP, "");
 }
 
+// Mask common live-time/date formats so doors that render the wall clock
+// (5D-Clock, easystatus, ConfStats etc.) stay diff-stable. Applied to
+// both golden and got before comparing — the on-disk golden remains the
+// raw door output, but equality is tested against the masked form.
+// Patterns conservative on purpose: anchor to whitespace or line edges
+// so we don't mangle e.g. opcode hex 0x14:00:00 (none of those exist in
+// Amiga door output, but the principle holds).
+const TIME_HMS = /(^|[\s\[(\|])(\d{1,2}):(\d{2}):(\d{2})(\b)/g;
+// HH:M or HH:MM — some doors (easystatus) render single-digit minutes
+// flush-against the next field ("16:0Main..."). \d{1,2} for minutes
+// catches both forms without false-positives on opcode-like contexts.
+const TIME_HM  = /(^|[\s\[(\|])(\d{1,2}):(\d{1,2})(\b|[a-zA-Z])/g;
+const DOW_DATE = /(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}/g;
+const DATE_DMY = /\b\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\b/g;
+
+function maskTimes(s: string): string {
+  return s
+    .replace(TIME_HMS, "$1HH:MM:SS$5")
+    .replace(TIME_HM, "$1HH:MM$4")
+    .replace(DOW_DATE, "DOW DD-MON-YYYY")
+    .replace(DATE_DMY, "DD-MON-YYYY");
+}
+
 const TRACE_LINE_CAP = 500;
 
 function extractTrace(stderr: string): string {
@@ -299,9 +322,12 @@ async function main(): Promise<void> {
       ? fs.readFileSync(tracePath, "utf8").replace(/\n$/, "")
       : null;
 
-    const outputDiff = goldenOutput !== renderedOutput;
+    // Compare time-masked forms so live-time renderers stay stable.
+    // Goldens on disk remain raw + human-readable; equality is tested
+    // against the masked transform.
+    const outputDiff = maskTimes(goldenOutput) !== maskTimes(renderedOutput);
     const traceDiff =
-      goldenTrace !== null && goldenTrace !== traceOutput;
+      goldenTrace !== null && maskTimes(goldenTrace) !== maskTimes(traceOutput);
 
     if (outputDiff || traceDiff) {
       const detail: string[] = [];
