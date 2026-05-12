@@ -1,6 +1,64 @@
-# Door Testing Script
+# Door Testing — Tools & Workflows
 
-Automated testing of all installed 68K Amiga doors for debugging and validation.
+Three complementary tools, pick the one that matches the question you have.
+
+| Question | Tool |
+|----------|------|
+| "Did anything regress in a door that used to work?" | **Door corpus** — `dev/scripts/door-corpus/` |
+| "Why does this new door not work / what does it need?" | **Door probe** — `dev/scripts/door-probe/probe.ts` |
+| "What LVOs / XIM ops does the whole universe of doors actually call?" | **Bulk probe** — `dev/scripts/door-probe/bulk-probe.ts` |
+| "Run every installed door, see what blows up" | **test-all-doors** — `dev/scripts/test-all-doors.sh` (this doc, below) |
+
+## Door corpus (regression)
+
+CI-runnable, frozen-golden diff for a curated set of doors covering the
+top XIM ops + LVOs. 36 doors at time of writing; goldens live at
+`dev/scripts/door-corpus/goldens/<id>/{output.txt,trace.txt}`. Jest
+wrapper at `web/backend/tests/corpus/door-corpus.test.ts`. Adding a
+door = 4 steps; see `dev/scripts/door-corpus/README.md`.
+
+```
+npx tsx dev/scripts/door-corpus/run.ts                # diff all
+npx tsx dev/scripts/door-corpus/run.ts --only <id>    # one door
+npx tsx dev/scripts/door-corpus/run.ts --capture      # refreeze (review first!)
+```
+
+Goldens are time-masked at diff time (HH:MM:SS / Dow DD-Mon-YYYY etc.)
+so live-clock renderers stay stable.
+
+## Door probe (per-door diagnosis)
+
+Boots a binary under the existing `run-amiga-door.ts` harness and
+emits a markdown / JSON report: XIM ops fired, LVOs (real / stub /
+missing), errors, recommendations. Turns "stare at logs and guess"
+into one shot.
+
+```
+npx tsx dev/scripts/door-probe/probe.ts <binary> [--doortype XIM]
+                                              [--input-script <file>]
+                                              [--out <report.md>] [--json]
+```
+
+`dev/scripts/door-probe/README.md` has the workflow.
+
+## Bulk probe (universe scan)
+
+Walks an LHA archive directory, extracts each, runs the per-door probe,
+aggregates LVO + XIM op frequency. Drives Phase 2 stub-elimination
+prioritisation. Cached results survive interrupts (`--skip-existing`).
+
+```
+npx tsx dev/scripts/door-probe/bulk-probe.ts <archive-dir> [--limit N]
+                                                          [--out <dir>]
+                                                          [--skip-existing]
+```
+
+---
+
+# test-all-doors (broad smoke)
+
+Older sweep harness, kept for compatibility. Use the corpus + probe
+above for anything new.
 
 - Shell wrapper: `dev/scripts/test-all-doors.sh`
 - TypeScript implementation: `dev/scripts/test-all-doors.ts`

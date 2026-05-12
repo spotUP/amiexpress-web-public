@@ -12,7 +12,11 @@
     "render-start": "npx tsx src/index.ts",
     "test": "jest --config dev-scripts/jest.config.ts --rootDir .",
     "test:watch": "jest --config dev-scripts/jest.config.ts --rootDir . --watch",
-    "test:coverage": "jest --config dev-scripts/jest.config.ts --rootDir . --coverage"
+    "test:coverage": "jest --config dev-scripts/jest.config.ts --rootDir . --coverage",
+    "test:corpus": "jest --config dev-scripts/jest.config.ts --rootDir . --testPathPattern=corpus",
+    "corpus": "cd ../.. && npx tsx dev/scripts/door-corpus/run.ts",
+    "corpus:capture": "cd ../.. && npx tsx dev/scripts/door-corpus/run.ts --capture",
+    "probe": "cd ../.. && npx tsx dev/scripts/door-probe/probe.ts"
   },
   "keywords": [],
   "author": "",
