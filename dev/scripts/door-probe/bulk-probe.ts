@@ -45,6 +45,7 @@ interface BulkOpts {
   outDir: string;
   limit: number | null;
   filter: string | null;
+  shard: { index: number; total: number } | null;
   timeoutMs: number;
   doorType: string;
   skipExisting: boolean;
@@ -66,6 +67,7 @@ function parseArgs(argv: string[]): BulkOpts {
     ),
     limit: null,
     filter: null,
+    shard: null,
     timeoutMs: 12000,
     doorType: "XIM",
     skipExisting: false,
@@ -77,6 +79,17 @@ function parseArgs(argv: string[]): BulkOpts {
     if (a === "--out") { opts.outDir = next; i += 1; }
     else if (a === "--limit") { opts.limit = Number(next); i += 1; }
     else if (a === "--filter") { opts.filter = next; i += 1; }
+    else if (a === "--shard") {
+      // Format: "I/N" — take every Nth archive starting at index I (0..N-1).
+      // Race-free way to parallelise across multiple bulk-probe instances.
+      const m = (next || "").match(/^(\d+)\/(\d+)$/);
+      if (!m) { process.stderr.write(`[bulk] --shard requires I/N, got ${next}\n`); process.exit(2); }
+      opts.shard = { index: parseInt(m[1], 10), total: parseInt(m[2], 10) };
+      if (opts.shard.index >= opts.shard.total) {
+        process.stderr.write(`[bulk] --shard index ${opts.shard.index} >= total ${opts.shard.total}\n`); process.exit(2);
+      }
+      i += 1;
+    }
     else if (a === "--timeout") { opts.timeoutMs = Number(next); i += 1; }
     else if (a === "--doortype") { opts.doorType = next; i += 1; }
     else if (a === "--skip-existing") { opts.skipExisting = true; }
@@ -384,7 +397,11 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const archives = listArchives(opts.archiveDir, opts.filter);
-  const slice = opts.limit ? archives.slice(0, opts.limit) : archives;
+  // Apply --shard before --limit so the limit is per-shard.
+  const sharded = opts.shard
+    ? archives.filter((_, i) => i % opts.shard!.total === opts.shard!.index)
+    : archives;
+  const slice = opts.limit ? sharded.slice(0, opts.limit) : sharded;
   if (slice.length === 0) {
     process.stderr.write(`[bulk] no matching archives (filter=${opts.filter})\n`);
     process.exit(1);
