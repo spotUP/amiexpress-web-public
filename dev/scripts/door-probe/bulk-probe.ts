@@ -127,11 +127,16 @@ function findHunkBinaries(dir: string, accum: string[] = [], depth = 0): string[
     const p = path.join(dir, e.name);
     if (e.isDirectory()) { findHunkBinaries(p, accum, depth + 1); continue; }
     if (!e.isFile()) continue;
-    // Skip obvious non-binaries by extension
+    // Skip obvious non-binaries by extension. `.library` is also Hunk
+    // format but isn't an executable door — those are shared libraries
+    // loaded via exec.OpenLibrary, not launched directly. Surfaces a
+    // false-positive `[68K] R exited with code N` cluster in the
+    // timeout-mining report (58 doors in the 2 254-archive scan).
     const ext = path.extname(e.name).toLowerCase();
     if ([".txt", ".doc", ".info", ".guide", ".diz", ".readme", ".nfo",
          ".lha", ".lzh", ".lzx", ".gif", ".iff", ".jpg", ".png",
-         ".rexx", ".rx", ".script"].includes(ext)) continue;
+         ".rexx", ".rx", ".script", ".library", ".device", ".handler",
+         ".datatype", ".classlibrary"].includes(ext)) continue;
     // Skip very small / very large outliers — Amiga doors are ~1-200 KB.
     try {
       const st = fs.statSync(p);
