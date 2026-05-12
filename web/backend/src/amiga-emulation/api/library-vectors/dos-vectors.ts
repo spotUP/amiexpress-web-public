@@ -862,6 +862,16 @@ export const DOS_VECTORS: LibraryVector[] = [
     handler: () => 0,
   },
   {
+    // -888 StartNotify. D1=NotifyRequest. File-change notification
+    // registration. Returns success/failure (BOOL). We don't model
+    // FS notifications — return DOSFALSE (0) so doors fall through
+    // to polling or accept the lack of notifications. 1 door / 9
+    // calls in the bulk-probe sample.
+    offset: -888,
+    name: "StartNotify",
+    handler: () => 0,
+  },
+  {
     // -240 DoPkt. D1=port, D2=action, D3-D7=args. Returns response.
     // Real DOS handler IPC. Doors using DoPkt directly bypass the
     // normal Read/Write API. Our emulator doesn't run real handler

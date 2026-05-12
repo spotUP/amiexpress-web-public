@@ -252,6 +252,51 @@ export const EXEC_VECTORS: LibraryVector[] = [
     name: "SetIntVector",
     handler: () => 0,
   },
+  // ============================================
+  // Batch 4 — long-tail stubs surfaced in the post-LVO-batch-3 scan.
+  // Two of these (AllocTrap / FreeTrap) were hit 84 408 times per door
+  // in 2 doors, so almost certainly another spin loop fixed by
+  // returning the canonical "no trap available" value.
+  // ============================================
+  {
+    // -342 AllocTrap. D0=trapNum (or -1 = any). Returns trap number,
+    // or -1 on failure. Defensive: -1 (no trap available). Doors that
+    // poll AllocTrap in a loop checking for a free trap get a quick
+    // exit. (84 408 calls per door = the loop.)
+    offset: -342,
+    name: "AllocTrap",
+    handler: () => -1,
+  },
+  {
+    // -348 FreeTrap. D0=trapNum. Void. Paired with AllocTrap; no-op
+    // since we never actually allocate.
+    offset: -348,
+    name: "FreeTrap",
+    handler: () => 0,
+  },
+  {
+    // -462 SendIO. A1=ioRequest. Spec is "begin IO asynchronously,
+    // return immediately, complete signals replyPort". Our IO model
+    // is synchronous (DoIO already returns immediately) — set
+    // io_Error=0 + reply asynchronously (via a microtask) so the
+    // door's WaitPort/WaitIO sees the reply. Defensive default:
+    // io_Error = 0 and return 0 like DoIO.
+    offset: -462,
+    name: "SendIO",
+    handler: (emu, _lib: ExecLibrary) => {
+      const ioReq = emu.getRegister(9); // A1
+      if (ioReq !== 0) emu.writeMemory(ioReq + 31, 0);
+      return 0;
+    },
+  },
+  {
+    // -426 SumLibrary. A1=library. Recomputes the library's checksum
+    // after a SetFunction patch. Void/returns 0. We don't track
+    // library checksums, so always-success.
+    offset: -426,
+    name: "SumLibrary",
+    handler: () => 0,
+  },
   {
     offset: -552, // LVO -552 (0xFDD8)
     name: "OpenLibrary",

@@ -16,7 +16,8 @@
     "test:corpus": "jest --config dev-scripts/jest.config.ts --rootDir . --testPathPattern=corpus",
     "corpus": "cd ../.. && npx tsx dev/scripts/door-corpus/run.ts",
     "corpus:capture": "cd ../.. && npx tsx dev/scripts/door-corpus/run.ts --capture",
-    "probe": "cd ../.. && npx tsx dev/scripts/door-probe/probe.ts"
+    "probe": "cd ../.. && npx tsx dev/scripts/door-probe/probe.ts",
+    "coverage:report": "cd ../.. && npx tsx dev/scripts/door-probe/coverage-report.ts"
   },
   "keywords": [],
   "author": "",
