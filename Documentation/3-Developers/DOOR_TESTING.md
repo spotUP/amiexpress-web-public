@@ -12,7 +12,7 @@ Three complementary tools, pick the one that matches the question you have.
 ## Door corpus (regression)
 
 CI-runnable, frozen-golden diff for a curated set of doors covering the
-top XIM ops + LVOs. 36 doors at time of writing; goldens live at
+top XIM ops + LVOs. 41 doors at time of writing; goldens live at
 `dev/scripts/door-corpus/goldens/<id>/{output.txt,trace.txt}`. Jest
 wrapper at `web/backend/tests/corpus/door-corpus.test.ts`. Adding a
 door = 4 steps; see `dev/scripts/door-corpus/README.md`.

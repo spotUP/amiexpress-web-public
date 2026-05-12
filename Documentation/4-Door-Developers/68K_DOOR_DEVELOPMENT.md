@@ -106,6 +106,10 @@ EOF
 
 Restart the BBS and type `MYDOOR` at the prompt.
 
+For diagnosis + regression coverage of a new 68K door (probe LVOs/XIM
+ops, freeze a golden, mine cluster reps), see
+[../3-Developers/DOOR_TESTING.md](../3-Developers/DOOR_TESTING.md).
+
 ---
 
 ## AEDoor.library LVO Reference
