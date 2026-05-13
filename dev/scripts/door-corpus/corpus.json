@@ -477,6 +477,19 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "afl_g_logoff",
+      "name": "G (AFL logoff helper)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/G",
+      "doorType": "XIM",
+      "command": "G",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 3000, "data": "n\\r" }
+      ],
+      "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' — 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry."
+    },
+    {
       "id": "comment2_afl",
       "name": "Comment2.040 (AFL)",
       "category": "XIM-BBSCmd",
