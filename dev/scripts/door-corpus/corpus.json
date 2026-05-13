@@ -477,6 +477,58 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "byte_comment",
+      "name": "ByteComment (OPS-BC10, ul side)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ByteComment/ByteComment",
+      "doorType": "XIM",
+      "command": "BC",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "OPS ByteComment 1.0 (upload side). Line-input prompt 'Please Enter Filename (ReTuRn)=End :' — bare Enter exits with 'End'. Exercises DT_BYTESUPLOAD + DT_BYTEDOWNLOAD path with high JH_SM count (46 ops). Cluster representative for the 5-door ByteComment family."
+    },
+    {
+      "id": "mst_wall",
+      "name": "wall.020 (MST)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstWall/wall",
+      "doorType": "XIM",
+      "command": "W",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "MST wall.020 — graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry — different banner / DT_NAME path / JH_SG show-gfile op)."
+    },
+    {
+      "id": "mst_edit",
+      "name": "edit.020 (MST)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstEdit/edit",
+      "doorType": "XIM",
+      "command": "EDIT",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "MST edit.020 — file-edit door. Line-input prompt 'Filename :' — bare Enter aborts and exits. Cluster representative for the 5-door edit.0X0 CPU-variant family. 30 JH_SM ops — heavy banner."
+    },
+    {
+      "id": "cd_dl",
+      "name": "CD_DL (Rioter Tools)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CD_DL/CD_DL",
+      "doorType": "XIM",
+      "command": "CDDL",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "Tiny 1.7 KB CD download helper from Rioter Tools. Line-input 'Filename(01):' — bare Enter exits. Cluster representative for the 5-door 'Filename(NN):' family (CD_DL + CDTrans variants), distinct from the cdtrans corpus entry by AEDoor library path (uses OldOpenLibrary)."
+    },
+    {
       "id": "fileid",
       "name": "FILEID (FID15CR)",
       "category": "XIM-BBSCmd",
