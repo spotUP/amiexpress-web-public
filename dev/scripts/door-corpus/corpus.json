@@ -477,6 +477,45 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "comment2_afl",
+      "name": "Comment2.040 (AFL)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Comment2/Comment2",
+      "doorType": "XIM",
+      "command": "C",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "AFL Comment2 (AFL_PACK.LHA). Sysop-comment helper variant — bare \\r exits. 3-door cluster representative for the 'comment' banner family."
+    },
+    {
+      "id": "dcn_sent",
+      "name": "dCN!SENT (DCN file-id v2)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/dCN_Sent/dCN_Sent",
+      "doorType": "XIM",
+      "command": "SENT",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "DCN file-id v2 SENT helper (DCN!F-X2.LHA). Prompt 'Your STRIP_ID settings do not exist! Configure them now (y/N)' — 'n' declines and exits. 4-door cluster representative."
+    },
+    {
+      "id": "5d_wall",
+      "name": "5D-Wall v1.25",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-Wall/5D-Wall",
+      "doorType": "XIM",
+      "command": "WALL",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "SvEN/5D Wall 1.25 (5D-WA125.LHA). 3-door cluster representative for the 'Call Joyrøde 4 unl¡m¡ted /X-door support' Wall banner family. Bare \\r exits."
+    },
+    {
       "id": "5d_logoff",
       "name": "5D-LogOff",
       "category": "XIM-BBSCmd",
