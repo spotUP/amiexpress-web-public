@@ -477,6 +477,19 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "quicklogon",
+      "name": "QuickLogon v1.0 (H&V)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/QuickLogon/QuickLogon",
+      "doorType": "XIM",
+      "command": "QL",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "n" }
+      ],
+      "notes": "H&V QuickLogon 1.0 — quick-logon-prompt door. Prompt 'Would you like a quick logon? (y/N)' — 'n' declines and exits. Cluster representative for the 6-door QuickLogon family (DTR/H&V variants)."
+    },
+    {
       "id": "getanswer",
       "name": "GetAnswer (HCD)",
       "category": "XIM-BBSCmd",
