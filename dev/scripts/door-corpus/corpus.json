@@ -477,6 +477,71 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "5d_logoff",
+      "name": "5D-LogOff",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D-LogOff/5D-LogOff",
+      "doorType": "XIM",
+      "command": "BYE",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner — 4-door cluster representative. Bare \\r exits."
+    },
+    {
+      "id": "file_description",
+      "name": "FileDescription 1.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FileDescription/FileDescription",
+      "doorType": "XIM",
+      "command": "FD",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "FileDescription 1.1 (FDESCR11.LHA). Without 'Filedescription.config' exits via deterministic 'Cannot open configfile' error path. 4-door cluster representative for the FileDescription0X0.x CPU-variant family."
+    },
+    {
+      "id": "color_wall",
+      "name": "cOLORWALL.030 (AFL)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ColorWall/ColorWall",
+      "doorType": "XIM",
+      "command": "CW",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "AFL cOLORWALL 1.3 (AFL-CW13.LHA). Renders graffiti wall, prompts '[KEY] TO CONTINUE !'. Bare Enter exits. 4-door cluster representative for the cOLORWALl CPU-variant family."
+    },
+    {
+      "id": "smart_dsf",
+      "name": "SmartDSF.040 (Nightshade)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/SmartDSF/SmartDSF",
+      "doorType": "XIM",
+      "command": "DSF",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "INS Nightshade SmartDSF 1.3 (INS-SD13.LHA). Sysop file-tag helper. Without tag data exits via 'HANG ON YOURE SYSOP IS TAGGING FiLES!' notice path. 4-door cluster representative for SmartDSF.0X0 CPU-variant family."
+    },
+    {
+      "id": "d_lost_bulls",
+      "name": "d-lOSt_bULLs.030 (Honey)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/dLostBulls/dLostBulls",
+      "doorType": "XIM",
+      "command": "BULL",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "Honey d-lOSt_bULLs 0.2 (HNY-LB02.LHA). Bulletin selector. Line-input 'eNTEr a bULLETINe nr# to vIEw or hIt rETURn to qUIt :>' — bare \\r exits. 4-door cluster representative."
+    },
+    {
       "id": "byte_comment",
       "name": "ByteComment (OPS-BC10, ul side)",
       "category": "XIM-BBSCmd",
