@@ -477,6 +477,19 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "fileid",
+      "name": "FILEID (FID15CR)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FILEID/FILEID",
+      "doorType": "XIM",
+      "command": "FILEID",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" }
+      ],
+      "notes": "FILEID file-id manager (FID15CR.LHA source). Without its config the door exits via 'Error (FileId.info)' path — deterministic clean exit on bare \\r. Cluster representative for the 7-door FileId family (Autosent / FILEID / AUTOSENT variants)."
+    },
+    {
       "id": "warcalls",
       "name": "WarCalls V1.2 (Humane&Vanity)",
       "category": "XIM-BBSCmd",
