@@ -477,6 +477,21 @@
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
     {
+      "id": "warcalls",
+      "name": "WarCalls V1.2 (Humane&Vanity)",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/WarCalls/WarCalls",
+      "doorType": "XIM",
+      "command": "WC",
+      "timeoutMs": 30000,
+      "inputScript": [
+        { "delayMs": 2500, "data": "\\r" },
+        { "delayMs": 5000, "data": "n" },
+        { "delayMs": 7500, "data": "n" }
+      ],
+      "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family — first multi-input corpus entry."
+    },
+    {
       "id": "quicklogon",
       "name": "QuickLogon v1.0 (H&V)",
       "category": "XIM-BBSCmd",
