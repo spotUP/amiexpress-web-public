@@ -1,0 +1,14 @@
+HALLO
+   |---------------------------------O--------------------------------|
+   !           USER  iNFOS           |       UP- DOWNLOAD iNFOS       !
+   :---------------------------------.--------------------------------:
+      HANDLE: Sysop UPLOADS: 0 
+      LOCATiON: Local Console   DOWNLOADS: 0 
+      PHONE NUMBER:   UPLOADED BYTES: 0
+      USER NUMBER: 0   DOWNLOADED BYTES: 0
+      ACCESS-LEVEL: 255   DAiLY BYTES DLD: 0
+      RATiO: 0:1   DAILY BYTE LiMiT: 0
+   |---------------------------------.--------------------------------|
+   |   SMK-STATS v0.1 - A SMoKeY PRODUCTiON  DONE BY JuNk 31-1-1996   |
+   :------------------------------------------------------------------:
+|!||||

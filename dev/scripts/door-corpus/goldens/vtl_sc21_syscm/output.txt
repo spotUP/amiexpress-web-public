@@ -1,0 +1,3 @@
+
+SysCm.CFG could not be opened. Abnormal program termination!
+

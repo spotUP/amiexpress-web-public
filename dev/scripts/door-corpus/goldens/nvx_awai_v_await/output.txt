@@ -1,0 +1,28 @@
+  F1  Sysop Login     F2  Local Login     F3  Instant Login   F4  Reserve BBS
+  F5  Conf Maint      F6  Account Editing F7  Toggle ChatFlag F8  ReProg Modem
+  F9  Exit BBS        F10 Exit (off hook) HLP Toggle Stat Bar
+.------------------------------------------------------------------------------.
+| Speed N Name              Location            On-Time  Action H:MM Up-K Dn-K |
+`------------------------------------------------------------------------------'
+  1920 1 MaRWic            [dECiSiON&ShELTER]  10:40:29 -----U 0:02 82mb    0
+  1920 1 Ransom1122        Aus                 06:57:26 --C--- 0:07    0    0
+  1920 1 Ransom1122        Aus                 06:33:30 --C-D- 0:13    0 LOTS
+  1920 1 KayPirinha        Somewhere           05:43:04 ----D- 0:07    0 LOTS
+  1920 1 spot              Up Rough            23:06:49 ------ 0:06    0    0
+  1920 1 lordnikon         Dekadence           22:59:34 -H---U 0:05   33    0
+  1920 2 sante             Vasto               22:35:45 ------ 0:23    0    0
+  1920 1 spot              Up Rough            22:31:36 ------ 0:04    0    0
+  1920 *1 Mindb3nd3r        Kingsfield, Stockho 20:57:10 ------ 0:21    0    0
+  1920 1 kokkiklhs         Athens, GR          20:41:14 ------ 0:11    0    0
+  1920 1 R/\DIOSITY        HOODLUM             20:09:00 ------ 0:00    0    0
+  1920 1 ramkiller         italy trieste       19:59:03 --C-d- 0:07    0    0
+  1920 1 RaGe              UK                  18:00:48 -----U 0:03 92mb    0
+  1920 1 lordnikon         Dekadence           11:39:21 ----d- 0:03    0    0
+  1920 1 RaGe              UK                  10:27:21 -----U 0:01 53mb    0
+  1920 1 Shocker           HiGH VoLTAge        07:23:27 -----U 0:03 LOTS    0
+  1920 1 Ransom1122        Aus                 05:10:21 --C-D- 0:09    0  738
+  1920 1 lordnikon         arse, Dekadence     00:55:41 ------ 0:05    0    0
+  1920 *1 lordnikon         arse, Dekadence     00:42:08 ------ 0:03    0    0
+  1920 1 MaRWic            [dECiSiON&ShELTER]  19:42:08 -----U 0:01 10mb    0
+.-------------------------.-------------------.------------------.-------------.
+| Calls    4 / Y'Day   15 | UL    13 / 84257k | DL   11 / 423831k | Hours  0:29 |`-------------------------^-------------------^------------------^-[Venom/NVX]-'

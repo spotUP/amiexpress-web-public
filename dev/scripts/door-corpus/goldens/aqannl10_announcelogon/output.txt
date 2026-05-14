@@ -1,0 +1,3 @@
+>>> AnnounceLogon v1.0 ©1993 by Aquarius <<<
+No users have been notified of your logon.
+

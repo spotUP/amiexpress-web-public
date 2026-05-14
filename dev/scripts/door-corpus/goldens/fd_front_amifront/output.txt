@@ -1,0 +1,38 @@
+
+            .-[ status ]--------- - : - -[ who's online ]------ - -[ bd ]-.
+  .---------+-----------------------+---- -   -                  .        |
+  | node 00 | <      B U S Y      > |                            |        |
+  | node 01 | <       Y O U       > | It's a secret!             | Local  |
+  | node 02 | <      B U S Y      > |                            | Local  |
+  | node 03 | <      B U S Y      > |                            | Local  |
+  | node 04 | <      B U S Y      > |                            | Local  |
+  | node 05 | <      B U S Y      > |                            | Local  |
+  | node 06 | <      B U S Y      > |                            | Local  |
+  | node 07 | <      B U S Y      > |                            | Local  |
+  | node 08 | <      B U S Y      > |                            | Local  |
+  | node 09 | <      B U S Y      > |                            | Local  |
+  | node 10 | <      B U S Y      > |                            | Local  |
+  | node 11 | <      B U S Y      > |                            | Local  |
+  | node 12 | <      B U S Y      > |                            | Local  |
+  | node 13 | <      B U S Y      > |                            | Local  |
+  | node 14 | <      B U S Y      > |                            | Local  |
+  | node 15 | <      B U S Y      > |                            | Local  |
+  | node 16 | <      B U S Y      > |                            | Local  |
+  | node 17 | <      B U S Y      > |                            | Local  |
+  | node 18 | <      B U S Y      > |                            | Local  |
+  | node 19 | <      B U S Y      > |                            | Local  |
+  | node 20 | <      B U S Y      > |                            | Local  |
+  | node 21 | <      B U S Y      > |                            |        |
+  | node 22 | <      B U S Y      > |                            |        |
+  | node 23 | <      B U S Y      > |                            |        |
+  | node 24 | <      B U S Y      > |                            |        |
+  | node 25 | <      B U S Y      > |                            |        |
+  | node 26 | <      B U S Y      > |                            |        |
+  | node 27 | <      B U S Y      > |                            |        |
+  | node 28 | <      B U S Y      > |                            |        |
+  | node 29 | <      B U S Y      > |                            |        |
+  | node 30 | <      B U S Y      > |                            |        |
+  | node 31 | <      B U S Y      > |                            |        |
+  `---------+-  -                   `----------------------------+--------'
+            `--------[ AmiFront - by Faktor/Independent ]--------'
+

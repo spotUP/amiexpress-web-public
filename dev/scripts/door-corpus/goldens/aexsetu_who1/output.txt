@@ -1,0 +1,12 @@
+
+       Node 1 - sysop                     Server Room              
+       Node 2 - sysop                     Server Room              
+       Node 3 - sysop                     Server Room              
+       Node 4 - sysop                     Server Room              
+       Node 5 - sysop                     Server Room              
+       Node 6 - sysop                     Server Room              
+       Node 7 - sysop                     Server Room              
+       Node 8 - sysop                     Server Room              
+       Node 9 - sysop                     Server Room              
+       Node 10 - sysop                     Server Room              
+
