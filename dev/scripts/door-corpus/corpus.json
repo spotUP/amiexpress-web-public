@@ -1479,6 +1479,366 @@
       "doorType": "XIM",
       "timeoutMs": 30000,
       "notes": "MTS DupeChekk 0.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "dpl_stfc",
+      "name": "DPL stfc 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DplStfc/stfc100",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DPL stfc 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "nvx_udinfo",
+      "name": "NVX ud-info",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NvxUdInfo/ud-info",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "NVX ud-info \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "tms_dn",
+      "name": "TMS dn",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TmsDn/dn",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TMS dn \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "afl_ri",
+      "name": "AFL RI",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AflRI/RI",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AFL RI \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "fg_axnewsbase",
+      "name": "FG axnewsbase",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FgAxNewsBase/axnewsbase",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FG axnewsbase \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "fg_axnewsbasexim",
+      "name": "FG axnewsbasexim",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FgAxNewsBaseXim/axnewsbasexim",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FG axnewsbasexim \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mst_conftop22",
+      "name": "MST Conftop 2.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstConftop22/Conftop.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST Conftop 2.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "cnfscn_dl",
+      "name": "CNFSCN ConfScan_DL",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CnfscnDL/ConfScan_DL",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CNFSCN ConfScan_DL \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "emp_checknu",
+      "name": "EmP CheckNU",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/EmpCheckNU/CheckNU",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "EmP CheckNU \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "noc_who",
+      "name": "noC-WHO 1.5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NocWho/noC-WHO.x.030",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "noC-WHO 1.5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "dcn_fileid",
+      "name": "DCN! FileID",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DcnFileId/dCN!FileID",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DCN! FileID \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "ins_sbull",
+      "name": "INS SBull 2.7r5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/InsSBull/SBull27r5.020",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "INS SBull 2.7r5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "klr_kcomment",
+      "name": "KLR KiLLER-Comment",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/KlrKComment/KiLLER-Comment",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "KLR KiLLER-Comment \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "led_dcspeed",
+      "name": "LED DC_Speed 2.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LedDcSpeed/DC_Speed",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LED DC_Speed 2.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "nb_belchlist",
+      "name": "NB BelchLIST",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NbBelchList/BelchLIST",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "NB BelchLIST \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "ptl_sxpager",
+      "name": "PTL S!X-Pager 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PtlSxPager/S!X-Pager",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PTL S!X-Pager 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "tms_logon",
+      "name": "TMS logon 1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TmsLogon/logon",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TMS logon 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "trsi_dre_sent",
+      "name": "TRSI DRE!SENT",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TrsiDreSent/DRE!SENT",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TRSI DRE!SENT \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "vsg_page",
+      "name": "VSG Mental page 0.5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/VsgPage/page_0.5.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "VSG Mental page 0.5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "vty_warkick",
+      "name": "VTY WarKick'Em 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/VtyWarKick/WarKick'Em",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "VTY WarKick'Em 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "5d_newfiles",
+      "name": "5D-NewFiles 0.22",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5dNewFiles/5D-NewFiles",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "5D-NewFiles 0.22 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "5d_security",
+      "name": "5D-Security 0.10",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5dSecurity/5D-Security",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "5D-Security 0.10 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "aq_announcelogon",
+      "name": "AQ AnnounceLogon 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AqAnnounceLogon/AnnounceLogon",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AQ AnnounceLogon 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "bb_help",
+      "name": "BB BBhELP 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BbHelp/BBhELP",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "BB BBhELP 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "bullread",
+      "name": "BullRead 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BullRead/BullRead",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "BullRead 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "cd_server",
+      "name": "CD-SERVER 1.03",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CdServer/CD-SERVER",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CD-SERVER 1.03 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "chatsrc_meter",
+      "name": "CHATSRC Chat-O-Meter",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ChatsrcMeter/Chat-O-Meter",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CHATSRC Chat-O-Meter \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "crd_sysopavail",
+      "name": "CRD SysOpAvail 1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CrdSysopAvail/SysOpAvail",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CRD SysOpAvail 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "dpl_frontavail",
+      "name": "DPL Frontavail 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DplFrontAvail/Frontavail.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DPL Frontavail 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "fafcst_chatstarter",
+      "name": "FAFCST ChatStarter 2.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FafcstChatStarter/ChatStarter",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FAFCST ChatStarter 2.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "fd_amifront",
+      "name": "FD! AmiFront",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FdAmiFront/AmiFront",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FD! AmiFront \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "fld_powerpager",
+      "name": "FLD PowerPager 0.14",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FldPowerPager/PowerPager",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FLD PowerPager 0.14 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "ilt_pumpsafe",
+      "name": "ILT pumpsafe 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/IltPumpSafe/pumpsafe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "ILT pumpsafe 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "ivn_mfmnukelog",
+      "name": "IVN mfm-nukelog 0.5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/IvnMfmNukeLog/mfm-nukelog",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "IVN mfm-nukelog 0.5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "joe_topcall",
+      "name": "JOE Topcall.000",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/JoeTopcall/Topcall.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "JOE Topcall.000 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "jso_paycheck",
+      "name": "JSO PayCheck 1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/JsoPayCheck/PayCheck",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "JSO PayCheck 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "lgc_belchview",
+      "name": "LGC BelchVIEW 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LgcBelchView/BelchVIEW",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LGC BelchVIEW 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mgs_wallhall",
+      "name": "MGS! wallhall",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MgsWallHall/wallhall.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MGS! wallhall \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "modpager",
+      "name": "MOD V-MPager",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ModPager/V-MPager",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MOD V-MPager \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mst_bytekiller",
+      "name": "MST ByteKiller 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstByteKiller/ByteKiller",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST ByteKiller 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
     }
   ]
 }

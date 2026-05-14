@@ -1,0 +1,19 @@
+    .---Statisfaction-V1.0-------------------------------------------------.
+									   |    |
+									   |    |                 Username . . . . . . . : Sysop
+									   |    |                 Your Location. . . . . : Local Console
+									   |    |                 Nodenumber . . . . . . : 1
+									   |    |
+									   |    |                 Dayly Bytelimit. . . . : 0
+									   |    |                 Number Of Uploads. . . : 0
+									   |    |                 Uploaded Bytes . . . . : 0
+									   |    |                 Number Of Downloads. . : 0
+									   |    |                 Downloaded Bytes . . . : 0
+									   |    |
+									   |    |                 Number Of Calls. . . . : 0
+									   |    |                 Chatflag . . . . . . . : OFF
+									   |    |
+    `-----------------------------------------------------------DupLo´94---'
+
+  Coded in 1994 by LiNus/DPL!                  Fistful Of Steel ++49 6723 5622
+

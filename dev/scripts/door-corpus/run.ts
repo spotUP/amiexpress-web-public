@@ -142,6 +142,10 @@ const DATE_DMY = /\b\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d
 // "Thu 14-May-2026 16: )" with just the hour. Match AFTER DOW_DATE so
 // the date is already collapsed to "DOW DD-MON-YYYY".
 const TIME_HOUR_ONLY = /(DOW DD-MON-YYYY )(\d{1,2}):(?=\D|$)/g;
+// Custom NhNm clock format — fafcst_chatstarter renders
+// "CuRReNt TiMe : 19h42m". Specific enough not to clash with file
+// sizes or counters because of the embedded 'h'+'m' letters.
+const TIME_HHMM_LETTER = /\b\d{1,2}h\d{1,2}m\b/g;
 
 function maskTimes(s: string): string {
   return s
@@ -149,7 +153,8 @@ function maskTimes(s: string): string {
     .replace(TIME_HM, "$1HH:MM$4")
     .replace(DOW_DATE, "DOW DD-MON-YYYY")
     .replace(DATE_DMY, "DD-MON-YYYY")
-    .replace(TIME_HOUR_ONLY, "$1HH:");
+    .replace(TIME_HOUR_ONLY, "$1HH:")
+    .replace(TIME_HHMM_LETTER, "HHhMMm");
 }
 
 const TRACE_LINE_CAP = 500;
