@@ -1,0 +1,8 @@
+
+                       Turbo Zippy by Mack Lifeguard v1.p
+                       68000 Code by NZO & The Controller
+                           ** DuAl CreW - ShiNinG **
+
+                       Wildcard Pattern Matching Allowed
+
+Enter string to search for: 

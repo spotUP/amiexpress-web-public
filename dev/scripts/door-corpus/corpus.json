@@ -925,6 +925,60 @@
         }
       ],
       "notes": "CD transfer banner + Filename(01): prompt; CR exits. Cluster representative for the 5-door CDTrans/CD_DL Filename family (CD_DL already in corpus, distinct binary)."
+    },
+    {
+      "id": "turboz",
+      "name": "DCS Turbo Zippy 1.p",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TurboZ/TurboZ",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "TurboZippy file search. Renders banner and exits on CR when its config is absent. Cluster representative for the 8-door TurboZ family (\"Enter string to search for:\" prompt)."
+    },
+    {
+      "id": "secchecker",
+      "name": "ILT SecChecker 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/SecChecker/SecChecker",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\x20"
+        }
+      ],
+      "notes": "Security checker. \"Press Space to Continue\" advances on space; door exits when config absent. Cluster representative for the 4-door SecChecker.* CPU-variant family."
+    },
+    {
+      "id": "tsn_comment",
+      "name": "TSN LComment 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Comment/Comment.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TSN/SiL/TRSI comment door. Aborts with \"Command requires higher access.\" when sysop-only access fails; exits cleanly. Cluster representative for the 4-door Comment.000/Comment.0x0 family."
+    },
+    {
+      "id": "dawall",
+      "name": "OOPS!/X DaWall v2.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DaWall/DAWALL",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "OOPS! /X DEV wall door. Renders full wall + Y/N add-line prompt; declines via CR and exits with two retry insults (\"What's Da Matter? / Lost Yar Guts Or What!?\"). Cluster representative for the 3-door fulledit/formedit/DaWall family."
     }
   ]
 }

@@ -201,7 +201,13 @@ main().then(() => {
   // database/Telnet/HTTP servers that keep Node alive forever. The
   // headless harness has no use for those listeners, so once the door
   // has terminated we drop the process explicitly.
-  process.exit(0);
+  //
+  // process.exit() does NOT flush async stdout when piped (Node docs);
+  // the corpus runner pipes our stdout to a buffer, so an immediate
+  // exit can drop the door's final lines on the floor (regressed the
+  // `who` golden 2026-05-14). Flush via an empty write+callback so
+  // the pipe drains before we drop.
+  process.stdout.write("", () => process.exit(0));
 }).catch((error) => {
   console.error("[run-amiga-door] Door execution failed:", error);
   process.exit(1);
