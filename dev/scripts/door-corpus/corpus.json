@@ -871,6 +871,60 @@
         }
       ],
       "notes": "AFL/fanta password-failure helper. Y/n -> n skips comment; subsequent Hit-Space prompt advances on space. Cluster representative for the 3-door Pwfail.* CPU-variant family."
+    },
+    {
+      "id": "autosent",
+      "name": "Byteandi AutoSent 1.4",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Autosent/Autosent",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "AutoSent file-id batch helper. Prints banner + Error(FileId.info) and exits when its config file is absent. Cluster representative for the 7-door Autosent/FILEID/AUTOSENT family."
+    },
+    {
+      "id": "exorcist",
+      "name": "SR Exorcist! 3.x",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Exorcist/Exorcist",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "Exorcist! file processor. Prints background-task startup banner then exits when the spawned task fails. Cluster representative for the 7-door Exorcist!_2_*/Exorcist!_3_* CPU-variant family."
+    },
+    {
+      "id": "tconf2",
+      "name": "ThrashConf TConf2 v2.20",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TConf2/TConf2.EXE",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "Conference manager. Bails with \"Could Not Find TConf2.EXE.info\" when the .info is absent. Cluster representative for the 5-door TConf2.EXE password-prompt family."
+    },
+    {
+      "id": "cdtrans",
+      "name": "doC wHoO CDTrans 0.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CDTrans/CDTrans",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "CD transfer banner + Filename(01): prompt; CR exits. Cluster representative for the 5-door CDTrans/CD_DL Filename family (CD_DL already in corpus, distinct binary)."
     }
   ]
 }
