@@ -1,0 +1,5 @@
+
+BoSS-NuKE (v1.5 ßeta) by Big Boss of the /X Development Team! 
+Enter '-h' for filename for full docs!
+Enter File(s) to BoSS-NuKE (Enter to begin): 
+Filespec #1 : 

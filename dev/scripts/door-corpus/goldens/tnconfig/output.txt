@@ -1,0 +1,11 @@
+                 -->  Turbo Toolz Config Menu From Hell v3.2 <--
+                       By Mack Lifeguard/Dual Crew Shining
+
+Config file version: 7
+
+1. Master Sysop Configuration (255 axs required)
+2. Turbo Newscan and Turbo Files Configuration
+3. Show ANSI color definitions used
+4. Exit
+1> 
+

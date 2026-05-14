@@ -979,6 +979,71 @@
         }
       ],
       "notes": "OOPS! /X DEV wall door. Renders full wall + Y/N add-line prompt; declines via CR and exits with two retry insults (\"What's Da Matter? / Lost Yar Guts Or What!?\"). Cluster representative for the 3-door fulledit/formedit/DaWall family."
+    },
+    {
+      "id": "bossnuke",
+      "name": "BossNuke",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BossNuke/BossNuke",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "BossNuke file-nuker. \"Filespec #1 :\" prompt; CR exits when config absent. Cluster representative for the 3-door BossNuke family."
+    },
+    {
+      "id": "tnconfig",
+      "name": "DCS TNConfig",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TNConfig/TNConfig",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 5000,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 8000,
+          "data": "q\\r"
+        }
+      ],
+      "notes": "DCS TurboN configurator. \"1>\" prompt + line input; CR/CR/q exits. Cluster representative for the 3-door TNConfig family."
+    },
+    {
+      "id": "turbon",
+      "name": "DCS Turbo Newscan Pro 2.z",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TurboN/TurboN",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 5000,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 7500,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 10000,
+          "data": "\\r"
+        }
+      ],
+      "notes": "DCS TurboN Newscan Pro 2.z by MaCK LiFeGuaRD. Multi-prompt newscan; 4\u00d7 CR walks date-range/dir prompts and exits at \"ENTER=EXIT\". Cluster representative for the 3-door TurboN family."
     }
   ]
 }
