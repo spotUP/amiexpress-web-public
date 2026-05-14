@@ -852,6 +852,25 @@
         }
       ],
       "notes": "AFL stats viewer. JH_LI prompts terminated by CR; 2 CRs to walk through and exit cleanly."
+    },
+    {
+      "id": "pwfail",
+      "name": "AFL PWFailure 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Pwfail/Pwfail",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "n\\r"
+        },
+        {
+          "delayMs": 5500,
+          "data": "\\x20"
+        }
+      ],
+      "notes": "AFL/fanta password-failure helper. Y/n -> n skips comment; subsequent Hit-Space prompt advances on space. Cluster representative for the 3-door Pwfail.* CPU-variant family."
     }
   ]
 }
