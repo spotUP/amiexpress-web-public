@@ -3009,6 +3009,105 @@
       "doorType": "XIM",
       "timeoutMs": 30000,
       "notes": "TRSI-SV3.LHA sUPERViSER.XiM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "mover_mover",
+      "name": "MOVER Mover",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MOVER_Mover/Mover",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MOVER Mover \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "bd_str20_textstrip",
+      "name": "BD-STR20 TextStrip",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BD_STR20_TextStrip/TextStrip",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "BD-STR20 TextStrip \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ns__ss10_smartshow10r1",
+      "name": "NS!-SS10 SmartShow10R1.0x0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NS__SS10_SmartShow10R1/SmartShow10R1.0x0",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "NS!-SS10 SmartShow10R1.0x0 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "at20_copy",
+      "name": "AT20 COPY",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AT20_COPY/COPY",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AT20 COPY \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "aetop20_aetop",
+      "name": "AETOP20 AETop",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AETOP20_AETop/AETop",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AETOP20 AETop \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "psn_xs10_amie_starter",
+      "name": "PSN-XS10 AmiE-starter.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PSN_XS10_AmiE_starter/AmiE-starter.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PSN-XS10 AmiE-starter.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "psn_xs10_ward",
+      "name": "PSN-XS10 ward.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PSN_XS10_ward/ward.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PSN-XS10 ward.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "psn_xs10_aia",
+      "name": "PSN-XS10 aia.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PSN_XS10_aia/aia.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PSN-XS10 aia.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dse200_powerpacker",
+      "name": "DSE200 powerpacker.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DSE200_powerpacker/powerpacker.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DSE200 powerpacker.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "love_a16_air",
+      "name": "LOVE-A16 air.xim",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LOVE_A16_air/air.xim",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LOVE-A16 air.xim \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "acs_ip10_telnetd",
+      "name": "ACS-IP10 telnetd.device",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ACS_IP10_telnetd/telnetd.device",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "ACS-IP10 telnetd.device \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
     }
   ]
 }
