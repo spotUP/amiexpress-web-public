@@ -10,7 +10,7 @@
       "doorType": "XIM",
       "command": "Sent_FE",
       "timeoutMs": 30000,
-      "notes": "Banner-only stub door (EMPiRE/MYSTiC X-DESiGN 1994). Loads, renders ANSI banner, issues PRV_COMMAND 'Sent', shuts down. No input expected — pure outbound trace test for XIM JH_REGISTER → SV_NEWMSG → DT_NAME → DT_SLOTNUMBER → BB_NONSTOPTEXT → JH_SM* → PRV_COMMAND → JH_SHUTDOWN sequence. Verified 2026-05-11."
+      "notes": "Banner-only stub door (EMPiRE/MYSTiC X-DESiGN 1994). Loads, renders ANSI banner, issues PRV_COMMAND 'Sent', shuts down. No input expected \u2014 pure outbound trace test for XIM JH_REGISTER \u2192 SV_NEWMSG \u2192 DT_NAME \u2192 DT_SLOTNUMBER \u2192 BB_NONSTOPTEXT \u2192 JH_SM* \u2192 PRV_COMMAND \u2192 JH_SHUTDOWN sequence. Verified 2026-05-11."
     },
     {
       "id": "conftop",
@@ -20,7 +20,7 @@
       "doorType": "XIM",
       "command": "CONFTOP",
       "timeoutMs": 30000,
-      "notes": "Conference Top Uploaders v2.3 (Bobo/Mystic + Looby/Insane). Exercises XIM banner + dos.library file I/O for Conf.DB reads + AEDoor message flow. Without Conf.DB seed data, exits early with 'Reset date is out of range' — stable trace either way. Verified runs to completion + emits banner 2026-05-11."
+      "notes": "Conference Top Uploaders v2.3 (Bobo/Mystic + Looby/Insane). Exercises XIM banner + dos.library file I/O for Conf.DB reads + AEDoor message flow. Without Conf.DB seed data, exits early with 'Reset date is out of range' \u2014 stable trace either way. Verified runs to completion + emits banner 2026-05-11."
     },
     {
       "id": "who",
@@ -40,7 +40,7 @@
       "doorType": "XIM",
       "command": "WHO",
       "timeoutMs": 30000,
-      "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive — renders list and exits."
+      "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive \u2014 renders list and exits."
     },
     {
       "id": "5d_autofree",
@@ -50,7 +50,7 @@
       "doorType": "XIM",
       "command": "FILECHECK",
       "timeoutMs": 30000,
-      "notes": "SvEN/5D 1994 file-check / auto-free door. Without its full .info tooltype set, the door's icon.library GetDiskObject lookup fails and it exits with 'Door hasn't been started fully right!' Pinned here as a deterministic 5-XIM-op trace (JH_REGISTER → SV_NEWMSG → BB_MAINLINE → JH_WRITE × 2 → JH_SHUTDOWN). Surfaced by bulk-probe 2026-05-12."
+      "notes": "SvEN/5D 1994 file-check / auto-free door. Without its full .info tooltype set, the door's icon.library GetDiskObject lookup fails and it exits with 'Door hasn't been started fully right!' Pinned here as a deterministic 5-XIM-op trace (JH_REGISTER \u2192 SV_NEWMSG \u2192 BB_MAINLINE \u2192 JH_WRITE \u00d7 2 \u2192 JH_SHUTDOWN). Surfaced by bulk-probe 2026-05-12."
     },
     {
       "id": "5d_dupecheck",
@@ -71,9 +71,12 @@
       "command": "DOORMENU",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "5D-DoorMenu — door-selection menu, prompt '<CR>=quit'. Scripted Enter drops out. Exercises XIM JH_HK + JH_SF (Show File)."
+      "notes": "5D-DoorMenu \u2014 door-selection menu, prompt '<CR>=quit'. Scripted Enter drops out. Exercises XIM JH_HK + JH_SF (Show File)."
     },
     {
       "id": "5d_timebank",
@@ -84,9 +87,12 @@
       "command": "TIMEBANK",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "q" }
+        {
+          "delayMs": 2500,
+          "data": "q"
+        }
       ],
-      "notes": "5D-TimeBank — time-deposit/withdraw door. 'Q' hotkey quits per its UI hint. Exercises XIM DT_TIMELIMIT + RAWARROW + JH_HK input path."
+      "notes": "5D-TimeBank \u2014 time-deposit/withdraw door. 'Q' hotkey quits per its UI hint. Exercises XIM DT_TIMELIMIT + RAWARROW + JH_HK input path."
     },
     {
       "id": "logoff",
@@ -97,9 +103,12 @@
       "command": "BYE",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "LogOff v1.2 by Steve and DR. G of Italian Bad Boys '93. Confirms 'do you really want to LogOff (y)es/(N)o/(r)eply ?' — 'n' declines + door exits. First door in corpus to exercise JH_BBSNAME (BBS name query) and DT_NAME together with the hotkey path."
+      "notes": "LogOff v1.2 by Steve and DR. G of Italian Bad Boys '93. Confirms 'do you really want to LogOff (y)es/(N)o/(r)eply ?' \u2014 'n' declines + door exits. First door in corpus to exercise JH_BBSNAME (BBS name query) and DT_NAME together with the hotkey path."
     },
     {
       "id": "5d_zippysearch",
@@ -110,9 +119,12 @@
       "command": "ZIPPY",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "5D-ZippySearch by sTc/5D. Line-input prompt 'Enter string to search for >:'. Bare Enter aborts the search and exits the door. Exercises XIM JH_LI (line-input) path — first corpus door to cover that op."
+      "notes": "5D-ZippySearch by sTc/5D. Line-input prompt 'Enter string to search for >:'. Bare Enter aborts the search and exits the door. Exercises XIM JH_LI (line-input) path \u2014 first corpus door to cover that op."
     },
     {
       "id": "bull",
@@ -123,9 +135,12 @@
       "command": "BULL",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "Bulletin update door from 5150-B10. Prompt 'Update bulletins? (y/N):' — 'n' declines and exits. Minimal 3.9 KB binary — useful for pinning the JH_HK hotkey path in isolation (no other XIM ops fire)."
+      "notes": "Bulletin update door from 5150-B10. Prompt 'Update bulletins? (y/N):' \u2014 'n' declines and exits. Minimal 3.9 KB binary \u2014 useful for pinning the JH_HK hotkey path in isolation (no other XIM ops fire)."
     },
     {
       "id": "confscan",
@@ -135,7 +150,7 @@
       "doorType": "XIM",
       "command": "CS",
       "timeoutMs": 30000,
-      "notes": "ConfScan v2.6 — conference scanning utility. Exercises ENVSTAT (environment-status query), DT_CONFACCESS (conf access flags), and BB_CONFNUM (current-conf number). Non-interactive, clean exit. Three novel XIM ops in one door."
+      "notes": "ConfScan v2.6 \u2014 conference scanning utility. Exercises ENVSTAT (environment-status query), DT_CONFACCESS (conf access flags), and BB_CONFNUM (current-conf number). Non-interactive, clean exit. Three novel XIM ops in one door."
     },
     {
       "id": "updowninfo",
@@ -145,7 +160,7 @@
       "doorType": "XIM",
       "command": "UDI",
       "timeoutMs": 30000,
-      "notes": "uPdOWNiNFO v1.2 — upload/download stats info screen. Exercises DT_STAMP_CTIME (account creation time) + BB_CONFNUM + the full DT_BYTES* / DT_DAILY* user-data field set. 20-op trace, non-interactive."
+      "notes": "uPdOWNiNFO v1.2 \u2014 upload/download stats info screen. Exercises DT_STAMP_CTIME (account creation time) + BB_CONFNUM + the full DT_BYTES* / DT_DAILY* user-data field set. 20-op trace, non-interactive."
     },
     {
       "id": "easystatus",
@@ -155,7 +170,7 @@
       "doorType": "XIM",
       "command": "ES",
       "timeoutMs": 30000,
-      "notes": "Damage93 easystatus — 24-op status renderer with embedded current-time field. Restored 2026-05-12 with the time-mask runner pass."
+      "notes": "Damage93 easystatus \u2014 24-op status renderer with embedded current-time field. Restored 2026-05-12 with the time-mask runner pass."
     },
     {
       "id": "confstats",
@@ -165,7 +180,7 @@
       "doorType": "XIM",
       "command": "CS",
       "timeoutMs": 30000,
-      "notes": "ConfStats v1.3 'Tough Stats' by Json — 31 XIM ops, highest single-door op-count in the corpus. Renders 'Local time...' line that previously drifted; restored 2026-05-12 with time-mask runner pass."
+      "notes": "ConfStats v1.3 'Tough Stats' by Json \u2014 31 XIM ops, highest single-door op-count in the corpus. Renders 'Local time...' line that previously drifted; restored 2026-05-12 with time-mask runner pass."
     },
     {
       "id": "newinfo",
@@ -175,7 +190,7 @@
       "doorType": "XIM",
       "command": "INFO",
       "timeoutMs": 30000,
-      "notes": "AFL_PACK newinfo — heaviest XIM trace in the universe sample (27 ops). Covers the entire user-data + sysop + BBS-info query surface. Non-interactive."
+      "notes": "AFL_PACK newinfo \u2014 heaviest XIM trace in the universe sample (27 ops). Covers the entire user-data + sysop + BBS-info query surface. Non-interactive."
     },
     {
       "id": "5d_status",
@@ -185,7 +200,7 @@
       "doorType": "XIM",
       "command": "ST",
       "timeoutMs": 30000,
-      "notes": "5D-Status V1.50 by SvEN/5D — third user-stats variant (23 ops) with NODE_DEVICE query that the others don't issue. Pinning all three (newinfo + easystatus + 5d_status) catches per-variant query-ordering regressions."
+      "notes": "5D-Status V1.50 by SvEN/5D \u2014 third user-stats variant (23 ops) with NODE_DEVICE query that the others don't issue. Pinning all three (newinfo + easystatus + 5d_status) catches per-variant query-ordering regressions."
     },
     {
       "id": "fucknature",
@@ -195,7 +210,7 @@
       "doorType": "XIM",
       "command": "FN",
       "timeoutMs": 30000,
-      "notes": "Dive's FuckNature — 20-op trace. Distinct fingerprint from the other status doors; different rendering path. Non-interactive."
+      "notes": "Dive's FuckNature \u2014 20-op trace. Distinct fingerprint from the other status doors; different rendering path. Non-interactive."
     },
     {
       "id": "joincnf",
@@ -205,7 +220,7 @@
       "doorType": "XIM",
       "command": "J",
       "timeoutMs": 30000,
-      "notes": "JoinCnf 3.6 — third-party conference-join helper (independent of the BBS's internal `J` command). Non-interactive — renders + exits."
+      "notes": "JoinCnf 3.6 \u2014 third-party conference-join helper (independent of the BBS's internal `J` command). Non-interactive \u2014 renders + exits."
     },
     {
       "id": "ratiorep",
@@ -225,7 +240,7 @@
       "doorType": "XIM",
       "command": "AO",
       "timeoutMs": 30000,
-      "notes": "EMPiRE AutoOnline 1.2 — auto-online activity bulletin. Different category from status doors (status writer not reader)."
+      "notes": "EMPiRE AutoOnline 1.2 \u2014 auto-online activity bulletin. Different category from status doors (status writer not reader)."
     },
     {
       "id": "confsecurity",
@@ -235,7 +250,7 @@
       "doorType": "XIM",
       "command": "CSEC",
       "timeoutMs": 30000,
-      "notes": "C+N Conference Security V1.30 — checks access on conference join. Different XIM surface from JoinCnf (access-check vs join-action)."
+      "notes": "C+N Conference Security V1.30 \u2014 checks access on conference join. Different XIM surface from JoinCnf (access-check vs join-action)."
     },
     {
       "id": "six_status",
@@ -245,7 +260,7 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "S!X Stat V2.0 from LGC — 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status."
+      "notes": "S!X Stat V2.0 from LGC \u2014 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status."
     },
     {
       "id": "skan_status",
@@ -255,7 +270,7 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "Insanity sKAN^4^sTATUs — 28-op status door, again distinct fingerprint."
+      "notes": "Insanity sKAN^4^sTATUs \u2014 28-op status door, again distinct fingerprint."
     },
     {
       "id": "super_stats",
@@ -265,7 +280,7 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "Intellect Super-Stats — 19-op variant. Different from the 5D family — broader Amiga-doors-scene coverage."
+      "notes": "Intellect Super-Stats \u2014 19-op variant. Different from the 5D family \u2014 broader Amiga-doors-scene coverage."
     },
     {
       "id": "afl_status",
@@ -275,7 +290,7 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "AFL status door — exercises NODE_UNIT + `Unknown (907` (an XIM op our XIMCommand enum doesn't name yet — useful for catching when we DO name it that the trace stays stable). 23 ops total."
+      "notes": "AFL status door \u2014 exercises NODE_UNIT + `Unknown (907` (an XIM op our XIMCommand enum doesn't name yet \u2014 useful for catching when we DO name it that the trace stays stable). 23 ops total."
     },
     {
       "id": "afl_pager",
@@ -285,7 +300,7 @@
       "doorType": "XIM",
       "command": "PAGE",
       "timeoutMs": 30000,
-      "notes": "AFL pager — exercises JH_SF (Show File) screen-display path + RETURNCOMMAND. First corpus entry covering JH_SF."
+      "notes": "AFL pager \u2014 exercises JH_SF (Show File) screen-display path + RETURNCOMMAND. First corpus entry covering JH_SF."
     },
     {
       "id": "holdcheck",
@@ -295,7 +310,7 @@
       "doorType": "XIM",
       "command": "HC",
       "timeoutMs": 30000,
-      "notes": "Kero/BTH HoldCheck — exercises JH_CO (Console Output) + JH_SO (Serial Output) — two distinct XIM output ops the rest of the corpus doesn't cover. Pinned to catch any regression in low-level output routing."
+      "notes": "Kero/BTH HoldCheck \u2014 exercises JH_CO (Console Output) + JH_SO (Serial Output) \u2014 two distinct XIM output ops the rest of the corpus doesn't cover. Pinned to catch any regression in low-level output routing."
     },
     {
       "id": "diary",
@@ -305,7 +320,7 @@
       "doorType": "XIM",
       "command": "DIARY",
       "timeoutMs": 30000,
-      "notes": "diary door from AEXSETU — exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path."
+      "notes": "diary door from AEXSETU \u2014 exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path."
     },
     {
       "id": "mgs_bulls",
@@ -315,7 +330,7 @@
       "doorType": "XIM",
       "command": "B",
       "timeoutMs": 30000,
-      "notes": "mgs! bulls bulletin-list door — exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output)."
+      "notes": "mgs! bulls bulletin-list door \u2014 exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output)."
     },
     {
       "id": "wall_mst",
@@ -325,8 +340,13 @@
       "doorType": "XIM",
       "command": "WALL",
       "timeoutMs": 30000,
-      "inputScript": [ { "delayMs": 2500, "data": "n" } ],
-      "notes": "MST wall door — prompts 'Write On Wall (y/n)?' — declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster."
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
+      ],
+      "notes": "MST wall door \u2014 prompts 'Write On Wall (y/n)?' \u2014 declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster."
     },
     {
       "id": "cdtrans",
@@ -336,8 +356,13 @@
       "doorType": "XIM",
       "command": "CDTRANS",
       "timeoutMs": 30000,
-      "inputScript": [ { "delayMs": 2500, "data": "\\r" } ],
-      "notes": "CDTrans — CD-ROM file transfer helper. Prompts 'Filename(01):' — bare Enter aborts, door exits. Represents a 5-door 'Filename:' line-input cluster (CDTrans/CD_DL.EXE variants)."
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "CDTrans \u2014 CD-ROM file transfer helper. Prompts 'Filename(01):' \u2014 bare Enter aborts, door exits. Represents a 5-door 'Filename:' line-input cluster (CDTrans/CD_DL.EXE variants)."
     },
     {
       "id": "sim_5d_fileid",
@@ -346,7 +371,7 @@
       "binary": "Doors/5D-FileId/5D-FileId",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "5D-FileId — pure SIM batch (no XIM ops, no AEDoor handshake). Exercises dos.library file open/read/write path against the door's config file. First SIM-category corpus entry."
+      "notes": "5D-FileId \u2014 pure SIM batch (no XIM ops, no AEDoor handshake). Exercises dos.library file open/read/write path against the door's config file. First SIM-category corpus entry."
     },
     {
       "id": "sim_makecmd",
@@ -355,7 +380,7 @@
       "binary": "Doors/MAKECMD/MAKECMD",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "dRE!NEW_PUB MAKECMD — SIM utility for building command sets. Different LVO mix from 5D-FileId."
+      "notes": "dRE!NEW_PUB MAKECMD \u2014 SIM utility for building command sets. Different LVO mix from 5D-FileId."
     },
     {
       "id": "sim_5d_news",
@@ -364,7 +389,7 @@
       "binary": "Doors/5D-News/5D-News",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "5D-News — news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point."
+      "notes": "5D-News \u2014 news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point."
     },
     {
       "id": "sim_5d_comment",
@@ -373,7 +398,7 @@
       "binary": "Doors/5D_Comment/5D_Comment",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "5D_Comment — sysop-comment helper (SIM batch). Fourth SIM corpus entry — different code patterns than the 5D-FileId/News doors."
+      "notes": "5D_Comment \u2014 sysop-comment helper (SIM batch). Fourth SIM corpus entry \u2014 different code patterns than the 5D-FileId/News doors."
     },
     {
       "id": "u_stat",
@@ -384,9 +409,12 @@
       "command": "STATS",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 4000, "data": "\\r" }
+        {
+          "delayMs": 4000,
+          "data": "\\r"
+        }
       ],
-      "notes": "U-Stat v1.0 by S¡eGeL/AFL (graphics by aRGøN/AFL). User-stats info screen — exercises 29 distinct XIM ops in one door including the entire DT_* user-data field family (DT_LOCATION, DT_UPLOADS, DT_BYTESUPLOAD, DT_DOWNLOADS, DT_BYTEDOWNLOAD, DT_SECBOARD, DT_SECLIBRARY, DT_DAILYBYTELIMIT, DT_DAILYBYTEDLD, DT_STAMP_LASTON, DT_TIMESCALLED, DT_MESSAGESPOSTED, DT_TIMETOTAL, DT_TIMEUSED, DT_EXPERT) + JH_SYSOP / EXPRESS_VERSION / BB_CONFNAME / BB_NODEID / BB_TASKPRI / NODE_BAUDRATE. Scripted \\r after 4 s exits cleanly. Pinning this catches any regression across the user-data XIM query surface in one shot. Surfaced by bulk-probe full sweep 2026-05-12."
+      "notes": "U-Stat v1.0 by S\u00a1eGeL/AFL (graphics by aRG\u00f8N/AFL). User-stats info screen \u2014 exercises 29 distinct XIM ops in one door including the entire DT_* user-data field family (DT_LOCATION, DT_UPLOADS, DT_BYTESUPLOAD, DT_DOWNLOADS, DT_BYTEDOWNLOAD, DT_SECBOARD, DT_SECLIBRARY, DT_DAILYBYTELIMIT, DT_DAILYBYTEDLD, DT_STAMP_LASTON, DT_TIMESCALLED, DT_MESSAGESPOSTED, DT_TIMETOTAL, DT_TIMEUSED, DT_EXPERT) + JH_SYSOP / EXPRESS_VERSION / BB_CONFNAME / BB_NODEID / BB_TASKPRI / NODE_BAUDRATE. Scripted \\r after 4 s exits cleanly. Pinning this catches any regression across the user-data XIM query surface in one shot. Surfaced by bulk-probe full sweep 2026-05-12."
     },
     {
       "id": "5d_entermsg",
@@ -407,9 +435,12 @@
       "command": "BYE",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' — 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12."
+      "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' \u2014 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12."
     },
     {
       "id": "warpsearch",
@@ -420,9 +451,12 @@
       "command": "ZIPPY",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "WarpSearch 2.5 — file-listing search door. Cluster representative for the 6-door 'Enter string to search for:' line-input family (WarpSearch + TurboZ variants). Bare Enter aborts search and exits. Pins the XIM line-input (JH_LI) return path on a second binary distinct from 5D-ZippySearch."
+      "notes": "WarpSearch 2.5 \u2014 file-listing search door. Cluster representative for the 6-door 'Enter string to search for:' line-input family (WarpSearch + TurboZ variants). Bare Enter aborts search and exits. Pins the XIM line-input (JH_LI) return path on a second binary distinct from 5D-ZippySearch."
     },
     {
       "id": "quickansi",
@@ -433,9 +467,12 @@
       "command": "QA",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "5D^QuickAnsi 0.05 — tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 — biggest 'Choose : ->' cluster in the universe sample)."
+      "notes": "5D^QuickAnsi 0.05 \u2014 tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 \u2014 biggest 'Choose : ->' cluster in the universe sample)."
     },
     {
       "id": "listspeeder",
@@ -446,9 +483,12 @@
       "command": "LS",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "Aqua ListSpeeder 1.2 — file-listing accelerator. Bare '>' prompt is a line-input read; Enter exits. Cluster representative for the 4-door ListSpeeder family (000/020/030/040 CPU variants)."
+      "notes": "Aqua ListSpeeder 1.2 \u2014 file-listing accelerator. Bare '>' prompt is a line-input read; Enter exits. Cluster representative for the 4-door ListSpeeder family (000/020/030/040 CPU variants)."
     },
     {
       "id": "goodbye",
@@ -459,9 +499,12 @@
       "command": "BYE",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "DPL GoodBye 1.1 (variant 'GoodBye.x'). Prompt 'Do you want to logoff or write a comment? (c/y/N)' — 'n' declines and exits. Cluster representative for the 4-door GoodBye.x family (000/020/030/040 CPU variants)."
+      "notes": "DPL GoodBye 1.1 (variant 'GoodBye.x'). Prompt 'Do you want to logoff or write a comment? (c/y/N)' \u2014 'n' declines and exits. Cluster representative for the 4-door GoodBye.x family (000/020/030/040 CPU variants)."
     },
     {
       "id": "masterview",
@@ -472,7 +515,10 @@
       "command": "V",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family."
     },
@@ -485,9 +531,12 @@
       "command": "G",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 3000, "data": "n\\r" }
+        {
+          "delayMs": 3000,
+          "data": "n\\r"
+        }
       ],
-      "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' — 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry."
+      "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' \u2014 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry."
     },
     {
       "id": "comment2_afl",
@@ -498,9 +547,12 @@
       "command": "C",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "AFL Comment2 (AFL_PACK.LHA). Sysop-comment helper variant — bare \\r exits. 3-door cluster representative for the 'comment' banner family."
+      "notes": "AFL Comment2 (AFL_PACK.LHA). Sysop-comment helper variant \u2014 bare \\r exits. 3-door cluster representative for the 'comment' banner family."
     },
     {
       "id": "dcn_sent",
@@ -511,9 +563,12 @@
       "command": "SENT",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "DCN file-id v2 SENT helper (DCN!F-X2.LHA). Prompt 'Your STRIP_ID settings do not exist! Configure them now (y/N)' — 'n' declines and exits. 4-door cluster representative."
+      "notes": "DCN file-id v2 SENT helper (DCN!F-X2.LHA). Prompt 'Your STRIP_ID settings do not exist! Configure them now (y/N)' \u2014 'n' declines and exits. 4-door cluster representative."
     },
     {
       "id": "5d_wall",
@@ -524,9 +579,12 @@
       "command": "WALL",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "SvEN/5D Wall 1.25 (5D-WA125.LHA). 3-door cluster representative for the 'Call Joyrøde 4 unl¡m¡ted /X-door support' Wall banner family. Bare \\r exits."
+      "notes": "SvEN/5D Wall 1.25 (5D-WA125.LHA). 3-door cluster representative for the 'Call Joyr\u00f8de 4 unl\u00a1m\u00a1ted /X-door support' Wall banner family. Bare \\r exits."
     },
     {
       "id": "5d_logoff",
@@ -537,9 +595,12 @@
       "command": "BYE",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner — 4-door cluster representative. Bare \\r exits."
+      "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner \u2014 4-door cluster representative. Bare \\r exits."
     },
     {
       "id": "file_description",
@@ -550,7 +611,10 @@
       "command": "FD",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
       "notes": "FileDescription 1.1 (FDESCR11.LHA). Without 'Filedescription.config' exits via deterministic 'Cannot open configfile' error path. 4-door cluster representative for the FileDescription0X0.x CPU-variant family."
     },
@@ -563,7 +627,10 @@
       "command": "CW",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
       "notes": "AFL cOLORWALL 1.3 (AFL-CW13.LHA). Renders graffiti wall, prompts '[KEY] TO CONTINUE !'. Bare Enter exits. 4-door cluster representative for the cOLORWALl CPU-variant family."
     },
@@ -576,7 +643,10 @@
       "command": "DSF",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
       "notes": "INS Nightshade SmartDSF 1.3 (INS-SD13.LHA). Sysop file-tag helper. Without tag data exits via 'HANG ON YOURE SYSOP IS TAGGING FiLES!' notice path. 4-door cluster representative for SmartDSF.0X0 CPU-variant family."
     },
@@ -589,9 +659,12 @@
       "command": "BULL",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "Honey d-lOSt_bULLs 0.2 (HNY-LB02.LHA). Bulletin selector. Line-input 'eNTEr a bULLETINe nr# to vIEw or hIt rETURn to qUIt :>' — bare \\r exits. 4-door cluster representative."
+      "notes": "Honey d-lOSt_bULLs 0.2 (HNY-LB02.LHA). Bulletin selector. Line-input 'eNTEr a bULLETINe nr# to vIEw or hIt rETURn to qUIt :>' \u2014 bare \\r exits. 4-door cluster representative."
     },
     {
       "id": "byte_comment",
@@ -602,9 +675,12 @@
       "command": "BC",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "OPS ByteComment 1.0 (upload side). Line-input prompt 'Please Enter Filename (ReTuRn)=End :' — bare Enter exits with 'End'. Exercises DT_BYTESUPLOAD + DT_BYTEDOWNLOAD path with high JH_SM count (46 ops). Cluster representative for the 5-door ByteComment family."
+      "notes": "OPS ByteComment 1.0 (upload side). Line-input prompt 'Please Enter Filename (ReTuRn)=End :' \u2014 bare Enter exits with 'End'. Exercises DT_BYTESUPLOAD + DT_BYTEDOWNLOAD path with high JH_SM count (46 ops). Cluster representative for the 5-door ByteComment family."
     },
     {
       "id": "mst_wall",
@@ -615,9 +691,12 @@
       "command": "W",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "MST wall.020 — graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry — different banner / DT_NAME path / JH_SG show-gfile op)."
+      "notes": "MST wall.020 \u2014 graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry \u2014 different banner / DT_NAME path / JH_SG show-gfile op)."
     },
     {
       "id": "mst_edit",
@@ -628,9 +707,12 @@
       "command": "EDIT",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "MST edit.020 — file-edit door. Line-input prompt 'Filename :' — bare Enter aborts and exits. Cluster representative for the 5-door edit.0X0 CPU-variant family. 30 JH_SM ops — heavy banner."
+      "notes": "MST edit.020 \u2014 file-edit door. Line-input prompt 'Filename :' \u2014 bare Enter aborts and exits. Cluster representative for the 5-door edit.0X0 CPU-variant family. 30 JH_SM ops \u2014 heavy banner."
     },
     {
       "id": "cd_dl",
@@ -641,9 +723,12 @@
       "command": "CDDL",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "Tiny 1.7 KB CD download helper from Rioter Tools. Line-input 'Filename(01):' — bare Enter exits. Cluster representative for the 5-door 'Filename(NN):' family (CD_DL + CDTrans variants), distinct from the cdtrans corpus entry by AEDoor library path (uses OldOpenLibrary)."
+      "notes": "Tiny 1.7 KB CD download helper from Rioter Tools. Line-input 'Filename(01):' \u2014 bare Enter exits. Cluster representative for the 5-door 'Filename(NN):' family (CD_DL + CDTrans variants), distinct from the cdtrans corpus entry by AEDoor library path (uses OldOpenLibrary)."
     },
     {
       "id": "fileid",
@@ -654,9 +739,12 @@
       "command": "FILEID",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
-      "notes": "FILEID file-id manager (FID15CR.LHA source). Without its config the door exits via 'Error (FileId.info)' path — deterministic clean exit on bare \\r. Cluster representative for the 7-door FileId family (Autosent / FILEID / AUTOSENT variants)."
+      "notes": "FILEID file-id manager (FID15CR.LHA source). Without its config the door exits via 'Error (FileId.info)' path \u2014 deterministic clean exit on bare \\r. Cluster representative for the 7-door FileId family (Autosent / FILEID / AUTOSENT variants)."
     },
     {
       "id": "warcalls",
@@ -667,11 +755,20 @@
       "command": "WC",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" },
-        { "delayMs": 5000, "data": "n" },
-        { "delayMs": 7500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 5000,
+          "data": "n"
+        },
+        {
+          "delayMs": 7500,
+          "data": "n"
+        }
       ],
-      "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family — first multi-input corpus entry."
+      "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family \u2014 first multi-input corpus entry."
     },
     {
       "id": "quicklogon",
@@ -682,9 +779,12 @@
       "command": "QL",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "n" }
+        {
+          "delayMs": 2500,
+          "data": "n"
+        }
       ],
-      "notes": "H&V QuickLogon 1.0 — quick-logon-prompt door. Prompt 'Would you like a quick logon? (y/N)' — 'n' declines and exits. Cluster representative for the 6-door QuickLogon family (DTR/H&V variants)."
+      "notes": "H&V QuickLogon 1.0 \u2014 quick-logon-prompt door. Prompt 'Would you like a quick logon? (y/N)' \u2014 'n' declines and exits. Cluster representative for the 6-door QuickLogon family (DTR/H&V variants)."
     },
     {
       "id": "getanswer",
@@ -695,7 +795,10 @@
       "command": "GA",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 2500, "data": "\\r" }
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
       ],
       "notes": "HCD GetAnswer. Prompt 'Enter handle/usernr >:' line-input. Bare Enter exits. Cluster representative for the 4-door GetAnswer family (HCD-GA10 + M22-GA11 CPU variants)."
     },
@@ -708,9 +811,47 @@
       "command": "HELP",
       "timeoutMs": 30000,
       "inputScript": [
-        { "delayMs": 8000, "data": "\\r" }
+        {
+          "delayMs": 8000,
+          "data": "\\r"
+        }
       ],
       "notes": "AEHelp v0.4 by -= Nameless =- of Snarfs' Pub BBS. Renders the full AmiExpress command help index then prompts 'Enter command you want HELP with [press <RETURN> to quit]->'. Bare Enter exits. Cluster representative for the 4-door AEHelp family (cluster mined 2026-05-12). Longer 8 s delay because the help screen takes time to render fully before the prompt appears."
+    },
+    {
+      "id": "mdb_confupdater",
+      "name": "MDB-ConfUpdater 1.5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MDB-ConfUpdater/MDB-ConfUpdater",
+      "doorType": "XIM",
+      "command": "CU",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "Q"
+        }
+      ],
+      "notes": "Conference updater. Menu prompt with JH_HK; Q exits."
+    },
+    {
+      "id": "hststat",
+      "name": "AFL Hststat",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/Hststat/Hststat",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        },
+        {
+          "delayMs": 5000,
+          "data": "\\r"
+        }
+      ],
+      "notes": "AFL stats viewer. JH_LI prompts terminated by CR; 2 CRs to walk through and exit cleanly."
     }
   ]
 }

@@ -194,7 +194,15 @@ function decodeEscapes(s: string): string {
   });
 }
 
-main().catch((error) => {
+main().then(() => {
+  // Force-exit after the door session resolves. Some XIM handlers
+  // (notably JH_MCI's dynamic import of screen.handler) transitively
+  // pull in the full BBS via index.ts, whose top-level IIFE spins up
+  // database/Telnet/HTTP servers that keep Node alive forever. The
+  // headless harness has no use for those listeners, so once the door
+  // has terminated we drop the process explicitly.
+  process.exit(0);
+}).catch((error) => {
   console.error("[run-amiga-door] Door execution failed:", error);
   process.exit(1);
 });
