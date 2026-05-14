@@ -1,0 +1,8 @@
+ 
+ 
+_NosNUKE_ Version 0.21 -- By Nosferatu!
+ 
+ 
+Cannot Find Paths File - "BBS:Conf1/Paths"!   Aborting!
+ 
+ 

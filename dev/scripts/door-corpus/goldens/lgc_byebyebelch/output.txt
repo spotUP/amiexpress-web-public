@@ -1,0 +1,9 @@
+                                                                               
+                        ByeByeBELCH v0.3 by Noisy Belch                        
+
+       Type [BYE 1] to Kick Node 1 or [BYE 1 4 2] to Kick Node 1 2 and 4
+
+                     [BYE *] will Kick EVERYONE expect YOU
+
+                            Soon with NODE RESERVER
+

@@ -1,0 +1,3 @@
+« noC-Coupon version 1.oo  - (C)1994 nocTurne deSign/MST - Mortuary Version »
+DOORS:noC-Coupon/noC-Coupon.config: Configuration file not found...
+

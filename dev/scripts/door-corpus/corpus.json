@@ -1218,6 +1218,267 @@
       "doorType": "XIM",
       "timeoutMs": 30000,
       "notes": "MMH gRAPEsTATS 1.3 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "zytes_bytes",
+      "name": "Zytes Bytes 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ZytesBytes/Bytes.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "Zytes Bytes 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "nosnuke",
+      "name": "NoSnuke 2.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NoSnuke/nosnuke021.030",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "NoSnuke 2.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "afl_newfiles1",
+      "name": "AFL newfiles v1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AflNewFiles1/newfiles.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AFL newfiles v1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "dc_axxcheck",
+      "name": "DC aXXCHECK",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DcAxxCheck/aXXCHECK.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DC aXXCHECK \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "dlt_filedesc_modify",
+      "name": "DLT Filedescription.Modify",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DltFileDescModify/Filedescription.Modify",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DLT Filedescription.Modify \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mst_conftop000",
+      "name": "MST Conftop 000",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstConftop000/Conftop000.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST Conftop 000 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "tel_frontinfo",
+      "name": "TEL FrontInfo 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TelFrontInfo/FrontInfo",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TEL FrontInfo 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "afl_newfiles",
+      "name": "AFL NewFiles",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AflNewFiles/NewFiles",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AFL NewFiles \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "killer_comment",
+      "name": "KiLLER Comment",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/KillerComment/KiLLER_Comment",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "KiLLER Comment \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "eall",
+      "name": "EALL 2.01",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/EAll/EALL.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "EALL 2.01 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "ecl_exorcist",
+      "name": "ECL Exorcist! 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/EclExorcist/Exorcist!.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "ECL Exorcist! 1.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "ihs_ul_logoff",
+      "name": "IHS Ul-Logoff 1.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/IhsUlLogoff/Ul-Logoff.X",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "IHS Ul-Logoff 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "noc_coupon",
+      "name": "noC-Coupon 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NocCoupon/noC-Coupon.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "noC-Coupon 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "baud_counter",
+      "name": "REAL bAUD-cOUNTER 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BaudCounter/BAUD-COUNTER",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "REAL bAUD-cOUNTER 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "shx_grapebooth",
+      "name": "SHX GrapeBooth 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ShxGrapeBooth/GrapeBooth",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "SHX GrapeBooth 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "tms_upstats",
+      "name": "TMS upstats",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TmsUpstats/upstats",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TMS upstats \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "afl_security",
+      "name": "AFL Security",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AflSecurity/Security",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AFL Security \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "killer_baud",
+      "name": "KiLLER Baud 1.4",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/KillerBaud/KiLLER_Baud",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "KiLLER Baud 1.4 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "bbopen",
+      "name": "BBoPeN 1.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BbOpen/BBoPeN",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "BBoPeN 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "db_fastdupe",
+      "name": "D&B Fastdupe 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DbFastdupe/Fastdupe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "D&B Fastdupe 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "dupecheck042",
+      "name": "DupeCheck 0.42",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DupeCheck042/DupeCheck.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DupeCheck 0.42 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "fd_magicscan",
+      "name": "FD! MagicScan",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FdMagicScan/MagicScan",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FD! MagicScan \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "jso_timestamp",
+      "name": "JSO TimeStamp 2.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/JsoTimestamp/TimeStamp",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "JSO TimeStamp 2.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "lgc_byebyebelch",
+      "name": "LGC ByeByeBELCH 0.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LgcByeByeBelch/ByeByeBELCH",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LGC ByeByeBELCH 0.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "lgc_belchnet",
+      "name": "LGC BelchNET 0.5",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LgcBelchNet/BelchNET",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LGC BelchNET 0.5 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mdb_front",
+      "name": "MDB-Front 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MdbFront/MDB-Front",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MDB-Front 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mst_view",
+      "name": "MST-VieW 1.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstView/MST-VieW",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST-VieW 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mst_what000",
+      "name": "MST What 1.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MstWhat000/What000.x",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST What 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
+    },
+    {
+      "id": "mts_dupechekk",
+      "name": "MTS DupeChekk 0.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MtsDupeChekk/DupeChekk.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MTS DupeChekk 0.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask."
     }
   ]
 }
