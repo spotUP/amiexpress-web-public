@@ -1083,6 +1083,141 @@
       "doorType": "XIM",
       "timeoutMs": 30000,
       "notes": "FLD up/down stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
+    },
+    {
+      "id": "ic_status",
+      "name": "I/C status",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/IC_Status/status",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "I/C status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "mgs_userstatus",
+      "name": "MGS! userstatus",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MgsUserStatus/userstatus",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MGS! userstatus \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "kd_confstats",
+      "name": "KD Tough ConfStats 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/KdConfStats/ConfStats",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "KD Tough ConfStats 1.3 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "nb_status",
+      "name": "NB status",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/NbStatus/status",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "NB status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "afl_ustat",
+      "name": "AFL U-Stat",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AflUStat/U-Stat.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AFL U-Stat \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "lgc_status",
+      "name": "LGC S!X Stat 2.0",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LgcStatus/Status",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LGC S!X Stat 2.0 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "ins_skanstatus",
+      "name": "Insanity sKAN^4^sTATUs",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/InsSkanStatus/sKAN^4^sTATUs",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "Insanity sKAN^4^sTATUs \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "mth_stats",
+      "name": "MTHStats12",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MthStats/MTHStats12",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MTHStats12 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "afl_newinfo",
+      "name": "AFL newinfo",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AflNewInfo/newinfo",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AFL newinfo \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "heavenstat",
+      "name": "SRS Spiris HeavenStat",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/HeavenStat/heavenstat.xim",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "SRS Spiris HeavenStat \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "5d_status15",
+      "name": "5D-Status v1.50",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/_5DStatus15/5D-Status",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "5D-Status v1.50 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "af_status",
+      "name": "AF status",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AfStatus/status",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AF status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "smk_stats",
+      "name": "sMK-sTATS v0.2-beta",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/SmkStats/sMK-sTATS-v0.2-bETA",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "sMK-sTATS v0.2-beta \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "psychostats",
+      "name": "BFG pSYCHoSTATS 1.2",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PsychoStats/pSYCHoSTATS",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "BFG pSYCHoSTATS 1.2 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
+    },
+    {
+      "id": "mmh_grapestats",
+      "name": "MMH gRAPEsTATS 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MmhGrapeStats/gRAPEsTATS",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MMH gRAPEsTATS 1.3 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask."
     }
   ]
 }

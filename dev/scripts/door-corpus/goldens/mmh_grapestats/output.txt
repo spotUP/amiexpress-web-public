@@ -1,0 +1,30 @@
+
+`-------------------------------------^-------------------------------------'
+| aCCESS-----[                      ] | /X-vERSION-[                      ] |
+| nODE-------[                      ] | mESS-pOSTED[                      ] |
+| rATIO------[                      ] | rATIO-tYPE-[                      ] |
+| nR-dLS-----[                      ] | bYTES-dL---[                      ] |
+| nR-uLS-----[                      ] | bYTES-uL---[                      ] |
+| lOCATION---[                      ] | bAUD-rATE--[                      ] |
+| hANDLE-----[                      ] | sYSOP-nAME-[                      ] |
+|------------------------------------^-----.--------------------------------|
+| gRAPEfRUIT-sTATS 1.2 bY P¡GeøN^mMH | yOUR sTATS aT                        |
+.------------------------------------.--------------------------------------.
+AmiExpress-Web
+Sysop
+Sysop
+Local Console
+115200
+0
+0
+0
+0
+dISABLED
+bYTES oNLY
+1
+0
+255
+v5.6=( Thu 14-May-2026 16: )=
+
+
+

@@ -1,0 +1,22 @@
++--------------------------------------+--------------------------------------+
+| 5D-sTATUS v1.50 cODED by sTc/5D      |  dESIGN bY sNoW/5th dYNASTY          |
++--------------------------------------+--------------------------------------+
+| nAME ......: Sysop                   | bBS nAME .....: AmiExpress-Web       |
+| lOCATION ..: Local Console           | sYSOP nAME ...: Sysop                |
+| cALLER nR .: 20265                   | pOST mSGS ....: 0                    |
+| lEVEL .....: 255                     | cALLS ........: 0                    |
+| pHONE nR ..:                         | dEVICE .......: TCP:                 |
+| cPS uP ....: 0                       | sLOT nR ......: 0                    |
+| cPS dN ....: 0                       | cONFNAME .....: Main                 |
+| bYTES uP ..: 0                       | /X vERSION ...: v5.6                 |
+| bYTES dn ..: 0                       | tIME lIMIT ...: 1                    |
+| rATIO .....: Disabled                | xPERT mODE ...: Off                  |
+| tOP uP pOS : 4                       | sYSTEM cALLS .: 20265                |
+| tOP dN pOS : 4                       | nODE nR ......: 1                    |
+| fILES uP ..: 0                       +--------------------------------------+
+| fILES dN ..: 0                       | pOWERBOX III          +49-30-4167884 |
+| pAGES .....: None                    | hOUSE oF bRAIN        +49-3328472023 |
++--------------------------------------+--------------------------------------+
+| wE sEARCH fOR cODERS (aSSEMBLER , C) cONTACT tHE mIAMI hEAT: +49-30-7424141 |
+`-----------------------------------------------------------------------------'
+

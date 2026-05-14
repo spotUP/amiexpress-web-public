@@ -1,0 +1,52 @@
+
+U-Stat V1.0 - CoDeD BY S¡eGeL/aFL 
+.-----------------------------------------------------------------------------.
+| UserName :                         Location :                               |
+)-----------------------------------------------------------------------------(
+| Ur SysOp :                         BBS-Name :                               |
+|-----------------------------------------------------------------------------|
+|  Uploads  (Files) :                           Uploads  (Bytes) :            |
+| Downloads (Files) :                          Downloads (Bytes) :            |
+|        Ratio Type :                                      Ratio :            |
+| Daily Bytes Limit :                            Daily Bytes Dld :            |
+|  Last Time Online :                             # Times Online :            |
+|     Caller Number :                              # of Messages :            |
+|    Security Level :                                 /X Version :            |
+|        Time Limit :                                  Time Used :            |
+|      The Sysop is :                                  Help Mode :            |
+|       Online Baud :                             Node Init Baud :            |
+|        Nodenumber :                               Taskpriority :            |
+|-----------------------------------------------------------------------------|
+|                                                                             |
+`-----------------------------------------------------------------------------´
+Sysop
+Local Console
+Sysop
+AmiExpress-Web
+0
+0
+0
+0
+Bytes only!
+Disable!
+0
+0
+Thu 01-Jan-1970 00:00:00
+0
+20265
+0
+255
+v5.6
+0 Mins
+0 Mins
+NoT iNteReSTeD iN You !
+LAMER !!!
+115200 BauD
+115200 BauD
+1
+1
+All Programming by S¡eGeL/AFL  -  Graphics by aRGøN/AFL       
+
+     Greetz to : SaBiNe/aFL - Wolfgang/Indy - ByteAndi/MST - STB/2000 A.D.
+^o^ Diz Flight will never Stop ^o^
+

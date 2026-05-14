@@ -138,13 +138,18 @@ const TIME_HMS = /(^|[\s\[(\|])(\d{1,2}):(\d{2}):(\d{2})(?=\D|$)/g;
 const TIME_HM  = /(^|[\s\[(\|])(\d{1,2}):(\d{1,2})(\b|[a-zA-Z])/g;
 const DOW_DATE = /(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}/g;
 const DATE_DMY = /\b\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\b/g;
+// Bare hour after the masked date — mmh_grapestats renders
+// "Thu 14-May-2026 16: )" with just the hour. Match AFTER DOW_DATE so
+// the date is already collapsed to "DOW DD-MON-YYYY".
+const TIME_HOUR_ONLY = /(DOW DD-MON-YYYY )(\d{1,2}):(?=\D|$)/g;
 
 function maskTimes(s: string): string {
   return s
     .replace(TIME_HMS, "$1HH:MM:SS")
     .replace(TIME_HM, "$1HH:MM$4")
     .replace(DOW_DATE, "DOW DD-MON-YYYY")
-    .replace(DATE_DMY, "DD-MON-YYYY");
+    .replace(DATE_DMY, "DD-MON-YYYY")
+    .replace(TIME_HOUR_ONLY, "$1HH:");
 }
 
 const TRACE_LINE_CAP = 500;
