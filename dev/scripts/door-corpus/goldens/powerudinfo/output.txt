@@ -1,0 +1,16 @@
+c
+                                            .------------------------------.
+                                            | PowerUDInfo V0.60 By MeNaCe! |
+.-------------------------------------------|------------------------------|
+| UserName.....:                      Sysop | Bytes Up.....:             0 |
+| Location.....:              Local Console | Files Up.....:             0 |
+| Node.........:                          1 | Bytes Down...:             0 |
+| TimeLeft.....:                     1 mins | Files Down...:             0 |
+| TimeLimit....:                     0 mins +------------------------------|
+|-------------------------------------------| Ration.......:      Disabled |
+| BBS..........:             AmiExpress-Web | Ration Type..:         Bytes |
+| SysOp........:                      Sysop |------------------------------|
+| Running AmiEx:                       v5.6 | ByteLimit....:             0 |
+`-------------------------------------------| ByteAvailable:      Disabled |
+        F  L  o  O  D   /X-Division         `------------------------------'
+

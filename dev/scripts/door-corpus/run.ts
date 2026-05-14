@@ -127,7 +127,11 @@ function stripAnsi(s: string): string {
 // Patterns conservative on purpose: anchor to whitespace or line edges
 // so we don't mangle e.g. opcode hex 0x14:00:00 (none of those exist in
 // Amiga door output, but the principle holds).
-const TIME_HMS = /(^|[\s\[(\|])(\d{1,2}):(\d{2}):(\d{2})(\b)/g;
+// Trailing boundary uses (?=\D|$) instead of \b so the mask also fires
+// when a door glues the time straight to a letter (DOORSae_sysinfo
+// renders "...2026 15:50:59Kickstart..." — between '9' and 'K' there
+// is no \b because both are word chars).
+const TIME_HMS = /(^|[\s\[(\|])(\d{1,2}):(\d{2}):(\d{2})(?=\D|$)/g;
 // HH:M or HH:MM — some doors (easystatus) render single-digit minutes
 // flush-against the next field ("16:0Main..."). \d{1,2} for minutes
 // catches both forms without false-positives on opcode-like contexts.
@@ -137,7 +141,7 @@ const DATE_DMY = /\b\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d
 
 function maskTimes(s: string): string {
   return s
-    .replace(TIME_HMS, "$1HH:MM:SS$5")
+    .replace(TIME_HMS, "$1HH:MM:SS")
     .replace(TIME_HM, "$1HH:MM$4")
     .replace(DOW_DATE, "DOW DD-MON-YYYY")
     .replace(DATE_DMY, "DD-MON-YYYY");

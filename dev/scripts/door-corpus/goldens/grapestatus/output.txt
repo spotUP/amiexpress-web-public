@@ -1,0 +1,18 @@
+
+.------------------------------------.
+| GrapeStatus v1.6 by Pigeon^Shx^Mmh |
+|------------------------------------|----------------------------------------.
+| Username:                    Sysop |     BBS Name:                                                                                                                                                                       
+| Location:            Local Console |   Sysop Name:                    Sysop |
+|   Access:                      255 |   /X Version:                     v5.6 |
+| Baudrate:                   115200 |   Local Time: Thu 14-May-2026 15:51:05 |
+`------------------------------------|----------------------------------------'
+|  -  - ---UL/DL Statistics--- -  -  | -  -  - ---Other Statistics--- -  -  - |
+| Bytes Up  :                      0 | Mezz Written:                        0 |
+| Bytes Down:                      0 | Current Conf:                     Main |
+| Files Up  :                      0 |  Node Number:                        1 |
+| Files Down:                      0 |    Chat Flag:     Sysop is not at home |
+| Ratio     :              Disabled! |    Time Used:               0 / 2 mins |
+| Ratio Type:            Bytes only! |----------------------------------------'
+`------------------------------------'
+

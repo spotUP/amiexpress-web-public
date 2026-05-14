@@ -912,21 +912,6 @@
       "notes": "Conference manager. Bails with \"Could Not Find TConf2.EXE.info\" when the .info is absent. Cluster representative for the 5-door TConf2.EXE password-prompt family."
     },
     {
-      "id": "cdtrans",
-      "name": "doC wHoO CDTrans 0.1",
-      "category": "XIM-BBSCmd",
-      "binary": "Doors/CDTrans/CDTrans",
-      "doorType": "XIM",
-      "timeoutMs": 30000,
-      "inputScript": [
-        {
-          "delayMs": 2500,
-          "data": "\\r"
-        }
-      ],
-      "notes": "CD transfer banner + Filename(01): prompt; CR exits. Cluster representative for the 5-door CDTrans/CD_DL Filename family (CD_DL already in corpus, distinct binary)."
-    },
-    {
       "id": "turboz",
       "name": "DCS Turbo Zippy 1.p",
       "category": "XIM-BBSCmd",
@@ -1044,6 +1029,60 @@
         }
       ],
       "notes": "DCS TurboN Newscan Pro 2.z by MaCK LiFeGuaRD. Multi-prompt newscan; 4\u00d7 CR walks date-range/dir prompts and exits at \"ENTER=EXIT\". Cluster representative for the 3-door TurboN family."
+    },
+    {
+      "id": "userinfo",
+      "name": "TRSI UserInfo 1.6",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/UserInfo/UserInfo",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "axtools user info renderer; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
+    },
+    {
+      "id": "wildstat",
+      "name": "YDL WildStat",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/WildStat/ws",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "YDL WiLDStat short stat dump; exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
+    },
+    {
+      "id": "superstats",
+      "name": "Intellect Super-Stats 1.3",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/SuperStats/Super-Stats",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "Intellect S-Stats stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
+    },
+    {
+      "id": "doorsae_sysinfo",
+      "name": "STM DOORSae_sysinfo",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DOORSae_SysInfo/DOORSae_sysinfo",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "STM sysinfo renderer; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
+    },
+    {
+      "id": "grapestatus",
+      "name": "SHX GrapeStatus 1.6",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/GrapeStatus/GrapeStatus",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "Shoxx grape stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
+    },
+    {
+      "id": "powerudinfo",
+      "name": "FLD PowerUDinfo 0.6",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PowerUDinfo/PowerUDinfo",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FLD up/down stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask."
     }
   ]
 }
