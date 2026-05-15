@@ -3252,6 +3252,21 @@
       "doorType": "XIM",
       "timeoutMs": 30000,
       "notes": "TRSICD1P guide2docprof \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "mdbzs103_mdb_search",
+      "name": "MDBZS103 MDB-Search",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MDBZS103_MDB-Search/MDB-Search",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "Q"
+        }
+      ],
+      "notes": "MDB Zippy Search 1.03. Renders search menu + Q hotkey exits. Recovered from deferred mining round 9."
     }
   ]
 }
