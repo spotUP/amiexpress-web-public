@@ -1,0 +1,4 @@
+
+ Could not open door icon
+
+[68K] R exited with code 2

@@ -1,0 +1,31 @@
+.------------------------------------------------------------------------------.
+|                                                 |                            |
+| Board Name...: AmiExpress-Web                   | Task Priority...: ________ |
+| Sysop Name...: Sysop                            | Chat Flag.......: OFF      |
+| Location.....:                                  | Express Version.: v5.6     |
+| CPU Type.....: MC68000                          | Node init.......: 115200   |
+| Node Device..: TCP:                             |                            |
+| Local time...: Fri 15-May-2026 22:48:59         | Kickstart.......: 39.106   |
+| Active Nodes.: _________                        | WB Version......: 39.29    |
+|                                                 |                            |
+|-------------------------------------------------+----------------------------|
+|                                                 |                            |
+| User.........: Sysop                            | Files Up..: 0              |
+| Location.....: Local Console                    | Files Down: 0              |
+| Phone........:                                  |                            |
+| Computer Type:                                  | Bytes Up..: 0              |
+| Security.....: 255                              | Bytes Down: 0              |
+| Conf Axx.....: Sysop                            |                            |
+| Last Time On.: Thu 01-Jan-1970 00:00:00         | Ratio.....: DISABLED       |
+| Current Conf.: Main                             | Ratio Type: Bytes          |
+|                                                 |                            |
+| Times Called.: 0                                | UpB4Dn Bytes:   =8-|       |
+|                                                 | UpB4Dn Files:   =8-|       |
+|-------------------------------------------------+                            |
+|  All code by Json / KiNGDoM RoYaL /X DiViSioN   | Expert Mode.....: Lamer    |
+|                                                 | Connect Speed...: 115200   |
+|           /X Tough Stats Version 1.2            | Messages Send...: 0        |
+|                                                 | Node Number.....: 1        |
+|     tnx to: Deature & Neurostorm / KiNGDoM      |                            |
+`------------------------------------------------------------------------------'
+

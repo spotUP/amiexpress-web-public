@@ -1,0 +1,25 @@
+	
+   - -- --- -----------------.
+         NewStatus v1.0      |
+   .-------------------------'----------------------------------------.
+   |                                                                  |
+   |  Handle: Sysop           Location: Local Console           |
+   |       UserNr: 0           Axx: 255           |
+   |------------------------------------------------------------------|
+   |                                                                  |
+   |       Times On: 0	    Baudrate: 115200           |
+   |       Messages: 0           Expert Mode: No!           |
+   |       Ratio: DISABLED           Last time on: Thu 01-Jan-1970            |
+   |       Uploaded Files: 0           D.Loaded Files: 0           |
+   |       Uploaded Bytes: 0           D.Loaded Bytes: 0           |
+   |       Byte Limit: 0           Time Total: 0           |   _
+   |------------------------------------------------------------------| _(_)_
+   |                                                                  |(_(_)_)
+   |  Sysop: Sysop           BBS Name: AmiExpress-Web           |  (_)
+   |  /X Version: v5.6           ChatFlag: OFF           !   |
+   |  ConfName: Main           Nodes: _________           !   ¦
+   `------------------------------------------------------------------------.
+                                              Newt/Subspace^Sardonyx 1996   |
+                                           - -- --- ------------------------'
+
+
