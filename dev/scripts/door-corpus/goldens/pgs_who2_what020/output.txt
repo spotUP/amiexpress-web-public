@@ -1,0 +1,8 @@
+
+.----------------------------------------------------------------------------.
+|    WHAT: Upload Activities (Version 1.0) - Coded in 1994 by Bobo/Mystic    |
+|--v-------------------------v--------------------v--------------v-----------|
+|Nd| Username (Handle)       | File Status        | File(s)      | Filesize  |
+|--+-------------------------+--------------------+--------------+-----------|
+
+WHAT (ERROR): Unable to open icon (Doors:What.info).
