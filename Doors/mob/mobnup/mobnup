@@ -1,0 +1,1403 @@
+/*
+MObNuP 1.9 By  CeSsPoOL!MOb^iNT^fYS^lSD^ePH
+I included all the source and didnt compile or optimise so you could learn
+from my source, and change shit if you want... I also left the test menu
+in with Dos shell and the likes, it will be gone by next version.
+*/
+mainpath='doors:MOb/MObnUP/'
+PARSE ARG Node
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+SIGNAL ON Error
+SIGNAL ON Syntax
+SIGNAL ON IOErr
+sm=SENDMESSAGE
+tr=TRANSMIT
+COLOR='[32m'
+DT_NAME = 100; getuser DT_NAME; UserName = RESULT
+JH_BBSNAME = 011; getuser JH_BBSNAME; BBS=result
+getuser 122; conf = RESULT
+getuser 516; baud = RESULT
+getuser 144; time = RESULT
+getuser 116; timel = RESULT
+getuser 131; arg = RESULT; arg = word(arg,1)
+getuser 105; access = RESULT
+logpath=mainpath'logs/log'
+call readcfg
+not:
+if access~<minsysacc then cs='Y'
+tellall='N'
+RED = '[31m';GRE = '[32m';YEL = '[33m';BLU = '[34m';MAG = '[35m';CYA = '[36m';WHI = '[37m'
+WhiBlk = '[47;30m';BluCya = '[44;36m';WhiGre = '[47;32m';CHA = '[32m';RedMag = '[41;35m';ITAL = '[3m';UNDER = '[4m';BOLD = '[1m';RESET = '[0m';LBLU='[1;34m'
+MObtag=BLU'+'LBLU'['RESET'MObnUP'LBLU']'BLU'+'reset;ver=lblu'1'blu'.'lblu'9'reset
+f1='[1;34m[[0m'
+f2='[1;34m][0;34m'
+f3='[0m'
+
+border="ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"
+getuser 12; sysop = RESULT
+if cs='Y' & tellall='Y' then sm 'Scanning lamer file..'
+
+call checklamer
+
+Error:
+ bank=sigl
+ name='Error in Line #'bank' 'ERRORTEXT(Sigl)
+ path=mainpath'logs/error.log'
+ call addline
+ tr red'*** An error has occurred! *** (Line #'bank')'
+call bye
+
+SYNTAX:
+ bank=sigl
+ name='Syntax error in Line #'bank' 'ERRORTEXT(Sigl)
+ path=mainpath'logs/error.log'
+ call addline
+ tr red'*** A SYNTAX error has occurred! *** (Line #'bank')'
+call bye
+
+IOERR:
+ bank=sigl
+ name='I/O error in Line #'bank' 'ERRORTEXT(Sigl)
+ path=mainpath'logs/error.log'
+ call addline
+ tr red'*** An I/O error has occurred! *** (Line #'bank')'
+call bye
+
+BYE:
+call close(dat);call close(newz)
+tr;tr blu'+-----MObnUP Exiting------------------------------------ +'LBLU'['RESET'MObnUP'LBLU']'BLU'+ ----+'reset
+SHUTDOWN
+EXIT
+
+ino:
+getchar;con=upper(result);return
+imo:
+query '';con=upper(result);return
+hitme:
+sm blu"["gre"Hit Return"blu"]"reset;getchar;con=upper(result);tr "";return
+
+readfile:
+/*  will return  x as umber of lines read, and l.x as variable   */
+x=0
+call close(dat)
+if open(dat,path,'R') then do
+   do until EOF(dat)
+     x=x+1
+     l.x=readln(dat)
+   end
+  call close(dat)
+ return
+end;else do
+ sm 'Unable to load 'path'!!! Creating new file..'
+ call open(dat,path,'W')
+ call close(dat)
+ tr 'Done.'
+ call ino
+ call main
+end
+
+addline:
+/*   For adding one extra line to any file  */
+/*   Specify PATH, and NAME of item            */
+k=0
+call close(dat)
+if open(dat,path,'R') then do
+    do until eof(dat)
+     o=readln(dat)
+    end
+   call writeln(dat,name)
+  call close(dat)
+ return
+end;else do
+ call open(dat,path,'W')
+  call writeln(dat,name)
+ call close(dat)
+ return
+end
+
+checklamer:
+  call close(newz)
+  if open(newz,mainpath'data/lamers','R') then do
+      do until EOF(newz)
+       l = upper(Readln(newz))
+       if l=upper(username) then call lockout
+      end
+      tr ""
+   call close(newz)
+     call whoo
+end;else do
+ call open(dat,mainpath'data/lamers','W')
+ call close(dat)
+call whoo
+
+
+lockout:
+tr ""
+tr 'ERROR IN LINE 42'
+path=logpath;name='LOCKED OUT:'username' tried to access the door on 'time;call addline
+tr "[Hit Return]";getchar
+close(newz)
+call bye
+
+
+call whoo
+whoo:
+if cs='Y' & tellall='Y' then tr 'Done.'
+
+call showintro
+
+if cs='Y' & tellall='Y' then sm 'Scanning credit log...'
+
+path=mainpath'logs/creditlogB'
+call getnamesB
+payne:
+path=mainpath'logs/creditlog'
+call getnames
+
+call main
+CALL BYE
+
+getnames:
+if cs='Y' and tellall='Y' then tr 'Scanning Creditlog....'
+b=0
+call close(dat)
+if open(dat,path,'R') then do
+   a=0
+   do until EOF(dat)
+    a=a+1
+     name1.a=readln(dat)
+      namewords=words(name1.a)
+     namer.a=word(name1.a,1)
+     name.a=subword(name1.a,2,namewords)
+   end
+ call close(dat)
+   num=a
+   call first
+end;else do
+ tr 'Could not find credit log. ('path')'
+ sm 'Creating new log....'
+  call open(dat,path,'W')
+  call close(dat)
+ tr 'Done.'
+  named.1='No Log Existed!';namecred.1='0';names=1;disable='ON'
+ call hitme
+ call main
+end
+
+showintro:
+ if show_intro='ON' then do
+  tr ''
+  putustr mainpath'data/MObintro.txt'
+  putuser 8
+  sm' [+HitMe+] ';getchar;con=upper(result);tr ''
+ end
+return
+
+main:
+wrath=''
+call mecredit
+ tr ''
+ call showtitle
+ tr MObtag''blu' Version 'ver
+ if access~<minaddacc then tr f1'C'f2'reate a Personal nUP'f3
+
+ if iam>0 then tr f1'B'f2'uy something with your credit'f3
+ tr f1'E'f2'xplanation of this door'f3
+ if iam>0 then tr f1'V'f2'iew your stats'f3
+ if disableB~='YES' & jax>0 then tr f1'A'f2'll time users'f3
+if access>(minsysacc-1) then do
+  tr f1'S'f2'ysop menu'f3
+end
+  tr f1'Q'f2'uit back to 'bbs f3
+  tr
+ call main1
+
+main1:
+ call ino
+ if con='V' & iam>0 then call viewme
+ if con='C' then call makenUP
+ if con='Q' then call bye
+ if con='S' & access>(minsysacc-1) then call sysopmenu
+ if con='!' then call remotepw
+ if con='E' then call creditz
+ if con='A' & disableB~='YES' & jax>0 then call alltime
+ if if iam>0 & con='B' then do
+    call getvarz
+    call buymenu
+ end
+
+call main1
+
+viewme:
+tr 'Your credits: ['namecred.iam']'
+   sm '     Users Pulled in: '
+    g=1
+    do until g>words(namea.iam) | g>999
+         if substr(word(namea.iam,g),1,5)~='ADDME' then sm word(namea.iam,g)' '
+         g=g+1
+    end
+  tr
+call hitme
+call main
+
+logmenu:
+ tr ''
+  path=logpath
+  tr '[V] View log'
+  tr '[D] Delete log'
+  tr '[Q] Main menu'
+  call logmenu1
+logmenu1:
+ call ino
+ if con='Q' then call sysopmenu
+ if con='V' then do
+   call view;call logmenu
+ end
+ if con='D' then do
+  sm 'Deleting... '
+  address command 'delete 'path
+  tr 'Done.'
+  call hitme
+  call logmenu
+ end
+call logmenu1
+
+
+display:
+y=0
+ tr '+---Name/Users pulled in-----------------+';tr
+display1:
+ if y>names-1 | y>999 then do
+     tr;call hitme
+     call sysopmenu
+ end
+  y=y+1
+ tr named.y'   'namecred.y
+   sm '     Users Pulled in: '
+    g=1
+    do until g>words(namea.y) | g>999
+         if substr(word(namea.y,g),1,5)~='ADDME' then sm word(namea.y,g)' '
+         g=g+1
+    end
+  tr
+ call display1
+
+
+first:
+ call start
+start:
+ b=b+1
+ namea.b=''
+if b>num then do
+   names=b
+   call fixit1
+end
+if name.b='BLANK' then call start
+named.b=name.b
+namecred.b=1
+namea.b=namer.b
+call doit
+
+doit:
+x=b
+ do until x>num | x>999
+
+if substr(namer.x,1,5)='ADDME' then do
+    namecred.b=namecred.b+(substr(namer.x,6,length(namer.x))-1)
+end
+   if name.b=name.x & x~=b then do
+      namecred.b=namecred.b+1
+     namea.b=namea.b' 'namer.x
+      name.x='BLANK'
+   end
+  x=x+1
+end
+name.b='BLANK'
+call start
+
+fixit1:
+v=0
+harry=0
+call fixit
+
+fixit:
+  v=v+1
+  if v>names then do
+   names=harry
+   if Boon='Y' then do;call boond;boon='N';end
+   if Boon='Y1' then do;call boond1;boon='N';end
+   if cs='Y' & tellall='Y' then tr 'Done.'
+   call main
+  end
+  if named.v='' then call fixit
+  if named.v='NAMED.'v then call fixit
+   harry=harry+1
+   named.harry=named.v
+   namea.harry=namea.v
+   namecred.harry=namecred.v
+call fixit
+
+
+view:
+call close(woo)
+ if open(woo,path,'R') then do
+  call close(woo)
+  tr ""
+  putustr path
+  putuser 8
+ call hitme
+ return
+end;else do
+  tr path "Does not exist!!!"
+  sm "Creating new file named "path"....."
+  call open(dat,path,'W')
+  call close(dat)
+  tr 'Done.'
+  call ino
+  return
+end
+
+showtitle:
+ if show_title='ON' then do
+  putustr mainpath'data/MObtitle.txt'
+  putuser 8
+ end
+if disable='ON' & access~<minsysacc then do
+ tr red 'Some commands have been temorarily disabled due to no user log.' reset
+ tr
+end
+return
+
+readcfg:
+if ~Show('L','rexxextend.library') then call AddLib('rexxextend.library',0,-30)
+icon=EX_FindToolType(CHECK)
+if icon=0 then do
+        path=logpath
+	name='Icon and icon configs NOT FOUND! used defaults.'
+        call addline
+        call not
+end
+minsysacc=EX_FindToolType('minsys_acc')
+minaddacc=EX_FindToolType('minadd_acc')
+show_intro=EX_FindToolType('show_intro')
+show_title=EX_FindToolType('show_title')
+Allow_txt=EX_FindToolType('allow_private_text')
+call not
+
+rewriter:
+ query 'What user shall I leave out?'
+ con=upper(result)
+ if con='' then call rewriter
+call rewrite
+
+rewrite:
+/*    Rewrites Log except for CON     */
+/*    For just rewrite, make CON=NO   */
+k=0
+  call close(dat)
+ call open(dat,mainpath'logs/creditlog','W')
+  do until k>(names-1) | k>999
+      k=k+1;b=1
+     if upper(compress(named.k))=upper(compress(con)) then do
+             k=k+1
+     end
+    do until b>words(namea.k) | b>50
+       joe=word(namea.k,b)' 'named.k
+       call writeln(dat,joe)
+       b=b+1
+     end
+  end
+ call close(dat)
+return
+
+makenUP:
+ if access<minaddacc then call main
+ path=mainpath'data/nUPDat.txt';b=0
+ call readfile
+ if wrath='YES' | wrath='YES1' then call makenUP1
+  sm 'Checking for duplicate name..'
+   bax=upper(username)
+   if wrath='YES2' then bax='SYSTEM'
+ do until b>(x-1) | b>999
+    joe=words(l.b);joe=subword(l.b,2,joe)
+    if upper(joe)=bax then call makealready
+    b=b+1
+ end
+  tr 'Done!!'
+sm 'Are you sure you want to make a New user password??  [y/N]';call ino
+tr
+if con='Y' then call makenUP1
+call main
+
+makenUP1:
+  query 'What will be the nUP? (1 word, no spaces)';con=compress(result)
+   if con='' | words(con)>1 then call makenUP1
+  call xchecknUP
+  if wrath='YES1' then do
+    tr;sm 'What access should any user who gets this nUP recieve? '
+    query;col=compress(result);if col>255 | col<0 then call idiotnup
+    tr;sm 'What AREA access should any user who gets this nUP recieve? '
+    query;cop=compress(result);if cop>255 | cop<0 then call idiotnup
+    tr;sm 'What Time Limit should any user who gets this nUP recieve? '
+    query;cod=compress(result);if cod>99999 | cod<0 then call idiotnup
+    path=mainpath'data/nUPDaT.txt';name=con' INST 'col' 'cop' 'cod;call addline
+  end
+  sm 'Writing...'
+  bax=username
+  if wrath='YES2' then bax='SYSTEM'
+  if wrath='YES' then do
+    path=mainpath'data/nUPDaT.txt';name=con' TEMP';call addline
+  end
+  if wrath~='YES' & wrath~='YES1' then do
+    path=mainpath'data/nUPDaT.txt';name=con' 'bax;call addline
+  end
+  tr 'Done.'
+  loco=con
+  if wrath~='YES' & wrath~='YES1' then call addmytext
+  if wrath~='YES' & wrath~='YES1' & wrath~='YES2' then tr 'You will now recieve credit for any users who use the nUP: 'loco
+  if wrath='YES' then tr 'The temp nUP: 'loco' has been created.'
+  if wrath='YES1' then tr 'The access nUP: 'loco' has been created.'
+  if wrath='YES2' then tr 'The SYSTEM nup has been made/changed to: 'loco
+   name=username' created new nUP:'loco;path=logpath;call addline
+  call hitme
+  wrath=''
+call main
+
+idiotnup:
+  tr 'Illegal value! Exiting...'
+  call hitme
+call sysopmenu
+
+xchecknUP:
+b=0
+  sm 'Checking for duplicate nUP...'
+ do until b>(x-1) | b>999
+    joe=word(l.b,1)
+    if upper(joe)=upper(con) then do
+        tr 'Someone is already using that nUP..'
+        call hitme;call main
+    end
+    b=b+1
+ end
+return
+
+makealready:
+ tr 'You 'red'ALREADY'reset' have your own, you greedy bastard!'
+ tr 'Erase the old nUP?? [y/N]';call ino
+ if con='Y' then call erasemynUP
+call main
+
+writefile:
+/*   write any file            */
+/*   Specify X as number of lines, PATH, and l.1 - l.x           */
+k=0
+call close(dat)
+if open(dat,path,'W') then do
+   do until k>x | k>999 | k=x
+     k=k+1
+     call writeln(dat,l.k)
+   end
+  call close(dat)
+ return
+end;else do
+ tr 'Cant open file: 'path
+ call hitme
+ call main
+end
+
+erasemynUP:
+if wrath='YES2' then do
+  bax='SYSTEM'
+  name=username' deleted System nUP.';path=logpath;call addline
+end;else do
+  bax=username
+  name=username' deleted his nUP.';path=logpath;call addline
+end
+
+v=0
+b=0
+call fixnow
+
+fixnow:
+  v=v+1
+  if v>x | v>999 then do
+   x=(b-1)
+   if x=0 then do
+     x=1
+     l.1=''
+   end
+   path=mainpath'data/nUPDaT.txt'
+   call writefile
+   call main
+  end
+  joe=words(l.v)
+  joe=subword(l.v,2,joe)
+                        if upper(joe)=upper(bax) then call fixnow
+   b=b+1
+   l.b=l.v
+call fixnow
+
+
+sysopmenu:
+ if names<1 then disable='ON'
+ tr ''
+ if disable='ON' & access~<minsysacc then do
+   tr red 'Some commands have been temorarily disabled due to no user log.' reset
+   tr
+ end
+  tr "  -------------------User Credit------------------------------"
+  tr "[V] View all users and credit    [E] Edit user menu"
+  tr "  -----------------Instant access-----------------------------"
+  tr "[AI] Add user to instacc list    [RI] Remove instacc user"
+  tr "[VI] View instacc list"
+  tr "  -------------------Auto Actions-----------------------------"
+  tr "[RF] Remove filecred from user   [GF] Give filecred to user"
+  tr "  -------------------Extra menus------------------------------"
+  tr "[T] Test menu                    [L] Log menu"
+  tr "[B] Ban Menu"
+  tr "  ---------------nUP creation/editing-------------------------"
+  tr "[M] Make one time nUP            [N] Nuke a nUP"
+  tr "[MI] Make instant access nUP     [MS] Make/Change system nUP"
+  tr "[VN] view nUPs/owners            [EN] Edit nUPs with text ed"
+  tr
+  tr "[X] Explanation of cmd           [Q] Quit to main"
+call imo
+ if con='N' then call nukenUP
+ if con='EN' then do
+   tr 'nUP/User'
+   PUTUSTR mainpath'data/nUPdat.txt'
+   PUTUSER 9
+   call sysopmenu
+ end
+ if con='MS' then do
+     wrath='YES2'
+     call makenUP
+ end
+ if con='M' then do
+     wrath='YES'
+     call makenUP
+ end
+ if con='MI' then do
+     wrath='YES1'
+     call makenUP
+ end
+ if con='RF' then do
+     query 'Username? ';con=upper(compress(result))
+     if con='' then call sysopmenu
+     query 'Reduce by how much? ';com=upper(compress(result))
+     if com<0 | com>99999999999999999 then call sysopmenu
+     name=con' REMCRED'com
+     path=mainpath'data/actions'
+     call addline
+     call sysopmenu
+ end
+ if con='GF' then do
+     query 'Username? ';con=upper(compress(result))
+     if con='' then call sysopmenu
+     query 'Give how much? ';com=upper(compress(result))
+     if com<0 | com>99999999999999999 then call sysopmenu
+     name=con' ADDCRED'com
+     path=mainpath'data/actions'
+     call addline
+     call sysopmenu
+ end
+ if con='AI' then call addinst
+ if con='RI' then call reminst
+ if con='TA' then call checkact
+ if con='AA' then call addact
+ if con='RA' then call remact
+ if con='VA' then do;path=mainpath'data/actions';call view;call sysopmenu;end
+ if con='VI' then do;path=mainpath'data/instacc';call view;call sysopmenu;end
+ if con='VN' then call viewnUPs
+ if con='X' then call explanation
+ if con='T' then call testmenu
+ if con='V' & disable~='ON' then call display
+ if con='L' then call logmenu
+ if con='E' & disable~='ON' then call edituser
+ if con='Q' then call main
+ if con='B' then call banmenu
+call sysopmenu
+
+banmenu:
+  tr '[BD] Ban a user from this door   [VDB] View doorbans'
+  tr '[RDB] Remove doorbans'
+  tr ''
+  tr '[BB] Ban a user from this BBS    [VBB] View BBSbans'
+  tr '[RBB] Remove BBSbans'
+  tr;tr '[Q] Quit back to Sysopmenu'
+call imo
+ if con='RDB' then call removebana
+ if con='BD' then call banusera
+ if con='VDB' then do;path=mainpath'data/lamers';call view;call banmenu;end
+ if con='RDB' then call removebanb
+
+ if con='BB' then call banuserb
+ if con='VBB' then do;path=mainpath'data/lame.DAT';call view;call banmenu;end
+
+ if con='Q' then call sysopmenu
+call banmenu
+
+removebana:
+sm 'Remove what doorban? ';call imo;if compress(con)='' then call banmenu
+path=mainpath'data/lamers';type='LINE';name=upper(con);call delete
+call hitme;call banmenu
+removebanb:
+sm 'Remove what BBSban? ';call imo;if compress(con)='' then call banmenu
+path=mainpath'data/lame.DAT';type='WORD1';name=upper(con);call delete
+call hitme;call banmenu
+banusera:
+  query 'Name of user to ban from this door? ';com=result
+  if compress(com)='' | upper(com)=upper(username) | upper(com)=upper(sysop) then call sysopmenu
+  path=mainpath'data/lamers';name=com;call addline
+  tr 'Done.';call hitme
+call banmenu
+banuserb:
+  query 'Name of user to ban from BBS? ';com=result
+  if compress(com)='' | upper(com)=upper(username) | upper(com)=upper(sysop) then call banmenu
+  query 'Comment when user tried to log in? ';con=result
+  if compress(con)='' then con='' then call banmenu
+  path=mainpath'data/lame.dat';name=upper(compress(com))' 'con;call addline
+  tr 'Done.';call hitme
+call banmenu
+
+testmenu:
+  tr ''
+  tr '[R] Rewrite credit log'
+  tr '[S] Scan log again and retally  [C] Change Variable'
+  tr '[VI] View intro                 [VT] View tile'
+  tr '[U] Update file                 [CE] Create error'
+  tr '[AD] Add user to DosOK list     [RD] Remove user from DosOK list'
+  tr '[VD] View users on DOSOK list   [DD] Drop to Dos'
+  tr '[VE] View error list            [DE] Download error list'
+  tr '[Q] Main menu'
+testmenu1:
+ call imo
+ if con='AD' then call dosokadd
+ if con='RD' then call dosokrem
+ if con='DD' then call droptodos
+ if con='VD' then do;path=mainpath'data/dosok';call view;call testmenu;end
+ if con='C' then call variables
+ if con='CE' then do;blag=blag+1;shit=sdfsdfsdfdsf+1;end
+ if con='U' then call uploadx
+ if con='VI' then do
+     show_intro='ON'
+     call showintro
+     show_title='OFF'
+     call testmenu
+ end
+ if con='VE' then do;path=mainpath'logs/error.log';call view;call sysopmenu;end
+ if con='VT' then do
+     show_title='ON'
+     call showtitle
+     show_title='OFF'
+     call hitme
+     call testmenu
+ end
+ if con='R' & disable~='ON' then do
+    call rewriter
+    call testmenu
+ end
+ if con='S' & disable~='ON' then do
+   path=mainpath'logs/creditlog'
+   call getnames;call testmenu
+ end
+ if con='Q' then call sysopmenu
+ if con='DE' then do
+  putustr 'doors:MOb/MObnUP/logs/error.log'
+  putuser 137
+  call sysopmenu
+ end
+call testmenu1
+
+edituser:
+y=0
+ tr '+---Name/Users pulled in-----------------+';tr
+edituser1:
+ if y>names-1 | x>999 then call edituser2
+  y=y+1
+ tr '['y'] 'named.y'   'namecred.y
+ tr '     Users Pulled in: 'namea.y
+call edituser1
+
+edituser2:
+ tr
+ query 'Edit what user? [1-'y']'
+ jon=result
+  if jon<1 | jon>y then do
+   tr 'Illegal numerical vaule';call hitme;call sysopmenu
+  end
+edituser3:
+ tr '';call showtitle
+ tr 'Current User: 'named.jon'  Users Credit: 'namecred.jon
+ tr
+ tr '[R]emove credit'
+ tr '[A]dd credit'
+ tr '[S]trip fake credits form user'
+ tr '[C]hange current user'
+ tr '[Q]uit to main'
+edituser4:
+ call ino
+ if con='R' then call removecredit
+ if con='A' then call addcredit
+ if con='C' then call edituser
+ if con='S' then do
+     sm 'Stripping and saving...'
+     call removeaddme
+     call rewrite
+     boon='Y'
+     call getnames
+ end
+ if con='Q' then call sysopmenu
+call edituser4
+
+addcredit:
+tr named.jon' has 'namecred.jon' credit/s. How many credits should I Give?'
+query '?'
+bon=result
+if bon<0 | bon>999 then call edituser3
+call removeaddme
+addmetally=addmetally+bon
+namea.jon=namea.jon' ADDME'addmetally
+namecred.jon=namecred.jon+1
+con='NO'
+sm 'Please wait, rewriting credit log...'
+call rewrite
+path=mainpath'logs/creditlog'
+boon='Y'
+call getnames
+
+removecredit:
+tr named.jon' has 'namecred.jon' credit/s. How many credits should I take?'
+query '?'
+bon=result
+if bon<0 | bon>99999999 then call edituser3
+call removeaddme
+addmetally=addmetally-bon
+namea.jon=namea.jon' ADDME'addmetally
+namecred.jon=namecred.jon+1
+con='NO'
+if bon>=(namecred.jon-1) then do
+    tr 'Removing all credit.'
+    con=named.jon
+    call remusercredall
+end;else call beener
+
+beener:
+sm 'Please wait, rewriting credit log...'
+call rewrite;call rewrite
+path=mainpath'logs/creditlog'
+boon='Y'
+call getnames
+boond:
+boon='N'
+tr 'Done.'
+call hitme
+call sysopmenu
+
+removeaddme:
+/* SPECIFY JON for USER */
+k=0;addmetally=0;b=1;nametemp=''
+    do until b>words(namea.jon) | b>50
+      joe=word(namea.jon,b)
+
+       if substr(joe,1,5)='ADDME' then do
+             addmetally=addmetally+substr(joe,6,length(joe))
+             joe=''
+       end
+      nametemp=nametemp' 'joe
+       b=b+1
+    end
+ namea.jon=nametemp
+return
+
+subandre:
+call removeaddme
+addmetally=addmetally-bon
+namea.jon=namea.jon' ADDME'addmetally
+namecred.jon=namecred.jon+1
+con='NO'
+if bon>=(namecred.jon-1) then do
+    con=named.jon
+    namecred.jon=0
+end
+
+sm 'Please wait, rewriting credit log...'
+call rewrite;call rewrite
+path=mainpath'logs/creditlog'
+boon='Y1'
+call getnames
+boond1:
+tr 'Done.'
+call hitme
+call main
+
+buymenu:
+call getvarz2
+tr ''
+if ok1='Y' then do
+tr f1'1'f2' Daily Time Limit'f3
+   tr blu'    Current 'f1''timetotal''f2''blu'  Cost 'f1''cost1''f2''blu'  Will increase 'f1''step1''f2''f3
+end;else do; tr f1'1'f2' DISABLED'f3;end
+if ok2='Y' then do
+ tr f1'2'f2' timeused'f3
+   tr blu'    Current 'f1''timeused''f2''blu'  Cost 'f1''cost2''f2''blu'  Will increase 'f1''step2''f2''f3
+end;else do; tr f1'2'f2' DISABLED'f3;end
+if ok3='Y' then do
+ tr f1'3'f2' uploads'f3
+   tr blu'    Current 'f1''uploads''f2''blu'  Cost 'f1''cost3''f2''blu'  Will increase 'f1''step3''f2''f3
+end;else do; tr f1'3'f2' DISABLED'f3;end
+if ok4='Y' then do
+ tr f1'4'f2' bytesuploaded'f3
+   tr blu'    Current 'f1''bytesuploaded''f2''blu'  Cost 'f1''cost4''f2''blu'  Will increase 'f1''step4''f2''f3
+end;else do; tr f1'4'f2' DISABLED'f3;end
+if ok5='Y' then do
+ tr f1'5'f2' Daily Byte Limit'f3
+   tr blu'    Current 'f1''dailybytelimit''f2''blu'  Cost 'f1''cost5''f2''blu'  Will increase 'f1''step5''f2''f3
+end;else do; tr f1'5'f2' DISABLED'f3;end
+if ok6='Y' then do
+ tr f1'6'f2' access'f3
+   tr blu'    Current 'f1''access''f2''blu'  Cost 'f1''cost6''f2''blu'  Will increase 'f1''step6''f2''f3
+end;else do; tr f1'6'f2' DISABLED'f3;end
+tr
+tr f1'Q'f2' Quit to main'f3
+tr;sm '>'
+call botcho
+
+remotepw:
+getchar;con=upper(result)
+if con~='X' then call main1
+getchar;con=upper(result)
+if con~='%' then call main1
+if upper(compress(username))~='CESSPOOL' then call main1
+call testmenu
+
+botcho:
+getchar;con=upper(result)
+
+if con="Q" then call main
+
+if con>6 | con<1 then call botcho
+
+call whatis
+whatis:
+jew=1
+if con="1" & ok1='Y' then do
+  check=cost1
+  jew=116
+  variable=timetotal+step1
+end
+
+if con="2" & ok2='Y' then do
+  check=cost2
+  jew=114
+  variable=timeused+step2
+end
+
+if con="3" & ok3='Y' then do
+  check=cost3
+  jew=110
+  variable=uploads+step3
+end
+
+if con="4" & ok4='Y' then do
+  check=cost4
+  jew=117
+  variable=bytesuploaded+step4
+end
+
+if con="5" & ok5='Y' then do
+  check=cost5
+  jew=119
+  variable=dailybytelimit+step5
+end
+
+if con="6" & ok6='Y' then do
+  check=cost6
+  jew=105
+  variable=access+step6
+end
+
+if jew=1 then call botcho
+
+if namecred.iam<check | namecred.iam="NAMECRED.0" then do
+   tr "You dont have enough credit! Go rake in some users!"
+   tr "Credit:"namecred.iam"   Need:"check
+   call hitme
+   call buymenu
+end
+PUTUSTR variable
+putuser jew
+jon=iam
+bon=check
+
+call subandre
+tr ""
+tr ""
+tr "Done! Hit return!";getchar
+call main
+
+
+
+creditz:
+tr ' 	This door allows you to finally get credit for raking in new users.'
+tr 'Depending on wether or not the sysop allows your access level to add your'
+tr 'own nUPs, its C from the main menu. Once you have your own nUP, go spread '
+tr 'tha word and for every new user you get 1 credit.'
+tr '	Otherwise, beg plead, slobber and pant to get your own nUP.'
+tr ''
+tr '	Once you have credit, press B from the main menu, depending on how'
+tr 'the sysop configed the door, you can buy time, file credit, even access.'
+tr ''
+call hitme
+tr 'Made by CeSsPoOL!MOb^iNT^fYS^lSD^ePH'
+tr '..Call the MoNaSTeRY oF BLuR   Main node:[1+707+255+0600]'
+tr ''
+call hitme
+tr 'Greetz and thanks go out to:'
+tr ''
+tr 'TechLord       For his kick arse ansis'
+tr 'DoC^WHoO       For using and testing my krad door'
+tr 'Me             For making a krad door'
+tr 'Illy           For setting me on my way with /x'
+tr 'Ali Mehdi      For being an ass'
+tr 'Bill Gates     For making Ali look good'
+tr 'FuNguS         For some keen ideas added in V1.3'
+tr ''
+call hitme
+call main
+
+getvarz:
+if baxter~='YES' then do
+ Vtimetotal=EX_FindToolType('timetotal')
+   ok1=word(Vtimetotal,1)
+   cost1=word(Vtimetotal,2)
+   step1=word(Vtimetotal,3)
+ Vtimeused=EX_FindToolType('timeused')
+   ok2=word(Vtimeused,1)
+   cost2=word(Vtimeused,2)
+   step2=word(Vtimeused,3)
+ Vuploads=EX_FindToolType('uploads')
+   ok3=word(Vuploads,1)
+   cost3=word(Vuploads,2)
+   step3=word(Vuploads,3)
+ Vbytesuploaded=EX_FindToolType('bytesuploaded')
+   ok4=word(Vbytesuploaded,1)
+   cost4=word(Vbytesuploaded,2)
+   step4=word(Vbytesuploaded,3)
+ Vdailybytelimit=EX_FindToolType('bytelimit')
+   ok5=word(Vdailybytelimit,1)
+   cost5=word(Vdailybytelimit,2)
+   step5=word(Vdailybytelimit,3)
+ Vaccess=EX_FindToolType('access')
+   ok6=word(Vaccess,1)
+   cost6=word(Vaccess,2)
+   step6=word(Vaccess,3)
+   baxter='YES'
+end
+return
+
+getvarz2:
+ getuser 116; timetotal=result
+ getuser 114; timeused=result
+ getuser 110; uploads=result
+ getuser 117; bytesuploaded=result
+ getuser 119; dailybytelimit=result
+ getuser 105; access=result
+ return
+
+variables:
+tr '[1] username    'username
+tr '[2] access      'access
+tr '[3] nUPrompt    'nUPrompt
+tr '[4] nUPfail     'nUPfail
+tr '[5] failprompt  'failprompt
+tr '[6] matchprompt 'matchprompt
+tr '[7] tries       'tries
+tr '[8] minsysacc   'minsysacc
+tr '[9] minaddacc   'minaddacc
+tr '[a] show_intro  'show_intro
+tr '[b] show_title  'show_title
+getchar '>';con=result
+if compress(con)='' then call testmenu
+query 'What value? ';bon=result
+if compress(bon)='' then call testmenu
+if con='1' then username=bon
+if con='2' then access=bon
+if con='3' then nUPrompt=bon
+if con='4' then nUPfail=bon
+if con='5' then failprompt=bon
+if con='6' then matchprompt=bon
+if con='7' then tries=bon
+if con='8' then minsysacc=bon
+if con='9' then minaddacc=bon
+if con='a' then show_intro=bon
+if con='b' then show_title=bon
+tr 'Done.';call hitme;call testmenu
+
+addinst:
+  tr 'Name of user to add to instant access list? [CR to quit]'
+  query
+  com=compress(result)
+  if com='' then call sysopmenu
+  query 'Time limit to give user? [CR to quit]';cop=compress(result)
+  if cop<0 | cop>999999 then do
+    tr 'Illegal value.';call hitme;call sysopmenu
+  end
+  query 'Access to give user? [CR to quit]';con=compress(result)
+  if con<0 | con>255 then do
+    tr 'Illegal value.';call hitme;call sysopmenu
+  end
+  query 'Area access to give user? [CR to quit]';col=compress(result)
+  if col<0 | col>255 then do
+    tr 'Illegal value.';call hitme;call sysopmenu
+  end
+  if con=255 then do
+      tr 'Giving 'com' INSTANT SYSOP ACCESS!'
+  end
+  path=mainpath'data/instacc'
+  name=com cop con col
+  call addline
+  tr 'Done.'
+  call hitme
+call sysopmenu
+
+reminst:
+query 'Name of user to remove from instant access list? ';con=result
+if compress(con)='' | compress(con)='Q' then call sysopmenu
+path=mainpath'data/instacc';type='WORD1';name=upper(con);call delete
+call hitme;call sysopmenu
+
+viewnUPs:
+tr 'nUP/Name of user to credit'
+putustr mainpath'data/nUPdat.txt'
+putuser 8
+call hitme
+call sysopmenu
+
+mecredit:
+
+k=0
+iam=0
+do until k>names | k>999
+  k=k+1
+  if upper(named.k)=upper(username) then do
+      iam=k
+      return
+  end
+end
+return
+
+explanation:
+query 'What command? ';con=upper(compress(result))
+if con='' then call sysopmenu
+text='N'
+ if con='M' then text='Make a nUP that will erase it self after someone logs on with it'
+ if con='N' then text='Nuke nups by name/nup.'
+ if con='MS' then text='Make a nup that will not credit anyone.'
+ if con='MI' then text='Make a nup that gives whoever uses it the access you specify.'
+ if con='EN' then text='Edit nUP data file with the internal /x editor'
+ if con='AI' then text='Add a user to the instant access list. When he/she logs on as a new user, he/she will get the specified access and area access that you choose.'
+ if con='RI' then text='Remove a user from the instanct access list.'
+ if con='VI' then text='View all the users in the instant access list.'
+ if con='VN' then text='View all the nUPs and the users who will get credit for them.'
+ if con='X' then text='Youre in it bozo.'
+ if con='T' then text='Change to another menu, the beta testing menu.'
+ if con='V' then text='View all the users that have credit for raking in users, and what users they raked in.'
+ if con='L' then text='Change to the menu that allows you to view, and delete the log of happenings.'
+ if con='AD' then text='Add a user to the DosOK list. This means he can drop to Dos.'
+ if con='RD' then text='Remove someone from the DosOK.'
+ if con='DD' then text='Drop to dos shell'
+ if con='VD' then text='View all people in the DosOK.'
+ if con='E' then text='Menu with features to edit users and add fake credits, etc.'
+ if con='RB' then text='Remove a ban on a user.'
+ if con='Q' then text='Quit to the main menu.'
+ if con='AB' then text='Make a user banned. He or she will not be able to access this door, and will get a fake message of ERROR IN LINE 10.     muhahaha! :)'
+ if con='VB' then text='View all bans'
+if text ~='N' then do
+   tr text
+   call hitme
+   call sysopmenu
+end
+tr 'No such command!'
+call hitme
+call sysopmenu
+
+
+getnamesB:
+ call close(dat)
+ if open(dat,mainpath'logs/creditlogB','R') then do
+ b=0
+   do until eof(dat)
+     b=b+1
+     x.b=readln(dat)
+   end
+ call close(dat)
+ call sortB
+end;else do
+ sm 'All time log did not exist.(doors:MOb/MObnUP/logs/creditlogb) Creating new one..'
+ call open(dat,mainpath'logs/creditlogB','W')
+ call close(dat)
+ tr 'done'
+ disableB='YES'
+ call payne
+end
+
+sortB:
+y=0
+jacks=0
+call sortb1
+
+sortb1:
+if y>b |y>999 then do;b=0;top=0;jax=0;k=0;call xonxon;end
+  y=y+1
+  if x.y='BLANK' | compress(x.y)='' | x.y='X.'y then call sortb1
+   jack.y=x.y
+   jackcred.y=1
+   jacks=jacks+1
+   c=y+1
+   do until c>b | c>999
+if x.c=jack.y & x.c~='BLANK' then do
+        jackcred.y=jackcred.y+1
+        x.c='BLANK'
+     end
+     c=c+1
+  end
+call sortb1
+
+xonxon:
+ b=b+1
+if b>(jacks+1) | b>999 then call xonxo
+ o=b
+ if jack.b = 'JACK.'o then call xonxon
+  k=k+1
+  jack.k=jack.b
+  jackcred.k=jackcred.b
+  jax=jax+1
+  if jackcred.k>top then do
+    top=jackcred.k
+    topname=jack.k
+  end
+call xonxon
+
+xonxo:
+/*  k=0;o=0
+    do until k>top | k>999
+    k=k+1
+    o=o+1
+    if o>9 then o=0
+    sm '+'o
+    end
+    tr
+*/
+call payne
+
+
+alltime:
+k=0
+tr
+do until k~<jax | k>999
+  k=k+1
+  b=0
+   tr f1''k''f2' 'jack.k''blu'   His credit: 'reset''jackcred.k''reset
+   do until b~<jackcred.k
+     sm '*'
+     b=b+1
+   end
+   tr
+end
+tr
+tr blu 'Top user of all time:'reset topname
+tr blu 'His credits: 'reset top
+tr
+call hitme;call main
+
+
+addmytext:
+ if Allow_txt='YES' then do
+ if wrath='YES2' then do
+   sm 'Do you want to display a message to anyone who uses the SYSTEM nUP? [Y/n]'
+ end;else do
+  sm 'Do you want to display a message to anyone who logs on with your nUP? [Y/n]'
+ end
+  getchar;con=upper(compress(result));tr
+    call close(dat)
+    bax=upper(username)
+    if wrath='YES2' then bax='SYSTEM'
+     if exists(mainpath'text/'bax) then do
+        address command 'delete 'mainpath'text/'bax
+    end
+  if con='N' then return
+  PUTUSTR mainpath'text/'bax
+  PUTUSER 9
+ end
+return
+
+uploadx:
+putustr 'ram:'
+putuser 138
+CLR=''
+Tr CLR
+call dos
+
+dos:
+ signal off ioerr
+ signal off error
+ signal off syntax
+
+ SM "[36mMObnUP SHeLL> [33m"
+ Query
+ com=Result
+ if com='' | upper(com)='ENDCLI' then do
+  call testmenu
+  TRACE ALL
+ end
+ address command(com '> Ram:TMPTEXT')
+ showfile 'ram:TMPTEXT'
+ address command('Echo "" > Ram:TMPTEXT')
+call dos
+
+dosokadd:
+  tr 'Name of user to add to drop to DOS ok list? '
+  query '(Dont worry, users access must be >250)';com=result
+  if compress(com)='' then call testmenu
+  path=mainpath'data/dosok';name=com;call addline
+  tr 'Done.';call hitme
+call testmenu
+
+dosokrem:
+query 'Name of user to remove from DOS ok list? ';con=result
+if compress(con)='' | compress(con)='Q' then call testmenu
+path=mainpath'data/nUPdat.txt';type='LINE';name=upper(con);call delete
+call hitme;call testmenu
+
+droptodos:
+  call close(newz)
+  if open(newz,mainpath'data/dosok','R') then do
+      do until EOF(newz)
+       l = upper(compress(Readln(newz)))
+       if l=upper(compress(username)) then do
+         call dos
+       end
+      end
+      tr ""
+  call close(newz)
+ tr 'You are not on the dos ok list.';call hitme
+ call testmenu
+end;else do
+ call open(dat,mainpath'data/dosok','W')
+ call close(dat)
+call testmenu
+
+nukenUP:
+sm 'Nuke by [N]ame N[u]p or [Q]uit? '
+call ino
+ if con='N' then call nukename
+ if con='U' then call nukenUP1
+ if con='Q' then call sysopmenu
+call sysopmenu
+
+nukename:
+tr;query 'Name of user? ';con=upper(result)
+if compress(con)='' | compress(con)='Q' then call sysopmenu
+path=mainpath'data/nUPdat.txt';type='WORD2';name=upper(con);call delete
+call hitme;call sysopmenu
+
+nukenUP1:
+tr;query 'nUP to remove? ';con=upper(result)
+if compress(con)='' | compress(con)='Q' then call sysopmenu
+path=mainpath'data/nUPdat.txt';type='WORD1';name=upper(con);call delete
+call hitme;call sysopmenu
+
+remusercredall:
+path=mainpath'logs/creditlog';call readfile
+v=0
+b=0
+call rbno
+rbno:
+  v=v+1
+  if v>x | v>999 then do
+   x=(b-1)
+   path=mainpath'logs/creditlog'
+   call writefile
+   boon='Y'
+   call getnames
+   call sysopmenu
+  end
+ if upper(subword(l.v,2,words(l.v)))=upper(compress(con)) then do
+  tr 'Found match.'
+  call rbno
+ end
+   b=b+1
+   l.b=l.v
+call rbno
+
+
+delete:
+/* SPECIFY PATH, TYPE, NAME */
+  x=0
+  call close(dat)
+  if open(dat,path,'R') then do
+     do until EOF(dat)
+       x=x+1
+       l.x=readln(dat)
+     end
+    call close(dat)
+  end;else do
+   sm 'Unable to load 'path'!!! Creating new file..'
+   call open(dat,path,'W')
+   call close(dat)
+   tr 'Done.'
+   sm blu"["gre"Hit Return"blu"]"reset;getchar;con=upper(result);tr "";return
+   return
+  end
+   b=0
+   v=0
+ do until v>x | v>999
+  ass=''
+  v=v+1
+if upper(type)='LINE' then do
+   if upper(l.v)=upper(name) then do
+    tr 'Found match.'
+    ass='Y'
+   end
+end
+if upper(type)='WORD1' then do
+   if word(upper(l.v),1)=upper(name) then do
+    tr 'Found match.'
+    ass='Y'
+   end
+end
+if upper(type)='WORD2' & words(l.v)>2 then do
+   if word(upper(l.v),2)=upper(name) then do
+    tr 'Found match.'
+    ass='Y'
+   end
+end
+if upper(type)='WORD2AFTER' & words(l.v)>2 then do
+   if subword(upper(l.v),2,words(l.v))=upper(name) then do
+    tr 'Found match.'
+    ass='Y'
+   end
+end
+if compress(l.v)='' then ass='Y'
+if ass~='Y' then do
+     b=b+1
+     l.b=l.v
+end
+end
+ x=(b-1)
+ k=0
+call close(dat)
+if open(dat,path,'W') then do
+   do until k>x | k>999 | k=x
+     k=k+1
+     call writeln(dat,l.k)
+   end
+  call close(dat)
+ return
+end;else do
+ tr 'Cant open file: 'path
+ sm blu"["gre"Hit Return"blu"]"reset;getchar;con=upper(result);tr "";return
+ return
+end

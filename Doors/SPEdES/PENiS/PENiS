@@ -1,0 +1,11 @@
+/* PENiSChECk V1.0ß By hUMPPA-kEiKKA / SPEdES /X diViSiON! */
+
+say 'PENiSChECk V1.0ß By hUMPPA-kEiKKA / SPEdES /X diViSiON!'
+say 'tYPE tHE lENGHT oF yOUR pENIS! (cm):'
+pull lenght
+kg = lenght + 100
+say 'aRE yOU (m)ALE oR (f)AG?'
+pull nakki
+if nakki = 'm' then kg = kg * 0.20
+else kg = kg * 0.01
+say 'yOUR pENIS iS cOOL fOR tRADING...iT wEIGHTS 'kg'kg!'

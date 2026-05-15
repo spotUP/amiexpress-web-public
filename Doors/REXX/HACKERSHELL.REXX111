@@ -1,0 +1,64 @@
+/* Test Port written by Joseph Hodge
+
+   *** Please note the below command 'parse arg node', 'options results',
+   *** 'nodeid = "AERexxControl"node' and 'address value nodeid'
+   *** You must have these in your Arexx Scripts.
+   *** you must also have run RexxMast, have RX in your command path, and
+   *** have rexxsyslib.library in your libs directory.
+   ***
+*/
+parse arg node
+options results
+nodeid = "AERexxControl"node
+
+tr=transmit;hk=getchar;pm=prompt;sendstring=sendmessage;ss=sendstring;gu=getuser
+address value nodeid
+JH_BBSName  = 11
+JH_Sysop    = 12
+/**************************** GET/SET Values from System ***********************/
+
+DT_NAME          = 100
+DT_PASSWORD      = 101
+DT_LOCATION      = 102
+DT_PHONENUMBER   = 103
+DT_SLOTNUMBER    = 104
+DT_SECSTATUS     = 105
+DT_MESSAGESPOSTED= 109
+DT_UPLOADS       = 110
+DT_DOWNLOADS     = 111
+DT_TIMESCALLED   = 112
+DT_TIMELASTON    = 113
+DT_TIMEUSED      = 114
+DT_TIMELIMIT     = 115
+DT_TIMETOTAL     = 116
+DT_BYTESUPLOAD   = 117
+DT_BYTEDOWNLOAD  = 118
+DT_DAILYBYTELIMIT= 119
+DT_DAILYBYTEDLD  = 120
+DT_EXPERT        = 121
+DT_LINELENGTH    = 122
+ACTIVE_NODES     = 123
+DT_DUMP          = 124
+BB_CONFNAME      = 126
+BB_CONFLOCAL     = 127
+BB_LOCAL         = 128
+BB_STATUS        = 129
+BB_COMMAND       = 130
+BB_MAINLINE      = 131
+BB_NODEID        = 149
+BB_CALLERSLOG    = 150
+
+gu DT_NAME
+name =result
+tr ""
+tr "[32m -*- Hacker's Hell -*-[0m by |<rypton/Venture"
+tr "Your activities were registered by our automatic anti-Hacker Util !"
+tr "We will see what to do in YOUR case of HACKING, " || name || " !!"
+tr ""
+tr "Updating Callerslog"
+address command "echo >>BBS:node" || node || "/Callerslog USER TRIED TO HACK THE BBS"
+tr "Writing Remark to hackerlogfile"
+address command "echo >>DH0:HACKTRAP/Bull255.txt " || name || " was trying to hack the BBS!! (TX)"
+tr
+SHUTDOWN
+EXIT

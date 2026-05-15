@@ -1,0 +1,34 @@
+/* Kick-Starter :P */
+parse arg node
+options results
+
+signal on ioerr
+signal on error
+signal on halt
+
+nodeid="AERexxControl"node
+address value nodeid
+
+filea="bbs:doors/hackers/hackers"
+
+address command filea node
+
+if (show('p',nodeid)) then do
+                address value nodeid
+                tr 'Fatal Error.'
+                shutdown
+end
+
+exit
+
+Ioerr:
+Error:
+Halt:
+if (show('p',nodeid)) then do
+                address value nodeid
+                tr 'Fatal Error.'
+                shutdown
+end
+exit
+return
+

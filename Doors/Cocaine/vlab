@@ -1,0 +1,155 @@
+/* Vlab>Amiexpress Written by Eurobyte/Cocaine "
+   This Script Makes a live Photo of any Image YOu want"
+   it will convert it and then the pic will be transfered to /x"
+
+*/
+
+parse arg node
+options results
+nodeid = "AERexxControl"node
+address value nodeid
+signal on error;signal on syntax;signal on ioerr
+tr=Transmit  
+tr "          лллл            ллллл лллллллллллллл лллллл    олллллл           "
+tr "            лллл        ллплл  олн   олл    лл   ллл       лл              "
+tr "            л ллл      лл  лл        олл         лллм     лл               "
+tr "            л  ллл    ол   лл        олл          лллм  млл                "
+tr "            л   плл   л    лл        олл           оллммлл                 "
+tr "            л    оллмлн    лл        олл            оллллп                 "
+tr "           млмм   оллн   ммллм      млллм            олн                   "
+tr "          ппппп    пп    пппппп     пппппп            п                    "
+tr "                                                                           "
+tr "                            FrameGrabber V0.91                             "
+tr "         Thiz Door Grabs a live FRame From The tv STation MTV              "
+tr "           Depending on the proccesor you are using                        "
+tr "   Yuv      = Vlab File format you can Convert it With Adpro or Imagefx    "
+tr "   Iff24Bit = Nice 24bit format but it Take's About 1.50m to convert       "
+tr "   Nocolour = Iff File With 16Greyscale HiresInterlaced                    "
+tr "   Yuv Takes About 5sec to save                                            "
+tr "   Iff 24bit About 1 a 2 minutes                                           "
+tr "   nocolour  About 29 sec                                                  "
+tr "   IMPORTANT NOTE: YUV FORMAT IS A RAW CAPTURE FROM MTV                    "
+tr "   That Means no Filter's so you must convert it with ImageFx or Adpro     "
+tr "   ohterwise the pic looks like shit  :)                    "
+tr "   The otherformats are convert with vlab and filters for better pic's     "
+Tr "  "
+tr "   "
+Transmit "MTV>VLAB>/X GRabber v0.91 Arexx Coding By Eurobyte/Cocaine 1995      "
+tr " "
+SENDMESSAGE "WHOWWW!!! Do You want to Grab A Pic ?y/N"
+getchar ; key=upper(result)
+if key=Y then signal Ready
+signal bye
+
+ready:
+tr "                             "
+sendmessage "Do You Want A Colour Pic y/N"
+getchar ; Key=Upper(Result)
+if Key=Y then Signal Colour
+Signal blackandwhite
+COLOUR:
+tr " "
+Tr "Yuv = Y    Iff24=n"
+tr " "
+SendMessage "YUV/IFF24 (y/N)?"
+getchar ; Key=Upper(Result)
+if Key=Y then Signal YUV
+Signal 24bit
+YUV:
+TR " "
+transmit "Vlab has NOw Copied A frame Please Wait while Converting to Yuv"
+Transmit "Please Wait 5 Sec's "
+OPTIONS RESULTS   
+ADDRESS VLAB
+SAFETYLEVEL LOW
+CLEAR ALL FORCE
+SCAN
+SAVEICONS OFF
+SAVEAS 'bbs:dms/upload/mtv.yuv'
+PARSE ARG Node
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+SIGNAL ON Error
+SIGNAL ON Syntax
+SIGNAL ON IOErr
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+tr "ALLDONE !!! ENTERING DOWNLOAD !!!"
+PUTUSTR "d mtv.yuv"
+putuser 136
+
+
+SHUTDOWN
+END
+
+24bit:
+tr "                             "
+tr " O-Kee grabbing Pic And Converting To A 24bit file "
+Tr "                             "
+tr " please Wait About 1 A 2 Minutes "
+tr "                             "
+Tr " A 68060 Would Be Cool :) "
+
+OPTIONS RESULTS   
+ADDRESS VLAB
+SAFETYLEVEL LOW
+CLEAR ALL FORCE
+SCAN
+DEINTERLACE
+SAVEICONS OFF
+EXPORT24 'bbs:dms/upload/mtv24b.iff'
+CLEAR ALL FORCE
+PARSE ARG Node
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+SIGNAL ON Error
+SIGNAL ON Syntax
+SIGNAL ON IOErr
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+tr "Transfering File From Vlab To /X"
+tr " "
+tr " Alldone ... Have Phun Dude "
+PUTUSTR "d mtv24b.iff"
+putuser 136
+SHUTDOWN
+END
+BLACKANDWHITE:
+tr "                             "
+Tr "Grabbing a mtv Frame ..And Converting to greylevel 16colours"
+tr "                                         "
+tr "Please wait 20 Sec "
+OPTIONS RESULTS   
+ADDRESS VLAB
+SAFETYLEVEL LOW
+CLEAR ALL FORCE
+SCAN
+DEINTERLACE
+SAVEICONS OFF
+CONVERTMODE HIRES BW
+CONVERTDEPTH 4
+CONVERT
+ILBMCOMPRESSION ON
+EXPORTAMIGA 'bbs:dms/upload/mtv.iff'
+CLEAR ALL FORCE
+PARSE ARG Node
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+SIGNAL ON Error
+SIGNAL ON Syntax
+SIGNAL ON IOErr
+OPTIONS RESULTS
+ADDRESS VALUE 'AERexxControl'Node
+transmit "Alldone !!! REady For Downloading "
+Transmit "have Phun With pic cya "
+PUTUSTR "d mtv.iff"
+putuser 136
+SHUTDOWN
+END
+BYE:
+tr "                          "
+Tr " Okee dude .. Cu Next time ..bibi "
+tr "                          "
+SHUTDOWN
+EXIT
+END
