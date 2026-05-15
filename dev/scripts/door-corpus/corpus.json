@@ -3282,6 +3282,555 @@
         }
       ],
       "notes": "5D-Page sysop pager. CR advances + exits. Recovered from input-variant brute-force batch."
+    },
+    {
+      "id": "5d_vl012_avail",
+      "name": "5D_VL012 AVAIL",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5D_VL012_AVAIL/AVAIL",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "5D_VL012 AVAIL \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ad_kmhh1_rawplay",
+      "name": "AD-KMHH1 RAWPLAY",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AD_KMHH1_RAWPLAY/RAWPLAY",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AD-KMHH1 RAWPLAY \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "af_vhs2_beavis_butt",
+      "name": "AF_VHS2 Beavis&Butt.RUN",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/AF_VHS2_Beavis_Butt/Beavis&Butt.RUN",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "AF_VHS2 Beavis&Butt.RUN \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "atx_sal2_samilog_v106",
+      "name": "ATX-SAL2 SAmiLog_v106",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ATX_SAL2_SAmiLog_v106/SAmiLog_v106",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "ATX-SAL2 SAmiLog_v106 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "atx_sal5_samilog",
+      "name": "ATX-SAL5 SAmiLog",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ATX_SAL5_SAmiLog/SAmiLog",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "ATX-SAL5 SAmiLog \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "atx_t101_tbar1",
+      "name": "ATX-T101 TBar1.1",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/ATX_T101_TBar1/TBar1.1",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "ATX-T101 TBar1.1 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "bosstop_bosstop",
+      "name": "BOSSTOP bosstop",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/BOSSTOP_bosstop/bosstop",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "BOSSTOP bosstop \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "cddc_10_cddc",
+      "name": "CDDC_10 cddc",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CDDC_10_cddc/cddc",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CDDC_10 cddc \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "chatsrc_sonnencreme",
+      "name": "CHATSRC sonnencreme.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CHATSRC_sonnencreme/sonnencreme.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CHATSRC sonnencreme.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "cle_uc12_uc",
+      "name": "CLE-UC12 UC.LoGCreaTor",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CLE_UC12_UC/UC.LoGCreaTor",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CLE-UC12 UC.LoGCreaTor \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "curselas_6oc__sgm",
+      "name": "CURSELAS 6OC-!SGM.EXE",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/CURSELAS_6OC__SGM/6OC-!SGM.EXE",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "CURSELAS 6OC-!SGM.EXE \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_append",
+      "name": "DFBV13 append",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_append/append",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 append \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfb_read",
+      "name": "DFBV13 dfb_read",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_dfb_read/dfb_read",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 dfb_read \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfbarchivers",
+      "name": "DFBV13 DFBArchivers",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_DFBArchivers/DFBArchivers",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 DFBArchivers \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfblogin",
+      "name": "DFBV13 DFBLogin",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_DFBLogin/DFBLogin",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 DFBLogin \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfbmakekeyfile",
+      "name": "DFBV13 DFBMakeKeyFile",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_DFBMakeKeyFile/DFBMakeKeyFile",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 DFBMakeKeyFile \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfbprefs",
+      "name": "DFBV13 DFBPrefs",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_DFBPrefs/DFBPrefs",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 DFBPrefs \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfbsection",
+      "name": "DFBV13 DFBSection",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_DFBSection/DFBSection",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 DFBSection \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_dfbuser",
+      "name": "DFBV13 DFBUser",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_DFBUser/DFBUser",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 DFBUser \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_maxspatch",
+      "name": "DFBV13 MaxsPatch",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_MaxsPatch/MaxsPatch",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 MaxsPatch \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_readdfb",
+      "name": "DFBV13 ReadDFB",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_ReadDFB/ReadDFB",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 ReadDFB \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dfbv13_sonnenbrand",
+      "name": "DFBV13 sonnenbrand.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DFBV13_sonnenbrand/sonnenbrand.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DFBV13 sonnenbrand.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dpl_gb11_aedoor",
+      "name": "DPL-GB11 AEDoor.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DPL_GB11_AEDoor/AEDoor.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DPL-GB11 AEDoor.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "dtr__j21_joinconf",
+      "name": "DTR!-J21 JoinConf.fim",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/DTR__J21_JoinConf/JoinConf.fim",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "DTR!-J21 JoinConf.fim \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "famewh12_famewho",
+      "name": "FAMEWH12 FAMEWHO.FIM",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/FAMEWH12_FAMEWHO/FAMEWHO.FIM",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "FAMEWH12 FAMEWHO.FIM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "hf_is1o_dmsdescript",
+      "name": "HF-IS1O DMSDescript",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/HF_IS1O_DMSDescript/DMSDescript",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "HF-IS1O DMSDescript \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "hf_is1o_exedescript",
+      "name": "HF-IS1O EXEDescript",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/HF_IS1O_EXEDescript/EXEDescript",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "HF-IS1O EXEDescript \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "hf_is1o_idstrip",
+      "name": "HF-IS1O iDsTRiP",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/HF_IS1O_iDsTRiP/iDsTRiP",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "HF-IS1O iDsTRiP \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "hf_is1o_textdiz",
+      "name": "HF-IS1O TextDiz",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/HF_IS1O_TextDiz/TextDiz",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "HF-IS1O TextDiz \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "klrcom11_kc_config",
+      "name": "KLRCOM11 KC-Config",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/KLRCOM11_KC_Config/KC-Config",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "KLRCOM11 KC-Config \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "led_cb10_phreak",
+      "name": "LED-CB10 Phreak.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LED_CB10_Phreak/Phreak.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LED-CB10 Phreak.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "lsd_a337_acp",
+      "name": "LSD_A337 acp",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LSD_A337_acp/acp",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LSD_A337 acp \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "lsd_a337_ae_registerv1",
+      "name": "LSD_A337 AE-REGISTERv1.05",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LSD_A337_AE_REGISTERv1/AE-REGISTERv1.05",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LSD_A337 AE-REGISTERv1.05 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "lzx_idfx_ssp_lzxcheck",
+      "name": "LZX_IDFX SSP_LZXCheck.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/LZX_IDFX_SSP_LZXCheck/SSP_LZXCheck.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "LZX_IDFX SSP_LZXCheck.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "m_bbvw01_bb_view",
+      "name": "M!BBVW01 BB-View",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/M_BBVW01_BB_View/BB-View",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "M!BBVW01 BB-View \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "mst_wh20_count",
+      "name": "MST-WH20 Count",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MST_WH20_Count/Count",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST-WH20 Count \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "mst_wh20_ni",
+      "name": "MST-WH20 NI",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MST_WH20_NI/NI",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST-WH20 NI \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "mst_wh20_no",
+      "name": "MST-WH20 No",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/MST_WH20_No/No",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "MST-WH20 No \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "otl_jc12_install",
+      "name": "OTL-JC12 Install.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/OTL_JC12_Install/Install.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "OTL-JC12 Install.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "piw_st05_rpstart",
+      "name": "PIW-ST05 RPStart",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PIW_ST05_RPStart/RPStart",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PIW-ST05 RPStart \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "protec17_shutdown",
+      "name": "PROTEC17 shutdown.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PROTEC17_shutdown/shutdown.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PROTEC17 shutdown.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "protec17_protector",
+      "name": "PROTEC17 Protector",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/PROTEC17_Protector/Protector",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "PROTEC17 Protector \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ryl_swh3_amenophisaddy",
+      "name": "RYL-SWH3 amenophisADDY.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/RYL_SWH3_amenophisADDY/amenophisADDY.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "RYL-SWH3 amenophisADDY.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ryl_swh3_swhocallcounter",
+      "name": "RYL-SWH3 SWhoCallCounter",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/RYL_SWH3_SWhoCallCounter/SWhoCallCounter",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "RYL-SWH3 SWhoCallCounter \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ton_fcv1_sad_ccut",
+      "name": "TON-FCV1 SAD-CCut.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TON_FCV1_SAD_CCut/SAD-CCut.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TON-FCV1 SAD-CCut.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ton_fcv1_sad_dsort",
+      "name": "TON-FCV1 SAD-Dsort.exe",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TON_FCV1_SAD_Dsort/SAD-Dsort.exe",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TON-FCV1 SAD-Dsort.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ton_fcv1_easyrexx",
+      "name": "TON-FCV1 easyrexx.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TON_FCV1_easyrexx/easyrexx.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TON-FCV1 easyrexx.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ton_fcv1_rexxextra",
+      "name": "TON-FCV1 rexxextra.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TON_FCV1_rexxextra/rexxextra.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TON-FCV1 rexxextra.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ton_fcv1_rexxsupport",
+      "name": "TON-FCV1 rexxsupport.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TON_FCV1_rexxsupport/rexxsupport.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TON-FCV1 rexxsupport.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ton_fcv1_rexxtricks",
+      "name": "TON-FCV1 rexxtricks.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TON_FCV1_rexxtricks/rexxtricks.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TON-FCV1 rexxtricks.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "trsi_dls_rexxsyslib",
+      "name": "TRSI-DLS rexxsyslib.library",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TRSI_DLS_rexxsyslib/rexxsyslib.library",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TRSI-DLS rexxsyslib.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "trsi_msg_msgedit",
+      "name": "TRSI-MSG MSGEdit",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TRSI_MSG_MSGEdit/MSGEdit",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TRSI-MSG MSGEdit \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "trsibv14_trsi_bullview",
+      "name": "TRSIBV14 TRSI_BULLVIEW",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TRSIBV14_TRSI_BULLVIEW/TRSI_BULLVIEW",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TRSIBV14 TRSI_BULLVIEW \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "tsn_sstp_sstrip",
+      "name": "TSN-SSTP SStrip",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/TSN_SSTP_SStrip/SStrip",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "TSN-SSTP SStrip \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "uni_sr10_super_request",
+      "name": "UNI-SR10 Super-Request",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/UNI_SR10_Super_Request/Super-Request",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "UNI-SR10 Super-Request \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "upl10_dfree",
+      "name": "UPL10 dfree",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/UPL10_dfree/dfree",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "UPL10 dfree \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "upl10_guide",
+      "name": "UPL10 guide",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/UPL10_guide/guide",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "UPL10 guide \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "warps_23_warpsearch_shell",
+      "name": "WARPS_23 WarpSearch_shell",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/WARPS_23_WarpSearch_shell/WarpSearch_shell",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "WARPS_23 WarpSearch_shell \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ws_sh263_warps_sh",
+      "name": "WS-SH263 WarpS_sh.000",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/WS_SH263_WarpS_sh/WarpS_sh.000",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "WS-SH263 WarpS_sh.000 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ydl_mens_comlist",
+      "name": "YDL-MENS comlist",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/YDL_MENS_comlist/comlist",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "YDL-MENS comlist \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
+    },
+    {
+      "id": "ydl_mens_frame",
+      "name": "YDL-MENS frame",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/YDL_MENS_frame/frame",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "notes": "YDL-MENS frame \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask."
     }
   ]
 }
