@@ -3267,6 +3267,21 @@
         }
       ],
       "notes": "MDB Zippy Search 1.03. Renders search menu + Q hotkey exits. Recovered from deferred mining round 9."
+    },
+    {
+      "id": "5dpage28_5d_page",
+      "name": "5D-Page 28",
+      "category": "XIM-BBSCmd",
+      "binary": "Doors/5DPAGE28_5D-Page/5D-Page",
+      "doorType": "XIM",
+      "timeoutMs": 30000,
+      "inputScript": [
+        {
+          "delayMs": 2500,
+          "data": "\\r"
+        }
+      ],
+      "notes": "5D-Page sysop pager. CR advances + exits. Recovered from input-variant brute-force batch."
     }
   ]
 }
