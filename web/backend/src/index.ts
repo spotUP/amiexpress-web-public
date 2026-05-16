@@ -1051,6 +1051,13 @@ console.log(
       }
     },
     id: connection.sessionId,
+    // Telnet/SSH emitter doesn't have Socket.IO's `.connected` property.
+    // The BBS menu code (menu.ts:121) treats falsy `socket.connected` as
+    // "carrier dropped" and sets subState=LOGOFF, which causes every
+    // subsequent telnet keypress to be ignored ("subState: logoff -
+    // IGNORING COMMAND"). Default to true; the connection's own 'close'
+    // event handler tears down the session when the transport really dies.
+    connected: true,
     on: (event: string, handler: (...args: any[]) => void) => {
       connection.on(event, handler);
     },
