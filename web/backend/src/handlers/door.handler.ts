@@ -829,13 +829,26 @@ console.log(
         // processCommand executes a full command string immediately.
         // Door RETURNCOMMAND is a system-initiated call (like express.e processSysCommand),
         // so allowSyscmd=true — express.e:28249.
-        const { processCommand } = require('./command.handler');
-        const runCommand = async (cmd?: string) => {
+        const { processCommand, runSysCommand, processBBSCommand } = require('./command.handler');
+        const invokingCommand = (doorInfo.command || '').toUpperCase();
+        const runCommand = async (cmd?: string, isReturn: boolean = false) => {
           if (cmd && cmd.trim().length > 0) {
             const trimmed = cmd.trim();
             const parts = trimmed.toUpperCase().split(/\s+/);
             const command = parts[0];
             const params = parts.slice(1).join(' ');
+            // Recursion guard: when a door's RETURNCOMMAND matches the command
+            // that launched it (5D-LogOff bound to G sends RETURNCOMMAND="G"
+            // expecting built-in logoff to run after), BBSCmd lookup would
+            // re-launch the same door → infinite loop. Skip BBSCmd, route
+            // SysCmd → built-in only.
+            if (isReturn && command === invokingCommand && invokingCommand.length > 0) {
+              console.log(`[door.handler] RETURNCOMMAND "${command}" matches invoking command — bypassing BBSCmd to avoid door self-recursion`);
+              const sysResult = await runSysCommand(socket, session, command, params);
+              if (sysResult === 'SUCCESS' || sysResult === 'NOT_ALLOWED') return;
+              await processBBSCommand(socket, session, command, params);
+              return;
+            }
             console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
             await processCommand(socket, session, command, params, true);
           }
@@ -852,7 +865,7 @@ console.log(
           if ((session as any).returnCommand) {
             const cmd = (session as any).returnCommand;
             (session as any).returnCommand = undefined;
-            await runCommand(cmd);
+            await runCommand(cmd, true);
           }
           if ((session as any).prvCommand) {
             const cmd = (session as any).prvCommand;
@@ -2645,13 +2658,22 @@ console.log(
         // processCommand executes a full command string immediately.
         // Door RETURNCOMMAND is a system-initiated call (like express.e processSysCommand),
         // so allowSyscmd=true — express.e:28249.
-        const { processCommand } = require('./command.handler');
-        const runCommand = async (cmd?: string) => {
+        const { processCommand, runSysCommand, processBBSCommand } = require('./command.handler');
+        const invokingCommand = (((session as any).doorCommand) || (door as any)?.command || '').toUpperCase();
+        const runCommand = async (cmd?: string, isReturn: boolean = false) => {
           if (cmd && cmd.trim().length > 0) {
             const trimmed = cmd.trim();
             const parts = trimmed.toUpperCase().split(/\s+/);
             const command = parts[0];
             const params = parts.slice(1).join(' ');
+            // Recursion guard — see launchAmigaDoor for full rationale.
+            if (isReturn && command === invokingCommand && invokingCommand.length > 0) {
+              console.log(`[door.handler] RETURNCOMMAND "${command}" matches invoking command — bypassing BBSCmd to avoid door self-recursion`);
+              const sysResult = await runSysCommand(socket, session, command, params);
+              if (sysResult === 'SUCCESS' || sysResult === 'NOT_ALLOWED') return;
+              await processBBSCommand(socket, session, command, params);
+              return;
+            }
             console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
             await processCommand(socket, session, command, params, true);
           }
@@ -2668,7 +2690,7 @@ console.log(
           if ((session as any).returnCommand) {
             const cmd = (session as any).returnCommand;
             (session as any).returnCommand = undefined;
-            await runCommand(cmd);
+            await runCommand(cmd, true);
           }
           if ((session as any).prvCommand) {
             const cmd = (session as any).prvCommand;
