@@ -1095,10 +1095,15 @@ debugLog(`[DoorMessageHandler]   Set security status to ${newSec}`);
         break;
 
       case XIMCommand.DT_SECBOARD:
-        // express.e:3539-3545: Get/Set message board security
+        // express.e:3539-3545: Get/Set ratioType (NOT access level!)
+        // secBoard is the user's ratio TYPE (0=bytes, 1=bytes+files, 2=files),
+        // see express.e:4904 loggedOnUser.secBoard := cb.ratioType.
+        // Returning secLevel here breaks doors like EALL that read this as the
+        // ratio classification (255 reads as garbage / "disabled").
 debugLog(`[DoorMessageHandler]   DT_SECBOARD: data=${data}`);
         if (data) {
-          const secBoard = this.config.bbsSession?.user?.secLevel || 100;
+          const u: any = this.config.bbsSession?.user;
+          const secBoard = (u?.secBoard ?? u?.ratioType ?? 0);
           this.writeStringToMessage(msgAddr, String(secBoard));
         } else {
 debugLog(`[DoorMessageHandler]   Set board security from: ${str}`);
@@ -1106,10 +1111,15 @@ debugLog(`[DoorMessageHandler]   Set board security from: ${str}`);
         break;
 
       case XIMCommand.DT_SECLIBRARY:
-        // express.e:3546-3552: Get/Set library security
+        // express.e:3546-3552: Get/Set ratio VALUE (NOT access level!)
+        // secLibrary is the user's upload/download ratio (0=unlimited, 1=1:1,
+        // 3=3:1, etc.), see express.e:4905 loggedOnUser.secLibrary := cb.ratio.
+        // Returning secLevel (e.g. 255) here broke EALL's "disabled user"
+        // check, which read the ratio as a status flag.
 debugLog(`[DoorMessageHandler]   DT_SECLIBRARY: data=${data}`);
         if (data) {
-          const secLib = this.config.bbsSession?.user?.secLevel || 100;
+          const u: any = this.config.bbsSession?.user;
+          const secLib = (u?.secLibrary ?? u?.ratio ?? 0);
           this.writeStringToMessage(msgAddr, String(secLib));
         } else {
 debugLog(`[DoorMessageHandler]   Set library security from: ${str}`);
@@ -1117,10 +1127,11 @@ debugLog(`[DoorMessageHandler]   Set library security from: ${str}`);
         break;
 
       case XIMCommand.DT_SECBULLETIN:
-        // express.e:3553-3559: Get/Set bulletin security
+        // express.e:3553-3559: Get/Set computer type (NOT access level).
 debugLog(`[DoorMessageHandler]   DT_SECBULLETIN: data=${data}`);
         if (data) {
-          const secBull = this.config.bbsSession?.user?.secLevel || 100;
+          const u: any = this.config.bbsSession?.user;
+          const secBull = (u?.secBulletin ?? u?.computerType ?? 0);
           this.writeStringToMessage(msgAddr, String(secBull));
         } else {
 debugLog(`[DoorMessageHandler]   Set bulletin security from: ${str}`);
