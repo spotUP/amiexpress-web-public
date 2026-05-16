@@ -1,2 +1,0 @@
-FastFileCheck v0.9  [©`96 Thoth/SNAFU]  (ID: Unknown)  No need to check!
-

@@ -1,2 +1,0 @@
-Can't open Config.Txt!
- Make sure it lies in Doors:Shoxx-Doors/GrapeComment/
