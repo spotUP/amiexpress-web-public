@@ -1,3 +1,0 @@
-/* Rexxmasher start */
-parse arg node;options results;address value "AERexxControl"NODE;signal on error;signal on syntax;signal on ioerr;if ~show('L','rexxtricks.library') then call addlib('rexxtricks.library',0,-30);Getuser 131;com=upper(word(result,1));file=gettooltypevalue('doors:RMStart',com);if ~exists(file) then call er;address command file' 'node;exit;ER: getuser 12;transmit "Error can't find door, please notify "RESULT;remlib('rexxtricks.library');shutdown;exit;ioerr: ;syntax: ;error: ;tr errortext(rc)' line 'sigl;shutdown;exit
-/*    by Snöarn     */

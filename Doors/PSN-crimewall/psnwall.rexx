@@ -1,2 +1,0 @@
-/* Optimized with RexxOpt 1.4 */
-parse arg node;options results;signal on ioerr;signal on error;signal on halt;nodeid="AERexxControl"node;address value nodeid;tr=transmit;ss=sendstring;f1="bbs:doors/psn-crimewall/wall.exe";address command f1 node;if(show('p',nodeid))then do;address value nodeid;tr 'Fatal Error.';shutdown;end;exit;Ioerr:;Error:;Halt:;if(show('p',nodeid))then do;address value nodeid;tr 'Fatal Error.';shutdown;end;exit;return
