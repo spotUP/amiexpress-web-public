@@ -1,3 +1,0 @@
- - Setting up some varibles
- - Getting icon info
- - Setting up cursoranims
