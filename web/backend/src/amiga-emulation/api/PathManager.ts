@@ -205,6 +205,21 @@ console.log(`[PathManager] Relative (case-insensitive): "${amiPath}" => "${caseI
         return caseInsensitivePath;
       }
 
+      // express.e parity: doors inherit CWD = BBS root (cmds.bbsLoc) at launch
+      // (express.e:3324 SystemTagList has no NP_CURRENTDIR). Our emulator sets
+      // CWD to PROGDIR: instead, which breaks classic bare-relative reads like
+      // "Node1/CallersLog" (AquaPWFail) that expect resolution from BBS root.
+      // Fallback: if the file isn't under the door's CWD, try baseDir before
+      // returning a non-existent path.
+      if (currentDir !== this.baseDir) {
+        const fallbackPath = path.join(this.baseDir, ...normalizedComponents);
+        const fallbackResolved = resolveCaseInsensitivePath(fallbackPath);
+        if (fallbackResolved) {
+console.log(`[PathManager] Relative -> baseDir fallback (case-insensitive): "${amiPath}" => "${fallbackResolved}"`);
+          return fallbackResolved;
+        }
+      }
+
 console.log(`[PathManager] Relative path: "${amiPath}" => "${fullPath}"`);
       return fullPath;
     }
