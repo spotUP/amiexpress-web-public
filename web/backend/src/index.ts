@@ -1557,7 +1557,7 @@ console.log(
 
   socket.emit(
     "ansi-output",
-    "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? "
+    "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
   );
 
 console.log(

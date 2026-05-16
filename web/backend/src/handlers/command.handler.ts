@@ -1359,14 +1359,14 @@ console.log(' Connection screen viewed, showing ANSI prompt');
 console.log('[handleCommand] Await screen command still running, deferring prompt');
         session.pendingScreenCommand.then(() => {
           if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-            emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+            emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
           }
         }).catch(error => {
 console.error('[handleCommand] Pending screen command rejected:', error);
-          emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+          emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
         });
       } else {
-        emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+        emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
       }
       return;
     }

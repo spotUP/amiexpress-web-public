@@ -592,7 +592,7 @@ console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-
         // Show standard ANSI prompt for non-C64 terminals
         connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
         connection.session.tempData = { inputBuffer: '' };
-        connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+        connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
       }
     };
 

@@ -289,7 +289,7 @@ console.log(
             if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
               socket.emit(
                 "ansi-output",
-                "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? "
+                "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
               );
             }
           })
@@ -300,13 +300,13 @@ console.error(
             );
             socket.emit(
               "ansi-output",
-              "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? "
+              "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
             );
           });
       } else {
         socket.emit(
           "ansi-output",
-          "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? "
+          "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
         );
       }
       return;
