@@ -1223,73 +1223,16 @@ console.error(
     );
   });
 
-  // Welcome flow: match the web `io.on('connection')` path — run the
-  // FRONTEND syscmd (express.e:29524) which lets sysops bind a custom
-  // door (Logon24hrs / TELNET-FRONT / etc.) to the pre-login screen.
-  // If FRONTEND isn't configured the call no-ops; in that case fall
-  // back to the minimal hardcoded banner so telnet/SSH callers at
-  // least see *something*.
-  const sendWelcomeMessage = async () => {
-    let usedFallback = true;
-    try {
-      const { runSysCommand } = await import(
-        "./handlers/command-execution.handler"
-      );
-      const sess = connection.session as any;
-      // Pre-login: there is no logged-in user, so the access-level check
-      // in command-execution.handler would reject any syscmd with
-      // ACCESS>0. The handler honours `session.executingScreenCommand`
-      // as a "privileged pre-login auto-dispatch" flag (used for
-      // V-AWAIT screen commands during the AWAIT state). Reuse it here
-      // so FRONTEND runs even when the door's .info specifies an
-      // ACCESS line.
-      const hadFlag = sess?.executingScreenCommand;
-      if (sess) sess.executingScreenCommand = true;
-      let result: any = 0;
-      try {
-        result = await runSysCommand(
-          emitter as any,
-          sess,
-          "FRONTEND",
-          "",
-        );
-      } finally {
-        if (sess) sess.executingScreenCommand = hadFlag;
-      }
-      console.log(
-        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: FRONTEND syscmd returned ${result}`,
-      );
-      if (typeof result === "number" && result > 0) {
-        usedFallback = false;
-      }
-    } catch (err) {
-      console.error(
-        `[${type.toUpperCase()}-WELCOME] FRONTEND syscmd threw: ${(err as Error).message}`,
-      );
-    }
-    if (usedFallback) {
-      console.log(
-        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: using hardcoded banner fallback`,
-      );
-      connection.write("\x1b[2J\x1b[H");
-      connection.write("\r\n\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n");
-      connection.write("\x1b[0;37mWelcome to AmiExpress BBS\x1b[0m\r\n");
-      connection.write(
-        `\x1b[33mConnected via ${type.toUpperCase()} on node ${
-          connection.nodeId
-        }\x1b[0m\r\n`,
-      );
-      connection.write("\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n\r\n");
-    }
-  };
-
-  // For SSH: Wait for 'ready' event before sending welcome
-  // For Telnet: Send welcome immediately (stream is ready on connection)
-  if (type === "ssh") {
-    connection.once("ready", sendWelcomeMessage);
-  } else {
-    sendWelcomeMessage();
-  }
+  // Welcome flow: match the web `io.on('connection')` path. Web does
+  // NOT print any "Welcome to AmiExpress BBS / Connected via …"
+  // banner — it just sets DISPLAY_CONNECT and waits for a keypress,
+  // then transitions to the ANSI prompt → BBSTITLE → login. This
+  // function used to print a hardcoded banner here that was visible
+  // ONLY on telnet/SSH; removing it brings the two transports back
+  // into alignment. If a sysop wants a pre-login welcome screen they
+  // can wire it via the FRONTEND syscmd (the standard express.e
+  // hook), which the DISPLAY_CONNECT handler will pick up on both
+  // transports identically.
 }
 
 // Set up telnet server event handlers
