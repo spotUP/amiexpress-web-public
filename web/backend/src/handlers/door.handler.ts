@@ -884,9 +884,17 @@ console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err)
       }
     }
 
-    // Return to menu
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.menuPause = false;
+    // Return to menu — UNLESS the RETURNCOMMAND parked the session in
+    // a transfer state (FILES_UPLOAD / FILES_DOWNLOAD). Overwriting
+    // those with DISPLAY_MENU triggered the menu prompt to render
+    // mid-ZMODEM-transfer, corrupting the wire and aborting lrzsz.
+    if (
+      session.subState !== LoggedOnSubState.FILES_UPLOAD &&
+      session.subState !== LoggedOnSubState.FILES_DOWNLOAD
+    ) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = false;
+    }
 
   } catch (error) {
 console.error(`[launchAmigaDoor] Error executing door:`, error);
