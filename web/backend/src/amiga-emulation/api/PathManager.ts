@@ -171,6 +171,35 @@ console.log(`[PathManager] Absolute POSIX path: "${amiPath}" => "${normalized}"`
 
     // Find matching assign
     const lowerPath = amiPath.toLowerCase();
+
+    // Volume-only fallback for physical-disk references (DH0:, DH1:,
+    // DH2:, HD0:, etc.) that doors use to query free disk space via
+    // dos.library Lock + Info. The real Amiga had multiple physical
+    // disks; our emulator runs on a single host filesystem, so every
+    // unrecognised volume name maps to bbsRoot. This makes Lock() on
+    // the volume succeed and Info() return the real host fs.statfsSync
+    // values — UL-LOGOFF and similar disk-space-checking doors then
+    // see actual free space instead of 0 (which made every upload
+    // abort with "Not enough free space for uploading!").
+    // Pattern: starts with letters, then digits maybe, then ':'.
+    const volumeMatch = lowerPath.match(/^([a-z][a-z0-9]*):(.*)$/);
+    if (volumeMatch) {
+      const volName = volumeMatch[1] + ':';
+      if (!this.assigns.has(volName)) {
+        const rest = volumeMatch[2] || '';
+        const normalizedComponents = this.normalizeComponents(rest);
+        if (normalizedComponents.length === 0) {
+          console.log(`[PathManager] Volume fallback (root): "${amiPath}" => "${this.baseDir}"`);
+          return this.baseDir;
+        }
+        const fullPath = path.join(this.baseDir, ...normalizedComponents);
+        const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
+        const final = caseInsensitivePath || fullPath;
+        console.log(`[PathManager] Volume fallback: "${amiPath}" => "${final}"`);
+        return final;
+      }
+    }
+
     for (const [assign, sysPath] of this.assigns) {
       if (lowerPath.startsWith(assign)) {
         // Remove assign prefix and append to system path
