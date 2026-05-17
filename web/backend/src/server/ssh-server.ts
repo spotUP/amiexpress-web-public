@@ -293,24 +293,20 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
 
 console.log(`[SSH] BBS session created for node ${connection.nodeId}`);
 
-      // express.e:29524 — run FRONTEND syscmd before the ANSI prompt.
-      // See telnet-server.ts:showPrompt for the rationale; SSH had the
-      // same gap. Emitter is attached by setupTelnetSSHHandler before
-      // this 'ready' fires.
+      // Pre-login pipeline shared with web + telnet. See
+      // telnet-server.ts:showPrompt() comment and
+      // services/login-connect.service.ts for the unified flow.
       const emitter = (connection as any).emitter;
       if (emitter) {
-        try {
-          const { runSysCommand } = await import('../handlers/command-execution.handler');
-          await runSysCommand(emitter, session, 'FRONTEND', '');
-        } catch {
-          // FRONTEND is optional.
-        }
+        const { runPreLoginConnect } = await import('../services/login-connect.service');
+        await runPreLoginConnect(emitter, session, {
+          socketId: connection.sessionId,
+        });
+      } else {
+        session.subState = LoggedOnSubState.ANSI_PROMPT;
+        session.tempData = { inputBuffer: '' };
+        connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
       }
-
-      // Show graphics prompt (same as telnet server)
-      session.subState = LoggedOnSubState.ANSI_PROMPT;
-      session.tempData = { inputBuffer: '' };
-      connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
     });
 
     // Forward events

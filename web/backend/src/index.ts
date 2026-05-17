@@ -25,11 +25,9 @@ import {
 // with procedures, SIGNAL, trace, ARG, BBS function bindings. The stub
 // previously imported from node-manager.service.ts only logged
 // "Simulate script execution" — it didn't run the script body.
-import { arexxEngine } from "./services/arexx.service";
 import { nodeFileManager } from "./services/NodeFileManager";
 import { callersLogManager } from "./services/CallersLogManager";
 import { doorDropFileManager } from "./services/DoorDropFileManager";
-import { triggerSamiLogRefresh } from "./services/SamiLogService";
 import { conferenceFileManager } from "./services/ConferenceFileManager";
 import { loadConfConfig } from "./services/conf-config.service";
 import { bbsEventEmitter } from "./services/bbs-event-emitter";
@@ -1539,60 +1537,22 @@ console.log(
   // Otherwise there's a race condition where user input arrives before handlers are ready
   registerSocketHandlers(io, socket, chatState);
 
-  // Setup operator chat listeners for this socket
-  // This allows the user to receive chat-accepted and chat-ended events
-  const { setupOperatorChatListeners } = await import(
-    "./handlers/operator-chat.handler"
+  // Pre-login connect pipeline — operator chat listeners, SamiLog
+  // refresh, FRONTEND syscmd, ANSI prompt + state, AREXX login trigger.
+  // Web/telnet/SSH all call the same service; previously each transport
+  // open-coded its own subset and they drifted apart silently (e.g.
+  // FRONTEND only ran on web, SamiLog and operator chat too).
+  const { runPreLoginConnect } = await import(
+    "./services/login-connect.service"
   );
-  setupOperatorChatListeners(socket, session);
-
-  try {
-    await triggerSamiLogRefresh();
-  } catch (error) {
-console.error("[SamiLog] Initial refresh failed:", error);
-  }
-
-  // express.e:29524 - Run FRONTEND syscmd (optional - runs custom telnet frontend screen)
-  // This runs the FRONTEND door which typically displays who's online
-  try {
-    const { runSysCommand } = await import(
-      "./handlers/command-execution.handler"
-    );
-    await runSysCommand(socket, session, "FRONTEND", "");
-  } catch (err) {
-    // FRONTEND syscmd is optional - continue if not found
-console.log("[Connection] FRONTEND syscmd not found, continuing");
-  }
-
-  // express.e:29527-29528 - ANSI prompt (unless FORCE_ANSI tooltype is set)
-  // "ANSI, RIP or No graphics (A/r/n)?"
-  // Skip if in password reset mode (express.e:29152-29213)
-  if (session.passwordResetState) {
-console.log(
-      `[Connection] Skipping ANSI prompt - in password reset mode for node ${nodeSession.nodeId}`
-    );
-    return;
-  }
-
-  socket.emit(
-    "ansi-output",
-    "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?"
-  );
+  const connectResult = await runPreLoginConnect(socket, session, {
+    socketId: socket.id,
+  });
+  if (connectResult.passwordResetActive) return;
 
 console.log(
     `[Connection] Welcome sequence complete for node ${nodeSession.nodeId}, waiting for ANSI response`
   );
-
-  // Set state to wait for ANSI response
-  session.subState = LoggedOnSubState.ANSI_PROMPT;
-  session.tempData = { inputBuffer: "" };
-
-  // Execute login trigger for AREXX scripts
-  await arexxEngine.executeTrigger("login", {
-    userId: undefined,
-    sessionId: socket.id,
-    environment: { nodeId: nodeSession.nodeId },
-  });
 
   // NOTE: registerSocketHandlers was moved to run right after session setup (before welcome sequence)
   // to eliminate race condition where user input could arrive before handlers were registered

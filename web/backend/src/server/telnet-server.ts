@@ -589,26 +589,24 @@ console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-
         // Emit terminal detection event for index.ts to handle BBSTITLE display
         this.emit('c64-detected', connection);
       } else if (connection.session) {
-        // express.e:29524 — run FRONTEND syscmd before the ANSI prompt.
-        // Web does this at index.ts:1545 inside io.on('connection');
-        // telnet/SSH previously skipped it entirely, so the "Who's
-        // Online" / custom welcome door never ran on these transports.
-        // The emitter wrapper is installed by setupTelnetSSHHandler
-        // (index.ts:setupTelnetSSHHandler), which runs synchronously
-        // after this telnet-server emits 'connection'.
+        // Pre-login pipeline shared with web + SSH: operator chat
+        // listeners, SamiLog refresh, FRONTEND syscmd, ANSI prompt
+        // + state, AREXX login trigger. The emitter is attached to
+        // the connection by setupTelnetSSHHandler, which runs
+        // synchronously after this telnet-server emits 'connection'.
         const emitter = (connection as any).emitter;
         if (emitter) {
-          try {
-            const { runSysCommand } = await import('../handlers/command-execution.handler');
-            await runSysCommand(emitter, connection.session, 'FRONTEND', '');
-          } catch {
-            // FRONTEND is optional; missing syscmd is not an error.
-          }
+          const { runPreLoginConnect } = await import('../services/login-connect.service');
+          await runPreLoginConnect(emitter, connection.session, {
+            socketId: connection.sessionId,
+          });
+        } else {
+          // Fallback: if the emitter wasn't attached, at least prompt
+          // so the user isn't stuck. Shouldn't happen in practice.
+          connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
+          connection.session.tempData = { inputBuffer: '' };
+          connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
         }
-        // Show standard ANSI prompt for non-C64 terminals
-        connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
-        connection.session.tempData = { inputBuffer: '' };
-        connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
       }
     };
 
