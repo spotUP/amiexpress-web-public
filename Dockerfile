@@ -132,7 +132,8 @@ RUN apk add --no-cache \
     curl \
     build-base \
     g++ \
-    make
+    make \
+    lrzsz
 
 # Create app user (non-root)
 RUN addgroup -g 1001 bbsuser && \
