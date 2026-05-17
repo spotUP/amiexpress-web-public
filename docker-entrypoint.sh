@@ -229,42 +229,14 @@ else
         fi
     fi
 
-    # ALWAYS sync code directories from image on every startup.
-    # Tiered policy:
-    #   - MIRROR_DIRS:    rsync --delete (image is authoritative; stale files
-    #                     accumulate otherwise and diverge live from git HEAD).
-    #   - ADDITIVE_DIRS:  cp -r (image overwrites, but user/door-runtime files
-    #                     in the volume are preserved).
-    #
-    # Commands/BBSCmd is the first MIRROR target — it's the cmd cache the BBS
-    # reads for ACCESS levels, door LOCATION, etc.; stale .info files there
-    # caused the "j 2: Command requires higher access" live-only regression.
-    # Expand the mirror list cautiously after auditing per-dir write paths.
-    MIRROR_DIRS="Commands/BBSCmd"
-    ADDITIVE_DIRS="Doors Screens Libs C"
-
-    echo "[Entrypoint] Mirroring authoritative code dirs from image (rsync --delete)..."
-    for mirror_dir in $MIRROR_DIRS; do
-        if [ -d "$DEFAULT_DATA_DIR/$mirror_dir" ]; then
-            mkdir -p "$BBS_DATA_DIR/$mirror_dir"
-            if command -v rsync >/dev/null 2>&1; then
-                rsync -a --delete \
-                    "$DEFAULT_DATA_DIR/$mirror_dir/" \
-                    "$BBS_DATA_DIR/$mirror_dir/"
-            else
-                # Portable fallback: copy then prune anything not in source.
-                cp -r "$DEFAULT_DATA_DIR/$mirror_dir/." "$BBS_DATA_DIR/$mirror_dir/"
-                ( cd "$BBS_DATA_DIR/$mirror_dir" && find . -type f | while read -r f; do
-                    [ -e "$DEFAULT_DATA_DIR/$mirror_dir/$f" ] || rm -f "$f"
-                done )
-            fi
-            echo "[Entrypoint]   Mirrored $mirror_dir from image (deletes stale entries)"
-        fi
-    done
-
-    echo "[Entrypoint] Additively syncing code directories from image..."
-    for sync_dir in $ADDITIVE_DIRS; do
+    # ALWAYS sync Doors, Commands, Screens, Libs, C from image on every startup
+    # This ensures deploys update code/binaries while preserving user data
+    echo "[Entrypoint] Syncing code directories from image..."
+    for sync_dir in Doors Commands Screens Libs C; do
         if [ -d "$DEFAULT_DATA_DIR/$sync_dir" ]; then
+            # Use cp with --update to only overwrite older files, and --no-clobber
+            # for safety. But for code we WANT to overwrite, so use rsync-like approach:
+            # Copy all files from image, but don't delete user-created files on disk.
             cp -r "$DEFAULT_DATA_DIR/$sync_dir/." "$BBS_DATA_DIR/$sync_dir/" 2>/dev/null || true
             echo "[Entrypoint]   Synced $sync_dir from image"
         fi

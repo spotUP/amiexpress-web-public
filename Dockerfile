@@ -130,7 +130,6 @@ RUN apk add --no-cache \
     sqlite \
     bash \
     curl \
-    rsync \
     build-base \
     g++ \
     make
