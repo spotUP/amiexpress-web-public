@@ -490,6 +490,45 @@ export class DownloadHandler {
     fileList: any[],
     goodbyeAfter: boolean
   ): Promise<void> {
+    // Telnet/SSH transports use real ZMODEM (the same path the F+D
+    // flagged-files flow uses). The web-only download-file socket
+    // event below is for the browser's DOM download trigger; on
+    // telnet/SSH it's a no-op and the BBS used to fake-complete the
+    // transfer in 1 second without actually sending bytes. Route
+    // through startZmodemDownload so MuffinTerm / SyncTerm / mTelnet
+    // negotiate ZMODEM and receive the files for real.
+    const transport = (session as any).connectionType;
+    if (transport === 'telnet' || transport === 'ssh') {
+      const { startZmodemDownload } = require('../commands/user-commands.handler');
+      const paths = fileList.map((f) => f.fullPath).filter((p: string) => !!p);
+      if (paths.length === 0) {
+        socket.emit('ansi-output', '\r\nNo file paths to send.\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.tempData = undefined;
+        return;
+      }
+      // Persist download stats for each file before handing off — the
+      // ZMODEM transfer is async and the user could disconnect; record
+      // intent now so per-user totals stay accurate.
+      if (session.user) {
+        for (const fileInfo of fileList) {
+          try {
+            const isFree = this.isFreeDownload(fileInfo);
+            await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
+            await updateDownloadStats(session.user, fileInfo.size, isFree);
+            await this.persistDownloadStats(session);
+            await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+            doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
+          } catch (err) {
+            console.warn('[download] pre-transfer stats failed:', err);
+          }
+        }
+      }
+      (session as any)._downloadGoodbyeAfter = goodbyeAfter;
+      startZmodemDownload(socket, session, paths);
+      return;
+    }
+
     const startTime = Date.now();
     let totalBytes  = 0;
 

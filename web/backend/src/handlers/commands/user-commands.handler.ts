@@ -159,7 +159,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
   manager.start();
 }
 
-function startZmodemDownload(socket: any, session: BBSSession, files: string[]): void {
+export function startZmodemDownload(socket: any, session: BBSSession, files: string[]): void {
   const ctxId = `zd-${session.nodeId || 0}-${Date.now()}`;
   console.log(`[ZMODEM-DL ${ctxId}] startZmodemDownload entry files=${JSON.stringify(files)}`);
 
