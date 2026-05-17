@@ -1117,7 +1117,11 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
       return; // loop — yesNo(1) ignores unknown chars
     }
     const doScan = (ch !== 'N'); // default yes: Y or Enter = scan
-    emitText(socket, doScan ? 'Yes\r\n' : 'No\r\n');
+    // Use direct emit (not emitText) so the echo lands BEFORE the
+    // subsequent "Scanning conferences…" lines that performConferenceScan
+    // emits directly. emitText is 16ms-buffered; the scan flushes ahead
+    // of it and the user sees a delayed "Yes" trailing the scan output.
+    socket.emit('ansi-output', doScan ? 'Yes\r\n' : 'No\r\n');
 
     // express.e:28079 - mscan:=(mystat=1)
     // Propagate the Y/N answer into confScanState so advanceConferenceScan can
@@ -1156,7 +1160,9 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
       return; // loop — yesNo(1) ignores unknown chars
     }
     const doRead = (ch !== 'N'); // default yes
-    emitText(socket, doRead ? 'Yes\r\n' : 'No\r\n');
+    // See MAILSCAN_PROMPT_INPUT above — direct emit so the echo doesn't
+    // get reordered after subsequent buffered output.
+    socket.emit('ansi-output', doRead ? 'Yes\r\n' : 'No\r\n');
 
     if (doRead && session.tempData?.confScanState?.pendingMessages?.length > 0) {
       const state = session.tempData.confScanState;
