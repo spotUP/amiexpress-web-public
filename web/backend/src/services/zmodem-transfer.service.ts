@@ -113,9 +113,14 @@ console.error('[ZMODEM] Failed to confirm detection:', err);
       return;
     }
 
-    // Wire up cleanup on session end
+    // Wire up cleanup on session end. zmodem.js only registers
+    // 'receive', 'garbage', 'session_end' on the base ZSession (see
+    // zmodem.js/src/zsession.js:260-262). Registering 'aborted'
+    // throws 'Bad event: aborted' from the Sentry consume() call,
+    // killing the transfer right after detection. Aborts manifest
+    // either as session_end without all files transferred, or as a
+    // throw caught in handleInput.
     zsession.on('session_end', () => this.finish(true));
-    zsession.on('aborted', () => this.finish(false));
 
     const role = zsession.type;
     if (role === 'send') {
