@@ -118,10 +118,21 @@ export class LrzszTransferManager {
     this.session.transferRawActive = true;
     (this.session as any).transferManager = this;
 
-    // child stdout → wire (the ZMODEM frames)
+    // child stdout → wire (the ZMODEM frames).
+    //
+    // lrzsz emits its HEX header trailer as CR + (LF|0x80) + XON, i.e.
+    // \r \x8a \x11 — Forsberg's original spec marked the LF with the
+    // high bit so receivers could distinguish trailer-LF from data-LF.
+    // Modern terminal clients (SyncTerm, MuffinTerm) only consume
+    // \r + \x8a as the trailer and then complain "Unexpected back-channel
+    // data: XON" when they see the next \x11. Normalize to plain
+    // \r\n\x11 which every client recognises.
     proc.stdout?.on('data', (chunk: Buffer) => {
       try {
-        this.transport.send(chunk);
+        const normalized = this.normalizeHexHeaderTrailers(chunk);
+        const preview = normalized.slice(0, 64).toString('hex');
+        console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
+        this.transport.send(normalized);
       } catch (err) {
         console.error(`[lrzsz ${this.direction}] transport.send failed:`, err);
       }
@@ -166,8 +177,15 @@ export class LrzszTransferManager {
    * transferRawActive is true.
    */
   handleInput(data: Buffer): void {
-    if (!this.proc || !this.proc.stdin || this.done) return;
+    if (!this.proc || !this.proc.stdin || this.done) {
+      console.log(`[lrzsz ${this.direction}] handleInput DROPPED ${data.length}B (proc=${!!this.proc} stdin=${!!this.proc?.stdin} done=${this.done})`);
+      return;
+    }
     try {
+      // Diagnostic: log first 64 bytes of inbound data per chunk. Helps
+      // diagnose why rz exits 128 immediately without receiving the file.
+      const preview = data.slice(0, 64).toString('hex');
+      console.log(`[lrzsz ${this.direction}] stdin <- ${data.length}B: ${preview}${data.length > 64 ? '...' : ''}`);
       this.proc.stdin.write(data);
     } catch (err) {
       console.error(`[lrzsz ${this.direction}] stdin.write failed:`, err);
@@ -187,20 +205,51 @@ export class LrzszTransferManager {
     // 'close' handler will fire finish() once the child actually exits.
   }
 
+  /**
+   * Rewrite lrzsz's high-bit-LF hex-header trailer (\r \x8a \x11) to the
+   * compatibility form (\r \n \x11). Both encode the same end-of-header
+   * marker per the ZMODEM spec, but receivers vary in which they
+   * tolerate. The high-bit form is the canonical Forsberg encoding;
+   * the plain form is what every modern client expects.
+   *
+   * Only affects header trailer bytes — the high-bit-LF only ever
+   * appears in hex headers (binary headers/data don't use LF as a
+   * delimiter), so the targeted replace is safe and doesn't corrupt
+   * binary file content.
+   */
+  private normalizeHexHeaderTrailers(chunk: Buffer): Buffer {
+    // Look for \r \x8a sequences and patch the \x8a → \x0a (LF).
+    // ZMODEM hex headers always end with this exact pair.
+    let hits = 0;
+    for (let i = 0; i < chunk.length - 1; i++) {
+      if (chunk[i] === 0x0d && chunk[i + 1] === 0x8a) {
+        chunk[i + 1] = 0x0a;
+        hits++;
+      }
+    }
+    if (hits > 0) {
+      console.log(`[lrzsz ${this.direction}] normalized ${hits} hex-header trailer(s) \\r\\x8a -> \\r\\n`);
+    }
+    return chunk;
+  }
+
   private buildArgs(): string[] {
     if (this.direction === 'download') {
-      // sz -b -e -O <files...>
-      // sz reads from -O stdin? No — for sender, stdin is the back-channel
-      // from the receiver. sz writes ZMODEM frames to stdout. The file list
-      // is positional args (files to send).
-      return ['-b', '-e', ...this.paths];
+      // sz -b -vv <files...>
+      //   -b binary mode (no CR/LF translation)
+      //   -vv verbose to stderr (we log it) — helps diagnose silent aborts
+      // NB: removed -e (escape ctrl chars). The escape flag asks the
+      // receiver to escape; MuffinTerm/SyncTerm typically send raw
+      // binary frames regardless, and -e adds unnecessary overhead
+      // that some receivers misinterpret as protocol errors.
+      return ['-b', '-vv', ...this.paths];
     }
-    // rz -b -e -y    (writes received files to CWD)
-    // Set the child's cwd via spawn options? We pass through; caller sets
-    // transferRawSink before start(). Files land in process.cwd() unless
-    // we cd in via spawn cwd: option. We'll do that.
-    // For simplicity, write to first path treated as a target directory.
-    return ['-b', '-e', '-y'];
+    // rz -b -y -vv
+    //   -b binary mode
+    //   -y overwrite existing files in target dir
+    //   -vv verbose to stderr
+    // Removed -e for same reason as sz.
+    return ['-b', '-y', '-vv'];
   }
 
   private resolveCwd(): string | undefined {
