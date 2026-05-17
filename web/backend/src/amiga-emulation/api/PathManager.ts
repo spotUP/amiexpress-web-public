@@ -218,6 +218,25 @@ console.log(`[PathManager] Mapped (case-insensitive): "${amiPath}" => "${caseIns
           return caseInsensitivePath;
         }
 
+        // PROGDIR fallback to bbsRoot for BBS-data paths. Real Amiga
+        // PROGDIR is the door binary's directory. Some doors (e.g.
+        // UL-LOGOFF, originally installed at the BBS root) construct
+        // paths like PROGDIR:/Node1/Playpen assuming PROGDIR is the
+        // BBS root — that only worked because the door binary lived
+        // at the BBS root. Our doors live under Doors/<X>/, so the
+        // path resolves to a non-existent subdir of the door's own
+        // folder, Lock fails, free-space check reports 0. If the
+        // resolved path doesn't exist under PROGDIR but DOES exist
+        // under bbsRoot, fall back so the door's intent is honored.
+        if (assign === 'progdir:' && sysPath !== this.baseDir) {
+          const bbsRootPath = path.join(this.baseDir, ...normalizedComponents);
+          const bbsRootResolved = resolveCaseInsensitivePath(bbsRootPath);
+          if (bbsRootResolved) {
+            console.log(`[PathManager] PROGDIR -> bbsRoot fallback: "${amiPath}" => "${bbsRootResolved}"`);
+            return bbsRootResolved;
+          }
+        }
+
 console.log(`[PathManager] Mapped: "${amiPath}" => "${fullPath}"`);
         return fullPath;
       }
