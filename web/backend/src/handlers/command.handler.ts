@@ -892,55 +892,24 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // express.e:5056-5061 — joinConf shows CONF_BULL and calls doPause() BEFORE
         // emitting "Joining Conference". We do it here in the display-flow loop so the
         // doPause correctly gates the output: show CONF_BULL now, return (waiting for
-        // space), then on the next tick (confBullShown=true) complete the join.
-        if (!session.tempData?.confBullShown) {
-          // Pre-set ALL conf-identifying session fields so CONF_BULL's MCI
-          // codes (~CC_CONFTOP, ~CC_*) and the menu prompt format
-          // ([relConfNum:currentConfName]) all resolve to the rejoin
-          // target. ~CC_CONFTOP runs the conftop door which reads
-          // Conf<relConfNum>/ctop.data; without relConfNum it would look
-          // in conf 0 and report "not installed" even when ctop.data
-          // exists for the target conf.
-          // joinConference below re-sets the full state authoritatively.
-          session.currentConf = confId;
-          session.relConfNum = confId;
-          session.conferenceId = confId;
-          session.currentConference = confId;
-          session.currentMsgBase = msgBaseId;
-          if (targetConfName) session.currentConfName = targetConfName;
-          // express.e:5056-5061 — CONF_BULL shows the conference's own
-          // bulletin, NOT a per-menu screen, so currentMenuName must be
-          // empty so MCI codes inside CONF_BULL that reference the menu
-          // name don't render the previous conference's stale value
-          // (audit F-8 — was leaking the prior conf's menu name into the
-          // new conf's CONF_BULL when MCI processed it).
-          session.currentMenuName = '';
-          try {
-            const shown = await displayScreen(socket, session, 'CONF_BULL', true, /* silent */ true);
-            if (shown) {
-              if (!session.tempData) session.tempData = {};
-              session.tempData.confBullShown = true;
-              // displayScreen already set up the pause/segment state for any
-              // ~SP / ~f / ~CC_ MCI codes inside CONF_BULL. Don't call doPause
-              // here — that would overwrite session.paginatedScreen and cause
-              // CONF_BULL's pendingInlineContent (e.g. ~CC_CONFTOP after the
-              // ~SP) to run twice OR get dropped on screen-segment resume.
-              if (session.lastScreenHadPause || session.screenSegments) {
-                displayFlowLog('CONF_BULL set up internal pause/segments — yielding');
-                return;
-              }
-              // Screen had no built-in pause: fall through to joinConference.
-              // joinConference (or pauseDisplayFlow on its way out) will emit
-              // a single pause after the "Joining Conference: …" line.
-              // A previous version emitted a doPause HERE and then
-              // pauseDisplayFlow emitted another one after joinConference,
-              // producing back-to-back "(Pause)...Space To Resume:" prompts
-              // with nothing between them. Single pause is correct.
-              displayFlowLog('CONF_BULL shown, deferring pause to post-joinConference');
-            }
-          } catch (_) {}
-        }
-        delete session.tempData?.confBullShown;
+        // Pre-set ALL conf-identifying session fields so CONF_BULL's MCI
+        // codes inside joinConference (~CC_CONFTOP, ~CC_*) and the menu
+        // prompt format ([relConfNum:currentConfName]) resolve to the
+        // rejoin target. ~CC_CONFTOP runs the conftop door which reads
+        // Conf<relConfNum>/ctop.data; without relConfNum it would look
+        // in conf 0 and report "not installed" even when ctop.data
+        // exists for the target conf. joinConference below re-sets the
+        // full state authoritatively.
+        session.currentConf = confId;
+        session.relConfNum = confId;
+        session.conferenceId = confId;
+        session.currentConference = confId;
+        session.currentMsgBase = msgBaseId;
+        if (targetConfName) session.currentConfName = targetConfName;
+        // CONF_BULL is now displayed by joinConference itself
+        // (express.e:5056-5061 1:1), so the AUTO_REJOIN block no
+        // longer pre-displays it. The earlier pre-display caused the
+        // banner to render twice (once here, once inside joinConf).
 
         displayFlowLog('AUTO_REJOIN: calling joinConference');
         displayFlowLog(`AUTO_REJOIN: confId=${confId}, msgBaseNum=${msgBaseNum}, msgBaseId=${msgBaseId}`);
