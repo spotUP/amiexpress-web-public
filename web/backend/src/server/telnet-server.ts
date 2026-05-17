@@ -569,7 +569,7 @@ console.error(`[Telnet] Error on node ${connection.nodeId}:`, error.message);
     // Wait briefly for terminal type negotiation before showing prompt
     // This allows C64 terminals to be auto-detected via TTYPE
     let promptShown = false;
-    const showPrompt = () => {
+    const showPrompt = async () => {
       if (promptShown) return;
       promptShown = true;
 
@@ -589,6 +589,22 @@ console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-
         // Emit terminal detection event for index.ts to handle BBSTITLE display
         this.emit('c64-detected', connection);
       } else if (connection.session) {
+        // express.e:29524 — run FRONTEND syscmd before the ANSI prompt.
+        // Web does this at index.ts:1545 inside io.on('connection');
+        // telnet/SSH previously skipped it entirely, so the "Who's
+        // Online" / custom welcome door never ran on these transports.
+        // The emitter wrapper is installed by setupTelnetSSHHandler
+        // (index.ts:setupTelnetSSHHandler), which runs synchronously
+        // after this telnet-server emits 'connection'.
+        const emitter = (connection as any).emitter;
+        if (emitter) {
+          try {
+            const { runSysCommand } = await import('../handlers/command-execution.handler');
+            await runSysCommand(emitter, connection.session, 'FRONTEND', '');
+          } catch {
+            // FRONTEND is optional; missing syscmd is not an error.
+          }
+        }
         // Show standard ANSI prompt for non-C64 terminals
         connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
         connection.session.tempData = { inputBuffer: '' };

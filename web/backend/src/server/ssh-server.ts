@@ -276,7 +276,7 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
     this.connections.set(connection.sessionId, connection);
 
     // Wait for connection to be ready before creating BBS session
-    connection.on('ready', () => {
+    connection.on('ready', async () => {
       // Create BBS session with unified options (same as telnet)
       const cfg = config.getConfig();
       const session = createSession(connection.nodeId, {
@@ -292,6 +292,20 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
       setSession(connection.sessionId, session);
 
 console.log(`[SSH] BBS session created for node ${connection.nodeId}`);
+
+      // express.e:29524 — run FRONTEND syscmd before the ANSI prompt.
+      // See telnet-server.ts:showPrompt for the rationale; SSH had the
+      // same gap. Emitter is attached by setupTelnetSSHHandler before
+      // this 'ready' fires.
+      const emitter = (connection as any).emitter;
+      if (emitter) {
+        try {
+          const { runSysCommand } = await import('../handlers/command-execution.handler');
+          await runSysCommand(emitter, session, 'FRONTEND', '');
+        } catch {
+          // FRONTEND is optional.
+        }
+      }
 
       // Show graphics prompt (same as telnet server)
       session.subState = LoggedOnSubState.ANSI_PROMPT;

@@ -1079,6 +1079,12 @@ console.log(
     destroy: () => connection.close(),
   };
 
+  // Expose the socket-shaped emitter on the connection so telnet/SSH
+  // server entry points (which run BEFORE this handler completes) can
+  // invoke pre-login pipeline pieces like the FRONTEND syscmd through
+  // the same code path the web transport uses.
+  (connection as any).emitter = emitter;
+
   const attachTransferSender = () => {
     if (connection.session) {
       (connection.session as any).connectionType = type;
