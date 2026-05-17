@@ -1789,6 +1789,36 @@ console.error(`[LOGIN] Error writing node files:`, error);
 console.error('[LOGIN] Batch scheduler failed:', err);
           }
 
+          // TODO(unify): the entire post-auth block in this handler is a
+          // hand-copy of auth-socket-handlers.ts's web-login flow. They have
+          // drifted (mailOnLogon + LOGON syscmd were missing here, just
+          // added below). Long-term: extract to
+          // services/post-auth.service.ts and have both transports call it.
+
+          // express.e:6726 — mailOnLogon notification (fire-and-forget,
+          // matches web-login flow at auth-socket-handlers.ts ~line 670).
+          try {
+            const { mailOnLogon } = await import('../services/mail-notification.service');
+            mailOnLogon(user.username, user.location || '').catch((err: any) => {
+              console.error('[LOGIN] mailOnLogon failed:', err);
+            });
+          } catch (err) {
+            console.error('[LOGIN] mailOnLogon import failed:', err);
+          }
+
+          // express.e:8222, 8231 — LOGON and LOGON{nodeId} syscmds.
+          // Matches web-login at auth-socket-handlers.ts ~line 668. These
+          // let sysops bind doors / screens to logon events; without this
+          // call telnet/SSH users silently skip the sysop's intended logon
+          // hooks (e.g. ANSImation, network announcement, stats banner).
+          try {
+            const { runSysCommand: runSys } = require('./command-execution.handler');
+            await runSys(socket, session, 'LOGON', '');
+            await runSys(socket, session, `LOGON${session.nodeId || 0}`, '');
+          } catch (err) {
+            console.error('[LOGIN] LOGON syscmd failed:', err);
+          }
+
           // Initialize security and track stats
           initializeSecurity(session);
           setEnvStat(session, EnvStat.IDLE);

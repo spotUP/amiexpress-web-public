@@ -1223,20 +1223,40 @@ console.error(
     );
   });
 
-  // Function to send welcome message
-  const sendWelcomeMessage = () => {
-    // Clear screen and move cursor to home position
-    connection.write("\x1b[2J\x1b[H");
-    // Send welcome message with ASCII-safe characters
-    // Use '=' instead of UTF-8 box-drawing for telnet compatibility
-    connection.write("\r\n\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n");
-    connection.write("\x1b[0;37mWelcome to AmiExpress BBS\x1b[0m\r\n");
-    connection.write(
-      `\x1b[33mConnected via ${type.toUpperCase()} on node ${
-        connection.nodeId
-      }\x1b[0m\r\n`
-    );
-    connection.write("\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n\r\n");
+  // Welcome flow: match the web `io.on('connection')` path — run the
+  // FRONTEND syscmd (express.e:29524) which lets sysops bind a custom
+  // door (Logon24hrs / TELNET-FRONT / etc.) to the pre-login screen.
+  // If FRONTEND isn't configured the call no-ops; in that case fall
+  // back to the minimal hardcoded banner so telnet/SSH callers at
+  // least see *something*.
+  const sendWelcomeMessage = async () => {
+    try {
+      const { runSysCommand } = await import(
+        "./handlers/command-execution.handler"
+      );
+      const result = await runSysCommand(
+        emitter as any,
+        connection.session as any,
+        "FRONTEND",
+        ""
+      );
+      // runSysCommand returns a non-success code when the syscmd isn't
+      // registered. In that case render the legacy banner so the
+      // connection doesn't sit silent.
+      if (!result || (typeof result === "number" && result <= 0)) {
+        throw new Error("FRONTEND syscmd not registered");
+      }
+    } catch {
+      connection.write("\x1b[2J\x1b[H");
+      connection.write("\r\n\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n");
+      connection.write("\x1b[0;37mWelcome to AmiExpress BBS\x1b[0m\r\n");
+      connection.write(
+        `\x1b[33mConnected via ${type.toUpperCase()} on node ${
+          connection.nodeId
+        }\x1b[0m\r\n`
+      );
+      connection.write("\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n\r\n");
+    }
   };
 
   // For SSH: Wait for 'ready' event before sending welcome
