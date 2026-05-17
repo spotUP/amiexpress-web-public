@@ -20,7 +20,7 @@ export function TerminalPage(): JSX.Element {
   const terminalRef = useRef<BBSTerminalRef>(null);
   const [isMobile, setIsMobile] = useState<boolean>(isPortraitMobile);
   const [fontSize, setFontSize] = useState<number>(() =>
-    isPortraitMobile() ? computeFontSize(window.innerWidth) : 16
+    isPortraitMobile() ? computeFontSize(window.innerWidth) : 18
   );
 
   const fontSizeRef = useRef(fontSize);
@@ -30,13 +30,13 @@ export function TerminalPage(): JSX.Element {
     const handleOrientationChange = () => {
       const mobile = isPortraitMobile();
       setIsMobile(mobile);
-      setFontSize(mobile ? computeFontSize(window.innerWidth) : 16);
+      setFontSize(mobile ? computeFontSize(window.innerWidth) : 18);
     };
     const handleResize = () => {
       // Only update on desktop — mobile portrait width never changes via resize
       if (!isPortraitMobile()) {
         setIsMobile(false);
-        setFontSize(16);
+        setFontSize(18);
       }
     };
     window.addEventListener('resize', handleResize);
