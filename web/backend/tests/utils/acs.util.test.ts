@@ -701,6 +701,73 @@ describe('ACS Utility', () => {
         const session = createSession(null);
         expect(() => initializeSecurity(session)).not.toThrow();
       });
+
+      /**
+       * Regression: production "Command requires higher access" on live.
+       *
+       * On the prod container `process.cwd()` is `/app/web/backend`, so the
+       * old `path.resolve(cwd, '..', '..')` fallback resolved bbsRoot to
+       * `/app` — which has no `Access/` subdirectory (the BBS data lives at
+       * `/app/data/bbs/Access/`). loadAcsAccessFiles logged
+       * "Access/ directory not found", findAcsLevel returned -1 for every
+       * secLevel, and checkSecurity rejected sysop (255) for every command
+       * that goes through the ACS table (j, who, b, r, u).
+       *
+       * Fix in acs.util.ts:initializeSecurity: honour BBS_ROOT, then
+       * BBS_DATA_DIR (already set in docker-compose), then keep the cwd
+       * fallback only for local dev where it works. This test asserts
+       * the resolution order so the production-only path can't silently
+       * regress to cwd-relative.
+       */
+      describe('bbsRoot resolution', () => {
+        let prevBbsRoot: string | undefined;
+        let prevBbsDataDir: string | undefined;
+
+        beforeEach(() => {
+          prevBbsRoot = process.env.BBS_ROOT;
+          prevBbsDataDir = process.env.BBS_DATA_DIR;
+          // Force the lazy loader to run again for each test.
+          mockIsAcsLoaded.mockReturnValue(false);
+        });
+
+        afterEach(() => {
+          if (prevBbsRoot === undefined) delete process.env.BBS_ROOT;
+          else process.env.BBS_ROOT = prevBbsRoot;
+          if (prevBbsDataDir === undefined) delete process.env.BBS_DATA_DIR;
+          else process.env.BBS_DATA_DIR = prevBbsDataDir;
+          // Restore the default mock so other tests aren't affected.
+          mockIsAcsLoaded.mockReturnValue(true);
+        });
+
+        it('uses BBS_ROOT when set', () => {
+          process.env.BBS_ROOT = '/var/lib/amiexpress/bbs';
+          delete process.env.BBS_DATA_DIR;
+          const session = createSession(createUser({ secLevel: 100 }));
+          initializeSecurity(session);
+          expect(mockLoadAcsAccessFiles).toHaveBeenCalledWith('/var/lib/amiexpress/bbs');
+        });
+
+        it('falls back to BBS_DATA_DIR when BBS_ROOT is unset (prod container)', () => {
+          delete process.env.BBS_ROOT;
+          process.env.BBS_DATA_DIR = '/app/data/bbs';
+          const session = createSession(createUser({ secLevel: 255 }));
+          initializeSecurity(session);
+          expect(mockLoadAcsAccessFiles).toHaveBeenCalledWith('/app/data/bbs');
+        });
+
+        it('falls back to cwd-relative only when neither env is set (dev)', () => {
+          delete process.env.BBS_ROOT;
+          delete process.env.BBS_DATA_DIR;
+          const session = createSession(createUser({ secLevel: 100 }));
+          initializeSecurity(session);
+          // cwd-relative ../.. — we don't pin the exact value, just that
+          // it's the dev fallback (i.e. NOT one of the env values above).
+          const call = mockLoadAcsAccessFiles.mock.calls[0]?.[0];
+          expect(call).toBeDefined();
+          expect(call).not.toBe('/app/data/bbs');
+          expect(call).not.toBe('/var/lib/amiexpress/bbs');
+        });
+      });
     });
   });
 
