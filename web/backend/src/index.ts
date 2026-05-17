@@ -1043,8 +1043,18 @@ console.log(
             connection.write(data);
           }
         } else {
-          // Modern terminal or unknown - send as-is (ANSI codes)
-          connection.write(data);
+          // Modern terminal or unknown - send as-is (ANSI codes),
+          // but normalize bare LF to CRLF so raw TCP clients (nc,
+          // some terminal apps without telnet NVT) don't stair-step
+          // content across the screen. Proper telnet clients already
+          // treat LF as "next row, column 0" via NVT; this is a no-op
+          // for them. Only normalize strings — binary file transfer
+          // buffers (e.g. ZModem) MUST pass through untouched.
+          if (typeof data === "string") {
+            connection.write(data.replace(/\r?\n/g, "\r\n"));
+          } else {
+            connection.write(data);
+          }
         }
       } else if (event === "petscii-output") {
         // Handle PETSCII output based on terminal type
