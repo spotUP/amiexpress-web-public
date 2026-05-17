@@ -96,7 +96,7 @@ export const XTERM_CONFIG = {
    * sweet spot — small enough that the pipe glyph's overflow still
    * bridges the row, large enough that G/C have ~1-2px between them.
    */
-  lineHeight: 1.1,
+  lineHeight: 1.05,
 
   /**
    * Inter-character spacing in pixels. Bitmap fonts have intrinsic
