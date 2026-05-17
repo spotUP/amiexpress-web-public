@@ -124,13 +124,35 @@ export class TelnetConnection extends EventEmitter {
   private handleData(data: Buffer): void {
     // ZMODEM bypass: when a binary file transfer is in progress, the
     // wire carries raw ZMODEM frames that legitimately contain NUL
-    // (0x00) and IAC (0xFF) bytes. The IAC state-machine below would
-    // eat both, corrupting the frame and stalling sz/rz. Pass the
-    // bytes through untouched and let the transfer manager handle
-    // protocol-level escaping (sz -e flag handles outgoing IAC; the
-    // client is responsible for incoming IAC if it cares).
+    // (0x00) and IAC (0xFF) bytes. The full IAC state-machine below
+    // would eat both and corrupt frames. We still MUST collapse the
+    // RFC-854 IAC-IAC → 0xFF doubling, though: every ZMODEM-over-telnet
+    // sender (SyncTerm, MuffinTerm, etc.) escapes a literal 0xFF byte
+    // in file data as the pair 0xFF 0xFF. If we forward the pair raw,
+    // the receiver (sz/rz / browser ZMODEM) sees two bytes where one
+    // was sent, the CRC fails, and the transfer aborts (which is what
+    // caused our SyncTerm uploads to drop to 0% with "Bad CRC" /
+    // ZRPOS retries despite the bytes flowing fine end-to-end).
     if ((this.session as any)?.transferRawActive) {
-      this.emit('data', data);
+      if (data.indexOf(0xff) === -1) {
+        this.emit('data', data);
+        return;
+      }
+      // Collapse IAC IAC -> IAC. Other IAC sequences shouldn't appear
+      // during a transfer (clients suppress negotiation while ZMODEM
+      // is active), but if a stray IAC <opt> arrives mid-transfer we
+      // pass it through as a 2-byte sequence — better than dropping
+      // bytes and corrupting the frame alignment.
+      const out: number[] = [];
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] === 0xff && i + 1 < data.length && data[i + 1] === 0xff) {
+          out.push(0xff);
+          i++; // skip second IAC
+        } else {
+          out.push(data[i]);
+        }
+      }
+      this.emit('data', Buffer.from(out));
       return;
     }
 

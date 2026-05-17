@@ -1096,8 +1096,25 @@ console.log(
   const attachTransferSender = () => {
     if (connection.session) {
       (connection.session as any).connectionType = type;
-      (connection.session as any).transferRawSend = (buf: Buffer) =>
-        connection.write(buf);
+      // For telnet, RFC 854 mandates that every literal 0xFF byte in
+      // raw data be doubled on the wire (IAC IAC = literal 0xFF). The
+      // client's telnet layer collapses the pair back. If we send a
+      // single 0xFF, the client treats it as start of an IAC sequence
+      // and consumes the next byte too — corrupting ZMODEM frames.
+      // SSH is a raw byte channel; no escaping needed there.
+      (connection.session as any).transferRawSend = (buf: Buffer) => {
+        if (type !== 'telnet' || buf.indexOf(0xff) === -1) {
+          connection.write(buf);
+          return;
+        }
+        // Double every 0xFF byte
+        const out: number[] = [];
+        for (let i = 0; i < buf.length; i++) {
+          out.push(buf[i]);
+          if (buf[i] === 0xff) out.push(0xff);
+        }
+        connection.write(Buffer.from(out));
+      };
     }
   };
   attachTransferSender();
