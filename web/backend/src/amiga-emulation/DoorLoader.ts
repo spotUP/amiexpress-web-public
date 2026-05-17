@@ -100,7 +100,11 @@ export class DoorLoader {
 
     // Write fresh random seed for doors that need entropy
     // This must be done per-door, not once at startup
-    const randomSeed = (Date.now() & 0xFFFFFFFF) ^ (Math.random() * 0xFFFFFFFF >>> 0);
+    // DOOR_RANDOM_SEED env override exists so we can repro non-deterministic
+    // door crashes (e.g. when a door reads from this slot as decryptor input).
+    const randomSeed = process.env.DOOR_RANDOM_SEED
+      ? (parseInt(process.env.DOOR_RANDOM_SEED, 16) >>> 0)
+      : ((Date.now() & 0xFFFFFFFF) ^ (Math.random() * 0xFFFFFFFF >>> 0));
     console.log(`[DoorLoader] Writing random seed 0x${randomSeed.toString(16)} to 0x400`);
     this.emulator.writeMemory32(0x00000400, randomSeed);
     // Verify it was written
@@ -218,6 +222,41 @@ debugLog(`  ${segInfo}`);
     // Load segments into memory (pass fileName for synthetic relocations)
     hunkLoader.load(this.emulator, hunkFile, this.config.executablePath);
 
+    // Patch nextBPTR of segment 0 to standard Amiga convention for
+    // self-relocating hunk-unpacker stubs (e.g. MASTERMIND's
+    // Imploder-style decompressor) that walk their own seglist via
+    // `lea -$e(PC), Ax; movea.l (Ax), Ay; adda.l Ay, Ay; ...` and
+    // compute data addresses as `bptr*4 + 4`. Our HunkLoader emits
+    // BPTRs pointing to size fields (legacy convention) which lands
+    // these stubs 4 bytes off the packed payload, scrambling the
+    // bit-stream decoder. Detect the stub by its prologue opcode
+    // signature so we don't disturb other doors.
+    const codeSegFix = hunkFile.segments[0];
+    if (codeSegFix && hunkFile.segments.length >= 2) {
+      const codeBase = codeSegFix.address;
+      try {
+        const s0 = this.emulator.readMemory16(codeBase);
+        const s4 = this.emulator.readMemory16(codeBase + 4);
+        const s8 = this.emulator.readMemory32(codeBase + 8);
+        const sC = this.emulator.readMemory16(codeBase + 0xc);
+        // Signature: `pea (d16,PC)` + `movem.l Dn-Dm/An-Am, -(A7)` +
+        //            `lea (-$e,PC), A4` + `movea.l (A4), A0`
+        // = bytes 48 7a __ __ 48 e7 __ __ 49 fa ff f2 20 54
+        if (s0 === 0x487a && s4 === 0x48e7 && s8 === 0x49faFFF2 && sC === 0x2054) {
+          const nextSeg = hunkFile.segments[1];
+          const standardBptr = ((nextSeg.headerAddress + 4) >>> 2) >>> 0;
+          this.emulator.writeMemory32(codeBase - 4, standardBptr);
+          console.log(
+            `[DoorLoader] Hunk-unpacker stub detected at 0x${codeBase.toString(16)}; ` +
+            `patched nextBPTR @0x${(codeBase - 4).toString(16)} -> 0x${standardBptr.toString(16)} ` +
+            `(standard Amiga BPTR → nextBPTR field of next segment)`
+          );
+        }
+      } catch {
+        /* probe failed; harmless, skip patch */
+      }
+    }
+
     // CRITICAL: Allocate door Task structure AFTER door segments to avoid overlap
     // Find the highest address used by door segments
     let highestSegmentEnd = 0;
@@ -291,6 +330,15 @@ debugLog(`  SR: 0x0000 (user mode)`);
     const execBaseAddr = this.execLibrary.getExecBaseAddress();
     this.emulator.setRegister(14, execBaseAddr); // A6 = ExecBase
 debugLog(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
+
+    // AbsExecBase ($00000004): standard Amiga convention. Exec writes its
+    // base address here during ROM boot; doors compiled with PC-relative
+    // loaders (e.g. MASTERMIND's internal LoadSeg-style relocator) read it
+    // via `movea.l $4.w, A6` instead of trusting the entry-A6 our
+    // DoorLoader sets. We skip ROM boot, so without this the slot still
+    // holds the ROM reset vector and library calls via A6 dispatch into
+    // ROM space.
+    this.emulator.writeMemory32(0x00000004, execBaseAddr);
 
     // Set up CLI/argument string similar to AmigaDOS
     // CRITICAL: Default to 1, not 0, to match AEDoorPort naming convention

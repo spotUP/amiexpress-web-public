@@ -729,6 +729,21 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
       const size = emu.getRegister(0); // D0
       const flags = emu.getRegister(1); // D1
       console.log(`[exec-vectors] AllocMem TRAP: size=${size} (0x${size.toString(16)}) flags=0x${flags.toString(16)}`);
+      if (process.env.DOOR_TRACE_ALLOCMEM_CTX === '1') {
+        try {
+          const a3 = emu.getRegister(11);
+          const a2 = emu.getRegister(10);
+          const d7 = emu.getRegister(7);
+          const d6 = emu.getRegister(6);
+          const d4 = emu.getRegister(4);
+          const mems: string[] = [];
+          for (let off = -16; off < 64; off += 4) {
+            try { mems.push(`${off >= 0 ? '+' : ''}${off}=0x${emu.readMemory32(a3 + off).toString(16)}`); } catch { mems.push(`${off}=?`); }
+          }
+          console.log(`[exec-vectors] AllocMem CTX: A3=0x${a3.toString(16)} A2=0x${a2.toString(16)} D4=0x${d4.toString(16)} D6=0x${d6.toString(16)} D7=0x${d7.toString(16)}`);
+          console.log(`[exec-vectors] AllocMem mem near A3: ${mems.join(' ')}`);
+        } catch { /* ignore */ }
+      }
       const result = lib.allocMem(size, flags);
       console.log(`[exec-vectors] AllocMem TRAP result: 0x${result.toString(16)}`);
       return result;

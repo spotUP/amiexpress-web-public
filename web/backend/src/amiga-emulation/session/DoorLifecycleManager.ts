@@ -25,6 +25,7 @@ import {
 import { installMessageCallbacks } from "./lifecycle/door-message-callbacks.js";
 import { DoorExitDetector, type CodeBoundsRef } from "./lifecycle/DoorExitDetector.js";
 import { DoorTrapDispatcher } from "./lifecycle/DoorTrapDispatcher.js";
+import { DoorPostMortemDebug } from "./lifecycle/DoorPostMortemDebug.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -109,6 +110,7 @@ export class DoorLifecycleManager {
   private watchAutoUpper: number = 0;
   private lastA5OutOfRangeLogged: number = 0;
   private firstInvalidPCLogged = false;
+  private postMortemDebug: DoorPostMortemDebug;
   private loggedAedoorPc = new Set<number>();
   private loggedAedoorPcCount = 0;
   private lastA3 = 0;
@@ -176,6 +178,8 @@ debugLog(
 
     // Exit detection + PC symbol formatting + paused-state polling
     // extracted to lifecycle/DoorExitDetector.
+    this.postMortemDebug = new DoorPostMortemDebug(this.emulator);
+
     this.exitDetector = new DoorExitDetector({
       emulator: this.emulator,
       socket: this.socket,
@@ -626,6 +630,9 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
         }
       this.debugMonitor?.setLastPCs(this.lastPCs);
 
+      this.postMortemDebug.pushPc(pc);
+      this.postMortemDebug.maybeDumpAtPc(pc);
+
       // TRACE: Detect first invalid PC and log what instruction caused it
       if (!this.firstInvalidPCLogged &&
           this.codeBounds.lowerBound !== 0 && this.codeBounds.upperBound !== 0 &&
@@ -677,6 +684,13 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
             `  A3 points to: 0x${a3.toString(16)}`
           );
         }
+
+        this.postMortemDebug.dumpPcRing(cpu, {
+          pc,
+          prevPC,
+          codeLow: this.codeBounds.lowerBound,
+          codeHigh: this.codeBounds.upperBound,
+        });
       }
       this.debugMonitor?.checkPcProbes(pc, this.executionState.iterationCount);
       this.debugMonitor?.checkWatchedValues();
