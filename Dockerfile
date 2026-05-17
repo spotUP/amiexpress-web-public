@@ -170,6 +170,15 @@ COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dis
 # Copy backend source files (backend runs TypeScript directly with tsx)
 COPY web/backend/src ./web/backend/src
 COPY web/backend/scripts ./web/backend/scripts
+# tsconfig.json MUST be present at runtime — tsx delegates to esbuild,
+# which only enables experimentalDecorators / emitDecoratorMetadata when
+# it can read them from a tsconfig.json walking up from each source
+# file. Without this copy, files using DI decorators (e.g.
+# services/use-cases/authentication.use-case.ts) throw
+# "Parameter decorators only work when experimental decorators are
+# enabled" the first time they're imported, which crashes the telnet/SSH
+# login path and silently drops the connection.
+COPY web/backend/tsconfig.json ./web/backend/tsconfig.json
 
 # Create directories that will exist in the container (not on persistent disk)
 RUN mkdir -p /app/logs /app/default-data
