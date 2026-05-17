@@ -15,23 +15,67 @@
             host: ${{ secrets.HETZNER_HOST }}
             username: root
             key: ${{ secrets.HETZNER_SSH_KEY }}
+            command_timeout: 30m
             script: |
               set -euo pipefail
               cd /app/amiexpress
-              git pull origin main
-              docker compose up -d --build
-              echo "Deploy complete: $(date)"
-              # Sanity check: a green workflow used to ship even when docker
-              # compose up -d --build silently failed (no set -e), leaving a
-              # stale container running. Assert the bbs container was
-              # actually recreated by this build, not a leftover from an
-              # earlier successful run.
+
+              # Always sync to origin/main exactly. `git pull` can silently
+              # leave the checkout behind when the working tree has local
+              # edits (which the server should never have, but accumulates
+              # in practice — e.g. a hand-edit, a CRLF conversion). Doing
+              # a hard fetch+reset guarantees the checkout matches the
+              # commit the workflow expects.
+              echo "== git fetch + hard reset =="
+              git fetch --prune origin main
+              EXPECTED_SHA=$(git rev-parse origin/main)
+              git reset --hard "$EXPECTED_SHA"
+              ACTUAL_SHA=$(git rev-parse HEAD)
+              echo "HEAD now at $ACTUAL_SHA"
+              if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+                echo "ERROR: HEAD ($ACTUAL_SHA) != origin/main ($EXPECTED_SHA)" >&2
+                exit 1
+              fi
+
+              # Build + recreate. `--force-recreate` is the critical bit:
+              # without it, docker compose can decide the running container
+              # "matches" the spec hash and skip the restart even when
+              # --build produced a brand-new image. Result: new image sits
+              # idle, old container keeps serving stale code (the source
+              # of every "deploy succeeded but the site shows old behaviour"
+              # report).
+              echo "== docker compose up --build --force-recreate =="
+              docker compose up -d --build --force-recreate
+
+              # Sanity check: assert the container was actually recreated
+              # by this build, not a leftover from an earlier run. Tighter
+              # than the old 600s heuristic (which silently passed any
+              # deploy that landed within 10 min of a prior good one).
+              echo "== verification =="
               CREATED_AT=$(docker inspect -f '{{.Created}}' amiexpress-bbs)
-              echo "Running container created: $CREATED_AT"
               CREATED_EPOCH=$(date -d "$CREATED_AT" +%s)
               NOW_EPOCH=$(date +%s)
               AGE=$((NOW_EPOCH - CREATED_EPOCH))
-              if [ "$AGE" -gt 600 ]; then
-                echo "ERROR: container is ${AGE}s old (> 600s) -- build did not recreate it" >&2
+              echo "Container amiexpress-bbs created: $CREATED_AT (${AGE}s ago)"
+              if [ "$AGE" -gt 300 ]; then
+                echo "ERROR: container is ${AGE}s old (> 300s) -- --force-recreate did not take effect" >&2
                 exit 1
               fi
+
+              # Health endpoint must respond (proves the container actually
+              # started, not just got created and crashed). docker-compose
+              # declares start_period: 60s, so allow up to 60s.
+              echo "Waiting for /health to respond..."
+              for i in $(seq 1 30); do
+                if curl -fsS http://localhost:3001/health >/dev/null 2>&1; then
+                  echo "OK: /health responding after ${i}*2s"
+                  break
+                fi
+                if [ "$i" = "30" ]; then
+                  echo "ERROR: /health never responded after 60s" >&2
+                  docker logs amiexpress-bbs --tail 100 >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              echo "Deploy complete: HEAD=$ACTUAL_SHA at $(date)"
