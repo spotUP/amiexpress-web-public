@@ -1522,8 +1522,17 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
   const addAnsiVariants = (name: string) => {
     const variants = new Set<string>();
     variants.add(name);
-    variants.add(`${name}.TXT`);
+    // Lowercase variant FIRST. Our image ships lowercase
+    // (`BBSTITLE.txt`); admin TUI and modern editors also default
+    // to lowercase. The uppercase variant is the legacy Amiga
+    // convention — kept as fallback so manually-uploaded uppercase
+    // files still load. Ordering matters on case-sensitive
+    // filesystems (Linux/prod): if both exist, the lowercase one
+    // wins. Previously uppercase-first caused stale BBSTITLE.TXT
+    // on the live volume to shadow a fresh BBSTITLE.txt, which
+    // broke the login-prompt placement.
     variants.add(`${name}.txt`);
+    variants.add(`${name}.TXT`);
     variants.add(`${name}.logoff`);
     variants.add(`${name}.logoff.txt`);
     variants.add(`${name}.LOGOFF.TXT`);
@@ -1537,9 +1546,9 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     variants.add(`${name}.SEQ`);
     // Also allow explicit name as-is (in case a .txt was provided)
     variants.add(name);
-    // Fall back to ANSI text if no .seq exists
-    variants.add(`${name}.TXT`);
+    // Fall back to ANSI text if no .seq exists (lowercase first; see addAnsiVariants).
     variants.add(`${name}.txt`);
+    variants.add(`${name}.TXT`);
     variants.add(`${name}.logoff`);
     variants.add(`${name}.logoff.txt`);
     variants.add(`${name}.LOGOFF.TXT`);
@@ -1553,9 +1562,9 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     variants.add(`${name}.RIP`);
     // Also allow explicit name as-is
     variants.add(name);
-    // Fall back to ANSI text if no .rip exists
-    variants.add(`${name}.TXT`);
+    // Fall back to ANSI text if no .rip exists (lowercase first; see addAnsiVariants).
     variants.add(`${name}.txt`);
+    variants.add(`${name}.TXT`);
     variants.add(`${name}.logoff`);
     variants.add(`${name}.logoff.txt`);
     variants.add(`${name}.LOGOFF.TXT`);
@@ -1570,7 +1579,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       } else if (session?.ripMode) {
         return [...addRipVariants(screenName)];
       }
-      return ['BBSTITLE.TXT', 'BBSTITLE.txt', 'BBSTITLE'];
+      return ['BBSTITLE.txt', 'BBSTITLE.TXT', 'BBSTITLE'];
     }
     if (screenName.toUpperCase() === 'AWAITSCREEN') {
       if (session?.petsciiMode) {
@@ -1578,7 +1587,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       } else if (session?.ripMode) {
         return [...addRipVariants(screenName)];
       }
-      return ['AWAITSCREEN.TXT', 'AWAITSCREEN.txt'];
+      return ['AWAITSCREEN.txt', 'AWAITSCREEN.TXT'];
     }
     // Use actualFileName for mapped screen types (e.g., NODE_BULL -> BULL)
     const fileToFind = actualFileName;
