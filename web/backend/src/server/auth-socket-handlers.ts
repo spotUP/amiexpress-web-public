@@ -8,16 +8,10 @@ import * as crypto from 'crypto';
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
-import { nodeFileManager } from '../services/NodeFileManager';
 import { userFileManager } from '../services/UserFileManager';
-import { userDatabaseManager } from '../services/UserDatabaseManager';
 import { callersLogManager } from '../services/CallersLogManager';
-import { initializeSecurity, setEnvStat } from '../utils/security.util';
-import { EnvStat } from '../constants/env-codes';
-import { AnsiUtil } from '../utils/ansi.util';
 import {
   getSessionBySocketId,
-  sessions,
   userSessions,
   socketToUser,
   socketToNodeId,
@@ -31,11 +25,9 @@ import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { sanitizeInput } from '../utils/input-normalizer.util';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { displayScreen, doPause } from '../handlers/screen.handler';
-import { runLoginBatches, runExecuteOn } from '../services/batch-scheduler';
-import { mailOnLogon, mailOnPwdFail, isMailEventEnabled, isSmtpConfigured } from '../services/mail-notification.service';
+import { mailOnPwdFail, isMailEventEnabled, isSmtpConfigured } from '../services/mail-notification.service';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
-import { emitUserLogin } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
 import { beginLogoff } from './logoff';
 
@@ -77,20 +69,10 @@ export function registerAuthHandlers(socket: Socket) {
   if (!initialSession) return;
   let session: BBSSession = initialSession;
 
-  const installAnsiFilter = (sock: Socket, sess: any) => {
-    if ((sock as any)._ansiFilterInstalled) return;
-    const originalEmit = sock.emit.bind(sock);
-    sock.emit = ((event: string, ...args: any[]) => {
-      if (event === 'ansi-output' && (sess.ansiMode === false || sess.user?.ansi === false)) {
-        const filtered = args.map((arg) =>
-          typeof arg === 'string' ? AnsiUtil.stripAnsiForPlainText(arg) : arg
-        );
-        return originalEmit(event, ...filtered);
-      }
-      return originalEmit(event, ...args);
-    }) as any;
-    (sock as any)._ansiFilterInstalled = true;
-  };
+  // installAnsiFilter moved to services/login-post.service.ts so both web
+  // and telnet/SSH wrap their emit() identically. Kept the AnsiUtil
+  // import for other handlers in this file that strip ANSI for plain
+  // displays.
 
   const getMaxPasswordFails = () => {
     try {
@@ -588,351 +570,12 @@ console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sy
 
       // Preserve previous last login for conference scan (New Since Date)
       const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
-      
-      // Update last login
-      await db.updateUser(user.id, { lastLogin: getSystemTime(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
 
-      // Set session user data
-      // ... (existing code continues) ...
-      session.state = BBSState.LOGGEDON;
-      session.subState = LoggedOnSubState.EXEC_QUICKNEW;
-      session.user = { ...user, lastLoginBeforeUpdate };
-      session.ansiMode = user.ansi;
-      installAnsiFilter(socket, session);
-
-      // Apply modem emulation preference from user baud (0/undefined = full speed)
-      const userBaud = user.baud || 0;
-      session.modemBps = userBaud;
-      session.modemEmulationEnabled = userBaud > 0;
-
-      // Install modem speed emulator (wraps socket.emit for throttled output)
-      const { getModemEmulator } = require('../utils/modem-emulator.util');
-      const modemEmulator = getModemEmulator(socket);
-      modemEmulator.install();
-      if (userBaud > 0) {
-        modemEmulator.enable(userBaud);
-        console.log(`[WEB LOGIN] Modem emulation enabled at ${userBaud} bps for ${user.username}`);
-      }
-
-      // Send modem speed to frontend for client-side emulation (web terminal only)
-      // Also track in session so doors can query it via bbs.getModemSpeed()
-      console.log(`[WEB LOGIN] Emitting modem-speed event with userBaud=${userBaud}`);
-      (session as any).modemSpeed = userBaud;
-      socket.emit('modem-speed', userBaud);
-      console.log(`[WEB LOGIN] modem-speed event emitted`);
-
-      // Disable AnsiBuffer batching when modem emulation is enabled
-      const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
-      const ansiBuffer = getAnsiBuffer(socket);
-      ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
-
-      // Register node with MULTICOM manager for WHO doors
-      try {
-        const { multicomManager, ENV_MENU } = await import('../nodes/MulticomManager.js');
-        multicomManager.updateNode(
-          session.nodeId,
-          user.username,
-          user.location || 'Unknown',
-          ENV_MENU  // User just logged in, at menu
-        );
-        console.error(`[LOGIN] Registered node ${session.nodeId} with MULTICOM: ${user.username}`);
-      } catch (error) {
-        console.error(`[LOGIN] Failed to register node with MULTICOM:`, error);
-      }
-
-      // Load command history from database
-      const { loadHistory } = require('../utils/command-history.util');
-      loadHistory(session, user.id).catch((err: any) => {
-console.error('[LOGIN] Failed to load command history:', err);
-      });
-
-      // Test sysop debug system
-      SysopDebugUtil.debug(
-        socket,
-        session,
-        'AUTH',
-        'Login successful - sysop debug system active',
-        { username: user.username, secLevel: user.secLevel },
-        DebugSeverity.INFO
-      );
-
-      // Update session log with user info
-      sessionLogManager.updateSession(socket.id, user.id, user.username, session.nodeId);
-
-      // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
-      // NOTE: Don't await - run in background so login flow continues immediately
-      runLoginBatches(session.nodeId || 0).catch((err) => {
-console.error('[LOGIN] Batch scheduler failed:', err);
-        SysopDebugUtil.debug(
-          socket,
-          session,
-          'AUTH',
-          'Login batch scheduler failed',
-          { nodeId: session.nodeId, error: (err as Error).message },
-          DebugSeverity.WARNING
-        );
-      });
-
-      // Run EXECUTE_ON_LOGON command from bbsConfig.info (express.e:6715)
-      runExecuteOn('LOGON', session.nodeId || 1, {
-        username: user.username,
-        location: user.location
-      }).catch((err) => {
-console.error('[LOGIN] EXECUTE_ON_LOGON failed:', err);
-      });
-
-      // MAIL_ON_LOGON tooltype - express.e:6716-6720
-      mailOnLogon(user.username, user.location || '').catch((err) => {
-console.error('[LOGIN] MAIL_ON_LOGON failed:', err);
-      });
-
-      // Run LOGON syscmds - mirroring express.e LOGOFF pattern (express.e:8222, 8231)
-      // This allows sysops to define LOGON and LOGONn syscmds to run at login time
-      try {
-        const { runSysCommand } = require('../handlers/command-execution.handler');
-        // Run generic LOGON syscmd (if exists)
-        await runSysCommand(socket, session, 'LOGON', '');
-        // Run node-specific LOGONn syscmd (if exists)
-        await runSysCommand(socket, session, `LOGON${session.nodeId || 0}`, '');
-      } catch (err) {
-        console.error('[LOGIN] LOGON syscmd failed:', err);
-      }
-
-      // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
-      // This fixes the multi-socket connection issue where new sockets get fresh sessions
-console.log(`[SESSION-MIGRATION] User ${user.id} logged in on socket ${socket.id}`);
-console.log(`[SESSION-MIGRATION] Migrating session from socket-based to user-based storage`);
-
-      // Remove from socket-based pre-login storage
-      sessions.delete(socket.id);
-
-      // Store in user-based post-login storage
-      userSessions.set(user.id, session);
-
-      // Map this socket to the user
-      socketToUser.set(socket.id, user.id);
-
-      // Multi-tab fanout: every authenticated socket joins user:<id> room.
-      // Lets DM/invite handlers io.to('user:'+id).emit() reach all tabs.
-      try { socket.join('user:' + String(user.id)); } catch (_) {}
-
-console.log(`[SESSION-MIGRATION] Session now keyed by user ID: ${user.id}`);
-
-      // Emit BBS event for LiveChat integration
-      try {
-        emitUserLogin({
-          username: user.username,
-          nodeId: session.nodeId || 1,
-          location: user.location || 'Unknown',
-          timestamp: Date.now()
-        });
-      } catch (error) {
-console.error('[BBSEvent] Error emitting login event:', error);
-      }
-
-      // CRITICAL: Write node{n}.user and node{n}.userkeys files for WHO door compatibility
-      // express.e:2935-2950 createNodeUserFiles()
-      const nodeId = session.nodeId || 0;
-      try {
-        nodeFileManager.writeNodeUserFile(nodeId, user);
-        nodeFileManager.writeNodeUserKeysFile(nodeId, user);
-console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
-
-        // Write to CallersLog
-        callersLogManager.logLogin(nodeId, user.username, 1, user.location || 'Unknown');
-      } catch (error) {
-console.error(`[LOGIN] Error writing node files:`, error);
-        SysopDebugUtil.debugFileError(
-          socket,
-          session,
-          'write',
-          `Node${nodeId}.user / Node${nodeId}.userkeys`,
-          error as Error,
-          DebugSeverity.CRITICAL
-        );
-      }
-
-      // Phase 9: Initialize security system (express.e:447-455)
-      initializeSecurity(session);
-      setEnvStat(session, EnvStat.IDLE);
-
-      // express.e:29768-29773 — secStatus <= 1 lockout check
-      // Must run before bulletin flow; secStatus 0 = LOCKOUT0, 1 = LOCKOUT1.
-      if (user.secLevel <= 1) {
-        const lockScreen = user.secLevel === 0 ? 'LOCKOUT0' : 'LOCKOUT1';
-        await displayScreen(socket, session, lockScreen, false);
-        // Pre-LOGGEDON bump: AWAIT (not LOGGING_OFF) since we never
-        // entered the post-login state machine. 1500ms gives the
-        // LOCKOUT screen time to render.
-        beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
-        return;
-      }
-
-      // Read Amiga-format user.misc for accountLocked, forcePwdReset, pwdLastUpdated.
-      // These fields live in the binary disk file, not the SQL DB.
-      // express.e:29775-29845 — these checks gate entry into the BBS.
-      let diskMisc: ReturnType<typeof userDatabaseManager.readUserFromDisk> = null;
-      if (user.slotNumber && user.slotNumber > 0) {
-        try {
-          diskMisc = userDatabaseManager.readUserFromDisk(user.slotNumber);
-        } catch (err) {
-console.warn(`[LOGIN] Could not read user.misc for slot ${user.slotNumber}:`, err);
-        }
-      }
-      const miscAccountLocked  = diskMisc ? diskMisc.misc.accountLocked  : 0;
-      const miscForcePwdReset  = diskMisc ? diskMisc.misc.forcePwdReset  : 0;
-      const miscPwdLastUpdated = diskMisc ? diskMisc.misc.pwdLastUpdated : 0;
-
-      // express.e:29775-29782 — accountLocked check
-      // Show message, offer comment to sysop, then disconnect.
-      if (miscAccountLocked) {
-        socket.emit('ansi-output', '\r\nYour account is locked out (possibly due to repeated password failures)\r\n\r\n');
-        socket.emit('ansi-output', 'Leave a comment for the sysop...\r\n\r\n');
-        const { processCommand } = require('../handlers/command.handler');
-        await processCommand(socket, session, 'C', '');
-        beginLogoff(socket, session, {
-          message: '\r\nThanks you will now be disconnected...\r\n\r\n',
-          finalState: BBSState.AWAIT,
-          readDelayMs: 1500,
-        });
-        return;
-      }
-
-      // express.e:29785-29845 — PASSWORD_EXPIRY_DAYS and forcePwdReset flow
-      {
-        // Read PASSWORD_EXPIRY_DAYS from system config (db row — kept in sync from bbsConfig.info)
-        let pwdExpiryDays = 0;
-        try {
-          const sysConf = db.getConfigRepository().getSystemConfig();
-          if (sysConf && typeof sysConf.password_expiry_days === 'number') {
-            pwdExpiryDays = sysConf.password_expiry_days;
-          }
-        } catch (_err) { /* non-fatal */ }
-
-        // express.e:29786-29790 — if pwdExpiryDays >= 0 and pwdLastUpdated is stale, force reset
-        // Note: express.e uses >= 0, meaning 0 = "enabled with 0-day expiry" would always force
-        // reset. In practice sysops set this to a positive integer; 0 means "off" in our config.
-        let forcedByExpiry = false;
-        if (pwdExpiryDays > 0 && miscPwdLastUpdated > 0) {
-          const nowSecs = Math.floor(Date.now() / 1000);
-          if (miscPwdLastUpdated + pwdExpiryDays * 86400 < nowSecs) {
-            forcedByExpiry = true;
-          }
-        }
-
-        const needsPwdChange = forcedByExpiry || miscForcePwdReset !== 0;
-
-        if (needsPwdChange) {
-          // express.e:29793-29802 — check if user has ACS_EDIT_PASSWORD permission
-          // If not, they cannot change it — show message, open comment door, disconnect.
-          const { checkSecurity } = require('../utils/acs.util');
-          const { ACSPermission } = require('../constants/acs-permissions');
-          const canEditPassword = checkSecurity(user, ACSPermission.EDIT_PASSWORD);
-
-          if (!canEditPassword) {
-            socket.emit('ansi-output', '\r\nYour account requires your password to be changed, however you do not have permission to do so.\r\n');
-            socket.emit('ansi-output', 'Leave a comment for the sysop...\r\n\r\n');
-            const { processCommand } = require('../handlers/command.handler');
-            await processCommand(socket, session, 'C', '');
-            beginLogoff(socket, session, {
-              message: '\r\nThanks you will now be disconnected...\r\n\r\n',
-              finalState: BBSState.AWAIT,
-              readDelayMs: 1500,
-            });
-            return;
-          }
-
-          // express.e:29804-29844 — prompt user to change password (up to 3 attempts)
-          // Read strength policy from system config once
-          let minPasswordLength = 0;
-          let minPasswordStrength = 0;
-          try {
-            const sysConf = db.getConfigRepository().getSystemConfig();
-            if (sysConf) {
-              minPasswordLength  = sysConf.min_password_length  ?? 0;
-              minPasswordStrength = sysConf.min_password_strength ?? 0;
-            }
-          } catch (_err) { /* non-fatal */ }
-
-          // Store state for the socket event handler below
-          session.forcedPwdChangeState = 'await_new';
-          session.forcedPwdChangeUsername = user.username;
-          session.forcedPwdChangeUserId   = user.id;
-          session.forcedPwdChangeSlot     = user.slotNumber ?? 0;
-          session.forcedPwdChangeRetry    = 0;
-          session.forcedPwdChangePwdHash      = user.passwordHash ?? '';
-          session.forcedPwdChangeMinLen       = minPasswordLength;
-          session.forcedPwdChangeMinStrength  = minPasswordStrength;
-
-          // Tell frontend to enter forced-pwd-change mode (routes Enter key to the right event)
-          socket.emit('prompt-forced-pwd-change');
-          socket.emit('ansi-output', '\r\nYour account requires your password to be changed.\r\n\r\n');
-          socket.emit('ansi-output', 'Enter New Password: ');
-          socket.emit('mask-input', true);
-          return;  // wait for 'forced-pwd-change-input' events
-        }
-      }
-
-      // Log successful login (express.e:9493 callersLog)
-      await callersLog(user.id, user.username, 'Logged on');
-
-      // Track system stats for ~SC MCI code (system calls today)
-      try {
-        const { systemStats } = await import('../services/SystemStatsService');
-        await systemStats.incrementCalls(user.id);
-      } catch (error) {
-console.error('[SystemStats] Error tracking login:', error);
-        SysopDebugUtil.debug(
-          socket,
-          session,
-          'AUTH',
-          'SystemStats tracking failed',
-          { userId: user.id, error: (error as Error).message },
-          DebugSeverity.WARNING
-        );
-      }
-
-      // Trigger webhook for user login (skip for sysops to reduce noise)
-      if (user.secLevel < 255) {
-        try {
-          const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
-          await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
-            username: user.username,
-            userId: user.id,
-            gdprConsented: !!user.gdprConsentAt,
-            secLevel: user.secLevel,
-            calls: user.calls + 1
-          });
-        } catch (error) {
-console.error('[Webhook] Error sending user login webhook:', error);
-          SysopDebugUtil.debug(
-            socket,
-            session,
-            'AUTH',
-            'Webhook service failed',
-            { userId: user.id, username: user.username, error: (error as Error).message },
-            DebugSeverity.WARNING
-          );
-        }
-      }
-
-      // Set user preferences
-      session.confRJoin = user.autoRejoin || 1;
-      session.msgBaseRJoin = 1; // Default message base
-      // CRITICAL: Set currentConf for XIM doors (BB_CONFNUM query) - express.e sets this at login
-      session.currentConf = user.autoRejoin || 1;
-      session.currentConference = user.autoRejoin || 1;
-      session.conferenceId = user.autoRejoin || 1;
-      console.log(`[CONF-DEBUG] login: user=${user.username} autoRejoin=${user.autoRejoin} confRJoin=${user.confRJoin} → session.currentConf=${session.currentConf}`);
-      // Like express.e:394 - default cmdShortcuts to FALSE (line input mode)
-      // This will be set to TRUE if .keys file exists when displaying menu (express.e:6567-6573)
-      session.cmdShortcuts = false;
-      session.inDoorManager = false;
-      session.mouseEventsEnabled = false; // Ensure mouse events are disabled on login
-      session.doorInputHandler = undefined;
-      if (session.shortcuts) session.shortcuts.clear();
-
-      // If we already sent login-success for username/password, don't send again
+      // JWT-path login-success: u/p path already emitted at the
+      // success branch above (line ~564); JWT path emits here so the
+      // frontend sees a login-success for both paths before the
+      // shared post-auth pipeline runs. Without this, JWT-token-only
+      // reconnects would never see the event.
       if (data.token) {
         socket.emit('login-success', {
           user: {
@@ -941,115 +584,23 @@ console.error('[Webhook] Error sending user login webhook:', error);
             realname: user.realname,
             secLevel: user.secLevel,
             expert: user.expert,
-            ansi: user.ansi
-          }
+            ansi: user.ansi,
+          },
         });
       }
 
-      // QuickLogon ('Q' at ANSI prompt) skips LOGON/BULL/CONF_BULL and jumps to menu
-      if (session.tempData?.quickLogon) {
-        session.tempData.quickLogon = false;
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        const { displayMainMenu } = require('../handlers/command-handler/menu');
-        await displayMainMenu(socket, session);
+      // Shared post-auth pipeline (see services/login-post.service.ts).
+      // Same call used by telnet/SSH at command.handler.ts after the
+      // line-buffered username/password handler completes.
+      const { runPostAuthLogin } = await import('../services/login-post.service');
+      const postAuthResult = await runPostAuthLogin(socket, session, user, {
+        lastLoginBeforeUpdate,
+      });
+      if (!postAuthResult.ok) {
+        // Pipeline already handled the terminating side-effects
+        // (logoff, comment-door, forced-pwd-change prompt, etc.).
         return;
       }
-
-      // CHAT-ONLY MODE: Auto-launch LiveChat door for web chat connections
-      // Detected by ?chatOnly=true query parameter or session.tempData.chatOnly flag
-      const chatOnly = socket.handshake?.query?.chatOnly === 'true' || session.tempData?.chatOnly;
-      if (chatOnly) {
-console.log('[AUTH] Chat-only mode detected - auto-launching LiveChat door');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DOOR_RUNNING;
-
-        // Import and execute the door handler to launch LiveChat
-        const { executeDoor } = require('../handlers/door.handler');
-
-        // Create a door object for LiveChat
-        const liveChatDoor = {
-          name: 'livechat',
-          path: 'Doors/livechat',
-          location: 'Doors/livechat',
-          executable: 'livechat',
-          type: 'typescript',
-          category: 'Chat',
-          args: [],
-        };
-
-        try {
-          await executeDoor(socket, session, liveChatDoor, []);
-        } catch (error) {
-console.error('[AUTH] Failed to launch LiveChat door:', error);
-          socket.emit('ansi-output', '\r\n\x1b[31mFailed to launch LiveChat. Please try again.\x1b[0m\r\n');
-        }
-
-        triggerSamiLogRefresh();
-        return;
-      }
-
-      // TOKEN-BASED RECONNECTION: Show bulletins like a normal login
-      // This matches AmiExpress behavior where bulletins are shown on each connection
-      // Users can press 'Q' at ANSI prompt for quick logon to skip bulletins
-      if (data.token) {
-console.log('[AUTH] =============================================');
-console.log('[AUTH] TOKEN-BASED LOGIN DETECTED');
-console.log('[AUTH] Showing bulletins like normal login (AmiExpress behavior)');
-console.log('[AUTH] =============================================');
-        // Fall through to normal bulletin display flow below
-      }
-
-      // express.e:29853-29855 - IF (quickFlag=FALSE) IF (displayScreen(SCREEN_LOGON)) THEN doPause()
-      // When quickFlag is set (user entered 'Q' at ANSI prompt), skip LOGON screen
-      let logonDisplayed = false;
-      if (!session.quickFlag) {
-        logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
-      } else {
-console.log('[LOGIN] Quick logon - skipping LOGON screen per express.e:29853');
-      }
-
-      // express.e:29859-29861 - After LOGON screen, state:=STATE_LOGGEDON (main loop processes it)
-      // Begin bulletin flow: BULL -> NODE_BULL -> confScan -> CONF_BULL -> MENU
-      session.subState = LoggedOnSubState.DISPLAY_BULL;
-      triggerSamiLogRefresh();
-
-      // WEB_: GDPR Phase 2 — if this user has no consent stamp (pre-GDPR
-      // account), block the bulletin flow until they accept the notice
-      // once. Account untouched on decline; user can reconnect or email
-      // the sysop for erasure. See thoughts/shared/plans/
-      // 2026-04-24-gdpr-hobby-baseline.md Phase 2.
-      console.log('[gdpr-gate] user=%s consentAt=%s source=%s', session.user?.username, (session.user as any)?.gdprConsentAt ?? '(none)', (session.user as any)?.gdprConsentSource ?? '(none)');
-      if (!(session.user as any)?.gdprConsentAt) {
-        const { promptGdprBackfill } = require('../handlers/user/gdpr.handler');
-        await promptGdprBackfill(socket, session);
-        return;
-      }
-
-      if (logonDisplayed) {
-        // LOGON screen displayed - honor express.e doPause() (express.e:29854)
-        // NOTE: We don't pass an onComplete callback because handleCommand (command.handler.ts:692-693)
-        // automatically calls advanceDisplayFlow() when pagination completes in a display flow state.
-        // Passing a callback that calls handleCommand would cause DOUBLE advancement (BULL displays twice).
-        // CRITICAL: Only call doPause if displayScreen didn't already set up a pause (via ~SP MCI)
-        if (!session.paginatedScreen) {
-console.log('[LOGIN] LOGON displayed, adding pause per express.e:29854');
-          doPause(socket, session);
-        } else {
-console.log('[LOGIN] LOGON displayed with built-in pause (~SP), skipping doPause');
-        }
-console.log('[LOGIN] Pause set up, waiting for user input to continue');
-        return;
-      }
-
-      // No LOGON screen - immediately trigger the bulletin display flow
-console.log('[AUTH] =============================================');
-console.log('[AUTH] USERNAME/PASSWORD LOGIN - Showing bulletin flow');
-console.log('[AUTH] subState:', session.subState);
-console.log('[AUTH] LOGON screen displayed:', logonDisplayed);
-console.log('[AUTH] =============================================');
-      const { handleCommand } = require('../handlers/command.handler');
-      await handleCommand(socket, session, '');
     } catch (error) {
 console.error('Socket login error:', error);
       SysopDebugUtil.debug(
@@ -1195,20 +746,12 @@ console.error('New user response error:', error);
   });
 
   // Password reset flow handler - express.e:29152-29213
-  // express.e:29193-29195 / 29263-29264 — when the password-reset flow ends
-  // in rejection (user declined, wrong code, missing email, mail send failed),
-  // express.e runs the PWFAIL syscmd then jumps to logoffErr which writes
-  // "\t* Password Failure *" to CallersLog. Same handler used by both the
-  // "no email available" branch above and the rejection paths below.
+  // The PWFAIL-on-rejection helper lives in services/login-post.service.ts
+  // (`runPwfailAndLogoff`) so telnet/SSH share the same disconnect+log
+  // semantics. Locally we just bind socket + session to it.
   const runPwfailAndLogoff = async (message: string): Promise<void> => {
-    try {
-      const { runSysCommand } = require('../handlers/command-execution.handler');
-      await runSysCommand(socket, session, 'PWFAIL', '');
-    } catch (err) {
-      console.error('[LOGIN] PWFAIL syscmd failed:', err);
-    }
-    callersLogManager.logActivity(session.nodeId || 1, '\t* Password Failure *');
-    beginLogoff(socket, session, { message });
+    const { runPwfailAndLogoff: sharedRun } = await import('../services/login-post.service');
+    return sharedRun(socket, session, message);
   };
 
   socket.on('password-reset-input', async (data: { input: string }) => {
