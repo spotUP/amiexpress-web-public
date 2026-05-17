@@ -122,39 +122,14 @@ export class TelnetConnection extends EventEmitter {
    * Based on express.e:2386-2508
    */
   private handleData(data: Buffer): void {
-    // ZMODEM bypass: when a binary file transfer is in progress, the
-    // wire carries raw ZMODEM frames that legitimately contain NUL
-    // (0x00) and IAC (0xFF) bytes. The full IAC state-machine below
-    // would eat both and corrupt frames. We still MUST collapse the
-    // RFC-854 IAC-IAC → 0xFF doubling, though: every ZMODEM-over-telnet
-    // sender (SyncTerm, MuffinTerm, etc.) escapes a literal 0xFF byte
-    // in file data as the pair 0xFF 0xFF. If we forward the pair raw,
-    // the receiver (sz/rz / browser ZMODEM) sees two bytes where one
-    // was sent, the CRC fails, and the transfer aborts (which is what
-    // caused our SyncTerm uploads to drop to 0% with "Bad CRC" /
-    // ZRPOS retries despite the bytes flowing fine end-to-end).
-    if ((this.session as any)?.transferRawActive) {
-      if (data.indexOf(0xff) === -1) {
-        this.emit('data', data);
-        return;
-      }
-      // Collapse IAC IAC -> IAC. Other IAC sequences shouldn't appear
-      // during a transfer (clients suppress negotiation while ZMODEM
-      // is active), but if a stray IAC <opt> arrives mid-transfer we
-      // pass it through as a 2-byte sequence — better than dropping
-      // bytes and corrupting the frame alignment.
-      const out: number[] = [];
-      for (let i = 0; i < data.length; i++) {
-        if (data[i] === 0xff && i + 1 < data.length && data[i + 1] === 0xff) {
-          out.push(0xff);
-          i++; // skip second IAC
-        } else {
-          out.push(data[i]);
-        }
-      }
-      this.emit('data', Buffer.from(out));
-      return;
-    }
+    // ZMODEM transfer in progress: the wire carries raw binary frames
+    // containing NUL (0x00) and IAC (0xFF) bytes as legitimate data.
+    // Run the full IAC state machine so RFC 854 escape pairs (IAC IAC
+    // → 0xFF) collapse correctly and option-renegotiation IAC sequences
+    // are honored, but suppress NUL stripping — NUL is valid file data
+    // and stripping it corrupts the CRC. The flag is read inside the
+    // NORMAL state below.
+    const rawTransfer = !!(this.session as any)?.transferRawActive;
 
     const output: number[] = [];
 
@@ -165,8 +140,9 @@ export class TelnetConnection extends EventEmitter {
         case IACState.NORMAL:
           if (byte === IAC) {
             this.iacState = IACState.IAC_SEEN;
-          } else if (byte === 0) {
+          } else if (byte === 0 && !rawTransfer) {
             // Telnet clients often send CR NUL; ignore NUL padding
+            // (but NOT during ZMODEM — NUL is valid binary data).
           } else {
             output.push(byte);
           }
