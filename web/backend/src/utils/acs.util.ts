@@ -464,9 +464,18 @@ export function initializeSecurity(session: any): void {
 
   // Load ACS access files if not already loaded
   if (!isAcsLoaded()) {
-    // BBS root contains the Access/ directory
-    // Server runs from web/backend/, so ../../ reaches the project root
-    const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '..', '..');
+    // BBS root contains the Access/ directory. On dev (localhost) the
+    // BBS lives at the project root, so cwd-relative ../.. works. On
+    // production (docker) the BBS data is mounted at $BBS_DATA_DIR
+    // (/app/data/bbs), and cwd-relative ../.. lands on /app — which
+    // has no Access/ subdirectory, causing ALL ACS lookups to deny.
+    // That left sysop locked out of `j`, `who`, `b`, `r`, etc. on
+    // live for months. Honour BBS_ROOT, then BBS_DATA_DIR, then the
+    // dev-only cwd fallback.
+    const bbsRoot =
+      process.env.BBS_ROOT ||
+      process.env.BBS_DATA_DIR ||
+      path.resolve(process.cwd(), '..', '..');
     loadAcsAccessFiles(bbsRoot);
   }
 
