@@ -492,15 +492,6 @@ console.warn(`[LOGIN] User ${safeUsername} has slotNumber=0 (deleted account) â€
           return;
         }
 
-        // TODO(unify): the post-auth block that begins here (through
-        // ~line 1000+) is mirrored, with drift, in
-        // web/backend/src/handlers/command.handler.ts:1700+ for
-        // telnet/SSH. Right answer is to extract both into
-        // services/login-post.service.ts and have both transports call
-        // it as a 3-line wrapper. ~400 lines of careful refactor â€” not
-        // done yet. Until then, keep the two blocks behaviourally in
-        // sync (any new step here must also land in command.handler.ts).
-
         // Reset retry counter on successful login
         session.loginRetryCount = 0;
         ipBanManager.resetFailures(remoteAddress);
