@@ -929,12 +929,14 @@ console.error('[handleCommand] Error running queued screen commands:', error);
                 displayFlowLog('CONF_BULL set up internal pause/segments — yielding');
                 return;
               }
-              // Screen had no built-in pause and no pending segments: emit
-              // an explicit pause so the user gets a chance to read CONF_BULL
-              // before joinConference fires.
-              doPause(socket, session);
-              displayFlowLog('pause after CONF_BULL');
-              return;
+              // Screen had no built-in pause: fall through to joinConference.
+              // joinConference (or pauseDisplayFlow on its way out) will emit
+              // a single pause after the "Joining Conference: …" line.
+              // A previous version emitted a doPause HERE and then
+              // pauseDisplayFlow emitted another one after joinConference,
+              // producing back-to-back "(Pause)...Space To Resume:" prompts
+              // with nothing between them. Single pause is correct.
+              displayFlowLog('CONF_BULL shown, deferring pause to post-joinConference');
             }
           } catch (_) {}
         }
