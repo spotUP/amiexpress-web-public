@@ -1722,6 +1722,30 @@ console.log('   Current state:', session.state);
           const result = await authUseCase.authenticate(username, password);
 
           if (!result.success) {
+            // express.e:29207-29208 — log each invalid attempt (masked).
+            // Web mirrors this at auth-socket-handlers.ts; aligning the
+            // two transports per the unification plan.
+            const { callersLogManager: clm } = require('../services/CallersLogManager');
+            clm.logActivity(session.nodeId || 1, '\tPassword Failure (xxxx)');
+            session.loginRetryCount = (session.loginRetryCount || 0) + 1;
+
+            const { getMaxPasswordFails } = require('../services/password-policy.util');
+            const maxFails = getMaxPasswordFails();
+            if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
+              // express.e:29193-29195 + 29263-29264 — PWFAIL syscmd
+              // then logoffErr writes '\t* Password Failure *' and
+              // disconnects. Same path web takes at
+              // auth-socket-handlers.ts:458-462.
+              emitText(socket, '\r\n\x1b[33mExcessive Password Failure\x1b[0m\r\n\r\n');
+              const { runPwfailAndLogoff } = await import('../services/login-post.service');
+              await runPwfailAndLogoff(
+                socket,
+                session,
+                '\r\nToo Many Errors, Goodbye!\r\n',
+              );
+              return;
+            }
+
             emitPrompt(socket, '\r\nInvalid PassWord\r\nUsername: ');
             session.tempData.loginPhase = 'username';
             session.tempData.loginUsername = '';

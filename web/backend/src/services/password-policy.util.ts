@@ -87,6 +87,35 @@ export async function validateNewPassword(
 }
 
 /**
+ * Read the system_config `max_password_fails` value. -1 means "no cap";
+ * any positive integer is the per-session ceiling of failed password
+ * attempts before the connection is dropped via runPwfailAndLogoff.
+ *
+ * Extracted from the duplicate inline implementations in
+ * auth-socket-handlers.ts:77 and command.handler.ts (telnet/SSH path)
+ * so both transports honour the same cap.
+ */
+export function getMaxPasswordFails(): number {
+  try {
+    if (db && typeof db.getConfigRepository === "function") {
+      const repo = db.getConfigRepository();
+      if (repo && typeof repo.getSystemConfig === "function") {
+        const sys = repo.getSystemConfig();
+        if (typeof sys?.max_password_fails === "number") {
+          return sys.max_password_fails;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(
+      "[AUTH] Unable to load max_password_fails from config:",
+      error,
+    );
+  }
+  return -1;
+}
+
+/**
  * Load the current system password policy from the DB. The values come
  * from system_config (kept in sync with bbsConfig.info on save). Either
  * caller (forced-change or email-reset) reads via this helper to avoid
