@@ -169,6 +169,12 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       (session as any).transferRawSink = (buf: Buffer) => lrzManager.handleInput(buf);
       (session as any).transferRawSend = sender;
       (session as any).transferManager = lrzManager;
+      // Park the session in FILES_UPLOAD so the post-command flow
+      // does NOT re-render the menu prompt while rz is still
+      // negotiating ZMODEM with the peer. The menu prompt bytes
+      // mid-transfer corrupted the wire and rz aborted with code 128.
+      // onComplete restores subState=DISPLAY_MENU when rz exits.
+      session.subState = LoggedOnSubState.FILES_UPLOAD;
       socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
       lrzManager.start();
       return;

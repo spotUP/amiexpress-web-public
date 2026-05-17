@@ -150,6 +150,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       (session as any).transferRawActive = true;
       (session as any).transferRawSink = (buf: Buffer) => lrzManager.handleInput(buf);
       (session as any).transferManager = lrzManager;
+      // Park in FILES_UPLOAD; see transfer-misc-commands.handler.ts:RZ
+      // path comment for rationale.
+      session.subState = LoggedOnSubState.FILES_UPLOAD;
       socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
       lrzManager.start();
       return;
@@ -270,6 +273,11 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
       (session as any).transferRawActive = true;
       (session as any).transferRawSink = (buf: Buffer) => lrzManager.handleInput(buf);
       (session as any).transferManager = lrzManager;
+      // Park in FILES_DOWNLOAD so the post-command flow doesn't
+      // render the menu prompt mid-transfer (would corrupt the wire
+      // with text bytes between ZMODEM frames). onComplete restores
+      // DISPLAY_MENU when sz exits.
+      session.subState = LoggedOnSubState.FILES_DOWNLOAD;
       socket.emit('ansi-output', `\r\nStarting ZMODEM send (lrzsz)...\r\n`);
       console.log(`[ZMODEM-DL ${ctxId}] using lrzsz, spawning sz`);
       lrzManager.start();
