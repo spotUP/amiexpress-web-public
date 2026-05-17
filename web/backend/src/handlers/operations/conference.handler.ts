@@ -309,10 +309,74 @@ console.warn('[joinConference] saveMsgPointers error:', err);
   }
 
   if (!silent) {
-    // express.e:5056-5061 - CONF_BULL screen and doPause are handled by the caller
-    // (advanceDisplayFlow AUTO_REJOIN block) BEFORE joinConference is called.
-    // This prevents non-blocking doPause from racing with the "Joining Conference" output.
+    // express.e:5056-5061 — when confScan=FALSE, joinConf displays
+    // SCREEN_CONF_BULL and pauses BEFORE the "Joining Conference"
+    // line. doPause in express.e BLOCKS until keypress; in our async
+    // model it yields and the rest of the join must resume on
+    // dismissal. We split into two parts: showCONF_BULL+pause, then
+    // continueJoin on pause-dismissal (or immediately if no pause).
+    //
+    // A previous version moved CONF_BULL out to the caller; only the
+    // AUTO_REJOIN display-flow branch put it back, so manual `j N`
+    // via handleJoinConferenceCommand → joinConference skipped the
+    // BULL entirely. Putting it back inline matches express.e 1:1.
+    if (!confScan) {
+      // currentMenuName must be cleared so MCI codes inside CONF_BULL
+      // that reference the menu name don't render the prior conf's
+      // stale value (express.e:5057 StrCopy(currentMenuName,'')).
+      (session as any).currentMenuName = '';
+      const shown = await displayScreen(socket, session, getConfScreenName(), true, /* silent */ true);
+      if (shown) {
+        const { doPause } = require('../screen.handler');
+        // If displayScreen installed its own pagination/segment pause
+        // (~SP inside the bull), don't stack another doPause. Either
+        // way, schedule continueJoinAfterBull as the dismissal
+        // continuation so the rest of the join runs on user input.
+        const continuation = () =>
+          continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom).catch((err) =>
+            console.error('[joinConference] continueJoinAfterBull failed:', err),
+          );
+        if (session.paginatedScreen) {
+          // Reuse the screen's existing paginatedScreen pause; just
+          // attach our continuation so it fires on dismissal.
+          (session.paginatedScreen as any).onComplete = continuation;
+        } else if (session.screenSegments) {
+          // Segments will doPause between each; attach continuation
+          // to the LAST segment's dismissal via a guarded callback.
+          (session.screenSegments as any).onComplete = continuation;
+        } else {
+          doPause(socket, session, continuation);
+        }
+        return true; // yield until the user dismisses the pause
+      }
+    }
 
+    // No CONF_BULL to show (or confScan=TRUE) — run the tail inline.
+    await continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom);
+  }
+
+  return true;
+}
+
+/**
+ * Post-CONF_BULL continuation for joinConference — emits the
+ * "Joining Conference:" line, runs auto-rejoin stats, loads flagged
+ * files, sets menuPause + DISPLAY_MENU. Extracted so doPause's
+ * onComplete callback can resume the flow after CONF_BULL is
+ * dismissed (express.e:5056-5061 blocks at doPause; our async model
+ * yields and resumes via the pagination dismissal path).
+ */
+async function continueJoinAfterBull(
+  socket: any,
+  session: BBSSession,
+  conference: any,
+  messageBase: any,
+  messageBases: any[],
+  confId: number,
+  auto: boolean,
+  mailStat: any,
+  isCustom: boolean,
+): Promise<void> {
     // express.e:5008 - QUIET_JOIN suppresses join output (bbsConfig tooltype).
     // When set, the leading \r\n, "Joining Conference:" / "Auto-ReJoined"
     // message, and the message-stats block are all skipped.
@@ -390,7 +454,15 @@ console.warn('[joinConference] saveMsgPointers error:', err);
     // Move to menu display
     console.log(`[JOIN] Setting subState to DISPLAY_MENU`);
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-  }
 
-  return true;
+    // After the continuation runs (from a pause-dismissal callback),
+    // the BBS sits in DISPLAY_MENU with menuPause=true. Kick the
+    // display-flow loop so the menu pause + render fires now instead
+    // of waiting for the next user input.
+    try {
+      const { advanceDisplayFlow } = require('../command.handler');
+      await advanceDisplayFlow(socket, session);
+    } catch (err) {
+      console.error('[continueJoinAfterBull] advanceDisplayFlow failed:', err);
+    }
 }
