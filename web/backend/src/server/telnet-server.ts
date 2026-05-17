@@ -122,6 +122,18 @@ export class TelnetConnection extends EventEmitter {
    * Based on express.e:2386-2508
    */
   private handleData(data: Buffer): void {
+    // ZMODEM bypass: when a binary file transfer is in progress, the
+    // wire carries raw ZMODEM frames that legitimately contain NUL
+    // (0x00) and IAC (0xFF) bytes. The IAC state-machine below would
+    // eat both, corrupting the frame and stalling sz/rz. Pass the
+    // bytes through untouched and let the transfer manager handle
+    // protocol-level escaping (sz -e flag handles outgoing IAC; the
+    // client is responsible for incoming IAC if it cares).
+    if ((this.session as any)?.transferRawActive) {
+      this.emit('data', data);
+      return;
+    }
+
     const output: number[] = [];
 
     for (let i = 0; i < data.length; i++) {
