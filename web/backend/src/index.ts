@@ -1232,27 +1232,36 @@ console.error(
   const sendWelcomeMessage = async () => {
     let usedFallback = true;
     try {
-      console.log(
-        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: trying FRONTEND syscmd; session=${connection.session ? "present" : "MISSING"}`,
-      );
       const { runSysCommand } = await import(
         "./handlers/command-execution.handler"
       );
-      const result = await runSysCommand(
-        emitter as any,
-        connection.session as any,
-        "FRONTEND",
-        "",
-      );
-      console.log(
-        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: FRONTEND syscmd returned ${result}`,
-      );
+      const sess = connection.session as any;
+      // Pre-login: there is no logged-in user, so the access-level check
+      // in command-execution.handler would reject any syscmd with
+      // ACCESS>0. The handler honours `session.executingScreenCommand`
+      // as a "privileged pre-login auto-dispatch" flag (used for
+      // V-AWAIT screen commands during the AWAIT state). Reuse it here
+      // so FRONTEND runs even when the door's .info specifies an
+      // ACCESS line.
+      const hadFlag = sess?.executingScreenCommand;
+      if (sess) sess.executingScreenCommand = true;
+      let result: any = 0;
+      try {
+        result = await runSysCommand(
+          emitter as any,
+          sess,
+          "FRONTEND",
+          "",
+        );
+      } finally {
+        if (sess) sess.executingScreenCommand = hadFlag;
+      }
       if (typeof result === "number" && result > 0) {
         usedFallback = false;
       }
     } catch (err) {
-      console.log(
-        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: FRONTEND syscmd threw: ${(err as Error).message}`,
+      console.error(
+        `[${type.toUpperCase()}-WELCOME] FRONTEND syscmd threw: ${(err as Error).message}`,
       );
     }
     if (usedFallback) {
