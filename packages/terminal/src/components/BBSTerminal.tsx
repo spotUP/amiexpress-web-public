@@ -573,6 +573,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       fontFamily: XTERM_CONFIG.fontFamily,
       fontSize: fontSize,
       lineHeight: XTERM_CONFIG.lineHeight,
+      letterSpacing: XTERM_CONFIG.letterSpacing,
       theme: XTERM_CONFIG.theme,
       ...XTERM_CONFIG.options,
       convertEol: false,
@@ -2105,6 +2106,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.options.fontFamily = fontFamily;
       term.options.fontSize = size;
       term.options.lineHeight = lineHeight;
+      term.options.letterSpacing = XTERM_CONFIG.letterSpacing;
       normalFont.current = fontFamily;
       console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', lineHeight);
     });
@@ -2126,6 +2128,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.options.fontFamily = fontFamily;
       term.options.fontSize = size;
       term.options.lineHeight = lineHeight;
+      term.options.letterSpacing = XTERM_CONFIG.letterSpacing;
       normalFont.current = fontFamily;
       console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', lineHeight);
     });
