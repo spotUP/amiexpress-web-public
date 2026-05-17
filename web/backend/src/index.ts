@@ -1256,6 +1256,9 @@ console.error(
       } finally {
         if (sess) sess.executingScreenCommand = hadFlag;
       }
+      console.log(
+        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: FRONTEND syscmd returned ${result}`,
+      );
       if (typeof result === "number" && result > 0) {
         usedFallback = false;
       }
