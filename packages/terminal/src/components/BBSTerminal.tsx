@@ -77,7 +77,7 @@ export interface BBSTerminalRef {
  */
 export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   backendUrl,
-  fontSize = 18,
+  fontSize = 16,
   className = '',
   showConnectionError = true,
   onConnectionError,

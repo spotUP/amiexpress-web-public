@@ -79,14 +79,8 @@ export const XTERM_CONFIG = {
   /** Default BBS font family - includes Unicode symbol fonts for braille/special chars */
   fontFamily: 'mosoul, "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", "Courier New", monospace',
 
-  /**
-   * Default font size. Bumped from 16 → 18 to compensate for the
-   * letterSpacing: -3 squeeze: each cell is 3px narrower, so the
-   * 80-column row was rendering ~240px narrower than the container.
-   * The bigger glyph plus the squeeze lands the row width back close
-   * to the pre-squeeze visual size.
-   */
-  fontSize: 18,
+  /** Default font size */
+  fontSize: 16,
 
   /**
    * Line height multiplier. Two contradictory constraints to balance:
