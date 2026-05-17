@@ -160,13 +160,30 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
 }
 
 function startZmodemDownload(socket: any, session: BBSSession, files: string[]): void {
+  const ctxId = `zd-${session.nodeId || 0}-${Date.now()}`;
+  console.log(`[ZMODEM-DL ${ctxId}] startZmodemDownload entry files=${JSON.stringify(files)}`);
+
   if (!files || files.length === 0) {
+    console.log(`[ZMODEM-DL ${ctxId}] no files, aborting`);
     socket.emit('ansi-output', '\r\nNo files available for download.\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
+  // Verify each file exists before starting the ZMODEM session — otherwise
+  // the client opens the dialog, the manager tries to read the missing
+  // file, and the session aborts silently.
+  const fsSync = require('fs');
+  const missing = files.filter((f) => { try { return !fsSync.existsSync(f); } catch { return true; } });
+  if (missing.length > 0) {
+    console.warn(`[ZMODEM-DL ${ctxId}] missing files: ${JSON.stringify(missing)}`);
+    socket.emit('ansi-output', `\r\nDownload error — files not found: ${missing.map((p) => path.basename(p)).join(', ')}\r\n`);
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
   const transport = getTransferTransport(session);
+  console.log(`[ZMODEM-DL ${ctxId}] transport.type=${transport.type} hasSend=${!!transport.send} transferRawSend=${typeof (session as any).transferRawSend}`);
   if (!transport.send) {
     transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
   }
@@ -177,6 +194,7 @@ function startZmodemDownload(socket: any, session: BBSSession, files: string[]):
     direction: 'download',
     paths: files,
     onComplete: (ok, detail) => {
+      console.log(`[ZMODEM-DL ${ctxId}] onComplete ok=${ok} sent=${JSON.stringify(detail?.sent || [])}`);
       const list = (detail?.sent || files).map((p) => path.basename(p)).join(', ');
       socket.emit(
         'ansi-output',
@@ -193,15 +211,19 @@ function startZmodemDownload(socket: any, session: BBSSession, files: string[]):
   (session as any).transferManager = manager;
 
   if (transport.type === 'web') {
+    console.log(`[ZMODEM-DL ${ctxId}] emitting transfer-raw:init for web`);
     socket.emit('transfer-raw:init', {
       direction: 'download',
       paths: files,
     });
   } else {
+    console.log(`[ZMODEM-DL ${ctxId}] telnet/SSH: emitting Starting ZMODEM banner`);
     socket.emit('ansi-output', `\r\nStarting ZMODEM send... (sz)\r\n`);
   }
 
+  console.log(`[ZMODEM-DL ${ctxId}] manager.start() — sending ZRQINIT next`);
   manager.start();
+  console.log(`[ZMODEM-DL ${ctxId}] manager.start() returned, transferRawActive=${(session as any).transferRawActive}`);
 }
 
 function shouldShowJoinConferenceList(screenPath?: string): boolean {
