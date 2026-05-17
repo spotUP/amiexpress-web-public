@@ -450,8 +450,18 @@ console.log('Too many login errors, disconnecting');
               return;
             }
 
-            // No reset available - disconnect.
-            // express.e:29634: plain text — STATE_LOGGING_OFF; RETURN.
+            // No reset available — express.e:29193-29195: runSysCommand('PWFAIL',
+            // '') then JUMP logoffErr (writes '\t* Password Failure *' to
+            // CallersLog and returns FAILURE). Show banner first.
+            socket.emit('ansi-output', '\r\n\x1b[33mExcessive Password Failure\x1b[0m\r\n\r\n');
+            try {
+              const { runSysCommand } = require('../handlers/command-execution.handler');
+              await runSysCommand(socket, session, 'PWFAIL', '');
+            } catch (err) {
+              console.error('[LOGIN] PWFAIL syscmd failed:', err);
+            }
+            // express.e:29263-29264 logoffErr.
+            callersLogManager.logActivity(session.nodeId || 1, '\t* Password Failure *');
             beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
@@ -464,6 +474,13 @@ console.log('Too many login errors, disconnecting');
             { username: safeUsername, retries: session.loginRetryCount, maxFails },
             DebugSeverity.WARNING
           );
+          // express.e:29207-29208 — callersLog('\tPassword Failure (\s)', tempStr).
+          // Mask the password attempt as 'xxxx'; express.e shows the real
+          // attempt only when the per-node tooltype SHOWPWFAIL is set, which
+          // we don't honour yet (intentional — passwords in logs is a foot-gun).
+          // AquaPWFail (the PWFAIL syscmd door) reads these lines to render
+          // the recent-failures display.
+          callersLogManager.logActivity(session.nodeId || 1, '\tPassword Failure (xxxx)');
           // express.e:29209 - aePuts('Invalid PassWord\b\n')
           // Match express.e: immediately re-prompt for password without asking for username again
           // Pass retryFrom='password' so frontend knows to keep username and only retry password
@@ -1169,6 +1186,22 @@ console.error('New user response error:', error);
   });
 
   // Password reset flow handler - express.e:29152-29213
+  // express.e:29193-29195 / 29263-29264 — when the password-reset flow ends
+  // in rejection (user declined, wrong code, missing email, mail send failed),
+  // express.e runs the PWFAIL syscmd then jumps to logoffErr which writes
+  // "\t* Password Failure *" to CallersLog. Same handler used by both the
+  // "no email available" branch above and the rejection paths below.
+  const runPwfailAndLogoff = async (message: string): Promise<void> => {
+    try {
+      const { runSysCommand } = require('../handlers/command-execution.handler');
+      await runSysCommand(socket, session, 'PWFAIL', '');
+    } catch (err) {
+      console.error('[LOGIN] PWFAIL syscmd failed:', err);
+    }
+    callersLogManager.logActivity(session.nodeId || 1, '\t* Password Failure *');
+    beginLogoff(socket, session, { message });
+  };
+
   socket.on('password-reset-input', async (data: { input: string }) => {
     try {
       const input = (data.input || '').trim().toUpperCase();
@@ -1183,16 +1216,16 @@ console.error('New user response error:', error);
           // Get user email
           const user = await db.getUserByUsername(session.passwordResetUsername || '');
           if (!user?.email) {
-            beginLogoff(socket, session, { message: '\r\n\x1b[31mNo email address on file.\x1b[0m\r\n' });
+            await runPwfailAndLogoff('\r\n\x1b[31mNo email address on file.\x1b[0m\r\n');
             return;
           }
 
           // Send reset code via email - express.e:29169-29172
           const emailSent = await mailOnPwdFail(user.email, resetCode);
           if (!emailSent) {
-            beginLogoff(socket, session, {
-              message: '\r\n\x1b[31mFailed to send reset code. Please contact the sysop.\x1b[0m\r\n',
-            });
+            await runPwfailAndLogoff(
+              '\r\n\x1b[31mFailed to send reset code. Please contact the sysop.\x1b[0m\r\n',
+            );
             return;
           }
 
@@ -1200,8 +1233,8 @@ console.error('New user response error:', error);
           socket.emit('ansi-output', '\r\nEnter reset code: ');
           session.passwordResetState = 'await_code';
         } else {
-          // User declined - disconnect.
-          beginLogoff(socket, session, { message: '\r\n\x1b[31mGoodbye!\x1b[0m\r\n' });
+          // express.e:29193-29195 — user declined reset → PWFAIL + logoffErr.
+          await runPwfailAndLogoff('\r\n\x1b[31mGoodbye!\x1b[0m\r\n');
         }
       } else if (session.passwordResetState === 'await_code') {
         // express.e:29173-29188 - Verify reset code
@@ -1213,8 +1246,8 @@ console.error('New user response error:', error);
           // Tell client to mask input
           socket.emit('mask-input', true);
         } else {
-          // express.e:29189-29195 - Wrong code, disconnect.
-          beginLogoff(socket, session, { message: '\r\n\x1b[31mInvalid reset code.\x1b[0m\r\n' });
+          // express.e:29189-29195 — wrong code → PWFAIL + logoffErr.
+          await runPwfailAndLogoff('\r\n\x1b[31mInvalid reset code.\x1b[0m\r\n');
         }
       } else if (session.passwordResetState === 'await_new_password') {
         // express.e:29196-29213 - Set new password
