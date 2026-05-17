@@ -135,34 +135,114 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         transport: { type: transportType, send: sender },
         direction: 'upload',
         paths: [playpen],
-        onComplete: (ok: boolean, detail: any) => {
+        onComplete: async (ok: boolean, detail: any) => {
           if (!ok) {
             socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
             session.subState = LoggedOnSubState.DISPLAY_MENU;
             session.menuPause = true;
             return;
           }
-          socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+          // Route through the web upload pipeline so every per-file
+          // step (DIZ extraction, file integrity test, move to
+          // FILES/LCFILES, DIRn append, FILES.BBS, user stats,
+          // conference stats, callersLog, BBSEvent, webhook) runs
+          // exactly as it would for a web upload. We synthesize the
+          // uploadContext that the web file picker normally builds,
+          // populate it with the files rz actually wrote (from the
+          // snapshot diff in lrzsz-transfer.service), then iterate
+          // processBatchFile per file followed by handleUploadBatchComplete.
           const received: string[] = detail?.received || [];
-          const ulFileCount = received.length;
-          let totalBytes = 0;
+          const fsSync = require('fs');
+          const pathMod = require('path');
+          const { db } = require('../../database');
+          const { config: appConfig } = require('../../config');
+          const { processBatchFile, handleUploadBatchComplete } =
+            require('../../server/file-socket-handlers');
+
+          // Determine target file area for this conference.
+          let fileArea: any = null;
           try {
-            const fsSync = require('fs');
-            for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
-          } catch (_) {}
-          const bytesKB = Math.floor(totalBytes / 1024);
-          const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
-          const mins    = Math.floor(ulTTTM / 60);
-          const secs    = ulTTTM % 60;
-          const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
-          const onlineBaud = (session as any).baudRate || 115200;
-          const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
-          const eff        = Math.floor((cps * 100) / baudDiv10);
-          socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${mins} minute(s). ${secs} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
-          const peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
-          socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+            const areas = await db.getFileAreas(session.currentConf);
+            fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
+          } catch (err: any) {
+            console.error('[ZMODEM-UL-RZ] getFileAreas failed:', err?.message || err);
+          }
+          if (!fileArea) {
+            socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+            return;
+          }
+
+          // Pre-populate uploadBatch with placeholder entries for each
+          // file rz received. processBatchFile uses uploadBatch.length
+          // to know when it's processing the last file (and then auto-
+          // calls handleUploadBatchComplete which clears tempData). An
+          // empty uploadBatch makes isLastFile true on EVERY iteration,
+          // so the first file would clear context and subsequent files
+          // bail with "Upload session lost". Real filenames come from
+          // the basename of each rz-written path; descriptions stay
+          // empty (FILE_ID.DIZ extraction will fill them when present).
+          const uploadBatch = received.map((fp: string) => ({
+            filename: pathMod.basename(fp),
+            description: '',
+            isPrivate: false,
+          }));
+
+          // Synthetic uploadContext mirroring the shape web's file picker
+          // installs (see web/backend/src/index.ts UploadSessionContext).
+          // batchUpload=true + webUploadMode=false makes processBatchFile
+          // take the auto-complete-on-last-file branch (line ~723), which
+          // funnels through handleUploadBatchComplete → runPostUpload.
+          session.tempData = {
+            uploadMode: true,
+            fileArea,
+            uploadSessionId: `rz-${Date.now()}`,
+            uploadBatch,
+            uploadCount: received.length,
+            uploadStartTime: ulStartTime,
+            webUploadMode: false,
+            batchUpload: true,
+            currentUploadIndex: 0,
+            filesProcessedCount: 0,
+            uploadedFiles: 0,
+            uploadedBytes: 0,
+            skipDizExtraction: false,
+          } as any;
+
+          for (let i = 0; i < received.length; i++) {
+            const fp = received[i];
+            let size = 0;
+            try { size = fsSync.statSync(fp).size; } catch (_) { continue; }
+            const name = pathMod.basename(fp);
+            (session.tempData as any).currentUploadIndex = i;
+            try {
+              await processBatchFile(socket, session, {
+                filename: name,
+                originalname: name,
+                size,
+                path: fp,
+              }, appConfig);
+            } catch (err: any) {
+              console.error(`[ZMODEM-UL-RZ] processBatchFile failed for ${name}:`, err?.message || err);
+            }
+            // The last iteration's processBatchFile auto-calls
+            // handleUploadBatchComplete and clears session.tempData.
+            // Stop walking — no more context to drive further calls.
+            if (!session.tempData?.uploadMode) break;
+          }
+
+          // Safety net: if processBatchFile didn't auto-complete (e.g.
+          // because every file errored), still run the summary.
+          if (session.tempData?.uploadMode) {
+            try {
+              await handleUploadBatchComplete(socket, session);
+            } catch (err: any) {
+              console.error('[ZMODEM-UL-RZ] handleUploadBatchComplete failed:', err?.message || err);
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              session.menuPause = true;
+            }
+          }
         },
       });
       (session as any).transferRawActive = true;
@@ -190,19 +270,19 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     },
     direction: 'upload',
     paths: [playpen],
-    onComplete: (ok, detail) => {
+    onComplete: async (ok, detail) => {
+      // Fallback path: zmodem.js JS implementation (used when lrzsz isn't
+      // installed AND for web's RZ entry point). Delegates to the same
+      // shared post-upload pipeline as the lrzsz onComplete above, so
+      // stats / callersLog / sysop notify / time credit stay identical
+      // across transports and implementations.
       if (!ok) {
         socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
         return;
       }
-
-      // express.e:19053 '\b\n\b\nFile Uploading Complete...\b\n'
-      socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
-
-      const received = detail?.received || [];
-      const ulFileCount = received.length;
+      const received: string[] = detail?.received || [];
       let totalBytes = 0;
       try {
         const fsSync = require('fs');
@@ -210,30 +290,19 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           try { totalBytes += fsSync.statSync(fp).size; } catch (_) {}
         }
       } catch (_) {}
-      const bytesKB    = Math.floor(totalBytes / 1024);
-      const ulTTTM     = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000)); // seconds
-      const minutes    = Math.floor(ulTTTM / 60);
-      const seconds    = ulTTTM % 60;
-      const cps        = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
+      const { runPostUpload } = require('../../services/post-upload.service');
       const onlineBaud = (session as any).baudRate || 115200;
+      const ulTTTM     = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
+      const cps        = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
       const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
       const eff        = Math.floor((cps * 100) / baudDiv10);
-
-      // express.e:19072 ' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.'
-      const statsLine = ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps, ${eff}% efficiency.`;
-      socket.emit('ansi-output', statsLine + '\r\n\r\n');
-
-      // express.e:19109: peff = (ulTTTM * 3 / 2) + 60 when files > 0 and time > 0
-      let peff = 0;
-      if (ulFileCount > 0 && ulTTTM > 0) {
-        peff = Math.floor((ulTTTM * 3) / 2) + 60;
-      }
-      const timeIncreasedMins = Math.floor(peff / 60);
-      // express.e:19127 'Time increased by \d mins.\b\n\b\n'
-      socket.emit('ansi-output', `Time increased by ${timeIncreasedMins} mins.\r\n\r\n`);
-
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = true;
+      await runPostUpload(socket, session, {
+        uploadStartTime: ulStartTime,
+        uploadedFiles: received.length,
+        uploadedBytes: totalBytes,
+        efficiencyPct: eff,
+        goodbyeAfter: false,
+      });
     },
   });
 
