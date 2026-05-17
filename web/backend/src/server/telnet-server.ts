@@ -64,6 +64,13 @@ enum IACState {
 export class TelnetConnection extends EventEmitter {
   private socket: Socket;
   private iacState: IACState = IACState.NORMAL;
+  /**
+   * RFC 854 CR-NUL state: when the previous emitted byte was 0x0d
+   * (CR), the next 0x00 (NUL) must be stripped as NVT padding. Only
+   * tracked during raw transfer (transferRawActive); outside of
+   * transfer the whole NUL is stripped unconditionally.
+   */
+  private lastWasCR: boolean = false;
   private iaccmd: number = 0;
   private nawsMode: number = 0;
   private nawsWidth: number = 80;
@@ -141,10 +148,19 @@ export class TelnetConnection extends EventEmitter {
           if (byte === IAC) {
             this.iacState = IACState.IAC_SEEN;
           } else if (byte === 0 && !rawTransfer) {
-            // Telnet clients often send CR NUL; ignore NUL padding
-            // (but NOT during ZMODEM — NUL is valid binary data).
+            // Telnet clients often send CR NUL; ignore NUL padding.
+          } else if (byte === 0 && rawTransfer && this.lastWasCR) {
+            // RFC 854 CR-NUL collapse: in NVT mode senders escape CR
+            // as `CR NUL`. The NUL is padding and MUST be stripped.
+            // MuffinTerm doesn't negotiate BINARY transmission, so
+            // it sends \r as \r\x00 even inside ZMODEM file data —
+            // corrupting the byte stream and breaking the CRC check.
+            // Standalone NULs (not preceded by CR) ARE valid binary
+            // data during a transfer, so we keep them.
+            this.lastWasCR = false;
           } else {
             output.push(byte);
+            this.lastWasCR = (byte === 0x0d);
           }
           break;
 
