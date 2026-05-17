@@ -2726,6 +2726,16 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
     if (session.paginatedScreen) {
       console.log('[executeAmigaDoor] Pause is active, skipping displayMainMenu (will resume via display flow)');
       fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor: SKIPPING displayMainMenu (pause active)\n`);
+    } else if (
+      session.subState === LoggedOnSubState.FILES_UPLOAD ||
+      session.subState === LoggedOnSubState.FILES_DOWNLOAD
+    ) {
+      // RETURNCOMMAND parked us in a transfer state (e.g. UL-LOGOFF
+      // → RZ → lrzsz running). Do NOT render the menu prompt — the
+      // prompt bytes mid-ZMODEM corrupt the wire and rz/sz aborts
+      // with code 128. The transfer's onComplete restores
+      // DISPLAY_MENU when the child exits.
+      console.log('[executeAmigaDoor] Transfer in progress, skipping displayMainMenu');
     } else {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = false;
