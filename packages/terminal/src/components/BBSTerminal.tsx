@@ -2095,12 +2095,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Unknown fonts fall back to 1.0 too; the BBS catalog only ships
       // bitmap fonts in this picker.
       const lineHeightMap: Record<string, number> = {
-        'mosoul': 1.05, 'MicroKnight': 1.05, 'MicroKnightPlus': 1.05,
-        'P0T-NOoDLE': 1.05, 'Topaz_a500': 1.05, 'Topaz_a1200': 1.05,
-        'TopazPlus_a500': 1.05, 'TopazPlus_a1200': 1.05,
+        'mosoul': 1.0, 'MicroKnight': 1.0, 'MicroKnightPlus': 1.0,
+        'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
+        'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
       };
       const fontFamily = `${fontName}, "Courier New", monospace`;
-      const lineHeight = lineHeightMap[fontName] ?? 1.05;
+      const lineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
       term.options.fontFamily = fontFamily;
@@ -2116,13 +2116,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[Font Preference] Received saved preference:', data.font);
       // See set-font handler above — bitmap fonts render gapless at 1.0.
       const lineHeightMap: Record<string, number> = {
-        'mosoul': 1.05, 'MicroKnight': 1.05, 'MicroKnightPlus': 1.05,
-        'P0T-NOoDLE': 1.05, 'Topaz_a500': 1.05, 'Topaz_a1200': 1.05,
-        'TopazPlus_a500': 1.05, 'TopazPlus_a1200': 1.05,
+        'mosoul': 1.0, 'MicroKnight': 1.0, 'MicroKnightPlus': 1.0,
+        'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
+        'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
       };
       const fontName = data.font;
       const fontFamily = `${fontName}, "Courier New", monospace`;
-      const lineHeight = lineHeightMap[fontName] ?? 1.05;
+      const lineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
       term.options.fontFamily = fontFamily;

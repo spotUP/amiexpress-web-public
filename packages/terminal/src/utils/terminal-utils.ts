@@ -96,7 +96,7 @@ export const XTERM_CONFIG = {
    * sweet spot — small enough that the pipe glyph's overflow still
    * bridges the row, large enough that G/C have ~1-2px between them.
    */
-  lineHeight: 1.05,
+  lineHeight: 1.0,
 
   /**
    * Inter-character spacing in pixels. Bitmap fonts have intrinsic
@@ -106,7 +106,7 @@ export const XTERM_CONFIG = {
    * cell flush against the previous, closing the gap. Values further
    * negative start to overlap glyphs.
    */
-  letterSpacing: -2,
+  letterSpacing: -3,
 
   /** BBS color theme (Amiga-style) */
   theme: {
