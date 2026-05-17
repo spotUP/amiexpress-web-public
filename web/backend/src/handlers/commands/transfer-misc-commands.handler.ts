@@ -123,6 +123,59 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     ((buf: Buffer) => socket.emit('transfer-raw:data', buf));
 
   const ulStartTime = Date.now();
+
+  // Telnet/SSH: hand off to lrzsz (canonical Forsberg/Ohse
+  // implementation) when available. Same pattern as startZmodemUpload
+  // and startZmodemDownload. Web keeps zmodem.js (in-browser).
+  if (transportType !== 'web') {
+    const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
+    if (isLrzszAvailable()) {
+      const lrzManager = new LrzszTransferManager({
+        session,
+        transport: { type: transportType, send: sender },
+        direction: 'upload',
+        paths: [playpen],
+        onComplete: (ok: boolean, detail: any) => {
+          if (!ok) {
+            socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+            return;
+          }
+          socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+          const received: string[] = detail?.received || [];
+          const ulFileCount = received.length;
+          let totalBytes = 0;
+          try {
+            const fsSync = require('fs');
+            for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
+          } catch (_) {}
+          const bytesKB = Math.floor(totalBytes / 1024);
+          const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
+          const mins    = Math.floor(ulTTTM / 60);
+          const secs    = ulTTTM % 60;
+          const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
+          const onlineBaud = (session as any).baudRate || 115200;
+          const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
+          const eff        = Math.floor((cps * 100) / baudDiv10);
+          socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${mins} minute(s). ${secs} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
+          const peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
+          socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = true;
+        },
+      });
+      (session as any).transferRawActive = true;
+      (session as any).transferRawSink = (buf: Buffer) => lrzManager.handleInput(buf);
+      (session as any).transferRawSend = sender;
+      (session as any).transferManager = lrzManager;
+      socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
+      lrzManager.start();
+      return;
+    }
+    console.warn('[ZMODEM-UL-RZ] lrzsz not installed, falling back to zmodem.js (may not interoperate)');
+  }
+
   const manager = new ZmodemTransferManager({
     session,
     transport: {
