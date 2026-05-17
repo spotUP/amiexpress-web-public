@@ -347,6 +347,14 @@ console.warn('[joinConference] saveMsgPointers error:', err);
         } else {
           doPause(socket, session, continuation);
         }
+        // CRITICAL: park subState OUTSIDE the display-flow loop so
+        // the outer `while (isDisplayFlowState(subState))` in
+        // advanceDisplayFlow exits cleanly and doesn't re-enter
+        // AUTO_REJOIN, which would re-invoke joinConference and
+        // reinstall a fresh BULL pause + onComplete — looping
+        // forever as the user dismisses each pause.
+        // continueJoinAfterBull restores DISPLAY_MENU on dismissal.
+        session.subState = LoggedOnSubState.READ_COMMAND;
         return true; // yield until the user dismisses the pause
       }
     }
