@@ -83,14 +83,20 @@ export const XTERM_CONFIG = {
   fontSize: 16,
 
   /**
-   * Line height multiplier. Amiga bitmap fonts (Topaz/mosoul/MicroKnight/
-   * P0T-NOoDLE) are designed to render gapless — pipe/box characters
-   * connect vertically across rows for ASCII-art continuity. Any value
-   * above 1.0 inserts a visible gap that breaks vertical lines, exactly
-   * the artefact the BBS author wanted to avoid. The default font is
-   * mosoul (bitmap), so 1.0 is correct here.
+   * Line height multiplier. Two contradictory constraints to balance:
+   *   1. Pipe / box-drawing chars MUST connect vertically across rows
+   *      (the bitmap font's pipe glyph fills its cell and slightly
+   *      overflows into adjacent rows so neighbours touch).
+   *   2. Regular chars (G/C/etc.) should have ~1-2px breathing room
+   *      between rows; readers expect that visual rhythm.
+   *
+   * 1.0 makes cells exactly fontSize tall — pipes connect but regular
+   * chars touch (no breathing room). 1.2 (the old value) gives plenty
+   * of breathing room but breaks the pipe connection. 1.1 is the
+   * sweet spot — small enough that the pipe glyph's overflow still
+   * bridges the row, large enough that G/C have ~1-2px between them.
    */
-  lineHeight: 1.0,
+  lineHeight: 1.1,
 
   /**
    * Inter-character spacing in pixels. Bitmap fonts have intrinsic
