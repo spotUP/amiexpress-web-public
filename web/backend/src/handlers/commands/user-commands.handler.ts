@@ -88,7 +88,7 @@ function getTransferTransport(session: BBSSession): TransferTransport {
   return { type: transportType, send };
 }
 
-function startZmodemUpload(socket: any, session: BBSSession): void {
+export function startZmodemUpload(socket: any, session: BBSSession): void {
   const bbsRoot =
     (session as any).bbsPath ||
     process.env.BBS_DATA_DIR ||

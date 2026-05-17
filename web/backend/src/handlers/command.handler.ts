@@ -3953,21 +3953,17 @@ function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter
   if (session.tempData) {
     session.tempData.goodbyeAfterTransfer = goodbyeAfter;
   }
-  // Telnet/SSH transports can't accept the browser-style `show-file-upload`
-  // socket event (no DOM file picker). Without this guard the BBS sat at
-  // an invisible UPLOAD_OKAY_CONFIRM → FILES_UPLOAD state until the user
-  // killed the connection. Mirror express.e:17776's user-feedback (an
-  // explicit message and a clean return to the menu) until real Zmodem-
-  // over-telnet support lands.
+  // Telnet/SSH transports use ZMODEM directly (the same flow web uses
+  // via socket events). Hand off to startZmodemUpload which sets up a
+  // ZmodemTransferManager bound to session.transferRawSend (already
+  // installed by setupTelnetSSHHandler), primes transferRawSink for
+  // inbound ZMODEM data, and prompts the user to start sending with
+  // rz. Browser/web clients keep using the show-file-upload event
+  // (DOM file picker) below.
   const transport = (session as any).connectionType;
   if (transport === 'telnet' || transport === 'ssh') {
-    emitText(
-      socket,
-      '\r\nUpload over telnet/SSH is not supported on this BBS.\r\n' +
-      'Use the web client to upload files. Aborting.\r\n\r\n',
-    );
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.tempData = undefined;
+    const { startZmodemUpload } = require('./commands/user-commands.handler');
+    startZmodemUpload(socket, session);
     return;
   }
   const batch = session.tempData?.uploadBatch || [];
