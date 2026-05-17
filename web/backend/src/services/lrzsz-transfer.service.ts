@@ -75,6 +75,15 @@ export class LrzszTransferManager {
   private stderrBuf: string = '';
   private timer: NodeJS.Timeout | null = null;
   private done: boolean = false;
+  private inboundBuf: Buffer = Buffer.alloc(0);
+  /**
+   * Snapshot of filenames present in the upload cwd at spawn time.
+   * Used at finish() to compute the actual set of files this transfer
+   * produced — readdirSync alone would include every pre-existing file
+   * in the playpen, which is how the earlier "31 file(s)" inflation
+   * happened when prior failed sessions had left stragglers.
+   */
+  private preTransferFiles: Set<string> = new Set();
 
   constructor(opts: LrzszTransferOptions) {
     this.session = opts.session;
@@ -93,6 +102,20 @@ export class LrzszTransferManager {
   start(): void {
     const args = this.buildArgs();
     console.log(`[lrzsz ${this.direction}] spawning: ${this.binary} ${args.join(' ')}`);
+
+    // Reset stdin tee for this transfer so the next diff is clean.
+    try { fs.writeFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, ''); } catch (_e) { /* ignore */ }
+
+    // Snapshot upload cwd so finish() can compute the diff (files
+    // rz actually wrote during THIS transfer).
+    if (this.direction === 'upload') {
+      const cwdSnap = this.resolveCwd();
+      if (cwdSnap) {
+        try {
+          for (const n of fs.readdirSync(cwdSnap)) this.preTransferFiles.add(n);
+        } catch { /* directory may not exist yet — that's fine */ }
+      }
+    }
 
     const cwd = this.resolveCwd();
     if (cwd) {
@@ -129,7 +152,7 @@ export class LrzszTransferManager {
     // \r\n\x11 which every client recognises.
     proc.stdout?.on('data', (chunk: Buffer) => {
       try {
-        const normalized = this.normalizeHexHeaderTrailers(chunk);
+        const normalized = this.normalizeHexHeaderTrailers(this.patchZrinitFlags(chunk));
         const preview = normalized.slice(0, 64).toString('hex');
         console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
         this.transport.send(normalized);
@@ -182,11 +205,14 @@ export class LrzszTransferManager {
       return;
     }
     try {
-      // Diagnostic: log first 64 bytes of inbound data per chunk. Helps
-      // diagnose why rz exits 128 immediately without receiving the file.
-      const preview = data.slice(0, 64).toString('hex');
-      console.log(`[lrzsz ${this.direction}] stdin <- ${data.length}B: ${preview}${data.length > 64 ? '...' : ''}`);
-      this.proc.stdin.write(data);
+      const rewritten = this.direction === 'upload' ? this.rewriteMuffintermZfile(data) : data;
+      if (rewritten.length === 0) return; // buffering for fragmentation
+      const preview = rewritten.slice(0, 64).toString('hex');
+      console.log(`[lrzsz ${this.direction}] stdin <- ${rewritten.length}B: ${preview}${rewritten.length > 64 ? '...' : ''}`);
+      try {
+        require('fs').appendFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, rewritten);
+      } catch (_e) { /* ignore */ }
+      this.proc.stdin.write(rewritten);
     } catch (err) {
       console.error(`[lrzsz ${this.direction}] stdin.write failed:`, err);
     }
@@ -217,6 +243,143 @@ export class LrzszTransferManager {
    * delimiter), so the targeted replace is safe and doesn't corrupt
    * binary file content.
    */
+  /**
+   * lrzsz advertises CANFC32 (0x20) in its ZRINIT capabilities, then
+   * incorrectly rejects subpackets sent with ZBIN (CRC16) framing as
+   * "Bad CRC" — it tries to verify them as CRC32. SyncTerm avoids
+   * this by always sending ZBIN32; MuffinTerm (and other strict
+   * clients) correctly use ZBIN per-frame, hit the rz bug, and the
+   * transfer dies in a ZNAK loop. Strip CANFC32 from rz's ZRINIT so
+   * senders never opt into CRC32 mode in the first place.
+   *
+   * ZRINIT on wire is the HEX header:
+   *   ** \x18 B 01 00000023 XXXX \r \x8a \x11
+   * Replace ZF0 byte (the "23") with "03" (clears bit 0x20 = CANFC32,
+   * keeps CANFDX 0x01 + CANOVIO 0x02) and recompute the CRC16.
+   * New header CRC for type=0x01, flags=0x00000003 is 0x9a32.
+   */
+  private patchZrinitFlags(chunk: Buffer): Buffer {
+    const orig = Buffer.from('2a2a18423031303030303030323362653530', 'hex');
+    const fixed = Buffer.from('2a2a18423031303030303030303339613332', 'hex');
+    const idx = chunk.indexOf(orig);
+    if (idx === -1) return chunk;
+    const out = Buffer.from(chunk);
+    fixed.copy(out, idx);
+    console.log(`[lrzsz ${this.direction}] patched ZRINIT: cleared CANFC32 at offset ${idx}`);
+    return out;
+  }
+
+  /**
+   * MuffinTerm terminates its ZFILE name/info subpacket with ZCRCE (0x68)
+   * — "frame ends, header packet follows". Per Forsberg the spec-compliant
+   * marker is ZCRCW (0x6b) which signals "ZACK expected before more data",
+   * since the sender must wait for the receiver's ZRPOS/ZSKIP before
+   * sending file content. lrzsz `rz` strictly requires ZCRCW for ZFILE
+   * and NAKs anything else, so the transfer dies in a retry loop.
+   *
+   * Rewrite the marker byte in-stream and recompute the 2-byte CRC16.
+   * Only touches ZBIN ZFILE subpackets (the `*\x18A\x18D` prefix is
+   * specific to ZBIN + ZFILE). SyncTerm and Forsberg sz both already
+   * send ZCRCW so the matcher is a no-op for compliant senders.
+   *
+   * Handles fragmentation: if a chunk doesn't yet contain the full
+   * subpacket terminator, buffer and wait for more bytes.
+   */
+  private rewriteMuffintermZfile(chunk: Buffer): Buffer {
+    // Append incoming chunk to any unpassed bytes from prior fragments.
+    const buf = Buffer.concat([this.inboundBuf, chunk]);
+    this.inboundBuf = Buffer.alloc(0);
+
+    // Look for ZBIN ZFILE prefix: 2a 18 41 18 44
+    const prefix = Buffer.from([0x2a, 0x18, 0x41, 0x18, 0x44]);
+    const startIdx = buf.indexOf(prefix);
+    if (startIdx < 0) return buf;
+
+    // After the prefix, scan forward for the ZDLE+ZCRCE terminator (18 68).
+    // Subpacket data may include ZDLE-escaped bytes, but in practice
+    // MuffinTerm's ZFILE has filename + metadata + NUL padding — no escapes.
+    // Limit scan distance to avoid runaway on garbage.
+    const scanEnd = Math.min(buf.length - 2, startIdx + 4096);
+    let termIdx = -1;
+    for (let i = startIdx + prefix.length; i < scanEnd; i++) {
+      if (buf[i] === 0x18 && buf[i + 1] === 0x68) {
+        termIdx = i;
+        break;
+      }
+    }
+    if (termIdx < 0) {
+      // Not enough bytes yet (or no terminator); buffer and wait.
+      this.inboundBuf = buf;
+      return Buffer.alloc(0);
+    }
+
+    // Need 2 more bytes after termIdx+1 for the CRC.
+    if (termIdx + 3 >= buf.length) {
+      this.inboundBuf = buf;
+      return Buffer.alloc(0);
+    }
+
+    // Decode subpacket data (strip ZDLE escapes) starting after the ZFILE
+    // header. The header is 5 escape pairs (type + 4 ZF bytes) + 2 CRC
+    // bytes (one possibly ZDLE-escaped). Find the end of the header by
+    // counting bytes after the prefix until 7 decoded bytes are consumed.
+    const headerStart = startIdx + 3; // after `*\x18A`
+    let decodedHdrBytes = 0;
+    let i = headerStart;
+    while (decodedHdrBytes < 7 && i < termIdx) {
+      if (buf[i] === 0x18) {
+        i += 2; // ZDLE-escaped pair → 1 decoded byte
+      } else {
+        i += 1;
+      }
+      decodedHdrBytes++;
+    }
+    const subStart = i;
+    const subEnd = termIdx; // exclusive
+    // Decode subpacket data
+    const decoded: number[] = [];
+    for (let j = subStart; j < subEnd; j++) {
+      if (buf[j] === 0x18 && j + 1 < subEnd) {
+        decoded.push(buf[j + 1] ^ 0x40);
+        j++;
+      } else {
+        decoded.push(buf[j]);
+      }
+    }
+    // Compute CRC16 over decoded subpacket + new marker byte (ZCRCW = 0x6b)
+    let crc = 0;
+    for (const b of decoded) {
+      crc ^= (b << 8);
+      for (let k = 0; k < 8; k++) {
+        crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+      }
+    }
+    const ZCRCW = 0x6b;
+    crc ^= (ZCRCW << 8);
+    for (let k = 0; k < 8; k++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+    }
+    const crcHi = (crc >> 8) & 0xff;
+    const crcLo = crc & 0xff;
+    // Encode CRC bytes with ZDLE escape if they're control characters.
+    const encodeCrc = (b: number): number[] => {
+      const isCtl = (b & 0x60) === 0; // matches lrzsz's "needs escape" rule loosely
+      if (b === 0x18 || b === 0x10 || b === 0x11 || b === 0x13 ||
+          b === 0x90 || b === 0x91 || b === 0x93) {
+        return [0x18, b ^ 0x40];
+      }
+      return [b];
+    };
+    const newTail = Buffer.from([0x18, ZCRCW, ...encodeCrc(crcHi), ...encodeCrc(crcLo)]);
+
+    // Reassemble: bytes before terminator + new tail + bytes after old CRC.
+    const beforeTerm = buf.slice(0, termIdx);
+    const afterCrc = buf.slice(termIdx + 4); // skip 18 68 + 2 CRC bytes
+    const out = Buffer.concat([beforeTerm, newTail, afterCrc]);
+    console.log(`[lrzsz ${this.direction}] rewrote ZFILE ZCRCE→ZCRCW at offset ${termIdx}, new CRC=${crcHi.toString(16)}${crcLo.toString(16)}`);
+    return out;
+  }
+
   private normalizeHexHeaderTrailers(chunk: Buffer): Buffer {
     // Look for \r \x8a sequences and patch the \x8a → \x0a (LF).
     // ZMODEM hex headers always end with this exact pair.
@@ -294,7 +457,10 @@ export class LrzszTransferManager {
         const cwd = this.resolveCwd();
         if (cwd) {
           try {
-            received = fs.readdirSync(cwd).map((n) => path.join(cwd, n));
+            for (const n of fs.readdirSync(cwd)) {
+              if (this.preTransferFiles.has(n)) continue;
+              received.push(path.join(cwd, n));
+            }
           } catch { /* ignore */ }
         }
       }
