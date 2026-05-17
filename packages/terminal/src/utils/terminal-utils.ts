@@ -104,10 +104,9 @@ export const XTERM_CONFIG = {
    * exactly — at lineHeight 1.0 you can still see a 1px gap between
    * horizontally adjacent box / `=` / `─` characters. -1 px pulls each
    * cell flush against the previous, closing the gap. Values further
-   * negative start to overlap glyphs; -1 is the sweet spot for these
-   * Amiga fonts at 16px.
+   * negative start to overlap glyphs.
    */
-  letterSpacing: -1,
+  letterSpacing: -2,
 
   /** BBS color theme (Amiga-style) */
   theme: {
