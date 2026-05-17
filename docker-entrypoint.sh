@@ -87,42 +87,104 @@ else
     echo "[Entrypoint]   Set FORCE_REINIT_ROMS=1 in render.yaml to attempt re-copy"
 fi
 
-# Copy root-level .info configuration files (critical for conferences and file areas)
-# These are binary Amiga icon files containing tooltypes (key=value pairs)
-# Note: bbsConfig.info is gitignored (user-specific) - backend uses defaults
-INFO_FILES="ConfConfig.info Conf.DB Doors.info NamesNotAllowed.info Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info Access.info Commands.info ComputerList.info Drives.info ScreenTypes.info Protocols.info Storage.info SysopStats.info Private.info HELP.info Languages.info Utils.info FCheck.info Zoom.info Areas.info AmiXnet.info UUCP.info batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info"
+# Root-level .info / binary configuration files.
+#
+# These split into TWO ownership classes — the bug that froze live volume
+# for months ("J: Command requires higher access" on sysop) came from
+# treating them all as VOLUME-owned (cp only-if-missing). Any image update
+# to ACS.255.info, Conf.DB, etc. then never propagated to live.
+#
+# IMAGE-OWNED files: pure code/config that ships with the BBS. The image
+# is authoritative — always overwrite the volume on every restart. There
+# is no sysop/admin path that legitimately modifies these. Includes the
+# whole `Access/` directory (ACS permission tables, area presets) and the
+# core configuration .info files that define the BBS's command catalog,
+# protocols, etc.
+#
+# VOLUME-OWNED files: admin TUI / web admin UI writes to them at runtime.
+# Initialize from image if missing; never overwrite. Includes per-node
+# Node*.info (telnet/FTP/chat-color toggles per node), per-conference
+# Conf*.info (sysop-tunable area config), and the SysopStats counter.
+#
+# When in doubt, default to VOLUME-OWNED. False positives in IMAGE-OWNED
+# silently nuke sysop edits.
+
+IMAGE_OWNED_INFO="ConfConfig.info Doors.info NamesNotAllowed.info Access.info Commands.info ComputerList.info Drives.info ScreenTypes.info Protocols.info Storage.info Private.info HELP.info Languages.info Utils.info FCheck.info Zoom.info Areas.info AmiXnet.info UUCP.info batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info Conf.DB"
+
+VOLUME_OWNED_INFO="Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info SysopStats.info"
 
 # Root data files (not .info - batch scripts, dat files, etc.)
 ROOT_DATA_FILES="batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 acp.dat acpConnections.dat BBSHelp.txt SystemStats cplistan1000.dat express"
 
-echo "[Entrypoint] Checking root .info configuration files..."
+echo "[Entrypoint] Syncing root configuration files..."
 
-# Force re-copy if requested
-if [ "$FORCE_REINIT_CONFIG" = "1" ]; then
-    echo "[Entrypoint] FORCE_REINIT_CONFIG=1 - Forcing re-copy of all .info config files..."
-    for infofile in $INFO_FILES; do
-        if [ -f "$DEFAULT_DATA_DIR/$infofile" ]; then
-            cp -v "$DEFAULT_DATA_DIR/$infofile" "$BBS_DATA_DIR/$infofile"
-        else
-            echo "[Entrypoint]   WARNING: $infofile not found in Docker image"
-        fi
-    done
-else
-    # Copy only if missing
-    for infofile in $INFO_FILES; do
-        if [ -f "$DEFAULT_DATA_DIR/$infofile" ] && [ ! -f "$BBS_DATA_DIR/$infofile" ]; then
-            cp -v "$DEFAULT_DATA_DIR/$infofile" "$BBS_DATA_DIR/$infofile"
-            echo "[Entrypoint]   Copied $infofile"
+# IMAGE-OWNED: always overwrite from image if hashes differ (or if missing).
+# Compare with md5sum so we don't churn mtimes on every restart for unchanged
+# files. FORCE_REINIT_CONFIG=1 forces unconditional overwrite for both classes.
+sync_image_owned() {
+    local file="$1"
+    local src="$DEFAULT_DATA_DIR/$file"
+    local dst="$BBS_DATA_DIR/$file"
+    [ -f "$src" ] || { echo "[Entrypoint]   WARNING: $file not found in image"; return; }
+    if [ ! -f "$dst" ]; then
+        cp "$src" "$dst"
+        echo "[Entrypoint]   [IMAGE-OWNED] $file: initialized from image"
+        return
+    fi
+    if [ "$FORCE_REINIT_CONFIG" = "1" ]; then
+        cp "$src" "$dst"
+        echo "[Entrypoint]   [IMAGE-OWNED] $file: force-overwritten (FORCE_REINIT_CONFIG=1)"
+        return
+    fi
+    local sh dh
+    sh=$(md5sum "$src" | awk '{print $1}')
+    dh=$(md5sum "$dst" | awk '{print $1}')
+    if [ "$sh" != "$dh" ]; then
+        cp "$src" "$dst"
+        echo "[Entrypoint]   [IMAGE-OWNED] $file: updated from image (hash drift)"
+    fi
+}
+
+# VOLUME-OWNED: copy only if missing; image is just the seed.
+sync_volume_owned() {
+    local file="$1"
+    local src="$DEFAULT_DATA_DIR/$file"
+    local dst="$BBS_DATA_DIR/$file"
+    [ -f "$src" ] || return
+    if [ ! -f "$dst" ]; then
+        cp "$src" "$dst"
+        echo "[Entrypoint]   [VOLUME-OWNED] $file: seeded from image (first run)"
+    fi
+}
+
+for f in $IMAGE_OWNED_INFO; do sync_image_owned "$f"; done
+for f in $VOLUME_OWNED_INFO; do sync_volume_owned "$f"; done
+
+# Also mirror the entire Access/ directory (ACS.*.info, AREA.*.info,
+# PRESET.*.info) — these are pure permission tables, never edited by the
+# sysop, and stale copies break login access checks. Treat each file as
+# IMAGE-OWNED with the same hash-drift logic.
+if [ -d "$DEFAULT_DATA_DIR/Access" ]; then
+    mkdir -p "$BBS_DATA_DIR/Access"
+    for src in "$DEFAULT_DATA_DIR/Access"/*.info; do
+        [ -f "$src" ] || continue
+        bn=$(basename "$src")
+        dst="$BBS_DATA_DIR/Access/$bn"
+        if [ ! -f "$dst" ]; then
+            cp "$src" "$dst"
+            echo "[Entrypoint]   [IMAGE-OWNED] Access/$bn: initialized"
+        elif [ "$FORCE_REINIT_CONFIG" = "1" ] || [ "$(md5sum "$src" | awk '{print $1}')" != "$(md5sum "$dst" | awk '{print $1}')" ]; then
+            cp "$src" "$dst"
+            echo "[Entrypoint]   [IMAGE-OWNED] Access/$bn: updated from image"
         fi
     done
 fi
 
-# Copy root data files (batch scripts, .dat files, express binary)
+# Root data files (batch scripts, .dat files, express binary) are
+# treated as VOLUME-OWNED. The `express` binary is a sysop-built/managed
+# artifact; .dat files accumulate runtime state.
 for datafile in $ROOT_DATA_FILES; do
-    if [ -f "$DEFAULT_DATA_DIR/$datafile" ] && [ ! -f "$BBS_DATA_DIR/$datafile" ]; then
-        cp -v "$DEFAULT_DATA_DIR/$datafile" "$BBS_DATA_DIR/$datafile"
-        echo "[Entrypoint]   Copied $datafile"
-    fi
+    sync_volume_owned "$datafile"
 done
 
 # Final config status check
