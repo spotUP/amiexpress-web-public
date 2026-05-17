@@ -1230,7 +1230,11 @@ console.error(
   // back to the minimal hardcoded banner so telnet/SSH callers at
   // least see *something*.
   const sendWelcomeMessage = async () => {
+    let usedFallback = true;
     try {
+      console.log(
+        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: trying FRONTEND syscmd; session=${connection.session ? "present" : "MISSING"}`,
+      );
       const { runSysCommand } = await import(
         "./handlers/command-execution.handler"
       );
@@ -1238,22 +1242,30 @@ console.error(
         emitter as any,
         connection.session as any,
         "FRONTEND",
-        ""
+        "",
       );
-      // runSysCommand returns a non-success code when the syscmd isn't
-      // registered. In that case render the legacy banner so the
-      // connection doesn't sit silent.
-      if (!result || (typeof result === "number" && result <= 0)) {
-        throw new Error("FRONTEND syscmd not registered");
+      console.log(
+        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: FRONTEND syscmd returned ${result}`,
+      );
+      if (typeof result === "number" && result > 0) {
+        usedFallback = false;
       }
-    } catch {
+    } catch (err) {
+      console.log(
+        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: FRONTEND syscmd threw: ${(err as Error).message}`,
+      );
+    }
+    if (usedFallback) {
+      console.log(
+        `[${type.toUpperCase()}-WELCOME] node ${connection.nodeId}: using hardcoded banner fallback`,
+      );
       connection.write("\x1b[2J\x1b[H");
       connection.write("\r\n\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n");
       connection.write("\x1b[0;37mWelcome to AmiExpress BBS\x1b[0m\r\n");
       connection.write(
         `\x1b[33mConnected via ${type.toUpperCase()} on node ${
           connection.nodeId
-        }\x1b[0m\r\n`
+        }\x1b[0m\r\n`,
       );
       connection.write("\x1b[36m" + "=".repeat(50) + "\x1b[0m\r\n\r\n");
     }
