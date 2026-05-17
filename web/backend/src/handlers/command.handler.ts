@@ -1614,6 +1614,17 @@ console.log('   Current state:', session.state);
     return;
   }
 
+  // Login-prompt adapters (services/login-prompt.service.ts) install a
+  // `loginInputHandler` to own input fully during a multi-step pre-login
+  // flow (forced password change, email reset, GDPR backfill). Must run
+  // BEFORE the LOGON state machine so the adapter doesn't recurse into
+  // the username/password loop. Web's frontend handles these flows via
+  // socket events, so loginInputHandler stays unset there.
+  if (session.loginInputHandler) {
+    session.loginInputHandler(data);
+    return;
+  }
+
   // LOGIN FLOW (telnet/SSH): line-buffered username/password when in LOGON state
   // Frontend socket clients use prompt-login events; telnet/SSH need server-side buffering.
   if (session.state === BBSState.LOGON) {
@@ -1720,177 +1731,23 @@ console.log('   Current state:', session.state);
           const user = result.user;
           const db = getDatabase(); // For remaining database calls
 
-          // Successful login: mirror auth-socket-handlers.ts login flow
+          // Successful login: hand off to the shared post-auth pipeline.
+          // Same code web hits at auth-socket-handlers.ts ~588 — keeps
+          // MULTICOM / webhook / forced-pwd-change / GDPR / LOGON screen
+          // / bulletin flow consistent across all three transports.
           session.loginRetryCount = 0;
-          session.state = BBSState.LOGGEDON;
-          session.subState = LoggedOnSubState.DISPLAY_BULL;
-          session.user = user;
-          session.ansiMode = user.ansi;
-          // Apply modem emulation preference from user baud (0/undefined = full speed)
-          const userBaud = user.baud || 0;
-          session.modemBps = userBaud;
-          session.modemEmulationEnabled = userBaud > 0;
-
-          // Install modem speed emulator (wraps socket.emit for throttled output)
-          const { getModemEmulator } = require('../utils/modem-emulator.util');
-          const modemEmulator = getModemEmulator(socket);
-          modemEmulator.install();
-          if (userBaud > 0) {
-            modemEmulator.enable(userBaud);
-console.log(`[LOGIN] Modem emulation enabled at ${userBaud} bps for ${user.username}`);
-          }
-
-          // Send modem speed to frontend for client-side emulation (web terminal only)
-          // Telnet uses server-side throttling, web terminal needs client-side throttling
-          // Also track in session so doors can query it via bbs.getModemSpeed()
-console.log(`[LOGIN] Emitting modem-speed event with userBaud=${userBaud}`);
-          (session as any).modemSpeed = userBaud;
-          socket.emit('modem-speed', userBaud);
-console.log(`[LOGIN] modem-speed event emitted`);
-
-          // Disable AnsiBuffer batching when modem emulation is enabled
-          // This prevents chunky output - client throttles smoothly instead
-          const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
-          const ansiBuffer = getAnsiBuffer(socket);
-          ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
-
-          // Install ANSI filter to strip codes for ANSI-disabled terminals
-          // Note: This must be installed AFTER modem emulator so ANSI filter runs first
-          if (!(socket as any)._ansiFilterInstalled) {
-            const originalEmit = socket.emit.bind(socket);
-            socket.emit = ((event: string, ...args: any[]) => {
-              if (event === 'ansi-output' && (session.ansiMode === false || session.user?.ansi === false)) {
-                const filtered = args.map((arg) =>
-                  typeof arg === 'string' ? AnsiUtil.stripAnsiForPlainText(arg) : arg
-                );
-                return originalEmit(event, ...filtered);
-              }
-              return originalEmit(event, ...args);
-            }) as any;
-            (socket as any)._ansiFilterInstalled = true;
-          }
-
-          // Update last login and node files
-          await db.updateUser(user.id, { lastLogin: getSystemTime(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
-          const nodeId = session.nodeId || 0;
-          try {
-            nodeFileManager.writeNodeUserFile(nodeId, user);
-            nodeFileManager.writeNodeUserKeysFile(nodeId, user);
-console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
-            callersLogManager.logLogin(nodeId, user.username);
-          } catch (error) {
-console.error(`[LOGIN] Error writing node files:`, error);
-          }
-
-          // Run login batches
-          try {
-            await runLoginBatches(nodeId);
-          } catch (err) {
-console.error('[LOGIN] Batch scheduler failed:', err);
-          }
-
-          // TODO(unify): the entire post-auth block in this handler is a
-          // hand-copy of auth-socket-handlers.ts's web-login flow. They have
-          // drifted (mailOnLogon + LOGON syscmd were missing here, just
-          // added below). Long-term: extract to
-          // services/post-auth.service.ts and have both transports call it.
-
-          // express.e:6726 — mailOnLogon notification (fire-and-forget,
-          // matches web-login flow at auth-socket-handlers.ts ~line 670).
-          try {
-            const { mailOnLogon } = await import('../services/mail-notification.service');
-            mailOnLogon(user.username, user.location || '').catch((err: any) => {
-              console.error('[LOGIN] mailOnLogon failed:', err);
-            });
-          } catch (err) {
-            console.error('[LOGIN] mailOnLogon import failed:', err);
-          }
-
-          // express.e:8222, 8231 — LOGON and LOGON{nodeId} syscmds.
-          // Matches web-login at auth-socket-handlers.ts ~line 668. These
-          // let sysops bind doors / screens to logon events; without this
-          // call telnet/SSH users silently skip the sysop's intended logon
-          // hooks (e.g. ANSImation, network announcement, stats banner).
-          try {
-            const { runSysCommand: runSys } = require('./command-execution.handler');
-            await runSys(socket, session, 'LOGON', '');
-            await runSys(socket, session, `LOGON${session.nodeId || 0}`, '');
-          } catch (err) {
-            console.error('[LOGIN] LOGON syscmd failed:', err);
-          }
-
-          // Initialize security and track stats
-          initializeSecurity(session);
-          setEnvStat(session, EnvStat.IDLE);
-          try {
-            const { systemStats } = await import('../services/SystemStatsService');
-            await systemStats.incrementCalls(user.id);
-          } catch (error) {
-console.error('[SystemStats] Error tracking login:', error);
-          }
-
-          // express.e:29768-29773 — secStatus <= 1 lockout check
-          // Must run before bulletin flow; secStatus 0 = LOCKOUT0, 1 = LOCKOUT1.
-          if (user.secLevel <= 1) {
-            const lockScreen = user.secLevel === 0 ? 'LOCKOUT0' : 'LOCKOUT1';
-            await displayScreen(socket, session, lockScreen, false);
-            // Pre-LOGGEDON bump after LOCKOUT screen — AWAIT, not LOGGING_OFF.
-            beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
+          const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
+          const { runPostAuthLogin } = await import('../services/login-post.service');
+          const postAuthResult = await runPostAuthLogin(socket, session, user, {
+            io,
+            lastLoginBeforeUpdate,
+          });
+          if (!postAuthResult.ok) {
+            // Shared pipeline already issued the disconnect / forced-
+            // pwd-change prompt / chat-only door launch / quick-logon
+            // menu jump. Nothing more to do here.
             return;
           }
-
-          // express.e:29775-29782 — accountLocked check
-          // Show message, offer comment to sysop, then disconnect.
-          if (user.accountLocked) {
-            emitText(socket, '\r\nYour account is locked out (possibly due to repeated password failures)\r\n\r\n');
-            emitText(socket, 'Leave a comment for the sysop...\r\n\r\n');
-            await processCommand(socket, session, 'C', '');
-            emitText(socket, '\r\nThanks you will now be disconnected...\r\n\r\n');
-            beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
-            return;
-          }
-
-          // Welcome message
-          emitText(socket, '\r\n\x1b[32mLogin successful.\x1b[0m\r\n');
-
-          // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
-          // LOGON screen contains ~CC_wall, ~CC_gwall etc. that need to execute
-          const cfg = getConfig();
-          const dataDir = cfg.get ? cfg.get('dataDir') : cfg.dataDir;
-          console.log(`[LOGIN] Attempting to display LOGON screen. dataDir=${dataDir}`);
-          try {
-            const fs = require('fs');
-            fs.appendFileSync('debug-display-flow.log', `[${new Date().toISOString()}] Login successful for ${user.username}. dataDir=${dataDir}\n`);
-          } catch (e) {}
-
-          // WEB_: GDPR Phase 2 — same gate as auth-socket-handlers.ts for telnet/SSH.
-          // Pre-GDPR users with no consent stamp must accept before any LOGON/bulletin
-          // flow. Mirrors auth-socket-handlers.ts:766-770.
-          console.log('[gdpr-gate] user=%s consentAt=%s source=%s', session.user?.username, (session.user as any)?.gdprConsentAt ?? '(none)', (session.user as any)?.gdprConsentSource ?? '(none)');
-          if (!(session.user as any)?.gdprConsentAt) {
-            const { promptGdprBackfill } = require('./user/gdpr.handler');
-            await promptGdprBackfill(socket, session);
-            return;
-          }
-
-          const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
-
-          if (logonDisplayed) {
-            // LOGON screen displayed - honor express.e doPause() (express.e:29854)
-            // State already set to DISPLAY_BULL, pause handler will continue flow
-            // CRITICAL: Only call doPause if displayScreen didn't already set up a pause (via ~SP MCI)
-            if (!session.paginatedScreen) {
-console.log('[LOGIN] LOGON displayed (telnet), adding pause per express.e:29854');
-              doPause(socket, session);
-            } else {
-console.log('[LOGIN] LOGON displayed (telnet) with built-in pause (~SP), skipping doPause');
-            }
-            return;
-          }
-
-          // No LOGON screen - trigger bulletin display flow directly
-console.log('[LOGIN] No LOGON screen (telnet), proceeding to bulletin flow');
-          await handleCommand(socket, session, '', io);
         } catch (err: any) {
 console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
           emitPrompt(socket, '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
