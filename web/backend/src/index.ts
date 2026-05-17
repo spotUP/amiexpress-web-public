@@ -402,6 +402,15 @@ export interface BBSSession {
   passwordResetCode?: string; // Generated 10-char reset code sent to email
   passwordResetUsername?: string; // Username attempting password reset
   passwordResetState?: 'await_confirm' | 'await_code' | 'await_new_password'; // Current reset flow state
+  // Login-prompt-adapter slots used by services/login-prompt.service.ts to
+  // own input fully during a multi-step pre-login UI flow on telnet/SSH
+  // (where the web equivalent is a socket event modal). When set, the
+  // telnet/SSH input dispatcher at command.handler.ts:1619 short-circuits
+  // and forwards every char to `loginInputHandler` until the handler
+  // resolves `loginPromptResolver`. Web does not use these (its frontend
+  // events drive the same outcome).
+  loginInputHandler?: (chunk: string) => void;
+  loginPromptResolver?: ((result: unknown) => void) | undefined;
   // Forced password change flow - express.e:29785-29845 (forcePwdReset / PASSWORD_EXPIRY_DAYS)
   forcedPwdChangeState?: 'await_new' | 'await_confirm'; // Step in forced-change dialog
   forcedPwdChangeUsername?: string;    // Username being changed
