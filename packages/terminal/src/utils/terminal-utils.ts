@@ -82,8 +82,15 @@ export const XTERM_CONFIG = {
   /** Default font size */
   fontSize: 16,
 
-  /** Line height multiplier */
-  lineHeight: 1.2,
+  /**
+   * Line height multiplier. Amiga bitmap fonts (Topaz/mosoul/MicroKnight/
+   * P0T-NOoDLE) are designed to render gapless — pipe/box characters
+   * connect vertically across rows for ASCII-art continuity. Any value
+   * above 1.0 inserts a visible gap that breaks vertical lines, exactly
+   * the artefact the BBS author wanted to avoid. The default font is
+   * mosoul (bitmap), so 1.0 is correct here.
+   */
+  lineHeight: 1.0,
 
   /** BBS color theme (Amiga-style) */
   theme: {

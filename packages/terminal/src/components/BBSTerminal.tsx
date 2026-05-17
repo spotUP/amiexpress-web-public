@@ -2088,13 +2088,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('set-font', (fontName: string) => {
       console.log('[Font] Received set-font event:', fontName);
+      // Amiga bitmap fonts render gapless at 1.0 — pipe / box-drawing
+      // chars are designed to connect vertically across rows. Any value
+      // above 1.0 inserts a visible gap that breaks the ASCII art.
+      // Unknown fonts fall back to 1.0 too; the BBS catalog only ships
+      // bitmap fonts in this picker.
       const lineHeightMap: Record<string, number> = {
-        'mosoul': 1.2, 'MicroKnight': 1.2, 'MicroKnightPlus': 1.2,
-        'P0T-NOoDLE': 1.2, 'Topaz_a500': 1.2, 'Topaz_a1200': 1.2,
-        'TopazPlus_a500': 1.2, 'TopazPlus_a1200': 1.2,
+        'mosoul': 1.0, 'MicroKnight': 1.0, 'MicroKnightPlus': 1.0,
+        'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
+        'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
       };
       const fontFamily = `${fontName}, "Courier New", monospace`;
-      const lineHeight = lineHeightMap[fontName] ?? 1.2;
+      const lineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
       term.options.fontFamily = fontFamily;
@@ -2107,14 +2112,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Handle font preference loaded from database on login
     socket.on('font-preference', (data: { font: string }) => {
       console.log('[Font Preference] Received saved preference:', data.font);
+      // See set-font handler above — bitmap fonts render gapless at 1.0.
       const lineHeightMap: Record<string, number> = {
-        'mosoul': 1.2, 'MicroKnight': 1.2, 'MicroKnightPlus': 1.2,
-        'P0T-NOoDLE': 1.2, 'Topaz_a500': 1.2, 'Topaz_a1200': 1.2,
-        'TopazPlus_a500': 1.2, 'TopazPlus_a1200': 1.2,
+        'mosoul': 1.0, 'MicroKnight': 1.0, 'MicroKnightPlus': 1.0,
+        'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
+        'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
       };
       const fontName = data.font;
       const fontFamily = `${fontName}, "Courier New", monospace`;
-      const lineHeight = lineHeightMap[fontName] ?? 1.2;
+      const lineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
       term.options.fontFamily = fontFamily;
