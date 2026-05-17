@@ -1732,9 +1732,31 @@ console.log('   Current state:', session.state);
             const { getMaxPasswordFails } = require('../services/password-policy.util');
             const maxFails = getMaxPasswordFails();
             if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-              // express.e:29193-29195 + 29263-29264 — PWFAIL syscmd
-              // then logoffErr writes '\t* Password Failure *' and
-              // disconnects. Same path web takes at
+              // express.e:29152-29213 — try the email-based password reset
+              // flow first (parity with web). If MAIL_ON_PWD_FAIL is
+              // enabled, SMTP is configured, AND the user has an email
+              // on file, offer them the reset Y/n; on success they can
+              // log in with the new password. On user-declined or any
+              // hard failure the adapter calls beginLogoff itself and
+              // we just return.
+              const existingUser = await getDatabase().getUserByUsername(username);
+              const { isPasswordResetAvailable, promptPasswordReset } =
+                await import('../services/login-prompt.service');
+              if (await isPasswordResetAvailable(existingUser?.email)) {
+                session.passwordResetUsername = username;
+                const resetResult = await promptPasswordReset(socket, session);
+                if (resetResult.ok) {
+                  // Re-prompt for username/password from the top.
+                  emitPrompt(socket, '\r\n\r\nUsername: ');
+                  session.tempData.loginPhase = 'username';
+                  session.tempData.loginUsername = '';
+                }
+                return;
+              }
+
+              // No reset available — express.e:29193-29195 + 29263-29264:
+              // PWFAIL syscmd then logoffErr writes '\t* Password
+              // Failure *' and disconnects. Same path web takes at
               // auth-socket-handlers.ts:458-462.
               emitText(socket, '\r\n\x1b[33mExcessive Password Failure\x1b[0m\r\n\r\n');
               const { runPwfailAndLogoff } = await import('../services/login-post.service');

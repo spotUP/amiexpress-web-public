@@ -556,10 +556,12 @@ export async function runPostAuthLogin(
   session.subState = LoggedOnSubState.DISPLAY_BULL;
   triggerSamiLogRefresh();
 
-  // GDPR consent gate (express.e: no equivalent; web-specific feature).
-  // Telnet/SSH parity for this is wired in commit 4 via login-prompt
-  // service; until then telnet/SSH skip the gate.
-  if (isWeb && !(session.user as any)?.gdprConsentAt) {
+  // GDPR consent gate — applies to every transport. The web isWeb-only
+  // gate was a parity stopgap; the underlying flow (promptGdprBackfill
+  // sets subState=GDPR_BACKFILL, then handleGdprBackfillInput at
+  // command.handler.ts:1217 line-buffers Y/n) is dispatch-agnostic and
+  // works for telnet/SSH unchanged.
+  if (!(session.user as any)?.gdprConsentAt) {
     try {
       const { promptGdprBackfill } = require("../handlers/user/gdpr.handler");
       await promptGdprBackfill(emitter as any, session);
