@@ -16,9 +16,17 @@ services:
     container_name: amiexpress-bbs
     restart: unless-stopped
     ports:
-      - "3001:3001"   # HTTP/WebSocket (BBS + Admin + SDK)
-      - "2323:2323"   # Telnet
-      - "2222:2222"   # SSH (requires SSH_HOST_KEY_PATH)
+      - "3001:3001"     # HTTP/WebSocket (BBS + Admin + SDK)
+      - "64128:64128"   # Telnet (matches TELNET_PORT default in
+                        # web/backend/src/index.ts:821; the prior 2323:2323
+                        # mapping was a dead port — backend was listening on
+                        # 64128 inside the container, so nothing answered
+                        # 2323 externally and 64128 wasn't forwarded.
+                        # A 2026-01 DB migration also forces telnet_port
+                        # back to 64128 on upgrade.)
+      - "31337:31337"   # BBS SSH (matches SSH_PORT default in
+                        # web/backend/src/index.ts:822; 2222:2222 was a
+                        # dead port for the same reason as telnet above).
     volumes:
       # Persistent data volume - survives container rebuilds
       - bbs-data:/app/data
@@ -36,6 +44,18 @@ services:
       # BBS paths
       - BBS_DATA_DIR=/app/data/bbs
       - ROM_DIR=/app/data/amiga-roms
+
+      # Telnet/SSH ports — these MUST match the host:container port
+      # mapping above. If a sysop wants different external ports they
+      # need to (a) update the `ports:` block above, (b) set the env
+      # vars below to the new container-side values, (c) update the
+      # ufw rules in deploy/hetzner-setup.sh, (d) restart the stack.
+      # Changing telnet_port/ssh_port via the admin UI alone only
+      # rebinds the internal port — it cannot change Docker port
+      # forwarding, so the UI change without the compose change just
+      # makes the BBS unreachable. This is a known follow-up.
+      - TELNET_PORT=${TELNET_PORT:-64128}
+      - SSH_PORT=${SSH_PORT:-31337}
 
       # Security - MUST override in .env file
       - JWT_SECRET=${JWT_SECRET:-CHANGE_ME}

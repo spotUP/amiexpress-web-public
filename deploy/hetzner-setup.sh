@@ -100,10 +100,12 @@ echo "=============================================="
 echo "Configuring firewall..."
 echo "=============================================="
 if command -v ufw &> /dev/null; then
-  ufw allow 22/tcp    # SSH (server admin)
-  ufw allow 3001/tcp  # HTTP/WebSocket
-  ufw allow 2323/tcp  # Telnet
-  ufw allow 2222/tcp  # SSH (BBS)
+  ufw allow 22/tcp      # SSH (server admin)
+  ufw allow 3001/tcp    # HTTP/WebSocket
+  ufw allow 64128/tcp   # Telnet (matches TELNET_PORT default — backend
+                        #   binds 64128 inside container; compose forwards
+                        #   64128:64128 so this rule must match)
+  ufw allow 31337/tcp   # BBS SSH (matches SSH_PORT default)
   ufw --force enable
   echo "  Firewall configured"
 else
@@ -129,7 +131,8 @@ echo "     docker compose logs -f"
 echo ""
 echo "  4. Access your BBS:"
 echo "     Web:    http://YOUR_SERVER_IP:3001"
-echo "     Telnet: telnet YOUR_SERVER_IP 2323"
+echo "     Telnet: telnet YOUR_SERVER_IP 64128"
+echo "     SSH:    ssh -p 31337 user@YOUR_SERVER_IP"
 echo ""
 echo "  5. (Optional) Set up SSL with Caddy or nginx"
 echo ""
