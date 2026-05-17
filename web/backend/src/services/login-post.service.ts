@@ -114,9 +114,12 @@ function installAnsiFilter(emitter: LoginEmitter, sess: BBSSession): void {
 export async function runPostAuthLogin(
   emitter: LoginEmitter,
   session: BBSSession,
-  user: any,
+  userArg: any,
   ctx: PostAuthContext,
 ): Promise<PostAuthResult> {
+  // Reassignable so the forced-pwd-change adapter can refresh the
+  // hash after the password is updated mid-flow.
+  let user = userArg;
   const isWeb = session.connectionType === "web";
 
   // Update last login (preserve previous via ctx for new-since scans).
@@ -414,6 +417,9 @@ export async function runPostAuthLogin(
       session.forcedPwdChangeMinStrength = minPasswordStrength;
 
       if (isWeb) {
+        // Web frontend modal: emit the prompts and return; the existing
+        // `forced-pwd-change-input` socket handler in
+        // auth-socket-handlers.ts drives the rest asynchronously.
         emitter.emit("prompt-forced-pwd-change");
         emitter.emit(
           "ansi-output",
@@ -421,18 +427,31 @@ export async function runPostAuthLogin(
         );
         emitter.emit("ansi-output", "Enter New Password: ");
         emitter.emit("mask-input", true);
-      } else {
-        emitter.emit(
-          "ansi-output",
-          "\r\nYour password has expired or your account requires a change.\r\n" +
-            "Please log in via the web client at this BBS's URL to set a new password.\r\n",
-        );
-        beginLogoff(emitter as any, session, {
-          finalState: BBSState.AWAIT,
-          readDelayMs: 1500,
-        });
+        return { ok: false, terminated: "pwd-change-pending" };
       }
-      return { ok: false, terminated: "pwd-change-pending" };
+
+      // Telnet/SSH: drive the prompt loop synchronously via the
+      // line-buffered adapter in services/login-prompt.service.ts. On
+      // success the adapter has already applied the new password +
+      // cleared session.forcedPwdChange* state; fall through to finish
+      // the post-auth flow. On failure the adapter has already called
+      // beginLogoff so we just return.
+      const { promptForcedPwdChange } = await import("./login-prompt.service");
+      const pwdResult = await promptForcedPwdChange(emitter, session, user);
+      if (!pwdResult.ok) {
+        return { ok: false, terminated: "pwd-change-denied" };
+      }
+      // Refresh the local `user` reference so the rest of the pipeline
+      // (callersLog, webhook payload, etc.) sees the updated hash. The
+      // adapter already wrote it; just reload.
+      try {
+        const refreshed = await db.getUserById(user.id);
+        if (refreshed) user = refreshed;
+      } catch {
+        /* non-fatal */
+      }
+      // Fall through to the standard callersLog → systemStats → webhook
+      // → preferences → LOGON → bulletin flow below.
     }
   }
 
