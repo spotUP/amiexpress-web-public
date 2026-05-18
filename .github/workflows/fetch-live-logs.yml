@@ -87,9 +87,24 @@ jobs:
             esac
 
             echo "== $FILE (last $TAIL_INPUT lines${GREP_INPUT:+, grep -E \"$GREP_INPUT\"}) =="
+            FILE_BYTES=$(docker exec "$CID" sh -lc "test -f '$FILE' && wc -c < '$FILE' || echo 0" 2>/dev/null)
+            echo "(file size: $FILE_BYTES bytes)"
             if [ -n "$GREP_INPUT" ]; then
               docker exec "$CID" tail -n "$TAIL_INPUT" "$FILE" 2>/dev/null \
-                | grep -aE "$GREP_INPUT" || echo "(no matches)"
+                | grep -aE "$GREP_INPUT" || echo "(no matches in file)"
             else
               docker exec "$CID" tail -n "$TAIL_INPUT" "$FILE" 2>/dev/null
+            fi
+
+            # If the file is small / empty, fall back to docker logs (the
+            # container's stdout/stderr — where Node's plain console.log
+            # actually lands when the BBS doesn't tee to a file).
+            if [ "${FILE_BYTES:-0}" -lt 1024 ]; then
+              echo ""
+              echo "== file too small / empty, falling back to `docker logs --tail $TAIL_INPUT` =="
+              if [ -n "$GREP_INPUT" ]; then
+                docker logs --tail "$TAIL_INPUT" "$CID" 2>&1 | grep -aE "$GREP_INPUT" || echo "(no matches in docker logs)"
+              else
+                docker logs --tail "$TAIL_INPUT" "$CID" 2>&1
+              fi
             fi
