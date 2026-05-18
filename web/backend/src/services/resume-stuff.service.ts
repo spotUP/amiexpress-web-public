@@ -131,6 +131,7 @@ export function startResumeStuff(
     handleResumeInput(session, typeof data === 'string' ? data : data.toString('latin1'));
 
   session.subState = LoggedOnSubState.UPLOAD_RESUME_PROMPT;
+  console.log(`[resumeStuff] subState SET to UPLOAD_RESUME_PROMPT (was: ${(session as any).__prevSub || 'unknown'})`);
   emitNextPrompt(session);
 }
 
