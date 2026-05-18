@@ -128,8 +128,9 @@ FROM node:20-alpine
 # explicitly before the install so `apk add lrzsz` resolves. Without
 # this the deploy fails with "lrzsz (no such package)" and the
 # Hetzner container never picks up ZMODEM upload/download support.
-RUN apk add --no-cache \
-    --repository=https://dl-cdn.alpinelinux.org/alpine/latest-stable/community \
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories \
+ && apk update \
+ && apk add --no-cache \
     python3 \
     py3-pip \
     sqlite \
