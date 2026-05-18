@@ -197,6 +197,41 @@ describe('LrzszTransferManager.normalizeHexHeaderTrailers — JPEG corruption re
     expect(result[result.length - 1]).toBe(0x11);
   });
 
+  test('does NOT patch a `0d 8a 11` triple that lacks the hex-header preamble', () => {
+    // Adversarial: binary payload that randomly contains `\r \x8a \x11`
+    // but is NOT preceded by `** \x18 B` + 14 ascii-hex chars. The
+    // pre-hardening matcher (only checking the trailer bytes) would
+    // corrupt this. The strict-shape matcher must leave it alone.
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    const payload = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe0, // JPEG SOI + APP0
+      0x42, 0x55, 0xaa, 0x99, 0xde, 0xad, 0xbe, 0xef, // arbitrary
+      0x0d, 0x8a, 0x11, // <-- the trailer-looking triple, NOT after a header
+      0xc0, 0xff, 0xee,
+    ]);
+    const before = Buffer.from(payload);
+    const result = callNormalize(mgr, payload);
+    expect(Buffer.compare(result, before)).toBe(0);
+  });
+
+  test('does NOT patch a `** \\x18 B` followed by NON-hex chars', () => {
+    // Adversarial: bytes shaped like a hex-header start but where the
+    // 14 "hex chars" aren't valid hex. Should not match.
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    const buf = Buffer.from([
+      0x2a, 0x2a, 0x18, 0x42, // marker
+      // 14 NON-hex bytes
+      0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50,
+      0x51, 0x52, 0x53, 0x54,
+      0x0d, 0x8a, 0x11, // trailer
+    ]);
+    const before = Buffer.from(buf);
+    const result = callNormalize(mgr, buf);
+    expect(Buffer.compare(result, before)).toBe(0);
+  });
+
   test('mixed buffer: patches trailer, leaves payload bytes intact', () => {
     const sent: Buffer[] = [];
     const mgr = makeManager('download', sent);

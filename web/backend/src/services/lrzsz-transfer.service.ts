@@ -479,23 +479,50 @@ export class LrzszTransferManager {
     // to plain LF (`\x0a`) so receivers that don't tolerate the Forsberg
     // form (some web/JS ZMODEM parsers) accept the header.
     //
-    // CRITICAL: the trailer is *exactly* `\r \x8a \x11` (CR, high-bit
-    // LF, XON). The earlier implementation matched on just `\r \x8a`
-    // — which by chance also occurs inside binary ZDATA payload (a
-    // user reported a JPEG download failing with "Bad Block (Wrong
-    // CRC)" + "Garbage count exceeded"; the payload contained random
-    // 0x0d 0x8a byte pairs and we were silently corrupting one byte
-    // per occurrence). Require the `\x11` follow-byte so we only
-    // touch genuine hex-header trailers.
+    // Hex header on the wire is exactly 21 bytes:
+    //   `** \x18 B` (4) + 2 type + 8 flag + 4 crc (ASCII hex chars) +
+    //   `\r \x8a \x11` (3 trailer)
+    // = positions 0..3 marker, 4..17 ascii-hex, 18..20 trailer.
+    //
+    // Originally we matched `\r \x8a` anywhere — that corrupted JPEG
+    // download payload where the same byte pair appeared by chance.
+    // Tightened to also require `\x11` follow-byte, then tightened
+    // again here to require the FULL hex-header shape: marker at
+    // start, 14 ascii-hex chars, then trailer. With this check the
+    // false-positive probability on random binary is effectively zero.
+    const isHexChar = (b: number) =>
+      (b >= 0x30 && b <= 0x39) || // 0-9
+      (b >= 0x41 && b <= 0x46) || // A-F
+      (b >= 0x61 && b <= 0x66); // a-f
     let hits = 0;
-    for (let i = 0; i < chunk.length - 2; i++) {
+    for (let i = 0; i + 20 < chunk.length; i++) {
       if (
-        chunk[i] === 0x0d &&
-        chunk[i + 1] === 0x8a &&
-        chunk[i + 2] === 0x11
+        chunk[i] !== 0x2a ||
+        chunk[i + 1] !== 0x2a ||
+        chunk[i + 2] !== 0x18 ||
+        chunk[i + 3] !== 0x42
       ) {
-        chunk[i + 1] = 0x0a;
+        continue;
+      }
+      // Verify the 14 hex chars (positions 4..17 from header start).
+      let allHex = true;
+      for (let j = i + 4; j <= i + 17; j++) {
+        if (!isHexChar(chunk[j])) {
+          allHex = false;
+          break;
+        }
+      }
+      if (!allHex) continue;
+      // Verify trailer shape.
+      if (
+        chunk[i + 18] === 0x0d &&
+        chunk[i + 19] === 0x8a &&
+        chunk[i + 20] === 0x11
+      ) {
+        chunk[i + 19] = 0x0a;
         hits++;
+        // Skip past this header so we don't try to re-match within it.
+        i += 20;
       }
     }
     if (hits > 0) {
