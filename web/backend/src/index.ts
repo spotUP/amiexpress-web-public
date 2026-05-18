@@ -1096,32 +1096,34 @@ console.log(
   const attachTransferSender = () => {
     if (connection.session) {
       (connection.session as any).connectionType = type;
-      // For telnet, RFC 854 mandates that every literal 0xFF byte in
-      // raw data be doubled on the wire (IAC IAC = literal 0xFF). The
-      // client's telnet layer collapses the pair back. If we send a
-      // single 0xFF, the client treats it as start of an IAC sequence
-      // and consumes the next byte too — corrupting ZMODEM frames.
-      // SSH is a raw byte channel; no escaping needed there.
+      // For telnet, TelnetConnection.write (telnet-server.ts:433)
+      // already doubles IAC (0xFF) bytes per RFC 854. Adding a SECOND
+      // doubling layer here turned each input 0xFF into 0xFF 0xFF 0xFF
+      // 0xFF on the wire — ZOC's ZMODEM parser saw the extra 0xFF in
+      // mid-data and ZNAK'd every subpacket containing a 0xFF byte.
+      // Just pass through; the transport layer escapes IAC.
+      // SSH connection wrapper is raw passthrough; no doubling
+      // either way.
       (connection.session as any).transferRawSend = (buf: Buffer) => {
-        if (type !== 'telnet' || buf.indexOf(0xff) === -1) {
-          connection.write(buf);
-          return;
-        }
-        // Double every 0xFF byte
-        const out: number[] = [];
-        for (let i = 0; i < buf.length; i++) {
-          out.push(buf[i]);
-          if (buf[i] === 0xff) out.push(0xff);
-        }
-        connection.write(Buffer.from(out));
+        connection.write(buf);
       };
       // Raw sender for protocol bytes (IAC negotiation, etc.) that
-      // must NOT be doubled. Callers passing IAC sequences (e.g.
-      // IAC WILL BINARY = 255 251 0) need the bytes through the
-      // wire untouched; the doubler above would turn 0xFF into
-      // 0xFF 0xFF and corrupt the negotiation.
+      // must NOT be doubled by the telnet write. TelnetConnection
+      // currently has no separate raw-write path; sendCommand uses
+      // the underlying socket directly. For now, write to the
+      // underlying socket if exposed; otherwise this is identical
+      // to transferRawSend and the caller must construct already-
+      // escaped sequences if they need raw IAC.
       (connection.session as any).transferRawSendUnescaped = (buf: Buffer) => {
-        connection.write(buf);
+        // Telnet.connection.write escapes IAC. To send IAC bytes
+        // raw (for option negotiation initiated by us), reach the
+        // underlying socket. SSH connection.write is already raw.
+        const conn: any = connection;
+        if (type === 'telnet' && conn.socket?.write) {
+          conn.socket.write(buf);
+        } else {
+          conn.write(buf);
+        }
       };
     }
   };
