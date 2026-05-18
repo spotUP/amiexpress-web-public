@@ -117,14 +117,18 @@ console.log(`Client connected from ${clientIp}`);
 
   // Diagnostic: log every transfer-raw:* event we receive at the
   // socket layer. Helps distinguish "the browser never emitted it"
-  // from "the server dropped it before reaching the handler".
-  socket.onAny((event: string, ...args: any[]) => {
-    if (event.startsWith('transfer-raw:')) {
-      const arg0 = args[0];
-      const size = arg0?.length ?? arg0?.byteLength ?? (typeof arg0 === 'string' ? arg0.length : 0);
-      console.log(`[onAny] ${event} args=${args.length} firstSize=${size}`);
-    }
-  });
+  // from "the server dropped it before reaching the handler". Gated
+  // behind LRZSZ_DEBUG — at typical transfer rates this is ~one log
+  // line per kilobyte uploaded.
+  if (process.env.LRZSZ_DEBUG) {
+    socket.onAny((event: string, ...args: any[]) => {
+      if (event.startsWith('transfer-raw:')) {
+        const arg0 = args[0];
+        const size = arg0?.length ?? arg0?.byteLength ?? (typeof arg0 === 'string' ? arg0.length : 0);
+        console.log(`[onAny] ${event} args=${args.length} firstSize=${size}`);
+      }
+    });
+  }
 
   // Debug MCP: tee every 'ansi-output' emit into a per-node ring buffer.
   // Dev-only. Transparent to the socket (we still call the original emit).

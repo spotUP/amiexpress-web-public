@@ -430,14 +430,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     transferState.current = { direction, paths: paths || [] };
     const sender = (octets: any) => {
       const u8 = new Uint8Array(octets);
-      console.log(`[ZMODEM] sender ${u8.length}B → server: ${Array.from(u8.slice(0, 24)).map(b => b.toString(16).padStart(2, '0')).join(' ')}${u8.length > 24 ? ' ...' : ''}`);
+      // Per-call hex preview was invaluable while debugging the
+      // ZACK → ZFILE byte path race, but it fires for every header
+      // the Send session emits during a transfer — noisy at any real
+      // file size. Set `window.__ZMODEM_DEBUG__ = true` in the
+      // console to re-enable.
+      if ((window as any).__ZMODEM_DEBUG__) {
+        console.log(
+          `[ZMODEM] sender ${u8.length}B → server: ${Array.from(u8.slice(0, 24)).map((b) => b.toString(16).padStart(2, '0')).join(' ')}${u8.length > 24 ? ' ...' : ''}`,
+        );
+      }
       socket.emit('transfer-raw:data', u8);
     };
 
     console.log(`[ZMODEM] beginZmodem direction=${direction} paths=`, paths);
     zmodemSentry.current = new Zmodem.Sentry({
       to_terminal: (data: any) => {
-        console.log('[ZMODEM] to_terminal bytes:', data?.length, data?.slice?.(0, 32));
+        if ((window as any).__ZMODEM_DEBUG__) {
+          console.log('[ZMODEM] to_terminal bytes:', data?.length, data?.slice?.(0, 32));
+        }
       },
       on_detect: (det: any) => {
         console.log('[ZMODEM] on_detect fired:', det);
@@ -1339,6 +1350,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('transfer-raw:data', (data: ArrayBuffer | Uint8Array) => {
       if (!zmodemSentry.current) {
+        // The arrival-without-Sentry log STAYS unconditional — it
+        // surfaces "Sentry not armed yet" timing regressions that
+        // would otherwise silently drop bytes.
         console.warn('[ZMODEM] transfer-raw:data arrived but no Sentry armed; dropping', data);
         return;
       }
@@ -1348,7 +1362,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           : data instanceof Uint8Array
             ? data
             : new Uint8Array(data as any);
-      console.log(`[ZMODEM] consume ${view.length}B: ${Array.from(view.slice(0, 16)).map((b: any) => b.toString(16).padStart(2, '0')).join(' ')}`);
+      if ((window as any).__ZMODEM_DEBUG__) {
+        console.log(
+          `[ZMODEM] consume ${view.length}B: ${Array.from(view.slice(0, 16)).map((b: any) => b.toString(16).padStart(2, '0')).join(' ')}`,
+        );
+      }
       try {
         zmodemSentry.current.consume(view);
       } catch (err) {
