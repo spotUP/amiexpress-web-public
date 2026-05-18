@@ -78,6 +78,17 @@ export async function runPostUpload(
   // text. Our DB caller_activity insert is a port-specific addition
   // for the web UI; keep alongside the disk writes.
   if (session.user) {
+    // express.e:19046-19049 — emit the per-session U/D header divider
+    // the first time the user does any upload OR download activity.
+    // beenUDd gates so subsequent transfers in the same session don't
+    // re-emit. Mirror runs in runPostDownload.
+    try {
+      const { writeUDSessionHeader } = require('../utils/download-logging.util');
+      await writeUDSessionHeader(session);
+    } catch (err: any) {
+      console.error(`[postUpload] U/D session header failed: ${err?.message || err}`);
+    }
+
     const summaryLog = ctx.uploadedFiles > 0
       ? `\t${statsLine}`
       : '\tUpload Failed..';

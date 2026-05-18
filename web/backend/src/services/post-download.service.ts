@@ -99,6 +99,17 @@ export async function runPostDownload(
   // to BOTH disk logs with the same text. Our DB caller_activity insert
   // is a port-specific addition for the web UI; keep alongside.
   if (session.user) {
+    // express.e:20242-20245 — same once-per-session U/D header as the
+    // upload pipeline. Whichever transfer fires first this session
+    // gets to write the header; subsequent transfers (upload or
+    // download) skip via session.beenUDd.
+    try {
+      const { writeUDSessionHeader } = require('../utils/download-logging.util');
+      await writeUDSessionHeader(session);
+    } catch (err: any) {
+      console.error(`[postDownload] U/D session header failed: ${err?.message || err}`);
+    }
+
     const summaryLog = (ctx.success && ctx.downloadedFiles > 0)
       ? `\t${statsLine}`
       : '\tDownload Failed..';

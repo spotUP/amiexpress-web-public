@@ -137,3 +137,41 @@ export async function logDivider(): Promise<void> {
   const divider = '**************************************************************';
   await writeToUDLog(divider, 0);
 }
+
+/**
+ * Write a "user session header" to UDLog the first time the user does
+ * any U/D activity this session. Port of express.e:16023
+ * displayUserToCallersLog(1) — the udonly=TRUE branch:
+ *
+ *   udLogDivider()
+ *   <date> (<time>) [<slot>] <name> (<connectString>) <location>
+ *
+ * Gated by session.beenUDd so subsequent uploads/downloads in the
+ * same session don't re-emit the header. Matches express.e:19046-19049
+ * (and the mirror at 20242-20245 in downloadAFile).
+ */
+export async function writeUDSessionHeader(session: any): Promise<void> {
+  if (session.beenUDd) return;
+  session.beenUDd = true;
+
+  const user = session.user;
+  if (!user) return;
+
+  const nodeId = session.nodeId || 1;
+  // Divider first
+  const divider = '**************************************************************';
+  await writeToUDLog(divider, nodeId);
+
+  // Build the session header line
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const datestr = `${pad(now.getDate())}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()]}-${now.getFullYear() % 100}`;
+  const timestr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const slot = user.slotNumber || 0;
+  const name = user.name || user.username || 'unknown';
+  const connectString = session.connectString || (session.connectionType || 'telnet').toUpperCase();
+  const location = user.location || 'Unknown';
+  const newMarker = (user.timesCalled || 0) === 0 ? 'NEW ' : '';
+  const line = `${datestr} (${timestr}) ${newMarker}[${slot}] ${name} (${connectString}) ${location}`;
+  await writeToUDLog(line, nodeId);
+}
