@@ -162,67 +162,7 @@ export class LrzszTransferManager {
     // \r\n\x11 which every client recognises.
     proc.stdout?.on('data', (chunk: Buffer) => {
       try {
-        const normalized = this.normalizeHexHeaderTrailers(this.patchZrinitFlags(chunk));
-        // Per-chunk hex preview is gated behind LRZSZ_DEBUG. It was
-        // invaluable during the MuffinTerm CRC/ZCRCE debugging round
-        // (commits e8ba1c08d, bc7f24961) but emits a 32KB hex string
-        // per ZDATA chunk, ballooning backend.log to tens of MB on
-        // any nontrivial transfer. Default off.
-        if (process.env.LRZSZ_DEBUG) {
-          const preview = normalized.slice(0, 64).toString('hex');
-          console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
-        }
-        // Identify if a chunk is exclusively a ZRINIT (hex header type
-        // 01) so we can suppress repeated keepalive ZRINITs after the
-        // first one — see zrinitForwarded comment on the class field.
-        const isLoneZrinit = (buf: Buffer): boolean => {
-          if (buf.length === 0 || buf.length > 28) return false;
-          if (buf[0] !== 0x2a || buf[1] !== 0x2a || buf[2] !== 0x18 || buf[3] !== 0x42) return false;
-          // Header type byte is the next 2 ASCII hex chars: '0' '1' = ZRINIT.
-          return buf[4] === 0x30 && buf[5] === 0x31;
-        };
-
-        // Split at ZMODEM hex-header boundaries (`**\x18B`) so each
-        // initial header is delivered to the peer as its own frame.
-        // zmodem.js's Sentry requires the *first* chunk it consumes to
-        // contain exactly ONE ZMODEM initialization header (see
-        // zsentry.js _parse: "this logic depends on the sender only
-        // sending one initial header"). lrzsz can emit two back-to-back
-        // ZRINITs (~21B each) in a single 42B stdout chunk on spawn,
-        // which makes detection fail and the bytes leak to to_terminal.
-        const HEADER_MARKER = Buffer.from([0x2a, 0x2a, 0x18, 0x42]);
-        const parts: Buffer[] = [];
-        let cursor = 0;
-        while (cursor < normalized.length) {
-          const next = normalized.indexOf(HEADER_MARKER, cursor + HEADER_MARKER.length);
-          if (next === -1) {
-            parts.push(normalized.slice(cursor));
-            break;
-          }
-          parts.push(normalized.slice(cursor, next));
-          cursor = next;
-        }
-        for (const part of parts) {
-          if (part.length === 0) continue;
-          if (isLoneZrinit(part)) {
-            if (this.zrinitForwarded) {
-              if (process.env.LRZSZ_DEBUG) {
-                console.log(`[lrzsz ${this.direction}] suppressed duplicate ZRINIT (${part.length}B)`);
-              }
-              continue;
-            }
-            this.zrinitForwarded = true;
-          } else {
-            // Any non-ZRINIT chunk (ZACK, ZRPOS, etc.) means the
-            // protocol has moved past initial handshake. Clear the
-            // suppression flag so the next ZRINIT — which signals
-            // "ready for next file or session end" after ZEOF — is
-            // delivered to the browser Sentry. Otherwise the Send
-            // session hangs after the first file completes.
-            this.zrinitForwarded = false;
-          }
-          this.transport.send(part);
-        }
+        this.processStdoutChunk(chunk);
       } catch (err) {
         console.error(`[lrzsz ${this.direction}] transport.send failed:`, err);
       }
@@ -335,6 +275,71 @@ export class LrzszTransferManager {
    * keeps CANFDX 0x01 + CANOVIO 0x02) and recompute the CRC16.
    * New header CRC for type=0x01, flags=0x00000003 is 0x9a32.
    */
+  /**
+   * Process a stdout chunk from the lrzsz child: patch ZRINIT flags,
+   * normalize hex-header trailers, split at hex-header boundaries so
+   * each frame goes out as its own socket message, and suppress
+   * duplicate keepalive ZRINITs. Public-ish (private but called via
+   * `(mgr as any).processStdoutChunk` from regression tests) so the
+   * full transport pipeline can be exercised without spawning rz.
+   */
+  private processStdoutChunk(chunk: Buffer): void {
+    const normalized = this.normalizeHexHeaderTrailers(this.patchZrinitFlags(chunk));
+    if (process.env.LRZSZ_DEBUG) {
+      const preview = normalized.slice(0, 64).toString('hex');
+      console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
+    }
+    // Identify if a chunk is exclusively a ZRINIT (hex header type
+    // 01) so we can suppress repeated keepalive ZRINITs after the
+    // first one — see zrinitForwarded comment on the class field.
+    const isLoneZrinit = (buf: Buffer): boolean => {
+      if (buf.length === 0 || buf.length > 28) return false;
+      if (buf[0] !== 0x2a || buf[1] !== 0x2a || buf[2] !== 0x18 || buf[3] !== 0x42) return false;
+      return buf[4] === 0x30 && buf[5] === 0x31;
+    };
+
+    // Split at ZMODEM hex-header boundaries (`**\x18B`) so each
+    // initial header is delivered to the peer as its own frame.
+    // zmodem.js's Sentry requires the *first* chunk it consumes to
+    // contain exactly ONE ZMODEM initialization header (see
+    // zsentry.js _parse). lrzsz can emit two back-to-back ZRINITs
+    // (~21B each) in a single 42B stdout chunk on spawn, which makes
+    // detection fail and the bytes leak to to_terminal.
+    const HEADER_MARKER = Buffer.from([0x2a, 0x2a, 0x18, 0x42]);
+    const parts: Buffer[] = [];
+    let cursor = 0;
+    while (cursor < normalized.length) {
+      const next = normalized.indexOf(HEADER_MARKER, cursor + HEADER_MARKER.length);
+      if (next === -1) {
+        parts.push(normalized.slice(cursor));
+        break;
+      }
+      parts.push(normalized.slice(cursor, next));
+      cursor = next;
+    }
+    for (const part of parts) {
+      if (part.length === 0) continue;
+      if (isLoneZrinit(part)) {
+        if (this.zrinitForwarded) {
+          if (process.env.LRZSZ_DEBUG) {
+            console.log(`[lrzsz ${this.direction}] suppressed duplicate ZRINIT (${part.length}B)`);
+          }
+          continue;
+        }
+        this.zrinitForwarded = true;
+      } else {
+        // Any non-ZRINIT chunk (ZACK, ZRPOS, etc.) means the
+        // protocol has moved past initial handshake. Clear the
+        // suppression flag so the next ZRINIT — which signals
+        // "ready for next file or session end" after ZEOF — is
+        // delivered to the browser Sentry. Otherwise the Send
+        // session hangs after the first file completes.
+        this.zrinitForwarded = false;
+      }
+      this.transport.send(part);
+    }
+  }
+
   private patchZrinitFlags(chunk: Buffer): Buffer {
     const orig = Buffer.from('2a2a18423031303030303030323362653530', 'hex');
     const fixed = Buffer.from('2a2a18423031303030303030303339613332', 'hex');
