@@ -61,6 +61,7 @@ export enum LoggedOnSubState {
   UPLOAD_OKAY_CONFIRM = 'upload_okay_confirm',    // express.e:17763-17796 "Okay: (Enter)/G/A"
   UPLOAD_RESUME_PROMPT = 'upload_resume_prompt',  // express.e:18119 resumeStuff() per-partial Y/N prompt
   UPLOAD_RESUME_DELETE = 'upload_resume_delete',  // express.e:18119 resumeStuff() "Delete (Y/N/All)?" follow-up
+  UPLOAD_RENAME_PROMPT = 'upload_rename_prompt',  // express.e:19192 "<file> is too long a name, please rename" loop
   FILE_LIST_DIR_INPUT = 'file_list_dir_input',  // F command directory input
   FLAG_INPUT = 'flag_input',                    // A command flag input
   FLAG_CLEAR_INPUT = 'flag_clear_input',        // A command clear flag input

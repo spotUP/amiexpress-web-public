@@ -915,7 +915,8 @@ console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err)
       session.subState !== LoggedOnSubState.FILES_UPLOAD &&
       session.subState !== LoggedOnSubState.FILES_DOWNLOAD &&
       session.subState !== LoggedOnSubState.UPLOAD_RESUME_PROMPT &&
-      session.subState !== LoggedOnSubState.UPLOAD_RESUME_DELETE
+      session.subState !== LoggedOnSubState.UPLOAD_RESUME_DELETE &&
+      session.subState !== LoggedOnSubState.UPLOAD_RENAME_PROMPT
     ) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = false;
@@ -1506,7 +1507,8 @@ console.log(`[executeDoor] Door ${door.name} completed during segment processing
       session.subState === LoggedOnSubState.FILES_UPLOAD ||
       session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
       session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
-      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE
+      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
+      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT
     ) {
       // Door's RETURNCOMMAND chain parked us in an interactive
       // transfer/prompt state (e.g. UL-LOGOFF → RZ → resumeStuff Y/N
@@ -2783,7 +2785,8 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
       session.subState === LoggedOnSubState.FILES_UPLOAD ||
       session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
       session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
-      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE
+      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
+      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT
     ) {
       // RETURNCOMMAND parked us in a transfer-class state (FILES_UPLOAD /
       // FILES_DOWNLOAD for active ZMODEM, UPLOAD_RESUME_PROMPT /

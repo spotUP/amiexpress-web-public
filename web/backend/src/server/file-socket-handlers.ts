@@ -113,6 +113,37 @@ async function handleDizExtractionAndDescription(
     return false;
   }
 
+  // express.e:19192-19256 — long-filename rename prompt.
+  // Express prompts the user to rename when filename > 12 chars or
+  // contains : / * space # + ? (express.e:19223). Without this the
+  // entry written to DIRn has the status marker at the wrong column
+  // (Amiga BBS format expects col 13) and AquaScan-class readers
+  // silently skip it.
+  if (data.path) {
+    const { needsRename, startRenamePrompt } = require('../services/rename-prompt.service');
+    if (needsRename(data.originalname || data.filename)) {
+      // Defer DIZ/description until rename completes
+      return await new Promise<boolean>((resolve) => {
+        startRenamePrompt(socket, session, data.path!, async (result: any) => {
+          if (result.aborted) {
+            socket.emit('ansi-output', '\r\n\x1b[31mRename aborted; upload cancelled.\x1b[0m\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+            resolve(true);
+            return;
+          }
+          // Update the upload data record to the renamed file then
+          // continue with the standard DIZ/description flow.
+          data.filename = result.newFilename;
+          data.originalname = result.newFilename;
+          data.path = result.newPath;
+          const cont = await handleDizExtractionAndDescription(socket, session, data, config);
+          resolve(cont);
+        });
+      });
+    }
+  }
+
   // Check if we already have a file pending description
   if (!uploadContext.currentUploadedFile) {
     uploadContext.currentUploadedFile = {

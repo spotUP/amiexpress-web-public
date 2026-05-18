@@ -171,6 +171,7 @@ console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
   if (
     sub === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
     sub === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
+    sub === LoggedOnSubState.UPLOAD_RENAME_PROMPT ||
     sub === LoggedOnSubState.FILES_UPLOAD ||
     sub === LoggedOnSubState.FILES_DOWNLOAD ||
     sub === LoggedOnSubState.DOWNLOAD_PGOODBYE

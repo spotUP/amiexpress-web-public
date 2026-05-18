@@ -2372,6 +2372,16 @@ console.log(' [DOWNLOAD] User confirming download');
     return;
   }
 
+  // PRIORITY 9d: Handle UPLOAD_RENAME_PROMPT (express.e:19192-19256
+  // long-filename rename loop). startRenamePrompt installs the handler.
+  if (
+    session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT &&
+    (session as any).uploadRenameInputHandler
+  ) {
+    (session as any).uploadRenameInputHandler(data);
+    return;
+  }
+
   // Handle substate-specific input
   // If menu is waiting to display and the user pressed any key (including Enter),
   // immediately drop to READ_COMMAND so input is not lost to the display flow loop.
