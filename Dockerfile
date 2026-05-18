@@ -122,6 +122,9 @@ RUN set -eux; \
       || { echo '--- config.log tail ---'; tail -80 config.log; exit 1; }; \
     make -j"$(nproc)" CFLAGS='-O2 -std=gnu89 -fcommon -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=incompatible-pointer-types -Wno-error=return-mismatch'; \
     make install; \
+    # lrzsz installs as lsz/lrz/lsb/lrb/lsx/lrx (Forsberg's "l" prefix).
+    # Add classic sz/rz/sb/rb/sx/rx symlinks so isLrzszAvailable() finds them.
+    for p in sz rz sb rb sx rx; do ln -sf "/usr/local/bin/l$p" "/usr/local/bin/$p"; done; \
     /usr/local/bin/sz --version
 
 WORKDIR /app/web/backend
@@ -151,12 +154,17 @@ RUN apk add --no-cache \
     make
 
 # lrzsz binaries built in backend-builder (Alpine v3.23 dropped the package).
-COPY --from=backend-builder /usr/local/bin/sz /usr/local/bin/sz
-COPY --from=backend-builder /usr/local/bin/rz /usr/local/bin/rz
-COPY --from=backend-builder /usr/local/bin/sb /usr/local/bin/sb
-COPY --from=backend-builder /usr/local/bin/rb /usr/local/bin/rb
-COPY --from=backend-builder /usr/local/bin/sx /usr/local/bin/sx
-COPY --from=backend-builder /usr/local/bin/rx /usr/local/bin/rx
+# Copy the real binaries (lsz/lrz) and recreate the classic sz/rz symlinks
+# in the production layer — symlinks don't always survive COPY --from cleanly.
+COPY --from=backend-builder /usr/local/bin/lsz /usr/local/bin/lsz
+COPY --from=backend-builder /usr/local/bin/lrz /usr/local/bin/lrz
+RUN ln -sf /usr/local/bin/lsz /usr/local/bin/sz \
+ && ln -sf /usr/local/bin/lsz /usr/local/bin/sb \
+ && ln -sf /usr/local/bin/lsz /usr/local/bin/sx \
+ && ln -sf /usr/local/bin/lrz /usr/local/bin/rz \
+ && ln -sf /usr/local/bin/lrz /usr/local/bin/rb \
+ && ln -sf /usr/local/bin/lrz /usr/local/bin/rx \
+ && /usr/local/bin/sz --version
 
 # Create app user (non-root)
 RUN addgroup -g 1001 bbsuser && \
