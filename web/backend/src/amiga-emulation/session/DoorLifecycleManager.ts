@@ -435,16 +435,18 @@ debugLog("[DoorLifecycleManager] Execution timeout");
       }
 
       // Auto-detection fallback
-      // Default: 25000x — see dev/scripts/bench-overclock.ts +
-      // report-overclock.json: 294 of 324 corpus doors run safely at
-      // 100000x; only 4 cap at 25000x. The previous 100x default was
-      // a holdover from pre-bench days when only a handful of doors
-      // had been verified. Doors that misbehave at high overclock
-      // (e.g. tight input-poll loops) can set OVERCLOCK=-1 or
-      // OVERCLOCK=1 explicitly in their .info.
+      // Default: 100x — conservative, works for every interactive door
+      // we've actually exercised on live. We tried bumping to 25000x
+      // based on report-overclock.json (294/324 corpus doors safe at
+      // 100000x) but that bench used different binary variants than
+      // what live deploys: e.g. corpus has `DC_X107I_AquaScan/AquaScan`
+      // but live serves `Doors/AquaScan/AquaScan.000`, and the latter
+      // failed to start at 25000x. Doors that benefit from a speedup
+      // declare it explicitly via OVERCLOCK= in their .info tooltype
+      // (or for batch doors, HEAVY_BATCH_OVERRIDES in batch-scheduler).
       if (overclockFactor === undefined) {
-        overclockFactor = 25000;
-        overclockSource = `auto-detection (default 25000x — see bench-overclock.ts)`;
+        overclockFactor = 100;
+        overclockSource = `auto-detection (default 100x — safe baseline; opt in via .info OVERCLOCK=)`;
       }
 
       // Apply overclocking
