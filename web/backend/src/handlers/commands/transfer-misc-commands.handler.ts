@@ -251,6 +251,17 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
             if (!session.tempData?.uploadMode) break;
           }
 
+          // express.e:19520 cleanPlayPen() — any files still in the
+          // playpen after the per-file pipeline are partials/aborts;
+          // move them to <conf>PartUpload/<fn>@<slot> so resumeStuff
+          // can offer them next session.
+          try {
+            const { cleanPlayPen } = require('../../utils/clean-playpen.util');
+            await cleanPlayPen(playpen, session, appConfig);
+          } catch (err: any) {
+            console.error('[ZMODEM-UL-RZ] cleanPlayPen failed:', err?.message || err);
+          }
+
           // Safety net: if processBatchFile didn't auto-complete (e.g.
           // because every file errored), still run the summary.
           if (session.tempData?.uploadMode) {
