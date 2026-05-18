@@ -811,15 +811,38 @@ console.log(
         );
       }
 
-      // Copy flagged files from door bbsSession back to main session
-      // Doors flag files via JH_FLAGFILE which stores in bbsSession.flaggedFiles
-      // Main BBS download handler checks session.flaggedFiles
+      // Copy flagged files from door bbsSession back to main session.
+      // Doors flag via JH_FLAGFILE which stores in bbsSession.flaggedFiles.
+      // CAVEAT: in the XIM emulator the door's bbsSession proxy IS the
+      // main session (same object reference), so JH_FLAGFILE already
+      // wrote into session.flaggedFiles. A naive push here would
+      // double-flag everything (task #14: "F (flag) double-flags files"
+      // + download silently sends each file twice via the dedupe-by-path
+      // safety net in startZmodemDownload). Dedupe by filename+confNum
+      // before pushing.
       if (Array.isArray((exitState as any).bbsSession?.flaggedFiles) && (exitState as any).bbsSession.flaggedFiles.length > 0) {
         if (!Array.isArray((session as any).flaggedFiles)) {
           (session as any).flaggedFiles = [];
         }
-        (session as any).flaggedFiles.push(...(exitState as any).bbsSession.flaggedFiles);
-        console.log(`[launchAmigaDoor] Copied ${(exitState as any).bbsSession.flaggedFiles.length} flagged file(s) from door to session`);
+        const existing = (session as any).flaggedFiles as Array<{ filename?: string; fileName?: string; confNum?: number; conferenceId?: number }>;
+        const seen = new Set(existing.map((f) => {
+          const name = (f.filename || f.fileName || '').toString().toLowerCase();
+          const conf = (f.confNum ?? f.conferenceId ?? 0);
+          return `${conf}:${name}`;
+        }));
+        let added = 0;
+        for (const f of (exitState as any).bbsSession.flaggedFiles as Array<any>) {
+          const name = (f.filename || f.fileName || '').toString().toLowerCase();
+          const conf = (f.confNum ?? f.conferenceId ?? 0);
+          const key = `${conf}:${name}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          existing.push(f);
+          added++;
+        }
+        if (added > 0) {
+          console.log(`[launchAmigaDoor] Merged ${added} new flagged file(s) from door (skipped ${(exitState as any).bbsSession.flaggedFiles.length - added} dupes)`);
+        }
       }
 
       // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
@@ -2648,15 +2671,32 @@ console.log(
         );
       }
 
-      // Copy flagged files from door bbsSession back to main session
-      // Doors flag files via JH_FLAGFILE which stores in bbsSession.flaggedFiles
-      // Main BBS download handler checks session.flaggedFiles
+      // Copy flagged files from door bbsSession back to main session.
+      // Same dedupe-by-filename+confNum guard as launchAmigaDoor —
+      // see comment there for why a naive push double-flags.
       if (Array.isArray((exitState as any).bbsSession?.flaggedFiles) && (exitState as any).bbsSession.flaggedFiles.length > 0) {
         if (!Array.isArray((session as any).flaggedFiles)) {
           (session as any).flaggedFiles = [];
         }
-        (session as any).flaggedFiles.push(...(exitState as any).bbsSession.flaggedFiles);
-        console.log(`[executeAmigaDoor] Copied ${(exitState as any).bbsSession.flaggedFiles.length} flagged file(s) from door to session`);
+        const existing = (session as any).flaggedFiles as Array<{ filename?: string; fileName?: string; confNum?: number; conferenceId?: number }>;
+        const seen = new Set(existing.map((f) => {
+          const name = (f.filename || f.fileName || '').toString().toLowerCase();
+          const conf = (f.confNum ?? f.conferenceId ?? 0);
+          return `${conf}:${name}`;
+        }));
+        let added = 0;
+        for (const f of (exitState as any).bbsSession.flaggedFiles as Array<any>) {
+          const name = (f.filename || f.fileName || '').toString().toLowerCase();
+          const conf = (f.confNum ?? f.conferenceId ?? 0);
+          const key = `${conf}:${name}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          existing.push(f);
+          added++;
+        }
+        if (added > 0) {
+          console.log(`[executeAmigaDoor] Merged ${added} new flagged file(s) from door (skipped ${(exitState as any).bbsSession.flaggedFiles.length - added} dupes)`);
+        }
       }
 
       // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
