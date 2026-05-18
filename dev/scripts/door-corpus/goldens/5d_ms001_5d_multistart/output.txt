@@ -1,0 +1,5 @@
+
+       [- >5D-MultiStart V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]
+
+Cannot open Doors:5D-MultiStart/BBS:Commands/MultiCmd/!
+

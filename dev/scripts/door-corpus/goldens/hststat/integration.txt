@@ -1,0 +1,10 @@
+                                                                                
+-÷-+---+-÷-+---+-÷-+---+-HSTStat by v1.5 -fanta- & SøNÝ-+---+-÷-+---+-÷-+---+-÷-
+
+
+Choose the way calculations will be based on.
+
+1. Up and Download statistics
+2. Calls statistics
+
+Choose a number :> 

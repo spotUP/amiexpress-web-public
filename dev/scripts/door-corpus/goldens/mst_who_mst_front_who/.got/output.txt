@@ -1,0 +1,14 @@
+WhO-LoGiN' V1.00 by S¡eGeL/MsT
+.----------------------------------------------------------------------------.
+| # | Name/Handle         | Location                     | Action            |
+)---+---------------------+------------------------------+-------------------(
+| 1 | sysop| Server Room | USING A DOOR |
+| 2 | sysop| Server Room | IDLE |
+| 3 | sysop| Server Room | IDLE |
+| 4 | sysop| Server Room | IDLE |
+| 5 | sysop| Server Room | IDLE |
+| 6 | sysop| Server Room | IDLE |
+| 7 | sysop| Server Room | IDLE |
+| 8 | sysop| Server Room | IDLE |
+`----------------------------------------------------------------------------'
+

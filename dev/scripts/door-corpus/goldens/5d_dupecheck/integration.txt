@@ -1,0 +1,402 @@
+
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+         ___                                                                 
+                                                                             
+                     __                                                      
+                      /                                                      
+                     /                                               AND     
+                                                                      :.     
+                                             ___               ___   :::___  
+                                                                      .Y
+
+ [U                                          FIL       [R   - Z            
+ [N                                          LIS       [A   - A             
+                  H                 CON                                      
+                  O S               LEA                                     
+                                    CHA                                        
+   ] -                                                                    
+   ] -                                                               
+   ] -                                                                        
+                                                                     
+                                                                              
+
+                              [0]                                           
+                              [3]                                        
+                              [DS                                      
+                     ___                                                        
+
+         ___                     ___         ___                             
+                                             \__                             
+      \__            __                                                      
+                      /                                                      
+                     /                                            OMMAND     
+                                                                      :.     
+                                             ___               ___   :::___  
+                                                                      .Y
+
+ [U                                          FIL   )   [R   - Z            
+ [N                                          LIS       [A   - A             
+                  H                 CON                            CO        
+                  O S               LEA                            NE       
+                                    CHA                            TX          
+   ] -   OW       AGE                                                     
+   ] -   OW       TIM                                                
+   ] -   OW                                                                   
+                                          ONF                        
+                                          INE                                 
+
+ [E            ST             [0]                                    EDI    
+ [2            LER   G        [3]                                    ate 
+ [5            ECT            [DS                                    EW
+                     ___               ___      ___            ___              
+
+       _____                     ___         ___               ___           
+      /                                      \__                _            
+     _\__            __                                                      
+    /                 /                                                      
+   /                 /                                            OMMAND     
+                                                         _||          :.     
+                                             ___         /|_______   :::___  
+                                                                      .Y
+
+ [U] -                                       FIL   )   [RZ] - Z      UPL   
+ [N] -                                       LIS       [A]  - A      ILE    
+ [Z      PPY      H                 CON                            CO      TS
+ [C      AVE      O S               LEA                            NE      S
+ [S      OW                         CHA                            TX      FIL 
+ [H] - SHOW    P PAGE                                  [M                 
+ [T] - SHOW    AL TIM                                  [G            
+ [?] - SHOW    U                                       [E                     
+                                          ONF                        
+                                          INE                                 
+
+ [E            ST             [0]   SHE                              EDI    
+ [2            LER   G        [3]   D-s                              ate 
+ [5            ECT            [DS   SYS                              EW
+                     ___               ___      ___            ___              
+
+       _____                     ___   ___   ___               ___           
+      /                                ___   \__                _            
+     _\__            __                                                      
+    /                 /                                                      
+   /                 /                o                           OMMAND     
+        /                                                _||          :.     
+      ______         ___                     ___         /|_______   :::___  
+                       \                                              .Y
+
+ [U] -      D F                              FIL   )   [RZ] - Z      UPL   
+ [N] -      NEW                              LIS       [A]  - A      ILE    
+ [Z      PPY      H                 CON                            CO      TS
+ [C      AVE      O S   P           LEA                            NE      S
+ [S      OW                         CHA                            TX      FIL 
+ [H] - SHOW    P PAGE             -                    [M                 
+ [T] - SHOW    AL TIM             -                    [G            
+ [?] - SHOW    U                  -                    [E                     
+                                       T CONF               - R   GON
+                                       N LINE               T]    UESTIONNA   
+
+ [E            ST             [0]   SHE                              EDITIN 
+ [2            LERSLOG        [3]   D-s                              ated
+ [5            ECTORY         [DS   SYS                              EW
+      ___            ___               ___   ______            ___              
+
+       ________                  ___   ___   ___        ___________ _        
+      /     ___                        ___   \__      __\___    _ /s         
+     _\__            __                 \/                      //           
+    /                 /                //                      _/            
+   /          /      /                o/                         COMMAND     
+        /                                                _||          :.     
+      ______         ___                     ___         /|_______   :::___  
+                       \                                              .Y
+
+ [U] -      D FILE                           FIL   )   [RZ] - Z      UPL   
+ [N] -      NEW FI                           LIS       [A]  - A      ILE    
+ [Z      PPY      H                 CON         LAG                CO      TS
+ [C      AVE      O S   P           LEA          US                NE      S
+ [S      OW                         CHA         NGS                TX      FIL 
+ [H] - SHOW    P PAGE             -                    [M                 
+ [T] - SHOW    AL TIM             -                    [G            
+ [?] - SHOW    U                  -                    [E                     
+                                       T CONF               - R   GON
+                                       N LINE               T]    UESTIONNA   
+
+ [E      EXORCIST             [0]   SHE                              EDITING
+ [2      EW CALLERSLOG        [3]   D-s                              ated
+ [5      EW DIRECTORY         [DS   SYS                              EW
+      ______         ___               ____________            ___              
+
+       ________                  ___   ___   ___        ___________ _      _.
+      /     ___                        ___   \__      __\___    _ /s        |
+     _\__            __                 \/                      //           
+    /                 /                //                      _/            
+   /          /      /                o/                         COMMAND     
+        /                 /                              _||          :.     
+      ______   ___   ___ /_                  ___         /|_______   :::___  
+                       \/                                             .Y
+
+ [U] -      D FILE            [D] -          FIL   )   [RZ] - Z      UPL   
+ [N] -      NEW FI            [F] -          LIS       [A]  - A      ILE    
+ [Z      PPY      H                 CON      E FLAG                CO      TS
+ [C      AVE      O S   P           LEA       TO US                NE      S
+ [S      OW                         CHA      TTINGS                TX      FIL 
+ [H] - SHOW HELP PAGE             -    U O             [M      OLO        
+ [T] - SHOW LOCAL TIM             -    E S             [G      OG    
+ [?] - SHOW MENU                  -    N C      NCE    [E      DIT            
+                  NFE                  T CONF               - R   GON
+                  N                    N LINE               T]    UESTIONNA   
+
+ [E      EXORCIST             [0]   SHE                              EDITING
+ [2      EW CALLERSLOG        [3]   D-s                              ated
+ [5      EW DIRECTORY         [DS   SYS                              EW
+      ______   _________               ____________   ___      ______           
+
+       ________                  ___   ___   ___        ___________ _   ____.
+      /     ___                        ___   \__      __\___    _ /s      . |
+     _\__            __                 \/.                     //          |
+    /                 /                //                      _/           |
+   /          /      /                o/                         COMMAND    |
+        /                 /           /                  _||          :.     
+      ______   ___   ___ /____      _/\      ___         /|_______   :::___  
+                       \/                                             .Y
+
+ [U] -      D FILE            [D] -          FIL   )   [RZ] - Z      UPL   
+ [N] -      NEW FI            [F] -          LIS       [A]  - A      ILE    
+ [Z      PPY SE   H           [CF   CON      E FLAGS           ULL CO      TS
+ [C      AVE MS   O S   P     [E]   LEA       TO USER          EAD NE      S
+ [S      OW STA               [W]   CHA      TTINGS            IEW TX      FIL 
+ [H] - SHOW HELP PAGE             -    U O             [M      OLO        
+ [T] - SHOW LOCAL TIM   CET       -    E S             [G      OG    
+ [?] - SHOW MENU                  -    N C      NCE    [E      DIT            
+         EVIOUS   NFE                  T CONF               - R   GON
+          AUTO    N                    N LINE               T]    UESTIONNA   
+
+ [E      EXORCIST             [0]   SHE                      AC   NT EDITING
+ [2      EW CALLERSLOG        [3]   D-s                      D-   tivated
+ [5      EW DIRECTORY         [DS   SYS                      SY    VIEW
+      ______   _________   ___         ____________   ___      ______           
+
+       ________                  ___   ___   ___        ___________ _   ____.
+      /     ___                        ___   \__      __\___    _ /s      . |
+ ||  _\__            __          __     \/.                     //          |
+ |. /                 /           /    //                      _/           |
+ | /          /      /           /    o/                         COMMAND    |
+        /                 /           /                 /_||          :.     
+      ______   ___   ___ /____      _/\      ___      __ /|_______   :::___  
+                       \/                              \/             .Y
+
+ [U] -      D FILE            [D] -    NLO   FIL   )   [RZ] - Z      UPLOAD
+ [N] -      NEW FI            [F] -    W F   LIS       [A]  - A      ILEFLA 
+ [Z] -   PPY SE   H           [CF   CONFER   E FLAGS           ULL CO      TS
+ [C] -   AVE MS   O S   P     [E]   LEAVE     TO USER          EAD NE      S
+ [S] -   OW STA               [W]   CHANGE   TTINGS            IEW TX      FIL 
+ [H] - SHOW HELP PAGE             -    U O             [M]     OLOR O     
+ [T] - SHOW LOCAL TIM   CET       -    E S             [G]     OG OFF
+ [?] - SHOW MENU                  -    N C      NCE    [ED]    DIT DE         
+ [<] -   EVIOUS   NFE             -    T CONF          [R   - R   GON
+ [SENT    AUTO    N              M]    N LINE          [Q   T]    UESTIONNA   
+
+ [E    - EXORCIST             [0]   SHELL                    AC   NT EDITING
+ [2    VIEW CALLERSLOG        [3]   D-sact                   D-   tivated
+ [5    VIEW DIRECTORY         [DS   SYSOP                    SY    VIEW
+      __________________   ___         ____________   ___      ______           
+
+       ________                  ___   ___   ___        ___________ ________.
+      /     ___                        ___   \__      __\___    _ /s      . |
+ ||  _\__         _____          __     \/.         //          //          |
+ |. /                 /           /    //          o/       ____/           |
+ | /          /      /           /    o/           /             COMMAND    |
+        /    ./     /     /           /           /     /_||          :.     
+      _______/__________ /____   ____/\___   ____/_   __ /|__________:::___  
+                       \/                              \/             .Y
+
+ [U] -      D FILE            [D] -    NLO   FIL   )   [RZ] - Z      UPLOAD
+ [N] -      NEW FI            [F] -    W F   LIS       [A]  - A      ILEFLA 
+ [Z] -   PPY SE   H           [CF   CONFER   E FLAGS     S]    ULL CO      TS
+ [C] -   AVE MS   O S   P     [E]   LEAVE     TO USER    ]     EAD NE      S
+ [S] -   OW STA               [W]   CHANGE   TTINGS      ]     IEW TX      FIL 
+ [H] - SHOW HELP PAGE             - MENU O             [M]  - COLOR O     
+ [T] - SHOW LOCAL TIM   CET)      - PAGE S             [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN C      NCE    [ED] - EDIT DE         
+ [<] - PREVIOUS   NFE             -    T CONF          [R   - R   GON
+ [SENT] - AUTO    N              M]    N LINE      GE  [Q   T]    UESTIONNA   
+
+ [E    - EXORCIST             [0]   SHELL                    AC   NT EDITING
+ [2    VIEW CALLERSLOG        [3]   D-sact                   D-   tivated
+ [5    VIEW DIRECTORY         [DS   SYSOP                    SY    VIEW
+___   __________________   ___         ____________   ___      ______           
+
+ ._    ________               ______   ___   ______     ___________ ________.
+ |S   /     ___               /        ___   \__      __\___    _ /s      . |
+ ||  _\__         _____          __     \/.   \/    //          //          |
+ |. /                 /           /    //     /    o/       ____/           |
+ | /          /      /           /    o/     /     /             COMMAND    |
+        /    ./     /     /           /           /     /_||          :.     
+      _______/__________ /____   ____/\___   ____/_   __ /|__________:::___  
+                       \/                              \/             .Y
+
+ [U] -   LOAD FILE            [D] -    NLOAD FIL   )   [RZ] - Z      UPLOAD
+ [N] -   OW NEW FI            [F] -    W FILELIS       [A]  - A      ILEFLA 
+ [Z] -   PPY SE   H           [CF   CONFER   E FLAGS     S]    ULL CO   STATS
+ [C] -   AVE MS   O S   P     [E]   LEAVE     TO USER    ]     EAD NE   SG'S
+ [S] -   OW STA               [W]   CHANGE   TTINGS      ]     IEW TX   HA FILE
+ [H] - SHOW HELP PAGE             - MENU O             [M]  - COLOR O     
+ [T] - SHOW LOCAL TIM   CET)      - PAGE S             [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN C      NCE    [ED] - EDIT DE         
+ [<] - PREVIOUS   NFE             - NEXT CONF          [R   - R   GON
+ [SENT] - AUTO    N              M] - ON LINE      GE  [Q   T]    UESTIONNAIRE
+
+ [EX!] - EXORCIST             [0]   SHELL ACC                AC   NT EDITING
+ [2] - VIEW CALLERSLOG        [3]   D-sactiva                D-   tivated
+ [5] - VIEW DIRECTORY         [DS   SYSOP DOW                SY    VIEW
+___   ________________________      _____________________      ______           
+
+ ._    ________               ______   ___   ________   ___________ ________.
+ |S   /     ___               /        ___   \__    _\__\___    _ /s      . |
+ ||  _\__         _____          __     \/.   \/    //          //          |
+ |. /                 /           /    //     /    o/   _   ____/           |
+ | /          /      /           /    o/     /     /             COMMAND    |
+        /    ./     /     /     /     /           /     /_||          :.    |
+      _______/__________ /___________/\___   ____/_   __ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -   LOAD FILE            [D] -    NLOAD FILE(S)   [RZ] - Z      UPLOAD
+ [N] -   OW NEW FI            [F] -    W FILELIST      [A]  - A      ILEFLAG
+ [Z] -   PPY SE   H           [CF   CONFER   E FLAGS     S]    ULL CONF STATS
+ [C] -   AVE MS   O S   P     [E]   LEAVE     TO USER    ]     EAD NEW MSG'S
+ [S] -   OW STA               [W]   CHANGE   TTINGS      ]     IEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE             - MENU ON/O          [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIM   CET)      - PAGE SYSO          [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN CONF   NCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFE             - NEXT CONF   NCE    [R   - R   GON
+ [SENT] - AUTO SIGN              M] - ON LINE   SSAGE  [Q   T]    UESTIONNAIRE
+
+ [EX!] - EXORCIST             [0]   SHELL ACCESS             ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3]   D-sactivated             D-sactivated
+ [5] - VIEW DIRECTORY         [DS   SYSOP DOWNLO             SYSOP VIEW
+_________________________________   _____________________      ______   ___     
+
+ .____ ________               _____________/\________   ___________ ________.
+ |Sk!n/     ___               /     ______// \__    _\__\___    _ /s      . |
+ ||  _\__         _____     ./   __     \/.   \/    //          //          |
+ |. /                 /    //     /    //     /    o/   _   ____/           |
+ | /          /      /     /     /    o/     /     /             COMMAND    |
+        /    ./     /     /     /     /           /     /_||          :.    |
+      _______/__________ /___________/\___   ____/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -   LOAD FILE            [D] -    NLOAD FILE(S)   [RZ] - Z      UPLOAD
+ [N] -   OW NEW FI            [F] -    W FILELIST      [A]  - A      ILEFLAG
+ [Z] - ZIPPY SE   H           [CF   CONFERENCE FLAGS     S]    ULL CONF STATS
+ [C] - LEAVE MS   O S   P     [E]   LEAVE MSG TO USER    ]     EAD NEW MSG'S
+ [S] - SHOW STA               [W]   CHANGE SETTINGS      ]     IEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE             - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIM   CET)      - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN CONFERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFEREN          - NEXT CONF   NCE    [RL] - R   GON
+ [SENT] - AUTO SIGN              M] - ON LINE   SSAGE  [QUEST]    UESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO         S]- SYSOP VIEW
+_________________________________________________________      ______   ________
+
+ .____ ____________/\___      _____________/\________   ___________ ________.
+ |Sk!n/     ______/           /     ______// \__    _\__\___    _ /s      . |
+ ||  _\__         _____     ./\____     \/.   \/    //     /    //          |
+ |. /                 /    //     /    //     /    o/   ________/           |
+ | /          /      /     /     /    o/     /     /     /|.     COMMAND    |
+ :/     /    ./     /     /     /     /           /     /_||          :.    |
+ /_   _______/__________ /___________/\___   ____/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] -    NLOAD FILE(S)   [RZ] - Z   EM UPLOAD
+ [N] - SHOW NEW FILES         [F] -    W FILELIST      [A]  - A   R FILEFLAG
+ [Z] - ZIPPY SE   H           [CF   CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MS   O S   P     [E]   LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STA               [W]   CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE             - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)      - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN CONFERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFEREN      [>] - NEXT CONF   NCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE   SSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO       [VS]- SYSOP VIEW
+____________________________________________________________   _________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /           /     /_||          :.    |
+ /___________/__________ /___________/\___   ____/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO S   P     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE             - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)      - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN CONFERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

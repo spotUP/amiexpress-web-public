@@ -1,0 +1,406 @@
+
+                   SlickMove 1.0 By BUGBYTE For /X 3.x
+
+Current Date is 05-19-26 
+ERROR: cannot find 's:slickmove.cfg'
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                ___               _ _        
+                                                                  /s         
+                  ___                                                        
+                                                                             
+                                                                             
+                                            /                                
+               ___                        ___                                
+                                                                        
+
+            D F                                                            
+            NEW                                                             
+                                                   S                 NF      
+                                                   ER                W M    
+                                                                     T/L       
+         OW                                                               
+         OW                                                          
+         OW                                                                   
+                                  -                         - R      
+                                 M]                         T]                
+
+                                                             AC             
+                                                             D-          
+                                                             SY        
+      ______   ___                              ___                             
+
+                           ___               ______               _ _   ___  
+                                             \__                  /s      .  
+                  ___                                                        
+                                                                             
+                                                                             
+                          /                 /                                
+               ___       /_               ___      ___                       
+                        /                                               
+
+            D F                                 E(S         - Z            
+            NEW                                 T           - A             
+                                                   S                 NF      
+                        P                          ER                W M    
+                                                                     T/L       
+         OW                         MENU O                        R O     
+         OW                         PAGE S                        OFF
+         OW                         JOIN C                         DE         
+       PR                         -                         - R      
+      ] -                        M]                         T]                
+
+                                          ACC                AC             
+                                          iva                D-          
+                                          DOW                SY        
+      ______   ___               ___            ___                        ___  
+
+                           ___               ______      ___      _ _   ___  
+                                             \__         ___      /s      .  
+                \/___         \__                                            
+                /                                                            
+               /                                                             
+                          /                 /                                
+               ___       /_               ______   ___                       
+                        /                                               
+
+            D F                              FILE(S         - Z            
+            NEW                              LIST           - A             
+                  H              ]-    FER         S                 NF      
+                  O S   P         -    VE          ER                W M    
+                                  -    NGE                           T/L      E
+   ] -   OW                         MENU O                     OLOR O     
+   ] -   OW                         PAGE S                     OG OFF
+   ] -   OW                         JOIN C      NCE            DIT DE         
+       PR                         - NEX         NCE         - R      
+      ] -                        M] - O         SSA         T]                
+
+               ST                         ACC                AC             
+               LER                        iva                D-          
+               ECT                        DOW                SY        
+      ______   ___      ___      ___            ___                     ______  
+
+                           ______            ______      ___      _ _   ___  
+                              /              \__         ___      /s      .  
+                \/___         \__                                            
+                /                                       _                    
+               /                                                             
+                          /                 /                         :.     
+   ___         ___       /_               ______   ___               :::     
+                        /                                             .Y
+
+ [U         D F                              FILE(S         - Z   EM       
+ [N         NEW                              LIST           - A   R F       
+       ZI         H           [CF]- CONFER         S                 NF      
+       LE         O S   P     [E] - LEAVE          ER                W M    
+       SH                     [W] - CHANGE                           T/L      E
+   ] -   OW       AGE               MENU O   FF                OLOR O     
+   ] -   OW       TIM               PAGE S   P                 OG OFF
+   ] -   OW                         JOIN C   ERENCE            DIT DE         
+ [<    PR         NFE             - NEX         NCE         - R      
+ [S   ] -         N              M] - O         SSA         T]                
+
+               ST                 -       ACC          [1    AC             
+               LER                -       iva          [4    D-          
+               ECT               ]-       DOW          [V    SY        
+      ______   ___      ___      ___            ______            ___   ______  
+
+            ___            ______            ______      ___      _ _   ___  
+            ___               /              \__         ___      /s      .  
+                \/___         \__                                            
+                /                                       _                    
+               /                                                             
+        /                 /           /     /                         :.     
+   ______      ___       /_         _/\   ______   ___               :::     
+                        /                                             .Y
+
+ [U         D F   (S)               DOW      FILE(S         - Z   EM       
+ [N         NEW   LES               SHO      LIST           - A   R F       
+   ] - ZI         H           [CF]- CONFER         S                 NF      
+   ] - LE         O S   P     [E] - LEAVE          ER                W M    
+   ] - SH                     [W] - CHANGE                           T/L      E
+   ] -   OW       AGE               MENU O   FF                OLOR O     
+   ] -   OW       TIM               PAGE S   P                 OG OFF
+   ] -   OW                         JOIN C   ERENCE            DIT DE         
+ [<    PR         NFE   CE        - NEXT C      NCE    [R   - R      
+ [S   ] -         N              M] - ON L      SSA    [Q   T]                
+
+               ST                 -    LL ACC          [1    AC            G
+               LER   G            -    activa          [4    D-          
+               ECT               ]-    OP DOW          [V    SY        
+      ______   ______   ___      ______         ______            ___   ______  
+
+            ___            ______            ______     ____      _ _   ___  
+            ___               /              \__      __\___      /s      .  
+                \/___         \__                                            
+                /                                       _                    
+               /                                                             
+        /                 /           /     /           /             :.     
+   ______      ___   ___ /_         _/\   ______   _____             :::___  
+                       \/                              \/             .Y
+
+ [U         D F   (S)         [D]   DOW      FILE(S         - Z   EM       
+ [N         NEW   LES         [F]   SHO      LIST           - A   R F       
+   ] - ZI         H           [CF]- CONFER         S           ULL   NF    TS
+   ] - LE         O S   P     [E] - LEAVE          ER          EAD   W M   S
+   ] - SH                     [W] - CHANGE                     IEW   T/L   FILE
+ [H] - SHOW       AGE               MENU O   FF                OLOR O     
+ [T] - SHOW       TIM               PAGE S   P                 OG OFF
+ [?] - SHOW                         JOIN C   ERENCE            DIT DE         
+ [<    PR         NFE   CE    [>] - NEXT C      NCE    [R   - R   GON
+ [S   ] -         N           [OLM] - ON L      SSA    [Q   T]    UES         
+
+               ST                 -    LL ACC          [1    ACCOU         G
+               LER   G            -    activa          [4    D-sac       
+               ECT               ]-    OP DOW          [V    SYSOP     
+      ______   ____________      ______   ___   ______   ___      ___   ______  
+
+            ___   _/\      ______            ________   ____      _ _   ___  
+            ___   /           /              \__    _\__\___      /s      .  
+                \/___         \__             \/           /              |  
+                /                             /         _______           :  
+              //                             /           /|.      OMM   S .  
+        /           /     /           /     /           /_||          :.     
+   ______      _________ /_         _/\   ______   _____ /|_   ___   :::___  
+                       \/                              \/             .Y
+
+ [U         D F   (S)         [D]   DOW      FILE(S         - Z   EM       
+ [N         NEW   LES         [F]   SHO      LIST           - A   R F       
+   ] - ZIPPY      H           [CF]- CONFER         S     S]    ULL   NF    TS
+   ] - LEAVE      O S   P     [E] - LEAVE          ER    ]     EAD   W M   S
+   ] - SHOW                   [W] - CHANGE               ]     IEW   T/L   FILE
+ [H] - SHOW    P PAGE               MENU O   FF                OLOR O     
+ [T] - SHOW    AL TIM               PAGE S   P                 OG OFF
+ [?] - SHOW    U                    JOIN C   ERENCE            DIT DE         
+ [<    PR         NFE   CE    [>] - NEXT C      NCE    [R   - R   GON
+ [S   ] -         N           [OLM] - ON L      SSA    [Q   T]    UES   NNA   
+
+   X!]         ST                 -    LL ACC          [1    ACCOU         G
+   ] -         LER   G            -    activa          [4    D-sac       
+   ] -         ECT               ]-    OP DOW          [V    SYSOP     
+___   ______   ____________      ______   ___   ______   ___      ___   ______  
+
+            ___   _/\      _________         ________   ____      _ _   ___  
+            ___   /           /              \__    _\__\___      /s      .  
+ ||             \/___         \__         .   \/           /              |  
+ |.             /                             /         _______           :  
+ |            //                             /           /|.      OMM   S .  
+        /           /     /           /     /           /_||          :.    |
+   ______      _________ /_         _/\   ______   _____ /|_   ___   :::____|
+                       \/                              \/             .Y
+
+ [U] -      D F   (S)         [D]   DOW   AD FILE(S         - Z   EM       
+ [N] -      NEW   LES         [F]   SHO   ILELIST           - A   R F       
+   ] - ZIPPY SE   H           [CF]- CONFER         S     S] - FULL CONF    TS
+   ] - LEAVE MS   O S   P     [E] - LEAVE          ER    ]  - READ NEW M   S
+   ] - SHOW STA               [W] - CHANGE               ]  - VIEW TXT/L   FILE
+ [H] - SHOW    P PAGE               MENU O   FF                OLOR O   FF
+ [T] - SHOW    AL TIM               PAGE S   P                 OG OFF
+ [?] - SHOW    U                    JOIN C   ERENCE            DIT DE   IPT   
+ [<    PR         NFE   CE    [>] - NEXT C      NCE    [RL] - R   GON
+ [S   ] -         N           [OLM] - ON L      SSA    [QUEST]    UESTIONNA   
+
+   X!]         ST                 -    LL ACCESS       [1    ACCOU   EDI   G
+   ] -         LER   G            -    activated       [4    D-sac   ate 
+   ] -         ECT               ]-    OP DOWNLO       [V    SYSOP   EW
+___   _____________________      ______   ____________   ___      ___   ______  
+
+   ___      ___   _/\      _________   ___   ________   ____   ____ _   ___  
+   k!n      ___   /           /        ___   \__    _\__\___    _ /s      .  
+ ||             \/___         \__         .   \/           /              |  
+ |.             /                             /         _______           :  
+ |            //                             /           /|.      OMM   S .  
+        /           /     /           /     /           /_||          :.    |
+   ______      _________ /_         _/\   ______   _____ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -      D F   (S)         [D]   DOW   AD FILE(S         - Z   EM UPL   
+ [N] -      NEW   LES         [F]   SHO   ILELIST           - A   R FILE    
+   ] - ZIPPY SE   H           [CF]- CONFER         S     S] - FULL CONF    TS
+   ] - LEAVE MS   O S   P     [E] - LEAVE          ER    ]  - READ NEW M   S
+   ] - SHOW STA               [W] - CHANGE               ]  - VIEW TXT/L   FILE
+ [H] - SHOW    P PAGE               MENU O   FF        [M      OLOR ON/OFF
+ [T] - SHOW    AL TIM   CET         PAGE S   P         [G      OG OFF
+ [?] - SHOW    U                    JOIN C   ERENCE    [E      DIT DESCRIPT   
+ [<    PR         NFE   CE    [>] - NEXT C   ERENCE    [RL] - RELOGON
+ [S   ] -         N           [OLM] - ON L    MESSA    [QUEST] - QUESTIONNA   
+
+ [EX!]         ST                 -    LL ACCESS       [1    ACCOU   EDITING
+ [2] -         LER   G            -    activated       [4    D-sac   ated
+ [5] -         ECT               ]-    OP DOWNLO       [V    SYSOP   EW
+___   _____________________      ______   ____________   ___   ______   ________
+
+   ___ __   ___   _/\   ____________   ___   ________   ____   ____ _   ____.
+   k!n/     ___   /     /     /        ___   \__    _\__\___    _ /s      . |
+ ||             \/___         \__         .   \/    //     /              |  
+ |.             /                             /    o/   _______           :  
+ |            //                             /     /     /|.      OMMANDS .  
+        /    ./     /     /           /     /     /     /_||          :.    |
+   __________/__________ /_         _/\   _______/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -      D F   (S)         [D] - DOW   AD FILE(S    [R   - ZMODEM UPL   
+ [N] -      NEW   LES         [F] - SHO   ILELIST      [A   - ALTER FILE    
+   ] - ZIPPY SE   H           [CF]- CONFER         S     S] - FULL CONF    TS
+   ] - LEAVE MS   O S   P     [E] - LEAVE          ER    ]  - READ NEW M   S
+   ] - SHOW STA               [W] - CHANGE               ]  - VIEW TXT/L   FILE
+ [H] - SHOW    P PAGE               MENU O   FF        [M   - COLOR ON/OFF
+ [T] - SHOW    AL TIM   CET         PAGE S   P         [G   - LOG OFF
+ [?] - SHOW    U                    JOIN C   ERENCE    [E   - EDIT DESCRIPT   
+ [<    PR       CONFE   CE    [>] - NEXT C   ERENCE    [RL] - RELOGON
+ [S   ] -      SIGN           [OLM] - ON L    MESSA    [QUEST] - QUESTIONNA   
+
+ [EX!]      RCIST                 -    LL ACCESS       [1    ACCOU   EDITING
+ [2] -      CALLER   G            -    activated       [4    D-sac   ated
+ [5] -      DIRECT               ]-    OP DOWNLO       [V    SYSOP   EW
+___   _____________________      ______   ____________   _______________________
+
+ .____ ________   _/\   ____________   ___   ________   ____   ____ _   ____.
+ |Sk!n/     ___   /     /     /        ___   \__    _\__\___    _ /s      . |
+ ||             \/___         \__         .   \/    //     /    //        | |
+ |.             /                             /    o/   ________/         : |
+ |            //                             /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /           /     /     /     /_||          :.    |
+ /___________/__________ /_         _/\   _______/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -      D F   (S)         [D] - DOW   AD FILE(S    [R   - ZMODEM UPLOAD
+ [N] -      NEW   LES         [F] - SHO   ILELIST      [A   - ALTER FILEFLAG
+   ] - ZIPPY SE   H           [CF]- CONFERENC      S     S] - FULL CONF    TS
+   ] - LEAVE MS   O S   P     [E] - LEAVE MSG      ER    ]  - READ NEW M   S
+   ] - SHOW STA               [W] - CHANGE SE            ]  - VIEW TXT/L   FILE
+ [H] - SHOW    P PAGE               MENU O   FF        [M]  - COLOR ON/OFF
+ [T] - SHOW    AL TIM   CET)        PAGE S   P         [G]  - LOG OFF
+ [?] - SHOW    U                    JOIN C   ERENCE    [ED] - EDIT DESCRIPT   
+ [<    PR   OUS CONFE   CE    [>] - NEXT C   ERENCE    [RL] - RELOGON
+ [S   ] -   TO SIGN           [OLM] - ON L    MESSA    [QUEST] - QUESTIONNA   
+
+ [EX!]   EXORCIST                 -    LL ACCESS       [1    ACCOUNT EDITING
+ [2] -   EW CALLER   G            -    activated       [4    D-sactivated
+ [5] -   EW DIRECT               ]-    OP DOWNLO       [V    SYSOP VIEW
+______________________________   ______   ______________________________________
+
+ .____ ________   _/\______________________/\________   ____   ____ _   ____.
+ |Sk!n/     ___   /     /     /     ______// \__    _\__\___    _ /s      . |
+ ||             \/___         \__         .   \/    //     /    //        | |
+ |.             /                             /    o/   ________/         : |
+ |            //                             /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /           /     /     /     /_||          :.    |
+ /___________/__________ /____      _/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -      D FILE(S)         [D] - DOWNLOAD FILE(S    [R   - ZMODEM UPLOAD
+ [N] -      NEW FILES         [F] - SHOW FILELIST      [A   - ALTER FILEFLAG
+   ] - ZIPPY SE   H           [CF]- CONFERENC   LAGS   [FS] - FULL CONF    TS
+   ] - LEAVE MS   O S   P     [E] - LEAVE MSG    USER  [R]  - READ NEW M   S
+   ] - SHOW STA               [W] - CHANGE SE   NGS    [V]  - VIEW TXT/L   FILE
+ [H] - SHOW    P PAGE         [X] - MENU O   FF        [M]  - COLOR ON/OFF
+ [T] - SHOW    AL TIM   CET)  [O] - PAGE S   P         [G]  - LOG OFF
+ [?] - SHOW    U              [J] - JOIN C   ERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PR   OUS CONFE   CE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] -   TO SIGN           [OLM] - ON LINE MESSA    [QUEST] - QUESTIONNA   
+
+ [EX!]   EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] -   EW CALLER   G        [3] - D-sactivated       [4] - D-sactivated
+ [5] -   EW DIRECT            [DS]- SYSOP DOWNLO       [VS]- SYSOP VIEW
+______________________________   ______   ______________________________________
+
+ .____ ________   _/\______________________/\________   ____   ____ _   ____.
+ |Sk!n/     ___   /     /     /     ______// \__    _\__\___    _ /s      . |
+ ||             \/_____       \__         .   \/    //     /    //        | |
+ |.             /     /                       /    o/   ________/         : |
+ |            //     /                o      /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /           /     /     /     /_||          :.    |
+ /___________/__________ /____   ____/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -   LOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] -   OW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+   ] - ZIPPY SE   H           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF    TS
+   ] - LEAVE MS   O SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW M   S
+   ] - SHOW STA               [W] - CHANGE SETTINGS    [V]  - VIEW TXT/L   FILE
+ [H] - SHOW    P PAGE         [X] - MENU O   FF        [M]  - COLOR ON/OFF
+ [T] - SHOW    AL TIME (CET)  [O] - PAGE S   P         [G]  - LOG OFF
+ [?] - SHOW    U              [J] - JOIN C   ERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSA    [QUEST] - QUESTIONNAIRE
+
+ [EX!]   EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] -   EW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] -   EW DIRECTORY         [DS]- SYSOP DOWNLO       [VS]- SYSOP VIEW
+______________________________   _______________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____       .   \/    //     /    //        | |
+ |. /     /     /     /    //     /           /    o/   ________/         : |
+ | /     /    //     /     /     /    o      /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /           /     /     /     /_||          :.    |
+ /___________/__________ /____   ____/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSA    [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO       [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

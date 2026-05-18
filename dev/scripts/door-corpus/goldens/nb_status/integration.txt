@@ -1,0 +1,419 @@
+
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+          s!x-status v0.beta / coded by spider^af / analog future '97 
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+   sysop :                  axx type :              nr calls :          
+   board :                  axx lvl  :              user nr  :          
+   node  :                  axx area :              conf axx :          
+   init  :                
+   baud  :                  handle       :                                 
+   s!x   :                  location     :                                 
+   chat  :                  current conf :                                 
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+   pumped bytes :                      leeched bytes :                    
+   pumped files :                      leeched files :                    
+   bytes avail  :                      leeched today :                    
+   ratio        :                      leech limit   :                    
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011024000512000115200212Mainunlimited!
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                          _/\                     _ _        
+                                          //                      /s         
+                                                                             
+                                                                             
+                                                                  OMM        
+                                /                                            
+                              ___      ___                              ___  
+                                                                        
+
+                                  -       AD           [R                  
+                                  -       ILE          [A                   
+                                                   S                         
+                     YSO                           ER                       
+                                                                               
+                                                                          
+                                                                     
+                                                NCE                           
+                                                                     
+                                                                        NNA   
+
+ [E                                                                         
+ [2                                                                      
+ [5                                                                    
+                                    ___               ___                     __
+
+ ._                           ___         _/\           _         _ _        
+ |S                           /           //          __\         /s         
+                     __                                                      
+                      /                                                      
+                     /                                            OMM        
+                                /                 /                          
+               ___            ___      ___      _/_                     ___  
+                                                                        
+
+                              [D] - DOW   AD           [R               OAD
+                              [F] - SHO   ILE          [A               FLA 
+                              [CF                  S           ULL           
+                     YSO      [E]                  ER          EAD          
+                              [W]                              IEW             
+               P P                                                        
+               AL                                                    
+               U                                NCE                           
+                                                                     
+                                                                     TIONNA   
+
+ [E                                                                         
+ [2                                                                      
+ [5                                                                    
+___            ___                  ___               ___                     __
+
+ ._            ___            ___         _/\___        _         _ _        
+ |S            ___            /           // \__      __\         /s         
+                     __                                                      
+                      /                                                      
+                     /                                            OMM        
+                                /                 /                          
+               ___            ___      ___      _/_                     ___  
+                                                                        
+
+                              [D] - DOW   AD           [R   - Z         OAD
+                              [F] - SHO   ILE          [A   - A         FLA 
+   ] -                        [CF]- CONFER      LAGS           ULL           
+   ] -               YSO      [E] - LEAVE        USER          EAD          
+   ] -                        [W] - CHANGE      NGS            IEW             
+         OW    P P                        N/O                             
+         OW    AL    E (CET               YSO                        
+         OW    U                          ONF   NCE                           
+                                                            - R      
+                                                            T]       TIONNA   
+
+ [E                                                                         
+ [2               SLO                                                    
+ [5               ORY                                                  
+___            ___                  ___               ___   ___               __
+
+ ._         ______            ___         _/\___   __   _         _ _        
+ |S         ______            /           // \__    _\__\         /s         
+      \__            __                                                      
+                      /                                                      
+                     /                                            OMM        
+                          /     /                 /     /                    
+               ___       /_   ___      ___      _/_   __                ___  
+                        /                              \/               
+
+   ] -                        [D] - DOW   AD           [R   - ZMOD      OAD
+   ] -                        [F] - SHO   ILE          [A   - ALTE      FLAG
+   ] -                        [CF]- CONFER      LAGS           ULL           
+   ] -               YSO      [E] - LEAVE        USER          EAD          
+   ] -                        [W] - CHANGE      NGS            IEW             
+         OW    P P                        N/O                             
+         OW    AL    E (CET               YSO                        
+         OW    U                          ONF   NCE                           
+                  NFE                           NCE         - R      
+                  N                             SSA         T]       TIONNA   
+
+ [E                           [0] - SHE                                     
+ [2               SLO         [3] - D-s                                  
+ [5               ORY         [DS]- SYS                                
+___            ___            ___   ___               ___   ___   ______      __
+
+ ._    __   ______            _________   _/\___   __   _         _ _        
+ |S   /     ______            /     ___   // \__    _\__\         /s         
+      \__       \/   __                                                     |
+                /     /                                                     |
+               /     /                                            OMM       |
+                          /     /                 /     /_||                 
+               ___       /_______      ___      _/_   __ /|_            ___  
+                        /                              \/               
+
+   ] -                        [D] - DOW   AD           [R   - ZMOD      OAD
+   ] -                        [F] - SHO   ILE          [A   - ALTE      FLAG
+   ] -                        [CF]- CONFER      LAGS           ULL           
+   ] -               YSO      [E] - LEAVE        USER          EAD          
+   ] -                        [W] - CHANGE      NGS            IEW             
+         OW    P P                        N/O                  OLO        
+         OW    AL    E (CET               YSO                  OG    
+         OW    U                          ONF   NCE            DIT            
+                  NFE                  T C      NCE         - R      
+                  N                    N L      SSAGE       T]       TIONNA   
+
+ [E                           [0] - SHE                              EDI    
+ [2               SLO         [3] - D-s                              ate 
+ [5               ORY         [DS]- SYS                              EW
+______         ___   ___      ___   ___      ___      _________   ______      __
+
+ ._    __   ______            _________   _/\___   __   _         _ _   ___  
+ |S   /     ______            /     ___   // \__    _\__\         /s      .  
+     _\____     \/   __                                                     |
+    /     /     /     /                                                     |
+   /     /     /     /                                            OMM       |
+                          /     /                 /     /_||                 
+               ___       /__________   ___      _/_   __ /|_            ___  
+                        /                              \/               
+
+   ] -                        [D] - DOW   AD           [RZ] - ZMOD      OAD
+   ] -                        [F] - SHO   ILE          [A]  - ALTE      FLAG
+ [Z] -                        [CF]- CONFER      LAGS           ULL           
+ [C] -               YSO      [E] - LEAVE        USER          EAD          
+ [S] -                        [W] - CHANGE      NGS            IEW             
+         OW    P P                        N/OFF                OLO      FF
+         OW    AL    E (CET               YSOP                 OG    
+         OW    U                          ONFERENCE            DIT      IPT   
+   ] -          CONFE         [>] -    T C      NCE         - R      
+   ENT         SIGN           [OLM]    N L      SSAGE       T]       TIONNA   
+
+ [E                           [0] - SHE                              EDI    
+ [2               SLO         [3] - D-s                              ate 
+ [5               ORY         [DS]- SYS                              EW
+____________   ___   ___   ____________      ___      _________   ______      __
+
+ ._    ___________         ____________   _/\___   __   _         _ _   ___  
+ |S   /     ______            /     ___   // \__    _\__\         /s      .  
+     _\____     \/_____                 \/                      //          |
+    /     /     /     /                //                   ____/           |
+   /     /     /     /                 /                         COMM       |
+ :/     /                 /     /                 /     /_||                 
+ /_   ______   ___       /__________   ___      _/_   __ /|_            ___  
+                        /                              \/               
+
+   ] -            (S)         [D] - DOW   AD       )   [RZ] - ZMOD      OAD
+   ] -            LES         [F] - SHO   ILE          [A]  - ALTE      FLAG
+ [Z] -   PPY                  [CF]- CONFER      LAGS           ULL           
+ [C] -   AVE         YSO      [E] - LEAVE        USER          EAD          
+ [S] -   OW                   [W] - CHANGE      NGS            IEW             
+         OW    P P                        N/OFF                OLO      FF
+         OW    AL    E (CET               YSOP                 OG    
+         OW    U                          ONFERENCE            DIT      IPT   
+   ] -          CONFE         [>] -    T C      NCE         - R      
+   ENT         SIGN           [OLM]    N L      SSAGE       T]       TIONNA   
+
+ [E      EXORCI               [0] - SHELL                            EDITIN 
+ [2      EW CAL   SLO         [3] - D-sact                           ated
+ [5      EW DIR   ORY         [DS]- SYSOP                            EW
+____________   ___   ___   ____________      ___      _________   ______      __
+
+ ._    ___________   ___   ____________   _/\___   __   _         _ _   ___  
+ |S   /     ______            /     ___   // \__    _\__\         /s      .  
+     _\____     \/_____          __     \/.                     //        | |
+    /     /     /     /           /    //               _   ____/         : |
+   /     /    //     /           /     /                         COMM   S . |
+ :/     /                 /     /                 /     /_||                 
+ /_   ______   ___       /__________   ___      _/______ /|_            ___  
+                        /                              \/               
+
+   ] -            (S)         [D] - DOW   AD    E(S)   [RZ] - ZMODEM    OAD
+   ] -            LES         [F] - SHO   ILE   T      [A]  - ALTER F   FLAG
+ [Z] -   PPY      H           [CF]- CONFER      LAGS        - FULL           
+ [C] -   AVE      O SYSO      [E] - LEAVE        USER       - READ          
+ [S] -   OW                   [W] - CHANGE      NGS         - VIEW             
+       SHOW HELP P                        N/OFF                OLO      FF
+       SHOW LOCAL    E (CET               YSOP                 OG    
+       SHOW MENU                          ONFERENCE            DIT      IPT   
+   ] -      OUS CONFE         [>] -    T C      NCE      L] - R      
+   ENT      TO SIGN           [OLM]    N L      SSAGE    UEST]       TIONNA   
+
+ [E      EXORCI               [0] - SHELL                            EDITIN 
+ [2      EW CAL   SLO         [3] - D-sact                           ated
+ [5      EW DIR   ORY         [DS]- SYSOP                            EW
+____________   ___   __________________      ______   _________   ______      __
+
+ ._    ____________/\___   ____________   _/\___   __   _         _ _______  
+ |S   /     ______/           /     ___   // \__    _\__\         /s      .  
+     _\____     \/_____     ./   __     \/.                     //        | |
+    /     /     /     /    //     /    //               _   ____/         : |
+   /     /    //     /     /     /     /                         COMM   S . |
+ :/     /                 /     /                 /     /_||                 
+ /__________   ___       /__________   ___      _/______ /|_            ___  
+                        /                              \/               
+
+ [U] -            (S)         [D] - DOWNLOAD    E(S)   [RZ] - ZMODEM    OAD
+ [N] -            LES         [F] - SHOW FILE   T      [A]  - ALTER F   FLAG
+ [Z] - ZIPPY   ARCH           [CF]- CONFER      LAGS        - FULL           
+ [C] - LEAVE   G TO SYSO      [E] - LEAVE        USER       - READ          
+ [S] - SHOW    TUS            [W] - CHANGE      NGS         - VIEW             
+       SHOW HELP P                        N/OFF        [M      OLO      FF
+       SHOW LOCAL    E (CET)              YSOP         [G      OG    
+       SHOW MENU                          ONFERENCE    [E      DIT      IPT   
+ [<] - PR   OUS CONFE         [>] -    T C      NCE      L] - R      
+ [SENT] -   TO SIGN           [OLM]    N L      SSAGE    UEST]       TIONNA   
+
+ [E      EXORCI               [0] - SHELL ACC            ] -         EDITIN 
+ [2      EW CAL   SLOG        [3] - D-sactiva            ] -         ated
+ [5      EW DIR   ORY         [DS]- SYSOP DOW            S]-         EW
+____________   ___   __________________      __________________   ______      __
+
+ ._    ____________/\__________________   _/\___   __   _         _ _______  
+ |S   /     ______/     /     /     ___   // \__    _\__\         /s      .  
+     _\____     \/_____     ./\____     \/.                     //        | |
+    /     /     /     /    //     /    //               _   ____/         : |
+   /     /    //     /     /     /    o/                         COMMANDS . |
+ :/     /                 /     /                 /     /_||                 
+ /__________   ___       /__________   ___      _/______ /|____         ___  
+                        /                              \/               
+
+ [U] - UP         (S)         [D] - DOWNLOAD    E(S)   [RZ] - ZMODEM    OAD
+ [N] - SH         LES         [F] - SHOW FILE   T      [A]  - ALTER F   FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFER      LAGS        - FULL   NF      
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE        USER       - READ   W M    
+ [S] - SHOW STATUS            [W] - CHANGE      NGS         - VIEW   T/L      E
+       SHOW HELP P                -    U ON/OFF        [M   - COLO      FF
+       SHOW LOCAL    E (CET)      -    E SYSOP         [G   - LOG    
+       SHOW MENU                  -    N CONFERENCE    [E   - EDIT      IPT   
+ [<] - PR   OUS CONFEREN      [>] -    T C      NCE      L] - R      
+ [SENT] -   TO SIGN           [OLM]    N L      SSAGE    UEST]       TIONNAIRE
+
+ [E    - EXORCI               [0] - SHELL ACC            ] -         EDITIN 
+ [2    VIEW CAL   SLOG        [3] - D-sactiva            ] -         ated
+ [5    VIEW DIR   ORY         [DS]- SYSOP DOW            S]-         EW
+____________   ________________________      __________________   _________   __
+
+ .____ ____________/\__________________   _/\___   __   _         _ ________.
+ |Sk!n/     ______/     /     /     ___   // \__    _\__\         /s      . |
+ ||  _\____     \/_____     ./\____     \/.         //          //        | |
+ |. /     /     /     /    //     /    //          o/   _   ____/         : |
+ | /     /    //     /     /     /    o/           /             COMMANDS . |
+ :/     /                 /     /     /           /     /_||                 
+ /__________   ___       /___________/\___      _/______ /|____         ___  
+                        /                              \/               
+
+ [U] - UP      ILE(S)         [D] - DOWNLOAD    E(S)   [RZ] - ZMODEM    OAD
+ [N] - SH       FILES         [F] - SHOW FILE   T      [A]  - ALTER F   FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFER      LAGS   [F   - FULL   NF      
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE        USER  [R   - READ   W M    
+ [S] - SHOW STATUS            [W] - CHANGE      NGS    [V   - VIEW   T/L      E
+       SHOW HELP PAGE             -    U ON/OFF        [M   - COLO      FF
+       SHOW LOCAL TIME (CET)      -    E SYSOP         [G   - LOG    
+       SHOW MENU                  -    N CONFERENCE    [E   - EDIT      IPT   
+ [<] - PR   OUS CONFEREN      [>] -    T C      NCE      L] - R      
+ [SENT] -   TO SIGN           [OLM]    N L      SSAGE    UEST]       TIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACC          [1] - ACCOU   EDITIN 
+ [2] - VIEW CALLERSLOG        [3] - D-sactiva          [4] - D-sac   ated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOW          [VS]- SYSOP   EW
+____________   ________________________      ______________________________   __
+
+ .____ ____________/\__________________   _/\________   _         _ ________.
+ |Sk!n/     ______/     /     /     ___   // \__    _\__\         /s      . |
+ ||  _\____     \/_____     ./\____     \/.         //     /    //        | |
+ |. /     /     /     /    //     /    //          o/   ________/         : |
+ | /     /    //     /     /     /    o/           /     /|.     COMMANDS . |
+ :/     /                 /     /     /           /     /_||                 
+ /__________   ___       /___________/\___      _/______ /|____         ___  
+                        /                              \/               
+
+ [U] - UP      ILE(S)         [D] - DOWNLOAD    E(S)   [RZ] - ZMODEM    OAD
+ [N] - SH       FILES         [F] - SHOW FILE   T      [A]  - ALTER F   FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFER      LAGS   [FS] - FULL CONF    TS
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE        USER  [R]  - READ NEW M   S
+ [S] - SHOW STATUS            [W] - CHANGE      NGS    [V]  - VIEW TXT/L   FILE
+       SHOW HELP PAGE             -    U ON/OFF        [M   - COLOR O   FF
+       SHOW LOCAL TIME (CET)      -    E SYSOP         [G   - LOG OFF
+       SHOW MENU                  -    N CONFERENCE    [E   - EDIT DE   IPTION
+ [<] - PR   OUS CONFEREN      [>] -    T C   ERENCE      L] - RELO   
+ [SENT] -   TO SIGN           [OLM]    N L    MESSAGE    UEST] - Q   TIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOU   EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sac   ated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO       [VS]- SYSOP   EW
+_______________________________________      ___________________________________
+
+ .____ ____________/\______________________/\________   _         _ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\         /s      . |
+ ||  _\____     \/_____     ./\____     \/.         //     /    //        | |
+ |. /     /     /     /    //     /    //          o/   ________/         : |
+ | /     /    //     /     /     /    o/           /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /           /     /_||          :.     
+ /___________/_______    /___________/\___   ____/______ /|____      :::___  
+                        /                              \/             .Y
+
+ [U] - UP   D FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SH   NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFER   E FLAGS   [FS] - FULL CONF    TS
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE     TO USER  [R]  - READ NEW M   S
+ [S] - SHOW STATUS            [W] - CHANGE   TTINGS    [V]  - VIEW TXT/L   FILE
+       SHOW HELP PAGE             - MENU ON/OFF        [M   - COLOR O   FF
+       SHOW LOCAL TIME (CET)      - PAGE SYSOP         [G   - LOG OFF
+       SHOW MENU                  - JOIN CONFERENCE    [E   - EDIT DE   IPTION
+ [<] - PREVIOUS CONFEREN      [>] - NEXT CONFERENCE      L] - RELO   
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE    UEST] - Q   TIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+_______________________________________   ______________________________________
+
+ .____ ____________/\______________________/\________   _______   _ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___      /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /           /     /_||          :.    |
+ /___________/__________ /___________/\___   ____/______ /|____   ___:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H    SHOW HELP PAGE         [X] - MENU ON/OFF        [M   - COLOR ON/OFF
+ [T    SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G   - LOG OFF
+ [?    SHOW MENU              [J] - JOIN CONFERENCE    [E   - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

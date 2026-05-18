@@ -1,0 +1,23 @@
+
+
+                       NewFiles V1.0 by Byteandi/AFL`93
+
+
+Functions help :
+~~~~~~~~~~~~~~~~
+       [n] ---> shows the filelistings who exist and ask first for the Date
+                and than for the List 
+       [f] ---> shows the filehelp and ask what list you want
+     [f x] ---> shows the filelist direct x = number
+     [n ?] ---> for the help
+    [n -x] ---> shows  Files x days bevore this Day 
+   [n t u] ---> shows the files from this day in the upload dir
+   [n t a] ---> shows for files from this day in all dirs
+   [n s u] ---> shows new Files in the upload dir
+   [n s a] ---> shows new Files from all dirs
+[n s u ns] ---> shows new Files in the upload dir Nonstop
+[n s a ns] ---> shows new Files from all dirs Nonstop
+
+
+
+

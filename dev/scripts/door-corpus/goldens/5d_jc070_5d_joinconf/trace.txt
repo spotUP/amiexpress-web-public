@@ -1,0 +1,40 @@
+[LibraryTraps] Loaded LVOs from ~/Code/amiexpress-web/Documentation/7-Reference Sources/LVOs.i
+[LibraryTraps] Installing Exec.library vectors at base 0x?
+[LibraryTraps] Installed 87 Exec.library vectors
+[LibraryTraps] Stubbed 40 LVOs for exec.library from LVOs.i
+[LibraryTraps] Synced 126 trap addresses to MOIRA for batch execution
+[LibraryTraps] Installing utility.library vectors at base 0x?
+[LibraryTraps] Installed 39 utility.library vectors
+[LibraryTraps] Installing icon.library vectors at base 0x?
+[LibraryTraps] *** icon.library GetDiskObject at 0x? contains: 0x? (should be 0x?) ***
+[LibraryTraps] *** icon.library FULLY OPERATIONAL - ALL traps installed and ready ***
+[LibraryTraps] Installed 12 icon.library vectors
+[LibraryTraps] Installing dos.library vectors at base 0x?
+[LibraryTraps] Installed 99 dos.library vectors
+[LibraryTraps] Stubbed 61 LVOs for dos.library from LVOs.i
+[LibraryTraps] ============================================
+[LibraryTraps] AEDoor.library vectors: TRAP MODE (TypeScript handlers)
+[LibraryTraps] Base address: 0x?
+[LibraryTraps] Installing 20 trap handlers...
+[LibraryTraps] Installed 20 AEDoor.library vectors
+[ExecLibrary] Signal APPLIED: sigRecvd 0x? -> 0x?, sigWait=0x?, isWaiting=false
+[LibraryTraps] VERIFICATION: All 356 ILLEGAL instructions verified OK
+[LibraryTraps] Synced 356 trap addresses to MOIRA for batch execution
+[ExecLibrary] CAPTURED actual AEDoorPort address: 0x? (port="AEDoorPort1")
+[exec-vectors] OpenLibrary TRAP: name="dos.library" version=0
+[ExecLibrary] *** dos.library opened - base=0x? *** Door should store this and use it for all DOS calls
+[exec-vectors] OpenLibrary TRAP result: 0x?
+[exec-vectors] AllocMem TRAP: size=20 (0x?) flags=0x?
+[exec-vectors] AllocMem TRAP result: 0x?
+[exec-vectors] OpenLibrary TRAP: name="intuition.library" version=0
+[LibraryTraps] Installing intuition.library vectors at base 0x?
+[LibraryTraps] Installed 8 intuition.library vectors
+[LibraryTraps] Synced 364 trap addresses to MOIRA for batch execution
+[exec-vectors] OpenLibrary TRAP: name="icon.library" version=0
+[exec-vectors] AllocMem TRAP: size=256 (0x?) flags=0x?
+[ExecLibrary] replyMsg: Putting message 0x? to replyPort 0x?
+[ExecLibrary] replyMsg: Message delivered to replyPort
+[ExecLibrary][Trap][Wait] signalMask=0x?
+[ExecLibrary][Trap][Wait] returned 0x?
+[ExecLibrary][Trap][WaitPort] port=0x? name=undefined
+[exec-vectors] AllocMem TRAP: size=260 (0x?) flags=0x?

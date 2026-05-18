@@ -1,0 +1,419 @@
+
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+          s!x-status v0.beta / coded by spider^af / analog future '97 
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+   sysop :                  axx type :              nr calls :          
+   board :                  axx lvl  :              user nr  :          
+   node  :                  axx area :              conf axx :          
+   init  :                
+   baud  :                  handle       :                                 
+   s!x   :                  location     :                                 
+   chat  :                  current conf :                                 
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+   pumped bytes :                      leeched bytes :                    
+   pumped files :                      leeched files :                    
+   bytes avail  :                      leeched today :                    
+   ratio        :                      leech limit   :                    
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011024000512000115200212Mainunlimited!
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                        E                                   
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                       W F                                  
+                                      NFERE                                  
+                                      AVE M                                 
+                                      ANGE                                     
+                                       U O                                
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                    DOWNLOAD                               
+                                    SHOW FILEL                              
+                                    CONFERENCE                               
+                                    LEAVE MSG                               
+                                    CHANGE SET                                 
+                                    MENU ON/OF                            
+                                    PAGE SYSO                        
+                                     OIN CON                                  
+                                      XT CO                          
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                      o/                                     
+                                      /     /                                
+                                   __/\_______                               
+                                                                        
+
+                                  - DOWNLOAD FIL                           
+                                ] - SHOW FILELIST                           
+                                F]- CONFERENCE FL                            
+                                ] - LEAVE MSG TO                            
+                                ] - CHANGE SETTIN                              
+                                ] - MENU ON/OFF                           
+                                  - PAGE SYSOP                       
+                                  - JOIN CONFERE                              
+                                  - NEXT CONFER                      
+                                    - ON LINE                                 
+
+                                      ELL A                                 
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                      ____/                                  
+                                        \/.                                  
+                                  /    //     /                              
+                                 /    o/     /                               
+                                /     /     /                                
+                               ______/\__________/                           
+                                                                        
+
+                              [D] - DOWNLOAD FILE(S                        
+                              [F] - SHOW FILELIST                           
+                              [CF]- CONFERENCE FLAGS                         
+                              [E] - LEAVE MSG TO USE                        
+                              [W] - CHANGE SETTINGS                            
+                              [X] - MENU ON/OFF                           
+                              [O] - PAGE SYSOP                       
+                              [J] - JOIN CONFERENCE                           
+                              [>] - NEXT CONFERENCE                  
+                               OLM] - ON LINE MESS                            
+
+                                  - SHELL ACCESS                            
+                                  - D-sactivate                          
+                                    SYSOP DOWN                         
+                                      _____                                     
+
+                                 __________/\___                             
+                                    ______// \__                             
+                               ____     \/.   \/                             
+                                  /    //     /                              
+                                 /    o/     /     /                         
+                                /     /     /     /                          
+                            _________/\__________/___                        
+                                                                        
+
+                              [D] - DOWNLOAD FILE(S)                       
+                              [F] - SHOW FILELIST                           
+                              [CF]- CONFERENCE FLAGS                         
+                              [E] - LEAVE MSG TO USER                       
+                              [W] - CHANGE SETTINGS                            
+                              [X] - MENU ON/OFF                           
+                           )  [O] - PAGE SYSOP                       
+                              [J] - JOIN CONFERENCE                           
+                              [>] - NEXT CONFERENCE                  
+                              [OLM] - ON LINE MESSAGE                         
+
+                              [0] - SHELL ACCESS                            
+                              [3] - D-sactivated                         
+                               DS]- SYSOP DOWNLOAD                     
+                                _________________                               
+
+                             ______________/\_______                         
+                              /     ______// \__    _                        
+                            ./\____     \/.   \/    //                       
+                           //     /    //     /    o/                        
+                           /     /    o/     /     /                         
+                          /     /     /     /     /                          
+                         /___________/\__________/______                     
+                        /                              \/               
+
+                              [D] - DOWNLOAD FILE(S)   [R                  
+                              [F] - SHOW FILELIST      [A                   
+                              [CF]- CONFERENCE FLAGS   [F                    
+                        P     [E] - LEAVE MSG TO USER  [R                   
+                              [W] - CHANGE SETTINGS    [V                      
+                              [X] - MENU ON/OFF        [M                 
+                        CET)  [O] - PAGE SYSOP         [G            
+                              [J] - JOIN CONFERENCE    [E                     
+                        CE    [>] - NEXT CONFERENCE    [R            
+                              [OLM] - ON LINE MESSAGE  [                      
+
+                              [0] - SHELL ACCESS                            
+                              [3] - D-sactivated                         
+                              [DS]- SYSOP DOWNLOAD                     
+                            _________________________                           
+
+                         __________________/\________                        
+                        /     /     ______// \__    _\__\                    
+                            ./\____     \/.   \/    //                       
+                           //     /    //     /    o/   __                   
+                           /     /    o/     /     /     /                   
+                          /     /     /     /     /     /_|                  
+                      __ /___________/\__________/______ /|                  
+                       \/                              \/               
+
+                              [D] - DOWNLOAD FILE(S)   [RZ]                
+                              [F] - SHOW FILELIST      [A]                  
+                              [CF]- CONFERENCE FLAGS   [FS]                  
+                     YSOP     [E] - LEAVE MSG TO USER  [R]                  
+                              [W] - CHANGE SETTINGS    [V]                     
+                              [X] - MENU ON/OFF        [M]                
+                     E (CET)  [O] - PAGE SYSOP         [G]           
+                              [J] - JOIN CONFERENCE    [ED]                   
+                      ENCE    [>] - NEXT CONFERENCE    [RL]          
+                              [OLM] - ON LINE MESSAGE  [QUE                   
+
+                              [0] - SHELL ACCESS       [1]                  
+                              [3] - D-sactivated       [4]               
+                              [DS]- SYSOP DOWNLOAD     [V              
+                        _________________________________                       
+
+                      _____________________/\________   ___                  
+                        /     /     ______// \__    _\__\___                 
+                    ___     ./\____     \/.   \/    //     /                 
+                      /    //     /    //     /    o/   _____                
+                     /     /     /    o/     /     /     /|.                 
+                    /     /     /     /     /     /     /_||                 
+                   _____ /___________/\__________/______ /|___               
+                       \/                              \/               
+
+                  (S)         [D] - DOWNLOAD FILE(S)   [RZ] - Z            
+                  LES         [F] - SHOW FILELIST      [A]  - A             
+                  H           [CF]- CONFERENCE FLAGS   [FS] - F              
+                  O SYSOP     [E] - LEAVE MSG TO USER  [R]  - R             
+                              [W] - CHANGE SETTINGS    [V]  - V                
+                  AGE         [X] - MENU ON/OFF        [M]  - C           
+                  TIME (CET)  [O] - PAGE SYSOP         [G]  - L      
+                              [J] - JOIN CONFERENCE    [ED] - E               
+                   FERENCE    [>] - NEXT CONFERENCE    [RL] -        
+                              [OLM] - ON LINE MESSAGE  [QUEST]                
+
+                              [0] - SHELL ACCESS       [1] -                
+                    OG        [3] - D-sactivated       [4] -             
+                    Y         [DS]- SYSOP DOWNLOAD     [VS]-           
+                     _______________________________________                    
+
+                  _/\______________________/\________   _______              
+                  /     /     /     ______// \__    _\__\___                 
+                 /_____     ./\____     \/.   \/    //     /                 
+                      /    //     /    //     /    o/   ________             
+                     /     /     /    o/     /     /     /|.                 
+                    /     /     /     /     /     /     /_||                 
+                ________ /___________/\__________/______ /|______            
+                       \/                              \/               
+
+               ILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMOD         
+                FILES         [F] - SHOW FILELIST      [A]  - ALTE          
+               ARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL           
+               G TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ          
+               TUS            [W] - CHANGE SETTINGS    [V]  - VIEW             
+               P PAGE         [X] - MENU ON/OFF        [M]  - COLO        
+               AL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG    
+                              [J] - JOIN CONFERENCE    [ED] - EDI             
+                CONFERENCE    [>] - NEXT CONFERENCE    [RL] - REL    
+                IGN           [OLM] - ON LINE MESSAGE  [QUEST] -              
+
+                              [0] - SHELL ACCESS       [1] - ACC            
+                 RSLOG        [3] - D-sactivated       [4] - D-s         
+                 TORY         [DS]- SYSOP DOWNLOAD     [VS]- SYS       
+                  _____________________________________________                 
+
+               ____/\______________________/\________   __________           
+               ___/     /     /     ______// \__    _\__\___    _            
+                \/_____     ./\____     \/.   \/    //     /    //           
+                /     /    //     /    //     /    o/   ________/            
+              //     /     /     /    o/     /     /     /|.     CO          
+             ./     /     /     /     /     /     /     /_||                 
+             /__________ /___________/\__________/______ /|_________         
+                       \/                              \/               
+
+              FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM       
+             EW FILES         [F] - SHOW FILELIST      [A]  - ALTER         
+             SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CO        
+             MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NE       
+            STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TX          
+             ELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR       
+             OCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OF 
+             ENU              [J] - JOIN CONFERENCE    [ED] - EDIT D          
+             US CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGO 
+             O SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUE          
+
+              IST             [0] - SHELL ACCESS       [1] - ACCOUN         
+              LLERSLOG        [3] - D-sactivated       [4] - D-sact      
+              RECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP     
+               ___________________________________________________              
+
+            _______/\______________________/\________   ___________ _        
+            ______/     /     /     ______// \__    _\__\___    _ /s         
+                \/_____     ./\____     \/.   \/    //     /    //           
+                /     /    //     /    //     /    o/   ________/            
+              //     /     /     /    o/     /     /     /|.     COMMA       
+             ./     /     /     /     /     /     /     /_||          :      
+          ___/__________ /___________/\__________/______ /|__________::      
+                       \/                              \/             . 
+
+          OAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UP    
+          W NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FIL     
+          PY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF      
+          VE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW      
+          W STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/        
+          W HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/   
+          W LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+          W MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESC       
+          VIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+          AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTI       
+
+           ORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT E      
+            CALLERSLOG        [3] - D-sactivated       [4] - D-sactiva   
+            DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIE 
+            _________________________________________________________           
+
+         __________/\______________________/\________   ___________ ____     
+            ______/     /     /     ______// \__    _\__\___    _ /s         
+        ___     \/_____     ./\____     \/.   \/    //     /    //           
+          /     /     /    //     /    //     /    o/   ________/            
+         /    //     /     /     /    o/     /     /     /|.     COMMANDS    
+        /    ./     /     /     /     /     /     /     /_||          :.     
+       ______/__________ /___________/\__________/______ /|__________:::__   
+                       \/                              \/             .Y
+
+       UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOA 
+       SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFL  
+       ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF ST   
+       LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG  
+       SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA     
+       SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+       SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+       SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIP    
+       PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+        - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONN    
+
+         EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDIT   
+        IEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+        IEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+         _______________________________________________________________        
+
+       ____________/\______________________/\________   ___________ _______  
+      /     ______/     /     /     ______// \__    _\__\___    _ /s      .  
+     _\____     \/_____     ./\____     \/.   \/    //     /    //        |  
+          /     /     /    //     /    //     /    o/   ________/         :  
+         /    //     /     /     /    o/     /     /     /|.     COMMANDS .  
+        /    ./     /     /     /     /     /     /     /_||          :.     
+     ________/__________ /___________/\__________/______ /|__________:::____ 
+                       \/                              \/             .Y
+
+     - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+     - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+     - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+     - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+     - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FI  
+     - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+     - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+     - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTIO 
+     - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+     T] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAI  
+
+     ] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+     - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+     - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+      _____________________________________________________________________     
+
+   ___ ____________/\______________________/\________   ___________ ________.
+   k!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+     _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+  . /     /     /     /    //     /    //     /    o/   ________/         : |
+   /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+  /     /    ./     /     /     /     /     /     /     /_||          :.    |
+  ___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+  <] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+  SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+  EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+  2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+   ] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+   ___________________________________________________________________________  
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

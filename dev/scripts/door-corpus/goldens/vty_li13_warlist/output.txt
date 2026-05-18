@@ -1,0 +1,6 @@
+Attempting to generate empty list...FAIL
+
+Some of the required files are missing, exiting...
+
+    Thank you for using WarList V1.3               Coded by Wardancer/Vanity    
+

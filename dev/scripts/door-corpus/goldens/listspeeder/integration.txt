@@ -1,0 +1,6 @@
+
+  ListSpeeder v1.2 ©1993 by Aquarius 
+
+For which directories (1-2) do you want the filelists (as free download)?
+Separate them with spaces. Write A to select all directories.
+> 

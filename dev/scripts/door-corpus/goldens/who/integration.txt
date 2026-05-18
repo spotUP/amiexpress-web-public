@@ -1,0 +1,24 @@
+
+
+  Nd . Name              . Location          . Action          . Misc Info
+.----+-------------------+-------------------+-----------------+--------------.
+| 00 |                   |                   | sMOKING a jOINT |              |
+| 01 |                   |                   | sMOKING a jOINT |              |
+| 02 |                   |                   | sMOKING a jOINT |              |
+| 03 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |
+| 04 |                   |                   | sMOKING a jOINT |              |
+| 05 |                   |                   | sMOKING a jOINT |              |
+| 06 |                   |                   | sMOKING a jOINT |              |
+| 07 |                   |                   | sMOKING a jOINT |              |
+| 08 |                   |                   | sMOKING a jOINT |              |
+| 09 |                   |                   | sMOKING a jOINT |              |
+| 10 |                   |                   | sMOKING a jOINT |              |
+| 11 |                   |                   | sMOKING a jOINT |              |
+| 12 |                   |                   | sMOKING a jOINT |              |
+| 13 |                   |                   | sMOKING a jOINT |              |
+| 14 |                   |                   | sMOKING a jOINT |              |
+| 15 |                   |                   | sMOKING a jOINT |              |
+| 16 |                   |                   | sMOKING a jOINT |              |
+| 17 |                   |                   | sMOKING a jOINT |              |
+| 18 |                   |                   | sMOKING a jOINT |              |
+press <RETURN> to continue

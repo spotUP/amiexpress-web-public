@@ -1,0 +1,418 @@
+
+
+        [FRONTSTAT V1.1]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS
+    -====================================================================-
+     ND#  ALIAS/HANDLE          LOCATION              ACTION
+    -====================================================================-
+      1.  sysop                 Server Room           IDLE             
+      2.  sysop                 Server Room           IDLE             
+      3.  sysop                 Server Room           IDLE             
+      4.  sysop                 Server Room           IDLE             
+      5.  sysop                 Server Room           IDLE             
+      6.  sysop                 Server Room           IDLE             
+      7.  sysop                 Server Room           IDLE             
+      8.  sysop                 Server Room           IDLE             
+      9.  sysop                 Server Room           IDLE             
+    -====================================================================-
+
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+ ._                              ___                        ___              
+ |S                                                                          
+ ||                                                                          
+ |.                                                                          
+ |                                                                           
+                          /                                                  
+                     ___ /_                                                  
+                       \/                                               
+
+                                                               MOD         
+                                                               LTE          
+ [Z                                    FER             [F                    
+ [C                                    VE              [R                   
+ [S                                    NGE             [V                      
+       SH                                                                 
+       SH            E (                                             
+       SH                                       NCE                           
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+   ___                                                                        __
+
+ ._                              ______         ___         ___              
+ |S                                 ___                                      
+ ||      __                                                                  
+ |.       /                                                                  
+ |       /                            o                              AND     
+                          /                                                  
+                     ___ /____                                               
+                       \/                                               
+
+            D F                                                MOD         
+            NEW                                                LTE          
+ [Z                                    FER         S   [F   - F              
+ [C                                    VE          ER  [R   - R             
+ [S                                    NGE             [V   - V                
+   ] - SH                                                                 
+   ] - SH            E (   )                                         
+   ] - SH                                       NCE                           
+                CO                        ONF   NCE                  
+               SIG                        INE   SSA                           
+
+                                                                            
+                  SLO                                                    
+                  ORY                                                  
+   ___                           ___                                          __
+
+ ._    __                        ______         ___         ___              
+ |S   /                             ___                                      
+ ||      __       ___                   \/                                   
+ |.       /                            //                                    
+ |       /                            o/                             AND     
+                          /                              _||                 
+                     ___ /____               ___         /|_                 
+                       \/                                               
+
+            D F                     DOW            )        - ZMOD         
+            NEW                     SHO                     - ALTE          
+ [Z                                    FER         S   [F   - F              
+ [C                                    VE          ER  [R   - R             
+ [S                                    NGE             [V   - V                
+   ] - SHOW                                                               
+   ] - SHOW          E (   )                                         
+   ] - SHOW                                     NCE                           
+                CO                     T CONFERENCE            ELO   
+               SIG                     N LINE MESSA            - Q            
+
+            RCI                                                   NT    TIN 
+            CAL   SLO                                             tiv   d
+            DIR   ORY                                              VI  
+   ___                           ___                     ___                  __
+
+ ._    __                        _________      ___      ______              
+ |S   /                             ______               ___                 
+ ||      __       ___                   \/                 /              | |
+ |.       /                            //                ___              : |
+ |       /                            o/                 /|.      OMMANDS . |
+        /                 /                              _||                 
+      ___            ___ /____               ___         /|____              
+                       \/                                               
+
+         LOAD F                     DOW            )   [R   - ZMOD         
+         OW NEW                     SHO                [A   - ALTE          
+ [Z] -                           ]-    FER   E F   S   [F   - F              
+ [C] -                            -    VE     TO   ER  [R   - R             
+ [S] -                            -    NGE   TTI       [V   - V                
+   ] - SHOW                                            [M                 
+   ] - SHOW          E (   )                           [G            
+   ] - SHOW                                     NCE    [E                     
+                CO                     T CONFERENCE      L]    ELO   
+               SIG                     N LINE MESSA      UES   - Q            
+
+            RCI                                                   NT    TIN 
+            CAL   SLO                                             tiv   d
+            DIR   ORY                                              VI  
+   ___                           ___   ___               ___   ___            __
+
+ ._    __   ___         ___      _________      ___     _______              
+ |S   /     ___         /           ______            __\___                 
+ ||      __       ___                   \/                 /              | |
+ |.       /                            //                ______           : |
+ |       /    /                       o/                 /|.      OMMANDS . |
+        /    ./           /                             /_||                 
+      ___   _/_      ___ /____               ___      __ /|____              
+                       \/                              \/               
+
+       UPLOAD F                     DOW            )   [R   - ZMOD         
+       SHOW NEW                     SHO                [A   - ALTE          
+ [Z] -       SE   H              ]-    FER   E F   S   [F   - F              
+ [C] -       MS   O S             -    VE     TO   ER  [R   - R             
+ [S] -      STA                   -    NGE   TTI       [V   - V                
+   ] - SHOW       AGE                                  [M                 
+   ] - SHOW       TIME (   )                           [G            
+   ] - SHOW                                     NCE    [E                     
+                CO            [>]      T CONFERENCE      L] - RELO   
+               SIG            [OL      N LINE MESSA      UEST] - Q            
+
+       -    RCI                                                   NT    TIN 
+       VI   CAL   SLO                                             tiv   d
+       VI   DIR   ORY                                              VI  
+   ___                           ___   ___               _________            __
+
+ ._    __   ___         ___      _________      ___     _______              
+ |S   /     ___         /           ______            __\___                 
+ ||      __       ___                   \/                 /              | |
+ |.       /                            //               _______           : |
+ |       /    /                       o/                 /|.      OMMANDS . |
+ :/     /    ./     /     /     /                       /_||                 
+ /_   _______/_   ______ /_______            ___      __ /|____              
+                       \/                              \/               
+
+       UPLOAD F                     DOWNLO         )   [R   - ZMOD         
+       SHOW NEW                     SHOW F             [A   - ALTE          
+ [Z] -       SE   H              ]-    FER   E F   S   [F   - F              
+ [C] -       MS   O S             -    VE     TO   ER  [R   - R             
+ [S] -      STA                   -    NGE   TTI       [V   - V                
+   ] - SHOW       AGE         [X]            FF        [M                 
+   ] - SHOW       TIME (   )  [O]            P         [G            
+   ] - SHOW                   [J]            ERENCE    [E                     
+                CO      CE    [>] -    T CONFERENCE    [RL] - RELO   
+               SIG            [OLM]    N LINE MESSA    [QUEST] - Q      NNA   
+
+   X!] -    RCI                                                   NT    TIN 
+   ] - VI   CAL   SLO                                             tiv   d
+   ] - VI   DIR   ORY                                              VI  
+   ___               ___         ___   ___         ___   _________            __
+
+ ._    __   ___      ______      _________      ___     _______              
+ |S   /     ___         /           ______            __\___                 
+ ||   \____       ___                   \/                 /              | |
+ |.       /                            //               _______           : |
+ |       /    /                       o/                 /|.      OMMANDS . |
+ :/     /    ./     /     /     /                       /_||                 
+ /_   _______/_   ______ /_______      ___   ___      __ /|____              
+                       \/                              \/               
+
+       UPLOAD F                     DOWNLO   FIL   )   [R   - ZMOD         
+       SHOW NEW                     SHOW F   LIS       [A   - ALTE          
+ [Z] -       SE   H              ]-    FER   E F   S   [F   - F              
+ [C] -       MS   O SYSO          -    VE     TO   ER  [R   - R             
+ [S] -      STA                   -    NGE   TTI       [V   - V                
+ [H] - SHOW       AGE         [X]            FF        [M      OLO        
+ [T] - SHOW       TIME (   )  [O]            P         [G      OG    
+ [?] - SHOW                   [J]            ERENCE    [E      DIT         ION
+                CONFE   CE    [>] -    T CONFERENCE    [RL] - RELO   
+               SIGN           [OLM]    N LINE MESSA    [QUEST] - Q      NNAIRE
+
+   X!] -    RCI                                                   NT    TIN 
+   ] - VI   CAL   SLOG                                            tiv   d
+   ] - VI   DIR   ORY                                              VI  
+   ______         ______   ___   ____________      ___   _________            __
+
+ ._    __   ___      _____________________      ___     _______            _.
+ |S   /     ___         /     /     ______            __\___                |
+ ||   \____       ___       ./          \/                 /              | |
+ |.       /                //          //               _______           : |
+ |       /    /            /          o/                 /|.      OMMANDS . |
+ :/     /    ./     /     /     /                       /_||                 
+ /_   _______/_   ______ /_______      ___   ___      __ /|____              
+                       \/                              \/               
+
+ [U    UPLOAD F                     DOWNLO   FIL   )   [RZ] - ZMOD         
+ [N    SHOW NEW                     SHOW F   LIS       [A]  - ALTE          
+ [Z] -       SE   H              ]-    FERENCE F   S   [F   - F      NF      
+ [C] -       MS   O SYSO          -    VE MSG TO   ER  [R   - R      W M    
+ [S] -      STA                   -    NGE SETTI       [V   - V      T/L       
+ [H] - SHOW    P PAGE         [X]            FF        [M      OLO        
+ [T] - SHOW    AL TIME (   )  [O]            P         [G      OG    
+ [?] - SHOW    U              [J]            ERENCE    [E      DIT         ION
+            OUS CONFE   CE    [>] - NEXT CONFERENCE    [RL] - RELO   
+            TO SIGN           [OLM] - ON LINE MESSA    [QUEST] - Q      NNAIRE
+
+   X!] -    RCI                                          ] -      NT    TIN 
+   ] - VI   CAL   SLOG                                   ] -      tiv   d
+   ] - VI   DIR   ORY                           AD       S]-       VI  
+   ______      _______________   ____________      ___   _________            __
+
+ ._    __   ___   _/\_____________________      ___     __________   ___   _.
+ |S   /     ___   /     /     /     ______            __\___    _           |
+ ||   \____     \/___       ./          \/    \/    //     /              | |
+ |.       /     /          //          //     /    o/   _______           : |
+ |       /    //           /          o/     /     /     /|.      OMMANDS . |
+ :/     /    ./     /     /     /                       /_||          :.     
+ /_   _______/_   ______ /_______      ___   ___      __ /|____      :::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F                     DOWNLOAD FIL   )   [RZ] - ZMOD         
+ [N] - SHOW NEW                     SHOW FILELIS       [A]  - ALTE         G
+ [Z] -       SE   H           [CF]-    FERENCE F   S   [F   - F      NF    TS
+ [C] -       MS   O SYSO      [E] -    VE MSG TO   ER  [R   - R      W M   S
+ [S] -      STA               [W] -    NGE SETTI       [V   - V      T/L   FIL 
+ [H] - SHOW    P PAGE         [X]            FF        [M]  - COLO        
+ [T] - SHOW    AL TIME (CET)  [O]            P         [G]  - LOG    
+ [?] - SHOW    U              [J]            ERENCE    [ED] - EDIT         ION
+            OUS CONFE   CE    [>] - NEXT CONFERENCE    [RL] - RELO   
+            TO SIGN           [OLM] - ON LINE MESSA    [QUEST] - Q   TIONNAIRE
+
+   X!] -    RCI                                          ] -      NT    TIN 
+   ] - VI   CAL   SLOG                                   ] -      tiv   d
+   ] - VI   DIR   ORY                           AD       S]-       VI  
+   ______      _______________   ____________      ___   _________            __
+
+ ._    __   ___   _/\_____________________      ___     __________   ___   _.
+ |S   /     ___   /     /     /     ______            __\___    _           |
+ ||  _\____     \/_____     ./   __     \/    \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /           /           /_||          :.     
+ /_   _______/_   ______ /__________   _________      __ /|____      :::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F                     DOWNLOAD FILE(S)   [RZ] - ZMOD         
+ [N] - SHOW NEW                     SHOW FILELIST      [A]  - ALTE         G
+ [Z] - ZIPPY SE   H           [CF]- CONFERENCE FLAGS   [F   - F    CONF    TS
+ [C] - LEAVE MS   O SYSO      [E] - LEAVE MSG TO USER  [R   - R    NEW M   S
+ [S] - SHOW STA               [W] - CHANGE SETTINGS    [V   - V    TXT/L   FIL 
+ [H] - SHOW    P PAGE         [X]         N/OFF        [M]  - COLO        
+ [T] - SHOW    AL TIME (CET)  [O]         YSOP         [G]  - LOG    
+ [?] - SHOW    U              [J]         ONFERENCE    [ED] - EDIT         ION
+            OUS CONFE   CE    [>] - NEXT CONFERENCE    [RL] - RELO   
+            TO SIGN           [OLM] - ON LINE MESSA    [QUEST] - Q   TIONNAIRE
+
+   X!] -    RCI                                          ] -      NT EDITIN 
+   ] - VI   CAL   SLOG                                   ] -      tivated
+   ] - VI   DIR   ORY                           AD       S]-       VIEW
+   ______      _______________   _______________   ___   _________            __
+
+ ._    __   ___   _/\_____________________      ___     __________   ___   _.
+ |S   /     ___   /     /     /     ______            __\___    _           |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /           /           /_||          :.     
+ /_   _______/_   ______ /__________   _________      __ /|____      :::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F                     DOWNLOAD FILE(S)   [RZ] - ZMOD      OAD
+ [N] - SHOW NEW                     SHOW FILELIST      [A]  - ALTE      FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [F   - FULL CONF    TS
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE MSG TO USER  [R   - READ NEW M   S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V   - VIEW TXT/L   FILE
+ [H] - SHOW HELP PAGE         [X] -       N/OFF        [M]  - COLOR O   FF
+ [T] - SHOW LOCAL TIME (CET)  [O] -       YSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] -       ONFERENCE    [ED] - EDIT DE   IPTION
+            OUS CONFE   CE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+            TO SIGN           [OLM] - ON LINE MESSA    [QUEST] - QUESTIONNAIRE
+
+   X!] -    RCI                   -                      ] -      NT EDITING
+   ] - VI   CAL   SLOG            -                      ] -      tivated
+   ] - VI   DIR   ORY            ]-             AD       S]-       VIEW
+   ______   __________________   _______________   ___   _________   ___      __
+
+ ._    __   ___   _/\_____________________      _____   __________   ___   _.
+ |S   /     ___   /     /     /     ______          _\__\___    _           |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /           /           /_||          :.     
+ /_   _______/_   ______ /__________   _________      __ /|____      :::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F               [D]   DOWNLOAD FILE(S)   [RZ] - ZMOD      OAD
+ [N] - SHOW NEW               [F]   SHOW FILELIST      [A]  - ALTE      FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [F   - FULL CONF    TS
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE MSG TO USER  [R   - READ NEW M   S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V   - VIEW TXT/L   FILE
+ [H] - SHOW HELP PAGE         [X] -       N/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] -       YSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] -       ONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] -   TO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+   X!] - EXORCIST                 - SHE                [1] - AC   NT EDITING
+   ] - VIEW CALLERSLOG            - D-s                [4] - D-   tivated
+   ] - VIEW DIRECTORY            ]- SYS         AD     [VS]- SY    VIEW
+   ______   __________________________________________   _________   ___      __
+
+ ._    __   ___   _/\_____________________   ________   ___________ ________.
+ |S   /     ___   /     /     /     ______   \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /           /_||          :.    |
+ /___________/_   ______ /___________/\_________      __ /|____   ___:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F   (S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM    OAD
+ [N] - SHOW NEW   LES         [F] - SHOW FILELIST      [A]  - ALTER F   FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [F   - FULL CONF    TS
+ [C] - LEAVE MSG TO SYSO      [E] - LEAVE MSG TO USER  [R   - READ NEW M   S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V   - VIEW TXT/L   FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] -   TO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST                 - SHE                [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG            - D-s                [4] - D-sactivated
+ [5] - VIEW DIRECTORY            ]- SYS         AD     [VS]- SYSOP VIEW
+______________________________________________________   _________   ___      __
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /           /_||          :.    |
+ /___________/_   ______ /___________/\_________   _____ /|____   ___:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM    OAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER F   FLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] -   TO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

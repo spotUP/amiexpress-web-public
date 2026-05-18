@@ -1,0 +1,11 @@
+
+
+              ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)
+
+
+Please Insert ToolType :
+USER_DATA=<full path for user.data> in Bytekiller.info
+
+
+This Bytekiller is registered to: [ Unregistered ]
+

@@ -1,0 +1,13 @@
+
+- --- -----[ 5D-TimeBank v0.01 ]----- --- - ---- - ---- --- -----[ sTc/5D ]---
+
+Today download-bytes remaining ........:          0   Saved: 0
+Today online-time remaining (minutes) .:          1   Saved: 0
+
+  1) Move current daily bytes remaining to bank
+  2) Move daily bytes from bank to current daily bytes remaining
+  3) Move current daily time remaining to bank
+  4) Move daily time remaining from bank to current daily time remaining
+> Q) Quit
+
+Choose: _   (Use cursor keys followed by return or use the mentioned hotkeys)

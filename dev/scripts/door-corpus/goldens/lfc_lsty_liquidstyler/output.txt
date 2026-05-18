@@ -1,0 +1,11 @@
+
+     _______ __________
+     \_    /_\     ___/___
+  .-_/   _/   \_/\_____   \_- --- ------ ------------------------(f@nK!)-.
+  | \_____     /___________/ LiQuiD STyLeR bY KLeiNDuiMPJe version    2.o|
+  `---- --\_____/------------------------ -- ----------------------------'
+
+Config Icon Could Not Be Allocated! Refer to manual!
+
+BIN File for this node was not found.
+Start LSAfter before using the Examine door.

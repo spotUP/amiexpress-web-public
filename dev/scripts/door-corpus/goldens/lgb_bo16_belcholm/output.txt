@@ -1,0 +1,7 @@
+                                                                               
+                      BelchOLM v1.6 by Noisy Belch/LOGIC                       
+
+       Type [OLM 1] to Olm Node 1 or [OLM 1 4 2] to Olm Node 1 2 and 4
+
+                     [OLM *] will post the Olm to EVERYONE
+
