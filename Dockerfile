@@ -108,23 +108,19 @@ FROM node:20-alpine AS backend-builder
 # Install build tools needed for native modules (deasync, better-sqlite3)
 RUN apk add --no-cache python3 make g++ build-base curl
 
-# lrzsz: build here (known-good toolchain) so the production stage only
-# needs to COPY the binaries. Alpine v3.23 dropped the lrzsz package
-# from community, so we build from upstream sources. ~5s build.
+# lrzsz: not in any Alpine repo. Build from upstream sources, but tell
+# gcc 14 to treat the K&R-era code as C89 (`-std=gnu89`) so `func()`
+# means "args unspecified" instead of "zero args". The xstrtol.h /
+# long-options.c errors that broke earlier builds are all C89-vs-C23
+# function-prototype mismatches.
 RUN set -eux; \
-    echo 'int main(void){return 0;}' > /tmp/hello.c; \
-    gcc /tmp/hello.c -o /tmp/hello && /tmp/hello && echo "gcc sanity OK"; \
     curl -fsSL https://www.ohse.de/uwe/releases/lrzsz-0.12.20.tar.gz -o /tmp/lrzsz.tgz; \
     cd /tmp && tar xzf lrzsz.tgz; \
     cd lrzsz-0.12.20; \
-    # lrzsz 0.12.20 ships an ancient autoconf-generated configure (2003) whose
-    # C-compiler test feeds `-g -O2` and a K&R-era conftest.c that musl-gcc 14
-    # rejects with implicit-int errors. Force a permissive CFLAGS that musl
-    # tolerates and disable -Werror-style strictness.
-    CFLAGS='-O2 -Wno-implicit-int -Wno-implicit-function-declaration -Wno-return-mismatch -Wno-incompatible-pointer-types -fcommon' \
+    CFLAGS='-O2 -std=gnu89 -fcommon -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=incompatible-pointer-types -Wno-error=return-mismatch' \
     ./configure --prefix=/usr/local --disable-nls --disable-rpath \
-      || { echo '--- config.log tail ---'; tail -120 config.log; exit 1; }; \
-    make -j"$(nproc)"; \
+      || { echo '--- config.log tail ---'; tail -80 config.log; exit 1; }; \
+    make -j"$(nproc)" CFLAGS='-O2 -std=gnu89 -fcommon -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=incompatible-pointer-types -Wno-error=return-mismatch'; \
     make install; \
     /usr/local/bin/sz --version
 
