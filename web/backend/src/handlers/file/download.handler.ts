@@ -328,9 +328,24 @@ export class DownloadHandler {
       return;
     }
 
-    // Add to list, update count
+    // Add to list, update count. Reject files whose comment starts
+    // "Restricted" per express.e checkFIBForFileSize:
+    //   IF StrCmp(fBlock.comment,'Restricted',10)=0 THEN
+    //     callersLog('\t\tAttempt to download RESTRICTED file [<path>]')
+    //     RETURN
+    // Without this gate, sysop-marked restricted files are downloadable.
     if (!session.tempData) session.tempData = { downloadFileList: [], downloadNumFiles: 0 };
     for (const file of found) {
+      const commentText = (file.comment || file.description || '');
+      if (typeof commentText === 'string' && commentText.toLowerCase().startsWith('restricted')) {
+        socket.emit('ansi-output', `\r\n\x1b[31m${file.name}: restricted file\x1b[0m\r\n`);
+        try {
+          const { callersLog } = require('../../server/database-helpers');
+          await callersLog(session.user?.id || null, session.user?.username || 'unknown',
+            `\t\tAttempt to download RESTRICTED file [${file.fullPath || file.name}]`);
+        } catch (_err) { /* non-critical */ }
+        continue;
+      }
       this.printFileFound(socket, session, file);  // express.e:12736
       fileList.push(file);
     }
