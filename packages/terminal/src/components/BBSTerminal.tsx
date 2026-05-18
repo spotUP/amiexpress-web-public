@@ -167,6 +167,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const ripBuffer = useRef<string>(''); // Buffer for RIP commands
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
+  // When the server emits `transfer-raw:init` with direction='upload'
+  // we DEFER arming the Sentry until the user picks a file. This kills
+  // the ZACK→ZFILE race where rz's post-ZACK timeout (~1s, not affected
+  // by `-t`) was firing before the OS file picker returned control.
+  const pendingZmodemInit = useRef<{ direction: 'upload' | 'download'; paths: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const transferTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gamepadManagerRef = useRef<GamepadManager | null>(null);
@@ -352,7 +357,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     pendingUploadFiles.current = files;
     if (!files.length) {
       terminalInstance.current?.writeln?.('\r\nUpload cancelled.\r\n');
-      zmodemSession.current?.close?.();
+      if (pendingZmodemInit.current) {
+        socketRef.current?.emit('transfer-raw:cancel');
+        pendingZmodemInit.current = null;
+      } else {
+        zmodemSession.current?.close?.();
+      }
+      return;
+    }
+    // Deferred path: user picked file before Sentry was armed. Arm
+    // now — beginZmodem will emit `transfer-raw:start`, backend
+    // spawns rz, ZRQINIT/ZRINIT/ZSINIT/ZACK/ZFILE all flow in one
+    // burst with no user-pick stall.
+    if (pendingZmodemInit.current) {
+      const init = pendingZmodemInit.current;
+      pendingZmodemInit.current = null;
+      console.log(`[ZMODEM] file picked (${files.length} file(s)); arming Sentry and starting handshake`);
+      beginZmodem(init.direction, init.paths);
       return;
     }
     if (zmodemSession.current && zmodemSession.current.type === 'send') {
@@ -408,15 +429,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     transferState.current = { direction, paths: paths || [] };
     const sender = (octets: any) => {
-      socket.emit('transfer-raw:data', new Uint8Array(octets));
+      const u8 = new Uint8Array(octets);
+      console.log(`[ZMODEM] sender ${u8.length}B → server: ${Array.from(u8.slice(0, 24)).map(b => b.toString(16).padStart(2, '0')).join(' ')}${u8.length > 24 ? ' ...' : ''}`);
+      socket.emit('transfer-raw:data', u8);
     };
 
+    console.log(`[ZMODEM] beginZmodem direction=${direction} paths=`, paths);
     zmodemSentry.current = new Zmodem.Sentry({
-      to_terminal: () => {
-        // Suppress raw noise in UI; ZMODEM takes over the channel.
+      to_terminal: (data: any) => {
+        console.log('[ZMODEM] to_terminal bytes:', data?.length, data?.slice?.(0, 32));
       },
-      on_detect: handleZmodemDetection,
-      on_retract: () => {},
+      on_detect: (det: any) => {
+        console.log('[ZMODEM] on_detect fired:', det);
+        handleZmodemDetection(det);
+      },
+      on_retract: () => {
+        console.log('[ZMODEM] on_retract');
+      },
       sender,
     });
 
@@ -1284,18 +1313,47 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('transfer-raw:init', (payload: any) => {
-      beginZmodem(payload?.direction || 'download', payload?.paths || []);
+      const direction = (payload?.direction || 'download') as 'upload' | 'download';
+      const paths: string[] = payload?.paths || [];
+      // Upload path: pop the OS file picker BEFORE arming the Sentry
+      // (and therefore before the backend spawns rz). Once a file is
+      // chosen, handleFileInputChange arms the Sentry and emits
+      // transfer-raw:start, which fires the backend handshake and
+      // spawns rz. Result: ZRQINIT/ZRINIT/ZSINIT/ZACK/ZFILE all flow
+      // in one tight burst with no user-pick stall.
+      if (direction === 'upload' && pendingUploadFiles.current.length === 0) {
+        pendingZmodemInit.current = { direction, paths };
+        console.log('[ZMODEM] deferring beginZmodem; opening file picker first');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+          fileInputRef.current.click();
+        } else {
+          // Fallback: arm immediately and let detection click the picker.
+          pendingZmodemInit.current = null;
+          beginZmodem(direction, paths);
+        }
+        return;
+      }
+      beginZmodem(direction, paths);
     });
 
     socket.on('transfer-raw:data', (data: ArrayBuffer | Uint8Array) => {
-      if (!zmodemSentry.current) return;
+      if (!zmodemSentry.current) {
+        console.warn('[ZMODEM] transfer-raw:data arrived but no Sentry armed; dropping', data);
+        return;
+      }
       const view =
         data instanceof ArrayBuffer
           ? new Uint8Array(data)
           : data instanceof Uint8Array
             ? data
             : new Uint8Array(data as any);
-      zmodemSentry.current.consume(view);
+      console.log(`[ZMODEM] consume ${view.length}B: ${Array.from(view.slice(0, 16)).map((b: any) => b.toString(16).padStart(2, '0')).join(' ')}`);
+      try {
+        zmodemSentry.current.consume(view);
+      } catch (err) {
+        console.error('[ZMODEM] consume threw:', err);
+      }
     });
 
     socket.on('transfer-raw:complete', () => {
@@ -1307,7 +1365,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     // Track pending files for batch upload - send one at a time
-    let pendingUploadFiles: File[] = [];
+    let legacyBatchQueue: File[] = [];
     let currentUploadOptions: { accept?: string; maxSize?: number; multiple?: boolean; uploadUrl?: string; fieldName?: string } | null = null;
 
     // Helper to upload the next file in the queue.
@@ -1324,14 +1382,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // tripped maxHttpBufferSize (#11). The HTTP route stays binary the
     // whole way.
     const uploadNextFile = async () => {
-      if (pendingUploadFiles.length === 0) {
+      if (legacyBatchQueue.length === 0) {
         console.log('[BBSTerminal] No more files to upload, signaling batch complete');
         socket.emit('upload-batch-complete');
         return;
       }
 
-      const file = pendingUploadFiles.shift()!;
-      console.log(`[BBSTerminal] Uploading file: ${file.name} (${pendingUploadFiles.length} remaining)`);
+      const file = legacyBatchQueue.shift()!;
+      console.log(`[BBSTerminal] Uploading file: ${file.name} (${legacyBatchQueue.length} remaining)`);
 
       if (currentUploadOptions?.maxSize && file.size > currentUploadOptions.maxSize) {
         socket.emit('ansi-output', `\r\n\x1b[31mFile ${file.name} exceeds maximum size of ${currentUploadOptions.maxSize} bytes\x1b[0m\r\n`);
@@ -1376,8 +1434,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[BBSTerminal] show-file-upload event received:', options);
 
       // If we have pending files from a batch selection, upload the next one
-      if (pendingUploadFiles.length > 0) {
-        console.log(`[BBSTerminal] Uploading next file from queue (${pendingUploadFiles.length} remaining)`);
+      if (legacyBatchQueue.length > 0) {
+        console.log(`[BBSTerminal] Uploading next file from queue (${legacyBatchQueue.length} remaining)`);
         uploadNextFile();
         return;
       }
@@ -1412,7 +1470,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         console.log('[BBSTerminal] Files selected:', files.length);
 
         // Queue all files for upload
-        pendingUploadFiles = Array.from(files);
+        legacyBatchQueue = Array.from(files);
 
         // Start uploading the first file
         uploadNextFile();

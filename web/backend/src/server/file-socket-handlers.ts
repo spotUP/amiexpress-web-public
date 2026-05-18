@@ -102,7 +102,7 @@ function clearUploadContext(session: BBSSession, socket?: Socket) {
  * Shared logic for both file-upload and file-uploaded handlers
  * Returns true if file was processed, false if waiting for description input
  */
-async function handleDizExtractionAndDescription(
+export async function handleDizExtractionAndDescription(
   socket: Socket,
   session: BBSSession,
   data: { filename: string; originalname: string; size: number; path?: string },

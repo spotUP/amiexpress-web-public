@@ -110,9 +110,10 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
 
   const ulStartTime = Date.now();
 
-  // Telnet/SSH transfers go through lrzsz when available. See
-  // startZmodemDownload for the same pattern + rationale.
-  if (transport.type !== 'web') {
+  // All transports go through lrzsz when available — web bridges
+  // lrzsz output via the existing `transfer-raw:data` socket channel
+  // to the browser-side zmodem.js Sentry.
+  {
     const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
     if (isLrzszAvailable()) {
       const lrzManager = new LrzszTransferManager({
@@ -154,7 +155,29 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // path comment for rationale.
       session.subState = LoggedOnSubState.FILES_UPLOAD;
       socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
-      lrzManager.start();
+      if (transport.type === 'web') {
+        let fired = false;
+        const start = () => { if (fired) return; fired = true; lrzManager.start(); };
+        socket.once('transfer-raw:start', () => start());
+        socket.once('transfer-raw:cancel', () => {
+          if (fired) return;
+          fired = true;
+          socket.emit('ansi-output', '\r\nUpload cancelled.\r\n\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = true;
+        });
+        setTimeout(() => {
+          if (!fired) {
+            fired = true;
+            socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+          }
+        }, 120000);
+        socket.emit('transfer-raw:init', { direction: 'upload', paths: [playpen] });
+      } else {
+        lrzManager.start();
+      }
       return;
     }
     console.warn('[ZMODEM-UL] lrzsz not installed, falling back to zmodem.js (may not interoperate)');
@@ -257,12 +280,12 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
   const goodbyeAfter = !!(session as any)._downloadGoodbyeAfter;
   (session as any)._downloadGoodbyeAfter = undefined;
 
-  // Telnet/SSH transfers go through lrzsz (the canonical Forsberg/Ohse
-  // implementation) when it's installed on the host. Battle-tested with
-  // every terminal client; sidesteps the pure-JS zmodem.js library's
-  // event-name and state-machine bugs we kept hitting. Web stays on
-  // zmodem.js — it runs in the browser, no subprocess available.
-  if (transport.type !== 'web') {
+  // All transports go through lrzsz (canonical Forsberg/Ohse) when
+  // available. Web bridges sz output to the browser-side zmodem.js
+  // Sentry via `transfer-raw:data` — the two ZMODEM implementations
+  // interop over the socket the way lrzsz interops with any other
+  // ZMODEM client over a serial wire.
+  {
     const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
     if (isLrzszAvailable()) {
       const lrzManager = new LrzszTransferManager({
@@ -313,7 +336,17 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
         console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: SKIPPED (condition false)`);
       }
       console.log(`[ZMODEM-DL ${ctxId}] using lrzsz, spawning sz`);
-      lrzManager.start();
+      if (transport.type === 'web') {
+        const startLrzsz = (() => {
+          let fired = false;
+          return () => { if (fired) return; fired = true; lrzManager.start(); };
+        })();
+        socket.once('transfer-raw:start', () => startLrzsz());
+        setTimeout(() => startLrzsz(), 1500);
+        socket.emit('transfer-raw:init', { direction: 'download', paths: files });
+      } else {
+        lrzManager.start();
+      }
       return;
     }
     console.warn(`[ZMODEM-DL ${ctxId}] lrzsz not installed, falling back to zmodem.js (may not interoperate)`);

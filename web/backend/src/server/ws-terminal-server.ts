@@ -111,9 +111,25 @@ export function attachWSTerminalServer(
   httpServer: HttpServer,
   connectionHandler: (conn: WSTerminalConnection) => void,
 ): WebSocketServer {
-  const wss = new WebSocketServer({
-    server: httpServer,
-    path: "/ws/terminal",
+  // `noServer: true` + manual upgrade routing is required when another
+  // WebSocket server (Socket.IO) already listens on the same HTTP
+  // server. With `{server, path}`, ws registers its own `upgrade`
+  // listener and calls `abortHandshake` on every non-matching path —
+  // which destroys Socket.IO's upgrades before they finish, surfacing
+  // in the browser as "Invalid frame header".
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (req, socket, head) => {
+    let url: URL;
+    try {
+      url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    } catch {
+      return;
+    }
+    if (url.pathname !== "/ws/terminal") return; // let Socket.IO (or others) handle it
+    wss.handleUpgrade(req, socket as any, head, (ws: any) => {
+      wss.emit("connection", ws, req);
+    });
   });
 
   wss.on("connection", (ws: WSLike, req: any) => {

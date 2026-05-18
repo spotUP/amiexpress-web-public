@@ -1,6 +1,13 @@
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css' // CRITICAL: Import CSS so Vite includes it in production build
+// zmodem.js is a UMD bundle that attaches `window.Zmodem` as a side
+// effect. The terminal package imports it the same way, but vite
+// inside the frontend tree-shakes that side-effect import when
+// resolved through a workspace-linked dist file. Importing it here at
+// the entry point guarantees it's bundled and `window.Zmodem` is set
+// before BBSTerminal mounts.
+import 'zmodem.js/dist/zmodem'
 
 // Expose dynamic font paths so the frontend can resolve them regardless of BASE_URL
 const baseUrl = import.meta.env.BASE_URL ?? '/'

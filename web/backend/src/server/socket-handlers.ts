@@ -115,6 +115,17 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   const clientIp = socket.handshake.address;
 console.log(`Client connected from ${clientIp}`);
 
+  // Diagnostic: log every transfer-raw:* event we receive at the
+  // socket layer. Helps distinguish "the browser never emitted it"
+  // from "the server dropped it before reaching the handler".
+  socket.onAny((event: string, ...args: any[]) => {
+    if (event.startsWith('transfer-raw:')) {
+      const arg0 = args[0];
+      const size = arg0?.length ?? arg0?.byteLength ?? (typeof arg0 === 'string' ? arg0.length : 0);
+      console.log(`[onAny] ${event} args=${args.length} firstSize=${size}`);
+    }
+  });
+
   // Debug MCP: tee every 'ansi-output' emit into a per-node ring buffer.
   // Dev-only. Transparent to the socket (we still call the original emit).
   // Applied exactly once per socket via a marker flag.
@@ -869,11 +880,21 @@ console.log('=== COMMAND PROCESSED ===\n');
 
   socket.on('transfer-raw:data', (data: Buffer) => {
     const session = getSession(socket.id);
-    if (!session || !(session as any).transferRawActive) return;
-    const sink = (session as any).transferRawSink || (session as any).serialInputHook;
-    if (sink) {
-      sink(Buffer.from(data));
+    const len = data?.length ?? (data as any)?.byteLength ?? 0;
+    if (!session) {
+      console.log(`[transfer-raw:data] ${len}B dropped — no session`);
+      return;
     }
+    if (!(session as any).transferRawActive) {
+      console.log(`[transfer-raw:data] ${len}B dropped — transferRawActive=false`);
+      return;
+    }
+    const sink = (session as any).transferRawSink || (session as any).serialInputHook;
+    if (!sink) {
+      console.log(`[transfer-raw:data] ${len}B dropped — no sink`);
+      return;
+    }
+    sink(Buffer.from(data));
   });
 
   socket.on('transfer-raw:end', () => {

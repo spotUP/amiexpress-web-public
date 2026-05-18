@@ -129,63 +129,17 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
 
   const ulStartTime = Date.now();
 
-  // Web transport: the browser has a direct socket channel, not a
-  // serial/terminal connection. Doing real ZMODEM here would mean
-  // running zmodem.js in the BBS and a second zmodem.js Sentry in
-  // the browser — that crashes (browser saw "Unhandled header:
-  // ZRINIT/ZRQINIT" because its Sentry was in receive mode while
-  // server emitted bytes it didn't expect). Simpler: trigger the
-  // browser file picker via `show-file-upload`, browser uploads
-  // the file bytes via the `file-upload` socket event, backend
-  // pipes through the standard processFileUpload pipeline.
-  if (transportType === 'web') {
-    // Set up an upload context the way the file picker normally
-    // does so handleUploadBatchComplete works for cleanup.
-    const { db } = require('../../database');
-    const { config: appConfig } = require('../../config');
-    const areas = await db.getFileAreas(session.currentConf).catch(() => []);
-    const fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
-    if (!fileArea) {
-      socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = true;
-      return;
-    }
-    session.tempData = {
-      uploadMode: true,
-      fileArea,
-      uploadSessionId: `web-rz-${Date.now()}`,
-      uploadBatch: [],
-      uploadCount: 0,
-      uploadStartTime: ulStartTime,
-      webUploadMode: true,
-      batchUpload: false,
-      currentUploadIndex: 0,
-      filesProcessedCount: 0,
-      uploadedFiles: 0,
-      uploadedBytes: 0,
-    } as any;
-    socket.emit('show-file-upload', {
-      accept: '*/*',
-      maxSize: 100 * 1024 * 1024,
-      uploadUrl: '/api/upload',
-      fieldName: 'file',
-      multiple: true,
-    });
-    socket.emit('ansi-output', '\r\n\x1b[36mFile picker opened. Select files to upload.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.FILES_UPLOAD;
-    return;
-  }
-
-  // Telnet/SSH: hand off to lrzsz (canonical Forsberg/Ohse
-  // implementation). The zmodem.js fallback at the bottom of this
-  // function lacks the ZRINIT CANFC32 patch and the ZFILE ZCRCE→ZCRCW
-  // rewrite needed for MuffinTerm interop — silently falling through
-  // to it on telnet/SSH would produce the "Unhandled header: ZRINIT"
-  // Sentry crash + "Upload aborted" UX. If lrzsz isn't installed on
-  // a telnet/SSH-capable host, that's a deployment bug, not a runtime
-  // fallback case.
-  // Telnet/SSH path (the web branch above already returned).
+  // All transports — including web — go through lrzsz (canonical
+  // Forsberg/Ohse). For web, the browser arms zmodem.js Sentry on
+  // `transfer-raw:init`; lrzsz output is bridged through the
+  // existing `transfer-raw:data` socket channel. Two zmodem
+  // implementations talking over the socket interop the same way
+  // lrzsz interops with any other ZMODEM client over a serial wire.
+  //
+  // The historical "Unhandled header: ZRINIT" Sentry crash was caused
+  // by IAC double-escape on telnet (commit b1e0b8f9b removed) +
+  // ANSI cooking pre-Sentry; both are fixed now. The web branch that
+  // previously routed to HTTP `/api/upload` is gone — uniform pipeline.
   {
     const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
     const lrzAvailable = isLrzszAvailable();
@@ -241,7 +195,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           const pathMod = require('path');
           const { db } = require('../../database');
           const { config: appConfig } = require('../../config');
-          const { processBatchFile, handleUploadBatchComplete } =
+          const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
             require('../../server/file-socket-handlers');
 
           // Determine target file area for this conference.
@@ -259,85 +213,68 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
             return;
           }
 
-          // Pre-populate uploadBatch with placeholder entries for each
-          // file rz received. processBatchFile uses uploadBatch.length
-          // to know when it's processing the last file (and then auto-
-          // calls handleUploadBatchComplete which clears tempData). An
-          // empty uploadBatch makes isLastFile true on EVERY iteration,
-          // so the first file would clear context and subsequent files
-          // bail with "Upload session lost". Real filenames come from
-          // the basename of each rz-written path; descriptions stay
-          // empty (FILE_ID.DIZ extraction will fill them when present).
-          const uploadBatch = received.map((fp: string) => ({
-            filename: pathMod.basename(fp),
-            description: '',
-            isPrivate: false,
-          }));
+          if (received.length === 0) {
+            socket.emit('ansi-output', '\r\nNo files received.\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+            return;
+          }
 
-          // Synthetic uploadContext mirroring the shape web's file picker
-          // installs (see web/backend/src/index.ts UploadSessionContext).
-          // batchUpload=true + webUploadMode=false makes processBatchFile
-          // take the auto-complete-on-last-file branch (line ~723), which
-          // funnels through handleUploadBatchComplete → runPostUpload.
+          // Build the same uploadContext that processFileUpload installs
+          // for HTTP uploads, so the description-prompt state machine
+          // (FILE_ID.DIZ check → "Please enter a description, you only
+          // have N lines." → DIRn append + FILES.BBS) runs exactly as
+          // it would for the legacy HTTP path. webUploadMode=true is
+          // what routes processBatchFile -> handleDizExtractionAndDescription.
+          //
+          // Multi-file ZMODEM batches are queued in pendingZmodemFiles
+          // and walked one at a time after each description completes
+          // (state machine in command.handler.ts advances on Enter-Enter).
           session.tempData = {
             uploadMode: true,
             fileArea,
             uploadSessionId: `rz-${Date.now()}`,
-            uploadBatch,
+            uploadBatch: [],
             uploadCount: received.length,
             uploadStartTime: ulStartTime,
-            webUploadMode: false,
-            batchUpload: true,
+            webUploadMode: true,
+            batchUpload: false,
             currentUploadIndex: 0,
             filesProcessedCount: 0,
             uploadedFiles: 0,
             uploadedBytes: 0,
             skipDizExtraction: false,
+            // Queue for files 2..N — pop one after each description
+            // completes. The dispatch on UPLOAD_DESC_INPUT done state
+            // needs to look at this and re-invoke handleDizExtraction.
+            pendingZmodemFiles: received.slice(1).map((fp: string) => ({
+              path: fp,
+              name: pathMod.basename(fp),
+            })),
           } as any;
 
-          for (let i = 0; i < received.length; i++) {
-            const fp = received[i];
-            let size = 0;
-            try { size = fsSync.statSync(fp).size; } catch (_) { continue; }
-            const name = pathMod.basename(fp);
-            (session.tempData as any).currentUploadIndex = i;
-            try {
-              await processBatchFile(socket, session, {
-                filename: name,
-                originalname: name,
-                size,
-                path: fp,
-              }, appConfig);
-            } catch (err: any) {
-              console.error(`[ZMODEM-UL-RZ] processBatchFile failed for ${name}:`, err?.message || err);
-            }
-            // The last iteration's processBatchFile auto-calls
-            // handleUploadBatchComplete and clears session.tempData.
-            // Stop walking — no more context to drive further calls.
-            if (!session.tempData?.uploadMode) break;
-          }
-
-          // express.e:19520 cleanPlayPen() — any files still in the
-          // playpen after the per-file pipeline are partials/aborts;
-          // move them to <conf>PartUpload/<fn>@<slot> so resumeStuff
-          // can offer them next session.
+          const firstPath = received[0];
+          let firstSize = 0;
+          try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
+          const firstName = pathMod.basename(firstPath);
           try {
-            const { cleanPlayPen } = require('../../utils/clean-playpen.util');
-            await cleanPlayPen(playpen, session, appConfig);
+            await handleDizExtractionAndDescription(socket, session, {
+              filename: firstName,
+              originalname: firstName,
+              size: firstSize,
+              path: firstPath,
+            }, appConfig);
+            // If handleDiz returned false (waiting for description),
+            // session.subState was set to UPLOAD_DESC_INPUT. The state
+            // machine drives the rest. Don't run cleanPlayPen here —
+            // playpen still has the file rz wrote, processBatchFile
+            // moves it to FILES/LCFILES.
+            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
           } catch (err: any) {
-            console.error('[ZMODEM-UL-RZ] cleanPlayPen failed:', err?.message || err);
-          }
-
-          // Safety net: if processBatchFile didn't auto-complete (e.g.
-          // because every file errored), still run the summary.
-          if (session.tempData?.uploadMode) {
-            try {
-              await handleUploadBatchComplete(socket, session);
-            } catch (err: any) {
-              console.error('[ZMODEM-UL-RZ] handleUploadBatchComplete failed:', err?.message || err);
-              session.subState = LoggedOnSubState.DISPLAY_MENU;
-              session.menuPause = true;
-            }
+            console.error('[ZMODEM-UL-RZ] handleDizExtractionAndDescription failed:', err?.message || err);
+            socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
           }
         },
       });
@@ -364,7 +301,51 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       if (transportType === 'telnet' && rawSendUL) {
         rawSendUL(Buffer.from([255, 251, 0, 255, 253, 0]));
       }
-      lrzManager.start();
+      // Web: arm browser Sentry before lrzsz writes its first byte.
+      // Frontend `transfer-raw:init` handler calls beginZmodem() which
+      // constructs the Sentry and (for upload) sends ZRQINIT back via
+      // `transfer-raw:data` — that ZRQINIT becomes rz's first stdin
+      // byte. Wait for the client to emit `transfer-raw:start` as
+      // confirmation; fall back to a 1500 ms timer if the client
+      // never acks (e.g. zmodem.js failed to load).
+      if (transportType === 'web') {
+        // Wait for the browser to ack `transfer-raw:start` before
+        // spawning rz. The browser defers that ack until the user has
+        // picked a file (otherwise rz times out waiting for ZFILE).
+        // No short fallback timer here — a premature spawn races the
+        // file picker; rz would exit before ZRQINIT arrives. A long
+        // safety timer cleans up if the user abandons the picker
+        // entirely.
+        const handshakeStart = Date.now();
+        const fireOnce = (reason: string) => {
+          if ((fireOnce as any)._fired) return;
+          (fireOnce as any)._fired = true;
+          console.log(`[ZMODEM-UL-RZ] handshake done via ${reason} after ${Date.now() - handshakeStart}ms — spawning rz`);
+          lrzManager.start();
+        };
+        socket.once('transfer-raw:start', () => fireOnce('client-start'));
+        socket.once('transfer-raw:cancel', () => {
+          if ((fireOnce as any)._fired) return;
+          (fireOnce as any)._fired = true;
+          console.log('[ZMODEM-UL-RZ] client cancelled before pick — aborting');
+          socket.emit('ansi-output', '\r\nUpload cancelled.\r\n\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = true;
+        });
+        setTimeout(() => {
+          if (!(fireOnce as any)._fired) {
+            (fireOnce as any)._fired = true;
+            console.log('[ZMODEM-UL-RZ] handshake timeout (120s) — abandoning rz spawn');
+            socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+          }
+        }, 120000);
+        console.log('[ZMODEM-UL-RZ] emitting transfer-raw:init { direction: upload }');
+        socket.emit('transfer-raw:init', { direction: 'upload', paths: [playpen] });
+      } else {
+        lrzManager.start();
+      }
     }
     return;
   }
