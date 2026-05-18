@@ -129,7 +129,7 @@ FROM node:20-alpine
 # this the deploy fails with "lrzsz (no such package)" and the
 # Hetzner container never picks up ZMODEM upload/download support.
 RUN apk add --no-cache \
-    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+    --repository=https://dl-cdn.alpinelinux.org/alpine/latest-stable/community \
     python3 \
     py3-pip \
     sqlite \
