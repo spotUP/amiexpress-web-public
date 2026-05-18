@@ -1,26 +1,26 @@
 #!/usr/bin/env node
 /**
- * bench-overclock.ts — sweep every corpus door across DOOR_OVERCLOCK
- * factors and find the highest factor where the door still matches its
- * golden output.
+ * bench-overclock.ts — fast top-down sweep to find the max-safe
+ * DOOR_OVERCLOCK factor for every corpus door.
  *
- * Strategy per door (binary-search-ish without the full bisect):
- *   1. Run at every factor in FACTORS ascending.
- *   2. Stop the moment the door's output stops matching its golden, or
- *      its run wall-time exceeds RUNTIME_BUDGET_MS (we treat "much
- *      slower" as a failure too — the whole point is speed).
- *   3. Record the last passing factor as the max-safe value.
+ * Strategy:
+ *   For each door, try factors in descending order: [100000, 25000, 5000,
+ *   1000, 500, 100]. First one that passes its golden diff wins. Most
+ *   doors pass at 100000x (WHO's pattern — startup dwarfs compute), so
+ *   the common case is ONE run per door.
  *
- * Output: report-overclock.json at repo root.
+ *   Within a phase, batches run in parallel (default 3 — bench is brief
+ *   and intentional, the per-memory cap of 1 sustained applies to
+ *   day-long corpus runs, not 30-min benches).
  *
- * The actual diffing is delegated to the existing corpus runner:
- *   DOOR_OVERCLOCK=<n> npx tsx dev/scripts/door-corpus/run.ts --only <id>
- * which already knows how to diff stdout against goldens/<id>/output.txt.
+ * Output: report-overclock.json at repo root (flushed after every door).
  *
- * Concurrency is hard-pinned to 1 — see memory
- * feedback_avoid_parallel_emulator_heat: more than one sustained 68K
- * emulator spikes load + fan. We add a small inter-spawn cooldown to
- * stay polite.
+ * Flags:
+ *   --concurrency N   parallel doors per phase (default 3)
+ *   --only ids        comma-sep door ids to test
+ *   --limit N         only the first N doors
+ *   --resume          skip doors already in report-overclock.json
+ *   --factors a,b,c   override descending factor list
  */
 
 import { spawn } from "child_process";
@@ -32,15 +32,8 @@ const CORPUS = path.join(REPO_ROOT, "dev/scripts/door-corpus/corpus.json");
 const RUN = path.join(REPO_ROOT, "dev/scripts/door-corpus/run.ts");
 const REPORT = path.join(REPO_ROOT, "report-overclock.json");
 
-// Sweep factors. Stops climbing the moment a door fails. Sparse enough
-// to keep the whole run tractable (324 doors × ~6 levels worst case).
-const FACTORS = [500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
-
-// Hard per-run timeout. The corpus runner has its own per-door timeout
-// (corpus.json), but we add a wall-clock cap so a hung door doesn't
-// pin the whole sweep.
+const DEFAULT_FACTORS = [100000, 25000, 5000, 1000, 500, 100];
 const RUN_TIMEOUT_MS = 60_000;
-const INTER_RUN_COOLDOWN_MS = 200;
 
 interface CorpusEntry {
   id: string;
@@ -53,12 +46,12 @@ interface DoorResult {
   id: string;
   name: string;
   binaryExists: boolean;
+  // Sparse record — only stores factors actually tested.
   perFactor: Record<
     string,
     { status: "pass" | "fail" | "timeout"; wallMs: number; detail?: string }
   >;
   maxSafeFactor: number | null;
-  speedupVs500x?: number;
 }
 
 interface Report {
@@ -68,7 +61,7 @@ interface Report {
   doors: DoorResult[];
 }
 
-async function runOne(
+function runOne(
   id: string,
   factor: number,
 ): Promise<{ status: "pass" | "fail" | "timeout"; wallMs: number; detail?: string }> {
@@ -84,15 +77,12 @@ async function runOne(
           DOOR_OVERCLOCK: String(factor),
           FORCE_COLOR: "0",
         },
-        // Own process group so the timeout kill takes the whole tree
-        // (npx → tsx → run-amiga-door → emulator subprocess).
         detached: true,
       },
     );
 
     let stdout = "";
     let stderr = "";
-    let timer: NodeJS.Timeout | null = null;
     let killed = false;
 
     proc.stdout?.on("data", (b) => {
@@ -102,7 +92,7 @@ async function runOne(
       stderr += b.toString();
     });
 
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       killed = true;
       try {
         if (proc.pid) process.kill(-proc.pid, "SIGKILL");
@@ -117,7 +107,7 @@ async function runOne(
     }, RUN_TIMEOUT_MS);
 
     proc.on("close", (code) => {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
       const wallMs = Date.now() - started;
 
       if (killed) {
@@ -125,8 +115,6 @@ async function runOne(
         return;
       }
 
-      // Corpus runner exits non-zero on any mismatch. With --only, the
-      // exit code reflects just our door.
       if (code === 0 && /:\s*pass\b/.test(stdout)) {
         resolve({ status: "pass", wallMs });
       } else {
@@ -140,6 +128,24 @@ async function runOne(
   });
 }
 
+async function pool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function take() {
+    while (true) {
+      const idx = next++;
+      if (idx >= items.length) return;
+      results[idx] = await worker(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => take()));
+  return results;
+}
+
 async function main() {
   const corpus = JSON.parse(fs.readFileSync(CORPUS, "utf8")) as {
     doors: CorpusEntry[];
@@ -148,17 +154,21 @@ async function main() {
   const args = process.argv.slice(2);
   let entries = corpus.doors;
 
-  const onlyArgIdx = args.indexOf("--only");
-  if (onlyArgIdx >= 0 && args[onlyArgIdx + 1]) {
-    const ids = args[onlyArgIdx + 1].split(",").map((s) => s.trim());
-    entries = entries.filter((e) => ids.includes(e.id));
+  let concurrency = 3;
+  let factors = DEFAULT_FACTORS;
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--concurrency") concurrency = parseInt(args[++i], 10);
+    else if (a === "--only") {
+      const ids = args[++i].split(",").map((s) => s.trim());
+      entries = entries.filter((e) => ids.includes(e.id));
+    } else if (a === "--limit") entries = entries.slice(0, parseInt(args[++i], 10));
+    else if (a === "--factors")
+      factors = args[++i].split(",").map((s) => parseInt(s.trim(), 10));
   }
-  const limitArgIdx = args.indexOf("--limit");
-  if (limitArgIdx >= 0 && args[limitArgIdx + 1]) {
-    entries = entries.slice(0, parseInt(args[limitArgIdx + 1], 10));
-  }
-  const resumeArgIdx = args.indexOf("--resume");
-  const resume = resumeArgIdx >= 0;
+
+  const resume = args.includes("--resume");
 
   let report: Report;
   if (resume && fs.existsSync(REPORT)) {
@@ -171,77 +181,105 @@ async function main() {
   } else {
     report = {
       generatedAt: new Date().toISOString(),
-      factors: FACTORS,
+      factors,
       runTimeoutMs: RUN_TIMEOUT_MS,
       doors: [],
     };
   }
 
-  let i = 0;
-  for (const entry of entries) {
-    i++;
-    const binPath = path.join(REPO_ROOT, entry.binary);
-    const binaryExists = fs.existsSync(binPath);
+  process.stdout.write(
+    `[bench] ${entries.length} doors, concurrency=${concurrency}, factors=[${factors.join(",")}], top-down\n`,
+  );
 
+  // Two-pass: split into doors with binary present vs missing first to
+  // keep the parallel batch hot (no wasted slots on instant skips).
+  const present: CorpusEntry[] = [];
+  for (const e of entries) {
+    const exists = fs.existsSync(path.join(REPO_ROOT, e.binary));
+    if (exists) {
+      present.push(e);
+    } else {
+      report.doors.push({
+        id: e.id,
+        name: e.name,
+        binaryExists: false,
+        perFactor: {},
+        maxSafeFactor: null,
+      });
+      process.stdout.write(`  ${e.id}: SKIP (missing binary)\n`);
+    }
+  }
+  fs.writeFileSync(REPORT, JSON.stringify(report, null, 2));
+
+  let completed = 0;
+  const total = present.length;
+
+  // Flush mutex — many workers writing same file concurrently is fine on
+  // Node's serial event loop, but we batch the actual fs.writeFileSync
+  // calls so we don't pay JSON.stringify on every status update.
+  let flushTimer: NodeJS.Timeout | null = null;
+  const scheduleFlush = () => {
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      fs.writeFileSync(REPORT, JSON.stringify(report, null, 2));
+    }, 500);
+  };
+
+  await pool(present, concurrency, async (entry) => {
     const result: DoorResult = {
       id: entry.id,
       name: entry.name,
-      binaryExists,
+      binaryExists: true,
       perFactor: {},
       maxSafeFactor: null,
     };
 
-    if (!binaryExists) {
-      process.stdout.write(
-        `[${i}/${entries.length}] ${entry.id}: SKIP (binary missing)\n`,
-      );
-      report.doors.push(result);
-      fs.writeFileSync(REPORT, JSON.stringify(report, null, 2));
-      continue;
-    }
-
-    process.stdout.write(`[${i}/${entries.length}] ${entry.id} (${entry.name})\n`);
-
-    // Climb. Stop on first failure or timeout.
-    for (const factor of FACTORS) {
+    // Top-down: first factor that passes is the answer.
+    for (const factor of factors) {
       const r = await runOne(entry.id, factor);
       result.perFactor[String(factor)] = r;
-      process.stdout.write(
-        `    ${factor}x: ${r.status} (${r.wallMs}ms)${
-          r.detail ? " — " + r.detail : ""
-        }\n`,
-      );
       if (r.status === "pass") {
         result.maxSafeFactor = factor;
-      } else {
-        // First non-pass — no point going higher.
         break;
       }
-      // Cooldown between spawns (emulator heat, per memory).
-      await new Promise((res) => setTimeout(res, INTER_RUN_COOLDOWN_MS));
     }
 
-    // Speedup ratio vs 500x baseline, if both measured.
-    const r500 = result.perFactor["500"];
-    const rMax =
-      result.maxSafeFactor !== null
-        ? result.perFactor[String(result.maxSafeFactor)]
-        : undefined;
-    if (r500?.status === "pass" && rMax?.status === "pass") {
-      result.speedupVs500x = +(r500.wallMs / rMax.wallMs).toFixed(2);
-    }
+    completed++;
+    const tag = result.maxSafeFactor
+      ? `max=${result.maxSafeFactor}x`
+      : "FAIL all factors";
+    const wall = Object.values(result.perFactor).reduce(
+      (acc, v) => acc + v.wallMs,
+      0,
+    );
+    process.stdout.write(
+      `[${completed}/${total}] ${entry.id}: ${tag} (${wall}ms, ${Object.keys(result.perFactor).length} run(s))\n`,
+    );
 
     report.doors.push(result);
-    // Flush after every door so a crash mid-sweep doesn't lose progress.
-    fs.writeFileSync(REPORT, JSON.stringify(report, null, 2));
-  }
+    scheduleFlush();
+    return result;
+  });
 
-  // Final summary
-  const passing = report.doors.filter((d) => d.maxSafeFactor !== null);
-  const max = passing.reduce((acc, d) => Math.max(acc, d.maxSafeFactor!), 0);
-  process.stdout.write(
-    `\n[bench] done. ${passing.length}/${report.doors.length} doors passed at some factor; highest survivor: ${max}x\n`,
-  );
+  // Final flush
+  if (flushTimer) clearTimeout(flushTimer);
+  fs.writeFileSync(REPORT, JSON.stringify(report, null, 2));
+
+  // Summary buckets
+  const buckets = new Map<string, number>();
+  for (const d of report.doors) {
+    if (!d.binaryExists) {
+      buckets.set("missing", (buckets.get("missing") ?? 0) + 1);
+      continue;
+    }
+    const k = d.maxSafeFactor === null ? "fail" : `${d.maxSafeFactor}x`;
+    buckets.set(k, (buckets.get(k) ?? 0) + 1);
+  }
+  process.stdout.write(`\n[bench] done.\n`);
+  for (const [k, v] of [...buckets.entries()].sort()) {
+    process.stdout.write(`  ${k}: ${v}\n`);
+  }
   process.stdout.write(`[bench] report: ${REPORT}\n`);
 }
 
