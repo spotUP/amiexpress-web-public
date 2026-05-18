@@ -305,8 +305,12 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
       // (which is transferRawSend and DOUBLES every 0xFF byte — would
       // turn each IAC into IAC IAC and break the negotiation).
       const rawSend = (session as any).transferRawSendUnescaped;
+      console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: transport.type=${transport.type} hasRawSend=${!!rawSend}`);
       if (transport.type === 'telnet' && rawSend) {
         rawSend(Buffer.from([255, 251, 0, 255, 253, 0]));
+        console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: sent IAC WILL/DO BINARY (8 bytes)`);
+      } else {
+        console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: SKIPPED (condition false)`);
       }
       console.log(`[ZMODEM-DL ${ctxId}] using lrzsz, spawning sz`);
       lrzManager.start();
