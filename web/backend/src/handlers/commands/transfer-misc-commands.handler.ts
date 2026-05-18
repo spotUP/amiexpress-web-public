@@ -80,7 +80,7 @@ export function setTransferMiscCommandsDependencies(deps: {
  * In AmiExpress, this called uploadaFile(1, cmdcode, FALSE) for Zmodem.
  * Web version: Shows file area selection for upload target.
  */
-export function handleZmodemUploadCommand(socket: any, session: BBSSession): void {
+export async function handleZmodemUploadCommand(socket: any, session: BBSSession): Promise<void> {
   // Check security - express.e:25609
   if (!checkSecurity(session.user, ACSPermission.UPLOAD)) {
     ErrorHandler.permissionDenied(socket, 'upload files', {
@@ -129,6 +129,54 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
 
   const ulStartTime = Date.now();
 
+  // Web transport: the browser has a direct socket channel, not a
+  // serial/terminal connection. Doing real ZMODEM here would mean
+  // running zmodem.js in the BBS and a second zmodem.js Sentry in
+  // the browser — that crashes (browser saw "Unhandled header:
+  // ZRINIT/ZRQINIT" because its Sentry was in receive mode while
+  // server emitted bytes it didn't expect). Simpler: trigger the
+  // browser file picker via `show-file-upload`, browser uploads
+  // the file bytes via the `file-upload` socket event, backend
+  // pipes through the standard processFileUpload pipeline.
+  if (transportType === 'web') {
+    // Set up an upload context the way the file picker normally
+    // does so handleUploadBatchComplete works for cleanup.
+    const { db } = require('../../database');
+    const { config: appConfig } = require('../../config');
+    const areas = await db.getFileAreas(session.currentConf).catch(() => []);
+    const fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
+    if (!fileArea) {
+      socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = true;
+      return;
+    }
+    session.tempData = {
+      uploadMode: true,
+      fileArea,
+      uploadSessionId: `web-rz-${Date.now()}`,
+      uploadBatch: [],
+      uploadCount: 0,
+      uploadStartTime: ulStartTime,
+      webUploadMode: true,
+      batchUpload: false,
+      currentUploadIndex: 0,
+      filesProcessedCount: 0,
+      uploadedFiles: 0,
+      uploadedBytes: 0,
+    } as any;
+    socket.emit('show-file-upload', {
+      accept: '*/*',
+      maxSize: 100 * 1024 * 1024,
+      uploadUrl: '/api/upload',
+      fieldName: 'file',
+      multiple: true,
+    });
+    socket.emit('ansi-output', '\r\n\x1b[36mFile picker opened. Select files to upload.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.FILES_UPLOAD;
+    return;
+  }
+
   // Telnet/SSH: hand off to lrzsz (canonical Forsberg/Ohse
   // implementation). The zmodem.js fallback at the bottom of this
   // function lacks the ZRINIT CANFC32 patch and the ZFILE ZCRCE→ZCRCW
@@ -137,7 +185,8 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
   // Sentry crash + "Upload aborted" UX. If lrzsz isn't installed on
   // a telnet/SSH-capable host, that's a deployment bug, not a runtime
   // fallback case.
-  if (transportType !== 'web') {
+  // Telnet/SSH path (the web branch above already returned).
+  {
     const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
     const lrzAvailable = isLrzszAvailable();
     console.log(`[ZMODEM-UL-RZ] lrzsz check: ${lrzAvailable}`);
