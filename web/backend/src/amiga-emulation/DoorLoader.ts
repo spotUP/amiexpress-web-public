@@ -286,9 +286,12 @@ debugLog(`[DoorLoader] SharedBBSData initialized at 0x${this.sharedBBSData.getCm
     // Set up CPU for door execution
     this.setupCpuRegisters(hunkFile);
 
-    // CRITICAL: Enable 100x overclocking for door execution speed
-    // Without this, doors run at native 68000 speed (~1-2 seconds per XIM message)
-    const overclockFactor = this.config.overclockFactor ?? 100;
+    // CRITICAL: Enable CPU overclocking for door execution speed.
+    // Without this, doors run at native 68000 speed (~1-2 seconds per
+    // XIM message). Default 500x: UL-Logoff's startup library/Info
+    // calls dropped from 7.8s to ~1.6s in profiling. Doors can still
+    // override via OVERCLOCK tooltype in their .info file.
+    const overclockFactor = this.config.overclockFactor ?? 500;
     if (this.emulator.setOverclocking) {
       this.emulator.setOverclocking(overclockFactor);
 debugLog(`[DoorLoader] Overclocking set to ${overclockFactor}x`);
