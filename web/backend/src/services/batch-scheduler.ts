@@ -742,6 +742,38 @@ function runAmigaDoorViaRunner(
 console.warn('[BatchScheduler] Failed to create drop files:', err?.message || err);
   }
 
+  // Read OVERCLOCK tooltype from the door's .info so batch invocations
+  // honour the same speed boost interactive doors get. Without this,
+  // every batch door runs at DoorLifecycleManager's 100x default — fine
+  // for tiny utilities, far too slow for ones that walk large data
+  // (mtop reads the full user.data; SAmiLog scans every CallersLog).
+  //
+  // Heavy-utility name overrides (last-resort floor): even if a door's
+  // own .info ships a conservative OVERCLOCK, these names are known to
+  // be safe to run very fast since they do pure file I/O, no input.
+  const HEAVY_BATCH_OVERRIDES: Record<string, number> = {
+    mtop: 5000,
+    multitop: 5000,
+  };
+  let batchOverclock: number | undefined;
+  try {
+    const infoPath = doorPath + '.info';
+    if (fs.existsSync(infoPath)) {
+      const buf = fs.readFileSync(infoPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buf);
+      const raw = parsed.toolTypes.get('OVERCLOCK');
+      if (raw) {
+        const n = parseInt(raw, 10);
+        if (!isNaN(n)) batchOverclock = n;
+      }
+    }
+  } catch { /* fall through to default */ }
+  const heavyFloor = HEAVY_BATCH_OVERRIDES[path.basename(doorPath).toLowerCase()];
+  if (heavyFloor !== undefined) {
+    batchOverclock = Math.max(batchOverclock ?? 0, heavyFloor);
+  }
+
   return new Promise<void>((resolve) => {
     const runnerPath = path.join(appRootPath, 'web', 'backend', 'dist', 'scripts', 'run-amiga-door.js');
     const resolvedRunner = fs.existsSync(runnerPath) ? runnerPath : path.join(appRootPath, 'web', 'backend', 'src', 'scripts', 'run-amiga-door.ts');
@@ -752,15 +784,30 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
     // Some batch doors (like quicklogon, ByteKillHandler) are actually XIM doors
     // that need XIM protocol polling to communicate with the BBS
     const doorType = getDoorTypeFromInfo(doorPath);
-    console.log(`[BatchScheduler] Running door ${path.basename(doorPath)} as type ${doorType}`);
+    if (batchOverclock !== undefined) {
+      console.log(`[BatchScheduler] Running door ${path.basename(doorPath)} as type ${doorType} (overclock=${batchOverclock}x)`);
+    } else {
+      console.log(`[BatchScheduler] Running door ${path.basename(doorPath)} as type ${doorType}`);
+    }
     const toolTypes = {}; // Use DoorLifecycleManager defaults
     const execArgs = useTsRunner
       ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType]
       : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType];
 
+    const spawnEnv: Record<string, string | undefined> = {
+      ...process.env,
+      ...envOverrides,
+      TS_NODE_TRANSPILE_ONLY: 'true',
+    };
+    if (batchOverclock !== undefined && spawnEnv.DOOR_OVERCLOCK === undefined) {
+      // DoorLifecycleManager checks DOOR_OVERCLOCK first and falls back to
+      // config.overclockFactor — passing as env keeps the existing
+      // priority chain intact without touching the runner's CLI.
+      spawnEnv.DOOR_OVERCLOCK = String(batchOverclock);
+    }
     const child: any = require('child_process').spawn(command, execArgs, {
       cwd: cwd || path.dirname(doorPath),
-      env: { ...process.env, ...envOverrides, TS_NODE_TRANSPILE_ONLY: 'true' },
+      env: spawnEnv,
       detached: true, // Create new process group so we can kill the entire tree
     });
 
