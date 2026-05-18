@@ -89,6 +89,10 @@ import {
 } from "./server/session-manager";
 import { app } from "./server/app";
 import { TelnetServer, TelnetConnection } from "./server/telnet-server";
+import {
+  attachWSTerminalServer,
+  WSTerminalConnection,
+} from "./server/ws-terminal-server";
 import { SSHServerImpl, SSHConnection } from "./server/ssh-server";
 import { SSHKeyUtil } from "./utils/ssh-key.util";
 import { findSecurityScreen } from "./utils/screen-security.util";
@@ -1727,6 +1731,29 @@ console.warn(
 console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
 console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
     });
+
+    // Raw WebSocket terminal endpoint at /ws/terminal — same pipeline
+    // telnet uses, no Socket.IO wrapper. Lets third-party web terminals
+    // and CLI ws clients connect to the BBS over wss:// using just the
+    // standard WebSocket protocol (no Socket.IO handshake).
+    try {
+      attachWSTerminalServer(server, (conn: WSTerminalConnection) => {
+        const cfg = config.getConfig();
+        const session = createSession(conn.nodeId, {
+          connectionType: "telnet", // Raw bytes both ways — same surface as telnet.
+          remoteAddress: conn.getRemoteAddress(),
+          connectionHostname: cfg.hostname,
+          connectionPort: port,
+          connectionBaud: 0,
+        });
+        conn.session = session;
+        setSession(conn.sessionId, session);
+        // Reuse the same connection handler telnet/SSH use.
+        setupTelnetSSHHandler(conn as any, "telnet", io);
+      });
+    } catch (err) {
+console.error("[WS-Terminal] Failed to attach:", err);
+    }
 
     // Start telnet server
     try {
