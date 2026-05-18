@@ -805,6 +805,7 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
       // priority chain intact without touching the runner's CLI.
       spawnEnv.DOOR_OVERCLOCK = String(batchOverclock);
     }
+    console.log(`[BatchScheduler] spawn env DOOR_OVERCLOCK=${spawnEnv.DOOR_OVERCLOCK ?? '(unset)'} for ${path.basename(doorPath)}`);
     const child: any = require('child_process').spawn(command, execArgs, {
       cwd: cwd || path.dirname(doorPath),
       env: spawnEnv,
@@ -868,7 +869,16 @@ console.error(`[BatchScheduler] Failed to kill door: ${e.message}`);
     child.stdout?.on('data', (chunk: Buffer) => {
       appendOutput(chunk);
     });
-    // stderr = debug/log output from the runner — do NOT include in redirect file
+    // stderr = debug/log output from the runner. Don't include in the
+    // redirect file (which captures door-emitted content), but DO surface
+    // it to the parent backend log so we can see runner-side errors and
+    // verify env propagation (e.g. [DoorLifecycleManager] Overclocking).
+    child.stderr?.on('data', (chunk: Buffer) => {
+      const line = chunk.toString();
+      if (line.trim().length > 0) {
+        process.stderr.write(`[runner:${path.basename(doorPath)}] ${line}`);
+      }
+    });
 
     child.on('error', (err: any) => {
       clearTimeout(timeoutHandle);
