@@ -111,24 +111,26 @@ export class XIMSystemCommandsHandler {
 
     // express.e: for JH_REGISTER, return userLineLen in msg->Command. We also mirror
     // it into msg->Data — see the WEB_: note below the writeCommand call for why.
-    const rawLineLen =
-      this.bbsSession?.user?.linesPerScreen ??
-      this.bbsSession?.user?.lineLength ??
-      this.bbsSession?.user?.pageLength;
+    //
     // express.e:3380: msg.command:=IF loggedOnUser<>NIL THEN userLineLen ELSE 29
-    // Three cases:
-    //   1. No user logged on → 29 (express.e default).
-    //   2. User logged on with explicit positive linesPerScreen → that value.
-    //   3. User logged on but linesPerScreen=0/missing ("unlimited" convention)
-    //      → 9999. JoinCnf 4.0 paginates by equality (cmp.l <userLineLen>,
-    //      counter; bne skip-prompt). With 9999 the equality never matches
-    //      a sub-9999-line banner. With 0 the door treats it as "broken
-    //      threshold" and collapses to a single fail-safe prompt screen,
-    //      which is worse than pagination.
+    //
+    // Earlier we forwarded the user's actual linesPerScreen here, with a
+    // 0→9999 mapping for unset/"unlimited". That suppressed the JoinCnf 4.0
+    // splash for users with linesPerScreen=0, but broke again for users
+    // with linesPerScreen=23/24 (a typical BBS user.data default) whenever
+    // a door's banner length happened to MATCH that value — JoinCnf
+    // paginates by equality (cmp.l <userLineLen>, counter; bne skip-prompt),
+    // so equality triggers the "press <RETURN> to continue" prompt mid-
+    // banner. Live user reported this exact regression on J/JoinCnf.
+    //
+    // Fix: always return 9999 for any logged-on user. The BBS handles
+    // pagination at its OWN layer (flagPause / checkForPause read
+    // session.user.linesPerScreen directly), so doors that respect the
+    // JH_REGISTER lineLen as a paginator threshold simply never trigger
+    // internal pagination. Doors that read lineLen for non-pagination
+    // sizing calculations get a sane large value, not 0.
     const hasUser = !!this.bbsSession?.user;
-    const lineLen = !hasUser
-      ? 29
-      : (typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 9999);
+    const lineLen = !hasUser ? 29 : 9999;
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
     // WEB_: divergence from express.e:3380 (which only writes msg.command).
     // AEKIT-based 68K doors (SRH/TList/TLP2 disasm at TLP2:0x24f4 reads msg->data
