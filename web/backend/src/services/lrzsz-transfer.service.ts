@@ -317,9 +317,16 @@ export class LrzszTransferManager {
       parts.push(normalized.slice(cursor, next));
       cursor = next;
     }
+    // ZRINIT suppression only applies to web: the browser-side
+    // zmodem.js Send session throws on repeated ZRINIT after
+    // detection. Telnet / SSH clients (SyncTerm, NetRunner, MuffinTerm,
+    // mTelnet, etc.) are tolerant ZMODEM parsers and EXPECT a fresh
+    // ZRINIT in response to their ZRQINIT — suppressing it leaves
+    // them stuck at "Waiting for OK to send".
+    const suppressDuplicates = this.transport.type === 'web';
     for (const part of parts) {
       if (part.length === 0) continue;
-      if (isLoneZrinit(part)) {
+      if (suppressDuplicates && isLoneZrinit(part)) {
         if (this.zrinitForwarded) {
           if (process.env.LRZSZ_DEBUG) {
             console.log(`[lrzsz ${this.direction}] suppressed duplicate ZRINIT (${part.length}B)`);
@@ -327,7 +334,7 @@ export class LrzszTransferManager {
           continue;
         }
         this.zrinitForwarded = true;
-      } else {
+      } else if (suppressDuplicates) {
         // Any non-ZRINIT chunk (ZACK, ZRPOS, etc.) means the
         // protocol has moved past initial handshake. Clear the
         // suppression flag so the next ZRINIT — which signals

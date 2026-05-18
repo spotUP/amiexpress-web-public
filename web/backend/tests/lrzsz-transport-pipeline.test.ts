@@ -155,3 +155,43 @@ describe('LrzszTransferManager.processStdoutChunk — behavior', () => {
     expect(sent.length).toBe(0);
   });
 });
+
+describe('LrzszTransferManager.processStdoutChunk — telnet/ssh do NOT suppress duplicates', () => {
+  // Regression: a telnet user reported "Waiting for OK to send" after
+  // their client sent ZRQINIT. rz emits a fresh ZRINIT in response,
+  // but our suppression dropped it as a duplicate. Telnet/SSH clients
+  // need every ZRINIT — only the web browser zmodem.js Sentry chokes
+  // on repeats.
+  function makeTelnetManager(sent: Buffer[]): any {
+    const transport: LrzszTransport = {
+      type: 'telnet',
+      send: (buf: Buffer) => sent.push(Buffer.from(buf)),
+    };
+    const session: any = { nodeId: 0 };
+    return new LrzszTransferManager({
+      session,
+      transport,
+      direction: 'upload',
+      paths: ['/tmp/playpen-test'],
+    });
+  }
+
+  test('telnet: every ZRINIT keepalive reaches the wire', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeTelnetManager(sent);
+    for (let i = 0; i < 5; i++) {
+      mgr.processStdoutChunk(ZRINIT_RAW_21);
+    }
+    // All 5 forwarded — telnet clients are tolerant and need every ZRINIT.
+    expect(sent.length).toBe(5);
+  });
+
+  test('telnet: split still applies (two ZRINITs in one chunk → two sends)', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeTelnetManager(sent);
+    const twoZrinits = Buffer.concat([ZRINIT_RAW_21, ZRINIT_RAW_21]);
+    mgr.processStdoutChunk(twoZrinits);
+    // Both reach the wire (suppression off, split still on).
+    expect(sent.length).toBe(2);
+  });
+});
