@@ -128,9 +128,7 @@ FROM node:20-alpine
 # explicitly before the install so `apk add lrzsz` resolves. Without
 # this the deploy fails with "lrzsz (no such package)" and the
 # Hetzner container never picks up ZMODEM upload/download support.
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc/apk/repositories \
- && apk update \
- && apk add --no-cache \
+RUN apk add --no-cache \
     python3 \
     py3-pip \
     sqlite \
@@ -138,8 +136,21 @@ RUN echo "https://dl-cdn.alpinelinux.org/alpine/latest-stable/community" >> /etc
     curl \
     build-base \
     g++ \
-    make \
-    lrzsz
+    make
+
+# lrzsz: not packaged for Alpine v3.23+ (community repo dropped it).
+# Build from upstream sources — tiny, ~5s build, installs sz/rz into
+# /usr/local/bin which is on PATH so isLrzszAvailable() picks them up.
+# Pinned to 0.12.20 (current stable since 2003; same version Homebrew
+# and Debian ship).
+RUN curl -fsSL https://www.ohse.de/uwe/releases/lrzsz-0.12.20.tar.gz -o /tmp/lrzsz.tgz \
+ && cd /tmp && tar xzf lrzsz.tgz \
+ && cd lrzsz-0.12.20 \
+ && ./configure --prefix=/usr/local --disable-nls --disable-rpath \
+ && make -j"$(nproc)" \
+ && make install \
+ && cd / && rm -rf /tmp/lrzsz.tgz /tmp/lrzsz-0.12.20 \
+ && /usr/local/bin/sz --version
 
 # Create app user (non-root)
 RUN addgroup -g 1001 bbsuser && \
