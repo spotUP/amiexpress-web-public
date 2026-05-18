@@ -94,7 +94,13 @@ export async function flagPause(
           return;
         }
 
-        if (response === 'N') {
+        // Q / N / X / Escape all stop the listing. Q-as-quit isn't in
+        // express.e's flagPause prompt, but every modern BBS terminal
+        // user (and every other Amiga BBS that ported flagPause) maps
+        // Q to "stop scrolling, return to menu". Without this branch,
+        // Q fell through to the re-prompt path and the listing got
+        // stuck forever — surfaced on live by FR + Q.
+        if (response === 'N' || response === 'Q') {
           socket.emit('ansi-output', '\r\n');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(false);
@@ -230,8 +236,8 @@ export async function checkForPause(
           return;
         }
 
-        // N = stop
-        if (response === 'N') {
+        // N or Q = stop (see flagPause for Q-quit rationale)
+        if (response === 'N' || response === 'Q') {
           socket.emit('ansi-output', '\r\n');
           session.tempData.checkPausePromise = undefined;
           resolveFn!(false);
