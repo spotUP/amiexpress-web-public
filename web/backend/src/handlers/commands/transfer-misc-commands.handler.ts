@@ -148,7 +148,22 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       session.menuPause = true;
       return;
     }
-    {
+    // express.e:19018-19023 — resumeStuff() runs BEFORE the receive.
+    // For our RZ command path (uLFType=1 in express.e) the call is
+    // technically a divergence from the original (express skips it
+    // for raw RZ), but RZ in the TS port is the de-facto upload
+    // entry point on telnet/SSH because the U command is wrapped by
+    // BBSCmd doors. Offering partials here gives users the same
+    // recovery UX they'd get from internal U on the original Amiga.
+    const { startResumeStuff } = require('../../services/resume-stuff.service');
+    const { config: appConfigForResume } = require('../../config');
+    startResumeStuff(socket, session, playpen, appConfigForResume, (resumeResult: any) => {
+      if (resumeResult.resumed > 0) {
+        socket.emit('ansi-output', `\r\n${resumeResult.resumed} partial file(s) restored to playpen.\r\n`);
+      }
+      spawnLrzszForUpload();
+    });
+    function spawnLrzszForUpload() {
       const lrzManager = new LrzszTransferManager({
         session,
         transport: { type: transportType, send: sender },
@@ -287,8 +302,8 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       session.subState = LoggedOnSubState.FILES_UPLOAD;
       socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
       lrzManager.start();
-      return;
     }
+    return;
   }
 
   const manager = new ZmodemTransferManager({

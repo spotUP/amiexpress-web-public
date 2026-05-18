@@ -2360,6 +2360,18 @@ console.log(' [DOWNLOAD] User confirming download');
     return;
   }
 
+  // PRIORITY 9c: Handle UPLOAD_RESUME_PROMPT / UPLOAD_RESUME_DELETE
+  // (express.e:18119 resumeStuff per-partial prompt loop). The service
+  // installs session.uploadResumeInputHandler when the loop is active.
+  if (
+    (session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
+     session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE) &&
+    (session as any).uploadResumeInputHandler
+  ) {
+    (session as any).uploadResumeInputHandler(data);
+    return;
+  }
+
   // Handle substate-specific input
   // If menu is waiting to display and the user pressed any key (including Enter),
   // immediately drop to READ_COMMAND so input is not lost to the display flow loop.
