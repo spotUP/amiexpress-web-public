@@ -133,9 +133,13 @@ export async function runPostUpload(
     return;
   }
 
-  // Standard return: pause for user, then re-render conference bull
-  // (express.e drops back to the main loop which re-prompts).
+  // Express.e: after uploadaFile() returns RESULT_SUCCESS the main
+  // command loop simply re-prompts for the next command — it does NOT
+  // re-display the conference bulletin (already shown at join time).
+  // Drop straight to DISPLAY_MENU. The earlier code path here used
+  // DISPLAY_CONF_BULL which re-rendered the join-conf ASCII + uploaders
+  // bull after every upload — wrong UX on every transport.
   emitter.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  (session as any).menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  (session as any).menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
