@@ -600,13 +600,8 @@ export class DownloadHandler {
       goodbyeAfter,
       success: true,
     });
-    if (goodbyeAfter) {
-      // pGoodbye 10-second countdown lives in this handler (web has the
-      // tick interval mechanism already wired). runPostDownload's
-      // immediate-goodbye path is the fallback for telnet/SSH; web
-      // overrides with the proper countdown.
-      await this.startPGoodbye(socket, session);
-    }
+    // runPostDownload handles the pGoodbye countdown for both web and
+    // telnet/SSH now (was previously web-only here).
   }
 
   /**
@@ -621,7 +616,7 @@ export class DownloadHandler {
    * sub-state, schedule a 1-second interval tick. Each tick: redraw prompt
    * with updated count. On input or final tick: resolve.
    */
-  private static async startPGoodbye(socket: Socket, session: BBSSession): Promise<void> {
+  static async startPGoodbye(socket: Socket, session: BBSSession): Promise<void> {
     const totalTicks = 10;
     session.tempData = {
       ...(session.tempData || {}),

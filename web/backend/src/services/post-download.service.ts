@@ -148,14 +148,24 @@ export async function runPostDownload(
   } catch { /* non-critical */ }
   emitter.emit('ansi-output', '\r\n');
 
-  // express.e:20317 — pGoodbye on user-picked G
+  // express.e:20317 — pGoodbye on user-picked G. The 10-second countdown
+  // ("Last chance! Auto LOGOFF in N SECS. Abort: (Enter)=yes?") works
+  // for both web and telnet/SSH because the DOWNLOAD_PGOODBYE substate
+  // and its input handler are wired in command.handler.ts for all
+  // transports. Web previously called DownloadHandler.startPGoodbye
+  // directly after this service returned; now we drive it from here
+  // so telnet/SSH gets the same countdown.
   if (ctx.goodbyeAfter) {
-    // pGoodbye is a 10-second countdown; web download.handler has the
-    // full implementation. Telnet/SSH falls back to immediate logoff
-    // for now (full countdown port is a follow-up).
-    const { handleGoodbyeCommand } = require('../handlers/commands/system-commands.handler');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    handleGoodbyeCommand(emitter as Socket, session, 'Y');
+    try {
+      const { DownloadHandler } = require('../handlers/file/download.handler');
+      await DownloadHandler.startPGoodbye(emitter as Socket, session);
+    } catch (err: any) {
+      console.error(`[postDownload] startPGoodbye failed: ${err?.message || err}`);
+      // Fallback to immediate logoff if the countdown can't start
+      const { handleGoodbyeCommand } = require('../handlers/commands/system-commands.handler');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      handleGoodbyeCommand(emitter as Socket, session, 'Y');
+    }
     return;
   }
 
