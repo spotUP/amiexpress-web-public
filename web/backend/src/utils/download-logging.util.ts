@@ -84,7 +84,7 @@ console.log(`[UPLOAD] ${message}`);
  * Write to UDLog (Upload/Download log)
  * Port from express.e:9520-9540 udLog()
  */
-async function writeToUDLog(message: string, nodeId: number): Promise<void> {
+export async function writeToUDLog(message: string, nodeId: number): Promise<void> {
   if (!getACSConfig().acLvl[LevelFlags.DO_UD_LOG]) return;
   try {
     const dataDir = config.get('dataDir');
@@ -109,7 +109,7 @@ console.error('[UDLOG] Error writing to log:', error);
  * Write to CallersLog
  * Port from express.e:9493-9518 callersLog()
  */
-async function writeToCallersLog(username: string, message: string, nodeId: number): Promise<void> {
+export async function writeToCallersLog(username: string, message: string, nodeId: number): Promise<void> {
   if (!getACSConfig().acLvl[LevelFlags.DO_CALLERSLOG]) return;
   try {
     const dataDir = config.get('dataDir');

@@ -74,6 +74,9 @@ export async function runPostUpload(
 
   // express.e:18862-18871 callersLog/udLog. express.e:19094 only logs
   // success line when ulFileCount > 0; otherwise logs "Upload Failed".
+  // Express writes to BOTH disk CallersLog AND UDLog with the same
+  // text. Our DB caller_activity insert is a port-specific addition
+  // for the web UI; keep alongside the disk writes.
   if (session.user) {
     const summaryLog = ctx.uploadedFiles > 0
       ? `\t${statsLine}`
@@ -82,6 +85,14 @@ export async function runPostUpload(
       await callersLog(session.user.id, session.user.username, summaryLog);
     } catch (err: any) {
       console.error(`[postUpload] callersLog failed: ${err?.message || err}`);
+    }
+    // express.e:19095-19096 — disk CallersLog + UDLog parity
+    try {
+      const { writeToCallersLog, writeToUDLog } = require('../utils/download-logging.util');
+      await writeToCallersLog(session.user.username, summaryLog, session.nodeId || 1);
+      await writeToUDLog(summaryLog, session.nodeId || 1);
+    } catch (err: any) {
+      console.error(`[postUpload] disk log write failed: ${err?.message || err}`);
     }
   }
 
@@ -115,6 +126,26 @@ export async function runPostUpload(
   const sessAny = session as any;
   if (typeof sessAny.timeLimit === 'number') {
     sessAny.timeLimit += peff;
+  }
+
+  // express.e:19137 — KEEP_UPLOAD_CREDIT persists half the bonus to
+  // the user's permanent timeTotal across sessions. Without this the
+  // user only keeps the bonus for the current session.
+  if (session.user && peff > 0) {
+    try {
+      const { checkSecurity } = require('../utils/acs.util');
+      const { ACSPermission } = require('../constants/acs-permissions');
+      if (checkSecurity(session.user, ACSPermission.KEEP_UPLOAD_CREDIT)) {
+        const halfCredit = Math.floor(peff / 2);
+        (session.user as any).timeTotal = ((session.user as any).timeTotal || 0) + halfCredit;
+        if (session.user.slotNumber) {
+          const { userFileManager } = require('../services/UserFileManager');
+          userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
+        }
+      }
+    } catch (err: any) {
+      console.error(`[postUpload] KEEP_UPLOAD_CREDIT persist failed: ${err?.message || err}`);
+    }
   }
 
   // Caller cleanup (e.g. clearUploadContext for web) — must run before

@@ -95,7 +95,9 @@ export async function runPostDownload(
     }
   }
 
-  // express.e:20280-20289 — callersLog summary
+  // express.e:20280-20289 — callersLog + udLog summary. Express writes
+  // to BOTH disk logs with the same text. Our DB caller_activity insert
+  // is a port-specific addition for the web UI; keep alongside.
   if (session.user) {
     const summaryLog = (ctx.success && ctx.downloadedFiles > 0)
       ? `\t${statsLine}`
@@ -104,6 +106,13 @@ export async function runPostDownload(
       await callersLog(session.user.id, session.user.username, summaryLog);
     } catch (err: any) {
       console.error(`[postDownload] callersLog failed: ${err?.message || err}`);
+    }
+    try {
+      const { writeToCallersLog, writeToUDLog } = require('../utils/download-logging.util');
+      await writeToCallersLog(session.user.username, summaryLog, session.nodeId || 1);
+      await writeToUDLog(summaryLog, session.nodeId || 1);
+    } catch (err: any) {
+      console.error(`[postDownload] disk log write failed: ${err?.message || err}`);
     }
   }
 
