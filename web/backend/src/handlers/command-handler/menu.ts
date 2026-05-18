@@ -162,6 +162,23 @@ console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
     return;
   }
 
+  // Skip when session is mid-prompt for an interactive flow whose
+  // own input handler owns the prompt (resumeStuff Y/N, file
+  // upload/download transfer prompts, etc). Emitting the menu
+  // prompt on top of them overwrites the user-facing prompt and
+  // breaks the input handler that's expecting Y/N/A keystrokes.
+  const sub = session.subState;
+  if (
+    sub === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
+    sub === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
+    sub === LoggedOnSubState.FILES_UPLOAD ||
+    sub === LoggedOnSubState.FILES_DOWNLOAD ||
+    sub === LoggedOnSubState.DOWNLOAD_PGOODBYE
+  ) {
+    console.log(`[menu] displayMenuPrompt SKIPPED (subState=${sub})`);
+    return;
+  }
+
   // WEB_: MODERN_* — 500ms debounce prevents duplicate menu prompts on rapid state-transition races; no express.e equivalent
   const now = Date.now();
   const lastPromptTime = (session as any)._lastMenuPromptTime || 0;
