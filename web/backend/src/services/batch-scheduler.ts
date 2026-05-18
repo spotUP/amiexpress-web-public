@@ -4,6 +4,7 @@ import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
 
 import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLogService';
+import { generateMultiTop } from '../utils/multitop-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { InfoFileParser } from './info-file-parser';
 import { getSystemTime } from '../utils/date-time.util';
@@ -422,12 +423,31 @@ console.log(`[BatchScheduler] Ran NTR-LASTCALLERS for node ${nodeNum}`);
     return;
   }
 
-  // MultiTop: fall through to the generic Amiga 68K runner.
-  // We previously short-circuited to a TypeScript port (generateMultiTop)
-  // but it reads user-record aggregate fields and silently filters sysops
-  // when batch passes `ignoresysop`, producing empty bull1..bull5 charts
-  // for sysop-only test BBSes. The 68K binary at Doors/MultiTop/MultiTop
-  // reads the real UDLog and reproduces the original behaviour.
+  // Special-case MultiTop (TypeScript) to generate bull1..bull5
+  // Command format: doors:multitop/mtop <design_file> <output_file> [ignoresysop] [userdata] <user_data_file>
+  // Example: doors:multitop/mtop doors:multitop/designs/mtopulbytes1.dsg bbs:bulletins/bull1.txt ignoresysop userdata bbs:user.data
+  if (program.includes('multitop/mtop')) {
+    const args = resolvedArgs;
+    if (args.length >= 2) {
+      // args[0] is design file path (e.g. "doors:multitop/designs/mtopulbytes1.dsg")
+      // args[1] is output file path (e.g. "bbs:bulletins/bull1.txt")
+      // These are raw Amiga paths - must resolve assigns to filesystem paths
+      const rawDesignPath = args[0].replace(/^"|"$/g, '');
+      const rawOutputPath = args[1].replace(/^"|"$/g, '');
+      const designPath = resolveAssign(rawDesignPath);
+      const outputPath = resolveAssign(rawOutputPath);
+
+      // Parse optional flags
+      const ignoreSysop = args.some(arg => arg.toLowerCase() === 'ignoresysop');
+
+console.log(`[BatchScheduler] Generating MultiTop from design: ${designPath} (raw: ${rawDesignPath}), output: ${outputPath}, ignoreSysop: ${ignoreSysop}`);
+      await generateMultiTop(designPath, outputPath, { ignoreSysop });
+console.log('[BatchScheduler] MultiTop generated successfully');
+    } else {
+console.error('[BatchScheduler] MultiTop requires design file and output file arguments');
+    }
+    return;
+  }
 
   // WEB_: disable buggy Discord announce utility instead of launching it from batch files.
   // User requested removal; keep the binary/docs for reference but skip runtime execution.
