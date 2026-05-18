@@ -98,6 +98,13 @@ jobs:
                 docker exec "$CID" sh -lc 'for f in /app/data/bbs/ConfConfig.info /app/ConfConfig.info /app/default-data/ConfConfig.info; do echo "==== $f ===="; strings "$f" 2>/dev/null | head -50; done' || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              joincfg)
+                echo "== joincnf.cfg on live =="
+                docker exec "$CID" sh -lc 'find /app -maxdepth 6 -iname "joincnf.cfg" 2>/dev/null' || true
+                echo ""
+                docker exec "$CID" sh -lc 'for f in /app/data/bbs/Doors/emp_tools/joincnf.cfg /app/Doors/emp_tools/joincnf.cfg; do echo "==== $f ===="; cat "$f" 2>/dev/null | head -50; done' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               userdata)
                 echo "== sqlite3 db locations =="
                 docker exec "$CID" sh -lc 'find /app -maxdepth 4 -name "*.db" 2>/dev/null' || true
