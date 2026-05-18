@@ -2770,14 +2770,18 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
       fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor: SKIPPING displayMainMenu (pause active)\n`);
     } else if (
       session.subState === LoggedOnSubState.FILES_UPLOAD ||
-      session.subState === LoggedOnSubState.FILES_DOWNLOAD
+      session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
+      session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
+      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE
     ) {
-      // RETURNCOMMAND parked us in a transfer state (e.g. UL-LOGOFF
-      // → RZ → lrzsz running). Do NOT render the menu prompt — the
-      // prompt bytes mid-ZMODEM corrupt the wire and rz/sz aborts
-      // with code 128. The transfer's onComplete restores
-      // DISPLAY_MENU when the child exits.
-      console.log('[executeAmigaDoor] Transfer in progress, skipping displayMainMenu');
+      // RETURNCOMMAND parked us in a transfer-class state (FILES_UPLOAD /
+      // FILES_DOWNLOAD for active ZMODEM, UPLOAD_RESUME_PROMPT /
+      // UPLOAD_RESUME_DELETE for the partial-upload Y/N prompt).
+      // Do NOT render the menu prompt — it overwrites the active
+      // interactive prompt and steals its input handler. The
+      // prompt's own state machine transitions back to DISPLAY_MENU
+      // when the user resolves it.
+      console.log(`[executeAmigaDoor] interactive prompt active (${session.subState}), skipping displayMainMenu`);
     } else {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = false;
