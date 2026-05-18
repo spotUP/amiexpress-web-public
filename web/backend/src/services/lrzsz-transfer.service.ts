@@ -398,14 +398,20 @@ export class LrzszTransferManager {
 
   private buildArgs(): string[] {
     if (this.direction === 'download') {
-      // sz -b -vv <files...>
-      //   -b binary mode (no CR/LF translation)
-      //   -vv verbose to stderr (we log it) — helps diagnose silent aborts
+      // sz -b -o -vv <files...>
+      //   -b  binary mode (no CR/LF translation)
+      //   -o  16-bit CRC instead of 32-bit. MuffinTerm's ZMODEM rz
+      //       chokes on ZBIN32 frames (it sends back ZNAK on every
+      //       data subpacket and the transfer dies in a retry loop).
+      //       Forcing CRC16 sidesteps the bug — same class of
+      //       interop fix as the inbound ZRINIT CANFC32 clear we
+      //       apply for uploads.
+      //   -vv verbose to stderr (we log it) — diagnoses silent aborts
       // NB: removed -e (escape ctrl chars). The escape flag asks the
       // receiver to escape; MuffinTerm/SyncTerm typically send raw
       // binary frames regardless, and -e adds unnecessary overhead
       // that some receivers misinterpret as protocol errors.
-      return ['-b', '-vv', ...this.paths];
+      return ['-b', '-o', '-vv', ...this.paths];
     }
     // rz -b -y -vv
     //   -b binary mode
