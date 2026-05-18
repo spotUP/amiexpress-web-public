@@ -131,7 +131,38 @@ export function startResumeStuff(
     handleResumeInput(session, typeof data === 'string' ? data : data.toString('latin1'));
 
   session.subState = LoggedOnSubState.UPLOAD_RESUME_PROMPT;
-  console.log(`[resumeStuff] subState SET to UPLOAD_RESUME_PROMPT (was: ${(session as any).__prevSub || 'unknown'})`);
+  console.log(`[resumeStuff] subState SET to UPLOAD_RESUME_PROMPT`);
+
+  // DIAG: trap any subsequent subState writes during this resume
+  // session and log who's clobbering it. Self-removes after the
+  // resume state ends. Use a private symbol to back the value
+  // so we can keep the getter/setter without infinite recursion.
+  const sessAny = session as any;
+  if (!sessAny.__subStateTrapped) {
+    const initial = session.subState;
+    let backing = initial;
+    sessAny.__subStateTrapped = true;
+    Object.defineProperty(session, 'subState', {
+      configurable: true,
+      get() { return backing; },
+      set(v) {
+        if (backing !== v) {
+          const stack = new Error().stack?.split('\n').slice(2, 7).join('\n          ') || '?';
+          console.log(`[subState] ${backing} -> ${v}\n          ${stack}`);
+        }
+        backing = v;
+      },
+    });
+    // schedule removal of the trap after a short window so we don't
+    // spam logs for the rest of the session.
+    setTimeout(() => {
+      try {
+        delete sessAny.__subStateTrapped;
+        Object.defineProperty(session, 'subState', { value: backing, writable: true, configurable: true });
+      } catch (_e) {}
+    }, 5000);
+  }
+
   emitNextPrompt(session);
 }
 
