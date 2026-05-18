@@ -2135,6 +2135,9 @@ console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
 }
 
 async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
+  const __doorT0 = Date.now();
+  (session as any).__doorT0 = __doorT0;
+console.log(`[TIMING] executeAmigaDoor ENTRY door=${door.name} t=0ms`);
 console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
 console.log(`[executeAmigaDoor] Path: ${door.path}`);
   fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor START: door="${door.name}" type="${door.type}" path="${door.path}"\n`);

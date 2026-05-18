@@ -620,6 +620,11 @@ debugLog(
    * From E sources (express.e:3406-3411)
    */
   handleSendMessage(msg: XIMMessage): void {
+    const __t0 = (this.bbsSession as any)?.__doorT0;
+    if (__t0 && !(this.bbsSession as any)?.__firstSmLogged) {
+      (this.bbsSession as any).__firstSmLogged = true;
+      console.log(`[TIMING] first JH_SM after door ENTRY: ${Date.now() - __t0}ms`);
+    }
     // WEB_*: RTW-specific fallback cap. If the ss_NestCount field approach doesn't
     // stop RTW from iterating, this JH_SM filter catches overflow rows.
     // rtwSuppressing is set on the last allowed newline so the NEXT row's content
