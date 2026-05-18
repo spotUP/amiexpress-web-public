@@ -91,6 +91,13 @@ jobs:
                 docker exec "$CID" sh -lc 'ls -la /app/data/bbs/Doors 2>/dev/null; echo "---"; ls -la /app/Doors 2>/dev/null' || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              confs)
+                echo "== ConfConfig.info strings on live =="
+                docker exec "$CID" sh -lc 'find /app -maxdepth 4 -iname "ConfConfig.info" 2>/dev/null | head -5' || true
+                echo "---"
+                docker exec "$CID" sh -lc 'for f in /app/data/bbs/ConfConfig.info /app/ConfConfig.info /app/default-data/ConfConfig.info; do echo "==== $f ===="; strings "$f" 2>/dev/null | head -50; done' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               *) FILE="$LOGS_DIR/$LOG_INPUT" ;;
             esac
 
