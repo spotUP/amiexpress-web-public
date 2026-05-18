@@ -106,7 +106,18 @@ RUN echo "[Build] Doors stage - copying pre-built doors only"
 FROM node:20-alpine AS backend-builder
 
 # Install build tools needed for native modules (deasync, better-sqlite3)
-RUN apk add --no-cache python3 make g++ build-base
+RUN apk add --no-cache python3 make g++ build-base curl
+
+# lrzsz: build here (known-good toolchain) so the production stage only
+# needs to COPY the binaries. Alpine v3.23 dropped the lrzsz package
+# from community, so we build from upstream sources. ~5s build.
+RUN curl -fsSL https://www.ohse.de/uwe/releases/lrzsz-0.12.20.tar.gz -o /tmp/lrzsz.tgz \
+ && cd /tmp && tar xzf lrzsz.tgz \
+ && cd lrzsz-0.12.20 \
+ && ./configure --prefix=/usr/local --disable-nls --disable-rpath \
+ && make -j"$(nproc)" \
+ && make install \
+ && /usr/local/bin/sz --version
 
 WORKDIR /app/web/backend
 
@@ -124,10 +135,6 @@ RUN npx tsc --project tsconfig.build.json
 FROM node:20-alpine
 
 # Install system dependencies (including build tools for native modules).
-# lrzsz lives in the Alpine community repo (not main) — enable it
-# explicitly before the install so `apk add lrzsz` resolves. Without
-# this the deploy fails with "lrzsz (no such package)" and the
-# Hetzner container never picks up ZMODEM upload/download support.
 RUN apk add --no-cache \
     python3 \
     py3-pip \
@@ -138,19 +145,13 @@ RUN apk add --no-cache \
     g++ \
     make
 
-# lrzsz: not packaged for Alpine v3.23+ (community repo dropped it).
-# Build from upstream sources — tiny, ~5s build, installs sz/rz into
-# /usr/local/bin which is on PATH so isLrzszAvailable() picks them up.
-# Pinned to 0.12.20 (current stable since 2003; same version Homebrew
-# and Debian ship).
-RUN curl -fsSL https://www.ohse.de/uwe/releases/lrzsz-0.12.20.tar.gz -o /tmp/lrzsz.tgz \
- && cd /tmp && tar xzf lrzsz.tgz \
- && cd lrzsz-0.12.20 \
- && ./configure --prefix=/usr/local --disable-nls --disable-rpath \
- && make -j"$(nproc)" \
- && make install \
- && cd / && rm -rf /tmp/lrzsz.tgz /tmp/lrzsz-0.12.20 \
- && /usr/local/bin/sz --version
+# lrzsz binaries built in backend-builder (Alpine v3.23 dropped the package).
+COPY --from=backend-builder /usr/local/bin/sz /usr/local/bin/sz
+COPY --from=backend-builder /usr/local/bin/rz /usr/local/bin/rz
+COPY --from=backend-builder /usr/local/bin/sb /usr/local/bin/sb
+COPY --from=backend-builder /usr/local/bin/rb /usr/local/bin/rb
+COPY --from=backend-builder /usr/local/bin/sx /usr/local/bin/sx
+COPY --from=backend-builder /usr/local/bin/rx /usr/local/bin/rx
 
 # Create app user (non-root)
 RUN addgroup -g 1001 bbsuser && \
