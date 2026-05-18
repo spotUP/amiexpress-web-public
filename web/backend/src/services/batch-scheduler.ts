@@ -770,7 +770,11 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
     // - mtop is an exception - it's XIM and needs 300s for large user databases
     const doorName = path.basename(doorPath).toLowerCase();
     const isSimUtility = doorType === 'SIM';
-    const BATCH_DOOR_TIMEOUT = isSimUtility ? 30000 : 300000; // 30s for SIM, 300s for others
+    // mtop walks the entire user.data — on a real BBS with hundreds of users
+    // this can take well past 30s under the 68K emulator. Give it the same
+    // 300s budget XIM doors get even though its .info classifies it as SIM.
+    const needsLongTimeout = doorName === 'mtop' || doorName === 'multitop';
+    const BATCH_DOOR_TIMEOUT = (isSimUtility && !needsLongTimeout) ? 30000 : 300000;
     let killed = false;
     const timeoutHandle = setTimeout(() => {
       if (!child.killed && child.pid) {
