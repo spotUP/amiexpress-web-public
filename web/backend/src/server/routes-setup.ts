@@ -44,13 +44,23 @@ const playpenStorage = multer.diskStorage({
   destination: (req: any, file: any, cb: (error: Error | null, destination: string) => void) => {
     try {
       const playpenDir = path.join(config.get('dataDir'), 'Node0', 'Playpen');
-console.log('[Upload] BBS data directory:', config.get('dataDir'));
-console.log('[Upload] Playpen directory:', playpenDir);
 
-      if (!fs.existsSync(playpenDir)) {
+      // Handle stray non-directory blocker (same class of bug as the
+      // Conf<n>/HOLD EEXIST issue — old AmiExpress installs leave a
+      // zero-byte FILE at the path that should be a directory).
+      // mkdir -p errors EEXIST when a non-directory file exists there.
+      // Rename the stray out of the way + retry.
+      if (fs.existsSync(playpenDir)) {
+        const stat = fs.statSync(playpenDir);
+        if (!stat.isDirectory()) {
+          const backup = `${playpenDir}.stray-${Date.now()}`;
+          console.warn(`[Upload] ${playpenDir} exists as non-directory; renaming to ${path.basename(backup)} and retrying mkdir`);
+          fs.renameSync(playpenDir, backup);
+          fs.mkdirSync(playpenDir, { recursive: true });
+        }
+      } else {
 console.log('[Upload] Creating playpen directory...');
         fs.mkdirSync(playpenDir, { recursive: true });
-console.log('[Upload] Playpen directory created');
       }
 
       cb(null, playpenDir);
