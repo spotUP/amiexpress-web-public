@@ -157,7 +157,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     // recovery UX they'd get from internal U on the original Amiga.
     const { startResumeStuff } = require('../../services/resume-stuff.service');
     const { config: appConfigForResume } = require('../../config');
+    console.log(`[ZMODEM-UL-RZ] startResumeStuff entry slot=${session.user?.slotNumber} conf=${session.currentConf}`);
     startResumeStuff(socket, session, playpen, appConfigForResume, (resumeResult: any) => {
+      console.log(`[ZMODEM-UL-RZ] startResumeStuff onComplete resumed=${resumeResult.resumed} aborted=${resumeResult.aborted}`);
       if (resumeResult.resumed > 0) {
         socket.emit('ansi-output', `\r\n${resumeResult.resumed} partial file(s) restored to playpen.\r\n`);
       }

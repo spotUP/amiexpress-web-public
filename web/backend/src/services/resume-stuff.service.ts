@@ -106,6 +106,7 @@ export function startResumeStuff(
     return;
   }
 
+  console.log(`[resumeStuff] scan: confDir=${confDir} partUploadDir=${partUploadDir} suffix=${suffix} matches=${partials.length}`);
   if (partials.length === 0) {
     onComplete({ resumed: 0, aborted: false });
     return;
