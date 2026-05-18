@@ -3836,8 +3836,15 @@ console.log(' Empty command, redisplaying menu');
     session.commandText = commandToRun.toUpperCase();
     session.subState = LoggedOnSubState.PROCESS_COMMAND;
     await processCommand(socket, session, commandToRun, '');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Only reset to DISPLAY_MENU if the command didn't transition
+    // into an interactive sub-flow (resume prompt, transfer, etc).
+    // Without this guard the unconditional reset clobbered states
+    // set by handlers like startResumeStuff, making their prompts
+    // disappear immediately under the menu re-render.
+    if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
     return;
   } else if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
     // Express.e:28639-28642 - Process the command with priority system
