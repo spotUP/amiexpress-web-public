@@ -78,6 +78,22 @@ export class TelnetConnection extends EventEmitter {
   private nawsHeight: number = 24;
   private willSent: boolean = false;
   private doSent: boolean = false;
+
+  /**
+   * Per-option state tracking. RFC 854 says responses MUST NOT be
+   * sent if they wouldn't change state. Without this we get infinite
+   * negotiation loops — e.g. we send DONT LINEMODE at startup, client
+   * acks WONT, we ack DONT again (because we're now "receiving"
+   * something we already said), client acks WONT again, forever.
+   * The loop pollutes the wire mid-ZMODEM transfer with garbage
+   * IAC sequences that desync the receiver's parser → "Garbage
+   * count exceeded" / "Bad Block (Wrong CRC)" failures.
+   *
+   * Values are 'agreed' (acked to our DONT/WONT, no need to re-ack)
+   * or 'enabled'. Absent = not yet negotiated, response allowed.
+   */
+  private peerWillState: Map<number, 'on' | 'off'> = new Map();
+  private peerDoState:   Map<number, 'on' | 'off'> = new Map();
   private ttypeRequested: boolean = false;
   private ttypeData: number[] = [];
   public terminalType: string = 'unknown';
@@ -105,7 +121,11 @@ export class TelnetConnection extends EventEmitter {
    * Send WILL/DO commands for supported options
    */
   private initializeTelnet(): void {
-    // Request character-at-a-time mode (disable linemode)
+    // Request character-at-a-time mode (disable linemode). Seed peer
+    // state to 'off' for both directions so when client mirrors back
+    // WONT/DONT LINEMODE we DON'T re-ack and start an infinite loop.
+    this.peerWillState.set(TELOPT_LINEMODE, 'off');
+    this.peerDoState.set(TELOPT_LINEMODE, 'off');
     this.sendCommand([IAC, DONT, TELOPT_LINEMODE]);
     this.sendCommand([IAC, WONT, TELOPT_LINEMODE]);
 
@@ -116,9 +136,11 @@ export class TelnetConnection extends EventEmitter {
     this.sendCommand([IAC, DO, TELOPT_NAWS]);
 
     // We will echo characters
+    this.peerDoState.set(TELOPT_ECHO, 'on');
     this.sendCommand([IAC, WILL, TELOPT_ECHO]);
 
     // We will suppress go-ahead
+    this.peerDoState.set(TELOPT_SGA, 'on');
     this.sendCommand([IAC, WILL, TELOPT_SGA]);
 
     // Request client to suppress go-ahead
@@ -319,7 +341,13 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
   private handleNegotiation(command: number, option: number): void {
     switch (command) {
       case WILL:
-        // Client willing to do something
+        // Client willing to do something. Skip if we already ack'd
+        // (peer state already 'on') — RFC 854 forbids re-ack to
+        // prevent negotiation loops.
+        if (this.peerWillState.get(option) === 'on' && option !== TELOPT_TTYPE) {
+          break;
+        }
+        this.peerWillState.set(option, 'on');
         if (option === TELOPT_TTYPE) {
           // Client will send terminal type - request it
           if (!this.ttypeRequested) {
@@ -347,33 +375,46 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
         break;
 
       case WONT:
-        // Client won't do something - acknowledge
-        this.sendCommand([IAC, DONT, option]);
+        // Client won't do something. RFC 854: only respond DONT if
+        // our perception of peer state changes. If we already know
+        // peer is off (we sent DONT earlier or peer sent WONT earlier),
+        // DON'T re-ack — that would cycle the negotiation forever.
+        if (this.peerWillState.get(option) !== 'off') {
+          this.peerWillState.set(option, 'off');
+          this.sendCommand([IAC, DONT, option]);
+        }
         break;
 
       case DO:
-        // Client requests us to do something
+        // Client requests us to do something. Only ack if it would
+        // change our state.
+        if (this.peerDoState.get(option) === 'on') {
+          // Already acked WILL for this option; don't re-ack.
+          break;
+        }
         if (option === TELOPT_ECHO || option === TELOPT_SGA) {
-          // We will echo/suppress-go-ahead - acknowledge
-          if (!this.willSent) {
-            this.sendCommand([IAC, WILL, option]);
-            this.willSent = true;
-          }
+          this.peerDoState.set(option, 'on');
+          this.sendCommand([IAC, WILL, option]);
+          if (option === TELOPT_ECHO) this.willSent = true;
         } else if (option === TELOPT_BINARY) {
-          // Client requests us to transmit binary — accept. Required
-          // for ZMODEM. We also initiate this before sz/rz spawns
-          // via the WILL BINARY emit in startZmodemDownload /
-          // handleZmodemUploadCommand.
+          // Required for ZMODEM. We also initiate via WILL BINARY
+          // emit in startZmodemDownload / handleZmodemUploadCommand.
+          this.peerDoState.set(option, 'on');
           this.sendCommand([IAC, WILL, TELOPT_BINARY]);
         } else {
           // We won't do this option
+          this.peerDoState.set(option, 'off');
           this.sendCommand([IAC, WONT, option]);
         }
         break;
 
       case DONT:
-        // Client requests us not to do something - acknowledge
-        this.sendCommand([IAC, WONT, option]);
+        // Client requests us not to do something. Only ack if state
+        // would change.
+        if (this.peerDoState.get(option) !== 'off') {
+          this.peerDoState.set(option, 'off');
+          this.sendCommand([IAC, WONT, option]);
+        }
         break;
     }
   }
