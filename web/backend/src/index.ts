@@ -1115,6 +1115,14 @@ console.log(
         }
         connection.write(Buffer.from(out));
       };
+      // Raw sender for protocol bytes (IAC negotiation, etc.) that
+      // must NOT be doubled. Callers passing IAC sequences (e.g.
+      // IAC WILL BINARY = 255 251 0) need the bytes through the
+      // wire untouched; the doubler above would turn 0xFF into
+      // 0xFF 0xFF and corrupt the negotiation.
+      (connection.session as any).transferRawSendUnescaped = (buf: Buffer) => {
+        connection.write(buf);
+      };
     }
   };
   attachTransferSender();

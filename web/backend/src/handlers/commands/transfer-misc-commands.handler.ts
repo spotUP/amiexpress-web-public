@@ -307,8 +307,11 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // errors on every subpacket containing such bytes.
       //   IAC WILL BINARY  = 255 251 0
       //   IAC DO   BINARY  = 255 253 0
-      if (transportType === 'telnet' && sender) {
-        sender(Buffer.from([255, 251, 0, 255, 253, 0]));
+      // Use transferRawSendUnescaped to bypass the 0xFF-doubler in
+      // sender — IAC negotiation must reach the wire byte-for-byte.
+      const rawSendUL = (session as any).transferRawSendUnescaped;
+      if (transportType === 'telnet' && rawSendUL) {
+        rawSendUL(Buffer.from([255, 251, 0, 255, 253, 0]));
       }
       lrzManager.start();
     }

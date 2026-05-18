@@ -301,8 +301,12 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
       // subpacket that happens to contain 0x0D in random binary data.
       //   IAC WILL BINARY  = 255 251 0  (we will transmit 8-bit)
       //   IAC DO BINARY    = 255 253 0  (please also transmit 8-bit)
-      if (transport.type === 'telnet' && transport.send) {
-        transport.send(Buffer.from([255, 251, 0, 255, 253, 0]));
+      // CRITICAL: send via transferRawSendUnescaped, NOT transport.send
+      // (which is transferRawSend and DOUBLES every 0xFF byte — would
+      // turn each IAC into IAC IAC and break the negotiation).
+      const rawSend = (session as any).transferRawSendUnescaped;
+      if (transport.type === 'telnet' && rawSend) {
+        rawSend(Buffer.from([255, 251, 0, 255, 253, 0]));
       }
       console.log(`[ZMODEM-DL ${ctxId}] using lrzsz, spawning sz`);
       lrzManager.start();
