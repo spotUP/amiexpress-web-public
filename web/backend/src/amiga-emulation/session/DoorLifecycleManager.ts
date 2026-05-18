@@ -435,11 +435,16 @@ debugLog("[DoorLifecycleManager] Execution timeout");
       }
 
       // Auto-detection fallback
-      // Default: 100x for all doors (tested and verified to work)
-      // Doors that need slower speed can set OVERCLOCK=-1 or OVERCLOCK=1 in .info
+      // Default: 25000x — see dev/scripts/bench-overclock.ts +
+      // report-overclock.json: 294 of 324 corpus doors run safely at
+      // 100000x; only 4 cap at 25000x. The previous 100x default was
+      // a holdover from pre-bench days when only a handful of doors
+      // had been verified. Doors that misbehave at high overclock
+      // (e.g. tight input-poll loops) can set OVERCLOCK=-1 or
+      // OVERCLOCK=1 explicitly in their .info.
       if (overclockFactor === undefined) {
-        overclockFactor = 100;  // 100x default - all tested doors work at this speed
-        overclockSource = `auto-detection (default 100x)`;
+        overclockFactor = 25000;
+        overclockSource = `auto-detection (default 25000x — see bench-overclock.ts)`;
       }
 
       // Apply overclocking

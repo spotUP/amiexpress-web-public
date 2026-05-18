@@ -759,6 +759,43 @@ console.log("[Upload] Last file in batch upload, auto-completing");
       }
     }
 
+    // ZMODEM batch continuation: rz already received all files into
+    // the playpen and we queued the rest in pendingZmodemFiles. Don't
+    // pop the browser file picker — instead pull the next file off the
+    // queue and walk it through DIZ/description like the first one.
+    if (
+      isWebUploadMode &&
+      Array.isArray(uploadContext.pendingZmodemFiles) &&
+      uploadContext.pendingZmodemFiles.length > 0
+    ) {
+      const next = uploadContext.pendingZmodemFiles.shift();
+      let nextSize = 0;
+      try {
+        nextSize = require("fs").statSync(next.path).size;
+      } catch {
+        /* file already moved or missing — handleDiz will surface */
+      }
+      await handleDizExtractionAndDescription(
+        socket,
+        session,
+        {
+          filename: next.name,
+          originalname: next.name,
+          size: nextSize,
+          path: next.path,
+        },
+        config
+      );
+      session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+      return;
+    }
+
+    // End of ZMODEM batch: no queue OR queue exhausted — wrap up.
+    if (isWebUploadMode && Array.isArray(uploadContext.pendingZmodemFiles)) {
+      await handleUploadBatchComplete(socket, session);
+      return;
+    }
+
     // More files may be pending - emit show-file-upload to request next file
     // Frontend will either:
     // 1. Upload next file from its queue (web mode with multiple files selected)

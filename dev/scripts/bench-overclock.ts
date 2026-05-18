@@ -16,7 +16,10 @@
  * Output: report-overclock.json at repo root (flushed after every door).
  *
  * Flags:
- *   --concurrency N   parallel doors per phase (default 3)
+ *   --concurrency N   parallel doors per phase (default 1; explicit
+ *                     opt-in beyond 1 — sustained parallel emulator
+ *                     runs cause fan spin / heat per memory
+ *                     feedback_avoid_parallel_emulator_heat)
  *   --only ids        comma-sep door ids to test
  *   --limit N         only the first N doors
  *   --resume          skip doors already in report-overclock.json
@@ -154,7 +157,7 @@ async function main() {
   const args = process.argv.slice(2);
   let entries = corpus.doors;
 
-  let concurrency = 3;
+  let concurrency = 1;
   let factors = DEFAULT_FACTORS;
 
   for (let i = 0; i < args.length; i++) {

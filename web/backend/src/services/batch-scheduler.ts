@@ -754,6 +754,12 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
   const HEAVY_BATCH_OVERRIDES: Record<string, number> = {
     mtop: 5000,
     multitop: 5000,
+    // ByteKillHandler walks the entire bytefile listing on logoff;
+    // QuickNew scans every NEW message base. Both timed out at the
+    // default 100x floor / 30s budget. Bench data (report-overclock.json)
+    // shows both safe at 100000x, so 5000x is conservative-safe.
+    bytekillhandler: 5000,
+    quicknew: 5000,
   };
   let batchOverclock: number | undefined;
   try {
@@ -821,7 +827,11 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
     // mtop walks the entire user.data — on a real BBS with hundreds of users
     // this can take well past 30s under the 68K emulator. Give it the same
     // 300s budget XIM doors get even though its .info classifies it as SIM.
-    const needsLongTimeout = doorName === 'mtop' || doorName === 'multitop';
+    const needsLongTimeout =
+      doorName === 'mtop' ||
+      doorName === 'multitop' ||
+      doorName === 'bytekillhandler' ||
+      doorName === 'quicknew';
     const BATCH_DOOR_TIMEOUT = (isSimUtility && !needsLongTimeout) ? 30000 : 300000;
     let killed = false;
     const timeoutHandle = setTimeout(() => {
