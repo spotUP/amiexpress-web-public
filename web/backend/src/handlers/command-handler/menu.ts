@@ -188,7 +188,8 @@ console.log('[menu] displayMenuPrompt SKIPPED (debounce - last prompt was', now 
   }
   (session as any)._lastMenuPromptTime = now;
 
-console.log('[menu] displayMenuPrompt called');
+console.log(`[menu] displayMenuPrompt called subState=${session.subState}`);
+console.log(`[menu]   stack: ${new Error().stack?.split('\n').slice(2, 6).join('\n          ')}`);
 
   const config = getConfig();
   const messageBases = getMessageBases() || [];
