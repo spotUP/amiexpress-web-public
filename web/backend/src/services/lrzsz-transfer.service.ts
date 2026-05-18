@@ -407,23 +407,26 @@ export class LrzszTransferManager {
 
   private buildArgs(): string[] {
     if (this.direction === 'download') {
-      // sz -b -o -w 1024 -L 1024 -vv <files...>
+      // sz -b -o -L 1024 -vv <files...>
       //   -b  binary mode (no CR/LF translation)
       //   -o  16-bit CRC. MuffinTerm's ZMODEM rz chokes on ZBIN32
       //       frames (ZNAK loop). Forcing CRC16 sidesteps it.
-      //   -w 1024  Sliding window cap: sender must wait for ZACK
-      //       every 1024 bytes. Without window backpressure, sz
-      //       streams 16KB+ chunks and MuffinTerm overflows its
-      //       receive buffer around 30KB into the file, then ZNAKs
-      //       and the transfer dies in a retry loop.
-      //   -L 1024  Subpacket length cap matching the window so
-      //       each subpacket is independently ACK'd.
+      //   -L 1024  Subpacket length cap. Keeps ZDATA subpackets
+      //       small so MuffinTerm's receive buffer doesn't
+      //       overflow (we saw it fail at 30KB with default
+      //       8K subpackets). Per-subpacket CRC = quicker
+      //       recovery on bad blocks.
       //   -vv verbose to stderr (we log it) — diagnoses silent aborts
-      // NB: removed -e (escape ctrl chars). The escape flag asks the
+      // NB1: removed -e (escape ctrl chars). The escape flag asks the
       // receiver to escape; MuffinTerm/SyncTerm typically send raw
       // binary frames regardless, and -e adds unnecessary overhead
       // that some receivers misinterpret as protocol errors.
-      return ['-b', '-o', '-w', '1024', '-L', '1024', '-vv', ...this.paths];
+      // NB2: removed -w (window size). With -w set, sz pauses for ZACK
+      // every <window> bytes. MuffinTerm doesn't send sliding-window
+      // ZACKs so sz hung at 0 bytes/6 errors. Streaming with bounded
+      // subpacket size (no window) lets MuffinTerm keep up via its
+      // own subpacket CRC validation.
+      return ['-b', '-o', '-L', '1024', '-vv', ...this.paths];
     }
     // rz -b -y -vv
     //   -b binary mode
