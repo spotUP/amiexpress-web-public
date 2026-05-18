@@ -99,11 +99,20 @@ jobs:
                 FILE="$LOGS_DIR/backend.log"
                 ;;
               userdata)
-                echo "== user.data confaccess (DB) =="
-                docker exec "$CID" sh -lc 'sqlite3 /app/data/amiexpress.db "SELECT username,seclevel,length(confaccess),hex(substr(confaccess,1,25)),confaccess FROM users LIMIT 5;"' 2>/dev/null || true
-                echo "---"
-                echo "== user.data file (binary, 32 bytes confaccess) =="
-                docker exec "$CID" sh -lc 'find /app -maxdepth 4 -iname "user.data" 2>/dev/null | head' || true
+                echo "== sqlite3 db locations =="
+                docker exec "$CID" sh -lc 'find /app -maxdepth 4 -name "*.db" 2>/dev/null' || true
+                echo ""
+                echo "== users table dump =="
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/amiexpress.db /app/data/amiexpress.db /app/web/backend/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT username,seclevel,length(confaccess) AS lc, confaccess, securityflags FROM users LIMIT 10;" 2>/dev/null; fi; done' || true
+                echo ""
+                echo "== user.data files (capital vs lowercase) sizes =="
+                docker exec "$CID" sh -lc 'ls -la /app/data/bbs/user.data /app/data/bbs/User.data 2>&1' || true
+                echo ""
+                echo "== md5sums =="
+                docker exec "$CID" sh -lc 'md5sum /app/data/bbs/user.data /app/data/bbs/User.data 2>&1' || true
+                echo ""
+                echo "== hex dump confaccess area (offsets 119..148 in record 1 — 29 bytes) =="
+                docker exec "$CID" sh -lc 'for f in /app/data/bbs/user.data /app/data/bbs/User.data; do if [ -f "$f" ]; then echo "==== $f record 1 ===="; xxd -s 119 -l 29 "$f" 2>/dev/null; echo "==== $f record 2 ===="; xxd -s $((1024+119)) -l 29 "$f" 2>/dev/null; fi; done' || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
               *) FILE="$LOGS_DIR/$LOG_INPUT" ;;
