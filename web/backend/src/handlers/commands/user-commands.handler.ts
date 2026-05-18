@@ -246,6 +246,17 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
     transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
   }
 
+  // Snapshot transfer start time and total expected bytes so the
+  // shared runPostDownload service can compute aggregate stats.
+  const dlStartTime = Date.now();
+  const fs2 = require('fs');
+  let totalExpectedBytes = 0;
+  for (const fp of files) {
+    try { totalExpectedBytes += fs2.statSync(fp).size; } catch (_) {}
+  }
+  const goodbyeAfter = !!(session as any)._downloadGoodbyeAfter;
+  (session as any)._downloadGoodbyeAfter = undefined;
+
   // Telnet/SSH transfers go through lrzsz (the canonical Forsberg/Ohse
   // implementation) when it's installed on the host. Battle-tested with
   // every terminal client; sidesteps the pure-JS zmodem.js library's
@@ -259,15 +270,19 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
         transport: { type: transport.type, send: transport.send },
         direction: 'download',
         paths: files,
-        onComplete: (ok: boolean, detail: any) => {
+        onComplete: async (ok: boolean, detail: any) => {
           console.log(`[ZMODEM-DL ${ctxId}] lrzsz onComplete ok=${ok} exit=${detail.exitCode} signal=${detail.signal}`);
-          const list = files.map((p) => path.basename(p)).join(', ');
-          socket.emit(
-            'ansi-output',
-            `\r\n${ok ? 'Download complete' : 'Download aborted'}${list ? `: ${list}` : ''}\r\n`
-          );
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+          // Route through the shared post-download pipeline so stats,
+          // callersLog, top-CPS persist, and goodbye-after handling
+          // match the web download path and express.e:20247-20316.
+          const { runPostDownload } = require('../../services/post-download.service');
+          await runPostDownload(socket, session, {
+            downloadStartTime: dlStartTime,
+            downloadedFiles: ok ? files.length : 0,
+            downloadedBytes: ok ? totalExpectedBytes : 0,
+            goodbyeAfter,
+            success: ok,
+          });
         },
       });
       (session as any).transferRawActive = true;
@@ -291,15 +306,20 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
     transport,
     direction: 'download',
     paths: files,
-    onComplete: (ok, detail) => {
+    onComplete: async (ok, detail) => {
       console.log(`[ZMODEM-DL ${ctxId}] onComplete ok=${ok} sent=${JSON.stringify(detail?.sent || [])}`);
-      const list = (detail?.sent || files).map((p) => path.basename(p)).join(', ');
-      socket.emit(
-        'ansi-output',
-        `\r\n${ok ? 'Download complete' : 'Download aborted'}${list ? `: ${list}` : ''}\r\n`
-      );
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = true;
+      // Same shared post-download pipeline as the lrzsz path above.
+      // zmodem.js (JS fallback) tracks "sent" files in detail.sent;
+      // use that count if present, else fall back to full file list.
+      const sentFiles = detail?.sent || (ok ? files : []);
+      const { runPostDownload } = require('../../services/post-download.service');
+      await runPostDownload(socket, session, {
+        downloadStartTime: dlStartTime,
+        downloadedFiles: sentFiles.length,
+        downloadedBytes: ok ? totalExpectedBytes : 0,
+        goodbyeAfter,
+        success: ok,
+      });
     },
   });
 

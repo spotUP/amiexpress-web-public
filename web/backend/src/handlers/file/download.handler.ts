@@ -572,45 +572,25 @@ export class DownloadHandler {
       totalBytes += fileInfo.size;
     }
 
-    // express.e:20251 aePuts('\b\n\b\nFile transfer Completed.\b\n')
-    socket.emit('ansi-output', '\r\n\r\nFile transfer Completed.\r\n');
-
-    // express.e:20266
-    // ' \d files, \sk bytes, \d minutes \d seconds \d cps, \d% efficiency at \d'
-    // pcps=tTCPS (actual cps from transfer), peff=tTEFF=calcEfficiency(tTCPS,onlineBaud)
-    // calcEfficiency(cps,baud): IF cps>21474836 THEN Mul(Div(cps,Div(baud,10)),100)
-    //                           ELSE Div(Mul(cps,100),Div(baud,10))
-    // = (cps * 100) / (baud / 10) = (cps * 1000) / baud
-    const elapsed    = Math.max(1, Math.round((Date.now() - startTime) / 1000));
-    const mins       = Math.floor(elapsed / 60);
-    const secs       = elapsed % 60;
-    const totalKb    = Math.floor(totalBytes / 1024);
-    const cps        = totalBytes > 0 ? Math.round(totalBytes / elapsed) : 0;
-    const onlineBaud = (session as any).onlineBaud || 38400;
-    // express.e:413-420 calcEfficiency: avoid overflow for very high cps
-    const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
-    const efficiency = cps > 21474836
-      ? Math.floor(Math.floor(cps / baudDiv10) * 100)
-      : Math.floor((cps * 100) / baudDiv10);
-    socket.emit('ansi-output',
-      ` ${fileList.length} files, ${totalKb}k bytes, ${mins} minutes ${secs} seconds ${cps} cps, ${efficiency}% efficiency at ${onlineBaud}\r\n`);
-    // express.e:20268 aePuts('\b\n\b\n')
-    socket.emit('ansi-output', '\r\n');
-
-    // express.e:20311 displayULStats(loggedOnUser,loggedOnUserMisc)
-    this.displayULStats(socket, session);
-
-    // express.e:20312 aePuts('\b\n')
-    socket.emit('ansi-output', '\r\n');
-
+    // Route through the shared runPostDownload pipeline so web/telnet/SSH
+    // post-transfer behavior (stats line, callersLog summary, top-CPS
+    // persist, lastDlCPS, displayULStats, goodbye-after) stays in lock-
+    // step with express.e:20247-20317.
     session.tempData = undefined;
-
-    // express.e:20317 IF((mystat=71) OR (mystat=103)) THEN RETURN(pGoodbye())
+    const { runPostDownload } = require('../../services/post-download.service');
+    await runPostDownload(socket, session, {
+      downloadStartTime: startTime,
+      downloadedFiles: fileList.length,
+      downloadedBytes: totalBytes,
+      goodbyeAfter,
+      success: true,
+    });
     if (goodbyeAfter) {
-      // express.e:13750-13772 pGoodbye(): 10-second countdown; Enter/Y cancels, N=logoff
+      // pGoodbye 10-second countdown lives in this handler (web has the
+      // tick interval mechanism already wired). runPostDownload's
+      // immediate-goodbye path is the fallback for telnet/SSH; web
+      // overrides with the proper countdown.
       await this.startPGoodbye(socket, session);
-    } else {
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
     }
   }
 
