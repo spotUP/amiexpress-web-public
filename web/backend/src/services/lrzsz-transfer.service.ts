@@ -153,8 +153,15 @@ export class LrzszTransferManager {
     proc.stdout?.on('data', (chunk: Buffer) => {
       try {
         const normalized = this.normalizeHexHeaderTrailers(this.patchZrinitFlags(chunk));
-        const preview = normalized.slice(0, 64).toString('hex');
-        console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
+        // Per-chunk hex preview is gated behind LRZSZ_DEBUG. It was
+        // invaluable during the MuffinTerm CRC/ZCRCE debugging round
+        // (commits e8ba1c08d, bc7f24961) but emits a 32KB hex string
+        // per ZDATA chunk, ballooning backend.log to tens of MB on
+        // any nontrivial transfer. Default off.
+        if (process.env.LRZSZ_DEBUG) {
+          const preview = normalized.slice(0, 64).toString('hex');
+          console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
+        }
         this.transport.send(normalized);
       } catch (err) {
         console.error(`[lrzsz ${this.direction}] transport.send failed:`, err);
@@ -207,11 +214,13 @@ export class LrzszTransferManager {
     try {
       const rewritten = this.direction === 'upload' ? this.rewriteMuffintermZfile(data) : data;
       if (rewritten.length === 0) return; // buffering for fragmentation
-      const preview = rewritten.slice(0, 64).toString('hex');
-      console.log(`[lrzsz ${this.direction}] stdin <- ${rewritten.length}B: ${preview}${rewritten.length > 64 ? '...' : ''}`);
-      try {
-        require('fs').appendFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, rewritten);
-      } catch (_e) { /* ignore */ }
+      if (process.env.LRZSZ_DEBUG) {
+        const preview = rewritten.slice(0, 64).toString('hex');
+        console.log(`[lrzsz ${this.direction}] stdin <- ${rewritten.length}B: ${preview}${rewritten.length > 64 ? '...' : ''}`);
+        try {
+          require('fs').appendFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, rewritten);
+        } catch (_e) { /* ignore */ }
+      }
       this.proc.stdin.write(rewritten);
     } catch (err) {
       console.error(`[lrzsz ${this.direction}] stdin.write failed:`, err);
