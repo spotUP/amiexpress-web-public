@@ -127,7 +127,12 @@ async function displayResolvedFile(
   // Fast path: no MCI codes — emit synchronously and reply.
   // Doors like dRE!Wall use JH_SF for positional UI fragments; pausing mid-layout
   // breaks absolute cursor positioning and blocks the trap-sync drain for ~5s.
-  const hasMciCodes = /~([A-Z][A-Z0-9_]*|D.)/.test(content);
+  // Regex MUST be case-insensitive: express.e accepts both ~F (uppercase form
+  // feed) and ~f (lowercase) for the same MCI code; uploadmsg.txt in stock
+  // reference-board files uses lowercase, and the previous uppercase-only regex
+  // mis-classified those files as "no MCI" — emitting `~f` literally to the
+  // user instead of clearing the screen.
+  const hasMciCodes = /~([A-Za-z][A-Za-z0-9_]*|[Dd].)/.test(content);
   if (!hasMciCodes) {
     const newlineCount = (content.match(/\n/g) ?? []).length;
     const pauseLines = self.state.pauseLines || 24;
