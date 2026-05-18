@@ -1502,6 +1502,17 @@ console.error(`Unknown door type: ${door.type}`);
 console.log(`[executeDoor] Door ${door.name} completed during segment processing - continuing segments`);
       // Restore subState so display flow can continue (was clobbered to DOOR_RUNNING)
       session.subState = originalSubState;
+    } else if (
+      session.subState === LoggedOnSubState.FILES_UPLOAD ||
+      session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
+      session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
+      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE
+    ) {
+      // Door's RETURNCOMMAND chain parked us in an interactive
+      // transfer/prompt state (e.g. UL-LOGOFF → RZ → resumeStuff Y/N
+      // prompt). Do NOT overwrite — the prompt's own state machine
+      // owns the next input.
+      console.log(`[executeDoor] interactive prompt active (${session.subState}), skipping menu transition`);
     } else {
       // Normal door completion - return to menu (express.e behavior after doors)
       session.menuPause = false;
