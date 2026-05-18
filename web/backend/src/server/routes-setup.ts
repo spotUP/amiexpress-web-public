@@ -289,6 +289,15 @@ console.error(`[Static] BBS Frontend index.html not found: ${indexPath}`);
   app.post('/api/wizard/generate', (req: Request, res: Response) => generateGame(req, res));
 
   // ===== File Upload Routes =====
+  // BBS user file uploads were migrated to ZMODEM/lrzsz in c67e50385
+  // and no longer use `/api/upload`. The route stays because two
+  // door-side flows still rely on multipart HTTP upload:
+  //   1. TypeScript doors calling `ctx.bbs.requestArchiveUpload()`
+  //      (web/backend/src/doors/BBSApi.ts) emit `show-file-upload`
+  //      with the default uploadUrl — frontend POSTs here, then
+  //      emits `file-upload-ready` with the multer-saved path.
+  //   2. DoorManager admin flow uses the parallel `/api/upload/door`
+  //      route below.
   app.post('/api/upload', (req: Request, res: Response) => {
 console.log('[Upload] Upload request received from:', req.headers.origin);
 

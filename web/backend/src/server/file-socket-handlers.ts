@@ -796,21 +796,15 @@ console.log("[Upload] Last file in batch upload, auto-completing");
       return;
     }
 
-    // More files may be pending - emit show-file-upload to request next file
-    // Frontend will either:
-    // 1. Upload next file from its queue (web mode with multiple files selected)
-    // 2. Emit 'upload-batch-complete' if no more files (ends batch)
-    socket.emit("show-file-upload", {
-      accept: "*/*",
-      maxSize: 10 * 1024 * 1024, // 10MB max
-      uploadUrl: "/api/upload",
-      fieldName: "file",
-      batchContinue: true, // Signal that this is part of a batch upload
-    });
-
-    session.subState = LoggedOnSubState.FILES_UPLOAD;
-    // Note: Frontend will emit 'upload-batch-complete' when all files are uploaded
-    // That handler will show the completion statistics
+    // Legacy fall-through (HTTP picker path) — unreachable after the
+    // ZMODEM unification (c67e50385). All web uploads now enter via
+    // `transfer-raw:init` + pendingZmodemFiles; both branches above
+    // handle continuation and end-of-batch. Kept as a defensive
+    // assertion so an unintended caller surfaces immediately.
+    console.warn(
+      "[processBatchFile] unexpected fall-through — no pendingZmodemFiles and not batch-upload. Completing.",
+    );
+    await handleUploadBatchComplete(socket, session);
     return;
   } catch (error: any) {
 console.error("File upload error:", error);
@@ -859,8 +853,11 @@ console.log("[Upload] No upload context for batch complete");
 }
 
 /**
- * Process file upload - shared logic for file-upload and file-uploaded events
- * Now consolidated to avoid code duplication
+ * Process multipart-HTTP upload completion. After Phase 4 cleanup
+ * (c67e50385 + follow-ups) this is reached ONLY via `file-upload-ready`
+ * from the TypeScript-doors `BBSApi.requestArchiveUpload()` flow —
+ * the BBS-user upload path is now ZMODEM-only. The previous "regular
+ * file upload to file area" branches were dead and have been removed.
  */
 async function processFileUpload(
   socket: Socket,
@@ -868,8 +865,9 @@ async function processFileUpload(
   config: any,
   data: { filename: string; originalname: string; size: number; path?: string }
 ) {
-  // Door archive upload must be checked BEFORE uploadContext — requestArchiveUpload()
-  // does not set uploadMode/fileArea so getUploadContext() returns null for it.
+  // Door archive upload — TypeScript-doors `requestArchiveUpload()` sets
+  // pendingDoorUpload before emitting `show-file-upload`; this is the
+  // sole live caller of processFileUpload after Phase 4.
   if (session.pendingDoorUpload) {
     if (data.path) {
       const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
@@ -883,70 +881,21 @@ async function processFileUpload(
     return;
   }
 
-  const uploadContext = getUploadContext(session, socket);
-
-  if (!uploadContext) {
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n"
-    );
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-    );
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    clearUploadContext(session, socket);
+  // DoorManager admin UI uses /api/upload/door + its own socket
+  // listener; if processFileUpload runs while inDoorManager, the admin
+  // UI's own handler will pick this up — skip silently.
+  if (session.inDoorManager) {
+    console.log('[processFileUpload] Door Manager active, deferring to its handler');
     return;
   }
 
-  // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
-  const isRegularFileUpload = uploadContext.uploadMode && uploadContext.fileArea;
-
-  // Check if Door Manager is active - it has its own file-uploaded handler for door archives
-  if (session.inDoorManager && !isRegularFileUpload) {
-console.log(
-      "[processFileUpload] Door Manager is active (door archive upload), skipping"
-    );
-    return;
-  }
-
-  if (!isRegularFileUpload) {
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n"
-    );
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-    );
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    clearUploadContext(session, socket);
-    return;
-  }
-
-  // Web upload mode: use shared DIZ extraction and description prompting logic
-  if (uploadContext.webUploadMode) {
-    const wasProcessed = await handleDizExtractionAndDescription(
-      socket,
-      session,
-      data,
-      config
-    );
-
-    // If file was not processed (waiting for description), return
-    if (!wasProcessed) {
-      session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-      return;
-    }
-
-    // File was processed (had DIZ or already has description)
-    return;
-  }
-
-  // Non-web upload mode (legacy batch upload) - process directly
-  await processBatchFile(socket, session, data, config);
+  // Anything else is an unexpected caller post-Phase-4. Loudly surface
+  // it so a stray emitter or new flow trips a visible error instead of
+  // silently dropping the file.
+  console.warn(
+    '[processFileUpload] unexpected invocation outside pendingDoorUpload / DoorManager. Ignoring.',
+    { filename: data.filename, hasPath: !!data.path },
+  );
 }
 
 /**
@@ -956,106 +905,19 @@ export function registerFileHandlers(socket: Socket) {
   const session = getSessionBySocketId(socket.id);
   if (!session) return;
 
-  // Handle file upload from browser (receives file data directly)
-  socket.on(
-    "file-upload",
-    async (data: {
-      filename: string;
-      size: number;
-      type: string;
-      data: number[];
-      uploadStartTime?: number;
-    }) => {
-      const receiveTime = Date.now();
-console.log(
-        "[file-upload] Received file from browser:",
-        data.filename,
-        data.size,
-        "bytes"
-      );
+  // Legacy `file-upload` (socket-body JSON-encoded byte array) and
+  // `file-uploaded` (never emitted by any current frontend) socket
+  // handlers were removed in the Phase 4 cleanup. BBS user file
+  // uploads route through ZMODEM/lrzsz via `transfer-raw:*` now;
+  // door-archive uploads (TypeScript-doors `requestArchiveUpload()`)
+  // keep using `file-upload-ready` below.
 
-      // Calculate real upload CPS from frontend timing
-      let uploadCPS = 0;
-      if (data.uploadStartTime && data.size > 0) {
-        const durationMs = receiveTime - data.uploadStartTime;
-        const durationSec = durationMs / 1000;
-        uploadCPS = durationSec > 0 ? Math.floor(data.size / durationSec) : 0;
-console.log(
-          `[file-upload] Transfer time: ${durationMs}ms, CPS: ${uploadCPS}`
-        );
-      }
-
-      // Store CPS in session for later use when updating user stats
-      if (!session.tempData) {
-        session.tempData = {} as any;
-      }
-      session.tempData.lastUploadCPS = uploadCPS;
-
-      const fs = require("fs");
-      const path = require("path");
-
-      // Get playpen directory
-      const playpenDir = getPlaypenDir(
-        session.nodeId || 0,
-        config.get("dataDir")
-      );
-
-      try {
-        // Ensure playpen exists (handle legacy PlayPen file from Amiga BBS)
-        if (fs.existsSync(playpenDir)) {
-          const stat = fs.statSync(playpenDir);
-          if (stat.isFile()) {
-            // Remove old file (legacy empty PlayPen file)
-            fs.unlinkSync(playpenDir);
-            fs.mkdirSync(playpenDir, { recursive: true });
-          }
-          // If it's already a directory, we're good
-        } else {
-          // Create directory if it doesn't exist
-          fs.mkdirSync(playpenDir, { recursive: true });
-        }
-
-        // Write file to playpen
-        const filePath = path.join(playpenDir, data.filename);
-        const buffer = Buffer.from(data.data);
-        fs.writeFileSync(filePath, buffer);
-
-console.log("[file-upload] Wrote file to:", filePath);
-
-        // Process the upload inline instead of emitting event
-        // Call the processing function directly
-        await processFileUpload(socket, session, config, {
-          filename: data.filename,
-          originalname: data.filename,
-          size: data.size,
-          path: filePath,
-        });
-      } catch (error: any) {
-        const filePath = `${playpenDir || "unknown"}/${data.filename}`;
-        SysopDebugUtil.debugFileError(
-          socket,
-          session,
-          "write",
-          filePath,
-          error
-        );
-        socket.emit(
-          "ansi-output",
-          `\r\n\x1b[31mError saving file: ${error.message}\x1b[0m\r\n`
-        );
-      }
-    }
-  );
-
-  // Handle upload-via-multipart-HTTP completion.
+  // Multipart-HTTP completion notification (BBSApi door archive flow).
   //
-  // The legacy `file-upload` event above accepts the file body as a
-  // JSON-encoded number array — that path inflates each byte ~3x and
-  // forced maxHttpBufferSize up to 64MB to fit a 10MB upload (#11). The
-  // new path is: frontend POSTs the file to /api/upload (multer saves to
-  // playpen and returns {filename, path, size}) then emits this small
-  // event with just the metadata. No file body on the websocket — buffer
-  // pressure goes away.
+  // Frontend POSTs the file to /api/upload (multer saves to playpen and
+  // returns {filename, path, size}) then emits this small event with
+  // just the metadata. No file body on the websocket → no buffer
+  // pressure.
   socket.on(
     "file-upload-ready",
     async (data: {
@@ -1195,22 +1057,10 @@ console.error(
     }
   );
 
-  // Handle file upload completion (express.e:19059-19110)
-  // Now uses shared processFileUpload() to avoid code duplication
-  socket.on(
-    "file-uploaded",
-    async (data: {
-      filename: string;
-      originalname: string;
-      size: number;
-      path?: string;
-    }) => {
-console.log("File uploaded event received:", data);
-
-      // Use shared upload processing logic (same as file-upload handler)
-      await processFileUpload(socket, session, config, data);
-    }
-  );
+  // `file-uploaded` socket handler removed in Phase 4 — no frontend
+  // (web, packages/terminal, or admin) emits this event in current
+  // code. DoorManager has its own `file-uploaded` listener for the
+  // legacy door-manager UI and is left intact.
 
   // Handle upload cancellation — reject any pending door archive upload Promise
   socket.on('upload-cancelled', () => {
