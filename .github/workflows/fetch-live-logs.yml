@@ -83,6 +83,14 @@ jobs:
                 echo ""
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              doors)
+                echo "== AquaScan binary on live =="
+                docker exec "$CID" sh -lc 'find /app /app/data -maxdepth 6 -name "AquaScan*" 2>/dev/null' || true
+                echo ""
+                echo "== Doors dir top-level =="
+                docker exec "$CID" sh -lc 'ls -la /app/data/bbs/Doors 2>/dev/null; echo "---"; ls -la /app/Doors 2>/dev/null' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               *) FILE="$LOGS_DIR/$LOG_INPUT" ;;
             esac
 
