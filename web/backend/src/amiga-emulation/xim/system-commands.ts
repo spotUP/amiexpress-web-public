@@ -1255,7 +1255,15 @@ debugLog(
   }
 
   private userDataPath(): string {
-    return path.join(this.getPaths().root(), 'User.data');
+    // express.e + UserFileManager + UserDatabaseManager all use the
+    // lowercase `user.data` form. Earlier this returned `User.data`
+    // (capital U), which worked on macOS APFS (case-insensitive) but
+    // tripped on Linux containers (case-sensitive): the BBS wrote
+    // updates to `user.data` while XIM doors like JoinCnf read from
+    // a stale/different `User.data`. Live user reported JoinCnf only
+    // showed 4 conferences post-registration because the capital file
+    // never received the post-init access flags. Lowercase here.
+    return path.join(this.getPaths().root(), 'user.data');
   }
 
   private lookupConference(confNum: number): { name: string; path: string } {
