@@ -111,13 +111,22 @@ RUN apk add --no-cache python3 make g++ build-base curl
 # lrzsz: build here (known-good toolchain) so the production stage only
 # needs to COPY the binaries. Alpine v3.23 dropped the lrzsz package
 # from community, so we build from upstream sources. ~5s build.
-RUN curl -fsSL https://www.ohse.de/uwe/releases/lrzsz-0.12.20.tar.gz -o /tmp/lrzsz.tgz \
- && cd /tmp && tar xzf lrzsz.tgz \
- && cd lrzsz-0.12.20 \
- && ./configure --prefix=/usr/local --disable-nls --disable-rpath \
- && make -j"$(nproc)" \
- && make install \
- && /usr/local/bin/sz --version
+RUN set -eux; \
+    echo 'int main(void){return 0;}' > /tmp/hello.c; \
+    gcc /tmp/hello.c -o /tmp/hello && /tmp/hello && echo "gcc sanity OK"; \
+    curl -fsSL https://www.ohse.de/uwe/releases/lrzsz-0.12.20.tar.gz -o /tmp/lrzsz.tgz; \
+    cd /tmp && tar xzf lrzsz.tgz; \
+    cd lrzsz-0.12.20; \
+    # lrzsz 0.12.20 ships an ancient autoconf-generated configure (2003) whose
+    # C-compiler test feeds `-g -O2` and a K&R-era conftest.c that musl-gcc 14
+    # rejects with implicit-int errors. Force a permissive CFLAGS that musl
+    # tolerates and disable -Werror-style strictness.
+    CFLAGS='-O2 -Wno-implicit-int -Wno-implicit-function-declaration -Wno-return-mismatch -Wno-incompatible-pointer-types -fcommon' \
+    ./configure --prefix=/usr/local --disable-nls --disable-rpath \
+      || { echo '--- config.log tail ---'; tail -120 config.log; exit 1; }; \
+    make -j"$(nproc)"; \
+    make install; \
+    /usr/local/bin/sz --version
 
 WORKDIR /app/web/backend
 
