@@ -2561,7 +2561,9 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
     }
 
     // Create AmigaDoorSession to run the native Amiga executable
+    console.log(`[TIMING] before new AmigaDoorSession: ${Date.now() - __doorT0}ms`);
     const amigaSession = new AmigaDoorSession(socket, doorConfig);
+    console.log(`[TIMING] after new AmigaDoorSession: ${Date.now() - __doorT0}ms`);
 
     // Move to a fresh line before the door renders any output (prevents menu prompt overlap)
     emitText(socket, '\r\n');
@@ -2637,7 +2639,9 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
 
     // Start the door execution
+    console.log(`[TIMING] before amigaSession.start(): ${Date.now() - __doorT0}ms`);
     await amigaSession.start();
+    console.log(`[TIMING] after amigaSession.start() (door exited): ${Date.now() - __doorT0}ms`);
 
     // Log door exit to Node{N}/DoorLog
     logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
