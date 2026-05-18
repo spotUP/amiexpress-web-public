@@ -306,6 +306,25 @@ else
     # Remove .ts source files from Doors - production uses compiled dist/
     find "$BBS_DATA_DIR/Doors" -maxdepth 2 -name "*.ts" -not -path "*/node_modules/*" -not -path "*/dist/*" -delete 2>/dev/null || true
     echo "[Entrypoint]   Cleaned .ts source files from Doors"
+
+    # Orphan cleanup: `cp -r src/. dst/` is additive — files removed from
+    # the image are NOT removed from the volume. Anything that needs to
+    # disappear at deploy time has to be deleted explicitly here.
+    # If you delete or rename a file in Doors/Commands/Screens/Libs/C in
+    # git, add the OLD path to this list so live volumes converge.
+    echo "[Entrypoint] Removing orphaned files from previous deploys..."
+    ORPHANS=(
+        # U.info was renamed to U.info.disabled-ulgoff in commit 5356bf66a
+        # so the U command uses the internal upload handler instead of the
+        # slow UL-Logoff door wrapper.
+        "$BBS_DATA_DIR/Commands/BBSCmd/U.info"
+    )
+    for orphan in "${ORPHANS[@]}"; do
+        if [ -e "$orphan" ]; then
+            rm -f "$orphan"
+            echo "[Entrypoint]   Removed orphan: $orphan"
+        fi
+    done
 fi
 
 # Show what data exists
