@@ -123,8 +123,13 @@ RUN npx tsc --project tsconfig.build.json
 # ============================================================================
 FROM node:20-alpine
 
-# Install system dependencies (including build tools for native modules)
+# Install system dependencies (including build tools for native modules).
+# lrzsz lives in the Alpine community repo (not main) — enable it
+# explicitly before the install so `apk add lrzsz` resolves. Without
+# this the deploy fails with "lrzsz (no such package)" and the
+# Hetzner container never picks up ZMODEM upload/download support.
 RUN apk add --no-cache \
+    --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
     python3 \
     py3-pip \
     sqlite \
