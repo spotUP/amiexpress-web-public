@@ -913,7 +913,9 @@ console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err)
     // mid-ZMODEM-transfer, corrupting the wire and aborting lrzsz.
     if (
       session.subState !== LoggedOnSubState.FILES_UPLOAD &&
-      session.subState !== LoggedOnSubState.FILES_DOWNLOAD
+      session.subState !== LoggedOnSubState.FILES_DOWNLOAD &&
+      session.subState !== LoggedOnSubState.UPLOAD_RESUME_PROMPT &&
+      session.subState !== LoggedOnSubState.UPLOAD_RESUME_DELETE
     ) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = false;
