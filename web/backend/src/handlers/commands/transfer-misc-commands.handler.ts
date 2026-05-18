@@ -118,6 +118,11 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         ? 'telnet'
         : 'web';
 
+  // Diagnostic — when uploads fall through to the wrong transport path
+  // (e.g. JS fallback that lacks the MuffinTerm CRC/ZCRCE patches),
+  // the silent fallthrough makes it impossible to tell why from logs.
+  console.log(`[ZMODEM-UL-RZ] transportType=${transportType} (session.connectionType=${(session as any).connectionType}) hasTransferRawSend=${!!(session as any).transferRawSend}`);
+
   const sender =
     (session as any).transferRawSend ||
     ((buf: Buffer) => socket.emit('transfer-raw:data', buf));
@@ -125,11 +130,25 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
   const ulStartTime = Date.now();
 
   // Telnet/SSH: hand off to lrzsz (canonical Forsberg/Ohse
-  // implementation) when available. Same pattern as startZmodemUpload
-  // and startZmodemDownload. Web keeps zmodem.js (in-browser).
+  // implementation). The zmodem.js fallback at the bottom of this
+  // function lacks the ZRINIT CANFC32 patch and the ZFILE ZCRCE→ZCRCW
+  // rewrite needed for MuffinTerm interop — silently falling through
+  // to it on telnet/SSH would produce the "Unhandled header: ZRINIT"
+  // Sentry crash + "Upload aborted" UX. If lrzsz isn't installed on
+  // a telnet/SSH-capable host, that's a deployment bug, not a runtime
+  // fallback case.
   if (transportType !== 'web') {
     const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
-    if (isLrzszAvailable()) {
+    const lrzAvailable = isLrzszAvailable();
+    console.log(`[ZMODEM-UL-RZ] lrzsz check: ${lrzAvailable}`);
+    if (!lrzAvailable) {
+      socket.emit('ansi-output', '\r\n\x1b[31mZMODEM unavailable: lrzsz (sz/rz) not installed on this BBS host.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[31mAsk the sysop to install lrzsz (brew install lrzsz / apk add lrzsz).\x1b[0m\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = true;
+      return;
+    }
+    {
       const lrzManager = new LrzszTransferManager({
         session,
         transport: { type: transportType, send: sender },
@@ -259,7 +278,6 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       lrzManager.start();
       return;
     }
-    console.warn('[ZMODEM-UL-RZ] lrzsz not installed, falling back to zmodem.js (may not interoperate)');
   }
 
   const manager = new ZmodemTransferManager({
