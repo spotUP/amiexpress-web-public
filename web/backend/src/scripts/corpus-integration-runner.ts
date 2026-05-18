@@ -56,7 +56,8 @@ import { EventEmitter } from "events";
 import * as fs from "fs";
 import * as path from "path";
 
-import type { BBSSession, Door } from "../types";
+import type { Door } from "../types";
+import type { BBSSession } from "../index";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { EnvStat } from "../constants/env-codes";
 
@@ -338,13 +339,17 @@ async function main() {
   let only: Set<string> | null = null;
   let concurrency = 4;
   let capture = false;
+  let captureAll = false;
   let keepAnsi = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--only") only = new Set(args[++i].split(",").map((s) => s.trim()));
     else if (a === "--concurrency") concurrency = parseInt(args[++i], 10);
     else if (a === "--capture") capture = true;
-    else if (a === "--keep-ansi") keepAnsi = true;
+    else if (a === "--capture-all") {
+      capture = true;
+      captureAll = true;
+    } else if (a === "--keep-ansi") keepAnsi = true;
   }
 
   // Boot only the BBS bits we need: door registry. Skip database +
@@ -425,9 +430,9 @@ async function main() {
   const corpus = JSON.parse(fs.readFileSync(CORPUS, "utf8")) as {
     doors: CorpusEntry[];
   };
-  let entries = corpus.doors.filter(
-    (e) => e.integration || only?.has(e.id),
-  );
+  let entries = captureAll
+    ? corpus.doors
+    : corpus.doors.filter((e) => e.integration || only?.has(e.id));
   if (only) entries = entries.filter((e) => only!.has(e.id));
 
   if (entries.length === 0) {
