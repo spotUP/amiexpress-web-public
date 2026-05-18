@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import multer from "multer";
+import { EventEmitter } from "events";
 import {
   User,
   Door,
@@ -1021,8 +1022,33 @@ console.log(
     }`
   );
 
-  // Create emitter interface that mimics Socket.IO socket
-  const emitter = {
+  // Create emitter interface that mimics Socket.IO socket.
+  // Backs synthetic events ('command', 'file-uploaded', etc.) with a
+  // real EventEmitter so DoorManager's socket.once/on/listenerCount
+  // calls behave the same on telnet/SSH as they do on web. Transport
+  // I/O ('ansi-output', 'binary-output', 'petscii-output') is still
+  // routed straight to connection.write below.
+  const eventBus = new EventEmitter();
+  eventBus.setMaxListeners(50);
+
+  const emitter: any = {
+    // socket.io's `.once / .removeListener / .removeAllListeners /
+    // .listenerCount / .listeners` all map to the synthetic event bus.
+    once: (event: string, handler: (...args: any[]) => void) => {
+      eventBus.once(event, handler);
+      return emitter;
+    },
+    listenerCount: (event: string) => eventBus.listenerCount(event),
+    listeners: (event: string) => eventBus.listeners(event),
+    removeListener: (event: string, handler: (...args: any[]) => void) => {
+      eventBus.removeListener(event, handler);
+      return emitter;
+    },
+    removeAllListeners: (event?: string) => {
+      eventBus.removeAllListeners(event);
+      return emitter;
+    },
+    emitInternal: (event: string, ...args: any[]) => eventBus.emit(event, ...args),
     emit: (event: string, data: any) => {
       if (event === "ansi-output") {
         // Check if this is a C64/PETSCII terminal
@@ -1076,10 +1102,25 @@ console.log(
     // event handler tears down the session when the transport really dies.
     connected: true,
     on: (event: string, handler: (...args: any[]) => void) => {
-      connection.on(event, handler);
+      // Transport-level events live on the underlying telnet/SSH
+      // connection; synthetic events (used by DoorManager, file
+      // upload flow, etc.) live on the local event bus.
+      const transportEvents = new Set(["data", "close", "error", "ready", "terminal-type", "window-size"]);
+      if (transportEvents.has(event)) {
+        connection.on(event, handler);
+      } else {
+        eventBus.on(event, handler);
+      }
+      return emitter;
     },
     off: (event: string, handler: (...args: any[]) => void) => {
-      connection.off(event, handler);
+      const transportEvents = new Set(["data", "close", "error", "ready", "terminal-type", "window-size"]);
+      if (transportEvents.has(event)) {
+        connection.off(event, handler);
+      } else {
+        eventBus.off(event, handler);
+      }
+      return emitter;
     },
     // Allow handlers (logoff) to terminate the underlying transport cleanly
     disconnect: () => connection.close(),
@@ -1181,6 +1222,16 @@ console.log(
 
       // Check if door is active and needs input (socket-handlers.ts:641-656)
       if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
+        // TypeScript doors (DoorManager) listen on emitter 'command' events
+        // the way the web frontend emits via socket.io. Web's socket.io
+        // Socket fires 'command' natively on socket.emit('command', input);
+        // telnet/SSH have no equivalent transport event, so bridge input
+        // here. This is what makes socket.once('command', …) in DoorManager
+        // resolve on telnet/SSH the same way it does on web.
+        if (eventBus.listenerCount('command') > 0) {
+          eventBus.emit('command', input);
+          return;
+        }
         if (session.doorInputHandler) {
           // Route input to active door's input handler
 console.log('[TELNET] Routing input to doorInputHandler');
