@@ -150,7 +150,8 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
 
     // express.e:8235-8237 - Run RELOGON and RELOGONn system commands
     try {
-      const { processSysCommand } = require('../../utils/syscommand.util');
+      // Renamed/moved: processSysCommand → runSysCommand in command-execution.handler.
+      const { runSysCommand: processSysCommand } = require('../command-execution.handler');
       await processSysCommand(socket, session, 'RELOGON');
       await processSysCommand(socket, session, `RELOGON${session.nodeId || 0}`);
     } catch (err) {
@@ -178,7 +179,8 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   // these to run cleanup scripts, rotate logs, etc. The same command
   // resolver handles both global and per-node by suffixing the node.
   try {
-    const { processSysCommand } = require('../../utils/syscommand.util');
+    // Renamed/moved: processSysCommand → runSysCommand in command-execution.handler.
+    const { runSysCommand: processSysCommand } = require('../command-execution.handler');
     await processSysCommand(socket, session, 'LOGOFF');
     await processSysCommand(socket, session, `LOGOFF${session.nodeId || 0}`);
   } catch (err) {
