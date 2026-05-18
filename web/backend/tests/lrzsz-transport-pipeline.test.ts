@@ -156,6 +156,69 @@ describe('LrzszTransferManager.processStdoutChunk — behavior', () => {
   });
 });
 
+describe('LrzszTransferManager.normalizeHexHeaderTrailers — JPEG corruption regression', () => {
+  // Regression: a telnet user reported a JPEG download failing with
+  // "Bad Block (Wrong CRC)" + "Garbage count exceeded" + abort. Root
+  // cause: the earlier matcher patched every `\r \x8a` pair, even
+  // inside binary ZDATA payload that happened to contain those bytes
+  // by chance. JPEGs / binaries often do. The fix requires the
+  // `\x11` (XON) follow-byte so only real hex-header trailers match.
+  function callNormalize(mgr: any, buf: Buffer): Buffer {
+    return (mgr as any).normalizeHexHeaderTrailers(buf);
+  }
+
+  test('does NOT patch `0d 8a` when next byte is NOT XON (binary payload safe)', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    // Synthetic ZDATA-style payload: random bytes that happen to
+    // contain 0x0d 0x8a but NOT followed by 0x11.
+    const payload = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe0, // JPEG SOI + APP0 marker
+      0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, // JFIF
+      0x0d, 0x8a, 0x42, 0x99, // <-- the problematic pair, NOT a trailer
+      0x55, 0xaa,
+    ]);
+    const original = Buffer.from(payload);
+    const result = callNormalize(mgr, payload);
+    expect(Buffer.compare(result, original)).toBe(0);
+  });
+
+  test('DOES patch `\\r \\x8a \\x11` hex-header trailer to `\\r \\n \\x11`', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    // Hex header (ZRQINIT shape) with the Forsberg high-bit-LF trailer.
+    const header = Buffer.concat([
+      Buffer.from('2a2a18423030303030303030303030303030', 'hex'),
+      Buffer.from([0x0d, 0x8a, 0x11]),
+    ]);
+    const result = callNormalize(mgr, header);
+    expect(result[result.length - 3]).toBe(0x0d);
+    expect(result[result.length - 2]).toBe(0x0a); // patched
+    expect(result[result.length - 1]).toBe(0x11);
+  });
+
+  test('mixed buffer: patches trailer, leaves payload bytes intact', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    const buf = Buffer.concat([
+      // Hex header + trailer
+      Buffer.from('2a2a18423031303030303030303030303030', 'hex'),
+      Buffer.from([0x0d, 0x8a, 0x11]),
+      // Then binary payload with the unsafe pair
+      Buffer.from([0xde, 0xad, 0x0d, 0x8a, 0x55, 0xbe, 0xef]),
+    ]);
+    const result = callNormalize(mgr, Buffer.from(buf));
+    // Trailer patched
+    expect(result[18]).toBe(0x0d);
+    expect(result[19]).toBe(0x0a);
+    expect(result[20]).toBe(0x11);
+    // Payload bytes untouched
+    expect(result[23]).toBe(0x0d);
+    expect(result[24]).toBe(0x8a);
+    expect(result[25]).toBe(0x55);
+  });
+});
+
 describe('LrzszTransferManager.processStdoutChunk — telnet/ssh do NOT suppress duplicates', () => {
   // Regression: a telnet user reported "Waiting for OK to send" after
   // their client sent ZRQINIT. rz emits a fresh ZRINIT in response,

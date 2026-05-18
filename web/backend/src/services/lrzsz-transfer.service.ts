@@ -475,11 +475,25 @@ export class LrzszTransferManager {
   }
 
   private normalizeHexHeaderTrailers(chunk: Buffer): Buffer {
-    // Look for \r \x8a sequences and patch the \x8a → \x0a (LF).
-    // ZMODEM hex headers always end with this exact pair.
+    // Patch the high-bit-LF byte (`\x8a`) of ZMODEM hex-header trailers
+    // to plain LF (`\x0a`) so receivers that don't tolerate the Forsberg
+    // form (some web/JS ZMODEM parsers) accept the header.
+    //
+    // CRITICAL: the trailer is *exactly* `\r \x8a \x11` (CR, high-bit
+    // LF, XON). The earlier implementation matched on just `\r \x8a`
+    // — which by chance also occurs inside binary ZDATA payload (a
+    // user reported a JPEG download failing with "Bad Block (Wrong
+    // CRC)" + "Garbage count exceeded"; the payload contained random
+    // 0x0d 0x8a byte pairs and we were silently corrupting one byte
+    // per occurrence). Require the `\x11` follow-byte so we only
+    // touch genuine hex-header trailers.
     let hits = 0;
-    for (let i = 0; i < chunk.length - 1; i++) {
-      if (chunk[i] === 0x0d && chunk[i + 1] === 0x8a) {
+    for (let i = 0; i < chunk.length - 2; i++) {
+      if (
+        chunk[i] === 0x0d &&
+        chunk[i + 1] === 0x8a &&
+        chunk[i + 2] === 0x11
+      ) {
         chunk[i + 1] = 0x0a;
         hits++;
       }
