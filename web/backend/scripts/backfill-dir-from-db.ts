@@ -18,7 +18,8 @@ import { getMaxDirs } from '../src/utils/max-dirs.util';
 async function main() {
   await new Promise(r => setTimeout(r, 1500)); // let DB init
   const bbsRoot = path.resolve(process.cwd(), '..', '..');
-  console.log(`bbsRoot: ${bbsRoot}`);
+  const rewrite = process.argv.includes('--rewrite');
+  console.log(`bbsRoot: ${bbsRoot}  rewrite=${rewrite}`);
 
   // Group file_entries by conference (via fileArea.conferenceId)
   // SQLite column names are stored as written in CREATE TABLE
@@ -44,6 +45,64 @@ async function main() {
 
   let appended = 0;
   let skipped = 0;
+
+  // --rewrite: drop entries we previously appended for each conference's
+  // DIR file before re-writing. We can't surgically delete just our rows
+  // since DIR is flat-text, but we CAN snapshot pre-backfill state by
+  // looking at .bak files (or back up + truncate non-existing entries
+  // after the rewrite). Simpler approach: collect filenames the script
+  // will rewrite, strip those entries from the existing DIR file, then
+  // append fresh. Preserves entries not in DB (e.g. manual sysop adds).
+  const willWriteByDir = new Map<string, Set<string>>();
+  if (rewrite) {
+    for (const row of allRows) {
+      if (row.status !== 'active' && row.status !== 'hold' && row.status !== 'private') continue;
+      const confDir = getConferenceDir(row.conferenceId, bbsRoot);
+      const maxDirs = await getMaxDirs(row.conferenceId, bbsRoot);
+      const dirNum = maxDirs > 0 ? maxDirs : 1;
+      const dirEntries = fs.existsSync(confDir) ? fs.readdirSync(confDir) : [];
+      const dirEntry = dirEntries.find(e => e.toLowerCase() === `dir${dirNum}`);
+      const dirFilePath = row.status === 'active'
+        ? path.join(confDir, dirEntry || `DIR${dirNum}`)
+        : path.join(confDir, 'HOLD', 'HELD');
+      if (!willWriteByDir.has(dirFilePath)) willWriteByDir.set(dirFilePath, new Set());
+      willWriteByDir.get(dirFilePath)!.add(row.filename);
+    }
+    for (const [dirFilePath, filenames] of willWriteByDir.entries()) {
+      let content = '';
+      try { content = fs.readFileSync(dirFilePath, 'latin1'); } catch { continue; }
+      const lines = content.split(/\r?\n/);
+      const kept: string[] = [];
+      let skipUntilNextEntry = false;
+      for (const line of lines) {
+        // Entry header: filename at col 0 (12 chars), space at 12, status (P/F/N/D) at 13.
+        const isHeader = line.length >= 14
+          && line[12] === ' '
+          && (line[13] === 'P' || line[13] === 'F' || line[13] === 'N' || line[13] === 'D')
+          && line.substring(0, 12).trim().length > 0;
+        if (isHeader) {
+          const fn = line.substring(0, 12).trim();
+          // Match any filename we're rewriting. Need case-insensitive +
+          // truncation-aware compare since DIR truncates to 12 chars.
+          const matched = Array.from(filenames).some(f => f.substring(0, 12).toUpperCase() === fn.toUpperCase());
+          skipUntilNextEntry = matched;
+          if (skipUntilNextEntry) continue;
+        } else if (skipUntilNextEntry) {
+          // continuation line (33-space indent) — skip
+          if (line.length >= 33 && line.substring(0, 33).trim().length === 0) continue;
+          // empty or new non-entry content — stop skipping
+          skipUntilNextEntry = false;
+        }
+        kept.push(line);
+      }
+      // Rejoin and write back. Preserve original line ending style.
+      const useCrlf = content.includes('\r\n');
+      const sep = useCrlf ? '\r\n' : '\n';
+      const newContent = kept.join(sep).replace(/(\r?\n)+$/, sep);
+      fs.writeFileSync(dirFilePath, newContent, 'latin1');
+      console.log(`  rewrite: stripped ${filenames.size} entries from ${path.basename(dirFilePath)}`);
+    }
+  }
 
   for (const row of allRows) {
     if (row.status !== 'active' && row.status !== 'hold' && row.status !== 'private') continue;

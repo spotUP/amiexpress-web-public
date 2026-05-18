@@ -185,22 +185,20 @@ export async function writeDirEntry(
       }
     }
 
-    // Split description into lines
+    // Split description into lines. Express.e:19285 ('IF f:=Open(<workdir><fname>,...) THEN
+    // ReadStr(f,fcomment)') takes the FIRST DIZ line as the primary (fcomment) and the
+    // remainder as continuation (scomment). It does NOT skip ASCII-art lines. An earlier
+    // version of this function tried to pick a "more readable" non-art line, which produced
+    // entry headers with mid-art content and broke door renderers (AquaScan) that expect
+    // the entry's first description text to match the DIZ's first line. Restore parity.
     const rawLines = description.split('\n').map(line => line.replace(/\r$/, ''));
     const meaningfulLines = rawLines.filter(line => line.trim().length > 0);
     let primaryLine = '';
     const continuationLines: string[] = [];
 
-    for (const line of meaningfulLines) {
-      if (!primaryLine && !looksLikeAsciiArt(line)) {
-        primaryLine = line;
-        continue;
-      }
-      continuationLines.push(line);
-    }
-
-    if (!primaryLine && continuationLines.length > 0) {
-      primaryLine = continuationLines.shift()!;
+    if (meaningfulLines.length > 0) {
+      primaryLine = meaningfulLines[0];
+      continuationLines.push(...meaningfulLines.slice(1));
     }
 
     // Build entry
