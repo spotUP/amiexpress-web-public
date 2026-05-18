@@ -32,6 +32,7 @@ const SB = 250;   // Subnegotiation begin
 const SE = 240;   // Subnegotiation end
 
 // Telnet options
+const TELOPT_BINARY = 0;      // 8-bit binary transmission (RFC 856)
 const TELOPT_ECHO = 1;        // Echo
 const TELOPT_SGA = 3;         // Suppress Go Ahead
 const TELOPT_STATUS = 5;      // Status
@@ -334,6 +335,14 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
         } else if (option === TELOPT_SGA) {
           // Client will suppress go-ahead - acknowledge
           this.sendCommand([IAC, DO, TELOPT_SGA]);
+        } else if (option === TELOPT_BINARY) {
+          // Client agrees to transmit 8-bit binary (RFC 856).
+          // Required for ZMODEM file transfers — without it the
+          // client applies NVT-mode rules (CR→CRLF/CRNUL, etc.)
+          // to binary data, corrupting CRC. We initiate the
+          // negotiation before sz/rz spawns; this acknowledges
+          // the client's WILL response.
+          this.sendCommand([IAC, DO, TELOPT_BINARY]);
         }
         break;
 
@@ -350,6 +359,12 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
             this.sendCommand([IAC, WILL, option]);
             this.willSent = true;
           }
+        } else if (option === TELOPT_BINARY) {
+          // Client requests us to transmit binary — accept. Required
+          // for ZMODEM. We also initiate this before sz/rz spawns
+          // via the WILL BINARY emit in startZmodemDownload /
+          // handleZmodemUploadCommand.
+          this.sendCommand([IAC, WILL, TELOPT_BINARY]);
         } else {
           // We won't do this option
           this.sendCommand([IAC, WONT, option]);

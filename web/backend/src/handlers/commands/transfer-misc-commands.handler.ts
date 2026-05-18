@@ -301,6 +301,15 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // onComplete restores subState=DISPLAY_MENU when rz exits.
       session.subState = LoggedOnSubState.FILES_UPLOAD;
       socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
+      // express.e:15891-15896 — negotiate IAC BINARY before ZMODEM so
+      // the client doesn't apply NVT rules to file data. Without this,
+      // outbound CR / NUL / 0xFF bytes get transformed, causing CRC
+      // errors on every subpacket containing such bytes.
+      //   IAC WILL BINARY  = 255 251 0
+      //   IAC DO   BINARY  = 255 253 0
+      if (transportType === 'telnet' && sender) {
+        sender(Buffer.from([255, 251, 0, 255, 253, 0]));
+      }
       lrzManager.start();
     }
     return;
