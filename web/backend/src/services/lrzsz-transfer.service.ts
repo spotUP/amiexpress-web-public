@@ -428,12 +428,20 @@ export class LrzszTransferManager {
       // own subpacket CRC validation.
       return ['-b', '-o', '-L', '1024', '-vv', ...this.paths];
     }
-    // rz -b -y -vv
+    // rz -b -r -vv
     //   -b binary mode
-    //   -y overwrite existing files in target dir
+    //   -r resume interrupted file transfer (Z). When the playpen
+    //      contains a partial file (restored by resumeStuff from
+    //      <conf>/PartUpload/), rz reads the existing size and tells
+    //      sz to start from that offset via ZRPOS. Without -r, rz
+    //      always starts from byte 0 — the partial is just
+    //      overwritten and the user re-uploads from scratch, which
+    //      defeats the whole resume flow we ported from express.e.
     //   -vv verbose to stderr
-    // Removed -e for same reason as sz.
-    return ['-b', '-y', '-vv'];
+    // NB: -y (overwrite) is incompatible with -r. With -r, rz uses
+    // partial-file size for resume; with -y, it always truncates.
+    // Mutually exclusive. Express.e behavior matches -r.
+    return ['-b', '-r', '-vv'];
   }
 
   private resolveCwd(): string | undefined {
