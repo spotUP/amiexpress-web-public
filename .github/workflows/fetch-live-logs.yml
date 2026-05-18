@@ -55,17 +55,35 @@ jobs:
             echo "Live HEAD: $(docker exec "$CID" sh -lc 'git -C /app rev-parse HEAD 2>/dev/null || echo unknown')"
             echo "================================================="
 
+            # Probe both common log dirs — the dev script writes to
+            # ./logs (project-root-relative), but in the container that
+            # resolves to /app/logs OR /app/web/backend/logs depending
+            # on cwd.
+            LOGS_DIR=""
+            for candidate in /app/logs /app/web/backend/logs /app/data/logs; do
+              if docker exec "$CID" test -d "$candidate" 2>/dev/null; then
+                LOGS_DIR="$candidate"
+                break
+              fi
+            done
+            if [ -z "$LOGS_DIR" ]; then
+              echo "ERROR: no logs dir found in container"
+              docker exec "$CID" find /app -maxdepth 3 -name 'backend.log' 2>/dev/null
+              exit 1
+            fi
+            echo "Resolved logs dir: $LOGS_DIR"
+
             case "$LOG_INPUT" in
-              backend) FILE=/app/data/logs/backend.log ;;
-              preview) FILE=/app/data/logs/preview.log ;;
-              xim)     FILE=/app/data/logs/xim-debug.log ;;
+              backend) FILE="$LOGS_DIR/backend.log" ;;
+              preview) FILE="$LOGS_DIR/preview.log" ;;
+              xim)     FILE="$LOGS_DIR/xim-debug.log" ;;
               all-recent)
-                echo "== /app/data/logs (top 20 newest) =="
-                docker exec "$CID" ls -lt /app/data/logs 2>/dev/null | head -20 || true
+                echo "== $LOGS_DIR (top 20 newest) =="
+                docker exec "$CID" ls -lt "$LOGS_DIR" 2>/dev/null | head -20 || true
                 echo ""
-                FILE=/app/data/logs/backend.log
+                FILE="$LOGS_DIR/backend.log"
                 ;;
-              *) FILE="/app/data/logs/$LOG_INPUT" ;;
+              *) FILE="$LOGS_DIR/$LOG_INPUT" ;;
             esac
 
             echo "== $FILE (last $TAIL_INPUT lines${GREP_INPUT:+, grep -E \"$GREP_INPUT\"}) =="
