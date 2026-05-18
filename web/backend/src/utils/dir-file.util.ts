@@ -159,8 +159,31 @@ export async function writeDirEntry(
   isLCFile: boolean = false
 ): Promise<void> {
   try {
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(dirFilePath), { recursive: true });
+    // Ensure directory exists. Older AmiExpress installs sometimes
+    // leave a stray ZERO-byte FILE named HOLD or LCFILES at the
+    // conference root (artifacts of broken installs or aborted
+    // setup). fs.mkdir even with {recursive:true} errors EEXIST on
+    // a non-directory blocker. Rename the stray out of the way and
+    // retry so the upload can complete instead of silently losing
+    // its DIR entry.
+    const dirToCreate = path.dirname(dirFilePath);
+    try {
+      await fs.mkdir(dirToCreate, { recursive: true });
+    } catch (err: any) {
+      if (err?.code === 'EEXIST') {
+        const stat = await fs.stat(dirToCreate).catch(() => null);
+        if (stat && !stat.isDirectory()) {
+          const backup = `${dirToCreate}.stray-${Date.now()}`;
+          console.warn(`[DIR] ${dirToCreate} exists as non-directory; renaming to ${path.basename(backup)} and retrying mkdir`);
+          await fs.rename(dirToCreate, backup);
+          await fs.mkdir(dirToCreate, { recursive: true });
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
 
     // Split description into lines
     const rawLines = description.split('\n').map(line => line.replace(/\r$/, ''));
