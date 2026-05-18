@@ -1,0 +1,77 @@
+name: Fetch Live Logs
+
+# Manual-dispatch workflow for grabbing live BBS logs (backend / xim /
+# preview / arbitrary path under /app/data/logs). Output is streamed
+# into the workflow log itself — fetch with:
+#
+#   gh run watch <run-id> --exit-status   # while it runs
+#   gh run view <run-id> --log            # after it completes
+#
+# Usage:
+#   gh workflow run fetch-live-logs.yml \
+#     -f log=backend -f tail=1000 -f grep="FR|flagPause|Pause"
+
+on:
+  workflow_dispatch:
+    inputs:
+      log:
+        description: 'backend / preview / xim / all-recent / <relative path>'
+        required: false
+        default: 'backend'
+      tail:
+        description: 'Number of trailing lines'
+        required: false
+        default: '1000'
+      grep:
+        description: 'Optional grep -E pattern'
+        required: false
+        default: ''
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH + dump logs to workflow stdout
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            LOG_INPUT='${{ inputs.log }}'
+            TAIL_INPUT='${{ inputs.tail }}'
+            GREP_INPUT='${{ inputs.grep }}'
+
+            CID=$(docker ps --filter "name=amiexpress-bbs" --format '{{.ID}}' | head -1)
+            if [ -z "$CID" ]; then
+              echo "ERROR: no amiexpress-bbs container running"
+              exit 1
+            fi
+            echo "================================================="
+            echo "Container: $CID"
+            echo "Started:   $(docker inspect --format '{{.State.StartedAt}}' "$CID")"
+            echo "Live HEAD: $(docker exec "$CID" sh -lc 'git -C /app rev-parse HEAD 2>/dev/null || echo unknown')"
+            echo "================================================="
+
+            case "$LOG_INPUT" in
+              backend) FILE=/app/data/logs/backend.log ;;
+              preview) FILE=/app/data/logs/preview.log ;;
+              xim)     FILE=/app/data/logs/xim-debug.log ;;
+              all-recent)
+                echo "== /app/data/logs (top 20 newest) =="
+                docker exec "$CID" ls -lt /app/data/logs 2>/dev/null | head -20 || true
+                echo ""
+                FILE=/app/data/logs/backend.log
+                ;;
+              *) FILE="/app/data/logs/$LOG_INPUT" ;;
+            esac
+
+            echo "== $FILE (last $TAIL_INPUT lines${GREP_INPUT:+, grep -E \"$GREP_INPUT\"}) =="
+            if [ -n "$GREP_INPUT" ]; then
+              docker exec "$CID" tail -n "$TAIL_INPUT" "$FILE" 2>/dev/null \
+                | grep -aE "$GREP_INPUT" || echo "(no matches)"
+            else
+              docker exec "$CID" tail -n "$TAIL_INPUT" "$FILE" 2>/dev/null
+            fi
