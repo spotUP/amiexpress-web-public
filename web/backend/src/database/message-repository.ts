@@ -5,6 +5,7 @@
 
 import { messageFileManager } from '../services/MessageFileManager';
 import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
+import { messagePointerFileManager } from '../services/MessagePointerFileManager';
 import type { Message } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
@@ -467,13 +468,29 @@ console.error(`[Database] Failed to delete message file from disk:`, error);
     // Use INSERT ... ON CONFLICT DO UPDATE to preserve existing scan_flags and other fields.
     // INSERT OR REPLACE deletes then re-inserts, resetting scan_flags to the SQL DEFAULT,
     // which caused AquaScan to run on every login after any message was read.
+    const userIdStr = userId.toString();
     const stmt = this.prepare(`
       INSERT INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf, scan_flags)
       VALUES (?, ?, ?, ?, 0)
       ON CONFLICT(user_id, conference_id, message_base_id)
       DO UPDATE SET last_msg_read_conf = MAX(last_msg_read_conf, excluded.last_msg_read_conf)
     `);
-    stmt.run(userId.toString(), conferenceId, messageBaseId, lastRead);
+    stmt.run(userIdStr, conferenceId, messageBaseId, lastRead);
+
+    // express.e:4971 — mirror lastMsgReadConf into <conf>/Conf.DB confYM field.
+    // Lazy require to dodge the database <-> repository circular import.
+    try {
+      const { db } = require('../database');
+      const user = await db.getUserById(userIdStr);
+      const slot = user?.slotNumber;
+      if (slot && slot >= 1) {
+        messagePointerFileManager.updateReadPointer(conferenceId, slot, lastRead);
+      }
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
+        console.error('[message-repository] Conf.DB sync failed (updateReadPointer):', e);
+      }
+    }
   }
 
   // Online Line Messages (OLM) methods

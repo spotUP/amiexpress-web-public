@@ -14,6 +14,36 @@ import { db } from '../database';
 import type { MailStat, ConfBase } from '../types/message-pointers';
 import { DEFAULT_MAIL_STAT, DEFAULT_SCAN_FLAGS } from '../types/message-pointers';
 import { getSystemTime } from '../utils/date-time.util';
+import { messagePointerFileManager } from '../services/MessagePointerFileManager';
+
+/**
+ * Best-effort sync of confBase pointer fields to `<conf>/Conf.DB` so 68K doors
+ * that call `loadMsgPointers` see fresh data. Looks up the user's slot from
+ * the user repo (Amiga side indexes by slotNumber - 1). Failures are logged
+ * but never thrown — the SQL upsert is the system of record; disk is a mirror.
+ */
+async function syncConfDbBestEffort(
+  userId: string,
+  conferenceId: number,
+  field: 'confRead' | 'confYM',
+  value: number,
+): Promise<void> {
+  try {
+    const user = await db.getUserById(userId);
+    const slot = user?.slotNumber;
+    if (!slot || slot < 1) return;
+    if (field === 'confRead') {
+      messagePointerFileManager.updateScanPointer(conferenceId, slot, value);
+    } else {
+      messagePointerFileManager.updateReadPointer(conferenceId, slot, value);
+    }
+  } catch (e) {
+    // Best-effort — SQL is authoritative. Log if not suppressed.
+    if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
+      console.error('[message-pointers] Conf.DB sync failed:', e);
+    }
+  }
+}
 
 function getSqliteDb(): any {
   const sqlite = (db as any).db;
@@ -332,6 +362,11 @@ export async function updateReadPointer(
      DO UPDATE SET last_msg_read_conf = MAX(last_msg_read_conf, excluded.last_msg_read_conf)`
   );
   stmt.run(userId, conferenceId, messageBaseId, msgNum, DEFAULT_SCAN_FLAGS);
+
+  // express.e:4971 — saveMsgPointers writes `cb.confYM := lastMsgReadConf`
+  // to <conf>/Conf.DB at (slot-1)*74. Mirror that here so doors that call
+  // loadMsgPointers see the updated pointer.
+  await syncConfDbBestEffort(userId, conferenceId, 'confYM', msgNum);
 }
 
 /**
@@ -357,4 +392,7 @@ export async function updateScanPointer(
      DO UPDATE SET last_new_read_conf = excluded.last_new_read_conf`
   );
   stmt.run(userId, conferenceId, messageBaseId, msgNum, DEFAULT_SCAN_FLAGS);
+
+  // express.e:4972 — saveMsgPointers writes `cb.confRead := lastNewReadConf`.
+  await syncConfDbBestEffort(userId, conferenceId, 'confRead', msgNum);
 }
