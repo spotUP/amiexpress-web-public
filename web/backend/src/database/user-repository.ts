@@ -60,6 +60,18 @@ export class UserRepository extends BaseRepository<User> {
     const id = crypto.randomUUID();
     const safeUsername = sanitizeInput(userData.username);
 
+    // express.e:29624 — userNum:=tempUser.slotNumber; the login path at
+    // auth-socket-handlers.ts:479 rejects slotNumber=0 / null as "That
+    // account has been deleted." Assign the next available slot at
+    // creation so a freshly-registered user can log in without waiting
+    // for the database.ts:443-450 startup backfill. Slot allocation is
+    // MAX(slotnumber)+1 — matches the express.e "highest known account
+    // + 1" semantics and avoids re-using slots from deleted accounts.
+    const maxSlotRow = this.get<{ maxSlot: number | null }>(
+      'SELECT COALESCE(MAX(slotnumber), 0) AS maxSlot FROM users'
+    );
+    const nextSlot = ((maxSlotRow?.maxSlot as number) || 0) + 1;
+
     this.run(`
       INSERT INTO users (
         id, username, passwordhash, realname, location, phone, email,
@@ -68,9 +80,9 @@ export class UserRepository extends BaseRepository<User> {
         lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
         linesperscreen, computer, screentype, protocol, editor, zoomtype,
         availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
-        topuploadcps, topdownloadcps, bytelimit, baud,
+        topuploadcps, topdownloadcps, bytelimit, baud, slotnumber,
         gdpr_consent_at, gdpr_notice_version, gdpr_consent_source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id, safeUsername, userData.passwordHash, userData.realname,
       userData.location, userData.phone, userData.email, userData.secLevel,
@@ -84,7 +96,7 @@ export class UserRepository extends BaseRepository<User> {
       userData.screenType, userData.protocol, userData.editor, userData.zoomType,
       userData.availableForChat ? 1 : 0, userData.quietNode ? 1 : 0, userData.autoRejoin,
       userData.confAccess, userData.areaName, userData.uuCP ? 1 : 0, userData.topUploadCPS,
-      userData.topDownloadCPS, userData.byteLimit, userData.baud ?? 0,
+      userData.topDownloadCPS, userData.byteLimit, userData.baud ?? 0, nextSlot,
       userData.gdprConsentAt ?? null,
       userData.gdprNoticeVersion ?? null,
       userData.gdprConsentSource ?? null

@@ -131,6 +131,30 @@ describe('UserRepository', () => {
       expect(user!.gdprConsentSource).toBeUndefined();
     });
 
+    it('assigns slotNumber on create (login rejects slotNumber=0 as "deleted account")', async () => {
+      // Regression: createUser() previously left slotnumber NULL/0, so
+      // newly-registered web users could not log back in — the express.e
+      // parity check at auth-socket-handlers.ts:479 interprets
+      // slotNumber=0 as a deleted account and emits "That account has
+      // been deleted." A friend hit this on bbs.uprough.net after
+      // registering then logging out.
+      const id = await repo.createUser(makeUserData());
+      const user = await repo.getUserById(id);
+
+      expect(user).not.toBeNull();
+      expect(user!.slotNumber).toBeGreaterThanOrEqual(1);
+    });
+
+    it('assigns monotonically-increasing slotNumbers (MAX+1)', async () => {
+      const id1 = await repo.createUser(makeUserData());
+      const id2 = await repo.createUser(makeUserData());
+      const u1 = await repo.getUserById(id1);
+      const u2 = await repo.getUserById(id2);
+
+      expect(u1!.slotNumber).toBeGreaterThanOrEqual(1);
+      expect(u2!.slotNumber).toBeGreaterThan(u1!.slotNumber!);
+    });
+
     it('does NOT write to disk (appendUser/writeUserFiles must not be called)', async () => {
       // Regression: createUser() was calling userDatabaseManager.appendUser() on every
       // user creation, polluting user.data with test users, admin API users, etc.
