@@ -105,6 +105,27 @@ jobs:
                 docker exec "$CID" sh -lc 'for f in /app/data/bbs/Doors/emp_tools/joincnf.cfg /app/Doors/emp_tools/joincnf.cfg; do echo "==== $f ===="; cat "$f" 2>/dev/null | head -50; done' || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              regenerate-users)
+                echo "== regenerating user.data/keys/misc from SQLite DB on live =="
+                # Run the existing regenerate-user-files.ts script inside the
+                # container against the live DB. Backs up the lowercase
+                # binary files first so a botched run can be rolled back.
+                docker exec "$CID" sh -lc '
+                  cd /app
+                  ts=$(date -u +%Y%m%dT%H%M%S)
+                  for f in /app/data/bbs/user.data /app/data/bbs/user.keys /app/data/bbs/user.misc; do
+                    if [ -f "$f" ]; then
+                      cp -a "$f" "${f}.before-regen-${ts}.bak"
+                      echo "backed up $f -> ${f}.before-regen-${ts}.bak"
+                    fi
+                  done
+                  npx tsx web/backend/src/scripts/regenerate-user-files.ts 2>&1 | tail -50
+                  echo ""
+                  echo "== after-state file sizes =="
+                  ls -la /app/data/bbs/user.* 2>&1 | head -10
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               userdump)
                 echo "== lowercase user.data slot dump (records 0..20) =="
                 docker exec "$CID" sh -lc '
