@@ -106,40 +106,36 @@ jobs:
                 FILE="$LOGS_DIR/backend.log"
                 ;;
               userdump)
-                echo "== usernames in lowercase user.data (first 4 chars of each name field per record) =="
-                docker exec "$CID" sh -lc 'python3 -c "
-import sys
-with open(\"/app/data/bbs/user.data\",\"rb\") as f: d=f.read()
-print(f\"file size: {len(d)}\")
-print(f\"slot count (239 bytes/rec): {len(d)//239}\")
-for slot in range(min(25, len(d)//239)):
-    base = slot*239
-    name = d[base:base+31].split(b\"\\x00\")[0].decode(\"latin1\",errors=\"replace\")
-    confstart = base+136
-    confbytes = d[confstart:confstart+10]
-    slotnum_bytes = d[base+83+1:base+85]
-    print(f\"slot {slot}: name={name!r:<25} confaccess={confbytes.hex()} ({confbytes!r})\")
-"' 2>&1 || true
+                echo "== lowercase user.data slot dump (records 0..20) =="
+                docker exec "$CID" sh -lc '
+                  F=/app/data/bbs/user.data
+                  SZ=$(stat -c %s "$F" 2>/dev/null || stat -f %z "$F" 2>/dev/null)
+                  echo "size=$SZ slots=$((SZ/239))"
+                  for i in $(seq 0 20); do
+                    off=$((i*239))
+                    name=$(dd if="$F" bs=1 skip=$off count=20 2>/dev/null | tr -d "\\0" | tr -c "[:print:]" " " | head -c 20)
+                    confhex=$(dd if="$F" bs=1 skip=$((off+136)) count=10 2>/dev/null | xxd -p)
+                    echo "slot $i: name=\"$name\"  confaccess=$confhex"
+                  done
+                ' 2>&1 || true
                 echo ""
-                echo "== same for capital User.data, first 25 + your username search =="
-                docker exec "$CID" sh -lc 'python3 -c "
-import sys
-with open(\"/app/data/bbs/User.data\",\"rb\") as f: d=f.read()
-print(f\"file size: {len(d)}\")
-print(f\"slot count: {len(d)//239}\")
-target = b\"spot\"
-hits = []
-for slot in range(len(d)//239):
-    base = slot*239
-    name = d[base:base+31].split(b\"\\x00\")[0]
-    if target in name.lower():
-        confstart = base+136
-        confbytes = d[confstart:confstart+10]
-        hits.append((slot, name.decode(\"latin1\",errors=\"replace\"), confbytes.hex(), confbytes))
-print(f\"matches for {target!r}:\")
-for h in hits[:5]:
-    print(f\"  slot {h[0]}: {h[1]!r:<25} confaccess={h[2]} ({h[3]!r})\")
-"' 2>&1 || true
+                echo "== capital User.data: search for \"spot\" in first 31 bytes of each slot =="
+                docker exec "$CID" sh -lc '
+                  F=/app/data/bbs/User.data
+                  SZ=$(stat -c %s "$F" 2>/dev/null || stat -f %z "$F" 2>/dev/null)
+                  TOTAL=$((SZ/239))
+                  echo "size=$SZ slots=$TOTAL"
+                  for i in $(seq 0 $((TOTAL-1))); do
+                    off=$((i*239))
+                    name=$(dd if="$F" bs=1 skip=$off count=20 2>/dev/null | tr -d "\\0" | tr -c "[:print:]" " " | head -c 20 | tr "[:upper:]" "[:lower:]")
+                    case "$name" in
+                      *spot*)
+                        confhex=$(dd if="$F" bs=1 skip=$((off+136)) count=10 2>/dev/null | xxd -p)
+                        echo "MATCH slot $i: name=\"$name\"  confaccess=$confhex"
+                        ;;
+                    esac
+                  done
+                ' 2>&1 || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
               userdata)
