@@ -1311,11 +1311,22 @@ console.warn('[XIMSystem] Conf.DB lookup failed:', err);
   }
 
   private userKeysPath(): string {
-    return path.join(this.getPaths().root(), 'User.keys');
+    // Match the lowercase convention UserFileManager writes to,
+    // with case-insensitive fallback for legacy capital `User.keys`
+    // (same bug class as userDataPath — see comment there).
+    const root = this.getPaths().root();
+    const lower = path.join(root, 'user.keys');
+    if (fs.existsSync(lower)) return lower;
+    return amigafs.resolvePath(lower) || lower;
   }
 
   private userMiscPath(): string {
-    return path.join(this.getPaths().root(), 'user.misc');
+    // Already lowercase here; keep the case-insensitive fallback for
+    // symmetry with userDataPath / userKeysPath.
+    const root = this.getPaths().root();
+    const lower = path.join(root, 'user.misc');
+    if (fs.existsSync(lower)) return lower;
+    return amigafs.resolvePath(lower) || lower;
   }
 
   private confDbPath(confNum: number): string {
