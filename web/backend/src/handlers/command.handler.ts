@@ -3982,44 +3982,20 @@ function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter
   if (session.tempData) {
     session.tempData.goodbyeAfterTransfer = goodbyeAfter;
   }
-  // Telnet/SSH transports use ZMODEM directly (the same flow web uses
-  // via socket events). Hand off to startZmodemUpload which sets up a
-  // ZmodemTransferManager bound to session.transferRawSend (already
-  // installed by setupTelnetSSHHandler), primes transferRawSink for
-  // inbound ZMODEM data, and prompts the user to start sending with
-  // rz. Browser/web clients keep using the show-file-upload event
-  // (DOM file picker) below.
-  const transport = (session as any).connectionType;
-  if (transport === 'telnet' || transport === 'ssh') {
-    const { startZmodemUpload } = require('./commands/user-commands.handler');
-    startZmodemUpload(socket, session);
-    return;
-  }
-  const batch = session.tempData?.uploadBatch || [];
-  if (batch.length === 0) {
-    // Nothing queued — start Zmodem receive with no expected files (user can send any file)
-    socket.emit('show-file-upload', {
-      accept: '*/*',
-      maxSize: 100 * 1024 * 1024,
-      uploadUrl: '/api/upload',
-      fieldName: 'file',
-      multiple: true,
-      goodbyeAfter,
-    });
-    session.subState = LoggedOnSubState.FILES_UPLOAD;
-    return;
-  }
-  session.tempData.currentUploadIndex = 0;
-  socket.emit('show-file-upload', {
-    accept: '*/*',
-    maxSize: 100 * 1024 * 1024,
-    uploadUrl: '/api/upload',
-    fieldName: 'file',
-    multiple: true,
-    expectedFilenames: batch.map((f: any) => f.filename),
-    goodbyeAfter,
-  });
-  session.subState = LoggedOnSubState.FILES_UPLOAD;
+  // All transports — telnet, SSH, web — use ZMODEM via startZmodemUpload.
+  // Web ZMODEM bridges through the `transfer-raw:*` socket channel to the
+  // browser-side zmodem.js Sentry; telnet/SSH use their PTY directly.
+  //
+  // Prior to 2026-05-19 this path emitted `show-file-upload` for web,
+  // routing through HTTP /api/upload + `file-upload-ready`. Phase 4
+  // cleanup (c67e50385) removed the BBS-user branch of
+  // `processFileUpload`, so the HTTP-picker path silently dropped every
+  // file (logged 'unexpected invocation… Ignoring.'). The frontend then
+  // waited forever for the next show-file-upload event and the UI
+  // appeared stuck after picking >1 file. Unifying all transports onto
+  // ZMODEM matches the handoff intent ("ZMODEM web unification").
+  const { startZmodemUpload } = require('./commands/user-commands.handler');
+  startZmodemUpload(socket, session);
 }
 
 // Command Priority System - Express.e:28228-28282
