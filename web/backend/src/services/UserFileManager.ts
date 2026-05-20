@@ -299,8 +299,11 @@ export class UserFileManager {
     offset = this.writeInt16(buffer, offset, struct.screenType);
     offset = this.writeInt16(buffer, offset, struct.editorType);
 
-    // Conference access string
-    offset += this.writeString(buffer, offset, struct.conferenceAccess, 10);
+    // Conference access map — 10 raw bytes, NOT null-terminated (every
+    // position is a meaningful access flag). writeFixedBytes preserves
+    // all 10 positions; writeString would reserve byte 10 for a null
+    // terminator and lose conf-10's access.
+    offset += this.writeFixedBytes(buffer, offset, struct.conferenceAccess, 10);
 
     // More INTs
     offset = this.writeInt16(buffer, offset, struct.uploads);
@@ -435,6 +438,27 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     const trimmed = str.substring(0, maxLen - 1); // Leave room for null terminator
     buffer.write(trimmed, offset, maxLen, 'ascii');
     // Null-pad the rest
+    for (let i = trimmed.length; i < maxLen; i++) {
+      buffer.writeUInt8(0, offset + i);
+    }
+    return maxLen;
+  }
+
+  /**
+   * Write a fixed-width byte field that is NOT a C-style null-terminated
+   * string. Used for `conferenceAccess[10]` — AmiExpress treats this as
+   * a 10-byte access bitmap (each byte 'X' = access, '_' = no access),
+   * with ALL 10 bytes meaningful. writeString reserves byte N-1 for a
+   * null terminator and that loses position 10's flag, so for any user
+   * granted access to confs 1..10 the door reads only confs 1..9 from
+   * binary. Bug surfaced 2026-05-20 during the live-vs-localhost
+   * confaccess investigation; the SQLite-first read in door.handler.ts
+   * (commit 731f63f20) bypassed the symptom, but binary write was still
+   * losing data. Fix it here so future binary readers see the full map.
+   */
+  private writeFixedBytes(buffer: Buffer, offset: number, str: string, maxLen: number): number {
+    const trimmed = str.substring(0, maxLen);
+    buffer.write(trimmed, offset, maxLen, 'ascii');
     for (let i = trimmed.length; i < maxLen; i++) {
       buffer.writeUInt8(0, offset + i);
     }
