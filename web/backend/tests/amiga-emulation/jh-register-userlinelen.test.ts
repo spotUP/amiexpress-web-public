@@ -116,7 +116,19 @@ function buildHandler(user: any) {
 }
 
 describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
-  test('writes user.linesPerScreen=23 (spot in DB) into msg.command AND msg.data', () => {
+  // Behavior change pinned 2026-05-19 (and re-verified 2026-05-20):
+  // ALWAYS return 9999 for any logged-on user, regardless of the user's
+  // own linesPerScreen / lineLength values. Rationale at
+  // system-commands.ts:116-131 — JoinCnf-style doors paginate by
+  // equality (`cmp.l userLineLen, counter; bne skip-prompt`), so any
+  // value that matches a banner-line count would trigger the
+  // "press <RETURN>" splash mid-banner. User reported the regression
+  // for linesPerScreen=23 doors. Returning a sentinel (9999) the BBS
+  // never naturally hits means equality never fires; the BBS still
+  // paginates at its own layer (flagPause / checkForPause read
+  // session.user.linesPerScreen directly).
+
+  test('returns 9999 sentinel for logged-on user regardless of linesPerScreen value', () => {
     const { handler, emulator, msgAddr } = buildHandler({
       username: 'spot',
       linesPerScreen: 23,
@@ -133,14 +145,13 @@ describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
     } as any);
 
     // Long layout: command lives at offset 0xe0, written as 32-bit big-endian.
-    // express.e-style doors read msg.command (e0) for userLineLen.
-    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(23);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(9999);
     // AEKIT-style doors (SRH/TList/TLP2) read msg.data (dc) via CheckMessage().
     // We mirror userLineLen into both so neither reader style pauses every line.
-    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(23);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(9999);
   });
 
-  test('falls back to lineLength when linesPerScreen missing', () => {
+  test('returns 9999 even when only lineLength is set (no linesPerScreen)', () => {
     const { handler, emulator, msgAddr } = buildHandler({
       username: 'tester',
       lineLength: 30,
@@ -156,8 +167,11 @@ describe('JH_REGISTER reply userLineLen at msg.command offset 0xe0', () => {
       string: '',
     } as any);
 
-    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(30);
-    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(30);
+    // Logged-on path always returns 9999; the user's per-record
+    // lineLength is consulted by the BBS for pagination at its own
+    // layer but never propagated to doors via JH_REGISTER.
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET)).toBe(9999);
+    expect(emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(9999);
   });
 
   test('uses default 29 when no user logged on (matches express.e:3380)', () => {

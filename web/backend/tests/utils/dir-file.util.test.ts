@@ -434,7 +434,12 @@ describe('DIR File Writing Utility', () => {
       expect(writtenContent).toContain('Line 3');
     });
 
-    it('should filter out ASCII art from primary line', async () => {
+    it('uses the literal first DIZ line as primary, NOT a "more readable" filtered pick', async () => {
+      // Behavior changed 2026-05-18 (commit 3716da37e) — express.e:19285
+      // takes ReadStr's first line as fcomment unconditionally. The
+      // previous "skip ASCII art" picking broke AquaScan rendering on
+      // telnet/SSH because the door's column-aware parser expects the
+      // entry's first description text to MATCH the DIZ's first line.
       const date = new Date(2025, 0, 15);
       const description = '=====\nActual description';
 
@@ -449,9 +454,11 @@ describe('DIR File Writing Utility', () => {
       );
 
       const writtenContent = mockAppendFile.mock.calls[0][1] as string;
-      // First line should be "Actual description", not "====="
-      const firstLine = writtenContent.split('\n')[0];
-      expect(firstLine).toContain('Actual description');
+      // First line MUST contain "=====" (the first DIZ line) per express.e
+      // parity. "Actual description" appears on the continuation line.
+      const lines = writtenContent.split('\n');
+      expect(lines[0]).toContain('=====');
+      expect(writtenContent).toContain('Actual description');
     });
 
     it('should handle description with CRLF line endings', async () => {
@@ -492,7 +499,10 @@ describe('DIR File Writing Utility', () => {
       expect(writtenContent).toContain('Line 2');
     });
 
-    it('should use first non-ASCII art line as primary', async () => {
+    it('uses the literal first DIZ line as primary even when multiple art lines precede content', async () => {
+      // Same parity rationale as the previous test — first DIZ line
+      // becomes the entry primary even when it's `=====`. Door
+      // renderers expect this exact format.
       const date = new Date(2025, 0, 15);
       const description = '=====\n-----\nReal description';
 
@@ -508,7 +518,9 @@ describe('DIR File Writing Utility', () => {
 
       const writtenContent = mockAppendFile.mock.calls[0][1] as string;
       const firstLine = writtenContent.split('\n')[0];
-      expect(firstLine).toContain('Real description');
+      expect(firstLine).toContain('=====');
+      // The "real" content still ends up in the file, just on continuation lines.
+      expect(writtenContent).toContain('Real description');
     });
 
     it('should handle all-ASCII-art description', async () => {

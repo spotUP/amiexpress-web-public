@@ -93,7 +93,18 @@ jest.mock('../src/amiga-emulation/AmigaDoorSession', () => ({
 
 jest.mock('../src/handlers/operations/conference.handler', () => ({
   displayConferenceBulletins: displayConferenceBulletinsMock,
-  joinConference: jest.fn(),
+  // joinConference is responsible for emitting displayScreen('CONF_BULL')
+  // per express.e:5058 (the CONF_BULL display moved from command.handler
+  // into joinConference in commit 3716da37e-era refactor). Simulate that
+  // here so the display-flow test still sees the call in the mock log.
+  joinConference: jest.fn(async (_socket: any, session: any) => {
+    // Pull the real displayScreen mock from the screen-handler mock; it's
+    // installed via jest.mock('.../screen.handler') in the test file.
+    try {
+      const sh = require('../src/handlers/screen.handler');
+      if (sh.displayScreen) await sh.displayScreen(_socket, session, 'CONF_BULL');
+    } catch { /* mock not installed yet — ok */ }
+  }),
 }));
 
 // Mock confScan so it doesn't call the real message scanner or set menuPause

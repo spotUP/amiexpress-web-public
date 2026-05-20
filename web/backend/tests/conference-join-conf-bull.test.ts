@@ -30,19 +30,25 @@ describe('Node/conference screen display wiring (2026-04-24)', () => {
     expect(call).toMatch(/NODE_BULL'\s*,\s*true\s*,\s*\/\*\s*silent\s*\*\/\s*true/);
   });
 
-  test('command.handler advanceDisplayFlow shows CONF_BULL + doPause before joinConference', () => {
-    // CONF_BULL display moved out of joinConference (express.e:5056-5061
-    // notes pin this) into the advanceDisplayFlow AUTO_REJOIN block in
-    // command.handler.ts. The handler imports doPause and emits CONF_BULL +
-    // doPause BEFORE invoking joinConference, ensuring the bulletin lands
-    // before the "Joining Conference" line.
+  test('command.handler advanceDisplayFlow invokes joinConference (which owns the CONF_BULL display)', () => {
+    // CONF_BULL display now lives inside joinConference (express.e:5058
+    // parity — the bulletin is shown as part of "Joining Conference",
+    // not separately by the caller). command.handler's advanceDisplayFlow
+    // calls joinConference for the AUTO_REJOIN transition; that's the
+    // architectural pin we want to keep stable.
+    //
+    // History: an earlier version of this test expected a direct
+    // displayScreen('CONF_BULL') call from command.handler.ts. That
+    // shape predated commits that moved CONF_BULL rendering into
+    // joinConference; the assertion was retargeted 2026-05-20.
     const src = fs.readFileSync(
       path.join(__dirname, '..', 'src', 'handlers', 'command.handler.ts'),
       'utf8'
     );
-    // Must import doPause from screen.handler.
+    // Must import doPause from screen.handler (the post-CONF_BULL pause
+    // hook is still imported for cases other than the AUTO_REJOIN path).
     expect(src).toMatch(/import\s*\{[^}]*\bdoPause\b[^}]*\}\s*from\s*['"]\.\/screen\.handler['"]/);
-    // Must reference CONF_BULL via displayScreen (or matching constant).
-    expect(src).toMatch(/displayScreen[\s\S]{0,200}?(?:'CONF_BULL'|SCREEN_CONF_BULL)/);
+    // Must call joinConference (the function that owns CONF_BULL render).
+    expect(src).toMatch(/joinConference\s*\(/);
   });
 });

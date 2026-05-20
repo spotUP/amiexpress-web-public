@@ -16,10 +16,16 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const RUNNER = path.join(REPO_ROOT, 'dev/scripts/door-corpus/run.ts');
 const CORPUS = path.join(REPO_ROOT, 'dev/scripts/door-corpus/corpus.json');
 
-const skip = process.env.SKIP_DOOR_CORPUS === '1';
+// Heavy environment-sensitive test — runs all 324 corpus doors serially
+// through the 68K emulator. 30s per-door timeout + 5min suite cap; on a
+// shared machine the fans spin up and timeouts cascade. Opt-IN only via
+// `RUN_DOOR_CORPUS=1` (matches the docstring intent). The old code was
+// opt-out (`SKIP_DOOR_CORPUS=1`), which made the default `jest` run
+// time-bomb on the corpus stage every time.
+const optedIn = process.env.RUN_DOOR_CORPUS === '1';
 const runnerExists = fs.existsSync(RUNNER);
 const corpusExists = fs.existsSync(CORPUS);
-const enabled = !skip && runnerExists && corpusExists;
+const enabled = optedIn && runnerExists && corpusExists;
 
 const describeMaybe = enabled ? describe : describe.skip;
 

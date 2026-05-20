@@ -57,7 +57,12 @@ describe('lrzsz protocol patches (MuffinTerm interop)', () => {
 
     test('runs inside the stdout handler so it actually reaches the client', () => {
       // patchZrinitFlags must be in the same call chain as transport.send.
-      expect(src).toMatch(/patchZrinitFlags[\s\S]{0,300}?transport\.send/);
+      // Originally bounded to 300 chars; the stdout handler grew (chunk
+      // splitting at hex-header boundaries + ZRINIT dedupe), pushing the
+      // transport.send call further away. Bumped to 3000 — still tight
+      // enough to fail if patchZrinitFlags is moved out of the stdout
+      // path entirely.
+      expect(src).toMatch(/patchZrinitFlags[\s\S]{0,3000}?transport\.send/);
     });
   });
 
@@ -85,7 +90,9 @@ describe('lrzsz protocol patches (MuffinTerm interop)', () => {
     });
 
     test('runs inside handleInput (the inbound wire path)', () => {
-      expect(src).toMatch(/handleInput[\s\S]{0,500}?rewriteMuffintermZfile/);
+      // Bumped from 500 to 2500 chars — handleInput grew an LRZSZ_DEBUG
+      // dump + tee-to-file block between entry and the rewrite call.
+      expect(src).toMatch(/handleInput[\s\S]{0,2500}?rewriteMuffintermZfile/);
     });
 
     test('only fires for upload direction', () => {
