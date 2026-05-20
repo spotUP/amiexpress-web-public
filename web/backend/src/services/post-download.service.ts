@@ -138,14 +138,17 @@ export async function runPostDownload(
   }
 
   // express.e:20311 displayULStats(loggedOnUser, loggedOnUserMisc)
-  // Web caller did this in DownloadHandler.displayULStats(); for telnet/SSH
-  // we'd need the same helper exposed. For now emit the minimum that
-  // tracks express.e's intent (Number Downloads / Number Uploads / Bytes).
+  // Same emit-shape as the pre-transfer banner in download.handler.ts:99
+  // — extracted to display-ul-stats.util.ts so both paths render an
+  // identical 3-line block (downloads/uploads counters + Todays Bytes
+  // Available, KB variant when CREDITBYKB).
   try {
-    const stats = `\r\n  Number of Downloads: ${(session.user as any)?.downloads || 0}\r\n` +
-                  `  Number of Uploads:   ${(session.user as any)?.uploads || 0}\r\n`;
-    emitter.emit('ansi-output', stats);
-  } catch { /* non-critical */ }
+    const { emitULStats } = require('../utils/display-ul-stats.util');
+    emitter.emit('ansi-output', '\r\n');
+    emitULStats(emitter, session);
+  } catch (err: any) {
+    console.error(`[postDownload] emitULStats failed: ${err?.message || err}`);
+  }
   emitter.emit('ansi-output', '\r\n');
 
   // express.e:20317 — pGoodbye on user-picked G. The 10-second countdown
