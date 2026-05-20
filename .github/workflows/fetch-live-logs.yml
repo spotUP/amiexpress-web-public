@@ -52,7 +52,13 @@ jobs:
             echo "================================================="
             echo "Container: $CID"
             echo "Started:   $(docker inspect --format '{{.State.StartedAt}}' "$CID")"
-            echo "Live HEAD: $(docker exec "$CID" sh -lc 'git -C /app rev-parse HEAD 2>/dev/null || echo unknown')"
+            # SHA was embedded at image build time by deploy-hetzner.yml
+            # (writes /app/.git-sha from the resolved origin/main SHA).
+            # `/app` is a docker artifact, not a git checkout, so
+            # `git rev-parse` returns "unknown" — the file is the
+            # canonical source. Fall back to the rev-parse probe for
+            # older images that predate the embed.
+            echo "Live HEAD: $(docker exec "$CID" sh -lc 'cat /app/.git-sha 2>/dev/null || git -C /app rev-parse HEAD 2>/dev/null || echo unknown')"
             echo "================================================="
 
             # Probe both common log dirs — the dev script writes to

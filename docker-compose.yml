@@ -13,6 +13,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Embed the commit SHA at build time so the container can report
+        # which git revision it was built from. Set externally by the
+        # deploy workflow (deploy-hetzner.yml passes the resolved SHA);
+        # falls back to "unknown" for local `docker compose up` if the
+        # caller didn't set GIT_SHA.
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: amiexpress-bbs
     restart: unless-stopped
     ports:

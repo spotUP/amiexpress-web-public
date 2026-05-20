@@ -142,6 +142,14 @@ RUN npx tsc --project tsconfig.build.json
 # ============================================================================
 FROM node:20-alpine
 
+# Embed the git SHA into the image so the running container can report
+# which revision it was built from. Set via docker-compose build-args
+# (GIT_SHA defaults to "unknown" in docker-compose.yml when not passed).
+# The CI deploy workflow always passes the resolved SHA. The /app/.git-sha
+# file is written below after WORKDIR /app establishes the directory.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="$GIT_SHA"
+
 # Install system dependencies (including build tools for native modules).
 RUN apk add --no-cache \
     python3 \
@@ -172,6 +180,10 @@ RUN addgroup -g 1001 bbsuser && \
 
 # Set working directory
 WORKDIR /app
+
+# Record the build's git SHA so the running container can answer
+# "which revision is this?". fetch-live-logs.yml reads this file.
+RUN echo "${GIT_SHA}" > /app/.git-sha && echo "[Docker] image built from $(cat /app/.git-sha)"
 
 # Copy backend production dependencies
 COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/

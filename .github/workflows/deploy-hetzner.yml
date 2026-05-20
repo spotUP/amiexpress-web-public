@@ -44,8 +44,12 @@
               # idle, old container keeps serving stale code (the source
               # of every "deploy succeeded but the site shows old behaviour"
               # report).
-              echo "== docker compose up --build --force-recreate =="
-              docker compose up -d --build --force-recreate
+              echo "== docker compose up --build --force-recreate (with GIT_SHA) =="
+              # Pass the resolved SHA as a build-arg so the image records
+              # which revision it was built from. fetch-live-logs.yml reads
+              # /app/.git-sha to surface this — answers "is the live deploy
+              # actually fresh?" without having to inspect mtimes.
+              GIT_SHA="$ACTUAL_SHA" docker compose up -d --build --force-recreate
 
               # Sanity check: assert the container was actually recreated
               # by this build, not a leftover from an earlier run. Tighter
