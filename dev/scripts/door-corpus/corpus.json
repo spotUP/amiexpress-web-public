@@ -2080,16 +2080,24 @@
         },
         "inputs": [
           {
+            "delayMs": 500,
+            "data": "n"
+          },
+          {
             "delayMs": 1500,
             "data": "n\r"
           },
           {
-            "delayMs": 3500,
+            "delayMs": 3000,
             "data": " "
           },
           {
-            "delayMs": 5500,
+            "delayMs": 5000,
             "data": " "
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
           }
         ]
       }
