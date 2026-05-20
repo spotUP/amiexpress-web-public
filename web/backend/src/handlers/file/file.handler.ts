@@ -716,6 +716,26 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const spaceStr = formatSpaceValue(ulPath);
   emitText(socket, `${spaceStr} available for uploading.  ${spaceStr} at one time.\r\n`);
 
+  // express.e:18989-19001 — refuse to start if the upload area can't hold
+  // the express.e minimum-playpen budget (2 MB). Without this check the
+  // upload "succeeds" up to the first ENOSPC write and rz silently aborts
+  // with a partial file in playpen — same UX as the disk-full incident
+  // 2026-05-20.
+  // express.e has a RAMWORK tooltype to override the floor with a ramdisk
+  // path; web has no such concept (single filesystem), so we keep the
+  // floor unconditional.
+  const MIN_PLAYPEN_BYTES = 2 * 1024 * 1024;
+  const freeBytes = readFreeBytes(ulPath);
+  if (freeBytes < MIN_PLAYPEN_BYTES) {
+    // express.e:18996 — 'Not enough free space for uploading!\b\n'
+    emitText(socket, '\r\n\x1b[31mNot enough free space for uploading!\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = undefined;
+    return;
+  }
+
   // express.e:19016
   emitText(socket, 'Filename lengths above 12 are not allowed.\r\n\r\n');
 
@@ -739,9 +759,10 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
 
 /**
  * Read actual free bytes at path using fs.statfsSync (Node >= 18.8) or df(1) fallback.
- * Then format with formatSpaceValue() — 1:1 port of MiscFuncs.e:234-249.
+ * Returns 0 if both probes fail. Used both for the human-readable display
+ * (formatSpaceValue) and the upload-floor gate.
  */
-function formatSpaceValue(dirPath: string): string {
+function readFreeBytes(dirPath: string): number {
   let freeBytes = 0;
   try {
     const fs = require('fs');
@@ -757,6 +778,15 @@ function formatSpaceValue(dirPath: string): string {
       if (!isNaN(avail)) freeBytes = avail * 1024;
     }
   } catch { /* leave freeBytes = 0 */ }
+  return freeBytes;
+}
+
+/**
+ * 1:1 port of MiscFuncs.e:234-249 formatSpaceValue — formats free bytes
+ * at a path as a human-readable "X.X MB" / "X.X GB" / "X.X TB" string.
+ */
+function formatSpaceValue(dirPath: string): string {
+  const freeBytes = readFreeBytes(dirPath);
 
   // MiscFuncs.e:234-249 formatSpaceValue(spaceInMB, spacelo, outstr)
   // spaceInMB = freeBytes >> 20   (megabytes)
