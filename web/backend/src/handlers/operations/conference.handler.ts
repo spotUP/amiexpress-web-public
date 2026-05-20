@@ -12,6 +12,7 @@ import { finalizeCommand } from '../../utils/command-response.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { checkConfAccess, checkMailConfScan } from '../message/message-scan.handler';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { callersLogManager } from '../../services/CallersLogManager';
 
 import type { BBSSession } from '../../index';
 
@@ -303,9 +304,12 @@ console.warn('[joinConference] saveMsgPointers error:', err);
     }
   }
 
-  // Log conference join (express.e:9493 callersLog)
+  // Log conference join — SQL (web activity widget) + disk (express.e
+  // parity, express.e:9493 callersLog). Was SQL-only per audit
+  // 2026-05-18_sqlite-disk-parity-audit.md.
   if (session.user) {
     await callersLog(session.user.id, session.user.username, 'Joined conference', conference.name);
+    callersLogManager.logActivity(session.nodeId || 1, `\tJoined conference: ${conference.name}`);
   }
 
   if (!silent) {

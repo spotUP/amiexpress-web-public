@@ -12,6 +12,7 @@ import { config } from '../../config';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import * as path from 'path';
 import { fileAreaManager } from '../../services/FileAreaManager';
+import { callersLogManager } from '../../services/CallersLogManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
 import { formatLongDate } from '../../utils/date-time.util';
@@ -224,9 +225,15 @@ console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, err
 
   emitText(socket, `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
 
-  // Log deletion
+  // Log deletion — SQL (web activity widget) + disk (express.e parity).
+  // callersLog and callersLogManager are independent loggers; the audit
+  // (thoughts/shared/research/2026-05-18_sqlite-disk-parity-audit.md)
+  // flagged this as SQL-only — the BBS:Node{X}/CallersLog file never
+  // saw deletions, breaking express.e parity for sysop tail-watch.
   filesToDelete.forEach((file: any) => {
-    callersLog(session.user!.id, session.user!.username, 'Deleted file', `${file.filename} (${file.areaname || ''})`);
+    const detail = `${file.filename} (${file.areaname || ''})`;
+    callersLog(session.user!.id, session.user!.username, 'Deleted file', detail);
+    callersLogManager.logActivity(session.nodeId || 1, `\tDeleted file: ${detail}`);
   });
 
   emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -355,9 +362,13 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
 
   emitText(socket, `\r\n\x1b[32mMoved ${filesToMove.length} file(s) to ${tempData.destArea.name} successfully.\x1b[0m\r\n`);
 
-  // Log move with destination
+  // Log move — SQL (web activity widget) + disk (express.e parity).
+  // Same SQL-only gap as the delete branch above (audit
+  // 2026-05-18_sqlite-disk-parity-audit.md).
   filesToMove.forEach((file: any) => {
-    callersLog(session.user!.id, session.user!.username, 'Moved file', `${file.filename} -> ${tempData.destArea.name}`);
+    const detail = `${file.filename} -> ${tempData.destArea.name}`;
+    callersLog(session.user!.id, session.user!.username, 'Moved file', detail);
+    callersLogManager.logActivity(session.nodeId || 1, `\tMoved file: ${detail}`);
   });
 
   emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
