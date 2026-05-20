@@ -344,6 +344,27 @@ export async function initializeData(io?: SocketIOServer) {
       }
     }
 
+    // Mirror disk conferences into the SQLite `conferences` table so
+    // web paths that resolve by conf-id (db.getFileAreas,
+    // db.getConferenceById, the admin UI) match what's actually
+    // declared in ConfConfig.info. Before this, SQLite carried only
+    // the 3 default-seeded rows even on sites declaring 14+ confs on
+    // disk, which silently broke per-conf lookups (the "still only 4
+    // confs visible" cascade). Disk is the source of truth — this is
+    // a one-way mirror, not a reverse sync.
+    try {
+      const syncResult = await db.syncConferencesFromDisk(
+        conferences.map((c: any) => ({ id: c.id, name: c.name, location: c.location }))
+      );
+      if (syncResult && (syncResult.inserted > 0 || syncResult.renamed > 0)) {
+        console.log(
+          `[INIT] Synced conferences table from disk: ${syncResult.inserted} inserted, ${syncResult.renamed} renamed`
+        );
+      }
+    } catch (e: any) {
+      console.warn('[INIT] Conferences disk sync failed:', e?.message || e);
+    }
+
     // Inject conferences into screen handler
     setConferences(conferences);
 

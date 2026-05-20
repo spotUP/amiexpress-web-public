@@ -133,12 +133,18 @@ describe('Telnet/SSH lrzsz onComplete routes through web pipeline (no duplicatio
     expect(src).not.toMatch(/file\(s\),[^"`'\n]*?bytes,[^"`'\n]*?minute\(s\)\.[^"`'\n]*?second\(s\),[^"`'\n]*?cps,[^"`'\n]*?efficiency\./);
   });
 
-  test('pre-populates uploadBatch with one entry per received file (prevents auto-complete-on-first-file bug)', () => {
-    // processBatchFile uses uploadBatch.length to know when it's the
-    // LAST file (auto-calls handleUploadBatchComplete + clears tempData
-    // when so). If we leave uploadBatch empty, isLastFile is true on
-    // every iteration and the second file bails with "Upload session
-    // lost". The placeholder loop guards against that.
-    expect(src).toMatch(/uploadBatch[\s\S]*?received\.map/);
+  test('queues files 2..N into pendingZmodemFiles for the state-machine walker', () => {
+    // Multi-file ZMODEM batches: file 1 enters the DIZ/description
+    // pipeline immediately; files 2..N are queued in pendingZmodemFiles
+    // and walked one at a time after each description completes (state
+    // machine in command.handler.ts advances on Enter-Enter, dispatch
+    // on UPLOAD_DESC_INPUT done state pops the next entry and re-invokes
+    // handleDizExtractionAndDescription).
+    //
+    // If this queue isn't populated, only the first file gets the full
+    // post-upload pipeline (DIZ → description → DIRn → FILES.BBS); the
+    // rest sit in playpen forever (the symptom we shipped a fix for in
+    // a0196a5e2 for the U-command path). Pin the construction shape.
+    expect(src).toMatch(/pendingZmodemFiles\s*:\s*received\.slice\(\s*1\s*\)\.map/);
   });
 });

@@ -96,6 +96,96 @@ console.error(`[Database] Failed to sync conference to disk:`, error);
     return confId;
   }
 
+  /**
+   * Sync SQLite `conferences` rows from the disk source of truth
+   * (ConfConfig.info parsed by loadConfConfig). Express.e treats the
+   * disk file as canonical; SQLite is a downstream mirror used by
+   * web-only paths (db.getFileAreas, db.getConferenceById, the
+   * conference list shown in the admin UI).
+   *
+   * Before this method existed, the conferences table held only the 3
+   * seeded defaults (General / Tech Support / Announcements) regardless
+   * of how many conferences ConfConfig.info declared. Web features that
+   * resolved by SQLite conf-id silently came back empty for any disk
+   * conference beyond #3 — see the "still only 4 confs" cascade.
+   *
+   * Behaviour:
+   *  - Conferences with the disk name AND id are left alone.
+   *  - A row matching the disk name at a DIFFERENT id is updated to
+   *    the disk id (rare; happens when an old test seeded the name).
+   *  - A row at the disk id with a DIFFERENT name is renamed to match.
+   *  - Missing rows are inserted with an explicit id matching the disk
+   *    position (1-based).
+   *
+   * Does NOT touch root `BBS:Conf.DB` (the conference list mirror used
+   * by some Amiga tools) — that's a separate concern handled by the
+   * existing createConference / updateConference Conf.DB write paths.
+   * We're syncing FROM disk, not back to it.
+   */
+  async syncConferencesFromDisk(diskConfs: { id: number; name: string; location?: string }[]): Promise<{ inserted: number; renamed: number }> {
+    if (!Array.isArray(diskConfs) || diskConfs.length === 0) {
+      return { inserted: 0, renamed: 0 };
+    }
+    let inserted = 0;
+    let renamed = 0;
+
+    const selectByIdStmt = this.prepare('SELECT id, name FROM conferences WHERE id = ?');
+    const selectByNameStmt = this.prepare('SELECT id, name FROM conferences WHERE LOWER(name) = LOWER(?)');
+    const insertStmt = this.prepare(
+      `INSERT INTO conferences (id, name, description) VALUES (?, ?, ?)`
+    );
+    const renameByIdStmt = this.prepare('UPDATE conferences SET name = ? WHERE id = ?');
+    const reIdByNameStmt = this.prepare('UPDATE conferences SET id = ? WHERE id = ?');
+
+    for (const disk of diskConfs) {
+      if (!disk?.id || !disk?.name) continue;
+      const rowById = selectByIdStmt.get(disk.id) as any;
+      const rowByName = selectByNameStmt.get(disk.name) as any;
+
+      if (rowById && rowById.name === disk.name) {
+        continue; // perfect match
+      }
+
+      if (rowByName && rowByName.id !== disk.id) {
+        // Same name lives at a different id — re-id it to match disk.
+        // Skip if the target id is also occupied by a different name
+        // (would require a merge; defer to admin tooling).
+        if (!rowById) {
+          try {
+            reIdByNameStmt.run(disk.id, rowByName.id);
+            renamed++;
+            continue;
+          } catch (_err) {
+            // UNIQUE collision or similar — fall through to no-op.
+          }
+        }
+      }
+
+      if (rowById && rowById.name !== disk.name) {
+        // Id slot exists with a different name — rename to match disk.
+        try {
+          renameByIdStmt.run(disk.name, disk.id);
+          renamed++;
+        } catch (_err) {
+          // UNIQUE name collision — disk name already used by another
+          // row; leave as-is.
+        }
+        continue;
+      }
+
+      if (!rowById && !rowByName) {
+        try {
+          insertStmt.run(disk.id, disk.name, disk.location || null);
+          inserted++;
+        } catch (_err) {
+          // Should never trip UNIQUE here (we already checked by name);
+          // swallow to keep startup resilient.
+        }
+      }
+    }
+    return { inserted, renamed };
+  }
+
   async getConferences(): Promise<Conference[]> {
 
 console.log('[ConferenceRepository] getConferences this.db type:', !!this.db, typeof this.db, this.db && this.db.constructor && this.db.constructor.name);

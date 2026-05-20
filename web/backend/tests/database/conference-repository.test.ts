@@ -84,6 +84,58 @@ describe('ConferenceRepository', () => {
     });
   });
 
+  describe('syncConferencesFromDisk', () => {
+    it('inserts missing conferences using the disk id (so SQLite mirrors ConfConfig.info)', async () => {
+      // Regression: SQLite carried only the 3 default-seeded conferences
+      // (General / Tech Support / Announcements) even on live sites that
+      // declared 14+ confs in ConfConfig.info — db.getFileAreas(5) etc.
+      // came back empty. Disk is canonical; this sync mirrors it.
+      const uniqueSuffix = `_sync_${Date.now()}`;
+      const diskConfs = [
+        { id: 9001, name: `DiskConf_A${uniqueSuffix}`, location: 'BBS:DiskA/' },
+        { id: 9002, name: `DiskConf_B${uniqueSuffix}`, location: 'BBS:DiskB/' },
+      ];
+
+      const result = await repo.syncConferencesFromDisk(diskConfs);
+      expect(result.inserted).toBe(2);
+
+      const a = await repo.getConferenceById(9001);
+      const b = await repo.getConferenceById(9002);
+      expect(a?.name).toBe(diskConfs[0].name);
+      expect(b?.name).toBe(diskConfs[1].name);
+    });
+
+    it('is idempotent — running twice over the same disk list inserts only once', async () => {
+      const diskConfs = [
+        { id: 9101, name: `Idem_${Date.now()}`, location: 'BBS:Idem/' },
+      ];
+      const first = await repo.syncConferencesFromDisk(diskConfs);
+      const second = await repo.syncConferencesFromDisk(diskConfs);
+
+      expect(first.inserted).toBe(1);
+      expect(second.inserted).toBe(0);
+      expect(second.renamed).toBe(0);
+    });
+
+    it('renames a row when the disk-id slot is occupied by a different name', async () => {
+      // Pre-seed conf id 9201 with one name, then sync with a different
+      // name at that same id. The slot should be renamed in place.
+      const stale = `Stale_${Date.now()}`;
+      const fresh = `Fresh_${Date.now()}`;
+      await repo.syncConferencesFromDisk([{ id: 9201, name: stale }]);
+      const result = await repo.syncConferencesFromDisk([{ id: 9201, name: fresh }]);
+      expect(result.renamed).toBe(1);
+      const c = await repo.getConferenceById(9201);
+      expect(c?.name).toBe(fresh);
+    });
+
+    it('handles empty input without erroring', async () => {
+      const result = await repo.syncConferencesFromDisk([]);
+      expect(result.inserted).toBe(0);
+      expect(result.renamed).toBe(0);
+    });
+  });
+
   describe('MessageBase CRUD', () => {
     it('createMessageBase returns id, getMessageBases lists it', async () => {
       const confId = await repo.createConference(makeConfData());
