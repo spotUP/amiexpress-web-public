@@ -820,6 +820,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "|            Ami-Express Diary Version 1.0 Written by ByteMaster           |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1116,8 +1119,11 @@
       ],
       "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' — 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 10000,
         "assertions": {
+          "mustContain": [
+            ">     LogOff V1.0 by PSYCHOPATH   ©1996     <"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1128,15 +1134,11 @@
         "inputs": [
           {
             "delayMs": 1500,
-            "data": "\r"
+            "data": "n\r"
           },
           {
-            "delayMs": 4000,
+            "delayMs": 3500,
             "data": "\r"
-          },
-          {
-            "delayMs": 8000,
-            "data": "q\r"
           }
         ]
       }
@@ -1675,7 +1677,7 @@
       ],
       "notes": "MST wall.020 — graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry — different banner / DT_NAME path / JH_SG show-gfile op).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 10000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1687,15 +1689,11 @@
         "inputs": [
           {
             "delayMs": 1500,
-            "data": "\r"
+            "data": "n\r"
           },
           {
-            "delayMs": 4000,
+            "delayMs": 3500,
             "data": "\r"
-          },
-          {
-            "delayMs": 8000,
-            "data": "q\r"
           }
         ]
       }
@@ -1718,6 +1716,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "|   /X Tough Edit 1.0  Coded By NeuroStorm/Mystic & D^Sign By Deature/Mystic   |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1865,6 +1866,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "(C) 1994 - Mainline Productions"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1933,6 +1937,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "** Help v0.4 by -= Nameless =- of Snarfs' Pub BBS (407) 267-8155 **"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2197,6 +2204,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "Turbo Zippy by Mack Lifeguard v1.p"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2377,6 +2387,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "-->  Turbo Toolz Config Menu From Hell v3.2 <--"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2429,6 +2442,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "TuRBo NeWSCaN PRO 2.z By [MaCK LiFeGuaRD/DuaL CReW-SHiNiNG] 68000 CoDe By [NZO]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2576,6 +2592,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "| Running AmiEx:                       v5.6 | ByteLimit....:             0 |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2667,6 +2686,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "| Location.....:                                  | Express Version.: v5.6     |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4765,6 +4787,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "-- - ---[ 5D-AdiMenu V1.0 ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- -"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4916,6 +4941,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            ".------------------) cOp Wall v0.1ß by HITLER!! / SS TRUPPE    (----------------"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5411,6 +5439,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "AmiEx GlobalNew 2.1 R.Björklund  Modified by: GeeZER"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",

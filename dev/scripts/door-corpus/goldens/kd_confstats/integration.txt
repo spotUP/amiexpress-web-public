@@ -1,0 +1,81 @@
+
+.------------------------------------------------------------------------------.
+| Board Name...: AmiExpress-Web                   | Task Priority...: ________ |
+| Sysop Name...: Sysop                            | Chat Flag.......: OFF      |
+| Location.....:                                  | Express Version.: v5.6     |
+| CPU Type.....: MC68000                          | Node init.......: 115200   |
+| Node Device..: TCP:                             |                            |
+| Local time...: Wed 20-May-2026 23:56:42         | Kickstart.......: 39.106   |
+| Active Nodes.: _________                        | WB Version......: 39.29    |
+|-------------------------------------------------+----------------------------|
+| User.........: sysop                            | Files Up..:                |
+| Location.....: Test Lab                         | Files Down:                |
+| Phone........:                                  |                            |
+| Computer Type:                                  | Bytes Up..:                |
+| Security.....: 255                              | Bytes Down:                |
+| Conf Axx.....: Sysop                            |                            |
+| Last Time On.: Wed 20-May-2026 23:56:38         | Ratio.....:                |
+| Current Conf.:                                  | Ratio Type:                |
+|                                                 |                            |
+| Times Called.: 1                                | UpB4Dn Bytes:              |
+|-------------------------------------------------+ UpB4Dn Files:              |
+|  All code by Json / KiNGDoM RoYaL /X DiViSioN   |                            |
+|                                                 | Expert Mode.....: Lamer    |
+|           /X Tough Stats Version 1.3            | Connect Speed...: 115200   |
+|                                                 | Messages Send...:          |
+|     tnx to: Deature & Neurostorm / KiNGDoM      | Node Number.....: 1        |
+`------------------------------------------------------------------------------'
+
+
+
+ .__░░░░____░░░░___/░░░░____░░░░____░░░░___/░░░░____░░░░____░░░░___ ░░░░____░
+ |Sk░░░░    ░░░░__/ ░░░░/   ░░░░    ░░░░__//░░░░    ░░░░\___░░░░_ /s░░░░  . ░
+ || ░░░░___ ░░░░\/__░░░░    ░░░░___ ░░░░\/. ░░░░    ░░░░   /░░░░//  ░░░░  | ░
+░░░░/   ░░░░    ░░░░  / ░░░░/   ░░░░   /░░░░  / ░░░░/   ░░░░____░░░░    ░░░░|
+░░░░    ░░░░  //░░░░ /  ░░░░    ░░░░  o/░░░░ /  ░░░░    ░░░░    ░░░░MAND░░░░|
+░░░░    ░░░░ ./ ░░░░/   ░░░░    ░░░░  / ░░░░/   ░░░░    ░░░░    ░░░░  :.░░░░|
+░░░░____░░░░_/__░░░░____░░░░____░░░░_/\_░░░░____░░░░____░░░░____░░░░_:::░░░░|
+    ░░░░    ░░░░    ░░░░/   ░░░░    ░░░░    ░░░░    ░░░░/   ░░░░    ░░░░
+
+ [U]░░░░PLOA░░░░LE(S░░░░    ░░░░] - ░░░░LOAD░░░░E(S)░░░░RZ] ░░░░ODEM░░░░OAD
+ [N]░░░░HOW ░░░░FILE░░░░    ░░░░] - ░░░░ FIL░░░░T   ░░░░A]  ░░░░TER ░░░░FLAG
+░░░░ - Z░░░░ SEA░░░░    ░░░░  [C░░░░CONF░░░░CE F░░░░   [░░░░- FU░░░░ONF ░░░░S
+░░░░ - L░░░░ MSG░░░░SYSO░░░░  [E░░░░LEAV░░░░G TO░░░░R  [░░░░- RE░░░░EW M░░░░
+░░░░ - S░░░░STAT░░░░    ░░░░  [W░░░░CHAN░░░░ETTI░░░░   [░░░░- VI░░░░XT/L░░░░ILE
+░░░░ - S░░░░HELP░░░░E   ░░░░  [X░░░░MENU░░░░OFF ░░░░   [░░░░- CO░░░░ON/O░░
+ [T]░░░░HOW ░░░░L TI░░░░CET)░░░░] - ░░░░ SYS░░░░    ░░░░G]  ░░░░G OF░
+ [?]░░░░HOW ░░░░    ░░░░    ░░░░] - ░░░░ CON░░░░NCE ░░░░ED] ░░░░IT D░░░░IPTI░░
+ [<]░░░░REVI░░░░CONF░░░░CE  ░░░░] - ░░░░ CON░░░░NCE ░░░░RL] ░░░░LOGO░
+ [SE░░░░- AU░░░░IGN ░░░░    ░░░░LM] ░░░░ LIN░░░░SSAG░░░░QUES░░░░ QUE░░░░NNAI░░
+
+░░░░!] -░░░░RCIS░░░░    ░░░░  [0░░░░SHEL░░░░CESS░░░░   [░░░░ ACC░░░░ EDI░░░░
+░░░░ - V░░░░CALL░░░░OG  ░░░░  [3░░░░D-sa░░░░ated░░░░   [░░░░ D-s░░░░vate░
+░░░░ - V░░░░DIRE░░░░Y   ░░░░  [D░░░░SYSO░░░░WNLO░░░░   [░░░░ SYS░░░░IEW
+____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

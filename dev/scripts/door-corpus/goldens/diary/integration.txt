@@ -1,0 +1,408 @@
+
+   .--------------------------------------------------------------------------.
+   |            Ami-Express Diary Version 1.0 Written by ByteMaster           |
+   |                /X Development Team - The Silent Achievers                |
+   `--------------------------------------------------------------------------'
+
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                 ___                                         
+                                                                             
+                            ./                      //                       
+                           //                      o/                        
+                           /                       /                         
+                                                                             
+                                                                             
+                                                                        
+
+                                                                     UPL   
+                                                                     ILE    
+                                                                             
+                                                                            
+                                                                               
+                                  -          FF                   R O     
+                                  -          P                    OFF
+                                  -          ERE                   DE         
+ [<                               -                      L] - R      
+ [S                              M]                      UEST]                
+
+                                                               COU      TIN 
+                                                               sac      d
+                                                               SOP     
+                     ___                     ___                        ___     
+
+                                 ___               __       ___              
+                                                    _\                       
+ ||                         ./                      //                       
+ |.                        //                      o/                        
+ |                         /                       /                         
+                                                                             
+                                                                        ___  
+                                                                        
+
+                                                            - Z      UPL   
+                                                            - A      ILE    
+                                                                             
+                                                                            
+                                                                               
+       SH                         -          FF                   R O     
+       SH                         -          P                    OFF
+       SH                         -          ERE                   DE         
+ [<                               -    T C   ERENCE      L] - R      
+ [S                              M]    N L    MESSA      UEST]       TIO   IRE
+
+                                                             ACCOU      TIN 
+                                                             D-sac      d
+                                                             SYSOP     
+         ___         ___                     ___                  ___   ___     
+
+                                 ___               __       ___            _.
+                                                    _\                      |
+ ||   \__                   ./            .         //                    |  
+ |.                        //                      o/                     :  
+ |                         /                       /                 ANDS .  
+             ./                                                              
+            _/_                                                         ___  
+                                                                        
+
+            D F               [D]                           - Z      UPL   
+            NEW               [F]                           - A      ILE    
+                                                       [F            NF      
+                                                       [R            W M    
+                                                       [V            T/L       
+ [H    SH                         -       N/OFF        [M         R O     
+ [T    SH                         -       YSOP         [G         OFF
+ [?    SH                         -       ONFERE       [E          DE         
+ [<                               -    T C   ERENCE      L] - R      
+ [S                              M]    N L    MESSA      UEST]       TIO   IRE
+
+                                             ESS             ACCOU      TIN 
+                     G                       ted             D-sac      d
+                                             NLO             SYSOP     
+         ___         ___                     ______               ___   ___     
+
+                                 ___         ___   __       ___      ___   _.
+                                             \__    _\                      |
+ ||   \__                   ./            .         //                    |  
+ |.                        //                      o/                     :  
+ |                         /                       /                 ANDS .  
+             ./     /                                   /                    
+            _/_   ___                  ___            __                ___  
+                                                       \/               
+
+            D F               [D]   DOW                     - Z      UPL   
+            NEW               [F]   SHO                     - A      ILE    
+                  H                       ENC          [F          CONF    TS
+                  O S                     MSG          [R          NEW M   S
+                                           SE          [V          TXT/L   FIL 
+ [H    SH                         -       N/OFF        [M         R O     
+ [T    SH                  )      -       YSOP         [G         OFF
+ [?    SH                         -       ONFERE       [E          DE         
+ [<                               -    T C   ERENCE      L] - R      
+ [S                              M]    N L    MESSA      UEST]       TIONNAIRE
+
+   X!] -                                     ESS         ] - ACCOU      TING
+   ] - VI            G                       ted         ] - D-sac      d
+   ] - VI                                    NLO         S]- SYSOP     
+         ___         ___                  _________               ___   ___     
+
+   ___ __   ___                  ___         ___   __       ___      ___   _.
+   k!n/     ___                              \__    _\                      |
+ ||   \__                   ./            .         //     /              |  
+ |.                        //                      o/    ___              :  
+ |            /            /                       /     /|.         ANDS .  
+             ./     /                                   /                    
+            _/_   ___                  ___            __       ___      ___  
+                                                       \/               
+
+ [U    UP   D F               [D]   DOW         E(S         - Z      UPL   
+ [N    SH   NEW               [F]   SHO         T           - A      ILE    
+   ] -   PPY      H                       ENC          [F          CONF    TS
+   ] -   AVE      O S                     MSG          [R          NEW M   S
+   ] -   OW                                SE          [V          TXT/L   FIL 
+ [H    SH                         -    U ON/OFF        [M         R O     
+ [T    SH                  )      -    E SYSOP         [G         OFF
+ [?    SH                         -    N CONFERE       [E          DE         
+ [<             CO                -    T C   ERENCE      L] - R      
+ [S            SIG               M]    N L    MESSA      UEST]       TIONNAIRE
+
+   X!] -                                     ESS         ] - ACCOU      TING
+   ] - VI            G                       ted         ] - D-sac      d
+   ] - VI                                    NLO         S]- SYSOP     
+         ___      ______                  _________      ___      ___   ___     
+
+   ___ __   ___            ___   ___         ___   __       ___      ___   _.
+   k!n/     ___                              \__    _\                      |
+ ||   \__       \/          ./\__         .         //     /              |  
+ |.             /          //                      o/    ______           :  
+ |            //           /                       /     /|.         ANDS .  
+             ./     /                       /           /                    
+            _/_   ___                  ______         __       ______   ___  
+                                                       \/               
+
+ [U    UP   D F               [D]   DOWNLO      E(S         - Z      UPL   
+ [N    SH   NEW               [F]   SHOW F      T           - A      ILE    
+ [Z] -   PPY      H           [CF         ENC          [F          CONF    TS
+ [C] -   AVE      O S         [E]         MSG          [R          NEW M   S
+ [S] -   OW                   [W]          SE          [V          TXT/L   FIL 
+ [H    SH   HEL                   - MENU ON/OFF        [M      OLOR O     
+ [T    SH   LOC      E (CET)      - PAGE SYSOP         [G      OG OFF
+ [?    SH   MEN                   - JOIN CONFERE       [E      DIT DE         
+ [<             CO                -    T C   ERENCE      L] - R      
+ [S            SIG               M]    N L    MESSA      UEST]       TIONNAIRE
+
+ [EX!] -                                     ESS         ] - ACCOU      TING
+ [2] - VI            G                       ted         ] - D-sac      d
+ [5] - VI                                    NLO         S]- SYSOP     
+___      ___      ______                  _________      ___      ___   ___     
+
+   ___ __   ___   _/\___   ___   ___         ___   __       ___      ___   _.
+   k!n/     ___   /                          \__    _\                      |
+ ||   \__       \/          ./\__         .         //     /              |  
+ |.             /          //                      o/    ______           :  
+ |            //           /          o            /     /|.         ANDS .  
+             ./     /                       /     /     /                    
+            _/_   ___            ___   ______   _/_   __       ______   ___  
+                                                       \/               
+
+ [U    UP   D F               [D]   DOWNLO      E(S         - Z   EM UPL   
+ [N    SH   NEW               [F]   SHOW F      T           - A   R FILE    
+ [Z] -   PPY      H           [CF         ENC          [F      ULL CONF    TS
+ [C] -   AVE      O S         [E]         MSG          [R      EAD NEW M   S
+ [S] -   OW                   [W]          SE          [V      IEW TXT/L   FIL 
+ [H    SH   HEL   AGE             - MENU ON/OFF        [M      OLOR O     
+ [T    SH   LOC   TIME (CET)      - PAGE SYSOP         [G      OG OFF
+ [?    SH   MEN                   - JOIN CONFERE       [E      DIT DE         
+ [<             CO                -    T C   ERENCE      L] - R   GON
+ [S            SIG               M]    N L    MESSA      UEST]    UESTIONNAIRE
+
+ [EX!] -                          -       ACCESS       [1] - ACCOU      TING
+ [2] - VI            G            -       ivated       [4] - D-sac      d
+ [5] - VI                        ]-       DOWNLO       [VS]- SYSOP     
+___   ______      ______                  _________      ___      ___   ___   __
+
+   ___ __   ___   _/\___   ___   ___      _/\___   __       ______   ___   _.
+   k!n/     ___   /                       // \__    _\          _           |
+ ||  _\__       \/          ./\__         .         //     /              |  
+ |. /           /          //                      o/    ______           :  
+ | /          //           /          o            /     /|.         ANDS .  
+ :/          ./     /                       /     /     /             :.     
+ /____   ____/_   ___            ___   ______   _/______       ______:::___  
+                                                       \/             .Y
+
+ [U    UP   D F               [D]   DOWNLO      E(S         - Z   EM UPL   
+ [N    SH   NEW               [F]   SHOW F      T           - A   R FILE    
+ [Z] -   PPY      H           [CF      FERENCE F       [F      ULL CONF    TS
+ [C] -   AVE      O S   P     [E]      VE MSG TO       [R      EAD NEW M   S
+ [S] -   OW                   [W]      NGE SETTI       [V      IEW TXT/L   FIL 
+ [H    SH   HEL   AGE             - MENU ON/OFF        [M      OLOR O     
+ [T    SH   LOC   TIME (CET)      - PAGE SYSOP         [G      OG OFF
+ [?    SH   MEN                   - JOIN CONFERE       [E      DIT DE         
+ [<    PREVI    CO   REN          -    T C   ERENCE      L] - R   GON
+ [S   ] - AU   SIG               M]    N L    MESSA      UEST]    UESTIONNAIRE
+
+ [EX!] -                          -       ACCESS       [1] - ACCOUNT    TING
+ [2] - VI            G            -       ivated       [4] - D-sactiv   d
+ [5] - VI                        ]-       DOWNLO       [VS]- SYSOP VI  
+___   ______   _________                  _________      ______   ___   ___   __
+
+   ___ __   _______/\___   ___   ______   _/\___   __   __________   ___   _.
+   k!n/     ______/                 ___   // \__    _\__\___    _           |
+ ||  _\____     \/          ./\__         .         //     /              |  
+ |. /     /     /          //                      o/    ______           :  
+ | /     /    //           /          o            /     /|.      OMMANDS .  
+ :/          ./     /                       /     /     /_||          :.     
+ /____   ____/_   ___            ___   ______   _/______ /|_   ______:::___  
+                                                       \/             .Y
+
+ [U    UP   D F   (S)         [D]   DOWNLO   FILE(S         - Z   EM UPL   
+ [N    SH   NEW   LES         [F]   SHOW F   LIST           - A   R FILE    
+ [Z] -   PPY   ARCH           [CF      FERENCE FLAG    [F      ULL CONF    TS
+ [C] -   AVE   G TO S   P     [E]      VE MSG TO US    [R      EAD NEW M   S
+ [S] -   OW    TUS            [W]      NGE SETTINGS    [V      IEW TXT/L   FIL 
+ [H    SH   HEL   AGE             - MENU ON/OFF        [M      OLOR O     
+ [T    SH   LOC   TIME (CET)      - PAGE SYSOP         [G      OG OFF
+ [?    SH   MEN                   - JOIN CONFERE       [E      DIT DE         
+ [<    PREVI    CO   REN          -    T C   ERENCE      L] - R   GON
+ [S   ] - AU   SIG               M]    N L    MESSA      UEST]    UESTIONNAIRE
+
+ [EX!] -                      [0] - SHE   ACCESS       [1] - ACCOUNT    TING
+ [2] - VI         SLOG        [3] - D-s   ivated       [4] - D-sactiv   d
+ [5] - VI         ORY         [DS]- SYS   DOWNLOAD     [VS]- SYSOP VI  
+___   ______   _________      ___      ____________      ______   ___   ___   __
+
+   ___ __   _______/\___   ___   ______   _/\___   __   __________   ___   _.
+   k!n/     ______/                 ___   // \__    _\__\___    _           |
+ ||  _\____     \/          ./\__         .         //     /              | |
+ |. /     /     /          //                      o/    ______           : |
+ | /     /    //           /          o            /     /|.      OMMANDS . |
+ :/     /    ./     /           /           /     /     /_||          :.     
+ /___________/_   ___         ______   ______   _/______ /|__________:::___  
+                                                       \/             .Y
+
+ [U    UP   D F   (S)         [D] - DOWNLO   FILE(S      Z] - Z   EM UPL   
+ [N    SH   NEW   LES         [F] - SHOW F   LIST        ]  - A   R FILE    
+ [Z] -   PPY   ARCH           [CF      FERENCE FLAG    [F      ULL CONF    TS
+ [C] -   AVE   G TO S   P     [E]      VE MSG TO US    [R      EAD NEW M   S
+ [S] -   OW    TUS            [W]      NGE SETTINGS    [V      IEW TXT/L   FIL 
+ [H    SH   HELP PAGE             - MENU ON/OFF        [M      OLOR O   FF
+ [T    SH   LOCAL TIME (CET)      - PAGE SYSOP         [G      OG OFF
+ [?    SH   MENU                  - JOIN CONFERE       [E      DIT DE   IPT   
+ [<    PREVIOUS CO   REN          - NEXT C   ERENCE      L] - R   GON
+ [S   ] - AUTO SIG               M] - ON L    MESSAGE    UEST]    UESTIONNAIRE
+
+ [EX!] -                      [0] - SHELL ACCESS       [1] - ACCOUNT    TING
+ [2] - VI         SLOG        [3] - D-sactivated       [4] - D-sactiv   d
+ [5] - VI         ORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VI  
+___   ______   __________________   _______________      ____________   ___   __
+
+   ___ __   _______/\__________________   _/\___   __   __________   ___   _.
+   k!n/     ______/     /     /     ___   // \__    _\__\___    _           |
+ ||  _\____     \/___       ./\__         .         //     /              | |
+ |. /     /     /          //                      o/   _______           : |
+ | /     /    //           /          o            /     /|.      OMMANDS . |
+ :/     /    ./     /           /           /     /     /_||          :.     
+ /___________/_   ___      _________   ______   _/______ /|__________:::___  
+                                                       \/             .Y
+
+ [U    UPLOAD F   (S)         [D] - DOWNLO   FILE(S      Z] - Z   EM UPL   
+ [N    SHOW NEW   LES         [F] - SHOW F   LIST        ]  - A   R FILE    
+ [Z] -   PPY SEARCH           [CF   CONFERENCE FLAG    [F   - FULL CONF STATS
+ [C] -   AVE MSG TO SYSOP     [E]   LEAVE MSG TO US    [R   - READ NEW MSG'S
+ [S] -   OW STATUS            [W]   CHANGE SETTINGS    [V   - VIEW TXT/LHA FILE
+ [H] - SH   HELP PAGE             - MENU ON/OFF        [M]     OLOR O   FF
+ [T] - SH   LOCAL TIME (CET)      - PAGE SYSOP         [G]     OG OFF
+ [?] - SH   MENU                  - JOIN CONFERENCE    [ED]    DIT DE   IPT   
+ [<    PREVIOUS CO   REN          - NEXT C   ERENCE      L] - R   GON
+ [S   ] - AUTO SIG               M] - ON L    MESSAGE    UEST]    UESTIONNAIRE
+
+ [EX!] -    RCI               [0] - SHELL ACCESS       [1] - ACCOUNT    TING
+ [2] - VI   CAL   SLOG        [3] - D-sactivated       [4] - D-sactiv   d
+ [5] - VI   DIR   ORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VI  
+___   ______   __________________   _______________      ____________   ___   __
+
+   ___ __   _______/\__________________   _/\___   __   __________   ___   _.
+   k!n/     ______/     /     /     ___   // \__    _\__\___    _           |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /           /           /     /     /_||          :.     
+ /___________/_   ___      _________   ______   _/______ /|__________:::___  
+                                                       \/             .Y
+
+ [U    UPLOAD F   (S)         [D] - DOWNLOAD FILE(S      Z] - ZMODEM UPLOAD
+ [N    SHOW NEW   LES         [F] - SHOW FILELIST        ]  - ALTER FILEFLA 
+ [Z] - ZIPPY SEARCH           [CF   CONFERENCE FLAG    [F   - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E]   LEAVE MSG TO US    [R   - READ NEW MSG'S
+ [S] - SHOW STATUS            [W]   CHANGE SETTINGS    [V   - VIEW TXT/LHA FILE
+ [H] - SH   HELP PAGE             - MENU ON/OFF        [M]     OLOR O   FF
+ [T] - SH   LOCAL TIME (CET)      - PAGE SYSOP         [G]     OG OFF
+ [?] - SH   MENU                  - JOIN CONFERENCE    [ED]    DIT DE   IPT   
+ [<] - PREVIOUS CONFEREN          - NEXT CONFERENCE      L] - RELOGON
+ [SENT] - AUTO SIGN              M] - ON LINE MESSAGE    UEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCI               [0] - SHELL ACCESS       [1] - ACCOUNT    TING
+ [2] - VIEW CAL   SLOG        [3] - D-sactivated       [4] - D-sactiv   d
+ [5] - VIEW DIR   ORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VI  
+____________   __________________   _______________      __________________   __
+
+ .____ __   _______/\______________________/\________   __________   _______.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _         . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /           /     /     /_||          :.     
+ /___________/_   ___    /__________   ______   _/______ /|__________:::___  
+                        /                              \/             .Y
+
+ [U] - UPLOAD F   (S)         [D] - DOWNLOAD FILE(S      Z] - ZMODEM UPLOAD
+ [N] - SHOW NEW   LES         [F] - SHOW FILELIST        ]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF   CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E]   LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W]   CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SH   HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR O   FF
+ [T] - SH   LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SH   MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DE   IPT   
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCI               [0] - SHELL ACCESS       [1] - ACCOUNT    TING
+ [2] - VIEW CAL   SLOG        [3] - D-sactivated       [4] - D-sactiv   d
+ [5] - VIEW DIR   ORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VI  
+____________   __________________   __________________   _______________________
+
+ .____ ____________/\______________________/\________   __________   _______.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _         . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/_   ______ /___________/\______   _/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S    [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 
