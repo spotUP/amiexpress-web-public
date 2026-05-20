@@ -170,6 +170,17 @@ jobs:
                 docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/db/amiexpress.db /app/web/backend/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT id, name, description FROM conferences ORDER BY id" 2>/dev/null; fi; done' 2>&1 || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              users)
+                echo "== users table — confaccess strings + lengths =="
+                # Live BBS db has been at /app/data/bbs/data/amiexpress.db
+                # in recent deploys (per conferences-case probe). Cover all
+                # plausible paths.
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/db/amiexpress.db /app/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT username, seclevel, slotnumber, length(confaccess) AS lc, confaccess FROM users ORDER BY slotnumber LIMIT 30;" 2>/dev/null; fi; done' 2>&1 || true
+                echo ""
+                echo "== system_config.new_user_conf_access =="
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/db/amiexpress.db /app/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT length(new_user_conf_access) AS lc, new_user_conf_access FROM system_config LIMIT 1;" 2>/dev/null; fi; done' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               userdata)
                 echo "== sqlite3 db locations =="
                 docker exec "$CID" sh -lc 'find /app -maxdepth 4 -name "*.db" 2>/dev/null' || true
