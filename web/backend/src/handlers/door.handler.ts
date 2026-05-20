@@ -621,13 +621,41 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
       // duplicate entries (e.g. sysop appears at indices 1-7 from prior appends).
       const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
       let slotIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(username);
+
+      // Prefer the SQLite-loaded confAccess string over the binary
+      // user.data probe. Rationale (added 2026-05-20 after live JoinCnf
+      // showed only 4 confs to sysop while local showed 14):
+      //
+      //   readConfAccessFromDisk reads the user's BINARY confaccess
+      //   (10 bytes, indexed by SLOT) and pads positions 11..25 with
+      //   'X' unconditionally. The padding is a workaround for the
+      //   binary's 10-conf ceiling — but it FAILS when SQLite
+      //   slotNumber doesn't match the binary record position (which
+      //   can happen after a regen, an import, or a duplicate-name
+      //   append). The door then reads the wrong slot's 10-byte
+      //   pattern, sees zeros for confs 1..10, and the padding
+      //   silently grants confs 11..N — visible as "only confs 11-N
+      //   are accessible" in JoinCnf.
+      //
+      //   The SQLite confAccess is authoritative (the startup
+      //   migration at initialization.ts:660-685 keeps it expanded to
+      //   conferences.length). When present, use it. Fall back to the
+      //   binary probe only if SQLite has no string at all.
+      const sqlConfAccess: string =
+        (session.user?.confAccess as any) ||
+        (session.user?.conferenceAccess as any) ||
+        '';
+
       if (slotIndex >= 0) {
-        confAccess = userDatabaseManager.readConfAccessFromDisk(slotIndex);
         diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
         userSlotNumber = slotIndex + 1;
+        confAccess =
+          (sqlConfAccess && sqlConfAccess.length > 0)
+            ? sqlConfAccess
+            : userDatabaseManager.readConfAccessFromDisk(slotIndex);
       } else {
-        // Fallback to session data if user not found in disk files
-        confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
+        // No matching binary slot at all — use SQLite as the only source.
+        confAccess = sqlConfAccess;
       }
     }
 console.log(`[launchAmigaDoor] Using confAccess = "${confAccess}" (len=${confAccess.length})`);
@@ -2436,9 +2464,20 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
       let userSlotNumber = dbSlot > 0 ? dbSlot : (Number.isFinite((session as any).userSlotNumber) ? (session as any).userSlotNumber : -1);
       let slotIndex = userSlotNumber > 0 ? userSlotNumber - 1 : -1;
 
+      // Same SQLite-first preference as launchAmigaDoor (see comment
+      // there at ~line 624). The binary readConfAccessFromDisk pads
+      // positions 11-25 with X, which silently misaligns when
+      // SQLite slot ≠ binary slot.
+      const sqlConfAccess: string =
+        (session.user?.confAccess as any) ||
+        (session.user?.conferenceAccess as any) ||
+        '';
+
       if (slotIndex >= 0) {
         if (!confAccess) {
-          confAccess = userDatabaseManager.readConfAccessFromDisk(slotIndex);
+          confAccess = (sqlConfAccess && sqlConfAccess.length > 0)
+            ? sqlConfAccess
+            : userDatabaseManager.readConfAccessFromDisk(slotIndex);
         }
         if (!diskUserStats) {
           diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
@@ -2451,7 +2490,9 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
         const foundIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(session.user.username);
         if (foundIndex >= 0) {
           if (!confAccess) {
-            confAccess = userDatabaseManager.readConfAccessFromDisk(foundIndex);
+            confAccess = (sqlConfAccess && sqlConfAccess.length > 0)
+              ? sqlConfAccess
+              : userDatabaseManager.readConfAccessFromDisk(foundIndex);
           }
           if (!diskUserStats) {
             diskUserStats = userDatabaseManager.readUserStatsFromDisk(foundIndex);
@@ -2459,7 +2500,7 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
           slotIndex = foundIndex;
           userSlotNumber = foundIndex + 1;
         } else if (!confAccess) {
-          confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
+          confAccess = sqlConfAccess;
         }
       }
 
