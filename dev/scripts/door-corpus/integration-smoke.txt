@@ -26,6 +26,7 @@
 976_rs13_rubberstamp
 acs_ip10_telnetd
 adn_c120_adn_cycle
+aehelp
 aetop20_aetop
 aexsetu_who1
 af_status
@@ -86,6 +87,7 @@ dc_axxcheck
 dc_x107i_aquascan
 dcn_fileid
 dcn_sent
+diary
 dive_boa_bitchcheck
 dlm_hl11_clear_hl
 dlt_af12_autofree
@@ -171,6 +173,7 @@ mdb_front
 mgs__lm1_mgzlistman
 mgs__wh1_wallhall
 mgs_bulls
+mgs_userstatus
 mgs_wallhall
 mmh_grapestats
 modpager
@@ -181,7 +184,9 @@ mst_bytekiller
 mst_cl10_mst_clock
 mst_conftop000
 mst_conftop22
+mst_edit
 mst_view
+mst_wall
 mst_what000
 mst_who_mst_front_who
 mth_ca10_kerocac
@@ -210,9 +215,11 @@ piw_st05_rexxmast
 psn_xs10_aia
 psn_xs10_amie_starter
 psn_xs10_ward
+psy_logoff
 psychostats
 ptl_sxpager
 quickansi
+quicklogon
 ratiorep
 rg_frv10_frontavail
 rlx_move_move

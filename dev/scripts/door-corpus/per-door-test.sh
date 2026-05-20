@@ -19,8 +19,10 @@
 # Output: per-door pass/fail + final tally.
 
 set -u
-cd "$(dirname "$0")/../../.."
 
+# Resolve --list relative to the caller's cwd BEFORE we cd, since
+# the npm script passes paths like ../../dev/scripts/... that only
+# make sense from web/backend/.
 CAPTURE=""
 IDS=()
 while [[ $# -gt 0 ]]; do
@@ -31,10 +33,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --list)
       shift
+      list="$1"
+      [[ "$list" != /* ]] && list="$PWD/$list"
       while IFS= read -r line; do
         [[ -z "$line" || "$line" =~ ^# ]] && continue
         IDS+=("$line")
-      done < "$1"
+      done < "$list"
       shift
       ;;
     *)
@@ -43,6 +47,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+cd "$(dirname "$0")/../../.."
 
 if [[ ${#IDS[@]} -eq 0 ]]; then
   echo "usage: per-door-test.sh [--capture] [--list FILE] <id> [<id>...]" >&2
