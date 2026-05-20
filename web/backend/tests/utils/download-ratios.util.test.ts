@@ -349,6 +349,111 @@ describe('download-ratios.util', () => {
         expect(result.canDownload).toBe(true);
       });
     });
+
+    describe('Per-conference accounting (D20 — express.e:19845)', () => {
+      // express.e: ACS_CONFERENCE_ACCOUNTING toggle gates whether ratio
+      // counters live on user (single global) vs on conference (per-conf).
+      // Pre-existing implementation handles per-conf in
+      // download-ratios.util.ts:121-202, but had no test coverage until
+      // 2026-05-20 — adding here.
+
+      const makeUser = (overrides: Partial<User> = {}): User => ({
+        secLevel: 10,
+        ratio: 3,
+        ratioType: 0,
+        uploads: 0,
+        downloads: 0,
+        bytesUpload: 0,
+        bytesDownload: 0,
+        confRJoin: 1,
+        ...overrides,
+      } as unknown as User);
+
+      const makeConf = (id: number, overrides: any = {}): any => ({
+        id,
+        name: `Conf${id}`,
+        ratio: 3,
+        ratioType: 0,
+        uploads: 10,
+        downloads: 5,
+        bytesUpload: 100000,
+        bytesDownload: 50000,
+        ...overrides,
+      });
+
+      it('aggregates requested bytes per conference and enforces per-conf ratio', async () => {
+        const user = makeUser();
+        const conf1 = makeConf(1, { ratio: 3, bytesUpload: 1000, bytesDownload: 0 }); // 3000 bytes allowed
+        const conf2 = makeConf(2, { ratio: 3, bytesUpload: 100, bytesDownload: 0 });  // 300 bytes allowed
+        const requests: DownloadRequest[] = [
+          { size: 2500, isFree: false, conference: 1 },
+          { size: 500, isFree: false, conference: 2 }, // Exceeds conf2 limit
+        ];
+        const result = await checkDownloadRatios(user, requests, [conf1, conf2], true);
+        expect(result.canDownload).toBe(false);
+        expect(result.errorMessage).toMatch(/Conf 2.*Not enough free bytes/);
+      });
+
+      it('per-conf file ratio (ratioType=2) blocks when files exceed allowance', async () => {
+        const user = makeUser({ ratioType: 2 });
+        // conf ratio=3, uploads=1, downloads=0 → 3*(1+1)=6 files allowed
+        const conf = makeConf(5, { ratio: 3, ratioType: 2, uploads: 1, downloads: 0 });
+        const requests: DownloadRequest[] = Array.from({ length: 7 }, () => ({
+          size: 100, isFree: false, conference: 5,
+        }));
+        const result = await checkDownloadRatios(user, requests, [conf], true);
+        expect(result.canDownload).toBe(false);
+        expect(result.errorMessage).toMatch(/Conf 5.*Not enough free files/);
+      });
+
+      it('conference with ratio=0 (disabled) does NOT block (only daily limit applies)', async () => {
+        const user = makeUser();
+        // conf ratio=0 disables per-conf checks
+        const conf = makeConf(3, { ratio: 0 });
+        const requests: DownloadRequest[] = [
+          { size: 10_000_000, isFree: false, conference: 3 },
+        ];
+        const result = await checkDownloadRatios(user, requests, [conf], true);
+        expect(result.canDownload).toBe(true);
+      });
+
+      it('free downloads in conference branch bypass byte ratio but count for daily', async () => {
+        const user = makeUser({ dailyBytesLimit: 10000 });
+        const conf = makeConf(1, { ratio: 3, bytesUpload: 100, bytesDownload: 0 });
+        const requests: DownloadRequest[] = [
+          { size: 5000, isFree: true, conference: 1 },
+        ];
+        const result = await checkDownloadRatios(user, requests, [conf], true);
+        expect(result.canDownload).toBe(true);
+      });
+
+      it('per-conf totals split correctly across conferences (not collapsed to one)', async () => {
+        const user = makeUser();
+        // conf1: allowance 600 bytes; conf2: allowance 600 bytes
+        const conf1 = makeConf(1, { ratio: 3, bytesUpload: 200, bytesDownload: 0 });
+        const conf2 = makeConf(2, { ratio: 3, bytesUpload: 200, bytesDownload: 0 });
+        const requests: DownloadRequest[] = [
+          { size: 500, isFree: false, conference: 1 },  // ok within conf1 (allows 600)
+          { size: 500, isFree: false, conference: 2 },  // ok within conf2 (allows 600)
+        ];
+        // If totals were collapsed (1000 bytes against either single conf,
+        // each only allowing 600), this would block. Per-conf split makes it pass.
+        const result = await checkDownloadRatios(user, requests, [conf1, conf2], true);
+        expect(result.canDownload).toBe(true);
+      });
+
+      it('falls back to user-level ratio when conferenceAccountingEnabled=false', async () => {
+        const user = makeUser({ ratio: 3, bytesUpload: 100, bytesDownload: 0 });
+        // Even if conferences are passed, the flag=false branch uses user counters.
+        const conf = makeConf(1, { ratio: 999, bytesUpload: 999999 }); // Generous conf, ignored
+        const requests: DownloadRequest[] = [
+          { size: 500, isFree: false, conference: 1 }, // 500 > user-level 300 (3*100)
+        ];
+        const result = await checkDownloadRatios(user, requests, [conf], false);
+        expect(result.canDownload).toBe(false);
+        expect(result.errorMessage).not.toMatch(/Conf/);
+      });
+    });
   });
 
   describe('updateDownloadStats', () => {
