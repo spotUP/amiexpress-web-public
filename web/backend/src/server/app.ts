@@ -170,9 +170,30 @@ app.post('/api/csp-report', (req, res) => {
   res.status(204).end();
 });
 
-// Health check endpoint
+// Health check endpoint. Includes the git SHA embedded at image build
+// time so monitoring + smoke tests can verify "is this the commit I
+// expect?" via a single HTTP call. Falls back to "unknown" for local
+// dev where the file isn't written (docker-compose default for non-CI
+// builds).
+let _cachedGitSha: string | null = null;
+function readGitSha(): string {
+  if (_cachedGitSha !== null) return _cachedGitSha;
+  try {
+    // /app/.git-sha is written by Dockerfile RUN echo at /app stage.
+    // Local dev: file doesn't exist → fall through to "unknown".
+    _cachedGitSha = fs.readFileSync('/app/.git-sha', 'utf-8').trim() || 'unknown';
+  } catch {
+    _cachedGitSha = 'unknown';
+  }
+  return _cachedGitSha;
+}
+
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: getSystemTime().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: getSystemTime().toISOString(),
+    revision: readGitSha(),
+  });
 });
 
 app.get('/api', (req, res) => {
