@@ -621,8 +621,8 @@ debugLog(
    */
   handleSendMessage(msg: XIMMessage): void {
     const __t0 = (this.bbsSession as any)?.__doorT0;
-    if (__t0 && !(this.bbsSession as any)?.__firstSmLogged) {
-      (this.bbsSession as any).__firstSmLogged = true;
+    if (__t0 && (this.bbsSession as any)?.__lastDoorT0 !== __t0) {
+      (this.bbsSession as any).__lastDoorT0 = __t0;
       console.log(`[TIMING] first JH_SM after door ENTRY: ${Date.now() - __t0}ms`);
     }
     // WEB_*: RTW-specific fallback cap. If the ss_NestCount field approach doesn't
