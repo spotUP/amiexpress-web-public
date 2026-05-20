@@ -413,8 +413,14 @@ console.log(`[UserFileManager] Serialized userKeys struct: ${offset} bytes (expe
     struct.uploadBytesBCD.copy(buffer, offset); offset += 8;
     offset += this.writeString(buffer, offset, struct.eMail, 50);
     offset = this.writeInt32(buffer, offset, struct.lastDlCPS);
-    offset += this.writeString(buffer, offset, struct.pwdHash, 32);
-    offset += this.writeString(buffer, offset, struct.salt, 8);
+    // pwdHash[32] (SHA256 — exactly 32 hex chars, no null terminator)
+    // and salt[8] (raw 8 bytes) are fixed-width like conferenceAccess.
+    // writeString would steal one byte each for a null terminator and
+    // silently truncate the hash / salt, breaking auth verification on
+    // any future pwdType != 1 (bcrypt) configuration. Use
+    // writeFixedBytes so all bytes carry data.
+    offset += this.writeFixedBytes(buffer, offset, struct.pwdHash, 32);
+    offset += this.writeFixedBytes(buffer, offset, struct.salt, 8);
     buffer.writeUInt8(struct.pwdType, offset++);
     buffer.writeUInt8(struct.forcePwdReset, offset++);
     buffer.writeUInt8(struct.accountLocked, offset++);
