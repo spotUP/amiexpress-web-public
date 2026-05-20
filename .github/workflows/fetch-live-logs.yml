@@ -170,6 +170,34 @@ jobs:
                 docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/db/amiexpress.db /app/web/backend/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT id, name, description FROM conferences ORDER BY id" 2>/dev/null; fi; done' 2>&1 || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              confdb-access)
+                echo "== per-conf Conf.DB access field for sysop slot (axobjects.e:confBase) =="
+                # confBase is 74B; layout per axobjects.e:136-155:
+                #   handle[16] + dlBCD[8] + ulBCD[8] + newSinceDate[4] +
+                #   confRead[4] + confYM[4] + bytesDL[4] + bytesUL[4] +
+                #   ulTracking[2] + unused[2] + unused2[4] + upload[2] +
+                #   downloads[2] + ratioType[2] + ratio[2] + msgPosted[2] +
+                #   access[2] + active[2]
+                # access field offset = 16+8+8+4+4+4+4+4+2+2+4+2+2+2+2+2 = 70
+                # User slot N → offset (N-1)*74 within Conf.DB
+                # Try sysop slot 25 (current binary), 24 (older), 2 (DB-prep db).
+                docker exec "$CID" sh -lc '
+                  for slot in 25 24 2; do
+                    echo "=== sysop@slot $slot ==="
+                    for cn in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+                      F="/app/Conf${cn}/Conf.DB"
+                      if [ -f "$F" ]; then
+                        access_off=$(( (slot - 1) * 74 + 70 ))
+                        active_off=$(( (slot - 1) * 74 + 72 ))
+                        ah=$(dd if="$F" bs=1 skip=$access_off count=2 2>/dev/null | xxd -p)
+                        tv=$(dd if="$F" bs=1 skip=$active_off count=2 2>/dev/null | xxd -p)
+                        printf "  Conf%-2d access=%s active=%s\\n" "$cn" "$ah" "$tv"
+                      fi
+                    done
+                  done
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               sysop-binary)
                 echo "== binary user.data — dump ALL slots with non-empty names + confaccess =="
                 # Record size is 232 bytes (UserFileStruct USER_STRUCT_SIZE).
