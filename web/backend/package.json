@@ -18,6 +18,7 @@
     "corpus:capture": "cd ../.. && npx tsx dev/scripts/door-corpus/run.ts --capture",
     "corpus:integration": "npx tsx src/scripts/corpus-integration-runner.ts --concurrency 1",
     "corpus:integration:capture": "npx tsx src/scripts/corpus-integration-runner.ts --concurrency 1 --capture",
+    "corpus:integration:smoke": "npx tsx src/scripts/corpus-integration-runner.ts --concurrency 1 --only \"$(tr '\\n' ',' < ../../dev/scripts/door-corpus/integration-smoke.txt | sed 's/,$//')\"",
     "probe": "cd ../.. && npx tsx dev/scripts/door-probe/probe.ts",
     "coverage:report": "cd ../.. && npx tsx dev/scripts/door-probe/coverage-report.ts",
     "clusters:report": "cd ../.. && npx tsx dev/scripts/door-probe/timeout-clusters.ts"
