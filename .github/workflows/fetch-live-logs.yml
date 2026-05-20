@@ -171,9 +171,10 @@ jobs:
                 FILE="$LOGS_DIR/backend.log"
                 ;;
               sysop-binary)
-                echo "== binary user.data — find sysop record + dump confaccess =="
+                echo "== binary user.data — dump ALL slots with non-empty names + confaccess =="
                 # Record size is 232 bytes (UserFileStruct USER_STRUCT_SIZE).
                 # conferenceAccess[10] starts at offset 133 within each record.
+                # Use od / printf to avoid bash subshell mangling of binary names.
                 docker exec "$CID" sh -lc '
                   F=/app/data/bbs/user.data
                   SZ=$(stat -c %s "$F" 2>/dev/null)
@@ -181,13 +182,13 @@ jobs:
                   echo "size=$SZ slots=$TOTAL (232B records)"
                   for i in $(seq 0 $((TOTAL-1))); do
                     off=$((i*232))
-                    name=$(dd if="$F" bs=1 skip=$off count=20 2>/dev/null | tr -d "\\0" | tr -c "[:print:]" " " | head -c 20)
-                    case "$(echo "$name" | tr "[:upper:]" "[:lower:]")" in
-                      *sysop*|*spot*)
-                        confhex=$(dd if="$F" bs=1 skip=$((off+133)) count=10 2>/dev/null | xxd -p)
-                        echo "slot $i (0-based): name=\"$name\"  confaccess=$confhex"
-                        ;;
-                    esac
+                    # Dump first 16 bytes as ascii (replace non-printable with .)
+                    namehex=$(dd if="$F" bs=1 skip=$off count=16 2>/dev/null | od -An -tx1 -w16 | tr -d " ")
+                    confhex=$(dd if="$F" bs=1 skip=$((off+133)) count=10 2>/dev/null | xxd -p)
+                    # Only print if name has at least one printable letter
+                    if [ -n "$(dd if=\"$F\" bs=1 skip=$off count=12 2>/dev/null | tr -cd \"[:alpha:]\")" ]; then
+                      echo "slot $i: name(hex)=$namehex  confaccess=$confhex"
+                    fi
                   done
                 ' 2>&1 || true
                 FILE="$LOGS_DIR/backend.log"
