@@ -924,6 +924,13 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
 console.log('[ENV] Downloading');
 
   // If user has flagged files, send them via ZMODEM; otherwise fall back to download interface.
+  // TODO (D16 — express.e checkFIBForFileSize): this path bypasses the
+  // "Restricted" comment-prefix gate that download.handler.ts:340 and
+  // batch-download.handler.ts:81 enforce. FlaggedFile here only carries
+  // {fileName, filePath, fileSize, areaId} — no comment/description —
+  // so gating requires a per-file metadata lookup (DIR entry parse) we
+  // haven't wired here. Less-common path (telnet/SSH direct D with
+  // pre-flagged files) but still a real bypass.
   const userId = session.user?.id;
   const flagged = userId ? flaggedFilesManager.getFiles(userId) : [];
   if (flagged && flagged.length > 0) {

@@ -77,6 +77,25 @@ export class BatchDownloadHandler {
         continue;
       }
 
+      // express.e checkFIBForFileSize — reject files whose comment
+      // starts "Restricted". This is the SAME gate as the single-file
+      // download path at download.handler.ts:340, but the batch path
+      // (F+D / flagged-files download) was bypassing it — a user could
+      // flag a Restricted file then download it via batch. The
+      // restricted-attempt is logged to callersLog per express.e for
+      // sysop visibility.
+      const fileComment = (fileInfo.comment || fileInfo.description || '');
+      if (typeof fileComment === 'string' && fileComment.toLowerCase().startsWith('restricted')) {
+        socket.emit('ansi-output', `\x1b[31m[X] ${flagItem.fileName}: restricted file\x1b[0m\r\n`);
+        try {
+          const { callersLog } = require('../../server/database-helpers');
+          await callersLog(session.user?.id || null, session.user?.username || 'unknown',
+            `\t\tAttempt to download RESTRICTED file [${fileInfo.fullPath || fileInfo.name || flagItem.fileName}]`);
+        } catch (_err) { /* non-critical */ }
+        failCount++;
+        continue;
+      }
+
       const isFree = this.isFreeDownload(fileInfo);
       fileInfo.isFree = isFree;
       downloadList.push(fileInfo);
