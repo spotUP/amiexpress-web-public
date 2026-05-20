@@ -188,7 +188,6 @@ import {
   matchesWildcard,
   parseParams,
   dirLineNewFile,
-  startFileUpload,
   startFileDownload,
   setFileAreas,
   setDatabase as setDatabaseForFileHandler,

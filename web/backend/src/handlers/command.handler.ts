@@ -29,7 +29,6 @@ import {
   displayNewFiles,
   displayUploadInterface,
   displayDownloadInterface,
-  startFileUpload,
   startFileDownload,
   handleFileDeleteConfirmation,
   handleFileMoveConfirmation,

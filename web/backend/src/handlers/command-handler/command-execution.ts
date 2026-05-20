@@ -24,7 +24,6 @@ import {
   displayNewFiles,
   displayUploadInterface,
   displayDownloadInterface,
-  startFileUpload,
 } from "../file/file.handler";
 import { FileMaintenanceHandler } from "../file/file-maintenance.handler";
 import {

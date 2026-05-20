@@ -922,79 +922,15 @@ export function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
 
 // ===== File Upload/Download WebSocket Handlers =====
 
-/**
- * **WEB_**: web upload bypasses the express.e:17769 "Okay: (Enter) to
- * Start, (G)oodbye after transfer, (A)bort?" prompt — the WebSocket
- * file picker shows up directly and the upload begins on file select.
- * Three reasons:
- *   1. The file picker is the equivalent of "I'm ready to send" — adding
- *      another keypress is friction without information value.
- *   2. There is no "abort after typing filenames" workflow on web; the
- *      user just doesn't pick a file in the chooser.
- *   3. "Goodbye after transfer" is a multi-call modem-era convenience
- *      that has no equivalent in a session-per-page web client.
- * The terminal-mode UPLOAD_OKAY_CONFIRM state (command.handler.ts:2628)
- * still emits the express.e prompt for raw telnet/SSH callers; only the
- * WebSocket startFileUpload path skips it. (Audit E-11.)
- */
-export function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
-console.log('startFileUpload called for area:', fileArea.name);
-
-  emitText(socket, `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n\r\n`);
-
-  // Check if user has upload access to this area
-  if (fileArea.uploadAccess > (session.user?.secLevel || 0)) {
-    emitText(socket, '\r\n\x1b[31mYou do not have upload access to this file area.\x1b[0m\r\n');
-    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  // Display available space (express.e:18991-18993)
-  emitText(socket, '1,000,000 bytes available for uploading.  1,000,000 at one time.\r\n');
-  emitText(socket, 'Filename lengths above 12 are not allowed.\r\n\r\n');
-
-  // Web-friendly flow: Show file picker immediately
-  emitText(socket, '\x1b[36mSelect file to upload...\x1b[0m\r\n\r\n');
-
-  const previousTempData = session.tempData || {};
-  const uploadContext: UploadSessionContext = {
-    uploadMode: true,
-    fileArea,
-    uploadSessionId: socket.id,
-    uploadBatch: [],
-    uploadCount: 1,
-    uploadStartTime: Date.now(),
-    webUploadMode: true,
-    batchUpload: true,  // Always enable batch/multiple upload for web mode
-    currentUploadIndex: 0,
-    uploadedFiles: 0,  // Track number of files actually uploaded
-    uploadedBytes: 0   // Track total bytes uploaded
-  };
-
-  session.uploadContext = uploadContext;
-  session.tempData = uploadContext;
-  storeUploadContext(socket.id, uploadContext);
-
-  // Initialize upload session data
-  // session.tempData already set via uploadContext above
-
-  // Trigger file picker immediately (web-friendly approach)
-  // Check if batch upload is enabled from tempData
-  const isBatchUpload = uploadContext.batchUpload || false;
-
-  socket.emit('show-file-upload', {
-    accept: '*/*',
-    maxSize: 10 * 1024 * 1024, // 10MB max
-    uploadUrl: '/api/upload',
-    fieldName: 'file',
-    multiple: isBatchUpload  // Enable HTML5 multiple file selection for batch uploads
-  });
-
-  session.subState = LoggedOnSubState.FILES_UPLOAD;
-}
+// startFileUpload (Audit E-11) removed 2026-05-20: 4 imports, 0
+// invocations. Dead after the Phase 4 ZMODEM unification — the U
+// command now routes through startBatchUploadTransfer →
+// startZmodemUpload (command.handler.ts), and door archive uploads
+// emit show-file-upload via BBSApi/DoorManager directly. The legacy
+// HTTP-picker path this function emitted into was killed when
+// processFileUpload was narrowed to door uploads only
+// (file-socket-handlers.ts:862-899). Re-introducing this function
+// would re-introduce the silent-drop bug we just fixed in cf2121c86.
 
 export function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
 console.log('startFileDownload called for area:', fileArea.name);
