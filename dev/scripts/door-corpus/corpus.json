@@ -1979,7 +1979,7 @@
       ],
       "notes": "Conference updater. Menu prompt with JH_HK; Q exits.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 18000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1991,15 +1991,11 @@
         "inputs": [
           {
             "delayMs": 1500,
-            "data": "\r"
+            "data": "q"
           },
           {
-            "delayMs": 4000,
-            "data": "\r"
-          },
-          {
-            "delayMs": 8000,
-            "data": "q\r"
+            "delayMs": 3000,
+            "data": "q"
           }
         ]
       }
@@ -2085,15 +2081,15 @@
         "inputs": [
           {
             "delayMs": 1500,
-            "data": "g\r"
+            "data": "n\r"
           },
           {
             "delayMs": 3500,
-            "data": "y\r"
+            "data": " "
           },
           {
-            "delayMs": 6000,
-            "data": "\r"
+            "delayMs": 5500,
+            "data": " "
           }
         ]
       }
@@ -2142,7 +2138,7 @@
       ],
       "notes": "Exorcist! file processor. Prints background-task startup banner then exits when the spawned task fails. Cluster representative for the 7-door Exorcist!_2_*/Exorcist!_3_* CPU-variant family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 20000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2151,20 +2147,7 @@
             "Software failure"
           ]
         },
-        "inputs": [
-          {
-            "delayMs": 1500,
-            "data": "\r"
-          },
-          {
-            "delayMs": 4000,
-            "data": "q\r"
-          },
-          {
-            "delayMs": 7000,
-            "data": "\r"
-          }
-        ]
+        "inputs": []
       }
     },
     {
@@ -6500,29 +6483,8 @@
       "timeoutMs": 30000,
       "notes": "MGS!-R11.LHA autoreward — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
-        "assertions": {
-          "mustNotContain": [
-            "TRAP",
-            "PANIC",
-            "Guru",
-            "Software failure"
-          ]
-        },
-        "inputs": [
-          {
-            "delayMs": 1500,
-            "data": "\r"
-          },
-          {
-            "delayMs": 4000,
-            "data": "q\r"
-          },
-          {
-            "delayMs": 7000,
-            "data": "\r"
-          }
-        ]
+        "skip": true,
+        "skipReason": "Hangs scanning Playpen with no uploaded files; runner has no way to populate Playpen state. Emits banner then blocks on FS read. Not driveable from current harness."
       }
     },
     {

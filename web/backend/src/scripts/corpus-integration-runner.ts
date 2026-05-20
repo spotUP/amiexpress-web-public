@@ -77,6 +77,12 @@ interface IntegrationConfig {
   inputs?: Array<{ delayMs: number; data: string }>;
   /** Hard cap on how long executeDoor is allowed to take. */
   timeoutMs?: number;
+  /** Skip this door entirely with a documented reason. Used for
+   *  doors that genuinely cannot be driven by the integration
+   *  harness (need filesystem state, hang waiting on missing
+   *  data files, etc.). Honors `skipReason` for visibility. */
+  skip?: boolean;
+  skipReason?: string;
   /** Assertions against captured state. */
   assertions?: {
     /** Strings that MUST appear in ansi-output capture (after ANSI strip). */
@@ -227,6 +233,14 @@ async function runOne(
   options: { capture: boolean; keepAnsi: boolean; nodeId: number },
 ): Promise<RunResult> {
   const integration = entry.integration ?? {};
+  if (integration.skip) {
+    return {
+      id: entry.id,
+      status: "skip",
+      wallMs: 0,
+      detail: integration.skipReason ?? "skip: true (no reason given)",
+    };
+  }
   // Fall back to the corpus id as the command when none is set —
   // synthesized Doors don't need a real command to dispatch.
   const command = entry.command ?? entry.id;

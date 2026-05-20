@@ -1,3 +1,305 @@
 
 
-Starting Ex! background task...
+Starting Ex! background task... Done!
+
+Couldn't open the background task!
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                             ___                        ___  
+                                             \__                          .  
+                                                                //           
+                                                               _/            
+                                                                 C           
+                                                                             
+                                                                             
+                                                                        
+
+                                                                  EM       
+                                                                  R F      G
+   ] -         ARC                                                           
+   ] -         G T                                                          
+   ] -         TUS                                                             
+                                                                          
+                                                                     
+                                                                              
+         EVI                                             L] - R      
+          AU                                             UEST]                
+
+         EXO                                                            TING
+         EW                                                             d
+         EW                                                            
+                                             ___         ___                  __
+
+                                             ___                        ___  
+                                             \__                          .  
+                                              \/                //           
+                                              /                _/            
+                                             /                   C           
+                                                        /                    
+                                                      __                     
+                                                       \/               
+
+                              [D]                                 EM       
+                              [F]                                 R F      G
+   ] - ZI      ARC                                          - F              
+   ] - LE      G T                                          - R             
+   ] - SH      TUS                                          - V                
+   ] -                        [X]                                         
+   ] -                        [O]                                    
+   ] -                        [J]               NCE                           
+   ] -   EVI         REN                                 L] - R      
+   ENT    AU                                             UEST]       TIO      
+
+         EXO                                                 AC         TING
+         EW                                                  D-         d
+         EW                                                  SY        
+___         ___         ___                  ___      ______                  __
+
+                                          _/\___                        ___  
+                                          // \__                          .  
+                                        \/    \/           /    //           
+                                       //     /          ___   _/            
+                                       /     /           /|.     C           
+                                                        /                    
+   ___                                                __                     
+                                                       \/               
+
+            D F               [D]               E(S    [R         EM       
+            NEW               [F]               T      [A         R F      G
+   ] - ZI      ARC                     FER   E F            - F              
+   ] - LE      G T      P              VE     TO            - R             
+   ] - SH      TUS                     NGE   TTI            - V                
+   ] - SH                     [X]                                    N/O  
+   ] - SH                     [O]                                    
+   ] - SH                     [J]               NCE                  SCR      
+   ] -   EVI         REN                                 L] - R      
+   ENT    AU                                             UEST]       TIO      
+
+ [E      EXO                                                 ACCOU      TING
+ [2      EW                                                  D-sac      d
+ [5      EW                                                  SYSOP     
+______      ___         ___                  ___      ______                  __
+
+                                          _/\___                        ___  
+                                          // \__                          .  
+                                        \/.   \/           /    //           
+                                       //     /          ___   _/            
+                                      o/     /           /|.     C           
+             ./                                         /                    
+   ___   ____/_                        ___            __                     
+                                                       \/               
+
+            D F               [D] -       AD FILE(S    [R         EM       
+            NEW               [F] -       ILELIST      [A         R F      G
+   ] - ZI      ARC            [CF      FER   E F            - FULL           
+   ] - LE      G T      P     [E]      VE     TO            - READ          
+   ] - SH      TUS            [W]      NGE   TTI            - VIEW             
+   ] - SH      P P            [X]   MEN                              N/O  
+   ] - SH      AL             [O]   PAG                              
+   ] - SH      U              [J]   JOI         NCE                  SCR      
+   ] -   EVIOUS      REN                                 L] - RELO   
+   ENT    AUTO                                           UEST] - Q   TIO      
+
+ [E      EXO                                                 ACCOU      TING
+ [2      EW                                                  D-sac      d
+ [5      EW                                                  SYSOP     
+______      ___         ___   ___            ___      ______                  __
+
+                                          _/\___                        ___  
+                                          // \__                          .  
+         __       ___            __     \/.   \/           /    //           
+          /                       /    //     /          ___   _/            
+         /                       /    o/     /           /|.     C           
+             ./                                         /                    
+   ___   ____/____                     ___            __                     
+                                                       \/               
+
+            D F               [D] - DOW   AD FILE(S    [R         EM    OAD
+            NEW               [F] - SHO   ILELIST      [A         R F   FLAG
+   ] - ZI      ARC            [CF   CONFERENCE F         S] - FULL           
+   ] - LE      G T   YSOP     [E]   LEAVE MSG TO         ]  - READ          
+   ] - SH      TUS            [W]   CHANGE SETTI         ]  - VIEW             
+   ] - SH      P P            [X]   MEN                              N/O  
+   ] - SH      AL             [O]   PAG                              
+   ] - SH      U              [J]   JOI         NCE                  SCR      
+ [<] -   EVIOUS      RENCE                               L] - RELO   
+ [SENT    AUTO                                           UEST] - Q   TIO      
+
+ [E      EXO                                           [1    ACCOU   EDITING
+ [2      EW                                            [4    D-sac   ated
+ [5      EW                                            [V    SYSOP   EW
+_________   ___      ______   ___            ___      ______                  __
+
+                              ___         _/\___                        ___  
+                              /           // \__                          .  
+         __       ___            __     \/.   \/           /    //           
+          /                       /    //     /          ___   _/            
+         /                       /    o/     /           /|.     C           
+        /    ./           /                 /           /                    
+   __________/____       /_            ______         __                     
+                        /                              \/               
+
+         LOAD F               [D] - DOW   AD FILE(S    [R      MODEM    OAD
+         OW NEW               [F] - SHO   ILELIST      [A      LTER F   FLAG
+   ] - ZI    SEARC            [CF   CONFERENCE F         S] - FULL           
+   ] - LE    MSG T   YSOP     [E]   LEAVE MSG TO         ]  - READ          
+   ] - SH   STATUS            [W]   CHANGE SETTI         ]  - VIEW            E
+   ] - SH      P P            [X] - MEN                [M            N/O  
+   ] - SH      AL             [O] - PAG                [G            
+   ] - SH      U              [J] - JOI         NCE    [E            SCR      
+ [<] -   EVIOUS      RENCE                               L] - RELO   
+ [SENT    AUTO                                           UEST] - Q   TIONNA   
+
+ [E    - EXO                        SHE                [1] - ACCOU   EDITING
+ [2    VIEW                         D-s                [4] - D-sac   ated
+ [5    VIEW                         SYS                [VS]- SYSOP   EW
+_______________      ______   ______         ___      ______                  __
+
+ ._               _/\   ___   ___   ___   _/\___                        ___  
+ |S               /     /     /     ___   // \__                          .  
+         __       ___            __     \/.   \/           /    //           
+          /                       /    //     /          ___   _/            
+         /                       /    o/     /           /|.     C           
+        /    ./     /     /                 /     /     /                    
+   __________/_______    /_            ______   _/_   __                     
+                        /                              \/               
+
+         LOAD F               [D] - DOW   AD FILE(S    [R      MODEM UPLOAD
+         OW NEW               [F] - SHO   ILELIST      [A      LTER FILEFLAG
+   ] - ZI    SEARC            [CF   CONFERENCE F       [FS] - FULL           
+   ] - LE    MSG T   YSOP     [E]   LEAVE MSG TO       [R]  - READ          
+   ] - SH   STATUS            [W]   CHANGE SETTI       [V]  - VIEW            E
+   ] - SH      P P            [X] - MEN                [M      OLO   N/O  
+   ] - SH      AL       CET   [O] - PAG                [G      OG    
+   ] - SH      U              [J] - JOI         NCE    [E      DIT   SCR      
+ [<] -   EVIOUS      RENCE                ONF   NCE      L] - RELO   
+ [SENT    AUTO                            INE   SSA      UEST] - Q   TIONNA   
+
+ [EX!] - EXO                        SHELL              [1] - ACCOU   EDITING
+ [2] - VIEW                         D-sact             [4] - D-sac   ated
+ [5] - VIEW                         SYSOP              [VS]- SYSOP   EW
+_______________      ______   _________   _________   ______                  __
+
+ ._               _/\   ___   _________   _/\___        _         _ _   ___  
+ |S               /     /     /     ___   // \__      __\         /s      .  
+ ||      __       _____       \____     \/.   \/           /    //           
+ |.       /           /           /    //     /          _______/            
+ |       /           /           /    o/     /           /|.     C           
+        /    ./     /     /                 /     /     /                    
+   __________/__________ /_      ___   ______   _/_   __                     
+                       \/                              \/               
+
+       UPLOAD FILE            [D] - DOW   AD FILE(S    [R      MODEM UPLOAD
+       SHOW NEW FI            [F] - SHO   ILELIST      [A      LTER FILEFLAG
+   ] - ZI    SEARC            [CF   CONFERENCE F       [FS] - FULL           
+   ] - LE    MSG T   YSOP     [E]   LEAVE MSG TO       [R]  - READ          
+   ] - SH   STATUS            [W]   CHANGE SETTI       [V]  - VIEW            E
+   ] - SH      P PAGE         [X] - MEN                [M   - COLO   N/O  
+   ] - SH      AL TIM   CET   [O] - PAG                [G   - LOG    
+   ] - SH      U              [J] - JOI         NCE    [E   - EDIT   SCR      
+ [<] -   EVIOUS CONFERENCE                ONF   NCE      L] - RELO   
+ [SENT    AUTO SIGN                       INE   SSA      UEST] - Q   TIONNA   
+
+ [EX!] - EXORCIST                   SHELL              [1] - ACCOU   EDITING
+ [2] - VIEW CALLER                  D-sact             [4] - D-sac   ated
+ [5] - VIEW DIRECT                  SYSOP              [VS]- SYSOP   EW
+_______________      ______   _________   _________   ______                  __
+
+ ._            ____/\______   _________   _/\___        _      ____ _   ___  
+ |S            ___/     /     /     ___   // \__      __\       _ /s      .  
+ ||      __       _____       \____     \/.   \/           /    //           
+ |.       /           /           /    //     /          _______/            
+ |       /           /           /    o/     /           /|.     C           
+        /    ./     /     /     /           /     /     /                    
+   __________/__________ /_   ______   ______   _/_   __                     
+                       \/                              \/               
+
+ [U    UPLOAD FILE            [D] - DOW   AD FILE(S    [RZ]    MODEM UPLOAD
+ [N    SHOW NEW FI            [F] - SHO   ILELIST      [A]     LTER FILEFLAG
+   ] - ZI    SEARC            [CF   CONFERENCE F       [FS] - FULL           
+   ] - LE    MSG T   YSOP     [E]   LEAVE MSG TO       [R]  - READ          
+   ] - SH   STATUS            [W]   CHANGE SETTI       [V]  - VIEW            E
+   ] - SH      P PAGE         [X] - MEN      FF        [M]  - COLO   N/OFF
+   ] - SH      AL TIM   CET   [O] - PAG      P         [G]  - LOG    
+   ] - SH      U              [J] - JOI      ERENCE    [ED] - EDIT   SCRIPT   
+ [<] - PREVIOUS CONFERENCE          NEXT CONF   NCE      L] - RELO   
+ [SENT] - AUTO SIGN                 - ON LINE   SSA      UEST] - Q   TIONNAIRE
+
+ [EX!] - EXORCIST                   SHELL ACCESS       [1] - ACCOU   EDITING
+ [2] - VIEW CALLER                  D-sactivated       [4] - D-sac   ated
+ [5] - VIEW DIRECT                  SYSOP DOWNLO       [VS]- SYSOP   EW
+_______________      ______   _________   __________________            ___   __
+
+ ._            ____/\______   _____________/\______     _      ____ ________.
+ |S            ___/     /     /     ______// \__      __\       _ /s      . |
+ ||  _   __       _____       \____     \/.   \/           /    //           
+ |. /     /           /           /    //     /          _______/            
+ | /     /    /      /           /    o/     /           /|.     COMM        
+        /    ./     /     /     /           /     /     /                    
+   __________/__________ /_   ______   ______   _/_   __                     
+                       \/                              \/               
+
+ [U    UPLOAD FILE            [D] - DOW   AD FILE(S)   [RZ]    MODEM UPLOAD
+ [N    SHOW NEW FI            [F] - SHO   ILELIST      [A]     LTER FILEFLAG
+   ] - ZI    SEARCH           [CF]- CONFERENCE F       [FS] - FULL           
+   ] - LE    MSG TO SYSOP     [E] - LEAVE MSG TO       [R]  - READ          
+   ] - SH   STATUS            [W] - CHANGE SETTI       [V]  - VIEW            E
+ [H] - SH   HELP PAGE         [X] - MEN      FF        [M]  - COLOR ON/OFF
+ [T] - SH   LOCAL TIM   CET   [O] - PAG      P         [G]  - LOG OFF
+ [?] - SH   MENU              [J] - JOI      ERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFERENCE    [>]   NEXT CONF   NCE      L] - RELO   
+ [SENT] - AUTO SIGN           [OL   - ON LINE   SSA      UEST] - Q   TIONNAIRE
+
+ [EX!] - EXORCIST                   SHELL ACCESS       [1] - ACCOU   EDITING
+ [2] - VIEW CALLER                  D-sactivated       [4] - D-sac   ated
+ [5] - VIEW DIRECT                  SYSOP DOWNLO       [VS]- SYSOP   EW
+_______________   _________   ______________________________            ___   __
+
+ ._         _______/\______________________/\______     _      ____ ________.
+ |S         ______/     /     /     ______// \__      __\       _ /s      . |
+ ||  _   __       _____       \____     \/.   \/           /    //          |
+ |. /     /           /           /    //     /          _______/           |
+ | /     /    /      /           /    o/     /           /|.     COMM       |
+        /    ./     /     /     /           /     /     /_||                 
+   __________/__________ /_   ______   ______   _/_   __ /|_   ___           
+                       \/                              \/               
+
+ [U    UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ]    MODEM UPLOAD
+ [N    SHOW NEW FILES         [F] - SHOW FILELIST      [A]     LTER FILEFLAG
+ [Z] - ZI    SEARCH           [CF]- CONFERENCE F       [FS] - FULL           
+ [C] - LE    MSG TO SYSOP     [E] - LEAVE MSG TO       [R]  - READ          
+ [S] - SH   STATUS            [W] - CHANGE SETTI       [V]  - VIEW            E
+ [H] - SH   HELP PAGE         [X] - MEN      FF        [M]  - COLOR ON/OFF
+ [T] - SH   LOCAL TIM   CET)  [O] - PAG      P         [G]  - LOG OFF
+ [?] - SH   MENU              [J] - JOI      ERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFERENCE    [>]   NEXT CONF   NCE    [RL] - RELO   
+ [SENT] - AUTO SIGN           [OL   - ON LINE   SSAGE  [QUEST] - Q   TIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO       [VS]- SYSOP VIEW
+_______________   __________________________________________            ___   __

@@ -1,4 +1,1 @@
-exorcist
-mdb_confupdater
 mgs__r11_autoreward
-pwfail
