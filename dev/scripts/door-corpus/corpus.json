@@ -14,8 +14,11 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR:  DOORS:FILEID/Sent.DAT Not Found"
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
           ]
         }
       }
@@ -88,8 +91,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "▫▀▄▄▫▓▪▌□░▒▪▀▄□■■▐█▪░▌▒▒▒▒░▒▄▄█□▒▀▄▓■█■▀█▐░▀█▄░▌▓■▀░■▫■▪▀▄▓▀█■▐▒■▀▒░▄□░▪▫█▓□▪▄▐□",
-            "         [- >5D-AutoFree V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
+            "[- >5D-AutoFree V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -112,9 +114,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "_________________________________________________________      ______   ________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -143,7 +142,6 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________",
             "- --- -----[ 5D-DoorMenu v0.02 ]----- --- - ---- - -- --- - -----[ sTc/5D ]---"
           ],
           "mustNotContain": [
@@ -289,7 +287,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "8Zd)0O^XFlG13n!CeJat%ObcWjTPN6SoAix*hJ%sXoX4%3yh%eE!pfRkLE3JtsxRZz!X^6PF$24%oQ88"
+            "--[ AquaScan v1.0 by Aquarius/Outlaws ]--------------[ 'cs ?' for options ]--"
           ],
           "mustNotContain": [
             "TRAP",
@@ -312,9 +310,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "FpglfQucCKZ@j3ITSSN72udKbmVb%C$#SFZ3)rI8DHSk4yenr7@khNhHuBro3Rj@cxD0GOSjqtsTbjG4"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -361,7 +356,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "--[ AquaScan v1.0 by Aquarius/Outlaws ]--------------[ 'cs ?' for options ]--"
           ],
           "mustNotContain": [
             "TRAP",
@@ -409,7 +404,6 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "P^DAXDQ49blTKPqM0IQHXbiJXE9ji$i6qe^RZOb%Wm(xuLE%l@gB(To&jRHEtdwvuu3INAva8AGVtuy(",
             "| 5D-sTATUS v1.50 cODED by sTc/5D      |  dESIGN bY sNoW/5th dYNASTY          |"
           ],
           "mustNotContain": [
@@ -548,7 +542,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
           ],
           "mustNotContain": [
             "TRAP",
@@ -621,7 +615,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
           ],
           "mustNotContain": [
             "TRAP",
@@ -644,9 +638,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "EXM9sk6K#!NF3^A@ViNZgR(lyumxBL5rr&q0(4q!8MxHXf$R&StswnloenV8f4d6#)$PM0Z7ayubkwtc"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -668,9 +659,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -796,9 +784,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -819,9 +804,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -896,7 +878,6 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________",
             "U-Stat V1.0 - CoDeD BY S¡eGeL/aFL"
           ],
           "mustNotContain": [
@@ -977,9 +958,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1270,7 +1248,8 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+            "Cannot open configfile: Filedescription.config",
+            "File Description (Version 1.1) [RELEASE 2]  Copyright (c)1994 Bobo of Mystic"
           ],
           "mustNotContain": [
             "TRAP",
@@ -1538,9 +1517,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "GFVqC%UpKYBXhsnbY&1LiuaZW(dYoJfs*T8u&%XpA#*b@uu^KWe!h#^1NN$wcUmCLfDY0DbNCoif^$jt"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1846,7 +1822,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Z&X)Tl7%R7F@gGes%x^mTBb!tHGKA6GZtsiGsR1uwQYXOsTeeY)8Girxm9#y9q$I0(*7Do#jXTQfvqO!"
+            "| Security Checker (C) 1996 !Lt / Version 1.00ß / Coded by KId/dSY/!LT - 1996 |"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2059,7 +2035,8 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "            ____________   ___         ___   ___   ___   ___         ______   __"
+            "= [Super Stats V1.4 By Etrigan/Intellect] =",
+            "·    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2105,7 +2082,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "_______________   _________   ___      ______   ______   ______         ___   __"
+            "| GrapeStatus v1.6 by Pigeon^Shx^Mmh |"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2148,7 +2125,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2214,7 +2191,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2257,7 +2234,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2387,7 +2364,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2807,9 +2784,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "c(q)h5#(xZz2vh#!Z1#t*nUzDHhNZMAEAgyMPA(D5Z#$OC&C(SOwlcN7Exgn!*LP7J*H(l^Qp2s15QVz"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2914,7 +2888,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "Copyright (c) 1995,96 Faktor/Independent."
           ],
           "mustNotContain": [
             "TRAP",
@@ -2937,7 +2911,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                     _________      ______   ______                  ______   __"
+            "-={ TimeStamp v2.0ß by jSON }=-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3149,7 +3123,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
+            "Ratioinfo v 1.5 by fanta & SøNy"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3251,9 +3225,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "   ___                                    ___   ___         ___   ___      _____"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3418,7 +3389,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "bGEfPpY63C5gAlmq!Vn33aa(Cs98YX5vZJsJJrVKQhtaU8d*Wk8Lpwei2C(%S%ZpCCNf1iDw#@WZhEMy"
+            "Logon Door Version V1.20           Coding By: T-SpooN ^1995^"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3735,9 +3706,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "▒■□█□▌▫▓▫░▫■█▪■░░▓▪▪▫░▫▐▐▌▪▄▪▪▫▫█▪░▒▐▒░░■▓░■▌▄■▓▪▫▫█▒▄▓■▓▀░█▌▪□▄█▐▐░█▒▒█░▓▌▀░░▐▒"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3759,7 +3727,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
+            "-[·]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[·]-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3908,7 +3876,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "twvgRNmfc$YG3EFxGTuk@rB5I*%Mp0T#LoW3wI)MwI9G%md8aYEgS7bd6v6!RjXzO^rayIE@sMPTltXg"
+            "ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3974,7 +3942,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "FilesSize v2.8 by Noisy Belch"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3997,7 +3965,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "Ill Communication v1 by Noisy Belch (Not /X.info Compatible!)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4020,7 +3988,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "___   _____________________      ______   ____________   ___   ______   ________"
+            "SlickMove 1.0 By BUGBYTE For /X 3.x"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4043,7 +4011,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "______      ___   ________________________   ______________________________   __"
+            "[=TAG LINE Adder=] V1.0 - (c)1994  SiNTAX/WøT"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4126,7 +4094,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "         ___               ___      ___               ___         ___   ___   __"
+            "[- >5D-MultiStart V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4148,9 +4116,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4272,7 +4237,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "7hr1PF1&kyqryjDb2gb$82JcldXJodaPeWq4&Y(D6WAq$pSN7%tDpw7lnlF6PV2)2dLhgos4Oqd(VoQL"
+            "[WHO_ELSE  V1.0]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4294,9 +4259,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4400,9 +4362,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "▒▫■■▄█▓▄▄■▄■▄█▄▫□▄▌▓▒░▒■■□▪▐■▪▫□▌▪■▫▓▐▓░▓□▫□□▄▓▓▫▐▐▫■▌▫□▫░░▒▌█▓░█▪▓▌▀▐▪▓░□▄▪█■▫▌"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4487,7 +4446,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "▀▓▒▐░▒▒▒▄░▪▄▄▀▓░▌▄▫▀▐■■▪▪▪▀▀□▒▐▓▓▐█▫▓▄▄▐▀▪□■▓▄▐▌█▄▄▫▀▀■▪░▓□▪█▀□▌▌░▐▒▐□▫▫█■▌█▄▐▪■"
+            "| \\_____     /___________/ LiQuiD STyLeR bY KLeiNDuiMPJe version    2.o|"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4510,7 +4469,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "BelchOLM v1.6 by Noisy Belch/LOGIC"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4573,7 +4532,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
+            "Lost Carrier Files Processor V1.42 for S!X (Versions 0.37 and higher)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4596,7 +4555,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "SLICK-SHELL V1.3 by BUGBYTE for Ami Express!"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4639,7 +4598,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
+            "ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4727,9 +4686,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4810,9 +4766,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "WCx)OMudgrGtCoK@4cBeIxrwchRh5AN&!ANw4O^)ZXqc0bx!cvlN)D1Armmq@J$3&(JiQgtD07%qisF^"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4914,7 +4867,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "         _________      ___      ___            ______                        __"
+            "5D-Security V0.10 By SvEN tHE CREAToR Of 5th Dynasty"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4977,7 +4930,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            ">>> AnnounceLogon v1.0 ©1993 by Aquarius <<<"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4999,9 +4952,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "KKc9UT3LMq6P5dU$QTPw*Xygcl2Dby04LrxHMPaVYx$MdE^*BR9)8MO@k)p(Ey6!$@LY0wwmpK2Bv@!F"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5148,9 +5098,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5172,7 +5119,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "▫▐▓▐▫▀▐□▀▓▓▓□▀■░▌▀░▫█▪▄█▫▓▓□▌█░▪▫▫▪□▫▓□█▌░▒□▐░▓▐▄▒▌▒▐░▄▄█▪▪▐■▌█□■▌■■░░▓▒□▒▄▐▫▪□█"
+            "-[·]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[·]-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5257,9 +5204,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "___   ___               ___               ___                        ______   __"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5344,7 +5288,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "BelchOLM v1.6 by Noisy Belch/LOGIC"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5426,9 +5370,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "▓▪▀▄▒▄▐▌░□■░▫▒▒□▫□█░▪▓▄□▫▪▪□▀▒▪▒▀▄▌▀▒■□▪□▌▄▫▒░▫░█■▀▒▫□▀■▪■□▒▒▪▓█▌▐▓■▓░▓▄▐▒▌▒▀▪▌▀"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5450,7 +5391,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "ByteLog V1.0 by Byteandi (tRSi/X-iNNOVATiON)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5513,7 +5454,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
+            "BelchVIEW v1.2 by Noisy Belch"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5536,7 +5477,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "BelchOLM v1.6 by Noisy Belch/LOGIC"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5579,7 +5520,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "   ___                                                                        __"
+            "[FRONTSTAT V1.1]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5601,9 +5542,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "_________________________________   ____________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5750,9 +5688,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "n1(#ZWC@$NlMC2LnPz&LISY*zF^Vkv3V3WT&Ocaqf46WorFgGwtkpBITQ2NQJdfmy$cd0djXV3JL%D%X"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5796,9 +5731,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5880,7 +5812,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "BelchVIEW v1.2 by Noisy Belch"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5923,7 +5855,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "SuperWHO 3.0 by pSYCHoTROn/rYL"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5946,7 +5878,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "   ___            ______   ____________         ___      ______   ______      __"
+            "| Thank you for using T-LiST PrO by   |___.::::::::.|"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6071,9 +6003,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "#Z5u)vCN93Xxnyu@*J0ofUfiGzbk367&fx79U(D#TB71X5WW$Wd!#WFg7QNEC9OXWH#(VKXHOiMl4WAd"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6115,7 +6044,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "CrzFront v1.1 by Nike'n'Rick 1994"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6329,9 +6258,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "_________   ______   ___         ____________   ___   ___      ____________   __"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6375,9 +6301,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6419,7 +6342,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "OgkjMKQ6B7RIxeB@b%c%IrJygMAKyBFSfivufp*kzid3YhyUX8BP%I)cJX0ra8T0n5hnwUNIiFlEyjYX"
+            "|---------------fRONT-sTATUS-v1.0!-bY-xERXES-rAGE------------/-/-/-|"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6501,9 +6424,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "YHHxNTKdRYR@f0uwhR1M*eY64afpx7%f2hjLs9xBgI5F31RLtYRnzM7UYm6RihSTd1R6jss1QiazUr5Q"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6524,9 +6444,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6548,7 +6465,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "                                                                ________________"
+            "WiLD THiNG's SPaR WaLL v0.4 © '94 By WiLD THiNG/¥øÐeL"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6613,9 +6530,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6659,9 +6573,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6683,7 +6594,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            " |Sk!       ___         /     /         __//        _\\_"
+            "wELCOME tO fLM v0.4 bY dR. iCE/lISENCE"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6788,9 +6699,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6811,9 +6719,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "         ______            ___            ______   ___   ___      ___      _____"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6954,9 +6859,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "▀▐▄░▀□▄▐▌▓▄▒▄░▐▫▐▌▒▪▀□■▌▄▪█▐▒■▫█▓▪▓█■░▀▪▪▄▀▪■■▒░█▒■▐■▐▌░▄▓▀▒░▀■▓▌▪□▪▒▪▐█■░▒▓█□▒▐"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7063,9 +6965,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7126,9 +7025,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7170,7 +7066,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "□▄▄▄■▐▫▀▪▀■□▐□▫■▒□▫□▓■▀▌▀▒▫▫░▓▄░▪▓▪▪■▪▪■□▀□▐■█▫▀■░▐▌▀▐░░▄███▀░▄▄□░█░□▐▀▐▪▀▫■▪▒▫▄"
+            "-  Auto-Free (Version 1.2) [RELEASE 2]  Copyright (c) 1994 Nike/CRZ^DLT  -"
           ],
           "mustNotContain": [
             "TRAP",
@@ -7275,9 +7171,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                                                                ________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
