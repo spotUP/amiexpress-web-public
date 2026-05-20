@@ -646,8 +646,30 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
         (session.user?.conferenceAccess as any) ||
         '';
 
+      // Same SQLite-first preference for stats as for confAccess
+      // above. Stats are eventually consistent (doors write back to
+      // binary during their run), but the INITIAL read can show wrong
+      // values to a door that renders stats on entry (e.g. mtop,
+      // displayULStats, AquaWho) when SQLite slot ≠ binary slot.
+      // Synthesize a stats record from session.user so the door sees
+      // the same numbers the BBS would.
+      const sqlUserStats = session.user ? {
+        messagesPosted: (session.user as any).messagesPosted ?? 0,
+        uploads: (session.user as any).uploads ?? 0,
+        downloads: (session.user as any).downloads ?? 0,
+        timesCalled: (session.user as any).timesCalled ?? (session.user as any).calls ?? 0,
+        timeUsed: (session.user as any).timeUsed ?? 0,
+        timeLimit: (session.user as any).timeLimit ?? 0,
+        timeTotal: (session.user as any).timeTotal ?? 0,
+        bytesDownload: (session.user as any).bytesDownload ?? 0,
+        bytesUpload: (session.user as any).bytesUpload ?? 0,
+        timeLastOn: (session.user as any).lastLogin
+          ? Math.floor(new Date((session.user as any).lastLogin).getTime() / 1000)
+          : 0,
+      } : null;
+
       if (slotIndex >= 0) {
-        diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
+        diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotIndex);
         userSlotNumber = slotIndex + 1;
         confAccess =
           (sqlConfAccess && sqlConfAccess.length > 0)
@@ -656,6 +678,7 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
       } else {
         // No matching binary slot at all — use SQLite as the only source.
         confAccess = sqlConfAccess;
+        diskUserStats = sqlUserStats;
       }
     }
 console.log(`[launchAmigaDoor] Using confAccess = "${confAccess}" (len=${confAccess.length})`);
@@ -2467,11 +2490,27 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
       // Same SQLite-first preference as launchAmigaDoor (see comment
       // there at ~line 624). The binary readConfAccessFromDisk pads
       // positions 11-25 with X, which silently misaligns when
-      // SQLite slot ≠ binary slot.
+      // SQLite slot ≠ binary slot. Stats have the same slot-mismatch
+      // risk but doors write back to binary during their session, so
+      // the SQLite-first read is an initial-state correctness fix.
       const sqlConfAccess: string =
         (session.user?.confAccess as any) ||
         (session.user?.conferenceAccess as any) ||
         '';
+      const sqlUserStats = session.user ? {
+        messagesPosted: (session.user as any).messagesPosted ?? 0,
+        uploads: (session.user as any).uploads ?? 0,
+        downloads: (session.user as any).downloads ?? 0,
+        timesCalled: (session.user as any).timesCalled ?? (session.user as any).calls ?? 0,
+        timeUsed: (session.user as any).timeUsed ?? 0,
+        timeLimit: (session.user as any).timeLimit ?? 0,
+        timeTotal: (session.user as any).timeTotal ?? 0,
+        bytesDownload: (session.user as any).bytesDownload ?? 0,
+        bytesUpload: (session.user as any).bytesUpload ?? 0,
+        timeLastOn: (session.user as any).lastLogin
+          ? Math.floor(new Date((session.user as any).lastLogin).getTime() / 1000)
+          : 0,
+      } : null;
 
       if (slotIndex >= 0) {
         if (!confAccess) {
@@ -2480,7 +2519,7 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
             : userDatabaseManager.readConfAccessFromDisk(slotIndex);
         }
         if (!diskUserStats) {
-          diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
+          diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotIndex);
         }
       }
 
@@ -2495,12 +2534,13 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
               : userDatabaseManager.readConfAccessFromDisk(foundIndex);
           }
           if (!diskUserStats) {
-            diskUserStats = userDatabaseManager.readUserStatsFromDisk(foundIndex);
+            diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(foundIndex);
           }
           slotIndex = foundIndex;
           userSlotNumber = foundIndex + 1;
-        } else if (!confAccess) {
-          confAccess = sqlConfAccess;
+        } else {
+          if (!confAccess) confAccess = sqlConfAccess;
+          if (!diskUserStats) diskUserStats = sqlUserStats;
         }
       }
 
