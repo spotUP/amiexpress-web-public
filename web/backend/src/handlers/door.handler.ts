@@ -907,11 +907,24 @@ console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err)
       }
     }
 
-    // Return to menu — UNLESS the RETURNCOMMAND parked the session in
-    // a transfer state (FILES_UPLOAD / FILES_DOWNLOAD). Overwriting
-    // those with DISPLAY_MENU triggered the menu prompt to render
-    // mid-ZMODEM-transfer, corrupting the wire and aborting lrzsz.
+    // Return to menu — UNLESS:
+    //  (a) RETURNCOMMAND parked the session in a transfer state
+    //      (FILES_UPLOAD / FILES_DOWNLOAD / UPLOAD_RESUME_*). Overwriting
+    //      those with DISPLAY_MENU triggered the menu prompt to render
+    //      mid-ZMODEM-transfer, corrupting the wire and aborting lrzsz.
+    //  (b) RETURNCOMMAND chained directly into another door — the
+    //      runCommand(cmd) above set inDoorManager=true again as the
+    //      next door took over. Falling through to DISPLAY_MENU here
+    //      would render "AmiExpress Web BBS [N:conf] Menu (M mins. left):"
+    //      between two chained doors (e.g. login-flow doors like
+    //      dRE!WAll declining → next door in the chain). express.e's
+    //      main loop doesn't render the menu prompt between auto-run
+    //      commands — only when the loop genuinely returns to idle.
+    const nextDoorActive =
+      !!(session as any).inDoorManager ||
+      session.subState === LoggedOnSubState.DOOR_RUNNING;
     if (
+      !nextDoorActive &&
       session.subState !== LoggedOnSubState.FILES_UPLOAD &&
       session.subState !== LoggedOnSubState.FILES_DOWNLOAD &&
       session.subState !== LoggedOnSubState.UPLOAD_RESUME_PROMPT &&
