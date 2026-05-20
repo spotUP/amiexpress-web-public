@@ -389,6 +389,17 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
         paths: files,
         onComplete: async (ok: boolean, detail: any) => {
           console.log(`[ZMODEM-DL ${ctxId}] lrzsz onComplete ok=${ok} exit=${detail.exitCode} signal=${detail.signal}`);
+          // express.e:20249 clearFlagItems(flagFilesList) — clear the
+          // user's flagged-files queue after a successful batch ZMODEM
+          // download so they don't see the same files queued next time.
+          // batch-download.handler.ts:228 already clears the web
+          // session.flagManager; this is the telnet/SSH counterpart for
+          // the flaggedFilesManager singleton used by startZmodemDownload.
+          if (ok && session.user?.id) {
+            try {
+              flaggedFilesManager.clearFiles(Number(session.user.id));
+            } catch (_e) { /* non-critical */ }
+          }
           // Route through the shared post-download pipeline so stats,
           // callersLog, top-CPS persist, and goodbye-after handling
           // match the web download path and express.e:20247-20316.
@@ -453,6 +464,13 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
     paths: files,
     onComplete: async (ok, detail) => {
       console.log(`[ZMODEM-DL ${ctxId}] onComplete ok=${ok} sent=${JSON.stringify(detail?.sent || [])}`);
+      // express.e:20249 clearFlagItems — see comment in lrzsz onComplete
+      // above; same clear applies to the zmodem.js fallback path.
+      if (ok && session.user?.id) {
+        try {
+          flaggedFilesManager.clearFiles(Number(session.user.id));
+        } catch (_e) { /* non-critical */ }
+      }
       // Same shared post-download pipeline as the lrzsz path above.
       // zmodem.js (JS fallback) tracks "sent" files in detail.sent;
       // use that count if present, else fall back to full file list.
