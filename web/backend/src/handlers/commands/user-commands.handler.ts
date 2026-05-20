@@ -103,8 +103,21 @@ export function startZmodemUpload(socket: any, session: BBSSession): void {
 console.error('[ZMODEM] Failed to ensure playpen:', err);
   }
 
+  // Web sessions don't have `transferRawSend` populated on the session —
+  // that's a telnet/SSH-only field installed by setupTelnetSSHHandler.
+  // For web, lrzsz output must bridge over the `transfer-raw:data`
+  // socket channel directly. `getTransferTransport` falls back to a
+  // no-op placeholder when `transferRawSend` is missing; the
+  // `if (!transport.send)` check below is dead because functions are
+  // truthy. So we explicitly install the socket-emit sender for web
+  // here, regardless of what the helper returned.
+  // (RZ command at transfer-misc-commands.handler.ts:126-128 builds its
+  // own real sender for the same reason — this was the U-command bug
+  // that made browser Sentry never see the ZRINIT and time out at 30s.)
   const transport = getTransferTransport(session);
-  if (!transport.send) {
+  if (transport.type === 'web') {
+    transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+  } else if (!transport.send) {
     transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
   }
 
@@ -121,31 +134,104 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         transport: { type: transport.type, send: transport.send },
         direction: 'upload',
         paths: [playpen],
-        onComplete: (ok: boolean, detail: any) => {
+        onComplete: async (ok: boolean, detail: any) => {
           if (!ok) {
             socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
             session.subState = LoggedOnSubState.DISPLAY_MENU;
             session.menuPause = true;
             return;
           }
-          socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+          // Route through the SAME post-upload pipeline as the RZ command
+          // (transfer-misc-commands.handler.ts:177-279). Previously this
+          // handler only emitted the stats banner and stopped — files
+          // landed in playpen but never got DIZ-extracted, given a
+          // description, moved to FILES/LCFILES, appended to DIRn /
+          // FILES.BBS, or logged. Express.e:19053+ runs the post-upload
+          // body unconditionally regardless of how the receive started,
+          // so U-command and RZ-command must converge here.
           const received: string[] = detail?.received || [];
-          const ulFileCount = received.length;
-          let totalBytes = 0;
+          const fsSync = require('fs');
+          const pathMod = require('path');
+          const { db } = require('../../database');
+          const { config: appConfig } = require('../../config');
+          const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
+            require('../../server/file-socket-handlers');
+
+          // Target file area: prefer what displayUploadInterface already
+          // resolved (file.handler.ts:720 sets session.tempData.fileArea
+          // = uploadArea via the conference's upload-path Tooltype). Only
+          // fall back to db.getFileAreas if tempData was cleared somehow
+          // — the express.e flow always commits the area at U-command
+          // entry, not at upload completion.
+          let fileArea: any = (session.tempData as any)?.fileArea || null;
+          if (!fileArea) {
+            try {
+              const areas = await db.getFileAreas(session.currentConf);
+              fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
+            } catch (err: any) {
+              console.error('[ZMODEM-UL] getFileAreas fallback failed:', err?.message || err);
+            }
+          }
+          if (!fileArea) {
+            socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+            return;
+          }
+
+          if (received.length === 0) {
+            // No files received — short-circuit to the stats-only banner +
+            // runPostUpload so the user still gets the express.e-style
+            // completion line and the menu prompt fires. Express.e:19127
+            // emits "Time increased" then drops back to the main loop.
+            await handleUploadBatchComplete(socket, session);
+            return;
+          }
+
+          // Synthesize the uploadContext that processFileUpload installs
+          // for HTTP uploads. webUploadMode=true routes processBatchFile
+          // through handleDizExtractionAndDescription. Multi-file batches
+          // queue in pendingZmodemFiles and walk one-at-a-time after each
+          // description completes (state machine in command.handler.ts
+          // advances on Enter-Enter, see UPLOAD_DESC_INPUT branch).
+          session.tempData = {
+            uploadMode: true,
+            fileArea,
+            uploadSessionId: `u-zmodem-${Date.now()}`,
+            uploadBatch: [],
+            uploadCount: received.length,
+            uploadStartTime: ulStartTime,
+            webUploadMode: true,
+            batchUpload: false,
+            currentUploadIndex: 0,
+            filesProcessedCount: 0,
+            uploadedFiles: 0,
+            uploadedBytes: 0,
+            skipDizExtraction: false,
+            pendingZmodemFiles: received.slice(1).map((fp: string) => ({
+              path: fp,
+              name: pathMod.basename(fp),
+            })),
+          } as any;
+
+          const firstPath = received[0];
+          let firstSize = 0;
+          try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
+          const firstName = pathMod.basename(firstPath);
           try {
-            const fsSync = require('fs');
-            for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
-          } catch (_) {}
-          const bytesKB = Math.floor(totalBytes / 1024);
-          const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
-          const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
-          const baud    = Math.max(1, Math.floor(((session as any).baudRate || 115200) / 10));
-          const eff     = Math.floor((cps * 100) / baud);
-          socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${Math.floor(ulTTTM/60)} minute(s). ${ulTTTM%60} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
-          const peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
-          socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+            await handleDizExtractionAndDescription(socket, session, {
+              filename: firstName,
+              originalname: firstName,
+              size: firstSize,
+              path: firstPath,
+            }, appConfig);
+            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+          } catch (err: any) {
+            console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
+            socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+          }
         },
       });
       (session as any).transferRawActive = true;
@@ -265,7 +351,15 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
 
   const transport = getTransferTransport(session);
   console.log(`[ZMODEM-DL ${ctxId}] transport.type=${transport.type} hasSend=${!!transport.send} transferRawSend=${typeof (session as any).transferRawSend}`);
-  if (!transport.send) {
+  // Same trap as startZmodemUpload: getTransferTransport returns a no-op
+  // placeholder function when session.transferRawSend isn't set (always
+  // true for web — that field is telnet/SSH-only). The `if (!transport.send)`
+  // falsy guard never fires because functions are truthy, so sz bytes
+  // would silently sink into the no-op. Install the real socket-emit
+  // sender explicitly for web.
+  if (transport.type === 'web') {
+    transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+  } else if (!transport.send) {
     transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
   }
 

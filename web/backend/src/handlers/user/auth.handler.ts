@@ -138,6 +138,22 @@ console.error('Me error:', error);
       // Hash password
       const passwordHash = await this.db.hashPassword(password);
 
+      // Determine new-user confAccess. system_config.new_user_conf_access
+      // is the canonical source — initialization.ts:660-685 keeps it
+      // expanded to match the current conference count. Falling back to
+      // 'XXX' would limit new users to 3 conferences on sites with more
+      // (e.g. live BBS has 14 confs; users registered with hardcoded
+      // 'XXX' saw only the first 3).
+      let newUserConfAccess = 'XXX';
+      try {
+        const cfg = this.db.getConfigRepository?.()?.getSystemConfig?.();
+        if (cfg?.new_user_conf_access && typeof cfg.new_user_conf_access === 'string' && cfg.new_user_conf_access.length > 0) {
+          newUserConfAccess = cfg.new_user_conf_access;
+        }
+      } catch (_) {
+        // Best-effort — keep 'XXX' default if system_config query fails.
+      }
+
       // Create new user with default settings
       const userId = await this.db.createUser({
         username: normalizedRegName,
@@ -172,7 +188,7 @@ console.error('Me error:', error);
         availableForChat: true,
         quietNode: false,
         autoRejoin: 1,
-        confAccess: 'XXX', // Access to first 3 conferences
+        confAccess: newUserConfAccess, // system_config.new_user_conf_access (expanded to match conf count)
         areaName: 'Standard',
         uuCP: false,
         topUploadCPS: 0,

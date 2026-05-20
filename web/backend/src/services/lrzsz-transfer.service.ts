@@ -84,6 +84,14 @@ export class LrzszTransferManager {
    * happened when prior failed sessions had left stragglers.
    */
   private preTransferFiles: Set<string> = new Set();
+
+  /**
+   * Filenames extracted from rz's stderr "Receiving: <name>" progress
+   * lines (one per file). Authoritative for upload completion detection
+   * because the readdir-diff approach fails when `-y` overwrites an
+   * already-present same-name file (snapshot before == snapshot after).
+   */
+  private receivedFilenames: string[] = [];
   /**
    * On startup, rz emits a ZRINIT every ~1s until it gets ZFILE.
    * zmodem.js's browser-side Send session can't handle repeated
@@ -179,6 +187,22 @@ export class LrzszTransferManager {
       for (const line of text.split(/\r?\n/)) {
         if (line.trim().length === 0) continue;
         console.log(`[lrzsz ${this.direction}] stderr: ${line}`);
+        // Capture filenames rz announces as it receives them. Line shape:
+        //   "                       Receiving: 4AM-FONT.LHA"
+        // (variable whitespace, optionally CR-overwritten progress lines).
+        // This is authoritative — readdir-based diff misses overwrites
+        // when -y replaces same-name files.
+        if (this.direction === 'upload') {
+          const m = line.match(/^\s*Receiving:\s+(\S.*?)\s*$/);
+          if (m && m[1]) {
+            const name = m[1].trim();
+            // De-dup: rz may emit the line more than once if it
+            // restarts/retries a file. Order-preserving uniqueness.
+            if (!this.receivedFilenames.includes(name)) {
+              this.receivedFilenames.push(name);
+            }
+          }
+        }
       }
     });
 
@@ -554,27 +578,33 @@ export class LrzszTransferManager {
       // own subpacket CRC validation.
       return ['-b', '-o', '-L', '1024', '-vv', ...this.paths];
     }
-    // rz -b -r -t 600 -vv
-    //   -b binary mode
-    //   -r resume interrupted file transfer (Z). When the playpen
-    //      contains a partial file (restored by resumeStuff from
-    //      <conf>/PartUpload/), rz reads the existing size and tells
-    //      sz to start from that offset via ZRPOS. Without -r, rz
-    //      always starts from byte 0 — the partial is just
-    //      overwritten and the user re-uploads from scratch, which
-    //      defeats the whole resume flow we ported from express.e.
+    // rz upload args. Web vs telnet/SSH differ because the browser
+    // zmodem.js Send session does NOT implement ZRPOS handling — the
+    // moment rz finds a same-name file in the playpen (e.g. a leftover
+    // from a previous batch that wasn't moved out by post-upload, or a
+    // partial from `<conf>/PartUpload/` that resumeStuff restored), it
+    // sends ZRPOS to request resume-from-offset and zmodem.js throws
+    // "Unhandled header: ZRPOS" — the whole transfer dies in an
+    // unrecoverable loop. Telnet/SSH clients (MuffinTerm, SyncTerm,
+    // NetRunner, mTelnet) all DO implement ZRPOS so for them we keep
+    // the express.e-style `-r` resume.
+    //
+    //   -b binary mode (no CR/LF translation)
+    //   -r resume interrupted file transfer (Z) — telnet/SSH only.
+    //   -y overwrite existing files — web only. Mutually exclusive
+    //      with -r per lrzsz(1).
     //   -t 600 per-retry timeout in tenths of seconds → 60s. The
     //      default (~10 = 1s) was tuned for serial-line transfers
     //      where the sender is software. For web uploads the user
     //      has to navigate an OS file picker between ZSINIT/ZACK
-    //      and ZFILE — that can easily take 10–30 s. Without the
+    //      and ZFILE — that can easily take 10–30s. Without the
     //      bump rz times out post-ZACK, sends the YMODEM-fallback
     //      `C` + CAN abort sequence, and exits 128 before the
     //      browser's send_files() has a chance to emit ZFILE.
     //   -vv verbose to stderr
-    // NB: -y (overwrite) is incompatible with -r. With -r, rz uses
-    // partial-file size for resume; with -y, it always truncates.
-    // Mutually exclusive. Express.e behavior matches -r.
+    if (this.transport.type === 'web') {
+      return ['-b', '-y', '-t', '600', '-vv'];
+    }
     return ['-b', '-r', '-t', '600', '-vv'];
   }
 
@@ -617,8 +647,21 @@ export class LrzszTransferManager {
       if (this.direction === 'download') {
         sent = [...this.paths];
       } else {
+        // Prefer stderr-captured filenames (authoritative, works with
+        // -y overwrites where readdir-diff sees no change). Fall back
+        // to the readdir-diff if rz didn't emit "Receiving:" lines for
+        // some reason (e.g. very old lrzsz, locale-translated stderr).
         const cwd = this.resolveCwd();
-        if (cwd) {
+        if (this.receivedFilenames.length > 0 && cwd) {
+          for (const name of this.receivedFilenames) {
+            const full = path.join(cwd, name);
+            try {
+              if (fs.statSync(full).isFile()) {
+                received.push(full);
+              }
+            } catch { /* file gone — skip */ }
+          }
+        } else if (cwd) {
           try {
             for (const n of fs.readdirSync(cwd)) {
               if (this.preTransferFiles.has(n)) continue;
