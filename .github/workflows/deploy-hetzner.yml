@@ -5,6 +5,16 @@
       branches: [main]
     workflow_dispatch:
 
+  # Serialize deploys. Without this, two pushes in quick succession
+  # (e.g. the bbfb57736 + e92037b26 pair on 2026-05-20) both grab the
+  # SSH session in parallel — the second hits a `docker compose up`
+  # race ("Container name … already in use") and fails. cancel-in-progress
+  # is FALSE because aborting a mid-build deploy can leave dangling
+  # docker resources on the VPS; queueing is safer.
+  concurrency:
+    group: deploy-hetzner
+    cancel-in-progress: false
+
   jobs:
     deploy:
       runs-on: ubuntu-latest
