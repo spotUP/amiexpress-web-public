@@ -239,9 +239,14 @@ function main() {
     }
     const raw = fs.readFileSync(goldenPath, "utf8");
     const before = entry.integration?.assertions?.mustContain;
+    // Preserve siblings of `assertions` (inputs, expectedSubState,
+    // any timeoutMs the caller set). v2 only owns the assertion
+    // block — `script-timeout-inputs.ts` owns inputs+timeoutMs.
+    const prev = entry.integration ?? {};
     if (raw.trim().length === 0) {
       entry.integration = {
-        timeoutMs: 15000,
+        ...prev,
+        timeoutMs: prev.timeoutMs ?? 15000,
         assertions: {
           mustNotContain: STABLE_DEFAULTS.mustNotContain,
         },
@@ -253,7 +258,8 @@ function main() {
     const sigs = pickSignatureLines(raw, entry.name);
     if (sigs.length === 0) noCandidate++;
     entry.integration = {
-      timeoutMs: 15000,
+      ...prev,
+      timeoutMs: prev.timeoutMs ?? 15000,
       assertions: {
         ...(sigs.length > 0 ? { mustContain: sigs } : {}),
         mustNotContain: STABLE_DEFAULTS.mustNotContain,

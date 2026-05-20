@@ -4,9 +4,9 @@
 .----+-------------------+-------------------+-----------------+--------------.
 | 00 |                   |                   | sMOKING a jOINT |              |
 | 01 |                   |                   | sMOKING a jOINT |              |
-| 02 |                   |                   | sMOKING a jOINT |              |
-| 03 | sysop             | Test Lab          | sLAMMING dOORS  |              |
-| 04 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |
+| 02 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |
+| 03 |                   |                   | sMOKING a jOINT |              |
+| 04 |                   |                   | sMOKING a jOINT |              |
 | 05 |                   |                   | sMOKING a jOINT |              |
 | 06 |                   |                   | sMOKING a jOINT |              |
 | 07 |                   |                   | sMOKING a jOINT |              |

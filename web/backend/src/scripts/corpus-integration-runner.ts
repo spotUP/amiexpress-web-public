@@ -244,16 +244,21 @@ async function runOne(
   const session = makeSession(options.nodeId);
   const started = Date.now();
 
-  // Schedule scripted inputs. They fire as 'command' events — the
-  // exact channel DoorManager listens on. Same path the frontend
-  // (web) and telnet bridge (after today's EventEmitter fix) use.
+  // Schedule scripted inputs. Fire on BOTH channels:
+  //  - 'command' — post-door-exit BBS command channel
+  //    (DoorManager listens here)
+  //  - 'door:input' — in-door keystroke channel for XIM/TIM
+  //    doors (AmigaDoorSession listens here; emits via
+  //    queueInput → JH_HK / JH_LI / JH_PM reply machinery)
+  // Most timeout-bucket doors are XIM and only `door:input`
+  // reaches them — `command` alone is silently dropped.
   const inputTimers: NodeJS.Timeout[] = [];
   for (const input of integration.inputs ?? []) {
     inputTimers.push(
-      setTimeout(
-        () => socket.emit("command", input.data),
-        input.delayMs,
-      ),
+      setTimeout(() => {
+        socket.emit("command", input.data);
+        socket.emit("door:input", input.data);
+      }, input.delayMs),
     );
   }
 
