@@ -189,31 +189,7 @@ export enum CPURegister {
 }
 
 export class MoiraEmulator {
-  // CRITICAL — share the WASM module across all MoiraEmulator
-  // instances. Each createMoiraModule() call allocates a fresh
-  // ~16 MB WASM heap that the emulator never releases (Emscripten
-  // modules retain their heap for the lifetime of their JS
-  // wrapper). Per-session module instantiation accumulated
-  // ~16 MB/door, exhausting external memory after ~30 doors and
-  // causing later doors to timeout. Singleton-ing the module
-  // keeps total external memory flat.
-  //
-  // The module is the WASM blob + JS wrapper (immutable code).
-  // Each MoiraCPU instance has its own per-emulator state.
-  // Sharing the module is safe; sharing CPU is not.
-  private static sharedModule: MoiraModule | null = null;
-  private static moiraPath: string = "";
-
-  private get module(): MoiraModule | null {
-    return MoiraEmulator.sharedModule;
-  }
-  private set module(_: MoiraModule | null) {
-    // Setter retained for API compat with the existing
-    // `this.module = await createMoiraModule()` call site below.
-    // We ignore the value — initialize() populates the shared
-    // singleton directly.
-  }
-
+  private module: MoiraModule | null = null;
   private cpu: MoiraCPU | null = null;
 
   // Wait() blocking state
@@ -330,31 +306,24 @@ console.log("[MoiraEmulator] Emulator RESUMING from pause");
         "moira.js"
       ),
     ];
-    // Only load+instantiate the module ONCE. Subsequent emulator
-    // sessions reuse the shared singleton — this is the leak fix.
-    if (!MoiraEmulator.sharedModule) {
-      let moiraPath = "";
-      let createMoiraModule: any = null;
-      for (const candidate of candidates) {
-        if (amigafs.existsSync(candidate)) {
-          moiraPath = candidate;
-          createMoiraModule = require(candidate);
-          break;
-        }
+    let moiraPath = "";
+    let createMoiraModule: any = null;
+    for (const candidate of candidates) {
+      if (amigafs.existsSync(candidate)) {
+        moiraPath = candidate;
+        createMoiraModule = require(candidate);
+        break;
       }
-      if (!createMoiraModule) {
-        throw new Error(
-          `Failed to locate moira.js. Tried: ${candidates.join(", ")}`
-        );
-      }
-      MoiraEmulator.sharedModule = await createMoiraModule();
-      if (!MoiraEmulator.sharedModule) {
-        throw new Error("Failed to load Moira module");
-      }
-      MoiraEmulator.moiraPath = moiraPath;
-console.log(`[MoiraEmulator] moira.js loaded from ${moiraPath} (shared singleton)`);
     }
-    this.cpu = new MoiraEmulator.sharedModule.MoiraCPU(this.memorySize);
+    if (!createMoiraModule) {
+      throw new Error(
+        `Failed to locate moira.js. Tried: ${candidates.join(", ")}`
+      );
+    }
+    this.module = await createMoiraModule();
+    if (!this.module) throw new Error("Failed to load Moira module");
+    this.cpu = new this.module.MoiraCPU(this.memorySize);
+console.log(`[MoiraEmulator] moira.js loaded from ${moiraPath}`);
     // Don't reset yet - wait until ROM is loaded
   }
 
