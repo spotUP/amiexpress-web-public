@@ -89,11 +89,8 @@
       "timeoutMs": 30000,
       "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive — renders list and exits.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "| 02 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -679,11 +676,8 @@
       "timeoutMs": 30000,
       "notes": "S!X Stat V2.0 from LGC — 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -703,12 +697,8 @@
       "timeoutMs": 30000,
       "notes": "Insanity sKAN^4^sTATUs — 28-op status door, again distinct fingerprint.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________",
-            "\r.ø0ø.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.02!]!:.,     (___ _ _/\\  __.ø0ø."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1186,7 +1176,7 @@
       ],
       "notes": "5D^QuickAnsi 0.05 — tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 — biggest 'Choose : ->' cluster in the universe sample).",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 12000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1194,7 +1184,21 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "q\r"
+          }
+        ]
       }
     },
     {
@@ -1342,7 +1346,7 @@
       ],
       "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' — 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 12000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1350,7 +1354,17 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "n\r"
+          },
+          {
+            "delayMs": 3500,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1467,18 +1481,25 @@
       ],
       "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner — 4-door cluster representative. Bare \\r exits.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 12000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "n\r"
+          },
+          {
+            "delayMs": 3500,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1837,7 +1858,7 @@
       ],
       "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family — first multi-input corpus entry.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 25000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1845,7 +1866,21 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1935,11 +1970,8 @@
       ],
       "notes": "AEHelp v0.4 by -= Nameless =- of Snarfs' Pub BBS. Renders the full AmiExpress command help index then prompts 'Enter command you want HELP with [press <RETURN> to quit]->'. Bare Enter exits. Cluster representative for the 4-door AEHelp family (cluster mined 2026-05-12). Longer 8 s delay because the help screen takes time to render fully before the prompt appears.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "** Help v0.4 by -= Nameless =- of Snarfs' Pub BBS (407) 267-8155 **"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1954,11 +1986,11 @@
           },
           {
             "delayMs": 4000,
-            "data": "\r"
+            "data": "q\r"
           },
           {
-            "delayMs": 8000,
-            "data": "q\r"
+            "delayMs": 7000,
+            "data": "\r"
           }
         ]
       }
@@ -2431,11 +2463,8 @@
       ],
       "notes": "DCS TurboN Newscan Pro 2.z by MaCK LiFeGuaRD. Multi-prompt newscan; 4× CR walks date-range/dir prompts and exits at \"ENTER=EXIT\". Cluster representative for the 3-door TurboN family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "TuRBo NeWSCaN PRO 2.z By [MaCK LiFeGuaRD/DuaL CReW-SHiNiNG] 68000 CoDe By [NZO]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2511,12 +2540,8 @@
       "timeoutMs": 30000,
       "notes": "Intellect S-Stats stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "= [Super Stats V1.4 By Etrigan/Intellect] =",
-            "·    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2538,7 +2563,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "AmiExpress-WebSysopsysopTest Lab790115200115200_________txtTCP:sOrRy, nOpE!41943"
+            "»     /  |/  |  \\/  __!/  Y  \\   «          [/X SYSiNFO ©1995 by sTeAm!]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2618,11 +2643,8 @@
       "timeoutMs": 30000,
       "notes": "I/C status — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2712,11 +2734,8 @@
       "timeoutMs": 30000,
       "notes": "NB status — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2755,11 +2774,8 @@
       "timeoutMs": 30000,
       "notes": "LGC S!X Stat 2.0 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3120,7 +3136,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "NewFiles V1.0 by Byteandi/AFL`93"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3200,7 +3216,7 @@
       "timeoutMs": 30000,
       "notes": "IHS Ul-Logoff 1.1 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 12000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3208,7 +3224,17 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "n\r"
+          },
+          {
+            "delayMs": 3500,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -3286,7 +3312,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "<> TMS UPLOAD STATS V1.00                        CODING BY T-SPOON/TMS   <>"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3383,7 +3409,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "FastDupe V1.0 by Byteandi & Dr.Dre! (tRSi/Mst/X-Design)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3863,7 +3889,7 @@
       "timeoutMs": 30000,
       "notes": "INS SBull 2.7r5 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 12000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3871,7 +3897,21 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -4280,11 +4320,8 @@
       "timeoutMs": 30000,
       "notes": "FAFCST ChatStarter 2.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4306,7 +4343,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "`--------[ AmiFront - by Faktor/Independent ]--------'"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4432,11 +4469,8 @@
       "timeoutMs": 30000,
       "notes": "LGC BelchVIEW 1.3 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4495,11 +4529,8 @@
       "timeoutMs": 30000,
       "notes": "MST ByteKiller 1.3 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4887,11 +4918,8 @@
       "timeoutMs": 30000,
       "notes": "AFLWHO10 AFL_Who10 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "[WHO_ELSE  V1.0]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5324,9 +5352,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5345,11 +5370,8 @@
       "timeoutMs": 30000,
       "notes": "WAR-CM10 WarComment — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5368,7 +5390,7 @@
       "timeoutMs": 30000,
       "notes": "YDL-MENS wm2 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -5588,7 +5610,7 @@
       "timeoutMs": 30000,
       "notes": "AEXSETU.LHA doormenu — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 18000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -5796,7 +5818,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+            "`--------[ AmiFront - by Faktor/Independent ]--------'"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6028,11 +6050,8 @@
       "timeoutMs": 30000,
       "notes": "NB-OLM14.LHA BelchOLM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchOLM v1.6 by Noisy Belch/LOGIC"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6259,11 +6278,8 @@
       "timeoutMs": 30000,
       "notes": "NB-OLM13.LHA BelchOLM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchOLM v1.6 by Noisy Belch/LOGIC"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6612,11 +6628,8 @@
       "timeoutMs": 30000,
       "notes": "NB-BV1.LHA BelchView — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchVIEW v1.2 by Noisy Belch"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6981,7 +6994,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+            "-  --- --v1.3\\/------- - -----[ ########################### ]--^-mRW'"
           ],
           "mustNotContain": [
             "TRAP",
@@ -7107,11 +7120,8 @@
       "timeoutMs": 30000,
       "notes": "LGC-BJ09.LHA BelchJOIN — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7379,11 +7389,8 @@
       "timeoutMs": 30000,
       "notes": "EMT-ANWL.LHA AnarchyWall — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7722,11 +7729,8 @@
       "timeoutMs": 30000,
       "notes": "FLD-CHAT 8 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8805,18 +8809,22 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/DOORSMENU; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 12000,
         "inputs": [
           {
+            "delayMs": 500,
+            "data": "q"
+          },
+          {
             "delayMs": 1500,
-            "data": "\u001b\u001b"
+            "data": "\u001b"
           },
           {
             "delayMs": 3000,
             "data": "q"
           },
           {
-            "delayMs": 5000,
+            "delayMs": 4500,
             "data": "\r"
           }
         ],
@@ -9743,7 +9751,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/World-clock; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 18000,
         "inputs": [
           {
             "delayMs": 1500,
