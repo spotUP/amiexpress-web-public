@@ -156,6 +156,21 @@ function scoreLine(line: string, nameStem: string): number {
   if (/\b[vV]\d+\.\d+/.test(line)) score += 5;
   if (/\bby\b|\(c\)|copyright/i.test(line)) score += 5;
   if (/\[[^\]]{2,}\]/.test(line)) score += 3;
+  // Error/Warning prefixes — these are typically hardcoded
+  // strings in the door binary that fire deterministically
+  // when the door hits a config/state precondition. As stable
+  // as banners but rarely contain the door's name.
+  if (/^\s*(ERROR|WARNING|Warning|Sorry|Could not|Failed|Cannot)\b/.test(line)) {
+    score += 6;
+  }
+  // First-3-chars match: relaxes the door-name match for doors
+  // whose corpus name has a different casing/format than the
+  // banner text (e.g. corpus "Sent_FE" vs golden "Sent.DAT" —
+  // both share "sent"). Only fires if not already matched
+  // by the full-stem rule.
+  if (stem.length >= 3 && !lower.includes(stem) && lower.includes(stem.slice(0, 3))) {
+    score += 3;
+  }
   score += Math.min(3, Math.floor(line.length / 30));
   return score;
 }

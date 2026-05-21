@@ -14,6 +14,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR:  DOORS:FILEID/Sent.DAT Not Found !!!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -91,6 +94,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "| 02 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -402,6 +408,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR: ONLY UPLOAD OR DOWNLOAD ARE ALLOWED AS ICON !!!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -619,6 +628,9 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
+          "mustContain": [
+            "ERROR:  DOORS:EmP_Tools/AutoOnline.info Not Found!!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -654,6 +666,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "Warning: This Door Only Works On ('J'/'<'/'>'/'G') Notify Sysop!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -689,6 +704,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -710,6 +728,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            ".ø0ø.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.02!]!:.,     (___ _ _/\\  __.ø0ø."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -859,6 +880,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "[Bulls 2.2 - EMPiRE]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -995,6 +1019,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR: Can`t open outputfile..."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2455,6 +2482,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "TuRBo NeWSCaN PRO 2.z By [MaCK LiFeGuaRD/DuaL CReW-SHiNiNG] 68000 CoDe By [NZO]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2532,6 +2562,10 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "= [Super Stats V1.4 By Etrigan/Intellect] =",
+            "·    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2635,6 +2669,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2655,6 +2692,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "Could not find the TOOL-TYPE \"COMPUTER.X\" in the COMPUTERLIST.info file..."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2726,6 +2766,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2766,6 +2809,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "s!x-status v0.beta / coded by spider^af / analog future '97"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3713,6 +3759,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "Sorry Not Supported!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3821,6 +3870,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR:  DOORS:EmP_Tools/CheckNU.CFG Not Found !!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4138,6 +4190,9 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
+          "mustContain": [
+            ">>> AnnounceLogon v1.0 ©1993 by Aquarius <<<"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4323,6 +4378,10 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "FrOnTaL ChaT StArTeR v2.0 bY MaNiAc 94 * FrOnTaL AcTiViTy",
+            "|     FrOnT ChAT StaRtEr v2.0 - DoNe By MaNiAC / FrOnTaL AcTiViTy       |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4472,6 +4531,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "BelchVIEW v1.2 by Noisy Belch"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4532,6 +4594,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4804,6 +4869,9 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
+          "mustContain": [
+            "-----[ 5D-SysopAvail v1.0 ]--------- --- - ---- -- - -----"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4949,6 +5017,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "[WHO_ELSE  V1.0]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5578,6 +5649,9 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
+          "mustContain": [
+            "-- ---[ 5D-AdiMUI v2.0  ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- - -"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6095,6 +6169,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "BelchOLM v1.6 by Noisy Belch/LOGIC"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6149,6 +6226,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "Sorry, no Bulletins available in Conference : >Main"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6203,6 +6283,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR: Icon not found...ABORTING !"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6323,6 +6406,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "BelchOLM v1.6 by Noisy Belch/LOGIC"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6698,6 +6784,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "BelchVIEW v1.2 by Noisy Belch"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7633,6 +7722,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] AT20_COPY exited with FAIL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7653,6 +7745,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] AETOP20_AETOP exited with code 1"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7793,6 +7888,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] PIW_ST05_REXXMAST exited with FAIL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7813,6 +7911,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "[68K] FLD_CHAT_8 exited with code 4294967295"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7956,6 +8057,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] GOD_TF02_TOP_FAKER exited with code 1573120"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8102,6 +8206,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] TRSICD1P_GUIDE2DOCPROF exited with FAIL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8795,6 +8902,9 @@
           }
         ],
         "assertions": {
+          "mustContain": [
+            "Warning: This Door Only Works On ('J'/'<'/'>'/'G') Notify Sysop!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8911,6 +9021,9 @@
           }
         ],
         "assertions": {
+          "mustContain": [
+            "+------------ mORE dOORS cURSOR mENU 1.0 -- (c) uP RoUGH /X 2026 ------------+"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9849,6 +9962,9 @@
           }
         ],
         "assertions": {
+          "mustContain": [
+            "ERROR: Icon not found...ABORTING !"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -11741,6 +11857,9 @@
           }
         ],
         "assertions": {
+          "mustContain": [
+            "ERROR:  cANT't oPEN cONFiG-file!!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
