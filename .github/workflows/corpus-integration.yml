@@ -62,12 +62,12 @@ jobs:
           SKIP_WEB_ASSET_BUILD: '1'
         run: npm ci --no-audit --no-fund
 
-      - name: Run corpus:integration:all
+      - name: Run corpus:integration:ci (with retry)
         id: corpus
         working-directory: web/backend
         run: |
           set -o pipefail
-          npm run corpus:integration:all 2>&1 | tee /tmp/corpus.log
+          npm run corpus:integration:ci 2>&1 | tee /tmp/corpus.log
           # Surface tally to the step summary
           tail -1 /tmp/corpus.log >> "$GITHUB_STEP_SUMMARY"
 
