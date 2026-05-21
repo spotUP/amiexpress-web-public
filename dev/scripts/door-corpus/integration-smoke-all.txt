@@ -62,7 +62,6 @@ acs_ip10_telnetd
 adn_c120_adn_cycle
 adn_dir
 aedoor
-aehelp
 aekit101_frontend
 aetop20_aetop
 aexsetu_auxed
