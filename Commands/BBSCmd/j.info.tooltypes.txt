@@ -1,4 +1,4 @@
-# Tooltypes for j.info
+# Tooltypes for J.info
 # Edit this file, then use a tool to rebuild the .info file
 
 ACCESS=10
