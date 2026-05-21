@@ -291,6 +291,26 @@ async function runOne(
     for (const t of inputTimers) clearTimeout(t);
   }
 
+  // Diagnostic: log memory + active handles between doors when
+  // CORPUS_DIAG=1 is set. Helps localize the state-pollution
+  // cause (memory leak vs. listener accumulation vs. WASM heap).
+  if (process.env.CORPUS_DIAG === "1") {
+    const m = process.memoryUsage();
+    const rss = Math.round(m.rss / 1024 / 1024);
+    const heap = Math.round(m.heapUsed / 1024 / 1024);
+    const ext = Math.round(m.external / 1024 / 1024);
+    const arr = Math.round(m.arrayBuffers / 1024 / 1024);
+    // @ts-expect-error — _getActiveHandles is undocumented but
+    // returns ALL libuv handles (timers, sockets, intervals, etc.)
+    const handles = (process as any)._getActiveHandles?.()?.length ?? -1;
+    // @ts-expect-error — _getActiveRequests undocumented
+    const requests = (process as any)._getActiveRequests?.()?.length ?? -1;
+    const socketListeners = socket.eventNames().length;
+    process.stderr.write(
+      `[diag] door=${entry.id} rss=${rss}M heap=${heap}M ext=${ext}M arr=${arr}M handles=${handles} requests=${requests} sockEvents=${socketListeners}\n`,
+    );
+  }
+
   const wallMs = Date.now() - started;
   let raw = socket.outputBuf.join("");
   if (!options.keepAnsi) raw = raw.replace(ANSI_STRIP, "");
