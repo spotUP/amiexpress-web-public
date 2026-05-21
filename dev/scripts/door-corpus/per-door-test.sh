@@ -68,6 +68,13 @@ fi
 # concurrency above 2 spins fans and degrades all doors.
 [[ "$JOBS" -gt 2 ]] && JOBS=2
 
+# Single output stream — each subshell prints its one result line
+# to stdout (line-atomic on POSIX since lines are well under
+# PIPE_BUF / 4 KB). We capture everything to a tempfile, sort by
+# id for reproducibility, then tally.
+RESULTS_FILE=$(mktemp -t per-door-results-XXXXXX)
+trap 'rm -f "$RESULTS_FILE"' EXIT
+
 run_one() {
   local id="$1"
   cd web/backend && \
@@ -78,32 +85,17 @@ run_one() {
 export -f run_one
 export CAPTURE
 
-# Each subprocess writes its single result line to a per-id file,
-# then we concatenate. Sidesteps xargs -P pipe-interleaving where
-# captured output via $(…) was losing lines under parallelism.
-RESULTS_DIR=$(mktemp -d -t per-door-XXXXXX)
-trap 'rm -rf "$RESULTS_DIR"' EXIT
-run_one_to_file() {
-  local id="$1"
-  run_one "$id" > "$RESULTS_DIR/$id.out"
-}
-export -f run_one_to_file
-export RESULTS_DIR
-
 printf '%s\n' "${IDS[@]}" | \
-  xargs -P "$JOBS" -I{} bash -c 'run_one_to_file "$@"' _ {}
+  xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {} \
+  > "$RESULTS_FILE"
 
-# Stream results in input order so the log is reproducible.
-for id in "${IDS[@]}"; do
-  if [[ -s "$RESULTS_DIR/$id.out" ]]; then
-    cat "$RESULTS_DIR/$id.out"
-  fi
-done > "$RESULTS_DIR/all.out"
-cat "$RESULTS_DIR/all.out"
+# Sort results so the log is reproducible (parallel runs naturally
+# interleave by completion order; sort by door id).
+sort -k1,1 "$RESULTS_FILE"
 
-PASS=$(grep -c "pass" "$RESULTS_DIR/all.out" || true)
-FAIL_TIMEOUT=$(grep -c "timed out" "$RESULTS_DIR/all.out" || true)
-FAIL_OTHER=$(grep -c "FAIL" "$RESULTS_DIR/all.out" || true)
-SKIP=$(grep -c "SKIP" "$RESULTS_DIR/all.out" || true)
+PASS=$(grep -c "pass" "$RESULTS_FILE" || true)
+FAIL_TIMEOUT=$(grep -c "timed out" "$RESULTS_FILE" || true)
+FAIL_OTHER=$(grep -c "FAIL" "$RESULTS_FILE" || true)
+SKIP=$(grep -c "SKIP" "$RESULTS_FILE" || true)
 FAIL_NON_TIMEOUT=$((FAIL_OTHER - FAIL_TIMEOUT))
 echo "[per-door] jobs=$JOBS pass=$PASS fail=$FAIL_OTHER (timeouts=$FAIL_TIMEOUT, other=$FAIL_NON_TIMEOUT) skip=$SKIP"
