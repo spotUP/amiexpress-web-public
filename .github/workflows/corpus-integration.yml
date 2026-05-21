@@ -1,0 +1,80 @@
+name: Corpus Integration
+
+# Runs the 421-door corpus integration gate. Each door runs in its
+# own tsx subprocess (`corpus:integration:all`) — slower than the
+# in-process variant but immune to the AmigaDoorSession state
+# pollution that causes order-dependent flake.
+#
+# Triggers:
+#   - push to main (full gate after merge)
+#   - pull_request to main (full gate as a merge precondition)
+#   - manual workflow_dispatch
+#
+# Runtime: ~25 min at -j 2 on GitHub-hosted runners. Cap at 60 min
+# to catch runaway emulator hangs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dev/scripts/door-corpus/**'
+      - 'Doors/**'
+      - 'web/backend/src/amiga-emulation/**'
+      - 'web/backend/src/handlers/door**'
+      - 'web/backend/src/scripts/corpus-integration-runner.ts'
+      - '.github/workflows/corpus-integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'dev/scripts/door-corpus/**'
+      - 'Doors/**'
+      - 'web/backend/src/amiga-emulation/**'
+      - 'web/backend/src/handlers/door**'
+      - 'web/backend/src/scripts/corpus-integration-runner.ts'
+      - '.github/workflows/corpus-integration.yml'
+  workflow_dispatch:
+
+jobs:
+  corpus-all:
+    name: corpus:integration:all (421 doors)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the full repo (corpus.json, goldens/, Doors/).
+          # No submodules.
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: web/backend
+        # Skip the postinstall web-asset build — corpus testing
+        # doesn't need the frontend, config-app, or SDK preview
+        # frontend (saves ~10 min of CI time).
+        env:
+          SKIP_WEB_ASSET_BUILD: '1'
+        run: npm ci --no-audit --no-fund
+
+      - name: Run corpus:integration:all
+        id: corpus
+        working-directory: web/backend
+        run: |
+          set -o pipefail
+          npm run corpus:integration:all 2>&1 | tee /tmp/corpus.log
+          # Surface tally to the step summary
+          tail -1 /tmp/corpus.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload corpus log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-log
+          path: /tmp/corpus.log
+          retention-days: 14
