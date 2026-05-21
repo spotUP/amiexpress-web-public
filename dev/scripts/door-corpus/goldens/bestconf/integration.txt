@@ -1,0 +1,192 @@
+
+.------------------------------------------.
+: Conference :            Main             :
+:-----------------.------------------------:---------------.--------.---------.
+:                 G                        U             1 F      0 R         :
+:                 R                        P             1 I      0 A         :
+: testuser_1779273O London                 :             1 L      0 T         :
+: testuser_1779273U London                 :             1 E      0 I         :
+:                 P                        :             1 S      0 N         :
+:                 :                        :             1 :      0 G         :
+:                 :                        :             1 :      0 :         :
+: erased_356c9aab :                        :             1 :      0 :         :
+:                 :                        :             1 :      0 :         :
+:                 :                        :             1 :      0 :         :
+: expertuser      : Test                   :             1 :      0 :         :
+: legacy_y_1779273: x                      :             1 :      0 :         :
+: e2euser         : Test City              :             1 :      1 :         :
+: spot            : -[uP rOUGH]-           :             0 :      5 :         :
+`-.---------------·------------------------:---------------:--------:---------'
+  : BESTCONF V1.0 by Calypso/GOD     TOTAL :            14 :      0 :
+  `----------------------------------------·---------------·--------'
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

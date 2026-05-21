@@ -1,0 +1,12 @@
+
+
+34m.----------------------------------------------------------------------------.
+| CD-Shell/FTP Emulator for CD-ROMs, a XIM Door by SiGMA SEVEN!  Version 1.0 |
+`----------------------------------------------------------------------------'
+No Configuration found, using default Values
+
+Available Commands can be viewed by entering ?
+
+Viewing Directory: 
+
+:Users/spot/Code/amiexpress-web> :Users/spot/Code/amiexpress-web> q:Users/spot/Code/amiexpress-web> :Users/spot/Code/amiexpress-web> 

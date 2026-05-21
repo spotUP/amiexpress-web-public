@@ -8107,6 +8107,3666 @@
           }
         ]
       }
+    },
+    {
+      "id": "mgs_mgzlistman",
+      "name": "mgzlistman",
+      "category": "auto-added",
+      "binary": "Doors/-mGs!-MGZListMan/mgzlistman",
+      "doorType": "XIM",
+      "command": "MGZLISTMAN",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/-mGs!-MGZListMan; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d",
+      "name": "5D-DoorMenu",
+      "category": "auto-added",
+      "binary": "Doors/5D/5D-DoorMenu",
+      "doorType": "XIM",
+      "command": "5D-DOORMENU",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "- --- -----[ 5D-DoorMenu v0.02 ]----- --- - ---- - -- --- - -----[ sTc/5D ]---"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_adimenu",
+      "name": "5D-AdiMenu",
+      "category": "auto-added",
+      "binary": "Doors/5D-ADIMENU/5D-AdiMenu",
+      "doorType": "XIM",
+      "command": "5D-ADIMENU",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D-ADIMENU; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "-- - ---[ 5D-AdiMenu V1.0 ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- -"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_clock",
+      "name": "5D-Clock",
+      "category": "auto-added",
+      "binary": "Doors/5D-Clock/5D-Clock",
+      "doorType": "XIM",
+      "command": "5D-CLOCK",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D-Clock; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_multistart",
+      "name": "5D-MultiStart",
+      "category": "auto-added",
+      "binary": "Doors/5D-MultiStart/5D-MultiStart",
+      "doorType": "XIM",
+      "command": "5D-MULTISTART",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D-MultiStart; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[- >5D-MultiStart V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]",
+            "Cannot open Doors:5D-MultiStart/BBS:Commands/MultiCmd/5D-MULTISTART!"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_security_2",
+      "name": "5D-Security",
+      "category": "auto-added",
+      "binary": "Doors/5D-Security/5D-Security",
+      "doorType": "XIM",
+      "command": "5D-SECURITY",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D-Security; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "5D-Security V0.10 By SvEN tHE CREAToR Of 5th Dynasty",
+            "Cannot open 'Doors:5D-Security/5D-Security.info'!"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_user",
+      "name": "5D-User",
+      "category": "auto-added",
+      "binary": "Doors/5D-User/5D-User",
+      "doorType": "XIM",
+      "command": "5D-USER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D-User; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_ws001_whats001",
+      "name": "WHATS001",
+      "category": "auto-added",
+      "binary": "Doors/5D_WS001_WHATS001/WHATS001",
+      "doorType": "XIM",
+      "command": "WHATS001",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_WS001_WHATS001; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_edit",
+      "name": "5D-Edit",
+      "category": "auto-added",
+      "binary": "Doors/5d-edit/5D-Edit",
+      "doorType": "XIM",
+      "command": "5D-EDIT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5d-edit; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "- --- -----[ 5D-Edit v1.21 ]----- --- - --- ----- --- ----- -----[ sTc/5D ]---"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_zippysearch_2",
+      "name": "5D-ZippySearch",
+      "category": "auto-added",
+      "binary": "Doors/5d-zippysearch/5D-ZippySearch",
+      "doorType": "XIM",
+      "command": "5D-ZIPPYSEARCH",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5d-zippysearch; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "- --- -----[ 5D-ZippySearch v0.03 ]----- --- - ---- - ----- -----[ sTc/5D ]---"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "aedoor",
+      "name": "aedoor",
+      "category": "auto-added",
+      "binary": "Doors/AEDOOR/aedoor",
+      "doorType": "XIM",
+      "command": "AEDOOR",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/AEDOOR; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "AEDoor Template (vbcc compiled)"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "amisettings",
+      "name": "AmiSettings",
+      "category": "auto-added",
+      "binary": "Doors/AmiSettings/AmiSettings",
+      "doorType": "XIM",
+      "command": "AMISETTINGS",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/AmiSettings; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "Missing Doors:AmiSettings/AmiSettings.info"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "aquapwfail",
+      "name": "AquaPWFail",
+      "category": "auto-added",
+      "binary": "Doors/AquaPWFail/AquaPWFail",
+      "doorType": "XIM",
+      "command": "AQUAPWFAIL",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/AquaPWFail; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "-(- AquaPWFail v1.0 by Aquarius/OTL -)-",
+            "Please hold a second...                                    -(- AquaPWFail -)-"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "autoreward",
+      "name": "autoreward",
+      "category": "auto-added",
+      "binary": "Doors/AutoReward/autoreward",
+      "doorType": "XIM",
+      "command": "AUTOREWARD",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/AutoReward; needs capture + triage",
+      "integration": {
+        "skip": true,
+        "skipReason": "Same upload-scanning hang pattern as mgs__r11_autoreward (sibling). Hangs after BB_CONFNUM doing AEDoor.library trap-mediated FS work."
+      }
+    },
+    {
+      "id": "bossnuke_2",
+      "name": "BossNuke",
+      "category": "auto-added",
+      "binary": "Doors/Bossnuke/BossNuke",
+      "doorType": "XIM",
+      "command": "BOSSNUKE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Bossnuke; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "BoSS-NuKE (v1.5 ßeta) by Big Boss of the /X Development Team!"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "bytekiller",
+      "name": "ByteComment",
+      "category": "auto-added",
+      "binary": "Doors/ByteKiller/ByteComment",
+      "doorType": "XIM",
+      "command": "BYTECOMMENT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/ByteKiller; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "ByteComment V1.0 by ByteAndi (tRSi/X-iNNOVATiON)"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "c_n_confsec",
+      "name": "ConferenceSecurity",
+      "category": "auto-added",
+      "binary": "Doors/C+N_ConfSec/ConferenceSecurity",
+      "doorType": "XIM",
+      "command": "CONFERENCESECURI",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/C+N_ConfSec; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cdshel_cdshell",
+      "name": "cdshell",
+      "category": "auto-added",
+      "binary": "Doors/CDSHEL_cdshell/cdshell",
+      "doorType": "XIM",
+      "command": "CDSHELL",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/CDSHEL_cdshell; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 2000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 3500,
+            "data": "quit\r"
+          },
+          {
+            "delayMs": 5500,
+            "data": "exit\r"
+          },
+          {
+            "delayMs": 7500,
+            "data": "\u0004"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "CD-Shell/FTP Emulator for CD-ROMs"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "doormenu",
+      "name": "DOORMENU",
+      "category": "auto-added",
+      "binary": "Doors/DOORMENU/DOORMENU",
+      "doorType": "XIM",
+      "command": "DOORMENU",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/DOORMENU; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "doorsmenu",
+      "name": "DOORSMENU",
+      "category": "auto-added",
+      "binary": "Doors/DOORSMENU/DOORSMENU",
+      "doorType": "XIM",
+      "command": "DOORSMENU",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/DOORSMENU; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\u001b\u001b"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "file_ops_test",
+      "name": "file-ops-test",
+      "category": "auto-added",
+      "binary": "Doors/FILE-OPS-TEST/file-ops-test",
+      "doorType": "XIM",
+      "command": "FILE-OPS-TEST",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/FILE-OPS-TEST; needs capture + triage",
+      "integration": {
+        "skip": true,
+        "skipReason": "Minimal VBCC test binary (7 KB); does not render the legacy menu output that earlier captures showed. Real menu likely comes from a TS replacement or a separate dispatcher. Not driveable as a standalone Amiga door."
+      }
+    },
+    {
+      "id": "fld_doors",
+      "name": "PowerPager",
+      "category": "auto-added",
+      "binary": "Doors/FLD-Doors/PowerPager",
+      "doorType": "XIM",
+      "command": "POWERPAGER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/FLD-Doors; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "**Missing File: BBS:BBSTexts/PowerPager/SysopNotAvail.txt(.gr)"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "flm",
+      "name": "FLM",
+      "category": "auto-added",
+      "binary": "Doors/FLM/FLM",
+      "doorType": "XIM",
+      "command": "FLM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/FLM; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "wELCOME tO fLM v0.4 bY dR. iCE/lISENCE"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fastdupe",
+      "name": "Fastdupe",
+      "category": "auto-added",
+      "binary": "Doors/FastDupe/Fastdupe",
+      "doorType": "XIM",
+      "command": "FASTDUPE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/FastDupe; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "FastDupe V1.0 by Byteandi & Dr.Dre! (tRSi/Mst/X-Design)"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fileid_2",
+      "name": "Autosent",
+      "category": "auto-added",
+      "binary": "Doors/Fileid/Autosent",
+      "doorType": "XIM",
+      "command": "AUTOSENT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Fileid; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "AutoSent V1.4 by Byteandi (Mystic/X-Design)"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "front_act",
+      "name": "Chatstarter",
+      "category": "auto-added",
+      "binary": "Doors/FrOnT-ACt/Chatstarter",
+      "doorType": "XIM",
+      "command": "CHATSTARTER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/FrOnT-ACt; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "FrOnTaL ChaT StArTeR v2.0 bY MaNiAc 94 * FrOnTaL AcTiViTy",
+            "|     FrOnT ChAT StaRtEr v2.0 - DoNe By MaNiAC / FrOnTaL AcTiViTy       |"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "jso_tools",
+      "name": "PayCheck",
+      "category": "auto-added",
+      "binary": "Doors/Jso-Tools/PayCheck",
+      "doorType": "XIM",
+      "command": "PAYCHECK",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Jso-Tools; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "kerocac",
+      "name": "KeroCac",
+      "category": "auto-added",
+      "binary": "Doors/KeroCac/KeroCac",
+      "doorType": "XIM",
+      "command": "KEROCAC",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/KeroCac; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "CaC v1.0 [PUBliC RELEASE 1]                          by KeroSene/Myth © 1995"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mastermind",
+      "name": "MASTERMIND",
+      "category": "auto-added",
+      "binary": "Doors/MASTERMIND/MASTERMIND",
+      "doorType": "XIM",
+      "command": "MASTERMIND",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/MASTERMIND; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[68K] MASTERMIND exited with code 2"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "msgscanner",
+      "name": "RMail",
+      "category": "auto-added",
+      "binary": "Doors/MsgScanner/RMail",
+      "doorType": "XIM",
+      "command": "RMAIL",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/MsgScanner; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ntr_checker",
+      "name": "NTR-CHECKER",
+      "category": "auto-added",
+      "binary": "Doors/NTR-CHECKER/NTR-CHECKER",
+      "doorType": "XIM",
+      "command": "NTR-CHECKER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/NTR-CHECKER; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[68K] NTR-CHECKER exited with FAIL"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nirvana",
+      "name": "NiRVANAORDER",
+      "category": "auto-added",
+      "binary": "Doors/NiRVANA/NiRVANAORDER",
+      "doorType": "XIM",
+      "command": "NIRVANAORDER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/NiRVANA; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "quicknew",
+      "name": "QuickNew",
+      "category": "auto-added",
+      "binary": "Doors/QuickNew/QuickNew",
+      "doorType": "XIM",
+      "command": "QUICKNEW",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/QuickNew; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "rtw",
+      "name": "rtw",
+      "category": "auto-added",
+      "binary": "Doors/RTW/rtw",
+      "doorType": "XIM",
+      "command": "RTW",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/RTW; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "|___________ _____ ____ ___ ___ __ _            rTW v2.01 bY cREW^oNE!mYTH  |",
+            "| 01 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "request",
+      "name": "Request",
+      "category": "auto-added",
+      "binary": "Doors/Request/Request",
+      "doorType": "XIM",
+      "command": "REQUEST",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Request; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "--[ Request v2.1b ]------------------------------------[ Neptune 'n Odyssey ]--"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "rexxdebug",
+      "name": "rexxdebug",
+      "category": "auto-added",
+      "binary": "Doors/RexxDebug/rexxdebug",
+      "doorType": "XIM",
+      "command": "REXXDEBUG",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/RexxDebug; needs capture + triage",
+      "integration": {
+        "skip": true,
+        "skipReason": "REXX debugger; expects to be invoked with a REXX script as argument. Without args, hangs at the splash. Not driveable as a standalone door."
+      }
+    },
+    {
+      "id": "s_xinfo",
+      "name": "S!XInfo",
+      "category": "auto-added",
+      "binary": "Doors/S!XInfo/S!XInfo",
+      "doorType": "XIM",
+      "command": "S!XINFO",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/S!XInfo; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            " S!X Info V1.0 [09.04.1995] (100% ASM) - Code by HiZ/LOGiC ! -"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "srh",
+      "name": "TList",
+      "category": "auto-added",
+      "binary": "Doors/SRH/TList",
+      "doorType": "XIM",
+      "command": "TLIST",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/SRH; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "| Thank you for using T-LiST PrO by   |___.::::::::.|"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "seccheck",
+      "name": "SecChecker",
+      "category": "auto-added",
+      "binary": "Doors/SecCheck/SecChecker",
+      "doorType": "XIM",
+      "command": "SECCHECKER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/SecCheck; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "| Security Checker (C) 1996 !Lt / Version 1.00ß / Coded by KId/dSY/!LT - 1996 |"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "shoxx_doors",
+      "name": "GrapeBooth",
+      "category": "auto-added",
+      "binary": "Doors/Shoxx-Doors/GrapeBooth",
+      "doorType": "XIM",
+      "command": "GRAPEBOOTH",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Shoxx-Doors; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "sizecheck",
+      "name": "SizeCheck",
+      "category": "auto-added",
+      "binary": "Doors/SizeCheck/SizeCheck",
+      "doorType": "XIM",
+      "command": "SIZECHECK",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/SizeCheck; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "SizeCheck v1.1 by Eric The RED/bAD kARMA"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "syscm",
+      "name": "SysCm",
+      "category": "auto-added",
+      "binary": "Doors/SysCm/SysCm",
+      "doorType": "XIM",
+      "command": "SYSCM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/SysCm; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "SysCm.CFG could not be opened. Abnormal program termination!"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "thcchatter",
+      "name": "THCChatter",
+      "category": "auto-added",
+      "binary": "Doors/THCChatter/THCChatter",
+      "doorType": "XIM",
+      "command": "THCCHATTER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/THCChatter; needs capture + triage",
+      "integration": {
+        "skip": true,
+        "skipReason": "Live chat door requiring partner on the other end. Not driveable in single-session harness."
+      }
+    },
+    {
+      "id": "tms",
+      "name": "DN",
+      "category": "auto-added",
+      "binary": "Doors/TMS/DN",
+      "doorType": "XIM",
+      "command": "DN",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/TMS; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "Version V1.10          Coding By: T-SPooN ^1995^"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "usercheck",
+      "name": "UserCheck",
+      "category": "auto-added",
+      "binary": "Doors/UserCheck/UserCheck",
+      "doorType": "XIM",
+      "command": "USERCHECK",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/UserCheck; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "USER CHECK (VERSION 1.1) CODED IN 1995 BY PSYCHOTRON OF INHUMANS"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "warlist",
+      "name": "WARLIST",
+      "category": "auto-added",
+      "binary": "Doors/WARLIST/WARLIST",
+      "doorType": "XIM",
+      "command": "WARLIST",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/WARLIST; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "Thank you for using WarList V1.3               Coded by Wardancer/Vanity"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "world_clock",
+      "name": "WORLD-CLOCK",
+      "category": "auto-added",
+      "binary": "Doors/World-clock/WORLD-CLOCK",
+      "doorType": "XIM",
+      "command": "WORLD-CLOCK",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/World-clock; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "xpr",
+      "name": "XPR",
+      "category": "auto-added",
+      "binary": "Doors/XPR/XPR",
+      "doorType": "XIM",
+      "command": "XPR",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/XPR; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "AmiExpress Web BBS [0:General] Menu (NaN mins. left):"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l_offl1_offliner",
+      "name": "offliner",
+      "category": "auto-added",
+      "binary": "Doors/_L_OFFL1_offliner/offliner",
+      "doorType": "XIM",
+      "command": "OFFLINER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/_L_OFFL1_offliner; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l_offl_offliner",
+      "name": "offliner",
+      "category": "auto-added",
+      "binary": "Doors/_L_OFFL_offliner/offliner",
+      "doorType": "XIM",
+      "command": "OFFLINER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/_L_OFFL_offliner; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "emp_tools",
+      "name": "AutoOnline",
+      "category": "auto-added",
+      "binary": "Doors/emp_tools/AutoOnline",
+      "doorType": "XIM",
+      "command": "AUTOONLINE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/emp_tools; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "ERROR:  DOORS:EmP_Tools/AutoOnline.info Not Found!!"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "slickshell",
+      "name": "slickshell",
+      "category": "auto-added",
+      "binary": "Doors/slickshell/slickshell",
+      "doorType": "XIM",
+      "command": "SLICKSHELL",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/slickshell; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "SLICK-SHELL V1.3 by BUGBYTE for Ami Express!",
+            "ERROR Reading doors:slickshell/config/Shellpassword.CFG"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ustats",
+      "name": "stats",
+      "category": "auto-added",
+      "binary": "Doors/ustats/stats",
+      "doorType": "XIM",
+      "command": "STATS",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/ustats; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[uSEr StAtS v1.0 by BOHEMiaN/FTU (c) Copyright 1994]",
+            "ThAnX fOR UsiNg UsEr StAtS v1.0 By BOHEMiaN/FTU"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "zoo_keeper",
+      "name": "dist",
+      "category": "auto-added",
+      "binary": "Doors/zoo-keeper/dist",
+      "doorType": "XIM",
+      "command": "DIST",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/zoo-keeper; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "24stdcal_le_win5_96",
+      "name": "LE-win5-96.exe",
+      "category": "auto-added",
+      "binary": "Doors/24STDCAL_LE_win5_96/LE-win5-96.exe",
+      "doorType": "XIM",
+      "command": "LE-WIN5-96.EXE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/24STDCAL_LE_win5_96; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_amber_5d_amber",
+      "name": "5D-AMBER.EXE",
+      "category": "auto-added",
+      "binary": "Doors/5D_AMBER_5D_AMBER/5D-AMBER.EXE",
+      "doorType": "XIM",
+      "command": "5D-AMBER.EXE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_AMBER_5D_AMBER; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_cc001_5d_comcommand_prefs",
+      "name": "5D-ComCommand_Prefs",
+      "category": "auto-added",
+      "binary": "Doors/5D_CC001_5D_ComCommand_Prefs/5D-ComCommand_Prefs",
+      "doorType": "XIM",
+      "command": "5D-COMCOMMAND_PR",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_CC001_5D_ComCommand_Prefs; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_ck001_da_fonk",
+      "name": "dA-fONK.exe",
+      "category": "auto-added",
+      "binary": "Doors/5D_CK001_dA_fONK/dA-fONK.exe",
+      "doorType": "XIM",
+      "command": "DA-FONK.EXE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_CK001_dA_fONK; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_ed110_le_window6",
+      "name": "LE-window6.12",
+      "category": "auto-added",
+      "binary": "Doors/5D_ED110_LE_window6/LE-window6.12",
+      "doorType": "XIM",
+      "command": "LE-WINDOW6.12",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_ED110_LE_window6; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_gvs_le_window6",
+      "name": "LE-window6.12",
+      "category": "auto-added",
+      "binary": "Doors/5D_GVS_LE_window6/LE-window6.12",
+      "doorType": "XIM",
+      "command": "LE-WINDOW6.12",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_GVS_LE_window6; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_jc070_5d_joinconf",
+      "name": "5D-JoinConf",
+      "category": "auto-added",
+      "binary": "Doors/5D_JC070_5D_JoinConf/5D-JoinConf",
+      "doorType": "XIM",
+      "command": "5D-JOINCONF",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_JC070_5D_JoinConf; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_jc072_le_win5_96",
+      "name": "LE-win5-96.exe",
+      "category": "auto-added",
+      "binary": "Doors/5D_JC072_LE_win5_96/LE-win5-96.exe",
+      "doorType": "XIM",
+      "command": "LE-WIN5-96.EXE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_JC072_LE_win5_96; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_jc074_5d_joinconf",
+      "name": "5D-JoinConf",
+      "category": "auto-added",
+      "binary": "Doors/5D_JC074_5D_JoinConf/5D-JoinConf",
+      "doorType": "XIM",
+      "command": "5D-JOINCONF",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_JC074_5D_JoinConf; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_jc16_5d_joinconf",
+      "name": "5D-JoinConf",
+      "category": "auto-added",
+      "binary": "Doors/5D_JC16_5D_JoinConf/5D-JoinConf",
+      "doorType": "XIM",
+      "command": "5D-JOINCONF",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_JC16_5D_JoinConf; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_lc022_5d_lastcallers",
+      "name": "5D-LastCallers",
+      "category": "auto-added",
+      "binary": "Doors/5D_LC022_5D_LastCallers/5D-LastCallers",
+      "doorType": "XIM",
+      "command": "5D-LASTCALLERS",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_LC022_5D_LastCallers; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_lcs_le_win5_96",
+      "name": "LE-win5-96.exe",
+      "category": "auto-added",
+      "binary": "Doors/5D_LCS_LE_win5_96/LE-win5-96.exe",
+      "doorType": "XIM",
+      "command": "LE-WIN5-96.EXE",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_LCS_LE_win5_96; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_ol001_5d_olm",
+      "name": "5D-Olm",
+      "category": "auto-added",
+      "binary": "Doors/5D_OL001_5D_Olm/5D-Olm",
+      "doorType": "XIM",
+      "command": "5D-OLM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_OL001_5D_Olm; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_qa001_le_window6",
+      "name": "LE-window6.12",
+      "category": "auto-added",
+      "binary": "Doors/5D_QA001_LE_window6/LE-window6.12",
+      "doorType": "XIM",
+      "command": "LE-WINDOW6.12",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_QA001_LE_window6; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_se001_5d_selector",
+      "name": "5D-Selector",
+      "category": "auto-added",
+      "binary": "Doors/5D_SE001_5D_Selector/5D-Selector",
+      "doorType": "XIM",
+      "command": "5D-SELECTOR",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_SE001_5D_Selector; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_srt02_le_window6",
+      "name": "LE-window6.12",
+      "category": "auto-added",
+      "binary": "Doors/5D_SRT02_LE_window6/LE-window6.12",
+      "doorType": "XIM",
+      "command": "LE-WINDOW6.12",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_SRT02_LE_window6; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_stc01_5d_status",
+      "name": "5D_Status.FIM",
+      "category": "auto-added",
+      "binary": "Doors/5D_STC01_5D_Status/5D_Status.FIM",
+      "doorType": "XIM",
+      "command": "5D_STATUS.FIM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_STC01_5D_Status; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_to001_5d_throwout",
+      "name": "5D-ThrowOut",
+      "category": "auto-added",
+      "binary": "Doors/5D_TO001_5D_ThrowOut/5D-ThrowOut",
+      "doorType": "XIM",
+      "command": "5D-THROWOUT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_TO001_5D_ThrowOut; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_ue001_5d_usered",
+      "name": "5D-USERED",
+      "category": "auto-added",
+      "binary": "Doors/5D_UE001_5D_USERED/5D-USERED",
+      "doorType": "XIM",
+      "command": "5D-USERED",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_UE001_5D_USERED; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_ul001_le_window6",
+      "name": "LE-window6.12",
+      "category": "auto-added",
+      "binary": "Doors/5D_UL001_LE_window6/LE-window6.12",
+      "doorType": "XIM",
+      "command": "LE-WINDOW6.12",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_UL001_LE_window6; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_vb002_5d_viewbulls",
+      "name": "5D-ViewBulls",
+      "category": "auto-added",
+      "binary": "Doors/5D_VB002_5D_ViewBulls/5D-ViewBulls",
+      "doorType": "XIM",
+      "command": "5D-VIEWBULLS",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_VB002_5D_ViewBulls; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_wh300_5d_who",
+      "name": "5D-Who",
+      "category": "auto-added",
+      "binary": "Doors/5D_WH300_5D_Who/5D-Who",
+      "doorType": "XIM",
+      "command": "5D-WHO",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_WH300_5D_Who; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_who12_le_window6",
+      "name": "LE-window6.12",
+      "category": "auto-added",
+      "binary": "Doors/5D_WHO12_LE_window6/LE-window6.12",
+      "doorType": "XIM",
+      "command": "LE-WINDOW6.12",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_WHO12_LE_window6; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d_who20_5d_who",
+      "name": "5D-Who",
+      "category": "auto-added",
+      "binary": "Doors/5D_WHO20_5D_Who/5D-Who",
+      "doorType": "XIM",
+      "command": "5D-WHO",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/5D_WHO20_5D_Who; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "adn_dir",
+      "name": "AdN-Cycle.x",
+      "category": "auto-added",
+      "binary": "Doors/AdN_dir/AdN-Cycle.x",
+      "doorType": "XIM",
+      "command": "ADN-CYCLE.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/AdN_dir; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "announce",
+      "name": "AnnLogoff",
+      "category": "auto-added",
+      "binary": "Doors/Announce/AnnLogoff",
+      "doorType": "XIM",
+      "command": "ANNLOGOFF",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Announce; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[68K] ANNLOGOFF exited with code 1"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "aquascan",
+      "name": "AquaScan.000",
+      "category": "auto-added",
+      "binary": "Doors/AquaScan/AquaScan.000",
+      "doorType": "XIM",
+      "command": "AQUASCAN.000",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/AquaScan; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "bestconf",
+      "name": "BestConf.XIM",
+      "category": "auto-added",
+      "binary": "Doors/BestConf/BestConf.XIM",
+      "doorType": "XIM",
+      "command": "BESTCONF.XIM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/BestConf; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            ": BESTCONF V1.0 by Calypso/GOD     TOTAL :            14 :      0 :"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "conftop_2",
+      "name": "Conftop000.x",
+      "category": "auto-added",
+      "binary": "Doors/Conftop/Conftop000.x",
+      "doorType": "XIM",
+      "command": "CONFTOP000.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Conftop; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "Conference Top Uploaders (Version 2.3) Coded by Bobo/Mystic and Looby/Insane!"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "exorcist_2",
+      "name": "EXORCIST!.X",
+      "category": "auto-added",
+      "binary": "Doors/EXORCIST!/EXORCIST!.X",
+      "doorType": "XIM",
+      "command": "EXORCIST!.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/EXORCIST!; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "The Exorcist! v1.3 (v2.3x version) by B/\\Zz & CFi of Eclipse"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "multitop",
+      "name": "MultiTop",
+      "category": "auto-added",
+      "binary": "Doors/MultiTop/MultiTop",
+      "doorType": "XIM",
+      "command": "MULTITOP",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/MultiTop; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ntr_lastcallers",
+      "name": "NTR-LASTCALLERS",
+      "category": "auto-added",
+      "binary": "Doors/NTR-LASTCALLERS/NTR-LASTCALLERS",
+      "doorType": "XIM",
+      "command": "NTR-LASTCALLERS",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/NTR-LASTCALLERS; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[68K] NTR-LASTCALLERS exited with FAIL"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "nodechat",
+      "name": "newchat",
+      "category": "auto-added",
+      "binary": "Doors/Nodechat/newchat",
+      "doorType": "XIM",
+      "command": "NEWCHAT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/Nodechat; needs capture + triage",
+      "integration": {
+        "skip": true,
+        "skipReason": "Live multi-node chat door requiring a partner on another node. Not driveable in single-session harness."
+      }
+    },
+    {
+      "id": "pwcommand",
+      "name": "PWCommand.x",
+      "category": "auto-added",
+      "binary": "Doors/PWCommand/PWCommand.x",
+      "doorType": "XIM",
+      "command": "PWCOMMAND.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/PWCommand; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "-> PWCommand v1.0, by Tango/DPL'94 <-"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "suck_nubc",
+      "name": "NUBC.x",
+      "category": "auto-added",
+      "binary": "Doors/SUCK_NUBC/NUBC.x",
+      "doorType": "XIM",
+      "command": "NUBC.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/SUCK_NUBC; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "`----------------------------( By Crimson!/SUCK )---'"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "turbolister",
+      "name": "TurboLister.Xim",
+      "category": "auto-added",
+      "binary": "Doors/TurboLister/TurboLister.Xim",
+      "doorType": "XIM",
+      "command": "TURBOLISTER.XIM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/TurboLister; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "Turbo Lister v0.2ß by CøRteX/tRS¿! (nOt rEGiStEREd!)"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ul_logoff",
+      "name": "Ul-Logoff.X",
+      "category": "auto-added",
+      "binary": "Doors/UL-LOGOFF/Ul-Logoff.X",
+      "doorType": "XIM",
+      "command": "UL-LOGOFF.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/UL-LOGOFF; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "-> UL-Logoff v1.1 [RELEASE ONE] by Tango/LED^IHS^PTL <-"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "what",
+      "name": "WHAT",
+      "category": "auto-added",
+      "binary": "Doors/What/WHAT",
+      "doorType": "XIM",
+      "command": "WHAT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/What; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ximvbcc",
+      "name": "xim-vbcc",
+      "category": "auto-added",
+      "binary": "Doors/XIMVBCC/xim-vbcc",
+      "doorType": "XIM",
+      "command": "XIM-VBCC",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/XIMVBCC; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "zytes",
+      "name": "BYTES.000",
+      "category": "auto-added",
+      "binary": "Doors/ZYTES/BYTES.000",
+      "doorType": "XIM",
+      "command": "BYTES.000",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/ZYTES; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "alster_exe_l0s_end0s_bbs",
+      "name": "exe.-l0S-eND0S-bBS-.exe",
+      "category": "auto-added",
+      "binary": "Doors/_ALSTER_exe__l0S_eND0S_bBS_/exe.-l0S-eND0S-bBS-.exe",
+      "doorType": "XIM",
+      "command": "EXE.-L0S-END0S-B",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/_ALSTER_exe__l0S_eND0S_bBS_; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "u_mbm10_mb_maker",
+      "name": "MB-MAKER",
+      "category": "auto-added",
+      "binary": "Doors/_U_MBM10_MB_MAKER/MB-MAKER",
+      "doorType": "XIM",
+      "command": "MB-MAKER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/_U_MBM10_MB_MAKER; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "glc",
+      "name": "glcupdater",
+      "category": "auto-added",
+      "binary": "Doors/glc/glcupdater",
+      "doorType": "XIM",
+      "command": "GLCUPDATER",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/glc; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "hydralux",
+      "name": "clear_hl.x",
+      "category": "auto-added",
+      "binary": "Doors/hydralux!/clear_hl.x",
+      "doorType": "XIM",
+      "command": "CLEAR_HL.X",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/hydralux!; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mrc",
+      "name": "mrc_door",
+      "category": "auto-added",
+      "binary": "Doors/mrc/mrc_door",
+      "doorType": "XIM",
+      "command": "MRC_DOOR",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/mrc; needs capture + triage",
+      "integration": {
+        "skip": true,
+        "skipReason": "IRC-like client requiring live network connection. Not driveable in single-session harness."
+      }
+    },
+    {
+      "id": "multi_check",
+      "name": "mULTI-cHECK",
+      "category": "auto-added",
+      "binary": "Doors/multi-check/mULTI-cHECK",
+      "doorType": "XIM",
+      "command": "MULTI-CHECK",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/multi-check; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "[68K] MULTI-CHECK exited with FAIL"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "superviser",
+      "name": "sUPERViSER.XiM",
+      "category": "auto-added",
+      "binary": "Doors/sUPERViSER/sUPERViSER.XiM",
+      "doorType": "XIM",
+      "command": "SUPERVISER.XIM",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/sUPERViSER; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "slicktop",
+      "name": "slicktop",
+      "category": "auto-added",
+      "binary": "Doors/slicktop/slicktop",
+      "doorType": "XIM",
+      "command": "SLICKTOP",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/slicktop; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "who_2",
+      "name": "NI",
+      "category": "auto-added",
+      "binary": "Doors/who/NI",
+      "doorType": "XIM",
+      "command": "NI",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/who; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "zootility",
+      "name": "zOOsTAT",
+      "category": "auto-added",
+      "binary": "Doors/zOOtILITY/zOOsTAT",
+      "doorType": "XIM",
+      "command": "ZOOSTAT",
+      "timeoutMs": 30000,
+      "notes": "auto-added from Doors/zOOtILITY; needs capture + triage",
+      "integration": {
+        "timeoutMs": 14000,
+        "inputs": [
+          {
+            "delayMs": 1500,
+            "data": "\r"
+          },
+          {
+            "delayMs": 4000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 7000,
+            "data": "\r"
+          }
+        ],
+        "assertions": {
+          "mustContain": [
+            "| zOOsTAtS v1.5  rEGGED TO: uNREGiSTERED!         |        nOT hERE nOW...  |"
+          ],
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
     }
   ]
 }

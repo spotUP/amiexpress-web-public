@@ -1,0 +1,5 @@
+
+RexxDebug v2.0, written by Joseph Hodge    
+Copyright (c) LightSpeed Technologies 1993 
+All rights reserved.
+-------------------------------------------

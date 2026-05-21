@@ -1,0 +1,55 @@
+
+ [- >5D-Clock V0.22< (Code: SvEN tHE CREAToR  Design: Desert) Of 5th Dynasty -][-PRESS A KEY TO STOP!-]:::::::::::::::: ...... :::  ::::::  ::::::  ::::::  ::::::  ::::::  ::::::  :::`::..::' ...... :::  ::::::.... :::  ::::::  ::::::  ::::::  ::::::  :::`::..::'  .......::  ::::::  :::     :::     :::     :::     :::     :::     :::........:::  :::`::.... ...  ::::::  ::::::  ::::::  ::::::  :::`::..::'  .......::  ::::::  :::     :::     :::     :::     :::     :::     :::...  ...:::  :::`::..:::     :::     :::     :::     :::     :::     :::Thu May 22 06:15:14 2026[-BREAK!-]
+
+
+ .__░░░░____░░░░___/░░░░____░░░░____░░░░___/░░░░____░░░░____░░░░___ ░░░░____░
+ |Sk░░░░    ░░░░__/ ░░░░/   ░░░░    ░░░░__//░░░░    ░░░░\___░░░░_ /s░░░░  . ░
+ || ░░░░___ ░░░░\/__░░░░    ░░░░___ ░░░░\/. ░░░░    ░░░░   /░░░░//  ░░░░  | ░
+░░░░/   ░░░░    ░░░░  / ░░░░/   ░░░░   /░░░░  / ░░░░/   ░░░░____░░░░    ░░░░|
+░░░░    ░░░░  //░░░░ /  ░░░░    ░░░░  o/░░░░ /  ░░░░    ░░░░    ░░░░MAND░░░░|
+░░░░    ░░░░ ./ ░░░░/   ░░░░    ░░░░  / ░░░░/   ░░░░    ░░░░    ░░░░  :.░░░░|
+░░░░____░░░░_/__░░░░____░░░░____░░░░_/\_░░░░____░░░░____░░░░____░░░░_:::░░░░|
+    ░░░░    ░░░░    ░░░░/   ░░░░    ░░░░    ░░░░    ░░░░/   ░░░░    ░░░░
+
+ [U]░░░░PLOA░░░░LE(S░░░░    ░░░░] - ░░░░LOAD░░░░E(S)░░░░RZ] ░░░░ODEM░░░░OAD
+ [N]░░░░HOW ░░░░FILE░░░░    ░░░░] - ░░░░ FIL░░░░T   ░░░░A]  ░░░░TER ░░░░FLAG
+░░░░ - Z░░░░ SEA░░░░    ░░░░  [C░░░░CONF░░░░CE F░░░░   [░░░░- FU░░░░ONF ░░░░S
+░░░░ - L░░░░ MSG░░░░SYSO░░░░  [E░░░░LEAV░░░░G TO░░░░R  [░░░░- RE░░░░EW M░░░░
+░░░░ - S░░░░STAT░░░░    ░░░░  [W░░░░CHAN░░░░ETTI░░░░   [░░░░- VI░░░░XT/L░░░░ILE
+░░░░ - S░░░░HELP░░░░E   ░░░░  [X░░░░MENU░░░░OFF ░░░░   [░░░░- CO░░░░ON/O░░
+ [T]░░░░HOW ░░░░L TI░░░░CET)░░░░] - ░░░░ SYS░░░░    ░░░░G]  ░░░░G OF░
+ [?]░░░░HOW ░░░░    ░░░░    ░░░░] - ░░░░ CON░░░░NCE ░░░░ED] ░░░░IT D░░░░IPTI░░
+ [<]░░░░REVI░░░░CONF░░░░CE  ░░░░] - ░░░░ CON░░░░NCE ░░░░RL] ░░░░LOGO░
+ [SE░░░░- AU░░░░IGN ░░░░    ░░░░LM] ░░░░ LIN░░░░SSAG░░░░QUES░░░░ QUE░░░░NNAI░░
+
+░░░░!] -░░░░RCIS░░░░    ░░░░  [0░░░░SHEL░░░░CESS░░░░   [░░░░ ACC░░░░ EDI░░░░
+░░░░ - V░░░░CALL░░░░OG  ░░░░  [3░░░░D-sa░░░░ated░░░░   [░░░░ D-s░░░░vate░
+░░░░ - V░░░░DIRE░░░░Y   ░░░░  [D░░░░SYSO░░░░WNLO░░░░   [░░░░ SYS░░░░IEW
+____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░____░░░░
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

@@ -439,7 +439,10 @@ async function main() {
       name: entry.name,
       description: entry.id,
       command: command.toUpperCase(),
-      path: path.join(REPO_ROOT, entry.binary),
+      // Relative — executeAmigaDoor re-joins against bbsRoot, so
+      // passing absolute here creates a doubled path that fails
+      // existsSync (`<root>/<root>/Doors/...`).
+      path: entry.binary,
       accessLevel: 0,
       enabled: true,
       type,
