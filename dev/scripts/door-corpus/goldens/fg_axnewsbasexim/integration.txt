@@ -4,381 +4,150 @@ No NewsStats!
  Can't open DOORS:NEWS/NEWS.CFG !
 
 
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-            ___      ___   ___                                               
-            ___                                                              
-     _                                    .                                  
-    /                                                                        
-   /                                                                         
-                                            /                                
-               ___                        ___                                
-                                                                        
-
-            D F                                    )                       
-            NEW                                                             
-             SE                                                              
-             MS                                                             
-            STA                                                                
-                  AGE                                       - C           
-                  TIM                                       - L      
-                                                            - E               
-                                                       [R            
-                                                       [Q                     
-
-   X!]                                                         COU          
-   ] -                                                         sac       
-   ] -                                                         SOP     
-            ___                                                                 
-
-            ___      ___   ___                                          ___  
-            ___                                                           .  
-     _                                  \/.                               |  
-    /                                  //                                 :  
-   /          /                        /                                S .  
-                                            /                                
-               ___                        ___                                
-                                                                        
-
-            D F                                    )                       
-            NEW                                                            G
-         PPY SE               [CF                  S        - F              
-         AVE MS               [E]                  ER       - R             
-         OW STA               [W]                           - V                
-               P PAGE                                       - C           
-               AL TIM                                       - L      
-               U                                            - E               
-                                             ERE       [R         GON
-                                              ME       [Q         UES   NNA   
-
-   X!]                                    ACC                  COUNT        
-   ] -                                    iva                  sactiv    
-   ] -                                    DOW                  SOP VI  
-            ___                                                                 
-
-       __   ___      ___   ___   ___                                    ___  
-      /     ___                                                           .  
-     _                                  \/.                               |  
-    /                                  //                                 :  
-   /          /                        /                                S .  
-                                            /            _||                 
-               ___               ___      ___            /|_                 
-                                                                        
-
-            D F                     DOWNLO         )           MOD         
-            NEW                     SHOW F                     LTE         G
-         PPY SEARC            [CF   CON            S        - F      NF STA  
-         AVE MSG T            [E]   LEA            ER       - R      W MSG' 
-         OW STATUS            [W]   CHA                     - V      T/LHA     
-               P PAGE                                       - C           
-               AL TIME (                                    - L      
-               U                                            - E               
-                                             ERE       [R         GON
-                                              ME       [Q         UES   NNA   
-
- [EX!]   EXO                  [0]         ACC                  COUNT        
- [2] -   EW                   [3]         iva                  sactiv    
- [5] -   EW                   [DS         DOW                  SOP VI  
-            ___                           ___                                   
-
-       __   ___      ___   ___   ___                     ___            ____.
-      /     ___                                          ___              . |
-     _                           __     \/.                               |  
-    /                             /    //                                 :  
-   /          /                  /    o/                                S .  
-                    /                       /            _||                 
-               ______      ___   ___      ___      ___   /|_            ___  
-                                                                        
-
- [U         D F                     DOWNLO         )           MOD         
- [N         NEW                     SHOW F                     LTE         G
-         PPY SEARC            [CF   CON            S        - F      NF STA  
-         AVE MSG T            [E]   LEA            ER       - R      W MSG' 
-         OW STATUS            [W]   CHA                     - V      T/LHA     
-               P PAGE                     N/O               - C           
-               AL TIME (                  YSO               - L      
-               U                          ONF               - E               
-                                             ERE       [R         GON
-                                              ME       [Q         UESTIONNA   
-
- [EX!]   EXO                  [0]         ACC          [1      COUNT        
- [2] -   EW                   [3]         iva          [4      sactiv    
- [5] -   EW                   [DS         DOW          [V      SOP VI  
-   ____________            ______         ___                                   
-
-       __   ___      ___   ___   ___               __    ___            ____.
-      /     ___                                     _\   ___              . |
-     _                           __     \/.                               |  
-    /                             /    //                                 :  
-   /          /                  /    o/                                S .  
-                    /                       /            _||                 
-               ______      ___   ___      ___      ___   /|_            ___  
-                                                                        
-
- [U    UP   D F                     DOWNLO         )           MOD         
- [N    SH   NEW                     SHOW F                     LTE         G
-       ZIPPY SEARC            [CF   CON            S        - F      NF STA  
-       LEAVE MSG T            [E]   LEA            ER       - R      W MSG' 
-       SHOW STATUS            [W]   CHA                     - V      T/LHA     
-               P PAGE               MEN   N/OFF             - C           
-               AL TIME (            PAG   YSOP              - L      
-               U                    JOI   ONFERE            - E            ION
-   ] - PR               CE        -       ONFERE       [R      ELOGON
-   ENT] -                        M]       INE ME       [Q      - QUESTIONNA   
-
- [EX!]   EXO                  [0]         ACC          [1      COUNT        
- [2] -   EW                   [3]         iva          [4      sactiv    
- [5] -   EW                   [DS         DOW          [V      SOP VI  
-   ____________            ______         ___            ___                    
-
- ._    __   ___      ___   ___   ___      _/\      __    ___      _ _   ____.
- |S   /     ___                           //        _\   ___      /s      . |
- ||  _                           __     \/.         //                    | |
- |. /                             /    //          o/                     : |
- | /          /                  /    o/           /                    S . |
-                    /                       /            _||                 
-               ______      ___   ___      ___      ___   /|_   ___      ___  
-                                                                        
-
- [U    UPLOAD FILE                  DOWNLO         )   [R      MOD         
- [N    SHOW NEW FI                  SHOW F             [A      LTE         G
-       ZIPPY SEARC            [CF]- CON         LAGS        - F      NF STA  
-       LEAVE MSG T            [E] - LEA          USER       - R      W MSG' 
-       SHOW STATUS            [W] - CHA         NGS         - V      T/LHA     
-       SH      P PAGE               MEN   N/OFF             - COLO        
-       SH      AL TIME (CET         PAG   YSOP              - LOG    
-       SH      U                    JOI   ONFERE            - EDIT         ION
-   ] - PR               CE        -       ONFERE       [RL]    ELOGON
-   ENT] -                        M]       INE ME       [QUES   - QUESTIONNA   
-
- [EX!]   EXO                  [0]         ACC          [1      COUNT        
- [2] -   EW       SLO         [3]         iva          [4      sactiv    
- [5] -   EW       ORY         [DS         DOW          [V      SOP VI  
-   ____________            ______         ___            ___                    
-
- ._    __   ___      _________   ___      _/\      __    ___      _ ________.
- |S   /     ___         /                 //        _\   ___      /s      . |
- ||  _                        \____     \/.         //                    | |
- |. /                             /    //          o/                     : |
- | /          /                  /    o/           /                    S . |
-                    /                       /            _||                 
-   ___         ______      ___   ___      ___      ___   /|_   ___      ___  
-                                                                        
-
- [U    UPLOAD FILE                  DOWNLO         )   [R      MOD         
- [N    SHOW NEW FI                  SHOW F             [A      LTE         G
-       ZIPPY SEARC            [CF]- CON         LAGS        - F    CONF STA  
-       LEAVE MSG T            [E] - LEA          USER       - R    NEW MSG' 
-       SHOW STATUS            [W] - CHA         NGS         - V    TXT/LHA     
-       SH      P PAGE         [X] - MEN   N/OFF             - COLO        
-       SH      AL TIME (CET   [O] - PAG   YSOP              - LOG    
-       SH      U              [J] - JOI   ONFERE            - EDIT         ION
-   ] - PR       CO      CE        -       ONFERE       [RL]    ELOGON
-   ENT] -      SIG               M]       INE ME       [QUES   - QUESTIONNA   
-
- [EX!]   EXO                  [0]         ACC          [1] -   COUNT       G
- [2] -   EW       SLO         [3]         iva          [4] -   sactiv    
- [5] -   EW       ORY         [DS         DOW          [VS]-   SOP VI  
-_______________      ___   _________      ______         ___         ___        
-
- ._    __   ___   _/\_________   ___   ____/\      __    ___      _ ________.
- |S   /     ___   /     /              ___//        _\   ___      /s      . |
- ||  _                        \____     \/.         //     /              | |
- |. /                             /    //          o/    ______           : |
- | /          /                  /    o/           /     /|.            S . |
-                    /                       /            _||                 
-   ___         ______      ___   ___      ___      ___   /|_______      ___  
-                                                                        
-
- [U    UPLOAD FILE                  DOWNLO         )   [R      MOD         
- [N    SHOW NEW FI                  SHOW F             [A      LTE         G
-       ZIPPY SEARC            [CF]- CON         LAGS        - F    CONF STA  
-       LEAVE MSG T      P     [E] - LEA          USER       - R    NEW MSG' 
-       SHOW STATUS            [W] - CHA         NGS         - V    TXT/LHA     
-   ] - SH      P PAGE         [X] - MEN   N/OFF             - COLO   N/OFF
-   ] - SH      AL TIME (CET   [O] - PAG   YSOP              - LOG    
-   ] - SH      U              [J] - JOI   ONFERE            - EDIT   SCRIPTION
-   ] - PR       CO      CE        -       ONFERENCE    [RL]    ELOGON
-   ENT] -      SIG               M]       INE MESSAGE  [QUES   - QUESTIONNAIRE
-
- [EX!]   EXO                  [0]         ACC          [1] -   COUNT       G
- [2] -   EW       SLO         [3]         iva          [4] -   sactiv    
- [5] -   EW       ORY         [DS         DOW          [VS]-   SOP VI  
-_______________      ___   _________   _________         ___         ___   _____
-
- ._    __   ___   _/\_________   ___   ____/\      __    ______   _ ________.
- |S   /     ___   /     /              ___//        _\   ___      /s      . |
- ||  _          \/          ./\____     \/.         //     /              | |
- |. /           /          //     /    //          o/   _______           : |
- | /          //           /     /    o/           /     /|.            S . |
-             ./     /                       /            _||                 
-   ___      _/_______      ___   ___      ___      ___   /|_______      ___  
-                                                                        
-
- [U    UPLOAD FILE(S)               DOWNLO         )   [RZ]    MOD         
- [N    SHOW NEW FILES               SHOW F             [A]     LTE         G
- [Z    ZIPPY SEARCH           [CF]- CON         LAGS   [F   - F    CONF STA  
- [C    LEAVE MSG TO S   P     [E] - LEA          USER  [R   - R    NEW MSG' 
- [S    SHOW STATUS            [W] - CHA         NGS    [V   - V    TXT/LHA     
- [H] - SH      P PAGE         [X] - MENU ON/OFF             - COLOR ON/OFF
- [T] - SH      AL TIME (CET   [O] - PAGE SYSOP              - LOG OFF
- [?] - SH      U              [J] - JOIN CONFERE            - EDIT DESCRIPTION
-   ] - PR       CO      CE        -       ONFERENCE    [RL]    ELOGON
-   ENT] -      SIG               M]       INE MESSAGE  [QUES   - QUESTIONNAIRE
-
- [EX!]   EXO   ST             [0] -       ACC          [1] -   COUNT EDI   G
- [2] -   EW    LERSLO         [3] -       iva          [4] -   sactivate 
- [5] -   EW    ECTORY         [DS]-       DOW          [VS]-   SOP VIEW
-_______________      ___   _________   _________         ___   ___   ___   _____
-
- ._    __   ___   _/\_________   ___   ____/\________    ______   _ ________.
- |S   /     ___   /     /              ___// \__    _\   ___      /s      . |
- ||  _          \/          ./\____     \/.         //     /              | |
- |. /           /          //     /    //          o/   _______           : |
- | /          //           /     /    o/           /     /|.         ANDS . |
-             ./     /                 /     /            _||                 
-   ___      _/_______      ___   ____/\   ___      ___   /|__________   ___  
-                                                                        
-
- [U    UPLOAD FILE(S)               DOWNLO         )   [RZ]    MODEM    OAD
- [N    SHOW NEW FILES               SHOW F             [A]     LTER F   FLAG
- [Z] - ZIPPY SEARCH           [CF]- CON         LAGS   [F   - FULL CONF STA  
- [C] - LEAVE MSG TO S   P     [E] - LEA          USER  [R   - READ NEW MSG' 
- [S] - SHOW STATUS            [W] - CHA         NGS    [V   - VIEW TXT/LHA     
- [H] - SH      P PAGE         [X] - MENU ON/OFF          ]  - COLOR ON/OFF
- [T] - SH      AL TIME (CET   [O] - PAGE SYSOP           ]  - LOG OFF
- [?] - SH      U              [J] - JOIN CONFERE         D] - EDIT DESCRIPTION
-   ] - PR       CO   RENCE        -       ONFERENCE    [RL]    ELOGON
-   ENT] -      SIG               M]       INE MESSAGE  [QUES   - QUESTIONNAIRE
-
- [EX!]   EXO   ST             [0] -    LL ACCESS       [1] - ACCOUNT EDI   G
- [2] -   EW    LERSLOG        [3] -    activated       [4] - D-sactivate 
- [5] -   EW    ECTORY         [DS]-    OP DOWNLO       [VS]- SYSOP VIEW
-_______________      ___   _________   _________         ___   ___   ___   _____
-
- ._    __   _______/\______________________/\________    ______   _ ________.
- |S   /     ______/     /     /     ______// \__    _\   ___      /s      . |
- ||  _\____     \/          ./\____     \/.         //     /              | |
- |. /     /     /          //     /    //          o/   _______           : |
- | /     /    //           /     /    o/           /     /|.         ANDS . |
-        /    ./     /                 /     /            _||                 
-   ______   _/_______      ___   ____/\   ______   ___   /|__________   ___  
-                                                                        
-
- [U] - UPLOAD FILE(S)         [D]   DOWNLO         )   [RZ]    MODEM    OAD
- [N] - SHOW NEW FILES         [F]   SHOW F             [A]     LTER F   FLAG
- [Z] - ZIPPY SEARCH           [CF]- CON      E FLAGS   [F   - FULL CONF STA  
- [C] - LEAVE MSG TO S   P     [E] - LEA       TO USER  [R   - READ NEW MSG' 
- [S] - SHOW STATUS            [W] - CHA      TTINGS    [V   - VIEW TXT/LHA    E
- [H] - SH      P PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SH      AL TIME (CET   [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SH      U              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-   ] - PR       CONFERENCE    [>] -       ONFERENCE    [RL]    ELOGON
-   ENT] -      SIGN           [OLM]       INE MESSAGE  [QUES   - QUESTIONNAIRE
-
- [EX!]   EXO   ST             [0] -    LL ACCESS       [1] - ACCOUNT EDITING
- [2] -   EW    LERSLOG        [3] -    activated       [4] - D-sactivated
- [5] -   EW    ECTORY         [DS]-    OP DOWNLO       [VS]- SYSOP VIEW
-_______________      ___   _________   ____________      ___   ___   ___   _____
-
- .____ __   _______/\______________________/\________    ______   _ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\   ___      /s      . |
- ||  _\____     \/___       ./\____     \/.         //     /    //        | |
- |. /     /     /          //     /    //          o/   ________/         : |
- | /     /    //           /     /    o/           /     /|.     C   ANDS . |
-        /    ./     /                 /     /            _||          :.     
-   ______   _/__________   ___   ____/\   ______   ___   /|__________:::___  
-                       \                                              .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD    E(S)   [RZ]    MODEM    OAD
- [N] - SHOW NEW FILES         [F] - SHOW FILE   T      [A]     LTER F   FLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFER   E FLAGS   [F   - FULL CONF STATS
- [C] - LEAVE MSG TO S   P     [E] - LEAVE     TO USER  [R   - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE   TTINGS    [V   - VIEW TXT/LHA FILE
- [H] - SHOW    P PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW    AL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW    U              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-   ] - PR       CONFERENCE    [>] -    T CONFERENCE    [RL]    ELOGON
-   ENT] -      SIGN           [OLM]    N LINE MESSAGE  [QUES   - QUESTIONNAIRE
-
- [EX!]   EXO   ST             [0] -    LL ACCESS       [1] - ACCOUNT EDITING
- [2] -   EW    LERSLOG        [3] -    activated       [4] - D-sactivated
- [5] -   EW    ECTORY         [DS]-    OP DOWNLOAD     [VS]- SYSOP VIEW
-__________________   ___   ________________________      _________   ___   _____
-
- .____ __   _______/\______________________/\________   ___________ ________.
+ .____ ____________/\______________________/\________   ___________ ________.
+ .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.         //     /    //        | |
- |. /     /     /     /    //     /    //          o/   ________/         : |
- | /     /    //     /     /     /    o/           /     /|.     C   ANDS . |
- :/     /    ./     /                 /     /           /_||          :.    |
- /___________/__________   ___   ____/\_________   _____ /|__________:::____|
-                       \                               \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD    E(S)   [RZ]    MODEM    OAD
- [N] - SHOW NEW FILES         [F] - SHOW FILE   T      [A]     LTER F   FLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [F   - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R   - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V   - VIEW TXT/LHA FILE
- [H] - SHOW    P PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW    AL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW    U              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-   ] - PR       CONFERENCE    [>] - NEXT CONFERENCE    [RL]    ELOGON
-   ENT] -      SIGN           [OLM] - ON LINE MESSAGE  [QUES   - QUESTIONNAIRE
-
- [EX!]   EXORCIST             [0] -    LL ACCESS       [1] - ACCOUNT EDITING
- [2] -   EW CALLERSLOG        [3] -    activated       [4] - D-sactivated
- [5] -   EW DIRECTORY         [DS]-    OP DOWNLOAD     [VS]- SYSOP VIEW
-__________________________________________________________________   ___   _____
-
- .____ __   _______/\______________________/\________   ___________ ________.
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
  |. /     /     /     /    //     /    //     /    o/   ________/         : |
  | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /           /     /     /     /     /_||          :.    |
- /___________/__________   __________/\__________/______ /|__________:::____|
-                       \                               \/             .Y
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
 
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD    E(S)   [RZ] - ZMODEM    OAD
- [N] - SHOW NEW FILES         [F] - SHOW FILE   T      [A]  - ALTER F   FLAG
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
  [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
  [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
  [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
  [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
  [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
  [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-   ] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
-   ENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
 
  [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
  [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
  [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |

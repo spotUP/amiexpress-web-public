@@ -1,0 +1,427 @@
+
+                  __.___________ _/\_.ø0ø._/\_ __________.__ 
+.ø0ø.__  /\_ _ ___)     ,.:![sKAN^4^sTATUs V1.03!]!:.,     (___ _ _/\  __.ø0ø.
+|      \/                                                            \/      |
+|        BBSName: AmiExpress-Web      System Operator: Sysop                 |
+·----------------------------------------------------------------------------·
+|    Name/Handle: sysop                Location/Group: Test Lab              |
+|   Security Lvl: 255                    Phone Number:                       |
+·----------------------------------------------------------------------------·
+|  Current Ratio: DISABLED!                Ratio Type: BYTES                 |
+|     Byte Limit: 0                        Time Limit: 1 Minutes             |
+|   Times Online: 1                      Last Date On: Fri 22-May-2026 01:   |
+|     LineLenght: 22                     Msg's Posted: 0                     |
+|    Online Baud: 115200                     Protocol: ??????                |
+|     /X Version: v5.6                   Current Conf: Main                  |
+·----------------------------------------------------------------------------·
+| Uploaded Bytes: 0                  Downloaded Bytes: 0                     |
+| Uploaded Files: 0                  Downloaded Files: 0                     |
+| Upload CPSRate: 0                  Download CPSRate: 0                     |
+·----------------------------------------------------------------------------·
+|      Chat Mode: OFF                     Expert Mode: OFF                   |
+·----------------------------------------------------------------------------·
+!_ ____/\  _ _ ___   100% ASM CODE, ©1995 [-mARX/iNSANE!]   ___ _ _  /\____ _|
+         \/       )                                        (       \/-cLU/iNS!
+                  ¯¯ ¯¯¯¯¯¯¯¯¯¯¯ ¯¯¯¯ ¯¯¯ ¯¯¯¯ ¯¯¯¯¯¯¯¯¯¯ ¯¯
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                               ___           
+                                                                _            
+     _                                                                       
+    /                                                       ___              
+   /                                                                         
+                                                                             
+   ___                                                                       
+                                                                        
+
+                  (S)             -                                     OAD
+                  LES             -                                     FLA 
+                  H                                                          
+                  O S                                                       
+                                                                               
+               P PAGE             -                                       
+               AL TIM             -                                  
+               U                  -             NCE                           
+                                    NEX                     - R      
+                                    - O                     T]                
+
+                                                                            
+                                                                         
+                                                                       
+      ___   ___                                                               __
+
+       __               ___                                    ___           
+      /                 /                                       _            
+     _   __                 ./                             /                 
+    /     /                //                            ______              
+   /     /                 /                             /|.                 
+                                                                             
+   ___               ___   ___                                 ___           
+                       \                                                
+
+                  (S)         [D] -                )     Z]             OAD
+                  LES         [F] -                      ]              FLA 
+                  H                 CON                                      
+                  O S               LEA                                     
+                                    CHA                                        
+               P PAGE             -                                       
+               AL TIM             -                                  
+               U                  -             NCE                           
+                        CE          NEX                     - R      
+                                    - O                     T]                
+
+ [E                                                                         
+ [2                                                                      
+ [5                                                                    
+      ___   ______                                                ___   ___   __
+
+       __         _/\   ___                     ___            ___           
+      /           /     /                                       _            
+ ||  _   __                 ./                             /                 
+ |. /     /                //                            ______              
+ | /     /                 /                             /|.                 
+                          /           /                                      
+   ___               ___ /____      _/\                        ___           
+                       \/                                               
+
+               ILE(S)         [D] -                )     Z]             OAD
+                FILES         [F] -                      ]              FLA 
+                  H                 CON                        ULL           
+                  O S               LEA                        EAD          
+                                    CHA                        IEW             
+               P PAGE             -                                       
+               AL TIM             -                                  
+               U                  -             NCE                           
+                CO      CE          NEX                     - R      
+               SIG                  - O                     T]                
+
+ [E    -                                                                    
+ [2    VI                                                                
+ [5    VI                                                              
+      ___   ______            ___   ___   ___               _________   ___   __
+
+       __         _/\   ______   ___            ___            ___           
+      /           /     /                                       _            
+ ||  _   __                 ./                             /                 
+ |. /     /                //                            ______              
+ | /     /                 /                             /|.         AND     
+                          /           /                 /                   |
+   ___               ___ /____      _/\               __       ___         _|
+                       \/                              \/               
+
+         LOA   ILE(S)         [D] -       AD       )   [RZ]             OAD
+         OW     FILES         [F] -       ILE          [A]              FLAG
+                  H                 CON                [FS]    ULL      STA  
+                  O S   P           LEA                [R]     EAD      SG' 
+                                    CHA                [V]     IEW      HA     
+               P PAGE             -                                       
+               AL TIM             -                                  
+               U                  -             NCE                           
+                CO      CE          NEX                     - RELO   
+               SIG                  - O            GE       T] - Q            
+
+ [E    -                                                                    
+ [2    VI                                                                
+ [5    VI                                       AD                     
+      ___   ______            ___   ___   ______            _________   ___   __
+
+       __         _/\   ______   ___      _/\______            ____ _   ___  
+      /           /     /                 // \__                _ /s      .  
+ ||  _   __                 ./          \/                 /              |  
+ |. /     /                //          //               _______           :  
+ | /     /                 /           /                 /|.         ANDS .  
+                          /     /     /     /           /                   |
+   ___               ___ /_______   _/\   ___         __       ___         _|
+                       \/                              \/               
+
+         LOA   ILE(S)         [D] -       AD       )   [RZ]             OAD
+         OW     FILES         [F] -       ILE          [A]              FLAG
+               ARCH                 CON                [FS]    ULL      STA  
+               G TO S   P           LEA                [R]     EAD      SG' 
+               TUS                  CHA                [V]     IEW      HA     
+       SHOW    P PAGE             -                    [M                 
+       SHOW    AL TIM             -                    [G            
+       SHOW    U                  -             NCE    [E                  ION
+       PR       CO      CE          NEX                     - RELO   
+      ] -      SIG                  - O            GE       T] - Q            
+
+ [E    - EXO                                                      NT        
+ [2    VIEW                                                       tiv    
+ [5    VIEW                                     AD                 VI  
+      ___   ______            ___   ___   ______            _________   ___   __
+
+       __         _/\   ______   ______   _/\________          ____ _______  
+      /           /     /           ___   // \__    _\          _ /s      .  
+ ||  _\____                 ./\__       \/                 /              |  
+ |. /     /                //          //               _______           :  
+ | /     /                 /           /                 /|.         ANDS .  
+                          /     /     /     /           /                   |
+   ___               ___ /_______   _/\   ______      __       ___      ____|
+                       \/                              \/               
+
+         LOA   ILE(S)         [D] -       AD FIL   )   [RZ]             OAD
+         OW     FILES         [F] -       ILELIS       [A]              FLAG
+         PPY   ARCH                 CON                [FS]    ULL      STA  
+         AVE   G TO S   P           LEA                [R]     EAD      SG' 
+         OW    TUS                  CHA                [V]     IEW      HA    E
+       SHOW    P PAGE             -                    [M                 
+       SHOW    AL TIM             -                    [G            
+       SHOW    U                  -             NCE    [E                  ION
+       PR       CO   RENCE          NEX         NCE         - RELOGON
+      ] -      SIG                  - O         SSAGE       T] - QUES         
+
+ [E    - EXO                                           [1         NT        
+ [2    VIEW                                            [4         tiv    
+ [5    VIEW                                     AD     [V          VI  
+      ___   ______   ___      ___   ___   ______            _________   ___   __
+
+ ._    __         _/\   ______   ______   _/\________          ____ _______  
+ |S   /           /     /           ___   // \__    _\          _ /s      .  
+ ||  _\____                 ./\__       \/                 /              |  
+ |. /     /                //          //               _______           :  
+ | /     /    /            /           /                 /|.      OMMANDS .  
+                    /     /     /     /     /           /                   |
+   ___            ______ /_______   _/\   ______      __       ______   ____|
+                       \/                              \/               
+
+         LOA   ILE(S)         [D] -       AD FIL   )   [RZ]       EM UPLOAD
+         OW     FILES         [F] -       ILELIS       [A]        R FILEFLAG
+ [Z      PPY   ARCH                 CON                [FS]    ULL      STA  
+ [C      AVE   G TO S   P           LEA                [R]     EAD      SG' 
+ [S      OW    TUS                  CHA                [V]     IEW      HA    E
+       SHOW    P PAGE             -                    [M      OLO        
+       SHOW    AL TIM             -                    [G      OG    
+       SHOW    U                  -             NCE    [E      DIT         ION
+       PR       CONFERENCE          NEX   ONF   NCE         - RELOGON
+      ] -      SIGN                 - O   INE   SSAGE       T] - QUES         
+
+ [EX!] - EXO                      -    LL              [1    AC   NT        
+ [2] - VIEW                       -    act             [4    D-   tiv    
+ [5] - VIEW                      ]-    OP       AD     [V    SY    VI  
+      ___   ______   ___      ___   ___   ______   ___      _________   ___   __
+
+ ._    __         _/\   _______________   _/\________          ____ _______  
+ |S   /           /     /     /     ___   // \__    _\          _ /s      .  
+ ||  _\____                 ./\__       \/    \/           /              |  
+ |. /     /                //          //     /         _______           :  
+ | /     /    /            /           /     /           /|.      OMMANDS .  
+                    /     /     /     /     /           /             :.    |
+   ___            ______ /___________/\   ______      __       ______:::____|
+                       \/                              \/             .Y
+
+         LOA   ILE(S)         [D] -       AD FIL   )   [RZ]       EM UPLOAD
+         OW     FILES         [F] -       ILELIS       [A]        R FILEFLAG
+ [Z      PPY   ARCH                 CON                [FS]    ULL CO   STA  
+ [C      AVE   G TO SYSOP           LEA                [R]     EAD NE   SG' 
+ [S      OW    TUS                  CHA                [V]     IEW TX   HA    E
+       SHOW    P PAGE         [X] -       N/OFF        [M      OLO        
+       SHOW    AL TIME (      [O] -       YSOP         [G      OG    
+       SHOW    U              [J] -       ONFERENCE    [E      DIT         ION
+   ] - PR       CONFERENCE          NEX   ONF   NCE         - RELOGON
+   ENT] -      SIGN                 - O   INE   SSAGE       T] - QUES         
+
+ [EX!] - EXO                      -    LL              [1    AC   NT        
+ [2] - VIEW          G            -    act             [4    D-   tiv    
+ [5] - VIEW                      ]-    OP       AD     [V    SY    VI  
+      ___   ____________      ___   __________________   ____________   ___   __
+
+ ._    __         _/\   _______________   _/\________       _______ _______  
+ |S   /           /     /     /     ___   // \__    _\          _ /s      .  
+ ||  _\____          __     ./\__       \/    \/           /              |  
+ |. /     /           /    //          //     /         _______           :  
+ | /     /    /      /     /          o/     /           /|.      OMMANDS .  
+                    /     /     /     /     /           /             :.    |
+   ___            ______ /___________/\_________      __       ______:::____|
+                       \/                              \/             .Y
+
+         LOA   ILE(S)         [D] -       AD FIL   )   [RZ] - ZMODEM UPLOAD
+         OW     FILES         [F] -       ILELIS       [A]  - ALTER FILEFLAG
+ [Z      PPY SEARCH                 CON         LAGS   [FS]    ULL CO   STA  
+ [C      AVE MSG TO SYSOP           LEA          USER  [R]     EAD NE   SG' 
+ [S      OW STATUS                  CHA         NGS    [V]     IEW TX   HA    E
+       SHOW    P PAGE         [X] -       N/OFF        [M]     OLO        
+       SHOW    AL TIME (   )  [O] -       YSOP         [G]     OG    
+       SHOW    U              [J] -       ONFERENCE    [ED]    DIT         ION
+   ] - PR       CONFERENCE          NEX   ONF   NCE    [R   - RELOGON
+   ENT] -      SIGN                 - O   INE   SSAGE  [Q   T] - QUES         
+
+ [EX!] - EXO   ST                 -    LL    ESS       [1    AC   NT        
+ [2] - VIEW    LER   G            -    act   ted       [4    D-   tiv    
+ [5] - VIEW    ECT               ]-    OP    NLOAD     [V    SY    VI  
+      ___   ____________      ________________________   ____________   ___   __
+
+ ._    __         _/\   _______________   _/\________    __________ _______  
+ |S   /           /     /     /     ___   // \__    _\   ___    _ /s      .  
+ ||  _\____          __     ./\__       \/.   \/           /              |  
+ |. /     /           /    //          //     /         _______           :  
+ | /     /    /      /     /          o/     /           /|.      OMMANDS .  
+ :/          ./     /     /     /     /     /     /     /             :.    |
+ /____      _/_   ______ /___________/\__________/______       ______:::____|
+                       \/                              \/             .Y
+
+         LOAD FILE(S)         [D] - DOW   AD FIL   )   [RZ] - ZMODEM UPLOAD
+         OW NEW FILES         [F] - SHO   ILELIS       [A]  - ALTER FILEFLAG
+ [Z      PPY SEARCH                 CON   ENC   LAGS   [FS] - FULL CO   STATS
+ [C      AVE MSG TO SYSOP           LEA   MSG    USER  [R]  - READ NE   SG'S
+ [S      OW STATUS                  CHA    SE   NGS    [V]  - VIEW TX   HA FILE
+       SHOW    P PAGE         [X] -       N/OFF        [M]     OLO        
+       SHOW    AL TIME (   )  [O] -       YSOP         [G]     OG    
+       SHOW    U              [J] -       ONFERENCE    [ED]    DIT         ION
+   ] - PR       CONFERENCE          NEX   ONF   NCE    [R   - RELOGON
+   ENT] -      SIGN                 - O   INE   SSAGE  [Q   T] - QUES   NNA   
+
+ [EX!] - EXO   ST                 -    LL    ESS       [1    AC   NT        
+ [2] - VIEW    LER   G            -    act   ted       [4    D-   tiv    
+ [5] - VIEW    ECT               ]-    OP    NLOAD     [V    SY    VI  
+   ______   ____________   ___________________________   ____________   ___   __
+
+ ._    __         _/\__________________   _/\________    __________ _______  
+ |S   /           /     /     /     ___   // \__    _\   ___    _ /s      .  
+ ||  _\____          __     ./\__       \/.   \/    //     /              |  
+ |. /     /           /    //          //     /    o/   _______           :  
+ | /     /    /      /     /          o/     /     /     /|.      OMMANDS .  
+ :/          ./     /     /     /     /     /     /     /             :.    |
+ /____      _/_   ______ /___________/\__________/______    _________:::____|
+                       \/                              \/             .Y
+
+   ] -   LOAD FILE(S)         [D] - DOW   AD FIL   )   [RZ] - ZMODEM UPLOAD
+   ] -   OW NEW FILES         [F] - SHO   ILELIS       [A]  - ALTER FILEFLAG
+ [Z    ZIPPY SEARCH                 CON   ENC   LAGS   [FS] - FULL CONF STATS
+ [C    LEAVE MSG TO SYSOP           LEA   MSG    USER  [R]  - READ NEW MSG'S
+ [S    SHOW STATUS                  CHA    SE   NGS    [V]  - VIEW TXT/LHA FILE
+       SHOW    P PAGE         [X] - MEN   N/OFF        [M]  - COLOR O     
+       SHOW    AL TIME (   )  [O] - PAG   YSOP         [G]  - LOG OFF
+       SHOW    U              [J] - JOI   ONFERENCE    [ED] - EDIT DE      ION
+   ] - PR       CONFERENCE          NEXT CONFERENCE    [R   - RELOGON
+   ENT] -      SIGN                 - ON LINE MESSAGE  [Q   T] - QUES   NNA   
+
+ [EX!] - EXORCIST             [0] -    LL    ESS       [1    AC   NT        
+ [2] - VIEW CALLER   G        [3] -    act   ted       [4    D-   tiv    
+ [5] - VIEW DIRECT            [DS]-    OP    NLOAD     [V    SY    VI  
+   ___________________________________________________   __________________   __
+
+ .____ __         _/\______________________/\________    __________ ________.
+ |Sk!n/           /     /     /     ______// \__    _\   ___    _ /s      . |
+ ||  _\____          __     ./\__       \/.   \/    //     /    //        |  
+ |. /     /           /    //          //     /    o/   ________/         :  
+ | /     /    /      /     /          o/     /     /     /|.     COMMANDS .  
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /_______   _/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+   ] -   LOAD FILE(S)         [D] - DOW   AD FIL   )   [RZ] - ZMODEM UPLOAD
+   ] -   OW NEW FILES         [F] - SHO   ILELIS       [A]  - ALTER FILEFLAG
+ [Z    ZIPPY SEARCH                 CONFERENC   LAGS   [FS] - FULL CONF STATS
+ [C    LEAVE MSG TO SYSOP           LEAVE MSG    USER  [R]  - READ NEW MSG'S
+ [S    SHOW STATUS                  CHANGE SE   NGS    [V]  - VIEW TXT/LHA FILE
+ [H    SHOW    P PAGE         [X] - MEN   N/OFF        [M]  - COLOR O     
+ [T    SHOW    AL TIME (CET)  [O] - PAG   YSOP         [G]  - LOG OFF
+ [?    SHOW    U              [J] - JOI   ONFERENCE    [ED] - EDIT DE      ION
+   ] - PR       CONFERENCE    [>]   NEXT CONFERENCE    [RL] - RELOGON
+   ENT] -      SIGN           [OL   - ON LINE MESSAGE  [QUEST] - QUES   NNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL    ESS       [1] - AC   NT EDI    
+ [2] - VIEW CALLER   G        [3] - D-sact   ted       [4] - D-   tivate 
+ [5] - VIEW DIRECT            [DS]- SYSOP    NLOAD     [VS]- SY    VIEW
+______________________________________________________   __________________   __
+
+ .____ __   _______/\______________________/\________    __________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\   ___    _ /s      . |
+ ||  _\____       _____     ./\__       \/.   \/    //     /    //        | |
+ |. /     /           /    //          //     /    o/   ________/         : |
+ | /     /    /      /     /          o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /_______   _/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+   ] -   LOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+   ] -   OW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z    ZIPPY SEARCH              ]- CONFERENC   LAGS   [FS] - FULL CONF STATS
+ [C    LEAVE MSG TO SYSOP         - LEAVE MSG    USER  [R]  - READ NEW MSG'S
+ [S    SHOW STATUS                - CHANGE SE   NGS    [V]  - VIEW TXT/LHA FILE
+ [H    SHOW    P PAGE         [X] - MENU ON/OFF        [M]  - COLOR O     
+ [T    SHOW    AL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?    SHOW    U              [J] - JOIN CONFERENCE    [ED] - EDIT DE      ION
+ [<] - PREVIOUS CONFERENCE    [>]   NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OL   - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL    ESS       [1] - ACCOUNT EDI   G
+ [2] - VIEW CALLERSLOG        [3] - D-sact   ted       [4] - D-sactivate 
+ [5] - VIEW DIRECTORY         [DS]- SYSOP    NLOAD     [VS]- SYSOP VIEW
+______________________________________________________   __________________   __
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /_______   _/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z    ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C    LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S    SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/O  
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCR   ION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDI   G
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivate 
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

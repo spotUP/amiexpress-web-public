@@ -1,0 +1,455 @@
+
+
+U-Stat V1.0 - CoDeD BY S¡eGeL/aFL 
+.-----------------------------------------------------------------------------.
+| UserName :                         Location :                               |
+)-----------------------------------------------------------------------------(
+| Ur SysOp :                         BBS-Name :                               |
+|-----------------------------------------------------------------------------|
+|  Uploads  (Files) :                           Uploads  (Bytes) :            |
+| Downloads (Files) :                          Downloads (Bytes) :            |
+|        Ratio Type :                                      Ratio :            |
+| Daily Bytes Limit :                            Daily Bytes Dld :            |
+|  Last Time Online :                             # Times Online :            |
+|     Caller Number :                              # of Messages :            |
+|    Security Level :                                 /X Version :            |
+|        Time Limit :                                  Time Used :            |
+|      The Sysop is :                                  Help Mode :            |
+|       Online Baud :                             Node Init Baud :            |
+|        Nodenumber :                               Taskpriority :            |
+|-----------------------------------------------------------------------------|
+|                                                                             |
+`-----------------------------------------------------------------------------´
+sysop
+Test Lab
+Sysop
+AmiExpress-Web
+0
+0
+0
+0
+Bytes only!
+Disable!
+0
+0
+Fri 22-May-2026 01:41:27
+1
+20265
+0
+255
+v5.6
+0 Mins
+0 Mins
+NoT iNteReSTeD iN You !
+LAMER !!!
+115200 BauD
+115200 BauD
+1
+1
+All Programming by S¡eGeL/AFL  -  Graphics by aRGøN/AFL       
+
+     Greetz to : SaBiNe/aFL - Wolfgang/Indy - ByteAndi/MST - STB/2000 A.D.
+^o^ Diz Flight will never Stop ^o^
+
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                               ___           
+                                                                _            
+                                          .                                  
+                                                                             
+                                                                             
+                    /                 /                                      
+   ___            ___               _/\                                      
+                                                                        
+
+         LOA                                           [R         EM       
+         OW                                            [A         R F       
+                                                       [F                    
+                                                       [R                   
+                                                       [V                      
+                  AGE                                                     
+                  TIM   CET                                          
+                                                                              
+                  NFE                                  [R            
+                  N                                    [Q                     
+
+ [E                                    LL                                   
+ [2                                    act                               
+ [5                                    OP                              
+                                                                                
+
+                                                               ____ _        
+                                                                _ /s         
+                  ___                     .                               |  
+                                                                          :  
+                                                                        S .  
+        /           /                 /                                      
+   ______         ___               _/\                                      
+                                                                        
+
+         LOA                                           [R         EM       
+         OW                                            [A         R F       
+                              [CF                      [FS]                  
+                              [E]                      [R]                  
+                              [W]                      [V]                     
+   ] -            AGE                                    ]                
+   ] -            TIM   CET                              ]           
+   ] -                                                   D]                   
+   ] -            NFE                                  [R            
+   ENT            N                                    [Q                     
+
+ [E         RCI                        LL                                   
+ [2         CAL                        act                               
+ [5         DIR                        OP       AD                     
+                     ___      ___                     ___                       
+
+            ___                                                ____ ____     
+            ___                                                 _ /s         
+         __       ___                     .                               |  
+          /                                                               :  
+         /                                                              S .  
+        /           /                 /                 /                    
+   ______         ___               _/\               __                     
+                                                       \/               
+
+         LOA                              AD    E(S    [R         EM       
+         OW                               ILE   T      [A         R F      G
+               ARC            [CF            E F       [FS]             STA  
+               G T            [E]             TO       [R]              SG' 
+               TUS            [W]            TTI       [V]              HA    E
+   ] -            AGE                                    ]           N/O  
+   ] -            TIM   CET                              ]           
+   ] -                                                   D]          SCR      
+   ] -            NFE                                  [R            
+   ENT            N                                    [Q                     
+
+ [E         RCI                        LL                            EDI    
+ [2         CAL                        act                           ate 
+ [5         DIR                        OP       AD                   EW
+___   ___            ___      ___                     ___                       
+
+            ___                                          ___   ____ ____     
+            ___                                          ___    _ /s         
+         __       ___                     .                               |  
+          /                                                               :  
+         /                            o                                 S .  
+        /           /                 /     /           /_||                 
+   ______         ___               _/\   ___         __ /|_            ___  
+                                                       \/               
+
+         LOA                              AD    E(S    [RZ]       EM       
+         OW                               ILE   T      [A]        R F      G
+             SEARC            [CF   CON      E F       [FS]             STA  
+             MSG T            [E]   LEA       TO       [R]              SG' 
+            STATUS            [W]   CHA      TTI       [V]              HA    E
+   ] -            AGE                                    ]           N/O  
+   ] -            TIM   CET)                             ]           
+   ] -                                                   D]          SCR      
+   ] -            NFE               NEX                [R            
+   ENT            N                 - O                [Q                     
+
+ [E         RCIST                      LL                            EDITIN 
+ [2         CALLER                     act                           ated
+ [5         DIRECT                     OP       AD                   EW
+___   ___            ___   ______      ___      ___   ___                     __
+
+            ___                     ______               ___   ____ ____     
+            ___                     ______               ___    _ /s         
+ ||      __       ___         \____       .                               |  
+ |.       /                       /                                       :  
+ |       /                       /    o                                 S .  
+        /           /                 /     /           /_||                 
+   ______         ___               _/\   ___         __ /|_            ___  
+                                                       \/               
+
+         LOA   ILE                  DOW   AD    E(S    [RZ]       EM       
+         OW     FI                  SHO   ILE   T      [A]        R F      G
+   ] -   PPY SEARC            [CF   CON      E F       [FS]             STA  
+   ] -   AVE MSG T            [E]   LEA       TO       [R]              SG' 
+   ] -   OW STATUS            [W]   CHA      TTI       [V]              HA    E
+   ] -            AGE                                    ]        R ON/OFF
+   ] -            TIM   CET)                             ]        OFF
+   ] -                                                   D]        DESCRIPT   
+   ] -            NFE               NEX                [R         GON
+   ENT            N                 - O                [Q         UESTIO      
+
+ [E         RCIST             [0]   SHELL                            EDITIN 
+ [2         CALLER   G        [3]   D-sact                           ated
+ [5         DIRECT            [DS   SYSOP       AD                   EW
+___   ______         ___   ______      ___      ___   ___                     __
+
+            ______         ______   _______/\            ___   ____ ____     
+            ______            /     ______//             ___    _ /s         
+ ||      __       ___         \____       .                /              |  
+ |.       /                       /                     ____              :  
+ |       /                       /    o                  /|.            S .  
+        /           /                 /     /           /_||          :.     
+   ______         ___               _/\   ______      __ /|____      :::___  
+                                                       \/             .Y
+
+         LOA   ILE                  DOW   AD    E(S    [RZ]       EM       
+         OW     FI                  SHO   ILE   T      [A]        R F      G
+   ] -   PPY SEARC            [CF   CON      E FLAG    [FS]             STA  
+   ] -   AVE MSG T            [E]   LEA       TO US    [R]              SG' 
+   ] -   OW STATUS            [W]   CHA      TTINGS    [V]              HA    E
+   ] -            AGE         [X]                        ]        R ON/OFF
+   ] -            TIM   CET)  [O]                        ]        OFF
+   ] -                        [J]               NCE      D]        DESCRIPT   
+   ] -   EVI      NFE   CE          NEX                [R         GON
+   ENT    AU      N                 - O                [Q         UESTIO      
+
+ [E         RCIST             [0]   SHELL                            EDITIN 
+ [2         CALLER   G        [3]   D-sact                           ated
+ [5         DIRECT            [DS   SYSOP       AD                   EW
+___   ______         ___   ______      ___      _________            ___      __
+
+            ______   ___   ______   _______/\            ___   ____ ____     
+            ______            /     ______//             ___    _ /s         
+ ||      __       ___         \____       .         //     /              |  
+ |.       /                       /                o/   ____              :  
+ |       /                       /    o            /     /|.            S .  
+        /           /                 /     /           /_||          :.     
+   ______         ______            _/\   ______      __ /|____      :::___  
+                       \                               \/             .Y
+
+         LOA   ILE                  DOW   AD    E(S    [RZ]       EM       
+         OW     FI                  SHO   ILE   T      [A]        R F      G
+   ] - ZIPPY SEARC            [CF   CON      E FLAG    [FS]             STA  
+   ] - LEAVE MSG T            [E]   LEA       TO US    [R]              SG' 
+   ] - SHOW STATUS            [W]   CHA      TTINGS    [V]              HA    E
+ [H] -            AGE         [X]         N/O            ]        R ON/OFF
+ [T] -            TIM   CET)  [O]         YSO            ]        OFF
+ [?] -                        [J]         ONF   NCE      D]        DESCRIPT   
+   ] -   EVI      NFE   CE        - NEX                [R      ELOGON
+   ENT    AU      N              M] - O                [Q      - QUESTIO      
+
+ [E         RCIST             [0]   SHELL    ESS         ] - ACCOU   EDITIN 
+ [2         CALLERSLOG        [3]   D-sact   ted         ] - D-sac   ated
+ [5         DIRECTORY         [DS   SYSOP    NLOAD       S]- SYSOP   EW
+___   ______      ______   ______      ___   ____________            ___      __
+
+            ______   ___   ______   _______/\            ___   ____ _______  
+            ______            /     ______//             ___    _ /s      .  
+ ||  _   __     \/___       ./\____       .         //     /              |  
+ |. /     /     /          //     /                o/   ____              :  
+ | /     /     /           /     /    o            /     /|.            S .  
+        /           /                 /     /           /_||          :.     
+   ______         ______            _/\   ______      __ /|____   ___:::___  
+                       \                               \/             .Y
+
+ [U      LOA   ILE                  DOWNLOAD    E(S    [RZ] - Z   EM       
+ [N      OW     FI                  SHOW FILE   T      [A]  - A   R F      G
+   ] - ZIPPY SEARCH           [CF   CON   ENCE FLAG    [FS]             STA  
+   ] - LEAVE MSG TO S         [E]   LEA   MSG TO US    [R]              SG' 
+   ] - SHOW STATUS            [W]   CHA    SETTINGS    [V]              HA    E
+ [H] - SH         AGE         [X]         N/O            ]        R ON/OFF
+ [T] - SH         TIME (CET)  [O]         YSO            ]        OFF
+ [?] - SH                     [J]         ONF   NCE      D]        DESCRIPTION
+   ] -   EVIOUS   NFE   CE    [>] - NEXT C             [R      ELOGON
+   ENT    AUTO    N           [OLM] - ON L             [Q      - QUESTIO      
+
+ [E         RCIST             [0]   SHELL    ESS         ] - ACCOU   EDITIN 
+ [2         CALLERSLOG        [3]   D-sact   ted         ] - D-sac   ated
+ [5         DIRECTORY         [DS   SYSOP    NLOAD       S]- SYSOP   EW
+___   ______      ______   ______      ___   ____________      ___   ___      __
+
+            ______   ___   ______   _______/\            ___   ____ _______  
+            ______            /     ______//             ___    _ /s      .  
+ ||  _   __     \/___       ./\____       .         //     /              |  
+ |. /     /     /          //     /                o/   ____              :  
+ | /     /     /           /     /    o            /     /|.         ANDS .  
+        /           /     /           /     /           /_||          :.     
+   ______         ______ /_         _/\   ______      __ /|____   ___:::___  
+                       \/                              \/             .Y
+
+ [U      LOAD FILE            [D]   DOWNLOAD FILE(S)   [RZ] - Z   EM       
+ [N      OW NEW FI            [F]   SHOW FILELIST      [A]  - A   R F      G
+   ] - ZIPPY SEARCH           [CF]- CON   ENCE FLAGS   [FS] - F         STA  
+   ] - LEAVE MSG TO S         [E] - LEA   MSG TO USER  [R]  - R         SG' 
+   ] - SHOW STATUS            [W] - CHA    SETTINGS    [V]  - V         HA    E
+ [H] - SH         AGE         [X] -       N/O            ]     OLOR ON/OFF
+ [T] - SH         TIME (CET)  [O] -       YSO            ]     OG OFF
+ [?] - SH                     [J] -       ONF   NCE      D]    DIT DESCRIPTION
+   ] -   EVIOUS   NFE   CE    [>] - NEXT C             [R      ELOGON
+   ENT    AUTO    N           [OLM] - ON L             [Q      - QUESTIONNA   
+
+ [E         RCIST             [0] - SHELL    ESS         ] - ACCOU   EDITIN 
+ [2         CALLERSLOG        [3] - D-sact   ted         ] - D-sac   ated
+ [5         DIRECTORY         [DS]- SYSOP    NLOAD       S]- SYSOP   EW
+___   ______      ______   ______   ______   ____________   ______   ______   __
+
+         _________   ___   ______   _______/\            ___   ____ ________.
+            ______            /     ______//             ___    _ /s      . |
+ ||  _   __     \/___       ./\____     \/.   \/    //     /              | |
+ |. /     /     /          //     /    //     /    o/   ____              : |
+ | /     /     /           /     /    o/     /     /     /|.         ANDS . |
+        /           /     /           /     /     /     /_||          :.     
+   ______         ______ /____      _/\__________/_   __ /|____   ___:::___  
+                       \/                              \/             .Y
+
+ [U    UPLOAD FILE(S)         [D]   DOWNLOAD FILE(S)   [RZ] - Z   EM       
+ [N    SHOW NEW FILES         [F]   SHOW FILELIST      [A]  - A   R F      G
+   ] - ZIPPY SEARCH           [CF]- CON   ENCE FLAGS   [FS] - F         STATS
+   ] - LEAVE MSG TO S         [E] - LEA   MSG TO USER  [R]  - R         SG'S
+   ] - SHOW STATUS            [W] - CHA    SETTINGS    [V]  - V         HA FILE
+ [H] - SH         AGE         [X] -       N/OFF          ]     OLOR ON/OFF
+ [T] - SH         TIME (CET)  [O] -       YSOP           ]     OG OFF
+ [?] - SH                     [J] -       ONFERENCE      D]    DIT DESCRIPTION
+ [<] -   EVIOUS   NFE   CE    [>] - NEXT C             [RL]    ELOGON
+ [SENT    AUTO    N           [OLM] - ON L             [QUES   - QUESTIONNA   
+
+ [E      EXORCIST             [0] - SHELL    ESS         ] - ACCOU   EDITIN 
+ [2      EW CALLERSLOG        [3] - D-sact   ted         ] - D-sac   ated
+ [5      EW DIRECTORY         [DS]- SYSOP    NLOAD       S]- SYSOP   EW
+___   ______      ______   ______   ______   ____________   ______   ______   __
+
+         _________   ___   ______   _______/\      __    ___   ____ ________.
+            ______            /     ______//        _\   ___    _ /s      . |
+ ||  _\____     \/___       ./\____     \/.   \/    //     /              | |
+ |. /     /     /          //     /    //     /    o/   _______           : |
+ | /     /     /           /     /    o/     /     /     /|.         ANDS . |
+        /           /     /           /     /     /     /_||          :.     
+   ______         ______ /____      _/\__________/______ /|____   ___:::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D]   DOWNLOAD FILE(S)   [RZ] - Z   EM UPL   
+ [N] - SHOW NEW FILES         [F]   SHOW FILELIST      [A]  - A   R FILE   G
+ [Z] - ZIPPY SEARCH           [CF]- CON   ENCE FLAGS   [FS] - F         STATS
+ [C] - LEAVE MSG TO S         [E] - LEA   MSG TO USER  [R]  - R         SG'S
+ [S] - SHOW STATUS            [W] - CHA    SETTINGS    [V]  - V         HA FILE
+ [H] - SH         AGE         [X] -       N/OFF          ]  - COLOR ON/OFF
+ [T] - SH         TIME (CET)  [O] -       YSOP           ]  - LOG OFF
+ [?] - SH                     [J] -       ONFERENCE      D] - EDIT DESCRIPTION
+ [<] -   EVIOUS   NFE   CE    [>] - NEXT C   ERE       [RL] - RELOGON
+ [SENT    AUTO    N           [OLM] - ON L    ME       [QUEST] - QUESTIONNAIRE
+
+ [EX!]   EXORCIST             [0] - SHELL    ESS         ] - ACCOUNT EDITIN 
+ [2] -   EW CALLERSLOG        [3] - D-sact   ted         ] - D-sactivated
+ [5] -   EW DIRECTORY         [DS]- SYSOP    NLOAD       S]- SYSOP VIEW
+___   ______      _______________   ______   _____________________   ______   __
+
+         __________/\___   ______   _______/\      __    ___   ____ ________.
+            ______/           /     ______//        _\   ___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /              | |
+ |. /     /     /     /    //     /    //     /    o/   _______           : |
+ | /     /     /     /     /     /    o/     /     /     /|.         ANDS . |
+ :/     /           /     /           /     /     /     /_||          :.    |
+ /_______         ______ /____   ____/\__________/______ /|____   ___:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D]   DOWNLOAD FILE(S)   [RZ] - Z   EM UPL   
+ [N] - SHOW NEW FILES         [F]   SHOW FILELIST      [A]  - A   R FILE   G
+ [Z] - ZIPPY SEARCH           [CF]- CON   ENCE FLAGS   [FS] - FULL   NF STATS
+ [C] - LEAVE MSG TO SYSO      [E] - LEA   MSG TO USER  [R]  - READ   W MSG'S
+ [S] - SHOW STATUS            [W] - CHA    SETTINGS    [V]  - VIEW   T/LHA FILE
+ [H] - SH         AGE         [X] -    U ON/OFF          ]  - COLOR ON/OFF
+ [T] - SH         TIME (CET)  [O] -    E SYSOP           ]  - LOG OFF
+ [?] - SH                     [J] -    N CONFERENCE      D] - EDIT DESCRIPTION
+ [<] -   EVIOUS   NFERENCE    [>] - NEXT CONFERE       [RL] - RELOGON
+ [SENT    AUTO    N           [OLM] - ON LINE ME       [QUEST] - QUESTIONNAIRE
+
+ [EX!]   EXORCIST             [0] - SHELL    ESS         ] - ACCOUNT EDITING
+ [2] -   EW CALLERSLOG        [3] - D-sact   ted         ] - D-sactivated
+ [5] -   EW DIRECTORY         [DS]- SYSOP    NLOAD       S]- SYSOP VIEW
+___   ______   __________________   ____________________________________________
+
+       ____________/\___   ________________/\   _____   ___________ ________.
+      /     ______/           /     ______//        _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /              | |
+ |. /     /     /     /    //     /    //     /    o/   _______           : |
+ | /     /     /     /     /     /    o/     /     /     /|.         ANDS . |
+ :/     /           /     /           /     /     /     /_||          :.    |
+ /_______      _________ /____   ____/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D]   DOWNLOAD FILE(S)   [RZ] - ZMODEM UPL   
+ [N] - SHOW NEW FILES         [F]   SHOW FILELIST      [A]  - ALTER FILE   G
+ [Z] - ZIPPY SEARCH           [CF]- CON   ENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSO      [E] - LEA   MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHA    SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SH      P PAGE         [X] -    U ON/OFF          ]  - COLOR ON/OFF
+ [T] - SH      AL TIME (CET)  [O] -    E SYSOP           ]  - LOG OFF
+ [?] - SH      U              [J] -    N CONFERENCE      D] - EDIT DESCRIPTION
+ [<] -   EVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT    AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD       S]- SYSOP VIEW
+___   __________________________________________________________________________
+
+       ____________/\______________________/\________   ___________ ________.
+      /     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     C   ANDS . |
+ :/     /    ./     /     /           /     /     /     /_||          :.    |
+ /___________/__________ /____   ____/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] -    U ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] -    E SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] -    N CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

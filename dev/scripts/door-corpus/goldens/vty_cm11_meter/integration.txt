@@ -1,0 +1,404 @@
+
+[68K] VTY_CM11_METER exited with code 1
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                           ______                                            
+                              /                                              
+ ||                              __       .                                 |
+ |.                               /                                         |
+ |                               /                                          |
+                                                                             
+                                                               ___           
+                                                                        
+
+                  (S)                                       - Z            
+                  LES                                       - A             
+                                                         S]                  
+                                                         ]                  
+                                                         ]                    E
+                                                                          
+                                                                     
+                                                                              
+                                                       [R            
+                                                       [Q                     
+
+                                                                            
+                                                                         
+                                                                       
+                        ______            ___                                   
+
+                        _________                                            
+                        /     /                                              
+ ||                  __          __       .                                 |
+ |.                   /           /                                         |
+ |                   /           /                                   AND    |
+                          /                                                  
+                         /_                                    ___           
+                        /                                               
+
+                  (S)                  NLO                  - ZMOD         
+                  LES                  W F                  - ALTE          
+   ] -         ARC                     FER               S]    ULL           
+   ] -         G T                     VE                ]     EAD          
+   ] -         TUS                     NGE               ]     IEW            E
+                                                                          
+                                                                     
+                                                                              
+                CO                     T C             [R      ELO   
+               SIG                     N L             [Q      - Q            
+
+                                                                        TIN 
+                  SLO                                                   d
+                  ORY                                                  
+                        ______      ___   ___   ___                             
+
+                        _________                              ___           
+                        /     /                                 _            
+ ||                  __          __       .         //                      |
+ |.                   /           /                o/                       |
+ |                   /           /                 /                 AND    |
+ :/                       /                                                  
+ /_                      /_                                    ___           
+                        /                                               
+
+                  (S)                  NLO      E(S      Z] - ZMOD         
+                  LES                  W F      T        ]  - ALTE         G
+   ] -         ARC                     FERENC            S]    ULL           
+   ] -         G T                     VE MSG            ]     EAD          
+   ] -         TUS                     NGE SE            ]     IEW            E
+       SH                              U O                  - C           
+       SH                              E S                  - L      
+       SH                              N C                  - E               
+ [<             CONFE                  T CONF          [R      ELOGON
+ [S            SIGN                    N LINE      GE  [Q      - QUES         
+
+       -                                                                TIN 
+       VI         SLO                                                   d
+       VI         ORY                                                  
+                        ______      ___   ___   ___               ___           
+
+                        ____________                           ___           
+                        /     /                                 _            
+ ||                  __     ./   __       .         //                      |
+ |.                   /    //     /                o/                       |
+ |                   /     /     /                 /                 AND    |
+ :/          ./     /     /                             /                    
+ /_      ____/_   ___    /____                        __       ___           
+                        /                              \/               
+
+                  (S)                  NLOAD    E(S      Z] - ZMOD         
+                  LES                  W FILE   T        ]  - ALTE         G
+   ] -         ARC                     FERENC          [FS]    ULL           
+   ] -         G T                     VE MSG          [R]     EAD          
+   ] -         TUS                     NGE SE          [V]     IEW            E
+       SH                              U O                  - C   R O     
+       SH                              E S                  - L   OFF
+       SH                              N C      NCE         - E    DE         
+ [<      EVI    CONFE                  T CONF          [R      ELOGON
+ [S       AU   SIGN                    N LINE      GE  [Q      - QUES   NNA   
+
+       -                          - SHE                                 TIN 
+       VI         SLO             - D-s                                 d
+       VI         ORY            ]- SYS                                
+      ___               ______      ___   ___   ___               ___           
+
+   ___                  ____________                           ___           
+   k!n                  /     /                                 _            
+ ||      __          __     ./   __       .         //                      |
+ |.       /           /    //     /                o/                       |
+ |       /           /     /     /                 /                 AND    |
+ :/     /    ./     /     /     /                       /             :.     
+ /_   _______/_   ___    /__________                  __       ___   :::     
+                        /                              \/             .Y
+
+                  (S)               DOWNLOAD    E(S      Z] - ZMODEM       
+                  LES               SHOW FILE   T        ]  - ALTER F      G
+   ] -   PPY   ARCH                    FERENC          [FS]    ULL           
+   ] -   AVE   G TO S                  VE MSG          [R]     EAD          
+   ] -   OW    TUS                     NGE SE          [V]     IEW            E
+       SH                              U O                  - C   R O     
+       SH                              E S                  - L   OFF
+       SH                              N C      NCE         - E    DE         
+ [<      EVI    CONFE                  T CONFERE       [R      ELOGON
+ [S       AU   SIGN                    N LINE ME   GE  [Q      - QUES   NNA   
+
+       - EXO                      - SHELL                               TIN 
+       VIEW       SLOG            - D-sact                              d
+       VIEW       ORY            ]- SYSOP                              
+      ___            _________      ___   ___   ___               ___           
+
+   ___      ___         _______________   _/\                  ___         _.
+   k!n      ___         /     /     ___   //                    _           |
+ ||      __          __     ./   __       .         //                      |
+ |.       /           /    //     /                o/                       |
+ |       /           /     /     /                 /                 AND    |
+ :/     /    ./     /     /     /                       /             :.     
+ /_   _______/_   ___    /__________                  __       ___   :::     
+                        /                              \/             .Y
+
+                  (S)             - DOWNLOAD    E(S      Z] - ZMODEM    OAD
+                  LES             - SHOW FILE   T        ]  - ALTER F   FLAG
+   ] -   PPY SEARCH                    FERENCE F       [FS]    ULL           
+   ] -   AVE MSG TO S                  VE MSG TO       [R]     EAD          
+   ] -   OW STATUS                     NGE SETTI       [V]     IEW            E
+       SH                              U O                  - C   R O     
+       SH                              E S                  - L   OFF
+       SH                              N C      NCE         - E    DE         
+ [<] -   EVI    CONFE                  T CONFERENCE    [R      ELOGON
+ [SENT    AU   SIGN                    N LINE MESSAGE  [Q      - QUES   NNA   
+
+       - EXO   ST                 - SHELL                         NT    TIN 
+       VIEW    LERSLOG            - D-sact                        tiv   d
+       VIEW    ECTORY            ]- SYSOP                          VI  
+      ___         ____________      ___   _________               ___         __
+
+   ___      ___      __________________   _/\   ___     ____   ___   ___   _.
+   k!n      ___         /     /     ___   //          __\___    _           |
+ ||      __          __     ./   __       .         //     /                |
+ |.       /           /    //     /                o/   ____                |
+ |       /           /     /     /                 /     /|.         AND    |
+ :/     /    ./     /     /     /     /                 /             :.     
+ /_   _______/_   ___    /___________/\               __       ___   :::     
+                        /                              \/             .Y
+
+                  (S)             - DOWNLOAD    E(S      Z] - ZMODEM    OAD
+                  LES             - SHOW FILE   T        ]  - ALTER F   FLAG
+   ] -   PPY SEARCH                    FERENCE F   S   [FS]    ULL CONF      
+   ] -   AVE MSG TO SYSO               VE MSG TO   ER  [R]     EAD NEW M    
+   ] -   OW STATUS                     NGE SETTI       [V]     IEW TXT/L      E
+       SH                         -    U O                  - C   R O     
+       SH                         -    E S                  - L   OFF
+       SH                         -    N C      NCE         - E    DE         
+ [<] - PREVI    CONFE             -    T CONFERENCE    [R      ELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [Q      - QUES   NNA   
+
+       - EXORCIST                 - SHELL                         NT    TIN 
+       VIEW CALLERSLOG            - D-sact                        tiv   d
+       VIEW DIRECTORY            ]- SYSOP                          VI  
+      ___         ____________      ___   _________               ___         __
+
+   ___      ___      ______________________/\   ___     ____   ___   _______.
+   k!n      ___         /     /     ______//          __\___    _         . |
+ ||      __          __     ./\____       .   \/    //     /              | |
+ |.       /           /    //     /           /    o/   _______           : |
+ |       /           /     /     /           /     /     /|.         ANDS . |
+ :/     /    ./     /     /     /     /                 /             :.     
+ /_   _______/_______    /___________/\      ___      __    ______   :::     
+                        /                              \/             .Y
+
+ [U    UP         (S)             - DOWNLOAD    E(S      Z] - ZMODEM    OAD
+ [N    SH         LES             - SHOW FILE   T        ]  - ALTER F   FLAG
+   ] -   PPY SEARCH                    FERENCE F   S   [FS]    ULL CONF      
+   ] -   AVE MSG TO SYSOP              VE MSG TO   ER  [R]     EAD NEW M    
+   ] -   OW STATUS                     NGE SETTI       [V]     IEW TXT/L      E
+       SH                         -    U ON/O               - C   R O   FF
+       SH                  )      -    E SYSO               - L   OFF
+       SH                         -    N CONF   NCE         - E    DE   IPT   
+ [<] - PREVI    CONFE             -    T CONFERENCE    [R      ELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [Q      - QUES   NNA   
+
+       - EXORCIST                 - SHELL ACC            ] -      NT    TIN 
+       VIEW CALLERSLOG            - D-sactiva            ] -      tiv   d
+       VIEW DIRECTORY            ]- SYSOP DOW            S]-       VI  
+      ___         ____________      ___   _________               ___         __
+
+   ___      ___      ______________________/\   ___     ____   ___   _______.
+   k!n      ___         /     /     ______//          __\___    _         . |
+ ||  _   __          __     ./\____       .   \/    //     /              | |
+ |. /     /           /    //     /           /    o/   _______           : |
+ | /     /           /     /     /           /     /     /|.         ANDS . |
+ :/     /    ./     /     /     /     /                 /             :.     
+ /_   _______/_______    /___________/\      ___   _____    ______   :::     
+                        /                              \/             .Y
+
+ [U    UP      ILE(S)             - DOWNLOAD    E(S      Z] - ZMODEM UPLOAD
+ [N    SH       FILES             - SHOW FILE   T        ]  - ALTER FILEFLAG
+ [Z] -   PPY SEARCH           [CF]-    FERENCE F   S   [FS]    ULL CONF    TS
+ [C] -   AVE MSG TO SYSOP     [E] -    VE MSG TO   ER  [R]     EAD NEW M   S
+ [S] -   OW STATUS            [W] -    NGE SETTI       [V]     IEW TXT/L   FILE
+       SH                         -    U ON/OFF             - C   R ON/OFF
+       SH                  )      -    E SYSOP              - L   OFF
+       SH                         -    N CONFERENCE         - E    DESCRIPT   
+ [<] - PREVI    CONFE             -    T CONFERENCE    [RL]    ELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [QUES   - QUESTIONNA   
+
+       - EXORCIST                 - SHELL ACC            ] -   COUNT    TIN 
+       VIEW CALLERSLOG            - D-sactiva            ] -   sactiv   d
+       VIEW DIRECTORY            ]- SYSOP DOW            S]-   SOP VI  
+   _________   _______________      ___   _________               ___         __
+
+   ___      ___   _/\______________________/\   ___     ____   ___   _______.
+   k!n      ___   /     /     /     ______//          __\___    _         . |
+ ||  _   __     \/   __     ./\____       .   \/    //     /              | |
+ |. /     /     /     /    //     /           /    o/   _______           : |
+ | /     /     /     /     /     /           /     /     /|.         ANDS . |
+ :/     /    ./     /     /     /     /                 /             :.     
+ /___________/_______    /___________/\      ___   _____    ______   :::___  
+                        /                              \/             .Y
+
+ [U    UP      ILE(S)             - DOWNLOAD    E(S      Z] - ZMODEM UPLOAD
+ [N    SH       FILES             - SHOW FILE   T        ]  - ALTER FILEFLAG
+ [Z] -   PPY SEARCH           [CF]- CONFERENCE F   S   [FS]    ULL CONF    TS
+ [C] -   AVE MSG TO SYSOP     [E] - LEAVE MSG TO   ER  [R]     EAD NEW M   S
+ [S] -   OW STATUS            [W] - CHANGE SETTI       [V]     IEW TXT/L   FILE
+       SH                         -    U ON/OFF             - C   R ON/OFF
+       SH               CET)      -    E SYSOP              - L   OFF
+       SH                         -    N CONFERENCE         - E    DESCRIPT   
+ [<] - PREVI    CONFE   CE        -    T CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+       - EXORCIST                 - SHELL ACC            ] -   COUNT    TIN 
+       VIEW CALLERSLOG            - D-sactiva            ] -   sactiv   d
+       VIEW DIRECTORY            ]- SYSOP DOW            S]-   SOP VI  
+   _________   __________________   ___   _________         _________   ___   __
+
+   ___   ______   _/\______________________/\   ___     ____   ____ ________.
+   k!n      ___   /     /     /     ______//          __\___    _ /s      . |
+ ||  _\____     \/   __     ./\____       .   \/    //     /              | |
+ |. /     /     /     /    //     /           /    o/   _______           : |
+ | /     /     /     /     /     /    o      /     /     /|.         ANDS . |
+ :/     /    ./     /     /     /     /                 /_||          :.     
+ /___________/_______    /___________/\      ___   _____ /|_______   :::___  
+                        /                              \/             .Y
+
+ [U] - UP      ILE(S)         [D] - DOWNLOAD    E(S      Z] - ZMODEM UPLOAD
+ [N] - SH       FILES         [F] - SHOW FILE   T        ]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE F   S   [FS]    ULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO   ER  [R]     EAD NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTI       [V]     IEW TXT/LHA FILE
+       SH                         -    U ON/OFF        [M   - C   R ON/OFF
+       SH            E (CET)      -    E SYSOP         [G   - L   OFF
+       SH                         -    N CONFERENCE    [E   - E    DESCRIPT   
+ [<] - PREVI    CONFE   CE        -    T CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+       - EXORCIST                 - SHELL ACCESS         ] -   COUNT    TING
+       VIEW CALLERSLOG            - D-sactivated         ] -   sactiv   d
+       VIEW DIRECTORY            ]- SYSOP DOWNLO         S]-   SOP VI  
+   _________   __________________   __________________   ____________   ___   __
+
+ .____   ______   _/\______________________/\________   ____   ____ ________.
+ |Sk!n      ___   /     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/   __     ./\____       .   \/    //     /    //        | |
+ |. /     /     /     /    //     /           /    o/   ________/         : |
+ | /     /     /     /     /     /    o      /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /                 /_||          :.     
+ /___________/__________ /___________/\___   ___   _____ /|_______   :::___  
+                       \/                              \/             .Y
+
+ [U] - UP      ILE(S)         [D] - DOWNLOAD    E(S      Z] - ZMODEM UPLOAD
+ [N] - SH       FILES         [F] - SHOW FILE   T        ]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS]    ULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]     EAD NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]     IEW TXT/LHA FILE
+ [H    SHOW                       -    U ON/OFF        [M   - C   R ON/OFF
+ [T    SHOW          E (CET)      -    E SYSOP         [G   - L   OFF
+ [?    SHOW                       -    N CONFERENCE    [E   - E    DESCRIPT   
+ [<] - PREVI    CONFE   CE        -    T CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+   X!] - EXORCIST             [0] - SHELL ACCESS         ] -   COUNT    TING
+   ] - VIEW CALLERSLOG        [3] - D-sactivated         ] -   sactiv   d
+   ] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO         S]-   SOP VI  
+____________   ______________________________________________________   ________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____       .   \/    //     /    //        | |
+ |. /     /     /     /    //     /           /    o/   ________/         : |
+ | /     /     /     /     /     /    o      /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /                 /_||          :.     
+ /___________/__________ /___________/\___   ___   _____ /|_______   :::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD    E(S    [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILE   T      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS]    ULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]     EAD NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]     IEW TXT/LHA FILE
+ [H] - SHOW HELP P            [X] -    U ON/OFF        [M   - COLOR ON/OFF
+ [T] - SHOW LOCAL    E (CET)  [O] -    E SYSOP         [G   - LOG OFF
+ [?] - SHOW MENU              [J] -    N CONFERENCE    [E   - EDIT DESCRIPT   
+ [<] - PREVI    CONFE   CE        -    T CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN              M]    N LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO         S]- SYSOP VIEW
+____________   _________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S    [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS]    ULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]     EAD NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]     IEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPT   
+ [<] - PREVIOUS CONFERENCE        - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN              M] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+____________   _________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

@@ -1,0 +1,404 @@
+
+[68K] 5D_TOPFA_5D_TOPFAKER exited with code 1
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                          _/\                                
+                                          //                                 
+     _                                                                       
+    /                                                                        
+   /          /                                                              
+                                                                             
+                                             ___                             
+                                                                        
+
+                                          AD                               
+                                          ILE                               
+ [Z                              ]-                                          
+ [C                               -                                         
+ [S                               -                                            
+       SH                         -                                       
+       SH                         -                                  
+       SH                         -                                           
+                                                                     
+                                                                              
+
+                                    SHE      ESS                            
+                                    D-s      ted                         
+                                    SYS      NLO                       
+______               ___   ___                                                  
+
+               ___                        _/\                                
+               ___                        //                                 
+     _                                    .                                  
+    /                                                                        
+   /          /                                                              
+ :/                             /                                            
+ /_                           ___            ___                             
+                                                                        
+
+                                          AD                               
+                                          ILE                               
+ [Z               H              ]-                                  NF    TS
+ [C               O S             -                                  W M   S
+ [S                               -                                  T/L   FIL 
+       SH                         -    U O                                
+       SH                         -    E S                           
+       SH                         -    N C                                    
+         EVI                                 ERE                     
+          AU                                  ME                     TIO      
+
+                                    SHE   ACCESS               COU          
+                                    D-s   ivated               sac       
+                                    SYS   DOWNLO               SOP     
+______               ___   ___   ___                     ___                  __
+
+   ___         ____/\      ___            _/\               ___              
+   k!n         ___/                       //                                 
+     _                                    .                     //           
+    /                                                          _/            
+   /          /                                                  C           
+ :/                             /                                            
+ /_                           ___            ___                             
+                                                                        
+
+       UP                                 AD       )   [R                  
+       SH                                 ILE          [A                   
+ [Z               H              ]-       ENCE F                     NF    TS
+ [C               O S             -       MSG TO                     W M   S
+ [S                               -        SETTI                     T/L   FIL 
+       SH                         -    U O                                
+       SH                         -    E S                           
+       SH                         -    N C                                    
+   ] -   EVI    CO                     T C   ERE                     
+   ENT    AU   SIG                     N L    ME                     TIO      
+
+                                    SHE   ACCESS             ACCOU      TIN 
+                                    D-s   ivated             D-sac      d
+                                    SYS   DOWNLO             SYSOP     
+______               ___   ___   ___                     ___                  __
+
+   ___         ____/\      ___            _/\               ___         ___  
+   k!n         ___/                       //                              .  
+     _                                    .                     //           
+    /                                                       ____/            
+   /          /                                                  C           
+ :/                             /                 /                          
+ /_                           ___            ____/_                          
+                                                                        
+
+       UPLOA                              AD       )   [R   - Z            
+       SHOW                               ILE          [A   - A             
+ [Z          SE   H              ]-       ENCE F   S                 NF    TS
+ [C          MS   O S             -       MSG TO   ER                W M   S
+ [S         STA                   -        SETTI                     T/L   FIL 
+       SH                         -    U O                        R O     
+       SH                  )      -    E S                        OFF
+       SH                         -    N C                         DE         
+   ] -   EVI    CO      CE             T C   ERE                     
+   ENT    AU   SIG                     N L    ME                     TIO      
+
+       -                            SHE   ACCESS       [1] - ACCOU      TIN 
+       VI                           D-s   ivated       [4] - D-sac      d
+       VI                           SYS   DOWNLO       [VS]- SYSOP     
+______      ___      ___   ___   ___               ___   ___                  __
+
+   ___         ____/\      ___         ____/\               ___         ___  
+   k!n         ___/                    ___//                              .  
+     _                                    .                     //           
+    /                                                       ____/            
+   /          /                                                  C           
+ :/          ./                 /                 /                          
+ /_         _/_               ___            ____/_                          
+                                                                        
+
+       UPLOA                      -       AD       )   [R   - Z            
+       SHOW                       -       ILE          [A   - A             
+ [Z] -       SE   H              ]-       ENCE F   S                 NF    TS
+ [C] -       MS   O S   P         -       MSG TO   ER                W M   S
+ [S] -      STA                   -        SETTI                     T/L   FIL 
+       SH      P P                -    U ON/O                     R O     
+       SH      AL       CET)      -    E SYSO                     OFF
+       SH      U                  -    N CONF                      DE         
+   ] -   EVI    CO      CE    [>]      T C   ERE               ELO   
+   ENT    AU   SIG            [OL      N L    ME               - Q   TIO      
+
+   X!] -                            SHE   ACCESS       [1] - ACCOU      TIN 
+   ] - VI                           D-s   ivated       [4] - D-sac      d
+   ] - VI                           SYS   DOWNLOAD     [VS]- SYSOP     
+______   ______      ___   _________               ___   ______   ___         __
+
+   ___         ____/\      ___         ____/\               ___         ___  
+   k!n         ___/                    ___//                              .  
+     _                                    .                     //          |
+    /                                                       ____/           |
+   /          /                                                  C   AND    |
+ :/          ./                 /                 /                          
+ /_      ____/_               ___            ____/_                          
+                                                                        
+
+   ] - UPLOA                      -       AD       )   [R   - Z      UPL   
+   ] - SHOW                       -       ILE          [A   - A      ILE    
+ [Z] -       SE   H              ]-       ENCE F   S     S]          NF    TS
+ [C] -       MS   O S   P         -       MSG TO   ER    ]           W M   S
+ [S] -      STA                   -        SETTI         ]           T/L   FILE
+       SH      P PAGE             -    U ON/O                     R ON/O  
+       SH      AL TIME (CET)      -    E SYSO                     OFF
+       SH      U                  -    N CONF                      DESCR   ION
+   ] -   EVI    CO      CE    [>]   NEXT C   ERE               ELO   
+   ENT    AU   SIG            [OL   - ON L    ME   GE          - Q   TIO      
+
+   X!] - EXO                        SHE   ACCESS       [1] - ACCOU      TIN 
+   ] - VIEW                         D-s   ivated       [4] - D-sac      d
+   ] - VIEW                         SYS   DOWNLOAD     [VS]- SYSOP     
+______   ______      ___   ____________            ___   ______   ___         __
+
+   ___         ____/\      ___         ____/\               ______   ______  
+   k!n         ___/                    ___//                    _         .  
+     _\__                                 .                     //        | |
+    /                                                       ____/         : |
+   /          /                                                  C   ANDS . |
+ :/     /    ./                 /           /     /                          
+ /_   _______/_      ___      ___         _______/_                     ___  
+                       \                                                
+
+   ] - UPLOA                      -       AD       )   [R   - Z      UPL   
+   ] - SHOW                       -       ILE          [A   - A      ILE    
+ [Z] -       SE   H              ]-    FERENCE F   S     S]          NF    TS
+ [C] -       MS   O S   P         -    VE MSG TO   ER    ]           W M   S
+ [S] -      STA                   -    NGE SETTI         ]           T/L   FILE
+       SH      P PAGE             -    U ON/OFF          ]        R ON/O  
+       SH      AL TIME (CET)      -    E SYSOP           ]        OFF
+       SH      U                  -    N CONFERE         D]        DESCR   ION
+   ] -   EVI    CO      CE    [>]   NEXT C   ERE       [R      ELO   
+   ENT    AU   SIG            [OL   - ON L    ME   GE  [Q      - Q   TIO   IRE
+
+ [EX!] - EXO                        SHE   ACCESS       [1] - ACCOU      TING
+ [2] - VIEW                         D-s   ivated       [4] - D-sac      d
+ [5] - VIEW                         SYS   DOWNLOAD     [VS]- SYSOP     
+______   _________   ___   ____________            ___   ______   ___         __
+
+ .____ __      ____/\      ___         ____/\               _______ _______  
+ |Sk!n/        ___/                    ___//                    _ /s      .  
+     _\__                                 .         //          //        | |
+    /                                              o/       ____/         : |
+   /          /                                    /             C   ANDS . |
+ :/     /    ./           /     /           /     /      _||          :.     
+ /_   _______/_      ___ /_   ______      _______/_      /|_   ___   :::___  
+                       \/                                             .Y
+
+   ] - UPLOA                      -       AD       )   [R   - Z      UPLOAD
+   ] - SHOW                       -       ILE          [A   - A      ILEFLA 
+ [Z] -   PPY SE   H              ]- CONFERENCE F   S     S]          NF STATS
+ [C] -   AVE MS   O S   P         - LEAVE MSG TO   ER    ]           W MSG'S
+ [S] -   OW STA                   - CHANGE SETTI         ]           T/LHA FILE
+       SH      P PAGE             - MENU ON/OFF          ]  - C   R ON/O  
+       SH      AL TIME (CET)      - PAGE SYSOP           ]  - L   OFF
+       SH      U                  - JOIN CONFERE         D] - E    DESCR   ION
+   ] -   EVI    CO      CE    [>]   NEXT C   ERE       [R      ELO   
+   ENT    AU   SIG            [OL   - ON L    ME   GE  [Q      - Q   TIO   IRE
+
+ [EX!] - EXO                        SHE   ACCESS       [1] - ACCOU      TING
+ [2] - VIEW       SLO               D-s   ivated       [4] - D-sac      d
+ [5] - VIEW       ORY               SYS   DOWNLOAD     [VS]- SYSOP     
+______   _________   ___   ____________            ___   ______   ___         __
+
+ .____ __      ____/\      ___         ____/\      __       _______ _______  
+ |Sk!n/        ___/                    ___//        _\          _ /s      .  
+     _\__                        __     \/.         //          //        | |
+    /                             /    //          o/       ____/         : |
+   /          /                  /     /           /             C   ANDS . |
+ :/     /    ./           /     /           /     /      _||          :.    |
+ /_   _______/____   ___ /_   ______      _______/_      /|_   ___   :::____|
+                       \/                                             .Y
+
+   ] - UPLOAD F                   -       AD       )   [R   - Z   EM UPLOAD
+   ] - SHOW NEW                   -       ILE          [A   - A   R FILEFLA 
+ [Z] -   PPY SE   H              ]- CONFERENCE F   S     S]          NF STATS
+ [C] -   AVE MS   O S   P         - LEAVE MSG TO   ER    ]           W MSG'S
+ [S] -   OW STA                   - CHANGE SETTI         ]           T/LHA FILE
+       SH      P PAGE             - MENU ON/OFF          ]  - C   R ON/O  
+       SH      AL TIME (CET)      - PAGE SYSOP           ]  - L   OFF
+       SH      U                  - JOIN CONFERE         D] - E    DESCR   ION
+   ] - PREVIOUS CONFE   CE    [>]   NEXT C   ERENCE    [RL]    ELO   
+   ENT] - AUTO SIGN           [OL   - ON L    MESSAGE  [QUES   - Q   TIO   IRE
+
+ [EX!] - EXO   ST                   SHE   ACCESS       [1] - ACCOU      TING
+ [2] - VIEW    LERSLO               D-s   ivated       [4] - D-sac      d
+ [5] - VIEW    ECTORY               SYS   DOWNLOAD     [VS]- SYSOP     
+______   _________   ___   ____________         ______   ______   ______      __
+
+ .____ __      ____/\      ___   __________/\      __   ___________ _______  
+ |Sk!n/        ___/                 ______//        _\__\___    _ /s      .  
+     _\__            __          __     \/.         //          //        | |
+    /                 /           /    //          o/       ____/         : |
+   /          /      /           /     /           /             C   ANDS . |
+ :/     /    ./           /     /           /     /      _||          :.    |
+ /_   _______/____   ___ /_   ______      _______/_      /|_   ___   :::____|
+                       \/                                             .Y
+
+   ] - UPLOAD F   (S)             -    NLOAD       )   [R   - ZMODEM UPLOAD
+   ] - SHOW NEW   LES             -    W FILE          [A   - ALTER FILEFLA 
+ [Z] -   PPY SE   H              ]- CONFERENCE F   S   [FS] - F      NF STATS
+ [C] -   AVE MS   O SYSOP         - LEAVE MSG TO   ER  [R]  - R      W MSG'S
+ [S] -   OW STA                   - CHANGE SETTI       [V]  - V      T/LHA FILE
+       SH      P PAGE             - MENU ON/OFF          ]  - C   R ON/OFF
+       SH      AL TIME (CET)      - PAGE SYSOP           ]  - L   OFF
+       SH      U                  - JOIN CONFERE         D] - E    DESCRIPTION
+   ] - PREVIOUS CONFE   CE    [>]   NEXT C   ERENCE    [RL]    ELO   
+   ENT] - AUTO SIGN           [OL   - ON L    MESSAGE  [QUES   - Q   TIO   IRE
+
+ [EX!] - EXO   ST             [0]   SHELL ACCESS       [1] - ACCOU      TING
+ [2] - VIEW    LERSLO         [3]   D-sactivated       [4] - D-sac      d
+ [5] - VIEW    ECTORY         [DS   SYSOP DOWNLOAD     [VS]- SYSOP     
+______   _________   ___   ____________         _______________   ______      __
+
+ .____ __   _______/\_________   __________/\___   __   ___________ _______  
+ |Sk!n/     ______/     /           ______// \__    _\__\___    _ /s      .  
+     _\__       \/   __          __     \/.         //          //        | |
+    /           /     /           /    //          o/       ____/         : |
+   /          //     /           /     /           /             C   ANDS . |
+ :/     /    ./     /     /     /           /     /      _||          :.    |
+ /_   _______/__________ /_   ______      _______/_      /|_   ______:::____|
+                       \/                                             .Y
+
+   ] - UPLOAD F   (S)             - DOWNLOAD    E(S)   [RZ] - ZMODEM UPLOAD
+   ] - SHOW NEW   LES             - SHOW FILE   T      [A]  - ALTER FILEFLA 
+ [Z] - ZIPPY SE   H              ]- CONFERENCE F   S   [FS] - F      NF STATS
+ [C] - LEAVE MS   O SYSOP         - LEAVE MSG TO   ER  [R]  - R      W MSG'S
+ [S] - SHOW STA                   - CHANGE SETTI       [V]  - V      T/LHA FILE
+       SH      P PAGE             - MENU ON/OFF          ]  - C   R ON/OFF
+       SH      AL TIME (CET)      - PAGE SYSOP           ]  - L   OFF
+       SH      U                  - JOIN CONFERE         D] - E    DESCRIPTION
+   ] - PREVIOUS CONFE   CE    [>]   NEXT CONFERENCE    [RL] - RELO   
+   ENT] - AUTO SIGN           [OL   - ON LINE MESSAGE  [QUEST] - Q   TIO   IRE
+
+ [EX!] - EXORCIST             [0]   SHELL ACCESS       [1] - ACCOU      TING
+ [2] - VIEW CALLERSLOG        [3]   D-sactivated       [4] - D-sac      d
+ [5] - VIEW DIRECTORY         [DS   SYSOP DOWNLOAD     [VS]- SYSOP     
+______   _________   ___   _______________      _______________   ______   _____
+
+ .____ ____________/\_________   __________/\________   ___________ ________.
+ |Sk!n/     ______/     /           ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/   __       \____     \/.   \/    //          //        | |
+ |. /     /     /     /           /    //     /    o/   _   ____/         : |
+ | /     /    //     /           /     /     /     /             C   ANDS . |
+ :/     /    ./     /     /     /           /     /      _||          :.    |
+ /_   _______/__________ /_   ______      _______/____   /|__________:::____|
+                       \/                                             .Y
+
+   ] - UPLOAD F   (S)             - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+   ] - SHOW NEW   LES             - SHOW FILELIST      [A]  - ALTER FILEFLA 
+ [Z] - ZIPPY SE   H              ]- CONFERENCE F   S   [FS] - F      NF STATS
+ [C] - LEAVE MS   O SYSOP         - LEAVE MSG TO   ER  [R]  - R      W MSG'S
+ [S] - SHOW STA                   - CHANGE SETTI       [V]  - V      T/LHA FILE
+       SH      P PAGE             - MENU ON/OFF          ]  - C   R ON/OFF
+       SH      AL TIME (CET)      - PAGE SYSOP           ]  - L   OFF
+       SH      U                  - JOIN CONFERENCE      D] - E    DESCRIPTION
+   ] - PREVIOUS CONFE   CE    [>]   NEXT CONFERENCE    [RL] - RELO   
+   ENT] - AUTO SIGN           [OL   - ON LINE MESSAGE  [QUEST] - Q   TIO   IRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOU      TING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sac      d
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP     
+______   _________   ___   _____________________________________________   _____
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /      _||          :.    |
+ /_   _______/__________ /___________/\   _______/____   /|__________:::____|
+                       \/                                             .Y
+
+   ] - UPLOAD F   (S)             - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+   ] - SHOW NEW   LES             - SHOW FILELIST      [A]  - ALTER FILEFLA 
+ [Z] - ZIPPY SE   H              ]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MS   O SYSOP         - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STA                   - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SH   HELP PAGE             - MENU ON/OFF          ]  - C   R ON/OFF
+ [T] - SH   LOCAL TIME (CET)      - PAGE SYSOP           ]  - L   OFF
+ [?] - SH   MENU                  - JOIN CONFERENCE      D] - E    DESCRIPTION
+ [<] - PREVIOUS CONFE   CE    [>]   NEXT CONFERENCE    [RL] - RELO   
+ [SENT] - AUTO SIGN           [OL   - ON LINE MESSAGE  [QUEST] - Q   TIO   IRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOU   EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sac   ated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP   EW
+______   _________   ___   _____________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+   ] - UPLOAD FILE(S)             - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+   ] - SHOW NEW FILES             - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE             - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)      - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+______   _______________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

@@ -1,0 +1,411 @@
+
+ 
+ 
+_NosNUKE_ Version 0.21 -- By Nosferatu!
+ 
+ 
+Cannot Find Paths File - "BBS:Conf1/Paths"!   Aborting!
+ 
+ 
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                        ___                                                  
+                        /                                                    
+                            ./                                               
+                           //                                                
+                           /                                                 
+ :/                                               /                          
+ /_            ___                              _/_         ___              
+                                                                        
+
+                                                                           
+                                                                            
+                                                                           TS
+                                                                           S
+                                                                           FIL 
+ [H] -   OW    P P                                                        
+ [T] -   OW    AL                                                    
+ [?] -   OW    U                                                              
+                                                         L]          
+                                                   GE    UES                  
+
+                                                         ] -                
+                                                         ] -             
+                                                         S]-           
+___                                                                             
+
+                        ___            ___                  ___         ___  
+                        /              ___                                .  
+                            ./                             /                 
+                           //                            ___                 
+                           /                             /|.      OMM        
+ :/                                         /     /                          
+ /_      ___   ___         ___            ___   _/_         ___              
+                                                                        
+
+   ] -                                                                     
+   ] -                                                                      
+       ZI                                                                  TS
+       LE                                                                  S
+       SH                                                                  FIL 
+ [H] -   OW    P P                                                        
+ [T] -   OW    AL       CET                                          
+ [?] -   OW    U                                                              
+                                                         L]          
+                                                   GE    UES                  
+
+                                             ESS         ] -            TIN 
+                                             ted         ] -            d
+                                             NLO         S]-           
+___   ___                                          ___                          
+
+                     ______            ___                  ___         ____.
+                        /              ___                                . |
+                     __     ./                             /                 
+                      /    //                            ___                 
+                     /     /                             /|.      OMM        
+ :/                                         /     /     /                    
+ /_      ___   ___         ___            ___   _/______    ___              
+                                                       \/               
+
+   ] -      D F   (S)                                    Z]                
+   ] -      NEW   LES                                    ]                  
+       ZIPPY                                                         NF    TS
+       LEAVE         YSO                                             W M   S
+       SHOW                                                          T/L   FIL 
+ [H] -   OW    P P                                                        
+ [T] -   OW    AL       CET                                          
+ [?] -   OW    U                                                              
+                                                         L]          
+                                                   GE    UES                  
+
+            RCIST                      LL    ESS         ] -            TIN 
+            CALLER                     act   ted         ] -            d
+            DIRECT                     OP    NLO         S]-           
+___   ______                                       ___   ___                    
+
+                     ______            ___                  ___         ____.
+                        /              ___                                . |
+                     __     ./                             /                 
+                      /    //                            ______              
+                     /     /                             /|.      OMM        
+ :/                                         /     /     /                    
+ /_      ___   ___         ___   ___      ___   _/______    ___              
+                                                       \/               
+
+   ] -      D F   (S)                                    Z]    MOD         
+   ] -      NEW   LES                                    ]     LTE          
+       ZIPPY                              ENC                        NF    TS
+       LEAVE         YSO                  MSG                        W M   S
+       SHOW                                SE                        T/L   FIL 
+ [H] -   OW    P P                           FF                           
+ [T] -   OW    AL       CET                  P                       
+ [?] -   OW    U                             ERE                              
+   ] - PR                           NEX   ONF            L]          
+   ENT] -                           - O   INE      GE    UES                  
+
+   X!]      RCIST                      LL ACCESS         ] -            TIN 
+   ] -      CALLERSLO                  activated         ] -            d
+   ] -      DIRECTORY                  OP DOWNLO         S]-           
+___   ______                  ___                  _________            ___   __
+
+         ___   ___   ______            ___                  ___         ____.
+               ___      /              ___                                . |
+                  _____     ./\__                          /                 
+                      /    //                            ______              
+                     /     /                             /|.      OMM        
+ :/                                         /     /     /                    
+ /_      ___   ___         ___   ___   ______   _/______    ___              
+                                                       \/               
+
+   ] -      D FILE(S)                        FIL         Z]    MOD         
+   ] -      NEW FILES                        LIS         ]     LTE          
+       ZIPPY                              ENC                      CONF STATS
+       LEAVE         YSO                  MSG                      NEW MSG'S
+       SHOW                                SE                      TXT/LHA FIL 
+ [H] -   OW    P P                           FF                           
+ [T] -   OW    AL       CET)                 P                       
+ [?] -   OW    U                             ERE                              
+   ] - PR            REN            NEX   ONF            L]          
+   ENT] -                           - O   INE      GE    UES         TIO      
+
+   X!]   EXORCIST                   SHELL ACCESS         ] -   COU      TIN 
+   ] -   EW CALLERSLO               D-sactivated         ] -   sac      d
+   ] -   EW DIRECTORY               SYSOP DOWNLO         S]-   SOP     
+___   ______                  ___                  _________            ________
+
+         ___   ___   ______            ___                  ___         ____.
+               ___      /              ___                                . |
+                \/_____     ./\__                          /                 
+                /     /    //                            ______              
+               /     /     /                             /|.      OMM        
+ :/     /           /                       /     /     /                    
+ /_   ______   _________   ___   ___   __________/______    ___   ___        
+                       \                               \/               
+
+   ] -      D FILE(S)         [D]         AD FIL         Z]    MOD         
+   ] -      NEW FILES         [F]         ILELIS         ]     LTE          
+       ZIPPY                        CON   ENC            S]        CONF STATS
+       LEAVE         YSO            LEA   MSG            ]         NEW MSG'S
+       SHOW                         CHA    SE            ]         TXT/LHA FIL 
+ [H] -   OW    P P                           FF                   R O     
+ [T] -   OW    AL       CET)                 P                    OFF
+ [?] -   OW    U                             ERE                   DE         
+   ] - PR   OUS      REN            NEX   ONF            L]          
+   ENT] -   TO                      - O   INE      GE    UES         TIO      
+
+   X!]   EXORCIST                 - SHELL ACCESS         ] - ACCOU      TIN 
+   ] -   EW CALLERSLOG            - D-sactivated         ] - D-sac      d
+   ] -   EW DIRECTORY            ]- SYSOP DOWNLO         S]- SYSOP     
+___   _________               ___                  _________            ________
+
+         ___   ___   ______   ___      ___         __   _   ___         ____.
+               ___      /     /        ___          _\__\                 . |
+                \/_____     ./\__                          /                 
+                /     /    //                            ______              
+               /     /     /                             /|.      OMM        
+ :/     /    ./     /                       /     /     /                    
+ /___________/__________   ___   ___   __________/______    ___   ___        
+                       \                               \/               
+
+   ] -      D FILE(S)         [D] -       AD FIL         Z]    MOD         
+   ] -      NEW FILES         [F] -       ILELIS         ]     LTE          
+       ZIPPY SE               [CF   CON   ENC            S]        CONF STATS
+       LEAVE MS      YSO      [E]   LEA   MSG            ]         NEW MSG'S
+       SHOW STA               [W]   CHA    SE            ]         TXT/LHA FIL 
+ [H] -   OW    P PAGE               MEN      FF                   R O     
+ [T] -   OW    AL TIM   CET)        PAG      P                    OFF
+ [?] -   OW    U                    JOI      ERE                   DE         
+   ] - PR   OUS      REN          - NEX   ONFERE         L]          
+   ENT] -   TO                   M] - O   INE ME   GE    UES         TIONNA   
+
+   X!]   EXORCIST                 - SHELL ACCESS         ] - ACCOU      TIN 
+   ] -   EW CALLERSLOG            - D-sactivated         ] - D-sac      d
+   ] -   EW DIRECTORY            ]- SYSOP DOWNLO         S]- SYSOP     
+__________________      ___   ___               ____________            ________
+
+         ___   ___   ______   ___      ___         __   _______         ____.
+               ___      /     /        ___          _\__\___              . |
+     _          \/_____     ./\__       \/    \/           /                 
+    /           /     /    //          //     /          ______              
+   /           /     /     /          o/     /           /|.      OMM        
+ :/     /    ./     /                       /     /     /                    
+ /___________/__________   ___   ___   __________/______    _________        
+                       \                               \/               
+
+   ] -      D FILE(S)         [D] -       AD FIL         Z]    MODEM    OAD
+   ] -      NEW FILES         [F] -       ILELIS         ]     LTER F   FLA 
+   ] - ZIPPY SE               [CF   CON   ENCE F         S]        CONF STATS
+   ] - LEAVE MS      YSO      [E]   LEA   MSG TO         ]         NEW MSG'S
+   ] - SHOW STA               [W]   CHA    SETTI         ]         TXT/LHA FILE
+ [H] -   OW    P PAGE               MEN      FF        [M]        R O     
+ [T] -   OW    AL TIME (CET)        PAG      P         [G]        OFF
+ [?] -   OW    U                    JOI      ERE       [ED]        DE         
+   ] - PR   OUS      REN          - NEX   ONFERENCE      L]          
+   ENT] -   TO                   M] - O   INE MESSAGE    UES         TIONNA   
+
+   X!]   EXORCIST                 - SHELL ACCESS         ] - ACCOU      TIN 
+   ] -   EW CALLERSLOG            - D-sactivated         ] - D-sac      d
+   ] -   EW DIRECTORY            ]- SYSOP DOWNLO         S]- SYSOP     
+__________________      ___   ___               ____________            ________
+
+         __________/\______   ___      ____/\___   __   _______         ____.
+            ______/     /     /        ___// \__    _\__\___              . |
+ ||  _          \/_____     ./\__       \/    \/           /                 
+ |. /           /     /    //          //     /          ______              
+ | /           /     /     /          o/     /           /|.      OMM        
+ :/     /    ./     /     /     /           /     /     /_||                 
+ /___________/__________ /__________   __________/______ /|__________        
+                       \/                              \/               
+
+   ] -      D FILE(S)         [D] -       AD FIL         Z]    MODEM    OAD
+   ] -      NEW FILES         [F] -       ILELIS         ]     LTER F   FLA 
+   ] - ZIPPY SE   H           [CF   CON   ENCE F         S]        CONF STATS
+   ] - LEAVE MS   O SYSO      [E]   LEA   MSG TO         ]         NEW MSG'S
+   ] - SHOW STA               [W]   CHA    SETTI         ]         TXT/LHA FILE
+ [H] -   OW    P PAGE               MEN      FF        [M]        R O     
+ [T] -   OW    AL TIME (CET)        PAG      P         [G]        OFF
+ [?] -   OW    U                    JOI      ERE       [ED]        DE         
+   ] - PR   OUS      REN          - NEXT CONFERENCE      L]          
+   ENT] -   TO                   M] - ON LINE MESSAGE    UES         TIONNA   
+
+   X!]   EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT    TIN 
+   ] -   EW CALLERSLOG        [3] - D-sactivated         ] - D-sactiv   d
+   ] -   EW DIRECTORY         [DS]- SYSOP DOWNLO         S]- SYSOP VI  
+__________________      ___   ___            ________________________   ________
+
+       ____________/\______   ___      ____/\___   __   _______         ____.
+      /     ______/     /     /        ___// \__    _\__\___              . |
+ ||  _\____     \/_____     ./\__       \/    \/           /                 
+ |. /     /     /     /    //          //     /          ______              
+ | /     /     /     /     /          o/     /           /|.      OMM        
+ :/     /    ./     /     /     /           /     /     /_||                 
+ /___________/__________ /__________   __________/______ /|__________        
+                       \/                              \/               
+
+ [U] -      D FILE(S)         [D] -    NLOAD FIL         Z]    MODEM    OAD
+ [N] -      NEW FILES         [F] -    W FILELIS         ]     LTER F   FLA 
+   ] - ZIPPY SE   H           [CF   CON   ENCE FLAG      S]        CONF STATS
+   ] - LEAVE MS   O SYSO      [E]   LEA   MSG TO US      ]         NEW MSG'S
+   ] - SHOW STA               [W]   CHA    SETTINGS      ]         TXT/LHA FILE
+ [H] -   OW    P PAGE         [X]   MEN      FF        [M]        R O   FF
+ [T] -   OW    AL TIME (CET)  [O]   PAG      P         [G]        OFF
+ [?] -   OW    U              [J]   JOI      ERE       [ED]        DE   IPT   
+   ] - PR   OUS      REN          - NEXT CONFERENCE    [RL]          
+   ENT] -   TO                   M] - ON LINE MESSAGE  [QUES         TIONNA   
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT    TIN 
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactiv   d
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO         S]- SYSOP VI  
+__________________   ______   _______________________________________   ________
+
+       ____________/\______   ___   _______/\___   __   _______         ____.
+      /     ______/     /     /     ______// \__    _\__\___              . |
+ ||  _\____     \/_____     ./\__       \/    \/    //     /    //          |
+ |. /     /     /     /    //          //     /    o/    _______/           |
+ | /     /     /     /     /          o/     /     /     /|.     COMM       |
+ :/     /    ./     /     /     /     /     /     /     /_||                |
+ /___________/__________ /___________/\__________/______ /|__________   ____|
+                       \/                              \/               
+
+ [U] -      D FILE(S)         [D] -    NLOAD FIL         Z]    MODEM    OAD
+ [N] -      NEW FILES         [F] -    W FILELIS         ]     LTER F   FLA 
+   ] - ZIPPY SE   H           [CF   CON   ENCE FLAG    [FS]        CONF STATS
+   ] - LEAVE MS   O SYSO      [E]   LEA   MSG TO US    [R]         NEW MSG'S
+   ] - SHOW STA               [W]   CHA    SETTINGS    [V]         TXT/LHA FILE
+ [H] -   OW    P PAGE         [X]   MEN   N/OFF        [M]        R ON/OFF
+ [T] -   OW    AL TIME (CET)  [O]   PAG   YSOP         [G]        OFF
+ [?] -   OW    U              [J]   JOI   ONFERE       [ED]        DESCRIPT   
+   ] - PREVIOUS   NFEREN          - NEXT CONFERENCE    [RL]          
+   ENT] - AUTO    N              M] - ON LINE MESSAGE  [QUES         TIONNA   
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT    TIN 
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactiv   d
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLO         S]- SYSOP VI  
+_____________________________________________________________________   ________
+
+       ____________/\______   ___   _______/\___   __   __________   _______.
+      /     ______/     /     /     ______// \__    _\__\___    _         . |
+ ||  _\____     \/_____     ./\__       \/.   \/    //     /    //          |
+ |. /     /     /     /    //          //     /    o/    _______/           |
+ | /     /    //     /     /          o/     /     /     /|.     COMM       |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] -   LOAD FILE(S)         [D] - DOWNLOAD FIL   )     Z]    MODEM UPLOAD
+ [N] -   OW NEW FILES         [F] - SHOW FILELIS         ]     LTER FILEFLAG
+   ] - ZIPPY SE   H           [CF   CON   ENCE FLAGS   [FS]        CONF STATS
+   ] - LEAVE MS   O SYSO      [E]   LEA   MSG TO USER  [R]         NEW MSG'S
+   ] - SHOW STA               [W]   CHA    SETTINGS    [V]         TXT/LHA FILE
+ [H] -   OW    P PAGE         [X]   MEN   N/OFF        [M]        R ON/OFF
+ [T] -   OW    AL TIME (CET)  [O]   PAG   YSOP         [G]        OFF
+ [?] -   OW    U              [J]   JOI   ONFERE       [ED]        DESCRIPT   
+   ] - PREVIOUS   NFERENCE        - NEXT CONFERENCE    [RL]       GON
+   ENT] - AUTO    N              M] - ON LINE MESSAGE  [QUES      UESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT    TIN 
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactiv   d
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD       S]- SYSOP VI  
+_____________________________________________________________________   ________
+
+       ____________/\______   _____________/\___   __   __________   _______.
+      /     ______/     /     /     ______// \__    _\__\___    _         . |
+ ||  _\____     \/_____     ./\__       \/.   \/    //     /    //        | |
+ |. /     /     /     /    //          //     /    o/   ________/         : |
+ | /     /    //     /     /          o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ]    MODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]     LTER FILEFLAG
+   ] - ZIPPY SE   H           [CF]- CON   ENCE FLAGS   [FS] - FULL CONF STATS
+   ] - LEAVE MS   O SYSOP     [E] - LEA   MSG TO USER  [R]  - READ NEW MSG'S
+   ] - SHOW STA               [W] - CHA    SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW    P PAGE         [X]   MEN   N/OFF        [M]  - C   R ON/OFF
+ [T] - SHOW    AL TIME (CET)  [O]   PAG   YSOP         [G]  - L   OFF
+ [?] - SHOW    U              [J]   JOI   ONFERENCE    [ED] - E    DESCRIPT   
+   ] - PREVIOUS   NFERENCE        - NEXT CONFERENCE    [RL] - R   GON
+   ENT] - AUTO    N              M] - ON LINE MESSAGE  [QUEST]    UESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS         ] - ACCOUNT    TING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated         ] - D-sactiv   d
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD       S]- SYSOP VI  
+_____________________________________________________________________   ________
+
+ .____ ____________/\______________________/\___   __   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\__       \/.   \/    //     /    //        | |
+ |. /     /     /     /    //          //     /    o/   ________/         : |
+ | /     /    //     /     /          o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW    P PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW    AL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW    U              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - R   GON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST]    UESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT    TING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactiv   d
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VI  
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

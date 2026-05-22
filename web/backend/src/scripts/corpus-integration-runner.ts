@@ -109,6 +109,10 @@ interface RunResult {
   wallMs: number;
   captured?: string;
   detail?: string;
+  /** Post-door session subState — useful for learning what
+   *  expectedSubState assertion to record for the door. Logged
+   *  when CORPUS_LEARN_SUBSTATE=1 is set. */
+  finalSubState?: string;
 }
 
 class MockSocket extends EventEmitter {
@@ -322,8 +326,19 @@ async function runOne(
   if (timedOut) failures.push(detail!);
   // If no assertions configured AND not capturing, treat "did not throw"
   // as the only signal — useful first pass before assertions are populated.
+  // Resolve the symbolic subState name (DISPLAY_MENU, LOGOFF, etc.)
+  // for both logging and the optional learn mode.
+  const subStateName = Object.entries(LoggedOnSubState).find(
+    ([, v]) => v === session.subState,
+  )?.[0];
   if (failures.length === 0) {
-    return { id: entry.id, status: "pass", wallMs, captured: raw };
+    return {
+      id: entry.id,
+      status: "pass",
+      wallMs,
+      captured: raw,
+      finalSubState: subStateName,
+    };
   }
   return {
     id: entry.id,
@@ -331,6 +346,7 @@ async function runOne(
     wallMs,
     captured: raw,
     detail: failures.join("; "),
+    finalSubState: subStateName,
   };
 }
 
@@ -481,7 +497,13 @@ async function main() {
       r.status === "captured" ? `captured (${r.captured?.length ?? 0}B)` :
       r.status === "skip" ? `SKIP ${r.detail}` :
       `FAIL ${r.detail}`;
-    process.stdout.write(`  ${r.id}: ${tag} (${r.wallMs}ms)\n`);
+    const subStateSuffix =
+      process.env.CORPUS_LEARN_SUBSTATE === "1" && r.finalSubState
+        ? ` [subState=${r.finalSubState}]`
+        : "";
+    process.stdout.write(
+      `  ${r.id}: ${tag} (${r.wallMs}ms)${subStateSuffix}\n`,
+    );
     return r;
   });
 

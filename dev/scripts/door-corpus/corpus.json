@@ -1189,6 +1189,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Asyncronous I/O, double buffered WarpSearch 2.5"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1216,6 +1219,9 @@
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
+          "mustContain": [
+            "- --- -----[ 5D^QuickAnsi v0.05 ]----- --- - --- -- - ----- -----[ sTc/5D ]---"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1898,6 +1904,9 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
+          "mustContain": [
+            "Thank you for using WarCalls V1.2      Coded by Wardancer/Humane&Vanity"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2542,6 +2551,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "=== WiLD STaT v0.4  B¥  WiLD THiNG/¥oÐeL ==="
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2789,6 +2801,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "U-Stat V1.0 - CoDeD BY S¡eGeL/aFL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2832,6 +2847,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            ".ø0ø.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.03!]!:.,     (___ _ _/\\  __.ø0ø."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2852,6 +2870,10 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[»«]  /X\\ sTATS v1.2 © PLL /X\\YTH /X )-sIGN  [»«]",
+            "[»«]  THANK YOU fOR uSING /X\\YTH sTATS v1.2  [»«]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2962,6 +2984,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "| sMK-sTATS v0.2 bETA - (c) SMoKeY pRODUCTIONS - cODE: InFeRnO & JuNk |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3048,6 +3073,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "_NosNUKE_ Version 0.21 -- By Nosferatu!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3068,6 +3096,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "NewFiles V1.1 by Byteandi/AFL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3088,6 +3119,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "\\(©thundercat^dC & dr. ¡ce^seasons'98 )/design by woober/arcade"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3108,6 +3142,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "File Description (Version 1.1) [RELEASE 2]  Copyright (c)1994 Bobo of Mystic"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3128,6 +3165,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Conference Top Uploaders (Version 2.3) Coded by Bobo/Mystic and Looby/Insane!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3194,6 +3234,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Could not find C.info in any of the command directories!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3214,6 +3257,10 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "EALLs for the MASSES v2.01 - by [DELTAFORCE/DLM/X-pression]",
+            "[68K] EALL exited with ERROR"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3234,6 +3281,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "The Exorcist! v1.3 (v2.3x version) by B/\\Zz & CFi of Eclipse"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3254,6 +3304,9 @@
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
+          "mustContain": [
+            "-> UL-Logoff v1.1 [RELEASE ONE] by Tango/LED^IHS^PTL <-"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3284,6 +3337,10 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "« noC-Coupon version 1.oo  - (C)1994 nocTurne deSign/MST - Mortuary Version »",
+            "DOORS:noC-Coupon/noC-Coupon.config: Configuration file not found..."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3304,6 +3361,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "| rEAL! |     bAUD-cOUNTER V1.Oo     |  cOde&dZ by hIGH-SPEEd ^ [-sAxOn-]  |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3390,6 +3450,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "KiLLER BAUD ERROR! Could not lock icon!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3593,6 +3656,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Can't find Doors:MDB-Front/MDB-Front.info"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3613,6 +3679,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "MST-VieW:Can't find Icon...ABORTING !"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3633,6 +3702,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "| Upload Activities (Version 1.1) [REL 2] - Copyright (c)1994 Bobo of Mystic |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3653,6 +3725,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "--[ DupeChekk v0.3 ]---- ----- --------- ---- -- ------ -- ---[ WD/MtS^SCX ]--"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3673,6 +3748,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Coded in 1994 by LiNus/DPL!                  Fistful Of Steel ++49 6723 5622"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3830,6 +3908,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Conference Top Uploaders v2.2 by Bobo (Mystic/X-Design) & Looby (Insane/X Dev)"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3893,6 +3974,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "UNABLE TO LOAD CONFIG FILE (DOORS:NOC-WHO/WHO.CONFIG)!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3913,6 +3997,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "dCN!FileID 2.0  by dERROW (dCN-/F·dEZiGN)"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3933,6 +4020,9 @@
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
+          "mustContain": [
+            "AmiExpress Web BBS [0:General] Menu (NaN mins. left):"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3967,6 +4057,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Could not find C.info in any of the command directories!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3987,6 +4080,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR #104 HAS OCCURED, PLEASE INFORM THE SYSOP!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4044,6 +4140,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[=S!X-Page v1.2/Alpha © 1995 By Xray2000/PTL=]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4087,6 +4186,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[tRSi] · dRE!SENt v0.2 [RELEASE 1] · (C) bY dR.dRE! · [/X·iNNOVATiON]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4107,6 +4209,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "MenTal Page v0.5                        By Mr.orion /  VISAGE!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4127,6 +4232,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Thank you for using WarKick'Em V1.0            Coded by Wardancer/Vanity"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4358,6 +4466,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[=+-     FrontAvail!    -+=] [=+-     Coded in 1994 by LiNus/DupLo     -+=]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4468,6 +4579,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[:.:]  MFM NuKING SYSTEM [0.3] (c)1995 MFM/iNVASiON/SKiD ROW  [:.:]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4488,6 +4602,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "|TopCall V1.0 ©1996 Joe Cool|"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4640,6 +4757,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "--[ LogonStartup v0.30 ]-- ---- -- ------- -- ---- ---- -- --[ WD/MtS^SCX ]--"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4772,6 +4892,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[- >5D-BaudCheck V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4792,6 +4915,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "FileID V1.4 by Byteandi (Mystic/X-Design)"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4943,6 +5069,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "- --- -----[ 5D^SysOpAvail v0.01 ]----- --- ---- -- - ----- -----[ sTc/5D ]---"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4997,6 +5126,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "fLAG-aDDER v0.1 fOR uPdOWNiNFO bY sHADOW mAN/aFL ©1994 !"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5097,6 +5229,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            ": BESTCONF V1.0 by Calypso/GOD     TOTAL :            14 :      0 :"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5323,6 +5458,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "WhO-LoGiN' V1.00 by S¡eGeL/MsT"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5452,6 +5590,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Thank you for using WarList V1.3               Coded by Wardancer/Vanity"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5472,6 +5613,9 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
+          "mustContain": [
+            "Thank you for using WarComment V1.0           Coded by Wardancer/VTY^HMS"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5512,6 +5656,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[- >5D-Reserve V1.00< By SvEN tHE CREAToR Of 5th Dynasty -]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5532,6 +5679,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "-=]  ©95 Strobe  ·=%=· RubberStamp v1.3 ·=%=·  976 Ev!L  [=-"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5589,6 +5739,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "--[ AquaScan v1.1 by Aquarius/Outlaws ]-[ 'dc_x107i_aquascan ?' for options ]--"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5609,6 +5762,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR: ONLY UPLOAD OR DOWNLOAD ARE ALLOWED AS ICON !!!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5629,6 +5785,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "|   SMK-STATS v0.1 - A SMoKeY PRODUCTiON  DONE BY JuNk 31-1-1996   |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5914,6 +6073,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[=+-     FrontAvail!    -+=] [=+-     Coded in 1994 by LiNus/DupLo     -+=]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6023,6 +6185,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[:.:]  MFM NuKING SYSTEM [0.3] (c)1995 MFM/iNVASiON/SKiD ROW  [:.:]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6043,6 +6208,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "|TopCall V1.0 ©1996 Joe Cool|"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6126,6 +6294,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "UP   D F   (S)             -    NLO   FILE(S    [RZ] - ZMODEM UPL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6263,6 +6434,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "oOo| TMS Upload Stats V0.10 BETA              Coding By : T-SPOON/TMS   |oOo"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6363,6 +6537,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "Bytekiller V1.0 by Byteandi (Mystic/X-Design)"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6506,6 +6683,9 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
+          "mustContain": [
+            "TComment V1.00 Aborted: Dos Error 205"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6583,6 +6763,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "EXTERMiNATE! v1.07ß - by [DELTAFORCE/DLM/X-pression]"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6603,6 +6786,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "This is SmartDSF V1.3 Copyright (C) 1994-95' by NiGHTSHADE/INS"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6623,6 +6809,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "-=- NEWS (C) 1994 Hydra of RDC,LSD and Maniacs -=-"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6887,6 +7076,9 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
+          "mustContain": [
+            "DoorMenu v1.3  by Gi Joe »SRH«"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6964,6 +7156,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            ".[ ShowDoors v0.3 © by CøRteX/tRS¿! (not registered) ]."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7024,6 +7219,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] VTY_CM11_METER exited with code 1"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7067,6 +7265,10 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "=================[ /XNet Information v1.0 By Caffeine/AFL ]================",
+            "/XNet Information v0.1 by Caffeine of ANGST"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7253,6 +7455,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "-> PWCommand v1.0, by Tango/DPL'94 <-"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7396,6 +7601,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "|  THX! fRONT-dOOR V1.5  /  (C) [THX!'96]  -  ALL dONE bY : [tENtAClE/tFP!]  |"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7416,6 +7624,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            ".[ ShowDoors v0.3 © by CøRteX/tRS¿! (not registered) ]."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7522,6 +7733,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] DLM_HL11_CLEAR_HL exited with ERROR"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7625,6 +7839,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "ERROR:  cANT't oPEN cONFiG-file!!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7702,6 +7919,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "sMARTSHOw V1.0 - Can't open datafile - Please report to sysop!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7768,6 +7988,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] PSN_XS10_AMIE_STARTER exited with code 305"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7788,6 +8011,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] PSN_XS10_WARD exited with code 2"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7808,6 +8034,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] PSN_XS10_AIA exited with code 2"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7828,6 +8057,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] DSE200_POWERPACKER exited with code 4294967295"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7848,6 +8080,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            ".-- -----:-->   aIR bYTES V1.6 XIM! bY sHARON/lOVE    <--:----- --."
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7954,6 +8189,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] OPS_TU11_TODAY_UP exited with code 1"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8017,6 +8255,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "`----------------------------( By Crimson!/SUCK )---'"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8123,6 +8364,9 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
+          "mustContain": [
+            "[68K] CLE_UC12_UC_CLI exited with FAIL"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -11172,6 +11416,10 @@
           }
         ],
         "assertions": {
+          "mustContain": [
+            "--[ AquaScan v1.0 by Aquarius/Outlaws ]----[ 'aquascan.000 ?' for options ]--",
+            "Config error: Tooltype DOORUSE.AQUASCAN.000 missing!"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -11770,6 +12018,9 @@
           }
         ],
         "assertions": {
+          "mustContain": [
+            "[68K] CLEAR_HL.X exited with ERROR"
+          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",

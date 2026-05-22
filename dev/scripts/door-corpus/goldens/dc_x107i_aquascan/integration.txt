@@ -1,80 +1,18 @@
-[68K] DC_X107I_AQUASCAN exited with ERROR
 
-5Spp0qSVbKPsfIS@VegVi368t%10mtv0NWRBu51CGlbrlm3^xHb9&Nf5RSk%H%%8UdV3VdPOo1jX)
-Y&OMCFb^spWlwRKXPp9tmNYOWtqEwjaN7TW6&&eqSm5!(v!RH5JujoUX1aZU1VML#&G#CXTeSgwEr
-$q*6H1GFU12Kl7NRqkoPNh14Im45jTHt(p)eGeja@TfGPoFM@jJy4UR$wrNNx&dPz&cQDLaft57vZ
-P^LTUk#(Nbq3@D6fo6LByL&TMrC*&Vi3O72cL4INw!KI4P7eY9aQn*Ym)C^T5GEPa3JVxiidB0bPw
-JM)Sx77@aubzkH(I2WSGlFYo7XXBZnR!HeL%&hyu%Zcu$Z06lIfU5b!$ENioua4Lm9eo4KUb9d@TG
-UY&1uEGdb&6bx5GQN!)i61ir3YwFu^bliyCUV^C&I%l%$5t89c*2pqPxVx19kOTdMI#@hr5Qy8(30
-^S9P(XPmc!(R4*3Xu&1qfUBxmRL%wghD1gAw8wT0TYaOqd^oV!FD(bv!53Pq73E)iPWgdAo5vn!JX
-YM$o4iI7GIW8M51KJ6)5f0Bc1pFH$#yIXPVPNc@znkKAyJ^tVB$&T5C@qie6F$U7RKmvjK7d
 
-cPt9ucmv1^c#g&#LKQz!d9HlnBnz3NrMIUx10zDkRP$MMaU%OgcADrLmzInVP$*uhMF&r9R$MTL
-7%zsQY)NlAI2U8I2KTzNWLmX$0NlS&DX9wAM^rLQV%iygb!f%@#wVtB#X&rFH7PVjln$8$vu5tBm
-*5@MC&5fdMU#Pf36LnWmYoLwzcNoc62knYd7U1pMWGV)IzUW2gfRzrMTgx9Wl(yM$Wa@J2ec%@jE7
-K$#C16DvwoFC($TFxrOz@E)y#8AziR5TXkysps*61Pg)r*CF59Ew$zo5b%*ihMsi9XkZESZgFWO@
-7A7Kjbpfm7&Y)8eqD8kxOHnwwU*mU0ng8@dras!F*c2$glOF^6VroL39UpXHEs@7WJ8KLw&aQTO4Wf(
-PxoFBMkACN@LdUWh*WUZzX#tHoDQKKpOhgqQs(oXn0MWF$)^4wrYzS4BZtNfQPZT0WgE0&jWzW
-%uFAhj3bDas5udiWPYKxBqx39HiEEzyN@Et4Il4!9t7CegBzi8vAUIBRlZoV19p*J*a#J
-rxC!3F^rDg#jqt@ujk$xNyRUA3J$WWr@1ub5qkXNE)o1dO9*kdA6uYFQLuk!fUDQkX@m$3VyV#C9v(
-rszgX)%gPLeP46%3db3Xhg#8vE8OcNm$@E9Xn5qRqtl@4@(DVcIhVLD)NI3X1t4Hh6&#Q
-2Fuds&*xlzp9WG0VZ)SKXKaatG9k$wgetcUYpxIF&ea00OlVfa*H&cv8NOjfYtpl9iWMmYdMbEtiiJ
+--[ AquaScan v1.1 by Aquarius/Outlaws ]-[ 'dc_x107i_aquascan ?' for options ]--
 
-FAMyeL#0gCAMu)%M03#7YNqktp6AYE#HYT22X5zMRRp@pnyhJgp19g0WG$oReKsUiR&MynC)1!HV
-QjyYrV9k3F8CwwzKtU2t8h!00Q6@DDKT)sL2tdBj3)Z!$xcob)N7gw71LI*m$KH5Mche8wsky
-Mmq)KEOKjeLP*%TalJW%A*S4ytQ@ifGPvlyaTLI)XyKvqfU)yltRNz%(oNjXCOlqGTzsj)&
-WCx)OMudgrGtCoK@4cBeIxrwchRh5AN&!ANw4O^)ZXqc0bx!cvlN)D1Armmq@J$3&(JiQgtD07%qisF^
+Config error: Tooltype DOORUSE.DC_X107I_AQUASCAN missing!
 
  .____ ____________/\______________________/\________   ___________ ________.
+ .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
-$yjvb(zc8&TeIKgO@kG&MrEgadvjWj6CpNur24NbdlRzy$eH1cAj8Nq*F9y$O@Ar6*q22V1**Ci(L
-)R(9FBCfe#D1QTN2v(gwcbNIR()9RB#^3KIkoJudTCiJC!wsmdVH5rl%eiCGEbg@LXRR!EjP23AZV
-V5$0j5SEdJUB8EsRP00Kxs*PCLlXBdZT0UcBMXReV@2qjwnU!22&(RWo2&ZdCKHRI@tEwW!KaUe*n
-Ext)J!6#PqZBoEq7v4cZm(7!lbCmkoT%Y)EtC33UVC66IAa*he0mN&2LE&LteBSq5aEHX(A)eXvvb
-rp)a*tVJQ#2ueL)HQ&4LvSa^hHV3RV$qJdR4IvtqLqUvaS^9Rz17X!w9&U6&zquEMVM^dmcwU1nQB
-#&cdfC$ml)H^PDVwE)ZlhWWzWlnfLoJ6@oO%p2^!Kj953q@yE(nP66$PJLE5@47wo3GuB6&z
-
-qHVK4lnSJUrU1wRzoqw@^Y%a%vn4!BfSpsYa$D@*0FAmhagMp51x!eA7wl5!#9AJ&hWXRZ#p@o0
-uaAL4T^CAQDrxNlZ!F1x4nrHM#%GeBbEtZqOZ%v1EYtDfgX9Y@bko6SLM2Du1OzQZeh6dODo8k*e
-SM6gW2KNyDjnzpki&5Cl#*lDpEd4j!)FgnHL%y1%8vZ*IvkZvZz6CtOb4IS%L!#98n4hZzX*vsrhL
-LP)4KEtFx8FlxTs4#ojIKC)u@X4%shDyJ6PLi5!&^UnApg#4ajZNPdLo^(xD5kL9v@7Ea4Zzg2uS
-)12(X4Yvz!*xUH6koBCf26N4!w3pMmqZh(s&h0oK3#u1Hv8AFXr9QEe7jxmU7O55ft&A#*!4AJq(kz^
-qcn%6HYEl%M)DLMKt&M6l%Fa)M1vvUyfCvy4w!(Q2vQ&P(jHPlocsanytJWShevxHS2LGdERZu
-S(ljDKOG0g2U&qym%5WMbN3WBKfmK6*4^RA4mAQqGbt4MZ(#r7*bRQzZOh^HBCEm!@QiF
-^lcntT^8K3KTWEbySawfW7JywDqm3qQkRl&6Cl67OE9ew1r$T6J3qy6MGWo%)t7uzQ*@zLaDV^vbuw
-APl*yYLqqKUNj&ST1D87iT9UIbsJ%vCysJw0VBd7nXnof5OgH0Z@6BvILs1JkLH3PyJFH
-y)OUqFHAMUjzWmKw8A4YsUXD@#DUZ5X@G!4PlEzUH1ZVv@w#!&CF6tu75ct6Ew8XulKtxDh6OUS#u1
-
-tcQ$R%0xdb8uinGJ$A&W)t%M1C)oARLvqboXS%80AfHnTuy%1@F0qVyw4Ct6PhmcbC9jR!pMjQAI
-(%G&qMFIpJ#yROh1LaEMXhKWeP4eSJ55HwA$OIH)6DRI8DEW7lb5HHI5qf0uu@Be5ZKlFbmGv
-sHZg99#AMB8env4ktnRzvZ^KoC&5CC8%nV3$w2TCrt7(9(ccZe8$0IbT#J9e6Wz(Kzp#R7r
-UKAJuW$%zXFu%qzf*cMi7ZHW&*Vl1NQFS$vNh(KhZkdVbOdOZmQKlg34Uu1F)*65bTe5UDSC^mzs^ZOK
-
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
  |. /     /     /     /    //     /    //     /    o/   ________/         : |
  | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
-(TYvy1)RQB@@$jG(vJjCiJZkmyzuhMvr(O&6PZluWB3h3uBVzXqJ#aokdu4K9i1&wE$snb(^iU047
-oFosHLQtF5#%lpxvV20Cv8xyhnX)BOt1VqGk@hwrLh2L)FP)juWWKtw58qxUq3CTOXq1DMmmvjPds
-SOdybs0aT9%yaIvgvQ^VU5@Rh6RqlSfe$54CtmVZ6)jq4toFozoqLSm^XhDydz5Cwa8e2ji*
-
-9l!w$9MlWh!$#cvwU4lCMXwH2umsE0gi!XmoJ!ebWOb*0PDhw&3buPDw@f$)Np%P^n)P^dv359e
-Qz1!8ViR#26S43DVMVokQ&9eeT^B%uFONq^m*kNX$4)X2jUCmNZh8Fp3nBOlb$!%LO$98e^iuQNk
-bc6p1GTt*FYl9o@VVmjXD5JZ&5DxQQuYlS7)GIJrFAsPoatZ&K&Rq(KjeQG#Sxx4w8nGaTU6rTLjZ
-lk10g5qWZ5HtoBsLG^^ZKCWXFfXOoRTCQbx24l5R5)BEIkysIu&)b@00^C8qmz(Aqlyzz2!qgOSk
-#ht&3&MB*ZgBJugWLH%5RUiK4SdUcxS*fbzj$Pgfr8o9KPRwNIvw(pBR*@npPu0TJnz)(^2IV!*acjy
-3ybGaM60yDNuR#DNrwqvFWtNCr7UwkGNI1Xy1#Hi7&KeI!Dui7(RY%8RB*!)xO%caPECH^x7ru
-1VJ5#0gHTnkfr#lSRjd!$@Kb5ssD8YOxOkVuvozb28z8NIKLPt2AX8KmsX$sPb@Ls8*t&
-A@m9fxWEG#ZFBmDRbZm6#ACkomuYIfvfy$zD4H9^PiPlPjVYO9i)pP(BfEbKcss0xu(0(qFZKtb^E^
-6aY9S1HDiXtEs$lohCQ(*k3YhoU6VTg&w^Gp$u7og7GhWvaMxYjLknjjWA$pyWlgSfZtB
-ct^@DE28(k6Kpd8au4xx6XGINAW6@FsD#)RQGpOJ1)gBXS(f)LC&n$cpA6QQutqmqbMROGanyWZwXR
-
-^BRKxWlsjjPxazhN2F47lTZ1rUqGtO9(I2r5Y$yRZ12!WYCQ!al8(L@#Bav!(sO#c5Dzj5rLLbTx
-fX#9(UsuvG#UOEQrgO7AoL$DtWAD*VVBV90Mp%ONo1bYMe5GiDssiTSXpBfusDQLYpgTU)fg3
-*9$4oREK3(PUS^Flbd%^xGW#!tXoVrctId8zpKLTm7frgXTb*q^o6MKST^7zK2sknkvR#SP
-rFrzBWzdDvZ*KqC*!#6(aZBci$@d1G3$GOZqTLzrBag5HIp5YX08WP8c1w%6V#fFAb(6BIhcwucL$yoU
-
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -82,23 +20,14 @@ rFrzBWzdDvZ*KqC*!#6(aZBci$@d1G3$GOZqTLzrBag5HIp5YX08WP8c1w%6V#fFAb(6BIhcwucL$yoU
  | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
  :/     /    ./     /     /     /     /     /     /     /_||          :.    |
  /___________/__________ /___________/\__________/______ /|__________:::____|
-NYY^4MDNW!xu&AkMQTeem)^)FeonOd@*BId2&A(uaPem#gw71)nyJeJzc!f6li574qGqRrHy
-
-TWdX65Fs!18iZLjorAo4ygy14e&7Pr31Jy7il%48UK()cw)AQ4ljwRidZ(819V5O5VWx5dHn)E8
-M6MV9BZLn5Txal^y*Bc*aj9qa59zkSGYr1#rC&21SQZ&rWwDb^MZmx8kmKb84CWlt9m1h!Qw(QVU
-Qb3pOkvMgK8uQimEr5y)RAREQugCW6krehMQDGeL^K&PZZBQWJm4IW)R&1vRaV1P4ba)G8HAjg7L4
-0v#QTT9c0FR1s24x(QZ!w@ckpsjDg9XenA6C72lpfFnTXWQ2Of$lJ@xgRF1sbCL8$N&V3uM(c5C#
-7bbPDr&r6PQ3k1V69lo^6E&aA1pxaR)SCWLG(#!CahN3&Ao$lSAOIQoRr*H*876Hf4lQmZx3QEBu$eV
-&C%aAeG(gOYrJu4*QuUYY@SZuiGkfecjs1Rsi7^Ica@bGl7KxzYuQT$kk0nG@R9#80ndcCJLmn
-n(YA@wkjacY*!I78pKzbbeA97pzmm%hQEcsXzFJ$nyi&rrajPHg&XOuqxRE8fhu)80$g9
-mufLlGd7rkVsYG*)(pkDs2!9al4K%p(IVAKQCAsaZWqfKfF!1mX8(qow6Ha5Gr7%ypbbff1yaj@h%L
-oCaLCJvIyBeWme6%)*PB&gJ!LDj@$WQ7Z)qlq8HoE5V*jPj#GXjGiKwEuiO70id(mswdX
-I^R)3xsBWm*19V1kv5J$sqGm(g@B1x63C*q1g&F^acN(9scm#xRjhsLGrhF2f57g&m6DGCcIO#R@ug
-
-vmw@jsqN^*Sx!QGTLdn4OEXaRKNauVEaFO%e7VLf34HnqVV4S1ggVLV)z7jAmPvv7st(yLGz3M0k
-Ax$uu6S2X@V6dnyuN$sQ@1mZKtE@oDNxlMcdms*5p70WYt1jxwhMCtGY9LG%9TYNaDo()wg2T
-p5ZeXMYV^EbmQVHGAAix$BGZL0GkZU3iAqH28$Oucw^o8N&Ib9I9t2Ogf0FzpMRN9yTPWWC
-f^S&N&iB4U9#FDgyYdhgCiCJSk&n7Ck&MlMjUO$B7A1I&n1SPVWzf)xEpfDDK0w#A*bSz(H)diNy@HOw
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
 
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
@@ -110,21 +39,7 @@ f^S&N&iB4U9#FDgyYdhgCiCJSk&n7Ck&MlMjUO$B7A1I&n1SPVWzf)xEpfDDK0w#A*bSz(H)diNy@HOw
                        \/                              \/             .Y
 
  [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
-ceEMjr*s*SdXqD4QQ^W4jC7w*w0V)6BN35pwXHs28FVFtB3AeGP!5IXYKw)(^zWGc7#et4ryIl1^
-)IBYFGarq&n)AAQK8hF$zywDJJGw!!O4jhuLr9kuTnfjVSBr49U@DmLtj16oBesi6(Y%l&yC6z8kP
-Hp9zhah6lQK28k8@rzK^s5!&WiNMI9sYJ(*&btX!)69osf70^tpsv&ERBZ8g@$3(9$uCQoW@aiN@
-F%qJClgwg*Q4ODc7^pdP1vsTauZtnE!v5J6HaJH1#JZpGJtvJeFk#dBhv@ZxfFsBQsDFS(R%ueqzOCX
-4S^^L$Iy&gIuYXOb*)AjU#t743uwx%s$5q%ZRZ8j37yrKIhap!LI$GASc1GzhpM%tDNux(8AN%
-xn3y@OB46*M(TbuuP*tjvSbATtXswxDa9y0ZGiu$iviV$Gg!R&HJIS$h*phVQ&u95)2!Y
-GeV6E7#*6@YgnmaxSlV6w8J$asThC2OxFFO8^z*5#H@JJYEZy48nk*^HtVA0WTPrsxYKHj0x@FSpYv
-dTgqd$i23S@D%eOJEOtj501^L#ePtdywV^!Dq5s3UReAB)sWzZr%E9@0W5bBt9*TEBCZQ
-ICN3ahDn7P%Gb^)9TPPRw$wwS9V1el1^Sh7qTq97RMcoULyq*jk$gcaGfVCVwBa%5ZSkX16duB0hPp
-
-eQ$5Xft^zWyx7o*EJA#gabaYK5l3Qp!OkGS$A61h093VTLnYE5inbaRGMO8)@jVfbKz2uoDDFP!q
-i6ngCwncYX9&x)sRoNlcNHVe(y1z4rgc2*pNDEk1rqJH4RN)twSv#lYV^O4^o9I4*#r8yN^gJ
-uE)i2JD*&kHtcbh9LkwRe*iT$W*sNuXE0gz9D*sZXyv0QAbaFZXBm2qO7a6^PfSXce@w^ws
-Fsusfcov3)uM^qKhuQ*yMk0WAJQS^NVZ0t9$F7$up%oRf*I3%b7OEAcjG4)FzwIyJ$hfgs7r6)X4@88U
-
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -138,18 +53,6 @@ Fsusfcov3)uM^qKhuQ*yMk0WAJQS^NVZ0t9$F7$up%oRf*I3%b7OEAcjG4)FzwIyJ$hfgs7r6)X4@88U
  [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
  [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
  [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
-PP#2KpxyKuQQ5z4M@4gJmZGFL#GlNp90YE@vfjDOE1qftlA0nW649^yky0u^ezL7FD6xi$gAp4Nfcwa
-DPH^9DLXez6*o$oN$vQ!ASPMZLwv2)Hx$KTwxw(HRVq19KdWem@zowkOFzy(4pu2dESuhPtHsK
-Rjb2qHnQWY0&y27$d9Ruk7G4xYOsHXGqCg^WoC^ZCW92a(W)6JvqA1aq4e!4%g73O&AL*
-&w$9lXEKqYUQiGQfus#t47WOa&juQ94kF(D3V8)Ffhe9s4Y12jC)SaiqIldrBYZNLvYgBOZvcP6bop
-!T4MuqPRBwp*&yoTbux$$LU5%NQBH8@2Yohhai1byWrrX2U6$s56spFJQ3mWj6aV%WDoJ
-cdL1ygmJQse)(xDNslKc%wWFiO%o@OT73cviGl#EX#yM$i!N!fvGT(Q@@WUMkuxEYp!Px!F@Rt^k&3
-
-%NZg^7qtTH)R!qpe2t@RCWLRu5PnuP!kcQzNtI1au*sQ@eDBxY72bsmoGj2yM1ExzkTmZBYCPYJJ
-@B)PbymSVOXNbgaBWq*0M$g2KA$DMdVQUXWLkHbadw04T6zW6D7PL)0S8V!qDH!O*HqDLfpcS
-Gl*Yn@*e0URC8pd5zm2#sdnI)Jh*qyvsJC0Qvtn4AVJLZr^3&QqniAtCXv0U8@Yq4(ASTIq
-qcHiGjCGdrrjOyNEHOFx(GkgyZbFXMq#GVUAEna9xt#452S(WqfEKSxIgQCjbb3$Qt89vc8TenMZ$6nm
-
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -165,16 +68,23 @@ qcHiGjCGdrrjOyNEHOFx(GkgyZbFXMq#GVUAEna9xt#452S(WqfEKSxIgQCjbb3$Qt89vc8TenMZ$6nm
  [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
  [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
  [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
-EOwqza45&iq$g)eSzdq7aemZT*y16@hCa69VhuXOqV1i1&SHGV)VYbgGIi$V3#uBNm6K9
-CTAbNFVuYFtp*&WAdNFmk2^Rh4XX&K#5oB2Pk3FYO6#8!eGATN4d)x#3t@KmY&E9YmggMqSfnQt2O#
-vwbDH(8uzI2*oOq6l*nik91^Ft!&0WwdOhgYK^%9Xdh!^HdMJiQK3Rc9aX$t(rWVbjUlm
-hD%ZZc#)S2YuV#n*NJ3i!x38*H)55SeIKMUgKotDNesM%&&MSbtTRBTeRDy(oU3aNHwBnh)0bjixxy
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
 
-uPDdBm8AyoBOi0YVlT(Jg7&m9nc$jv6Y23j!OGGb)O(&jpUhXC9qW)Mg(H#CLpS4zXSYO^v#lFio
-XH@oFOHt^LsTSWKyh(DEALWuR4AeK7FaL38GXTdis4rO6wOp71kr8^efhOYP4rNZlKnnMPav0
-#GRq%4eWgeK%Kt#F@Z8zYaSuNlO40yz^Z@3xGT&Bd(m@hMEs#ZHKIjJZ#KS!8(&z50gJ*8D
-s!7BYLrmyDueL9&f9kHhMQpl%&WlBj@bwTIFfURSwhf7Vi80fVgIBeFrLgQDLvx9Jd9g65fxrWp*V720
-
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -193,13 +103,7 @@ s!7BYLrmyDueL9&f9kHhMQpl%&WlBj@bwTIFfURSwhf7Vi80fVgIBeFrLgQDLvx9Jd9g65fxrWp*V720
  [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
  [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
  [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
-PF**d4&@sFVns3QvhN%jwvJMLfsh7y7p^P4f6%4^F1us2ySz533!T9if1p$#fEvZ4y8F5fdL#EjXk0
-
-A*Zf89yn9*Wucfu@@05rKI(KP!N7gLgJ&o6EUdS$YP0HA&$1hyI2bU!z!Wtvin#m0(TmA^Ou4FNr
-Ta#*72dHxsNC&HuhS@YK1El(Z9*7xW^ic9Gfn(!0Wza6jRtH83G(OE*5xfL%LjJt%84aBDBVR
-#DH@HIcB&G*Whro2)Dz4coj8hecXN)rAy!HJK&2YJ@)PlNnSQUKAEu2GIiEu!QWwzk71XWz
-$$3tQu4*KN0UGMzxOWA)z*PWrmV6aGfq$MhNXGQcW&%t85y5iXgqjqs@7(9^I(1$s6ykmm$5)!!B8WnL
-
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -220,11 +124,7 @@ $$3tQu4*KN0UGMzxOWA)z*PWrmV6aGfq$MhNXGQcW&%t85y5iXgqjqs@7(9^I(1$s6ykmm$5)!!B8WnL
  [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
  [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
 
-Ooa(mtCB*wr1rO(%$Os3rUOuUqbWyHjzh^zyk04zb$!c5GI1qKlPWct#CLF6z2EOOdd2hURMgMWX
-CyEjj*eB2Hy@A8Ti(ghZ06$wLNlpK%Q$Ab7b%66plM5Y97uJ)klkUHe$TIi6oA1JFsl@zcH^8
-HNLXq9em%N3nNt23m3xW@Ng59&9Keadle0o)62YEvPYnU3Q7Lku0Qzl2WF(ul^a!K@^*0A6
-L^1KzljD5*z^A!hdIj$Rw$vVohR6!W(uBxV%F*x7WgVzE!W#^J00(yTCx0!MDEbFHp&iCzbtJiEd^lsD
-
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -248,8 +148,6 @@ L^1KzljD5*z^A!hdIj$Rw$vVohR6!W(uBxV%F*x7WgVzE!W#^J00(yTCx0!MDEbFHp&iCzbtJiEd^lsD
  [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
  [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
  [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-)MJpy3vvTLf3n3ldtFLND(IGtc2E$G%6ozoTF5xt%wYciOKIbH2YGe76Lrbg0OABRdpVo)y7GbgSDUU4
-
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
  ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
@@ -275,3 +173,4 @@ L^1KzljD5*z^A!hdIj$Rw$vVohR6!W(uBxV%F*x7WgVzE!W#^J00(yTCx0!MDEbFHp&iCzbtJiEd^lsD
  [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
 ________________________________________________________________________________
 
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 
