@@ -22,7 +22,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -64,7 +65,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -161,7 +163,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -636,7 +639,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -805,7 +809,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -826,7 +831,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -850,7 +856,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -929,7 +936,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1004,7 +1012,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -1197,7 +1206,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -1227,7 +1237,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1312,7 +1323,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1491,7 +1503,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1532,7 +1545,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1749,7 +1763,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1912,7 +1927,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2044,7 +2060,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2232,7 +2249,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2261,7 +2279,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2444,7 +2463,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2559,7 +2579,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2652,7 +2673,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2749,7 +2771,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2809,7 +2832,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2855,7 +2879,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2879,7 +2904,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2922,7 +2948,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2992,7 +3019,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3058,7 +3086,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3081,7 +3110,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3104,7 +3134,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3127,7 +3158,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3150,7 +3182,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3173,7 +3206,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3242,7 +3276,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3266,7 +3301,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3289,7 +3325,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3312,7 +3349,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -3346,7 +3384,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3369,7 +3408,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3435,7 +3475,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3458,7 +3499,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3478,7 +3520,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -3535,7 +3578,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3664,7 +3708,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3687,7 +3732,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3710,7 +3756,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3733,7 +3780,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3756,7 +3804,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3776,7 +3825,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3845,7 +3895,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -3879,7 +3930,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -3916,7 +3968,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3936,7 +3989,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3982,7 +4036,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4005,7 +4060,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4028,7 +4084,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -4065,7 +4122,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4088,7 +4146,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4148,7 +4207,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4194,7 +4254,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4217,7 +4278,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4240,7 +4302,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4260,7 +4323,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4340,7 +4404,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -4397,7 +4462,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4417,7 +4483,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4437,7 +4504,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -4474,7 +4542,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4541,7 +4610,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4587,7 +4657,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4610,7 +4681,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4676,7 +4748,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4696,7 +4769,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4765,7 +4839,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4877,7 +4952,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4900,7 +4976,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4923,7 +5000,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4966,7 +5044,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5003,7 +5082,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5040,7 +5120,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5077,7 +5158,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5097,7 +5179,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5134,7 +5217,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5177,7 +5261,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5200,7 +5285,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5237,7 +5323,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5257,7 +5344,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5300,7 +5388,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5320,7 +5409,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5340,7 +5430,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5429,7 +5520,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5466,7 +5558,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5532,7 +5625,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5575,7 +5669,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5598,7 +5693,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5621,7 +5717,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5641,7 +5738,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5664,7 +5762,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5687,7 +5786,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5710,7 +5810,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5747,7 +5848,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5770,7 +5872,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5793,7 +5896,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5816,7 +5920,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5850,7 +5955,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5893,7 +5999,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5927,7 +6034,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5984,7 +6092,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6004,7 +6113,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6024,7 +6134,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6044,7 +6155,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6081,7 +6193,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6147,7 +6260,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6193,7 +6307,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6216,7 +6331,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6259,7 +6375,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6279,7 +6396,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6302,7 +6420,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6368,7 +6487,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6405,7 +6525,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6442,7 +6563,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6508,7 +6630,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6545,7 +6668,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6611,7 +6735,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6668,7 +6793,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6691,7 +6817,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6748,7 +6875,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6771,7 +6899,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6794,7 +6923,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6817,7 +6947,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6837,7 +6968,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6870,7 +7002,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6890,7 +7023,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6910,7 +7044,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6944,7 +7079,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7001,7 +7137,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7084,7 +7221,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7141,7 +7279,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7164,7 +7303,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7184,7 +7324,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7204,7 +7345,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7227,7 +7369,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7274,7 +7417,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7294,7 +7438,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7463,7 +7608,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7483,7 +7629,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7503,7 +7650,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7523,7 +7671,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7543,7 +7692,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7586,7 +7736,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7609,7 +7760,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7632,7 +7784,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7652,7 +7805,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7672,7 +7826,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7741,7 +7896,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7781,7 +7937,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7801,7 +7958,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7847,7 +8005,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7867,7 +8026,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7927,7 +8087,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7996,7 +8157,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8019,7 +8181,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8042,7 +8205,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8065,7 +8229,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8088,7 +8253,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8108,7 +8274,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8174,7 +8341,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8197,7 +8365,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8240,7 +8409,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8263,7 +8433,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8283,7 +8454,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8326,7 +8498,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8372,7 +8545,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8412,7 +8586,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8484,7 +8659,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -8576,7 +8752,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8614,7 +8791,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8652,7 +8830,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8687,7 +8866,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8726,7 +8906,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8765,7 +8946,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8800,7 +8982,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8835,7 +9018,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8873,7 +9057,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8911,7 +9096,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8949,7 +9135,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8987,7 +9174,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9026,7 +9214,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9078,7 +9267,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9116,7 +9306,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9154,7 +9345,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9231,7 +9423,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9325,7 +9518,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9363,7 +9557,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9401,7 +9596,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9439,7 +9635,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9478,7 +9675,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9513,7 +9711,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9551,7 +9750,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9589,7 +9789,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9624,7 +9825,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9662,7 +9864,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9697,7 +9900,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9732,7 +9936,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9771,7 +9976,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9809,7 +10015,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9861,7 +10068,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9899,7 +10107,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9937,7 +10146,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9972,7 +10182,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10010,7 +10221,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10048,7 +10260,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10100,7 +10313,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10138,7 +10352,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10176,7 +10391,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10214,7 +10430,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10252,7 +10469,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10287,7 +10505,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10322,7 +10541,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10360,7 +10580,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10399,7 +10620,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10438,7 +10660,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10473,7 +10696,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10508,7 +10732,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10543,7 +10768,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10578,7 +10804,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10613,7 +10840,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10648,7 +10876,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10683,7 +10912,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10718,7 +10948,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10753,7 +10984,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10788,7 +11020,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10823,7 +11056,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10858,7 +11092,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10893,7 +11128,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10928,7 +11164,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10963,7 +11200,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11033,7 +11271,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11313,7 +11552,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11348,7 +11588,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11386,7 +11627,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11425,7 +11667,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11463,7 +11706,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11501,7 +11745,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11539,7 +11784,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11574,7 +11820,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11612,7 +11859,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11664,7 +11912,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11702,7 +11951,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11740,7 +11990,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11778,7 +12029,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11848,7 +12100,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11883,7 +12136,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11918,7 +12172,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11953,7 +12208,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11988,7 +12244,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12026,7 +12283,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12078,7 +12336,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12116,7 +12375,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12151,7 +12411,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12186,7 +12447,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12224,7 +12486,8 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ]
+          ],
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     }
