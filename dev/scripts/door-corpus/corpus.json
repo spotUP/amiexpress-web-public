@@ -1485,6 +1485,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "Door executable not found."
           ]
         }
       }
@@ -2030,6 +2033,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "Door executable not found."
           ]
         }
       }
@@ -3113,7 +3119,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Can't open program icon"
+          ]
         }
       }
     },
@@ -3960,7 +3969,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "No NewsStats"
+          ]
         },
         "inputs": [
           {
@@ -5487,7 +5499,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "No bulletins are available"
+          ]
         }
       }
     },
@@ -5729,7 +5744,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "dRE!REPORt.INFO"
+          ]
         }
       }
     },
@@ -6155,7 +6173,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "reading the preferences file for BullRead"
+          ]
         }
       }
     },
@@ -6701,7 +6722,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "AUX1: handler can't be opened"
+          ]
         },
         "inputs": [
           {
@@ -6946,7 +6970,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DRE!ADVERTISE.INFO"
+          ]
         }
       }
     },
@@ -7703,7 +7730,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Sysop Is NOT Avail For Chatting"
+          ]
         }
       }
     },
@@ -7882,7 +7912,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DATEIT.INFO"
+          ]
         }
       }
     },
@@ -8106,7 +8139,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Unable to open S:ACP.Startup"
+          ]
         },
         "inputs": [
           {
@@ -8489,7 +8525,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "cONFIG nOT fOUND"
+          ]
         }
       }
     },
@@ -10265,7 +10304,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "SYS:/Votes/Current created"
+          ]
         }
       }
     },
@@ -12240,7 +12282,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Can't open program icon"
+          ]
         }
       }
     },
