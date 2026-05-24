@@ -12704,7 +12704,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "ZIPPY SEARCH"
+          ]
         }
       }
     },
