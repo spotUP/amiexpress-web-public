@@ -838,7 +838,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "ZIPPY SEARCH"
+          ]
         }
       }
     },
@@ -5275,7 +5278,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "LAST OUTPOST"
+          ]
         },
         "inputs": [
           {
@@ -6630,7 +6636,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "ZIPPY SEARCH"
+          ]
         },
         "inputs": [
           {
