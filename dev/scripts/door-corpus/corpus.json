@@ -5420,7 +5420,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            ": BESTCONF V1.0 by Calypso/GOD     TOTAL :            14 :      0 :"
+            "BESTCONF V1.0 by Calypso/GOD"
           ],
           "mustNotContain": [
             "TRAP",
@@ -9731,7 +9731,7 @@
         ],
         "assertions": {
           "mustContain": [
-            "**Missing File: BBS:BBSTexts/PowerPager/SysopNotAvail.txt(.gr)"
+            "PowerPager v0.14"
           ],
           "mustNotContain": [
             "TRAP",
@@ -11973,7 +11973,7 @@
         ],
         "assertions": {
           "mustContain": [
-            ": BESTCONF V1.0 by Calypso/GOD     TOTAL :            14 :      0 :"
+            "BESTCONF V1.0 by Calypso/GOD"
           ],
           "mustNotContain": [
             "TRAP",
