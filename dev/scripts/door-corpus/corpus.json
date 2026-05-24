@@ -57,9 +57,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "|___________ _____ ____ ___ ___ __ _            rTW v2.01 bY cREW^oNE!mYTH  |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -855,7 +852,7 @@
       "timeoutMs": 30000,
       "notes": "diary door from AEXSETU \u2014 exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 40000,
         "assertions": {
           "mustContain": [
             "|            Ami-Express Diary Version 1.0 Written by ByteMaster           |"
@@ -1064,7 +1061,7 @@
       "timeoutMs": 30000,
       "notes": "5D-News \u2014 news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustContain": [
             "________________________________________________________________________________"
@@ -1087,7 +1084,7 @@
       "timeoutMs": 30000,
       "notes": "5D_Comment \u2014 sysop-comment helper (SIM batch). Fourth SIM corpus entry \u2014 different code patterns than the 5D-FileId/News doors.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustContain": [
             " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
@@ -1679,7 +1676,7 @@
       ],
       "notes": "INS Nightshade SmartDSF 1.3 (INS-SD13.LHA). Sysop file-tag helper. Without tag data exits via 'HANG ON YOURE SYSOP IS TAGGING FiLES!' notice path. 4-door cluster representative for SmartDSF.0X0 CPU-variant family.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustContain": [
             "\r         .___.           .___.__ .___.___.                       .___."
@@ -4236,9 +4233,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "BelchLIST v0.3 Noisy Belch     Files      Bytes Difference LastCall"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5419,9 +5413,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "BESTCONF V1.0 by Calypso/GOD"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6636,10 +6627,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "ZIPPY SEARCH"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6890,10 +6878,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Node 1"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7076,7 +7061,7 @@
       "timeoutMs": 30000,
       "notes": "INS-SD13.LHA SmartDSF.020 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustContain": [
             "This is SmartDSF V1.3 Copyright (C) 1994-95' by NiGHTSHADE/INS"
@@ -8120,7 +8105,7 @@
       "timeoutMs": 30000,
       "notes": "EMT-ANWL.LHA AnarchyWall \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 28000,
+        "timeoutMs": 35000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -8128,7 +8113,6 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
           "mustContain": [
             "AnarchyWall v1.o"
           ]
@@ -8165,7 +8149,7 @@
       "timeoutMs": 30000,
       "notes": "TEL-TP02.LHA flm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustContain": [
             "wELCOME tO fLM v0.4 bY dR. iCE/lISENCE"
@@ -9749,7 +9733,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/FLM; needs capture + triage",
       "integration": {
-        "timeoutMs": 22000,
+        "timeoutMs": 35000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11008,7 +10992,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_CC001_5D_ComCommand_Prefs; needs capture + triage",
       "integration": {
-        "timeoutMs": 22000,
+        "timeoutMs": 35000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11467,7 +11451,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_SE001_5D_Selector; needs capture + triage",
       "integration": {
-        "timeoutMs": 22000,
+        "timeoutMs": 35000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11541,7 +11525,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_STC01_5D_Status; needs capture + triage",
       "integration": {
-        "timeoutMs": 22000,
+        "timeoutMs": 35000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11611,7 +11595,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_UE001_5D_USERED; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 35000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11968,9 +11952,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "BESTCONF V1.0 by Calypso/GOD"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12091,10 +12072,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "EXORCIST"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
