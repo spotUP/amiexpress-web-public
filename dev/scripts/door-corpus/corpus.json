@@ -2413,6 +2413,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "dA WALL v2.1"
           ]
         },
         "inputs": [
@@ -2993,7 +2996,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "SUTATS-NEVAEH"
+          ]
         }
       }
     },
@@ -7653,6 +7659,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "N e w U s e r   v 1 . 2"
           ]
         }
       }
@@ -8110,7 +8119,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "AnarchyWall v1.o"
+          ]
         }
       }
     },
@@ -8853,7 +8865,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Zippy Search 1.03"
+          ]
         },
         "inputs": [
           {
@@ -9060,7 +9075,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "5D-Clock V0.22"
+          ]
         }
       }
     },
@@ -11043,7 +11061,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "VIEW CALLERSLOG"
+          ]
         }
       }
     },
@@ -11079,7 +11100,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "UPLOAD FILE(S)"
+          ]
         }
       }
     },
@@ -11115,7 +11139,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DOWNLOAD FILE(S)"
+          ]
         }
       }
     },
@@ -11304,7 +11331,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "SHOW FILELIST"
+          ]
         }
       }
     },
@@ -11340,7 +11370,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "AmiExpress Web BBS"
+          ]
         }
       }
     },
@@ -11412,7 +11445,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "CHANGE SETTINGS"
+          ]
         }
       }
     },
@@ -11483,7 +11519,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "SHOW STATUS"
+          ]
         }
       }
     },
@@ -11588,6 +11627,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "LEAVE MSG TO SYSOP"
           ]
         }
       }
@@ -11623,6 +11665,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "SHOW NEW FILES"
           ]
         }
       }
@@ -11806,7 +11851,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "PREVIOUS CONFERENCE"
+          ]
         }
       }
     },
@@ -12038,7 +12086,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "EXORCIST"
+          ]
         }
       }
     },
@@ -12399,7 +12450,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "AUTO SIGN"
+          ]
         }
       }
     },
