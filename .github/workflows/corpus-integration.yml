@@ -53,13 +53,22 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/backend/package-lock.json
 
+      - name: Build SDK
+        working-directory: sdk
+        # Build the SDK using its own pinned TypeScript (5.4.5 in sdk/package-lock.json)
+        # before the backend install triggers the SDK's prepare hook. This avoids
+        # version mismatches when the backend's TypeScript emits TS5107 for
+        # moduleResolution=node10 that was deprecated in TypeScript 6.0.
+        run: npm ci --no-audit --no-fund && npm run build
+
       - name: Install backend deps
         working-directory: web/backend
-        # Skip the postinstall web-asset build — corpus testing
-        # doesn't need the frontend, config-app, or SDK preview
-        # frontend (saves ~10 min of CI time).
+        # SKIP_WEB_ASSET_BUILD: skip the postinstall web-asset build (saves ~10 min)
+        # SKIP_SDK_PREPARE: SDK was already built in the previous step; skip its
+        #   prepare hook so npm ci does not re-build it with a mismatched tsc.
         env:
           SKIP_WEB_ASSET_BUILD: '1'
+          SKIP_SDK_PREPARE: '1'
         run: npm ci --no-audit --no-fund
 
       - name: Run corpus:integration:ci (with retry)

@@ -145,7 +145,7 @@
     "test:integration": "jest --testPathPattern=integration",
     "docs": "typedoc --out docs/api core",
     "clean": "rm -rf dist releases",
-    "prepare": "npm run build"
+    "prepare": "[ \"$SKIP_SDK_PREPARE\" = '1' ] && echo '[SDK] prepare skipped (SKIP_SDK_PREPARE=1)' || npm run build"
   },
   "keywords": [
     "bbs",
