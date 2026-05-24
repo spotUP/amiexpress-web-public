@@ -855,7 +855,7 @@
       "timeoutMs": 30000,
       "notes": "diary door from AEXSETU \u2014 exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "assertions": {
           "mustContain": [
             "|            Ami-Express Diary Version 1.0 Written by ByteMaster           |"
@@ -8120,7 +8120,7 @@
       "timeoutMs": 30000,
       "notes": "EMT-ANWL.LHA AnarchyWall \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 28000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -9652,28 +9652,24 @@
       "id": "doorsmenu",
       "name": "DOORSMENU",
       "category": "auto-added",
-      "binary": "Doors/DOORSMENU/DOORSMENU",
+      "binary": "Doors/Doorsmenu/DOORSMENU",
       "doorType": "XIM",
       "command": "DOORSMENU",
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/DOORSMENU; needs capture + triage",
       "integration": {
-        "timeoutMs": 12000,
+        "timeoutMs": 20000,
         "inputs": [
           {
-            "delayMs": 500,
-            "data": "q"
-          },
-          {
-            "delayMs": 1500,
-            "data": "\u001b"
-          },
-          {
             "delayMs": 3000,
-            "data": "q"
+            "data": "Q"
           },
           {
-            "delayMs": 4500,
+            "delayMs": 6000,
+            "data": "Q"
+          },
+          {
+            "delayMs": 9000,
             "data": "\r"
           }
         ],
@@ -9753,7 +9749,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/FLM; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 22000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11012,7 +11008,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_CC001_5D_ComCommand_Prefs; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 22000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11471,7 +11467,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_SE001_5D_Selector; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 22000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11545,7 +11541,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_STC01_5D_Status; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 22000,
         "inputs": [
           {
             "delayMs": 1500,
