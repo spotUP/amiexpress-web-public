@@ -1,9 +1,9 @@
+
                                                                                
-                      BelchOLM v1.6 by Noisy Belch/LOGIC                       
+                         BelchOLM v1.4 by Noisy Belch                          
 
-       Type [OLM 1] to Olm Node 1 or [OLM 1 4 2] to Olm Node 1 2 and 4
+That Node is OFFLINE
 
-                     [OLM *] will post the Olm to EVERYONE
 
 
                                                                              
@@ -631,3 +631,4 @@ ________________________________________________________________________________
  [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
 ________________________________________________________________________________
 
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

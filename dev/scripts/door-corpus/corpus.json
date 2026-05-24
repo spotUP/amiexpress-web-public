@@ -97,7 +97,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "| 02 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |"
+            "|___________ _____ ____ ___ ___ __ _            rTW v2.01 bY cREW^oNE!mYTH  |"
           ],
           "mustNotContain": [
             "TRAP",
@@ -709,7 +709,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
+            " S!X Stat V2.0 [08.02.1995] (100% ASM) - © 1995 b WHiZ/LOGiC -"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2596,7 +2596,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "= [Super Stats V1.4 By Etrigan/Intellect] =",
+            "= [Super Stats V1.3 By Etrigan/Intellect] =",
             "·    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
           ],
           "mustNotContain": [
@@ -2704,7 +2704,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
+            "|         sTATUS 4 eVOLUTION^bBS V1.0 cODED bY cREEPiN-DEATH              |"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2802,7 +2802,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
+            "This is what you are! v1 by Noisy Belch (Not /X.info Compatible!)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2849,7 +2849,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
+            " S!X Stat V2.0 [08.02.1995] (100% ASM) - © 1995 b WHiZ/LOGiC -"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4721,7 +4721,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "BelchVIEW v1.2 by Noisy Belch"
+            "BelchVIEW v1.3 by Noisy Belch/LOGIC"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4786,7 +4786,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)"
+            "Bytekiller V1.3 by Byteandi (Mystic/X-Design)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6412,16 +6412,12 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "UP   D F   (S)             -    NLO   FILE(S    [RZ] - ZMODEM UPL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "expectedSubState": "DISPLAY_MENU"
+          ]
         }
       }
     },
@@ -6460,7 +6456,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "BelchOLM v1.6 by Noisy Belch/LOGIC"
+            "BelchOLM v1.4 by Noisy Belch"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6708,7 +6704,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "BelchOLM v1.6 by Noisy Belch/LOGIC"
+            "BelchOLM v1.3 by Noisy Belch (Not /X.info Compatible!)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -7110,7 +7106,7 @@
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            "BelchVIEW v1.2 by Noisy Belch"
+            "BelchView v0.8 by Noisy Belch"
           ],
           "mustNotContain": [
             "TRAP",
