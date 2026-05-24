@@ -1415,6 +1415,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "Do U realy whish to logoff?"
           ]
         },
         "inputs": [
@@ -1773,7 +1776,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Write On Wall"
+          ]
         },
         "inputs": [
           {
@@ -2360,6 +2366,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "Command requires higher access"
           ]
         }
       }
@@ -4010,7 +4019,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Permission denied"
+          ]
         }
       }
     },
@@ -4344,7 +4356,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Command requires higher access"
+          ]
         }
       }
     },
@@ -4778,7 +4793,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Wallhall: ERROR! CAN'T OPEN DATAFILE"
+          ]
         }
       }
     },
@@ -4982,7 +5000,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "5TH dYNASTY"
+          ]
         }
       }
     },
@@ -5994,7 +6015,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Command requires higher access"
+          ]
         }
       }
     },
@@ -6444,7 +6468,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Wallhall: ERROR! CAN'T OPEN DATAFILE"
+          ]
         }
       }
     },
@@ -7697,7 +7724,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "I dont code doors for /X.info"
+          ]
         }
       }
     },
@@ -11001,7 +11031,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Command requires higher access"
+          ]
         }
       }
     },
@@ -11073,7 +11106,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Command requires higher access"
+          ]
         }
       }
     },
@@ -11109,7 +11145,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Command requires higher access"
+          ]
         }
       }
     },
@@ -11499,6 +11538,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "Command requires higher access"
           ]
         }
       }
@@ -11605,7 +11647,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Command requires higher access"
+          ]
         }
       }
     },
@@ -12156,7 +12201,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "XIM Door (vbcc) - Direct Protocol"
+          ]
         }
       }
     },
