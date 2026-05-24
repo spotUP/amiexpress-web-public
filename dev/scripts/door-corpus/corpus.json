@@ -10,7 +10,7 @@
       "doorType": "XIM",
       "command": "Sent_FE",
       "timeoutMs": 30000,
-      "notes": "Banner-only stub door (EMPiRE/MYSTiC X-DESiGN 1994). Loads, renders ANSI banner, issues PRV_COMMAND 'Sent', shuts down. No input expected — pure outbound trace test for XIM JH_REGISTER → SV_NEWMSG → DT_NAME → DT_SLOTNUMBER → BB_NONSTOPTEXT → JH_SM* → PRV_COMMAND → JH_SHUTDOWN sequence. Verified 2026-05-11.",
+      "notes": "Banner-only stub door (EMPiRE/MYSTiC X-DESiGN 1994). Loads, renders ANSI banner, issues PRV_COMMAND 'Sent', shuts down. No input expected \u2014 pure outbound trace test for XIM JH_REGISTER \u2192 SV_NEWMSG \u2192 DT_NAME \u2192 DT_SLOTNUMBER \u2192 BB_NONSTOPTEXT \u2192 JH_SM* \u2192 PRV_COMMAND \u2192 JH_SHUTDOWN sequence. Verified 2026-05-11.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -35,7 +35,7 @@
       "doorType": "XIM",
       "command": "CONFTOP",
       "timeoutMs": 30000,
-      "notes": "Conference Top Uploaders v2.3 (Bobo/Mystic + Looby/Insane). Exercises XIM banner + dos.library file I/O for Conf.DB reads + AEDoor message flow. Without Conf.DB seed data, exits early with 'Reset date is out of range' — stable trace either way. Verified runs to completion + emits banner 2026-05-11.",
+      "notes": "Conference Top Uploaders v2.3 (Bobo/Mystic + Looby/Insane). Exercises XIM banner + dos.library file I/O for Conf.DB reads + AEDoor message flow. Without Conf.DB seed data, exits early with 'Reset date is out of range' \u2014 stable trace either way. Verified runs to completion + emits banner 2026-05-11.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -92,7 +92,7 @@
       "doorType": "XIM",
       "command": "WHO",
       "timeoutMs": 30000,
-      "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive — renders list and exits.",
+      "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive \u2014 renders list and exits.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -130,7 +130,7 @@
       "doorType": "XIM",
       "command": "FILECHECK",
       "timeoutMs": 30000,
-      "notes": "SvEN/5D 1994 file-check / auto-free door. Without its full .info tooltype set, the door's icon.library GetDiskObject lookup fails and it exits with 'Door hasn't been started fully right!' Pinned here as a deterministic 5-XIM-op trace (JH_REGISTER → SV_NEWMSG → BB_MAINLINE → JH_WRITE × 2 → JH_SHUTDOWN). Surfaced by bulk-probe 2026-05-12.",
+      "notes": "SvEN/5D 1994 file-check / auto-free door. Without its full .info tooltype set, the door's icon.library GetDiskObject lookup fails and it exits with 'Door hasn't been started fully right!' Pinned here as a deterministic 5-XIM-op trace (JH_REGISTER \u2192 SV_NEWMSG \u2192 BB_MAINLINE \u2192 JH_WRITE \u00d7 2 \u2192 JH_SHUTDOWN). Surfaced by bulk-probe 2026-05-12.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -164,7 +164,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DOWNLOAD"
+          ]
         }
       }
     },
@@ -182,7 +185,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "5D-DoorMenu — door-selection menu, prompt '<CR>=quit'. Scripted Enter drops out. Exercises XIM JH_HK + JH_SF (Show File).",
+      "notes": "5D-DoorMenu \u2014 door-selection menu, prompt '<CR>=quit'. Scripted Enter drops out. Exercises XIM JH_HK + JH_SF (Show File).",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -212,7 +215,7 @@
           "data": "q"
         }
       ],
-      "notes": "5D-TimeBank — time-deposit/withdraw door. 'Q' hotkey quits per its UI hint. Exercises XIM DT_TIMELIMIT + RAWARROW + JH_HK input path.",
+      "notes": "5D-TimeBank \u2014 time-deposit/withdraw door. 'Q' hotkey quits per its UI hint. Exercises XIM DT_TIMELIMIT + RAWARROW + JH_HK input path.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -256,7 +259,7 @@
           "data": "n"
         }
       ],
-      "notes": "LogOff v1.2 by Steve and DR. G of Italian Bad Boys '93. Confirms 'do you really want to LogOff (y)es/(N)o/(r)eply ?' — 'n' declines + door exits. First door in corpus to exercise JH_BBSNAME (BBS name query) and DT_NAME together with the hotkey path.",
+      "notes": "LogOff v1.2 by Steve and DR. G of Italian Bad Boys '93. Confirms 'do you really want to LogOff (y)es/(N)o/(r)eply ?' \u2014 'n' declines + door exits. First door in corpus to exercise JH_BBSNAME (BBS name query) and DT_NAME together with the hotkey path.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -301,7 +304,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "5D-ZippySearch by sTc/5D. Line-input prompt 'Enter string to search for >:'. Bare Enter aborts the search and exits the door. Exercises XIM JH_LI (line-input) path — first corpus door to cover that op.",
+      "notes": "5D-ZippySearch by sTc/5D. Line-input prompt 'Enter string to search for >:'. Bare Enter aborts the search and exits the door. Exercises XIM JH_LI (line-input) path \u2014 first corpus door to cover that op.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -345,7 +348,7 @@
           "data": "n"
         }
       ],
-      "notes": "Bulletin update door from 5150-B10. Prompt 'Update bulletins? (y/N):' — 'n' declines and exits. Minimal 3.9 KB binary — useful for pinning the JH_HK hotkey path in isolation (no other XIM ops fire).",
+      "notes": "Bulletin update door from 5150-B10. Prompt 'Update bulletins? (y/N):' \u2014 'n' declines and exits. Minimal 3.9 KB binary \u2014 useful for pinning the JH_HK hotkey path in isolation (no other XIM ops fire).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -383,7 +386,7 @@
       "doorType": "XIM",
       "command": "CS",
       "timeoutMs": 30000,
-      "notes": "ConfScan v2.6 — conference scanning utility. Exercises ENVSTAT (environment-status query), DT_CONFACCESS (conf access flags), and BB_CONFNUM (current-conf number). Non-interactive, clean exit. Three novel XIM ops in one door.",
+      "notes": "ConfScan v2.6 \u2014 conference scanning utility. Exercises ENVSTAT (environment-status query), DT_CONFACCESS (conf access flags), and BB_CONFNUM (current-conf number). Non-interactive, clean exit. Three novel XIM ops in one door.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -407,7 +410,7 @@
       "doorType": "XIM",
       "command": "UDI",
       "timeoutMs": 30000,
-      "notes": "uPdOWNiNFO v1.2 — upload/download stats info screen. Exercises DT_STAMP_CTIME (account creation time) + BB_CONFNUM + the full DT_BYTES* / DT_DAILY* user-data field set. 20-op trace, non-interactive.",
+      "notes": "uPdOWNiNFO v1.2 \u2014 upload/download stats info screen. Exercises DT_STAMP_CTIME (account creation time) + BB_CONFNUM + the full DT_BYTES* / DT_DAILY* user-data field set. 20-op trace, non-interactive.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -431,7 +434,7 @@
       "doorType": "XIM",
       "command": "ES",
       "timeoutMs": 30000,
-      "notes": "Damage93 easystatus — 24-op status renderer with embedded current-time field. Restored 2026-05-12 with the time-mask runner pass.",
+      "notes": "Damage93 easystatus \u2014 24-op status renderer with embedded current-time field. Restored 2026-05-12 with the time-mask runner pass.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -455,7 +458,7 @@
       "doorType": "XIM",
       "command": "CS",
       "timeoutMs": 30000,
-      "notes": "ConfStats v1.3 'Tough Stats' by Json — 31 XIM ops, highest single-door op-count in the corpus. Renders 'Local time...' line that previously drifted; restored 2026-05-12 with time-mask runner pass.",
+      "notes": "ConfStats v1.3 'Tough Stats' by Json \u2014 31 XIM ops, highest single-door op-count in the corpus. Renders 'Local time...' line that previously drifted; restored 2026-05-12 with time-mask runner pass.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -479,7 +482,7 @@
       "doorType": "XIM",
       "command": "INFO",
       "timeoutMs": 30000,
-      "notes": "AFL_PACK newinfo — heaviest XIM trace in the universe sample (27 ops). Covers the entire user-data + sysop + BBS-info query surface. Non-interactive.",
+      "notes": "AFL_PACK newinfo \u2014 heaviest XIM trace in the universe sample (27 ops). Covers the entire user-data + sysop + BBS-info query surface. Non-interactive.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -503,7 +506,7 @@
       "doorType": "XIM",
       "command": "ST",
       "timeoutMs": 30000,
-      "notes": "5D-Status V1.50 by SvEN/5D — third user-stats variant (23 ops) with NODE_DEVICE query that the others don't issue. Pinning all three (newinfo + easystatus + 5d_status) catches per-variant query-ordering regressions.",
+      "notes": "5D-Status V1.50 by SvEN/5D \u2014 third user-stats variant (23 ops) with NODE_DEVICE query that the others don't issue. Pinning all three (newinfo + easystatus + 5d_status) catches per-variant query-ordering regressions.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -527,7 +530,7 @@
       "doorType": "XIM",
       "command": "FN",
       "timeoutMs": 30000,
-      "notes": "Dive's FuckNature — 20-op trace. Distinct fingerprint from the other status doors; different rendering path. Non-interactive.",
+      "notes": "Dive's FuckNature \u2014 20-op trace. Distinct fingerprint from the other status doors; different rendering path. Non-interactive.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -551,7 +554,7 @@
       "doorType": "XIM",
       "command": "J",
       "timeoutMs": 30000,
-      "notes": "JoinCnf 3.6 — third-party conference-join helper (independent of the BBS's internal `J` command). Non-interactive — renders + exits.",
+      "notes": "JoinCnf 3.6 \u2014 third-party conference-join helper (independent of the BBS's internal `J` command). Non-interactive \u2014 renders + exits.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -627,7 +630,7 @@
       "doorType": "XIM",
       "command": "AO",
       "timeoutMs": 30000,
-      "notes": "EMPiRE AutoOnline 1.2 — auto-online activity bulletin. Different category from status doors (status writer not reader).",
+      "notes": "EMPiRE AutoOnline 1.2 \u2014 auto-online activity bulletin. Different category from status doors (status writer not reader).",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -666,7 +669,7 @@
       "doorType": "XIM",
       "command": "CSEC",
       "timeoutMs": 30000,
-      "notes": "C+N Conference Security V1.30 — checks access on conference join. Different XIM surface from JoinCnf (access-check vs join-action).",
+      "notes": "C+N Conference Security V1.30 \u2014 checks access on conference join. Different XIM surface from JoinCnf (access-check vs join-action).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -704,12 +707,12 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "S!X Stat V2.0 from LGC — 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status.",
+      "notes": "S!X Stat V2.0 from LGC \u2014 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            " S!X Stat V2.0 [08.02.1995] (100% ASM) - © 1995 b WHiZ/LOGiC -"
+            "\u007f\u007f\u007f\u007f S!X Stat V2.0 [08.02.1995] (100% ASM) - \u00a9 1995 b WHiZ/LOGiC -\u007f\u007f\u007f\u007f\u007f"
           ],
           "mustNotContain": [
             "TRAP",
@@ -728,12 +731,12 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "Insanity sKAN^4^sTATUs — 28-op status door, again distinct fingerprint.",
+      "notes": "Insanity sKAN^4^sTATUs \u2014 28-op status door, again distinct fingerprint.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            ".ø0ø.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.02!]!:.,     (___ _ _/\\  __.ø0ø."
+            ".\u00f80\u00f8.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.02!]!:.,     (___ _ _/\\  __.\u00f80\u00f8."
           ],
           "mustNotContain": [
             "TRAP",
@@ -752,7 +755,7 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "Intellect Super-Stats — 19-op variant. Different from the 5D family — broader Amiga-doors-scene coverage.",
+      "notes": "Intellect Super-Stats \u2014 19-op variant. Different from the 5D family \u2014 broader Amiga-doors-scene coverage.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -776,7 +779,7 @@
       "doorType": "XIM",
       "command": "STATS",
       "timeoutMs": 30000,
-      "notes": "AFL status door — exercises NODE_UNIT + `Unknown (907` (an XIM op our XIMCommand enum doesn't name yet — useful for catching when we DO name it that the trace stays stable). 23 ops total.",
+      "notes": "AFL status door \u2014 exercises NODE_UNIT + `Unknown (907` (an XIM op our XIMCommand enum doesn't name yet \u2014 useful for catching when we DO name it that the trace stays stable). 23 ops total.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -800,7 +803,7 @@
       "doorType": "XIM",
       "command": "PAGE",
       "timeoutMs": 30000,
-      "notes": "AFL pager — exercises JH_SF (Show File) screen-display path + RETURNCOMMAND. First corpus entry covering JH_SF.",
+      "notes": "AFL pager \u2014 exercises JH_SF (Show File) screen-display path + RETURNCOMMAND. First corpus entry covering JH_SF.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -810,7 +813,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Couldn't load icon"
+          ]
         }
       }
     },
@@ -822,7 +828,7 @@
       "doorType": "XIM",
       "command": "HC",
       "timeoutMs": 30000,
-      "notes": "Kero/BTH HoldCheck — exercises JH_CO (Console Output) + JH_SO (Serial Output) — two distinct XIM output ops the rest of the corpus doesn't cover. Pinned to catch any regression in low-level output routing.",
+      "notes": "Kero/BTH HoldCheck \u2014 exercises JH_CO (Console Output) + JH_SO (Serial Output) \u2014 two distinct XIM output ops the rest of the corpus doesn't cover. Pinned to catch any regression in low-level output routing.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -844,7 +850,7 @@
       "doorType": "XIM",
       "command": "DIARY",
       "timeoutMs": 30000,
-      "notes": "diary door from AEXSETU — exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path.",
+      "notes": "diary door from AEXSETU \u2014 exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -883,7 +889,7 @@
       "doorType": "XIM",
       "command": "B",
       "timeoutMs": 30000,
-      "notes": "mgs! bulls bulletin-list door — exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output).",
+      "notes": "mgs! bulls bulletin-list door \u2014 exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -927,7 +933,7 @@
           "data": "n"
         }
       ],
-      "notes": "MST wall door — prompts 'Write On Wall (y/n)?' — declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster.",
+      "notes": "MST wall door \u2014 prompts 'Write On Wall (y/n)?' \u2014 declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -969,7 +975,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "CDTrans — CD-ROM file transfer helper. Prompts 'Filename(01):' — bare Enter aborts, door exits. Represents a 5-door 'Filename:' line-input cluster (CDTrans/CD_DL.EXE variants).",
+      "notes": "CDTrans \u2014 CD-ROM file transfer helper. Prompts 'Filename(01):' \u2014 bare Enter aborts, door exits. Represents a 5-door 'Filename:' line-input cluster (CDTrans/CD_DL.EXE variants).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -1006,7 +1012,7 @@
       "binary": "Doors/5D-FileId/5D-FileId",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "5D-FileId — pure SIM batch (no XIM ops, no AEDoor handshake). Exercises dos.library file open/read/write path against the door's config file. First SIM-category corpus entry.",
+      "notes": "5D-FileId \u2014 pure SIM batch (no XIM ops, no AEDoor handshake). Exercises dos.library file open/read/write path against the door's config file. First SIM-category corpus entry.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1016,7 +1022,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Error: Cannot open icon"
+          ]
         }
       }
     },
@@ -1027,7 +1036,7 @@
       "binary": "Doors/MAKECMD/MAKECMD",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "dRE!NEW_PUB MAKECMD — SIM utility for building command sets. Different LVO mix from 5D-FileId.",
+      "notes": "dRE!NEW_PUB MAKECMD \u2014 SIM utility for building command sets. Different LVO mix from 5D-FileId.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1050,7 +1059,7 @@
       "binary": "Doors/5D-News/5D-News",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "5D-News — news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point.",
+      "notes": "5D-News \u2014 news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1073,7 +1082,7 @@
       "binary": "Doors/5D_Comment/5D_Comment",
       "doorType": "SIM",
       "timeoutMs": 30000,
-      "notes": "5D_Comment — sysop-comment helper (SIM batch). Fourth SIM corpus entry — different code patterns than the 5D-FileId/News doors.",
+      "notes": "5D_Comment \u2014 sysop-comment helper (SIM batch). Fourth SIM corpus entry \u2014 different code patterns than the 5D-FileId/News doors.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1103,12 +1112,12 @@
           "data": "\\r"
         }
       ],
-      "notes": "U-Stat v1.0 by S¡eGeL/AFL (graphics by aRGøN/AFL). User-stats info screen — exercises 29 distinct XIM ops in one door including the entire DT_* user-data field family (DT_LOCATION, DT_UPLOADS, DT_BYTESUPLOAD, DT_DOWNLOADS, DT_BYTEDOWNLOAD, DT_SECBOARD, DT_SECLIBRARY, DT_DAILYBYTELIMIT, DT_DAILYBYTEDLD, DT_STAMP_LASTON, DT_TIMESCALLED, DT_MESSAGESPOSTED, DT_TIMETOTAL, DT_TIMEUSED, DT_EXPERT) + JH_SYSOP / EXPRESS_VERSION / BB_CONFNAME / BB_NODEID / BB_TASKPRI / NODE_BAUDRATE. Scripted \\r after 4 s exits cleanly. Pinning this catches any regression across the user-data XIM query surface in one shot. Surfaced by bulk-probe full sweep 2026-05-12.",
+      "notes": "U-Stat v1.0 by S\u00a1eGeL/AFL (graphics by aRG\u00f8N/AFL). User-stats info screen \u2014 exercises 29 distinct XIM ops in one door including the entire DT_* user-data field family (DT_LOCATION, DT_UPLOADS, DT_BYTESUPLOAD, DT_DOWNLOADS, DT_BYTEDOWNLOAD, DT_SECBOARD, DT_SECLIBRARY, DT_DAILYBYTELIMIT, DT_DAILYBYTEDLD, DT_STAMP_LASTON, DT_TIMESCALLED, DT_MESSAGESPOSTED, DT_TIMETOTAL, DT_TIMEUSED, DT_EXPERT) + JH_SYSOP / EXPRESS_VERSION / BB_CONFNAME / BB_NODEID / BB_TASKPRI / NODE_BAUDRATE. Scripted \\r after 4 s exits cleanly. Pinning this catches any regression across the user-data XIM query surface in one shot. Surfaced by bulk-probe full sweep 2026-05-12.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "U-Stat V1.0 - CoDeD BY S¡eGeL/aFL"
+            "U-Stat V1.0 - CoDeD BY S\u00a1eGeL/aFL"
           ],
           "mustNotContain": [
             "TRAP",
@@ -1157,12 +1166,12 @@
           "data": "n"
         }
       ],
-      "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' — 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12.",
+      "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' \u2014 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12.",
       "integration": {
         "timeoutMs": 10000,
         "assertions": {
           "mustContain": [
-            ">     LogOff V1.0 by PSYCHOPATH   ©1996     <"
+            ">     LogOff V1.0 by PSYCHOPATH   \u00a91996     <"
           ],
           "mustNotContain": [
             "TRAP",
@@ -1197,7 +1206,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "WarpSearch 2.5 — file-listing search door. Cluster representative for the 6-door 'Enter string to search for:' line-input family (WarpSearch + TurboZ variants). Bare Enter aborts search and exits. Pins the XIM line-input (JH_LI) return path on a second binary distinct from 5D-ZippySearch.",
+      "notes": "WarpSearch 2.5 \u2014 file-listing search door. Cluster representative for the 6-door 'Enter string to search for:' line-input family (WarpSearch + TurboZ variants). Bare Enter aborts search and exits. Pins the XIM line-input (JH_LI) return path on a second binary distinct from 5D-ZippySearch.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1228,7 +1237,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "5D^QuickAnsi 0.05 — tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 — biggest 'Choose : ->' cluster in the universe sample).",
+      "notes": "5D^QuickAnsi 0.05 \u2014 tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 \u2014 biggest 'Choose : ->' cluster in the universe sample).",
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
@@ -1273,12 +1282,12 @@
           "data": "\\r"
         }
       ],
-      "notes": "Aqua ListSpeeder 1.2 — file-listing accelerator. Bare '>' prompt is a line-input read; Enter exits. Cluster representative for the 4-door ListSpeeder family (000/020/030/040 CPU variants).",
+      "notes": "Aqua ListSpeeder 1.2 \u2014 file-listing accelerator. Bare '>' prompt is a line-input read; Enter exits. Cluster representative for the 4-door ListSpeeder family (000/020/030/040 CPU variants).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
           "mustContain": [
-            "ListSpeeder v1.2 ©1993 by Aquarius"
+            "ListSpeeder v1.2 \u00a91993 by Aquarius"
           ],
           "mustNotContain": [
             "TRAP",
@@ -1317,7 +1326,7 @@
           "data": "n"
         }
       ],
-      "notes": "DPL GoodBye 1.1 (variant 'GoodBye.x'). Prompt 'Do you want to logoff or write a comment? (c/y/N)' — 'n' declines and exits. Cluster representative for the 4-door GoodBye.x family (000/020/030/040 CPU variants).",
+      "notes": "DPL GoodBye 1.1 (variant 'GoodBye.x'). Prompt 'Do you want to logoff or write a comment? (c/y/N)' \u2014 'n' declines and exits. Cluster representative for the 4-door GoodBye.x family (000/020/030/040 CPU variants).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -1406,7 +1415,7 @@
           "data": "n\\r"
         }
       ],
-      "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' — 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry.",
+      "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' \u2014 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry.",
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
@@ -1446,7 +1455,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "AFL Comment2 (AFL_PACK.LHA). Sysop-comment helper variant — bare \\r exits. 3-door cluster representative for the 'comment' banner family.",
+      "notes": "AFL Comment2 (AFL_PACK.LHA). Sysop-comment helper variant \u2014 bare \\r exits. 3-door cluster representative for the 'comment' banner family.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1476,7 +1485,7 @@
           "data": "n"
         }
       ],
-      "notes": "DCN file-id v2 SENT helper (DCN!F-X2.LHA). Prompt 'Your STRIP_ID settings do not exist! Configure them now (y/N)' — 'n' declines and exits. 4-door cluster representative.",
+      "notes": "DCN file-id v2 SENT helper (DCN!F-X2.LHA). Prompt 'Your STRIP_ID settings do not exist! Configure them now (y/N)' \u2014 'n' declines and exits. 4-door cluster representative.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1506,7 +1515,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "SvEN/5D Wall 1.25 (5D-WA125.LHA). 3-door cluster representative for the 'Call Joyrøde 4 unl¡m¡ted /X-door support' Wall banner family. Bare \\r exits.",
+      "notes": "SvEN/5D Wall 1.25 (5D-WA125.LHA). 3-door cluster representative for the 'Call Joyr\u00f8de 4 unl\u00a1m\u00a1ted /X-door support' Wall banner family. Bare \\r exits.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -1548,7 +1557,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner — 4-door cluster representative. Bare \\r exits.",
+      "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner \u2014 4-door cluster representative. Bare \\r exits.",
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
@@ -1695,7 +1704,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "Honey d-lOSt_bULLs 0.2 (HNY-LB02.LHA). Bulletin selector. Line-input 'eNTEr a bULLETINe nr# to vIEw or hIt rETURn to qUIt :>' — bare \\r exits. 4-door cluster representative.",
+      "notes": "Honey d-lOSt_bULLs 0.2 (HNY-LB02.LHA). Bulletin selector. Line-input 'eNTEr a bULLETINe nr# to vIEw or hIt rETURn to qUIt :>' \u2014 bare \\r exits. 4-door cluster representative.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -1739,7 +1748,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "OPS ByteComment 1.0 (upload side). Line-input prompt 'Please Enter Filename (ReTuRn)=End :' — bare Enter exits with 'End'. Exercises DT_BYTESUPLOAD + DT_BYTEDOWNLOAD path with high JH_SM count (46 ops). Cluster representative for the 5-door ByteComment family.",
+      "notes": "OPS ByteComment 1.0 (upload side). Line-input prompt 'Please Enter Filename (ReTuRn)=End :' \u2014 bare Enter exits with 'End'. Exercises DT_BYTESUPLOAD + DT_BYTEDOWNLOAD path with high JH_SM count (46 ops). Cluster representative for the 5-door ByteComment family.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1769,7 +1778,7 @@
           "data": "n"
         }
       ],
-      "notes": "MST wall.020 — graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry — different banner / DT_NAME path / JH_SG show-gfile op).",
+      "notes": "MST wall.020 \u2014 graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry \u2014 different banner / DT_NAME path / JH_SG show-gfile op).",
       "integration": {
         "timeoutMs": 10000,
         "assertions": {
@@ -1810,7 +1819,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "MST edit.020 — file-edit door. Line-input prompt 'Filename :' — bare Enter aborts and exits. Cluster representative for the 5-door edit.0X0 CPU-variant family. 30 JH_SM ops — heavy banner.",
+      "notes": "MST edit.020 \u2014 file-edit door. Line-input prompt 'Filename :' \u2014 bare Enter aborts and exits. Cluster representative for the 5-door edit.0X0 CPU-variant family. 30 JH_SM ops \u2014 heavy banner.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -1854,7 +1863,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "Tiny 1.7 KB CD download helper from Rioter Tools. Line-input 'Filename(01):' — bare Enter exits. Cluster representative for the 5-door 'Filename(NN):' family (CD_DL + CDTrans variants), distinct from the cdtrans corpus entry by AEDoor library path (uses OldOpenLibrary).",
+      "notes": "Tiny 1.7 KB CD download helper from Rioter Tools. Line-input 'Filename(01):' \u2014 bare Enter exits. Cluster representative for the 5-door 'Filename(NN):' family (CD_DL + CDTrans variants), distinct from the cdtrans corpus entry by AEDoor library path (uses OldOpenLibrary).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -1898,7 +1907,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "FILEID file-id manager (FID15CR.LHA source). Without its config the door exits via 'Error (FileId.info)' path — deterministic clean exit on bare \\r. Cluster representative for the 7-door FileId family (Autosent / FILEID / AUTOSENT variants).",
+      "notes": "FILEID file-id manager (FID15CR.LHA source). Without its config the door exits via 'Error (FileId.info)' path \u2014 deterministic clean exit on bare \\r. Cluster representative for the 7-door FileId family (Autosent / FILEID / AUTOSENT variants).",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -1935,7 +1944,7 @@
           "data": "n"
         }
       ],
-      "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family — first multi-input corpus entry.",
+      "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family \u2014 first multi-input corpus entry.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -1980,7 +1989,7 @@
           "data": "n"
         }
       ],
-      "notes": "H&V QuickLogon 1.0 — quick-logon-prompt door. Prompt 'Would you like a quick logon? (y/N)' — 'n' declines and exits. Cluster representative for the 6-door QuickLogon family (DTR/H&V variants).",
+      "notes": "H&V QuickLogon 1.0 \u2014 quick-logon-prompt door. Prompt 'Would you like a quick logon? (y/N)' \u2014 'n' declines and exits. Cluster representative for the 6-door QuickLogon family (DTR/H&V variants).",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -2084,7 +2093,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DOWNLOAD"
+          ]
         },
         "inputs": [
           {
@@ -2120,7 +2132,7 @@
         "timeoutMs": 14000,
         "assertions": {
           "mustContain": [
-            "-÷-+---+-÷-+---+-÷-+---+-HSTStat by v1.5 -fanta- & SøNÝ-+---+-÷-+---+-÷-+---+-÷-"
+            "-\u00f7-+---+-\u00f7-+---+-\u00f7-+---+-HSTStat by v1.5 -fanta- & S\u00f8N\u00dd-+---+-\u00f7-+---+-\u00f7-+---+-\u00f7-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2167,7 +2179,7 @@
         "timeoutMs": 14000,
         "assertions": {
           "mustContain": [
-            "PWFailure v1.0 by -fanta- & SoNy of aLPHA fLIGHT & TheriøN"
+            "PWFailure v1.0 by -fanta- & SoNy of aLPHA fLIGHT & Theri\u00f8N"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2345,7 +2357,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "| Security Checker (C) 1996 !Lt / Version 1.00ß / Coded by KId/dSY/!LT - 1996 |"
+            "| Security Checker (C) 1996 !Lt / Version 1.00\u00df / Coded by KId/dSY/!LT - 1996 |"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2437,7 +2449,7 @@
         "timeoutMs": 14000,
         "assertions": {
           "mustContain": [
-            "BoSS-NuKE (v1.5 ßeta) by Big Boss of the /X Development Team!"
+            "BoSS-NuKE (v1.5 \u00dfeta) by Big Boss of the /X Development Team!"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2539,7 +2551,7 @@
           "data": "\\r"
         }
       ],
-      "notes": "DCS TurboN Newscan Pro 2.z by MaCK LiFeGuaRD. Multi-prompt newscan; 4× CR walks date-range/dir prompts and exits at \"ENTER=EXIT\". Cluster representative for the 3-door TurboN family.",
+      "notes": "DCS TurboN Newscan Pro 2.z by MaCK LiFeGuaRD. Multi-prompt newscan; 4\u00d7 CR walks date-range/dir prompts and exits at \"ENTER=EXIT\". Cluster representative for the 3-door TurboN family.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -2604,7 +2616,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "=== WiLD STaT v0.4  B¥  WiLD THiNG/¥oÐeL ==="
+            "=== WiLD STaT v0.4  B\u00a5  WiLD THiNG/\u00a5o\u00d0eL ==="
           ],
           "mustNotContain": [
             "TRAP",
@@ -2629,7 +2641,7 @@
         "assertions": {
           "mustContain": [
             "= [Super Stats V1.3 By Etrigan/Intellect] =",
-            "·    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
+            "\u00b7    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2652,7 +2664,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "»     /  |/  |  \\/  __!/  Y  \\   «          [/X SYSiNFO ©1995 by sTeAm!]"
+            "\u00bb     /  |/  |  \\/  __!/  Y  \\   \u00ab          [/X SYSiNFO \u00a91995 by sTeAm!]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2731,7 +2743,7 @@
       "binary": "Doors/IC_Status/status",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "I/C status — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "I/C status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -2754,7 +2766,7 @@
       "binary": "Doors/MgsUserStatus/userstatus",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MGS! userstatus — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "MGS! userstatus \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -2791,7 +2803,7 @@
       "binary": "Doors/KdConfStats/ConfStats",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "KD Tough ConfStats 1.3 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "KD Tough ConfStats 1.3 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -2829,7 +2841,7 @@
       "binary": "Doors/NbStatus/status",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB status — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "NB status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -2852,12 +2864,12 @@
       "binary": "Doors/AflUStat/U-Stat.exe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL U-Stat — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "AFL U-Stat \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "U-Stat V1.0 - CoDeD BY S¡eGeL/aFL"
+            "U-Stat V1.0 - CoDeD BY S\u00a1eGeL/aFL"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2876,12 +2888,12 @@
       "binary": "Doors/LgcStatus/Status",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC S!X Stat 2.0 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "LGC S!X Stat 2.0 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
           "mustContain": [
-            " S!X Stat V2.0 [08.02.1995] (100% ASM) - © 1995 b WHiZ/LOGiC -"
+            "\u007f\u007f\u007f\u007f S!X Stat V2.0 [08.02.1995] (100% ASM) - \u00a9 1995 b WHiZ/LOGiC -\u007f\u007f\u007f\u007f\u007f"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2899,12 +2911,12 @@
       "binary": "Doors/InsSkanStatus/sKAN^4^sTATUs",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "Insanity sKAN^4^sTATUs — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "Insanity sKAN^4^sTATUs \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            ".ø0ø.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.03!]!:.,     (___ _ _/\\  __.ø0ø."
+            ".\u00f80\u00f8.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.03!]!:.,     (___ _ _/\\  __.\u00f80\u00f8."
           ],
           "mustNotContain": [
             "TRAP",
@@ -2923,13 +2935,13 @@
       "binary": "Doors/MthStats/MTHStats12",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTHStats12 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "MTHStats12 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "[»«]  /X\\ sTATS v1.2 © PLL /X\\YTH /X )-sIGN  [»«]",
-            "[»«]  THANK YOU fOR uSING /X\\YTH sTATS v1.2  [»«]"
+            "[\u00bb\u00ab]  /X\\ sTATS v1.2 \u00a9 PLL /X\\YTH /X )-sIGN  [\u00bb\u00ab]",
+            "[\u00bb\u00ab]  THANK YOU fOR uSING /X\\YTH sTATS v1.2  [\u00bb\u00ab]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -2948,7 +2960,7 @@
       "binary": "Doors/AflNewInfo/newinfo",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL newinfo — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "AFL newinfo \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -2971,7 +2983,7 @@
       "binary": "Doors/HeavenStat/heavenstat.xim",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SRS Spiris HeavenStat — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "SRS Spiris HeavenStat \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -2992,7 +3004,7 @@
       "binary": "Doors/_5DStatus15/5D-Status",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-Status v1.50 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "5D-Status v1.50 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3016,7 +3028,7 @@
       "binary": "Doors/AfStatus/status",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AF status — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "AF status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3039,7 +3051,7 @@
       "binary": "Doors/SmkStats/sMK-sTATS-v0.2-bETA",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "sMK-sTATS v0.2-beta — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "sMK-sTATS v0.2-beta \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3063,7 +3075,7 @@
       "binary": "Doors/PsychoStats/pSYCHoSTATS",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BFG pSYCHoSTATS 1.2 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "BFG pSYCHoSTATS 1.2 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3086,7 +3098,7 @@
       "binary": "Doors/MmhGrapeStats/gRAPEsTATS",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MMH gRAPEsTATS 1.3 — clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
+      "notes": "MMH gRAPEsTATS 1.3 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3109,7 +3121,7 @@
       "binary": "Doors/ZytesBytes/Bytes.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "Zytes Bytes 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "Zytes Bytes 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3133,7 +3145,7 @@
       "binary": "Doors/NoSnuke/nosnuke021.030",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NoSnuke 2.1 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "NoSnuke 2.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3157,7 +3169,7 @@
       "binary": "Doors/AflNewFiles1/newfiles.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL newfiles v1 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "AFL newfiles v1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3181,12 +3193,12 @@
       "binary": "Doors/DcAxxCheck/aXXCHECK.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DC aXXCHECK — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "DC aXXCHECK \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "\\(©thundercat^dC & dr. ¡ce^seasons'98 )/design by woober/arcade"
+            "\\(\u00a9thundercat^dC & dr. \u00a1ce^seasons'98 )/design by woober/arcade"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3205,7 +3217,7 @@
       "binary": "Doors/DltFileDescModify/Filedescription.Modify",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DLT Filedescription.Modify — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "DLT Filedescription.Modify \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3229,7 +3241,7 @@
       "binary": "Doors/MstConftop000/Conftop000.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST Conftop 000 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MST Conftop 000 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3253,7 +3265,7 @@
       "binary": "Doors/TelFrontInfo/FrontInfo",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TEL FrontInfo 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "TEL FrontInfo 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3276,7 +3288,7 @@
       "binary": "Doors/AflNewFiles/NewFiles",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL NewFiles — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "AFL NewFiles \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3299,7 +3311,7 @@
       "binary": "Doors/KillerComment/KiLLER_Comment",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "KiLLER Comment — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "KiLLER Comment \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3323,7 +3335,7 @@
       "binary": "Doors/EAll/EALL.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "EALL 2.01 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "EALL 2.01 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3348,7 +3360,7 @@
       "binary": "Doors/EclExorcist/Exorcist!.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "ECL Exorcist! 1.3 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "ECL Exorcist! 1.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3372,7 +3384,7 @@
       "binary": "Doors/IhsUlLogoff/Ul-Logoff.X",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "IHS Ul-Logoff 1.1 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "IHS Ul-Logoff 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
@@ -3406,12 +3418,12 @@
       "binary": "Doors/NocCoupon/noC-Coupon.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "noC-Coupon 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "noC-Coupon 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "« noC-Coupon version 1.oo  - (C)1994 nocTurne deSign/MST - Mortuary Version »",
+            "\u00ab noC-Coupon version 1.oo  - (C)1994 nocTurne deSign/MST - Mortuary Version \u00bb",
             "DOORS:noC-Coupon/noC-Coupon.config: Configuration file not found..."
           ],
           "mustNotContain": [
@@ -3431,7 +3443,7 @@
       "binary": "Doors/BaudCounter/BAUD-COUNTER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "REAL bAUD-cOUNTER 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "REAL bAUD-cOUNTER 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3455,7 +3467,7 @@
       "binary": "Doors/ShxGrapeBooth/GrapeBooth",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SHX GrapeBooth 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "SHX GrapeBooth 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3478,7 +3490,7 @@
       "binary": "Doors/TmsUpstats/upstats",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TMS upstats — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "TMS upstats \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3501,7 +3513,7 @@
       "binary": "Doors/AflSecurity/Security",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL Security — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "AFL Security \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3511,7 +3523,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Couldn't load icon"
+          ]
         }
       }
     },
@@ -3522,7 +3537,7 @@
       "binary": "Doors/KillerBaud/KiLLER_Baud",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "KiLLER Baud 1.4 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "KiLLER Baud 1.4 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3546,7 +3561,7 @@
       "binary": "Doors/BbOpen/BBoPeN",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BBoPeN 1.1 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "BBoPeN 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -3556,7 +3571,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "MuRpHy"
+          ]
         },
         "inputs": [
           {
@@ -3581,7 +3599,7 @@
       "binary": "Doors/DbFastdupe/Fastdupe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "D&B Fastdupe 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "D&B Fastdupe 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3604,7 +3622,7 @@
       "binary": "Doors/DupeCheck042/DupeCheck.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DupeCheck 0.42 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "DupeCheck 0.42 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3628,7 +3646,7 @@
       "binary": "Doors/FdMagicScan/MagicScan",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FD! MagicScan — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "FD! MagicScan \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3651,12 +3669,12 @@
       "binary": "Doors/JsoTimestamp/TimeStamp",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "JSO TimeStamp 2.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "JSO TimeStamp 2.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "-={ TimeStamp v2.0ß by jSON }=-"
+            "-={ TimeStamp v2.0\u00df by jSON }=-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3674,7 +3692,7 @@
       "binary": "Doors/LgcByeByeBelch/ByeByeBELCH",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC ByeByeBELCH 0.3 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "LGC ByeByeBELCH 0.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3697,7 +3715,7 @@
       "binary": "Doors/LgcBelchNet/BelchNET",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC BelchNET 0.5 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "LGC BelchNET 0.5 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -3734,7 +3752,7 @@
       "binary": "Doors/MdbFront/MDB-Front",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MDB-Front 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MDB-Front 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3758,7 +3776,7 @@
       "binary": "Doors/MstView/MST-VieW",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST-VieW 1.0 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MST-VieW 1.0 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3782,7 +3800,7 @@
       "binary": "Doors/MstWhat000/What000.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST What 1.1 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MST What 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3806,7 +3824,7 @@
       "binary": "Doors/MtsDupeChekk/DupeChekk.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTS DupeChekk 0.3 — clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MTS DupeChekk 0.3 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3830,7 +3848,7 @@
       "binary": "Doors/DplStfc/stfc100",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DPL stfc 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "DPL stfc 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3854,7 +3872,7 @@
       "binary": "Doors/NvxUdInfo/ud-info",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NVX ud-info — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "NVX ud-info \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3864,7 +3882,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Can't open cookiefile"
+          ]
         }
       }
     },
@@ -3875,7 +3896,7 @@
       "binary": "Doors/TmsDn/dn",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TMS dn — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "TMS dn \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -3898,12 +3919,12 @@
       "binary": "Doors/AflRI/RI",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL RI — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "AFL RI \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "Ratioinfo v 1.5 by fanta & SøNy"
+            "Ratioinfo v 1.5 by fanta & S\u00f8Ny"
           ],
           "mustNotContain": [
             "TRAP",
@@ -3921,7 +3942,7 @@
       "binary": "Doors/FgAxNewsBase/axnewsbase",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FG axnewsbase — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "FG axnewsbase \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -3959,7 +3980,7 @@
       "binary": "Doors/FgAxNewsBaseXim/axnewsbasexim",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FG axnewsbasexim — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "FG axnewsbasexim \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -3997,7 +4018,7 @@
       "binary": "Doors/MstConftop22/Conftop.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST Conftop 2.2 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MST Conftop 2.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4021,7 +4042,7 @@
       "binary": "Doors/CnfscnDL/ConfScan_DL",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CNFSCN ConfScan_DL — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "CNFSCN ConfScan_DL \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4045,7 +4066,7 @@
       "binary": "Doors/EmpCheckNU/CheckNU",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "EmP CheckNU — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "EmP CheckNU \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4068,7 +4089,7 @@
       "binary": "Doors/NocWho/noC-WHO.x.030",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "noC-WHO 1.5 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "noC-WHO 1.5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4092,12 +4113,12 @@
       "binary": "Doors/DcnFileId/dCN!FileID",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DCN! FileID — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "DCN! FileID \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "dCN!FileID 2.0  by dERROW (dCN-/F·dEZiGN)"
+            "dCN!FileID 2.0  by dERROW (dCN-/F\u00b7dEZiGN)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4116,7 +4137,7 @@
       "binary": "Doors/InsSBull/SBull27r5.020",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "INS SBull 2.7r5 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "INS SBull 2.7r5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
@@ -4154,7 +4175,7 @@
       "binary": "Doors/KlrKComment/KiLLER-Comment",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "KLR KiLLER-Comment — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "KLR KiLLER-Comment \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4178,7 +4199,7 @@
       "binary": "Doors/LedDcSpeed/DC_Speed",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LED DC_Speed 2.2 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "LED DC_Speed 2.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4202,7 +4223,7 @@
       "binary": "Doors/NbBelchList/BelchLIST",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB BelchLIST — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "NB BelchLIST \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -4239,12 +4260,12 @@
       "binary": "Doors/PtlSxPager/S!X-Pager",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "PTL S!X-Pager 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "PTL S!X-Pager 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "[=S!X-Page v1.2/Alpha © 1995 By Xray2000/PTL=]"
+            "[=S!X-Page v1.2/Alpha \u00a9 1995 By Xray2000/PTL=]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4263,7 +4284,7 @@
       "binary": "Doors/TmsLogon/logon",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TMS logon 1.2 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "TMS logon 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4286,12 +4307,12 @@
       "binary": "Doors/TrsiDreSent/DRE!SENT",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI DRE!SENT — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "TRSI DRE!SENT \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "[tRSi] · dRE!SENt v0.2 [RELEASE 1] · (C) bY dR.dRE! · [/X·iNNOVATiON]"
+            "[tRSi] \u00b7 dRE!SENt v0.2 [RELEASE 1] \u00b7 (C) bY dR.dRE! \u00b7 [/X\u00b7iNNOVATiON]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4310,7 +4331,7 @@
       "binary": "Doors/VsgPage/page_0.5.exe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "VSG Mental page 0.5 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "VSG Mental page 0.5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4334,7 +4355,7 @@
       "binary": "Doors/VtyWarKick/WarKick'Em",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "VTY WarKick'Em 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "VTY WarKick'Em 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4358,7 +4379,7 @@
       "binary": "Doors/5dNewFiles/5D-NewFiles",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-NewFiles 0.22 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "5D-NewFiles 0.22 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4382,7 +4403,7 @@
       "binary": "Doors/5dSecurity/5D-Security",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-Security 0.10 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "5D-Security 0.10 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4405,12 +4426,12 @@
       "binary": "Doors/AqAnnounceLogon/AnnounceLogon",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AQ AnnounceLogon 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "AQ AnnounceLogon 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
           "mustContain": [
-            ">>> AnnounceLogon v1.0 ©1993 by Aquarius <<<"
+            ">>> AnnounceLogon v1.0 \u00a91993 by Aquarius <<<"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4442,7 +4463,7 @@
       "binary": "Doors/BbHelp/BBhELP",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BB BBhELP 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "BB BBhELP 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -4452,7 +4473,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "MuRpHy"
+          ]
         },
         "inputs": [
           {
@@ -4477,7 +4501,7 @@
       "binary": "Doors/BullRead/BullRead",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BullRead 1.3 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "BullRead 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4500,7 +4524,7 @@
       "binary": "Doors/CdServer/CD-SERVER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CD-SERVER 1.03 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "CD-SERVER 1.03 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4524,7 +4548,7 @@
       "binary": "Doors/ChatsrcMeter/Chat-O-Meter",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CHATSRC Chat-O-Meter — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "CHATSRC Chat-O-Meter \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4534,7 +4558,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Chat-O-Meter ERROR"
+          ]
         }
       }
     },
@@ -4545,7 +4572,7 @@
       "binary": "Doors/CrdSysopAvail/SysOpAvail",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CRD SysOpAvail 1.2 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "CRD SysOpAvail 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -4583,7 +4610,7 @@
       "binary": "Doors/DplFrontAvail/Frontavail.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DPL Frontavail 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "DPL Frontavail 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4607,7 +4634,7 @@
       "binary": "Doors/FafcstChatStarter/ChatStarter",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FAFCST ChatStarter 2.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "FAFCST ChatStarter 2.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -4631,7 +4658,7 @@
       "binary": "Doors/FdAmiFront/AmiFront",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FD! AmiFront — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "FD! AmiFront \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4654,7 +4681,7 @@
       "binary": "Doors/FldPowerPager/PowerPager",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FLD PowerPager 0.14 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "FLD PowerPager 0.14 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4678,12 +4705,12 @@
       "binary": "Doors/IltPumpSafe/pumpsafe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "ILT pumpsafe 1.0 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "ILT pumpsafe 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "-[·]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[·]-"
+            "-[\u00b7]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[\u00b7]-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4701,7 +4728,7 @@
       "binary": "Doors/IvnMfmNukeLog/mfm-nukelog",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "IVN mfm-nukelog 0.5 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "IVN mfm-nukelog 0.5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4725,12 +4752,12 @@
       "binary": "Doors/JoeTopcall/Topcall.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "JOE Topcall.000 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "JOE Topcall.000 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "|TopCall V1.0 ©1996 Joe Cool|"
+            "|TopCall V1.0 \u00a91996 Joe Cool|"
           ],
           "mustNotContain": [
             "TRAP",
@@ -4749,7 +4776,7 @@
       "binary": "Doors/JsoPayCheck/PayCheck",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "JSO PayCheck 1.2 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "JSO PayCheck 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4772,7 +4799,7 @@
       "binary": "Doors/LgcBelchView/BelchVIEW",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC BelchVIEW 1.3 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "LGC BelchVIEW 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -4795,7 +4822,7 @@
       "binary": "Doors/MgsWallHall/wallhall.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MGS! wallhall — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MGS! wallhall \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4819,7 +4846,7 @@
       "binary": "Doors/ModPager/V-MPager",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MOD V-MPager — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MOD V-MPager \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4840,7 +4867,7 @@
       "binary": "Doors/MstByteKiller/ByteKiller",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST ByteKiller 1.3 — clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
+      "notes": "MST ByteKiller 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -4863,7 +4890,7 @@
       "binary": "Doors/MTH_CA10_KeroCac/KeroCac",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTH-CA10 KeroCac — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "MTH-CA10 KeroCac \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4886,7 +4913,7 @@
       "binary": "Doors/MTS_LS03_LogonStartup/LogonStartup.020",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTS^LS03 LogonStartup.020 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "MTS^LS03 LogonStartup.020 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4910,7 +4937,7 @@
       "binary": "Doors/NB_FS28_filessize/filessize",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB-FS28 filessize — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "NB-FS28 filessize \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4933,7 +4960,7 @@
       "binary": "Doors/NB_OLM09_olm/olm",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB-OLM09 olm — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "NB-OLM09 olm \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4956,7 +4983,7 @@
       "binary": "Doors/RLX_MOVE_move/move",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "RLX-MOVE move — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "RLX-MOVE move \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -4979,12 +5006,12 @@
       "binary": "Doors/WOT_ATAG_Sent/Sent",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "WOT-ATAG Sent — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "WOT-ATAG Sent \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "[=TAG LINE Adder=] V1.0 - (c)1994  SiNTAX/WøT"
+            "[=TAG LINE Adder=] V1.0 - (c)1994  SiNTAX/W\u00f8T"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5002,7 +5029,7 @@
       "binary": "Doors/5D_DP002_5D_DummyPage/5D-DummyPage",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D!DP002 5D-DummyPage — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D!DP002 5D-DummyPage \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5026,7 +5053,7 @@
       "binary": "Doors/5D_BCH_5D_BaudCheck/5D-BaudCheck",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-BCH 5D-BaudCheck — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D-BCH 5D-BaudCheck \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5050,7 +5077,7 @@
       "binary": "Doors/5D_CS3_FILEID/FILEID.040",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-CS3 FILEID.040 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D-CS3 FILEID.040 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5074,7 +5101,7 @@
       "binary": "Doors/5D_MS001_5D_MultiStart/5D-MultiStart",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-MS001 5D-MultiStart — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D-MS001 5D-MultiStart \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5097,7 +5124,7 @@
       "binary": "Doors/5D_USR11_5D_User/5D-User",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-USR11 5D-User — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D-USR11 5D-User \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -5132,7 +5159,7 @@
       "binary": "Doors/5D5ESA10_5D_SYSAVAIL/5D^SYSAVAIL",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D5ESA10 5D^SYSAVAIL — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D5ESA10 5D^SYSAVAIL \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -5170,7 +5197,7 @@
       "binary": "Doors/5D_AMN10_5D_AdiMenu/5D-AdiMenu",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D^AMN10 5D-AdiMenu — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D^AMN10 5D-AdiMenu \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -5208,7 +5235,7 @@
       "binary": "Doors/5D_SA001_5D_SysOpAvail/5D^SysOpAvail",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D^SA001 5D^SysOpAvail — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D^SA001 5D^SysOpAvail \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5232,7 +5259,7 @@
       "binary": "Doors/AEKIT101_FrontEnd/FrontEnd",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AEKIT101 FrontEnd — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "AEKIT101 FrontEnd \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -5267,12 +5294,12 @@
       "binary": "Doors/AFL_UD12_fLAG_aDDER/fLAG-aDDER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL-UD12 fLAG-aDDER — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "AFL-UD12 fLAG-aDDER \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "fLAG-aDDER v0.1 fOR uPdOWNiNFO bY sHADOW mAN/aFL ©1994 !"
+            "fLAG-aDDER v0.1 fOR uPdOWNiNFO bY sHADOW mAN/aFL \u00a91994 !"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5291,7 +5318,7 @@
       "binary": "Doors/AFLWHO10_AFL_Who10/AFL_Who10",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFLWHO10 AFL_Who10 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "AFLWHO10 AFL_Who10 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -5314,7 +5341,7 @@
       "binary": "Doors/AFL_PACK_Autoaxx/Autoaxx",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL_PACK Autoaxx — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "AFL_PACK Autoaxx \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5324,7 +5351,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Couldn't load icon"
+          ]
         }
       }
     },
@@ -5335,12 +5365,12 @@
       "binary": "Doors/BTH_WA02_KeroWall/KeroWall",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BTH-WA02 KeroWall — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "BTH-WA02 KeroWall \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
           "mustContain": [
-            ".------------------) cOp Wall v0.1ß by HITLER!! / SS TRUPPE    (----------------"
+            ".------------------) cOp Wall v0.1\u00df by HITLER!! / SS TRUPPE    (----------------"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5373,7 +5403,7 @@
       "binary": "Doors/CAL_BCON_BestConf/BestConf.XIM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CAL-BCON BestConf.XIM — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "CAL-BCON BestConf.XIM \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5397,7 +5427,7 @@
       "binary": "Doors/DOWNMANI_DM_Extra/DM_Extra.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DOWNMANI DM_Extra.x — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "DOWNMANI DM_Extra.x \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5421,7 +5451,7 @@
       "binary": "Doors/FD_CFG_AmiSettings/AmiSettings",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FD!CFG AmiSettings — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "FD!CFG AmiSettings \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5444,7 +5474,7 @@
       "binary": "Doors/FLD_SW10_SuperWHOFront/SuperWHOFront",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FLD-SW10 SuperWHOFront — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "FLD-SW10 SuperWHOFront \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5468,7 +5498,7 @@
       "binary": "Doors/HBT_PW21_PW_FokkUp/PW-FokkUp",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "HBT-PW21 PW-FokkUp — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "HBT-PW21 PW-FokkUp \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5478,7 +5508,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "PW-FokkUp"
+          ]
         }
       }
     },
@@ -5489,7 +5522,7 @@
       "binary": "Doors/HBT_SB20_SmartBII/SmartBII.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "HBT-SB20 SmartBII.000 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "HBT-SB20 SmartBII.000 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5513,7 +5546,7 @@
       "binary": "Doors/IHS_UC11_usercheck/usercheck",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "IHS-UC11 usercheck — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "IHS-UC11 usercheck \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5536,7 +5569,7 @@
       "binary": "Doors/LFC_LSTY_LIQUIDSTYLER/LIQUIDSTYLER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LFC-LSTY LIQUIDSTYLER — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "LFC-LSTY LIQUIDSTYLER \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5559,7 +5592,7 @@
       "binary": "Doors/LGB_BO16_BelchOLM/BelchOLM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGB-BO16 BelchOLM — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "LGB-BO16 BelchOLM \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5582,7 +5615,7 @@
       "binary": "Doors/M_S_FA6_idADD/idADD",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "M!S-FA6 idADD — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "M!S-FA6 idADD \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -5592,7 +5625,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Not configured"
+          ]
         },
         "inputs": [
           {
@@ -5617,12 +5653,12 @@
       "binary": "Doors/MST_WHO_MST_FRONT_WHO/MST-FRONT_WHO",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST-WHO MST-FRONT_WHO — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "MST-WHO MST-FRONT_WHO \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "WhO-LoGiN' V1.00 by S¡eGeL/MsT"
+            "WhO-LoGiN' V1.00 by S\u00a1eGeL/MsT"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5641,7 +5677,7 @@
       "binary": "Doors/S_X39N2_fileprocessor/fileprocessor",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "S!X39N2 fileprocessor — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "S!X39N2 fileprocessor \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5664,7 +5700,7 @@
       "binary": "Doors/SLKSHELL_SlickShell/SlickShell",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SLKSHELL SlickShell — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "SLKSHELL SlickShell \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5687,7 +5723,7 @@
       "binary": "Doors/TFA_BPXC_GANUAAN/GANUAAN.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TFA-BPXC GANUAAN.x — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "TFA-BPXC GANUAAN.x \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5711,7 +5747,7 @@
       "binary": "Doors/TRS_BK22_Bytekiller/Bytekiller",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRS-BK22 Bytekiller — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "TRS-BK22 Bytekiller \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5734,7 +5770,7 @@
       "binary": "Doors/TRSI_REP_dRE_REPORt/dRE!REPORt",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI-REP dRE!REPORt — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "TRSI-REP dRE!REPORt \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5758,7 +5794,7 @@
       "binary": "Doors/VTY_LI13_WarList/WarList",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "VTY-LI13 WarList — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "VTY-LI13 WarList \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5782,7 +5818,7 @@
       "binary": "Doors/WAR_CM10_WarComment/WarComment",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "WAR-CM10 WarComment — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "WAR-CM10 WarComment \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -5806,7 +5842,7 @@
       "binary": "Doors/YDL_MENS_wm2/wm2",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "YDL-MENS wm2 — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "YDL-MENS wm2 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -5816,7 +5852,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "KEYFILE ERROR"
+          ]
         }
       }
     },
@@ -5827,7 +5866,7 @@
       "binary": "Doors/5D_RSRV1_5D_Reserve/5D-Reserve",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-RSRV1 5D-Reserve — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "5D-RSRV1 5D-Reserve \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5851,12 +5890,12 @@
       "binary": "Doors/976_RS13_RubberStamp/RubberStamp.XiM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "976-RS13 RubberStamp.XiM — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "976-RS13 RubberStamp.XiM \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "-=]  ©95 Strobe  ·=%=· RubberStamp v1.3 ·=%=·  976 Ev!L  [=-"
+            "-=]  \u00a995 Strobe  \u00b7=%=\u00b7 RubberStamp v1.3 \u00b7=%=\u00b7  976 Ev!L  [=-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5875,12 +5914,12 @@
       "binary": "Doors/AEXSETU_scan/scan",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AEXSETU scan — clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
+      "notes": "AEXSETU scan \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
           "mustContain": [
-            "AmiEx GlobalNew 2.1 R.Björklund  Modified by: GeeZER"
+            "AmiEx GlobalNew 2.1 R.Bj\u00f6rklund  Modified by: GeeZER"
           ],
           "mustNotContain": [
             "TRAP",
@@ -5913,7 +5952,7 @@
       "binary": "Doors/DC_X107I_AquaScan/AquaScan",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DC-X107I.LHA AquaScan — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DC-X107I.LHA AquaScan \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5937,7 +5976,7 @@
       "binary": "Doors/AFL_UD10_uPdOWNiNFO/uPdOWNiNFO.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL-UD10.LHA uPdOWNiNFO.000 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AFL-UD10.LHA uPdOWNiNFO.000 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5961,7 +6000,7 @@
       "binary": "Doors/SMK_STAT_smk_statsv0/smk-statsv0.1",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SMK-STAT.LHA smk-statsv0.1 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SMK-STAT.LHA smk-statsv0.1 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -5985,7 +6024,7 @@
       "binary": "Doors/5D_AMU20_5d_adimui/5d-adimui",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D^AMU20.LHA 5d-adimui — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "5D^AMU20.LHA 5d-adimui \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -6023,7 +6062,7 @@
       "binary": "Doors/5D_NF022_5D_NewFiles/5D-NewFiles",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-NF022.LHA 5D-NewFiles — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "5D-NF022.LHA 5D-NewFiles \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6047,7 +6086,7 @@
       "binary": "Doors/5D_SE010_5D_Security/5D-Security",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-SE010.LHA 5D-Security — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "5D-SE010.LHA 5D-Security \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6070,7 +6109,7 @@
       "binary": "Doors/AEXSETU_doormenu/doormenu",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AEXSETU.LHA doormenu — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AEXSETU.LHA doormenu \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -6105,7 +6144,7 @@
       "binary": "Doors/BB_H1O_BBhELP/BBhELP",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BB_H1O.LHA BBhELP — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "BB_H1O.LHA BBhELP \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -6115,7 +6154,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "MuRpHy"
+          ]
         },
         "inputs": [
           {
@@ -6140,12 +6182,12 @@
       "binary": "Doors/AQANNL10_AnnounceLogon/AnnounceLogon",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AQANNL10.LHA AnnounceLogon — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AQANNL10.LHA AnnounceLogon \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            ">>> AnnounceLogon v1.0 ©1993 by Aquarius <<<"
+            ">>> AnnounceLogon v1.0 \u00a91993 by Aquarius <<<"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6163,7 +6205,7 @@
       "binary": "Doors/BREAD13_BullRead/BullRead",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BREAD13.LHA BullRead — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "BREAD13.LHA BullRead \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6187,7 +6229,7 @@
       "binary": "Doors/CD_SE103_CD_SERVER/CD-SERVER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CD-SE103.LHA CD-SERVER — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CD-SE103.LHA CD-SERVER \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6211,7 +6253,7 @@
       "binary": "Doors/CHATSRC_Chat_O_Meter/Chat-O-Meter",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CHATSRC.LHA Chat-O-Meter — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CHATSRC.LHA Chat-O-Meter \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6221,7 +6263,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Chat-O-Meter ERROR"
+          ]
         }
       }
     },
@@ -6232,7 +6277,7 @@
       "binary": "Doors/CRD_NU12_SysOpAvail/SysOpAvail",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CRD-NU12.LHA SysOpAvail — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CRD-NU12.LHA SysOpAvail \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -6270,7 +6315,7 @@
       "binary": "Doors/DPL_FA10_Frontavail/Frontavail.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DPL_FA10.LHA Frontavail.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DPL_FA10.LHA Frontavail.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6294,7 +6339,7 @@
       "binary": "Doors/FD_FRONT_AmiFront/AmiFront",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FD!FRONT.LHA AmiFront — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "FD!FRONT.LHA AmiFront \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6317,7 +6362,7 @@
       "binary": "Doors/FAFCST20_ChatStarter/ChatStarter",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FAFCST20.LHA ChatStarter — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "FAFCST20.LHA ChatStarter \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6340,7 +6385,7 @@
       "binary": "Doors/FLD_P014_PowerPager/PowerPager",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FLD-P014.LHA PowerPager — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "FLD-P014.LHA PowerPager \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6364,12 +6409,12 @@
       "binary": "Doors/ILT_PS10_pumpsafe/pumpsafe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "ILT-PS10.LHA pumpsafe — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "ILT-PS10.LHA pumpsafe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "-[·]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[·]-"
+            "-[\u00b7]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[\u00b7]-"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6387,7 +6432,7 @@
       "binary": "Doors/IVN_N05_mfm_nukelog/mfm-nukelog",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "IVN-N05.LHA mfm-nukelog — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "IVN-N05.LHA mfm-nukelog \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6411,12 +6456,12 @@
       "binary": "Doors/JOE_S_TL_Topcall/Topcall.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "JOE_S!TL.LHA Topcall.000 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "JOE_S!TL.LHA Topcall.000 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "|TopCall V1.0 ©1996 Joe Cool|"
+            "|TopCall V1.0 \u00a91996 Joe Cool|"
           ],
           "mustNotContain": [
             "TRAP",
@@ -6435,7 +6480,7 @@
       "binary": "Doors/LGC_BV13_BelchVIEW/BelchVIEW",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC-BV13.LHA BelchVIEW — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LGC-BV13.LHA BelchVIEW \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6458,7 +6503,7 @@
       "binary": "Doors/JSO_PC12_PayCheck/PayCheck",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "JSO-PC12.LHA PayCheck — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "JSO-PC12.LHA PayCheck \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6479,7 +6524,7 @@
       "binary": "Doors/MGS__WH1_wallhall/wallhall.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MGS!-WH1.LHA wallhall.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MGS!-WH1.LHA wallhall.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6503,7 +6548,7 @@
       "binary": "Doors/MODPAGER_V_MPager/V-MPager",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MODPAGER.LHA V-MPager — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MODPAGER.LHA V-MPager \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6523,7 +6568,7 @@
       "binary": "Doors/MST_BK13_ByteKiller/ByteKiller",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST-BK13.LHA ByteKiller — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MST-BK13.LHA ByteKiller \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6546,7 +6591,7 @@
       "binary": "Doors/NB_OLM14_BelchOLM/BelchOLM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB-OLM14.LHA BelchOLM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NB-OLM14.LHA BelchOLM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -6569,7 +6614,7 @@
       "binary": "Doors/SLICKW20_loggon/loggon",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SLICKW20.LHA loggon — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SLICKW20.LHA loggon \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -6604,7 +6649,7 @@
       "binary": "Doors/TE_BULLM_BullMenue/BullMenue",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TE_BULLM.LHA BullMenue — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TE_BULLM.LHA BullMenue \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -6642,7 +6687,7 @@
       "binary": "Doors/TMS_UP_tms_upload/tms-upload",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TMS-UP.LHA tms-upload — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TMS-UP.LHA tms-upload \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6666,7 +6711,7 @@
       "binary": "Doors/WCLOCK11_WORLD_CLOCK/WORLD-CLOCK",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "WCLOCK11.LHA WORLD-CLOCK — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "WCLOCK11.LHA WORLD-CLOCK \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6689,7 +6734,7 @@
       "binary": "Doors/TRS_BK22_ByteLog/ByteLog",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRS-BK22.LHA ByteLog — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRS-BK22.LHA ByteLog \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6712,7 +6757,7 @@
       "binary": "Doors/AEXSETU_auxed/auxed",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AEXSETU.LHA auxed — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AEXSETU.LHA auxed \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -6750,7 +6795,7 @@
       "binary": "Doors/BYTEKILL_ByteKiller/ByteKiller.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BYTEKILL.LHA ByteKiller.000 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "BYTEKILL.LHA ByteKiller.000 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6774,7 +6819,7 @@
       "binary": "Doors/LGC_BV12_BelchVIEW/BelchVIEW",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC-BV12.LHA BelchVIEW — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LGC-BV12.LHA BelchVIEW \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6797,7 +6842,7 @@
       "binary": "Doors/NB_OLM13_BelchOLM/BelchOLM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB-OLM13.LHA BelchOLM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NB-OLM13.LHA BelchOLM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -6820,7 +6865,7 @@
       "binary": "Doors/AEXSETU_who1/who1.0",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AEXSETU.LHA who1.0 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AEXSETU.LHA who1.0 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -6830,7 +6875,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Node 1"
+          ]
         },
         "inputs": [
           {
@@ -6855,7 +6903,7 @@
       "binary": "Doors/AFLFRO11_AFL_Front11/AFL_Front11",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFLFRO11.LHA AFL_Front11 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AFLFRO11.LHA AFL_Front11 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6878,7 +6926,7 @@
       "binary": "Doors/AFL_PACK_order/order",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFL_PACK.LHA order — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AFL_PACK.LHA order \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6888,7 +6936,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Couldn't find icon"
+          ]
         }
       }
     },
@@ -6899,7 +6950,7 @@
       "binary": "Doors/ATX_TCOM_TComm/TComm",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "ATX-TCOM.LHA TComm — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "ATX-TCOM.LHA TComm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -6937,7 +6988,7 @@
       "binary": "Doors/CRZ_BT11_Time/Time",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CRZ-BT11.LHA Time — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CRZ-BT11.LHA Time \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6960,7 +7011,7 @@
       "binary": "Doors/DRE__AD_dre_advertis/dre!advertis",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DRE!_AD.LHA dre!advertis — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DRE!_AD.LHA dre!advertis \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -6984,12 +7035,12 @@
       "binary": "Doors/EXT107_exterminate_/exterminate!.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "EXT107.LHA exterminate!.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "EXT107.LHA exterminate!.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "EXTERMiNATE! v1.07ß - by [DELTAFORCE/DLM/X-pression]"
+            "EXTERMiNATE! v1.07\u00df - by [DELTAFORCE/DLM/X-pression]"
           ],
           "mustNotContain": [
             "TRAP",
@@ -7008,7 +7059,7 @@
       "binary": "Doors/INS_SD13_SmartDSF/SmartDSF.020",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "INS-SD13.LHA SmartDSF.020 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "INS-SD13.LHA SmartDSF.020 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7032,7 +7083,7 @@
       "binary": "Doors/LSDHNEWS_H_News/H-News",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LSDHNEWS.LHA H-News — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LSDHNEWS.LHA H-News \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7056,7 +7107,7 @@
       "binary": "Doors/MGS__LM1_mgzlistman/mgzlistman",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MGS!-LM1.LHA mgzlistman — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MGS!-LM1.LHA mgzlistman \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7077,7 +7128,7 @@
       "binary": "Doors/MGS__R11_autoreward/autoreward",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MGS!-R11.LHA autoreward — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MGS!-R11.LHA autoreward \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "skip": true,
         "skipReason": "Emits \"Auto Reward 1.3 ... checking your upload......\" via XIM JH_SM, BB_MAINLINE, BB_CONFNUM, then stops sending XIM commands and hangs. Likely doing AEDoor.library trap-mediated FS work that blocks on missing fixture state. PartUpload seeding did not unstick. Needs trap-level instrumentation to diagnose."
@@ -7090,7 +7141,7 @@
       "binary": "Doors/MSCANV10_RMail/RMail",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MSCANV10.LHA RMail — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MSCANV10.LHA RMail \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7100,7 +7151,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "No such command"
+          ]
         }
       }
     },
@@ -7111,7 +7165,7 @@
       "binary": "Doors/MST_CL10_MST_CLOCK/MST-CLOCK",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MST-CL10.LHA MST-CLOCK — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MST-CL10.LHA MST-CLOCK \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7132,7 +7186,7 @@
       "binary": "Doors/MTH_BU1_Examine/Examine",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTH-BU1.LHA Examine — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MTH-BU1.LHA Examine \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -7167,7 +7221,7 @@
       "binary": "Doors/MTH_BU1_SetUp/SetUp",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTH-BU1.LHA SetUp — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MTH-BU1.LHA SetUp \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -7202,7 +7256,7 @@
       "binary": "Doors/NB_BV1_BelchView/BelchView",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NB-BV1.LHA BelchView — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NB-BV1.LHA BelchView \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -7225,7 +7279,7 @@
       "binary": "Doors/RNSC_FE4_frontend/frontend",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "RNSC-FE4.LHA frontend — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "RNSC-FE4.LHA frontend \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -7260,7 +7314,7 @@
       "binary": "Doors/RYL_SWH3_SWhoUlCounter/SWhoUlCounter",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "RYL-SWH3.LHA SWhoUlCounter — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "RYL-SWH3.LHA SWhoUlCounter \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7283,7 +7337,7 @@
       "binary": "Doors/SRH_TLP2_TLP2/TLP2",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SRH-TLP2.LHA TLP2 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SRH-TLP2.LHA TLP2 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7306,12 +7360,12 @@
       "binary": "Doors/SRH_DM14_DoorMenu/DoorMenu",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SRH_DM14.LHA DoorMenu — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SRH_DM14.LHA DoorMenu \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
           "mustContain": [
-            "DoorMenu v1.3  by Gi Joe »SRH«"
+            "DoorMenu v1.3  by Gi Joe \u00bbSRH\u00ab"
           ],
           "mustNotContain": [
             "TRAP",
@@ -7344,7 +7398,7 @@
       "binary": "Doors/SUPDUPE2_SuperDupe/SuperDupe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SUPDUPE2.LHA SuperDupe — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SUPDUPE2.LHA SuperDupe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7367,7 +7421,7 @@
       "binary": "Doors/TRSI_CD1_CD_SERVER/CD-SERVER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI-CD1.LHA CD-SERVER — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRSI-CD1.LHA CD-SERVER \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7391,12 +7445,12 @@
       "binary": "Doors/TRSI_SD_ShowDoors/ShowDoors.XiM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI-SD.LHA ShowDoors.XiM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRSI-SD.LHA ShowDoors.XiM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            ".[ ShowDoors v0.3 © by CøRteX/tRS¿! (not registered) ]."
+            ".[ ShowDoors v0.3 \u00a9 by C\u00f8RteX/tRS\u00bf! (not registered) ]."
           ],
           "mustNotContain": [
             "TRAP",
@@ -7415,7 +7469,7 @@
       "binary": "Doors/TSN_SG10_SpeedGuard/SpeedGuard.000",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TSN-SG10.LHA SpeedGuard.000 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TSN-SG10.LHA SpeedGuard.000 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7425,7 +7479,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Couldn't load config icon"
+          ]
         }
       }
     },
@@ -7436,7 +7493,7 @@
       "binary": "Doors/VTL_SC21_SysCm/SysCm",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "VTL-SC21.LHA SysCm — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "VTL-SC21.LHA SysCm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7457,7 +7514,7 @@
       "binary": "Doors/VTY_CM11_Meter/Meter.020",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "VTY-CM11.LHA Meter.020 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "VTY-CM11.LHA Meter.020 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7481,7 +7538,7 @@
       "binary": "Doors/X_FRNDOR_Front/Front",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "X-FRNDOR.LHA Front — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "X-FRNDOR.LHA Front \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7504,7 +7561,7 @@
       "binary": "Doors/XNETXIM_NetHelp/NetHelp.XiM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "XNETXIM.LHA NetHelp.XiM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "XNETXIM.LHA NetHelp.XiM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7529,7 +7586,7 @@
       "binary": "Doors/ADN_C120_AdN_Cycle/AdN-Cycle.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "ADN-C120.LHA AdN-Cycle.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "ADN-C120.LHA AdN-Cycle.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
@@ -7564,7 +7621,7 @@
       "binary": "Doors/AFLCOM2_comment/comment",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AFLCOM2.LHA comment — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AFLCOM2.LHA comment \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7587,7 +7644,7 @@
       "binary": "Doors/CRX_NU12_newuser/newuser.xim",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CRX-NU12.LHA newuser.xim — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CRX-NU12.LHA newuser.xim \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7607,7 +7664,7 @@
       "binary": "Doors/CRX_DL13_DirLook/DirLook",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CRX-DL13.LHA DirLook — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CRX-DL13.LHA DirLook \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7630,7 +7687,7 @@
       "binary": "Doors/CURSELAS_curselast/curselast",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CURSELAS.LHA curselast — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CURSELAS.LHA curselast \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7653,7 +7710,7 @@
       "binary": "Doors/DIVE_BOA_BitchCheck/BitchCheck",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DIVE-BOA.LHA BitchCheck — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DIVE-BOA.LHA BitchCheck \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7676,7 +7733,7 @@
       "binary": "Doors/DPL_SP10_SpeedPass/SpeedPass.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DPL-SP10.LHA SpeedPass.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DPL-SP10.LHA SpeedPass.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7696,7 +7753,7 @@
       "binary": "Doors/DPL_PC10_PWCommand/PWCommand.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DPL-PC10.LHA PWCommand.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DPL-PC10.LHA PWCommand.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7720,7 +7777,7 @@
       "binary": "Doors/DV_PHAN_PhukAnsi/PhukAnsi",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DV-PHAN.LHA PhukAnsi — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DV-PHAN.LHA PhukAnsi \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7744,7 +7801,7 @@
       "binary": "Doors/LGC_BJ09_BelchJOIN/BelchJOIN",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC-BJ09.LHA BelchJOIN — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LGC-BJ09.LHA BelchJOIN \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -7768,7 +7825,7 @@
       "binary": "Doors/NRV_OR10_NiRVANAORDER/NiRVANAORDER",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NRV-OR10.LHA NiRVANAORDER — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NRV-OR10.LHA NiRVANAORDER \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7789,7 +7846,7 @@
       "binary": "Doors/NVX_AWAI_V_Await/V-Await",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NVX-AWAI.LHA V-Await — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NVX-AWAI.LHA V-Await \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7810,7 +7867,7 @@
       "binary": "Doors/RG_FRV10_FrontAvail/FrontAvail",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "RG-FRV10.LHA FrontAvail — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "RG-FRV10.LHA FrontAvail \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7833,7 +7890,7 @@
       "binary": "Doors/SR_KCV10_KConvert/KConvert.XIM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SR-KCV10.LHA KConvert.XIM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SR-KCV10.LHA KConvert.XIM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7854,7 +7911,7 @@
       "binary": "Doors/THX_WH16_THX_WHO_/THX-WHO!.XiM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "THX-WH16.LHA THX-WHO!.XiM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "THX-WH16.LHA THX-WHO!.XiM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7878,12 +7935,12 @@
       "binary": "Doors/TRSI_SD3_ShowDoors/ShowDoors.XiM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI-SD3.LHA ShowDoors.XiM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRSI-SD3.LHA ShowDoors.XiM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            ".[ ShowDoors v0.3 © by CøRteX/tRS¿! (not registered) ]."
+            ".[ ShowDoors v0.3 \u00a9 by C\u00f8RteX/tRS\u00bf! (not registered) ]."
           ],
           "mustNotContain": [
             "TRAP",
@@ -7902,7 +7959,7 @@
       "binary": "Doors/TVK_DI1_dateit/dateit",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TVK-DI1.LHA dateit — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TVK-DI1.LHA dateit \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7926,7 +7983,7 @@
       "binary": "Doors/WL7A_wildlist/wildlist",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "WL7A.LHA wildlist — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "WL7A.LHA wildlist \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7936,7 +7993,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Some tooltype is missing"
+          ]
         }
       }
     },
@@ -7947,12 +8007,12 @@
       "binary": "Doors/YDL_WW04_wwall/wwall",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "YDL-WW04.LHA wwall — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "YDL-WW04.LHA wwall \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "WiLD THiNG's SPaR WaLL v0.4 © '94 By WiLD THiNG/¥øÐeL"
+            "WiLD THiNG's SPaR WaLL v0.4 \u00a9 '94 By WiLD THiNG/\u00a5\u00f8\u00d0eL"
           ],
           "mustNotContain": [
             "TRAP",
@@ -7970,7 +8030,7 @@
       "binary": "Doors/CAL_PW13_PWCheck/PWCheck",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CAL-PW13.LHA PWCheck — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CAL-PW13.LHA PWCheck \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -7993,7 +8053,7 @@
       "binary": "Doors/DLM_HL11_CLEAR_HL/CLEAR_HL.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DLM-HL11.LHA CLEAR_HL.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DLM-HL11.LHA CLEAR_HL.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8017,7 +8077,7 @@
       "binary": "Doors/DLT_DL11_DIRLOOK_CPS/DIRLOOK_CPS",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DLT-DL11.LHA DIRLOOK_CPS — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DLT-DL11.LHA DIRLOOK_CPS \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8040,7 +8100,7 @@
       "binary": "Doors/EMT_ANWL_AnarchyWall/AnarchyWall",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "EMT-ANWL.LHA AnarchyWall — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "EMT-ANWL.LHA AnarchyWall \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -8061,7 +8121,7 @@
       "binary": "Doors/NRV_BA10_nirvanabaud/nirvanabaud",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NRV-BA10.LHA nirvanabaud — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NRV-BA10.LHA nirvanabaud \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8082,7 +8142,7 @@
       "binary": "Doors/TEL_TP02_flm/flm",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TEL-TP02.LHA flm — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TEL-TP02.LHA flm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8105,7 +8165,7 @@
       "binary": "Doors/TRSI_SV3_sUPERViSER/sUPERViSER.XiM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI-SV3.LHA sUPERViSER.XiM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRSI-SV3.LHA sUPERViSER.XiM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8129,7 +8189,7 @@
       "binary": "Doors/MOVER_Mover/Mover",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MOVER Mover — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MOVER Mover \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
@@ -8167,7 +8227,7 @@
       "binary": "Doors/BD_STR20_TextStrip/TextStrip",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "BD-STR20 TextStrip — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "BD-STR20 TextStrip \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8190,7 +8250,7 @@
       "binary": "Doors/NS__SS10_SmartShow10R1/SmartShow10R1.0x0",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "NS!-SS10 SmartShow10R1.0x0 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "NS!-SS10 SmartShow10R1.0x0 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8214,7 +8274,7 @@
       "binary": "Doors/AT20_COPY/COPY",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AT20 COPY — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AT20 COPY \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8237,7 +8297,7 @@
       "binary": "Doors/AETOP20_AETop/AETop",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "AETOP20 AETop — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "AETOP20 AETop \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8260,7 +8320,7 @@
       "binary": "Doors/PSN_XS10_AmiE_starter/AmiE-starter.exe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "PSN-XS10 AmiE-starter.exe — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "PSN-XS10 AmiE-starter.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8284,7 +8344,7 @@
       "binary": "Doors/PSN_XS10_ward/ward.exe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "PSN-XS10 ward.exe — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "PSN-XS10 ward.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8308,7 +8368,7 @@
       "binary": "Doors/PSN_XS10_aia/aia.exe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "PSN-XS10 aia.exe — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "PSN-XS10 aia.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8332,7 +8392,7 @@
       "binary": "Doors/DSE200_powerpacker/powerpacker.library",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DSE200 powerpacker.library — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DSE200 powerpacker.library \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8356,7 +8416,7 @@
       "binary": "Doors/LOVE_A16_air/air.xim",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LOVE-A16 air.xim — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LOVE-A16 air.xim \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8380,7 +8440,7 @@
       "binary": "Doors/ACS_IP10_telnetd/telnetd.device",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "ACS-IP10 telnetd.device — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "ACS-IP10 telnetd.device \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8390,7 +8450,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "ACS_IP10_TELNETD exited with code"
+          ]
         }
       }
     },
@@ -8401,7 +8464,7 @@
       "binary": "Doors/PIW_ST05_Rexxmast/Rexxmast",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "PIW-ST05 Rexxmast — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "PIW-ST05 Rexxmast \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8424,7 +8487,7 @@
       "binary": "Doors/FLD_CHAT_8/8",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "FLD-CHAT 8 — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "FLD-CHAT 8 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
@@ -8447,7 +8510,7 @@
       "binary": "Doors/TRSI_MSG_textfield/textfield.gadget",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSI-MSG textfield.gadget — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRSI-MSG textfield.gadget \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8457,7 +8520,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "TRSI_MSG_TEXTFIELD exited with code"
+          ]
         }
       }
     },
@@ -8468,7 +8534,7 @@
       "binary": "Doors/OPS_TU11_TODAY_UP/TODAY-UP",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "OPS-TU11 TODAY-UP — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "OPS-TU11 TODAY-UP \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8492,7 +8558,7 @@
       "binary": "Doors/SENTBY_SentBy/SentBy",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SENTBY SentBy — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SENTBY SentBy \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8515,7 +8581,7 @@
       "binary": "Doors/MTH_NU11_nup/nup",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MTH-NU11 nup — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MTH-NU11 nup \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8539,7 +8605,7 @@
       "binary": "Doors/SCK_NUBC_NUBC/NUBC.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "SCK-NUBC NUBC.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "SCK-NUBC NUBC.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8563,7 +8629,7 @@
       "binary": "Doors/LGC_JC11_JoyComment/JoyComment.xim",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LGC-JC11 JoyComment.xim — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LGC-JC11 JoyComment.xim \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8587,7 +8653,7 @@
       "binary": "Doors/GOD_TF02_Top_Faker/Top_Faker",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "GOD-TF02 Top_Faker — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "GOD-TF02 Top_Faker \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8610,7 +8676,7 @@
       "binary": "Doors/RSE_PM10_PM/PM.XIM",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "RSE_PM10 PM.XIM — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "RSE_PM10 PM.XIM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8620,7 +8686,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Cant find ProgramIcon"
+          ]
         }
       }
     },
@@ -8631,7 +8700,7 @@
       "binary": "Doors/DLT_AF12_Autofree/Autofree",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "DLT-AF12 Autofree — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "DLT-AF12 Autofree \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8654,7 +8723,7 @@
       "binary": "Doors/CLE_UC12_UC_Cli/UC_Cli.exe",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "CLE-UC12 UC_Cli.exe — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "CLE-UC12 UC_Cli.exe \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8678,7 +8747,7 @@
       "binary": "Doors/LZX_IDFX_FileDescription/FileDescription.x",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "LZX_IDFX FileDescription.x — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "LZX_IDFX FileDescription.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8698,7 +8767,7 @@
       "binary": "Doors/5D_TOPFA_5D_TopFaker/5D-TopFaker",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "5D-TOPFA 5D-TopFaker — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "5D-TOPFA 5D-TopFaker \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8708,7 +8777,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "5D_TOPFA_5D_TOPFAKER exited with code"
+          ]
         }
       }
     },
@@ -8719,7 +8791,7 @@
       "binary": "Doors/MASMD101_MasterMind/MasterMind",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "MASMD101 MasterMind — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "MASMD101 MasterMind \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -8742,7 +8814,7 @@
       "binary": "Doors/TRSICD1P_guide2docprof/guide2docprof",
       "doorType": "XIM",
       "timeoutMs": 30000,
-      "notes": "TRSICD1P guide2docprof — clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
+      "notes": "TRSICD1P guide2docprof \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
@@ -9381,7 +9453,7 @@
         ],
         "assertions": {
           "mustContain": [
-            "BoSS-NuKE (v1.5 ßeta) by Big Boss of the /X Development Team!"
+            "BoSS-NuKE (v1.5 \u00dfeta) by Big Boss of the /X Development Team!"
           ],
           "mustNotContain": [
             "TRAP",
@@ -9864,7 +9936,7 @@
         ],
         "assertions": {
           "mustContain": [
-            "CaC v1.0 [PUBliC RELEASE 1]                          by KeroSene/Myth © 1995"
+            "CaC v1.0 [PUBliC RELEASE 1]                          by KeroSene/Myth \u00a9 1995"
           ],
           "mustNotContain": [
             "TRAP",
@@ -9947,7 +10019,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "No such command"
+          ]
         }
       }
     },
@@ -10058,7 +10133,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DOWNLOAD"
+          ]
         }
       }
     },
@@ -10182,7 +10260,7 @@
         ],
         "assertions": {
           "mustContain": [
-            " S!X Info V1.0 [09.04.1995] (100% ASM) - Code by HiZ/LOGiC ! -"
+            "\u007f\u007f\u007f\u007f S!X Info V1.0 [09.04.1995] (100% ASM) - Code by HiZ/LOGiC ! -\u007f\u007f\u007f\u007f\u007f"
           ],
           "mustNotContain": [
             "TRAP",
@@ -10260,7 +10338,7 @@
         ],
         "assertions": {
           "mustContain": [
-            "| Security Checker (C) 1996 !Lt / Version 1.00ß / Coded by KId/dSY/!LT - 1996 |"
+            "| Security Checker (C) 1996 !Lt / Version 1.00\u00df / Coded by KId/dSY/!LT - 1996 |"
           ],
           "mustNotContain": [
             "TRAP",
@@ -12122,7 +12200,7 @@
         ],
         "assertions": {
           "mustContain": [
-            "Turbo Lister v0.2ß by CøRteX/tRS¿! (nOt rEGiStEREd!)"
+            "Turbo Lister v0.2\u00df by C\u00f8RteX/tRS\u00bf! (nOt rEGiStEREd!)"
           ],
           "mustNotContain": [
             "TRAP",
@@ -12357,7 +12435,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "DOWNLOAD"
+          ]
         }
       }
     },
