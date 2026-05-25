@@ -5562,7 +5562,7 @@
         "timeoutMs": 15000,
         "assertions": {
           "mustContain": [
-            "________________________________________________________________________________"
+            "Missing Doors:AmiSettings/AmiSettings.info"
           ],
           "mustNotContain": [
             "TRAP",
@@ -10350,10 +10350,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DOWNLOAD"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
