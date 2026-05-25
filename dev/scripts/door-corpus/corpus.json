@@ -998,7 +998,13 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 90000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1576,7 +1582,13 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 90000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -7476,7 +7488,13 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 90000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
