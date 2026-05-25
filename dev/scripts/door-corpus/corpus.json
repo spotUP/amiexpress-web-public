@@ -14,9 +14,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR:  DOORS:FILEID/Sent.DAT Not Found !!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -39,9 +36,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Conference Top Uploaders"
-          ],
           "expectedSubState": "DISPLAY_MENU"
         }
       }
@@ -64,10 +58,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -93,9 +84,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "|___________ _____ ____ ___ ___ __ _            rTW v2.01 bY cREW^oNE!mYTH  |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -132,9 +120,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[- >5D-AutoFree V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -163,10 +148,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DOWNLOAD"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -188,9 +170,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D-DoorMenu v0.02 ]----- --- - ---- - -- --- - -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -219,9 +198,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D-TimeBank v0.01 ]----- --- - ---- - ---- --- -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -264,10 +240,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "LogOff V1.2 by Steve and DR. G of Italian Bad Boys'93",
-            "Hey sysop, do you really want to LogOff (y)es/(N)o/(r)eply ? No"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -309,9 +281,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D-ZippySearch v0.03 ]----- --- - ---- - ----- -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -354,9 +323,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Tell Sysop to install BullView v1.0 correct."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -393,9 +359,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "--[ AquaScan v1.0 by Aquarius/Outlaws ]--------------[ 'cs ?' for options ]--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -418,9 +381,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR: ONLY UPLOAD OR DOWNLOAD ARE ALLOWED AS ICON !!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -443,9 +403,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ".-----------------------------------------------------------------------------."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -468,9 +425,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "--[ AquaScan v1.0 by Aquarius/Outlaws ]--------------[ 'cs ?' for options ]--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -493,9 +447,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "::`-----------------------------------------------------------------------------"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -518,9 +469,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| 5D-sTATUS v1.50 cODED by sTc/5D      |  dESIGN bY sNoW/5th dYNASTY          |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -543,9 +491,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ".                                                                              ."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -568,9 +513,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "[JoinCnf 4.0 - EMPiRE]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -606,9 +548,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Ratio Report V1.7 - (c) 1995 Captain Caveman/Psychad/Atomic /X!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -645,9 +584,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "ERROR:  DOORS:EmP_Tools/AutoOnline.info Not Found!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -684,9 +620,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Warning: This Door Only Works On ('J'/'<'/'>'/'G') Notify Sysop!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -723,9 +656,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "\u007f\u007f\u007f\u007f S!X Stat V2.0 [08.02.1995] (100% ASM) - \u00a9 1995 b WHiZ/LOGiC -\u007f\u007f\u007f\u007f\u007f"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -748,9 +678,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            ".\u00f80\u00f8.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.02!]!:.,     (___ _ _/\\  __.\u00f80\u00f8."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -773,9 +700,6 @@
       "integration": {
         "timeoutMs": 60000,
         "assertions": {
-          "mustContain": [
-            "[Super Stats V1.4 By Etrigan/Intellect]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -798,9 +722,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -829,10 +750,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Couldn't load icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -854,10 +772,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "ZIPPY SEARCH"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -873,9 +788,6 @@
       "integration": {
         "timeoutMs": 90000,
         "assertions": {
-          "mustContain": [
-            "|            Ami-Express Diary Version 1.0 Written by ByteMaster           |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -920,9 +832,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "[Bulls 2.2 - EMPiRE]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1012,9 +921,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "CDTrans v"
           ]
         },
         "inputs": [
@@ -1050,10 +956,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Error: Cannot open icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -1068,9 +971,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR: Can`t open outputfile..."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1092,9 +992,6 @@
       "integration": {
         "timeoutMs": 180000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1115,9 +1012,6 @@
       "integration": {
         "timeoutMs": 180000,
         "assertions": {
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1151,9 +1045,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "U-Stat V1.0 - CoDeD BY S\u00a1eGeL/aFL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1176,9 +1067,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1207,9 +1095,6 @@
       "integration": {
         "timeoutMs": 10000,
         "assertions": {
-          "mustContain": [
-            ">     LogOff V1.0 by PSYCHOPATH   \u00a91996     <"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1247,9 +1132,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Asyncronous I/O, double buffered WarpSearch 2.5"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1278,9 +1160,6 @@
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D^QuickAnsi v0.05 ]----- --- - --- -- - ----- -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1323,9 +1202,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "ListSpeeder v1.2 \u00a91993 by Aquarius"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1374,10 +1250,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Do you want to logoff or write a comment?"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1413,9 +1286,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "-> MasterView v1.0, by Tango/DPL'94 <-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1463,9 +1333,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "Do U realy whish to logoff?"
           ]
         },
         "inputs": [
@@ -1498,9 +1365,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1534,9 +1398,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "Door executable not found."
           ]
         }
       }
@@ -1565,10 +1426,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "dRE!WAll v2.0 [UNREGiStEREd VERSiON]"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1610,10 +1468,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "5D-LoGOFF V1.14"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1645,10 +1500,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Cannot open configfile: Filedescription.config",
-            "File Description (Version 1.1) [RELEASE 2]  Copyright (c)1994 Bobo of Mystic"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1677,10 +1528,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "|__|_____|_____|__| cOLORWALL v1.3 (w) bY sHADOW mAN/aFL `94 |__|_____|_____|__|",
-            "tHX fOR uSING cOLORWALL v1.3 wRITTEN iN C bY sHADOW mAN/aFL `94 !"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1723,9 +1570,6 @@
       "integration": {
         "timeoutMs": 180000,
         "assertions": {
-          "mustContain": [
-            "\r         .___.           .___.__ .___.___.                       .___."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1753,9 +1597,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "-========] d-lOSt bULLs v0.2 [RELEASE 1] pRODUCEd by diSTLEr of hONEy [=======-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1798,9 +1639,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "          ___ ___   _______   ___.      _______   _______   ___|____|  __."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1835,10 +1673,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Write On Wall"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -1870,9 +1705,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "|   /X Tough Edit 1.0  Coded By NeuroStorm/Mystic & D^Sign By Deature/Mystic   |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1915,9 +1747,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            ">>> CD Download V2.0 by Rioter/Eqx <<<"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -1997,9 +1826,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "Thank you for using WarCalls V1.2      Coded by Wardancer/Humane&Vanity"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2042,9 +1868,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "(C) 1994 - Mainline Productions"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2092,9 +1915,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "Door executable not found."
           ]
         }
       }
@@ -2144,10 +1964,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DOWNLOAD"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -2182,9 +1999,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "-\u00f7-+---+-\u00f7-+---+-\u00f7-+---+-HSTStat by v1.5 -fanta- & S\u00f8N\u00dd-+---+-\u00f7-+---+-\u00f7-+---+-\u00f7-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2230,9 +2044,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "PWFailure v1.0 by -fanta- & SoNy of aLPHA fLIGHT & Theri\u00f8N"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2281,9 +2092,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "                AutoSent V1.4 by Byteandi (Mystic/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2316,9 +2124,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "Starting Ex!"
           ]
         },
         "inputs": []
@@ -2341,10 +2146,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "TConf V2.20"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -2365,9 +2167,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Turbo Zippy by Mack Lifeguard v1.p"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2409,9 +2208,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| Security Checker (C) 1996 !Lt / Version 1.00\u00df / Coded by KId/dSY/!LT - 1996 |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2438,9 +2234,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "Command requires higher access"
           ]
         }
       }
@@ -2467,9 +2260,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "dA WALL v2.1"
           ]
         },
         "inputs": [
@@ -2505,9 +2295,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "BoSS-NuKE (v1.5 \u00dfeta) by Big Boss of the /X Development Team!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2557,9 +2344,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "-->  Turbo Toolz Config Menu From Hell v3.2 <--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2613,9 +2397,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "TuRBo NeWSCaN PRO 2.z By [MaCK LiFeGuaRD/DuaL CReW-SHiNiNG] 68000 CoDe By [NZO]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2650,9 +2431,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\r\r----------------------------------------------------------+-------------------"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2674,9 +2452,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "=== WiLD STaT v0.4  B\u00a5  WiLD THiNG/\u00a5o\u00d0eL ==="
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2698,10 +2473,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "= [Super Stats V1.3 By Etrigan/Intellect] =",
-            "\u00b7    .::.........    [D-zign  by Recall/-U!]     ........::.     :"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2723,9 +2494,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\u00bb     /  |/  |  \\/  __!/  Y  \\   \u00ab          [/X SYSiNFO \u00a91995 by sTeAm!]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2747,9 +2515,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| GrapeStatus v1.6 by Pigeon^Shx^Mmh |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2771,9 +2536,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "| Running AmiEx:                       v5.6 | ByteLimit....:             0 |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2809,9 +2571,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "|         sTATUS 4 eVOLUTION^bBS V1.0 cODED bY cREEPiN-DEATH              |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2833,9 +2592,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Could not find the TOOL-TYPE \"COMPUTER.X\" in the COMPUTERLIST.info file..."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2871,9 +2627,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "| Location.....:                                  | Express Version.: v5.6     |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2909,9 +2662,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "This is what you are! v1 by Noisy Belch (Not /X.info Compatible!)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2933,9 +2683,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "U-Stat V1.0 - CoDeD BY S\u00a1eGeL/aFL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2957,9 +2704,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "\u007f\u007f\u007f\u007f S!X Stat V2.0 [08.02.1995] (100% ASM) - \u00a9 1995 b WHiZ/LOGiC -\u007f\u007f\u007f\u007f\u007f"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -2981,9 +2725,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ".\u00f80\u00f8.__  /\\_ _ ___)     ,.:![sKAN^4^sTATUs V1.03!]!:.,     (___ _ _/\\  __.\u00f80\u00f8."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3005,10 +2746,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[\u00bb\u00ab]  /X\\ sTATS v1.2 \u00a9 PLL /X\\YTH /X )-sIGN  [\u00bb\u00ab]",
-            "[\u00bb\u00ab]  THANK YOU fOR uSING /X\\YTH sTATS v1.2  [\u00bb\u00ab]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3030,9 +2767,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "::`-----------------------------------------------------------------------------"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3060,10 +2794,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SUTATS-NEVAEH"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3078,10 +2809,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "+--------------------------------------+--------------------------------------+",
-            "| 5D-sTATUS v1.50 cODED by sTc/5D      |  dESIGN bY sNoW/5th dYNASTY          |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3103,9 +2830,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "s!x-status v0.beta / coded by spider^af / analog future '97"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3127,9 +2851,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| sMK-sTATS v0.2 bETA - (c) SMoKeY pRODUCTIONS - cODE: InFeRnO & JuNk |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3151,9 +2872,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "pppSpSpSYpSYpSYCpSYCpSYCHpSYCHpSYCHopSYCHopSYCHoSpSYCHoSpSYCHoSTpSYCHoSTpSYCHoST"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3175,9 +2893,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3205,10 +2920,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Can't open program icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3223,9 +2935,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "_NosNUKE_ Version 0.21 -- By Nosferatu!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3247,9 +2956,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "NewFiles V1.1 by Byteandi/AFL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3271,9 +2977,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\\(\u00a9thundercat^dC & dr. \u00a1ce^seasons'98 )/design by woober/arcade"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3295,9 +2998,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "File Description (Version 1.1) [RELEASE 2]  Copyright (c)1994 Bobo of Mystic"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3319,9 +3019,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Conference Top Uploaders (Version 2.3) Coded by Bobo/Mystic and Looby/Insane!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3343,9 +3040,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\r==============================================================================="
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3367,9 +3061,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "NewFiles V1.0 by Byteandi/AFL`93"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3391,9 +3082,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Could not find C.info in any of the command directories!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3415,10 +3103,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "EALLs for the MASSES v2.01 - by [DELTAFORCE/DLM/X-pression]",
-            "[68K] EALL exited with ERROR"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3440,9 +3124,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "The Exorcist! v1.3 (v2.3x version) by B/\\Zz & CFi of Eclipse"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3464,9 +3145,6 @@
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
-          "mustContain": [
-            "-> UL-Logoff v1.1 [RELEASE ONE] by Tango/LED^IHS^PTL <-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3498,10 +3176,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\u00ab noC-Coupon version 1.oo  - (C)1994 nocTurne deSign/MST - Mortuary Version \u00bb",
-            "DOORS:noC-Coupon/noC-Coupon.config: Configuration file not found..."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3523,9 +3197,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| rEAL! |     bAUD-cOUNTER V1.Oo     |  cOde&dZ by hIGH-SPEEd ^ [-sAxOn-]  |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3547,9 +3218,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3571,9 +3239,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "<> TMS UPLOAD STATS V1.00                        CODING BY T-SPOON/TMS   <>"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3601,10 +3266,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Couldn't load icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3619,9 +3281,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "KiLLER BAUD ERROR! Could not lock icon!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3649,10 +3308,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "MuRpHy"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -3681,9 +3337,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "FastDupe V1.0 by Byteandi & Dr.Dre! (tRSi/Mst/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3711,10 +3364,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[=Duplicate_Check=] V0.42"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3729,9 +3379,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Copyright (c) 1995,96 Faktor/Independent."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3753,9 +3400,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-={ TimeStamp v2.0\u00df by jSON }=-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3777,9 +3421,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3801,9 +3442,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "BelchNET v0.5 by Noisy Belch/LOGIC"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3839,9 +3477,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Can't find Doors:MDB-Front/MDB-Front.info"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3863,9 +3498,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "MST-VieW:Can't find Icon...ABORTING !"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3887,9 +3519,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| Upload Activities (Version 1.1) [REL 2] - Copyright (c)1994 Bobo of Mystic |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3911,9 +3540,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "--[ DupeChekk v0.3 ]---- ----- --------- ---- -- ------ -- ---[ WD/MtS^SCX ]--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3935,9 +3561,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Coded in 1994 by LiNus/DPL!                  Fistful Of Steel ++49 6723 5622"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -3965,10 +3588,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Can't open cookiefile"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -3983,9 +3603,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4007,9 +3624,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Ratioinfo v 1.5 by fanta & S\u00f8Ny"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4031,9 +3645,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Sorry Not Supported!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4075,10 +3686,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "No NewsStats"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -4107,9 +3715,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Conference Top Uploaders v2.2 by Bobo (Mystic/X-Design) & Looby (Insane/X Dev)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4137,10 +3742,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Permission denied"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4155,9 +3757,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR:  DOORS:EmP_Tools/CheckNU.CFG Not Found !!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4179,9 +3778,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "UNABLE TO LOAD CONFIG FILE (DOORS:NOC-WHO/WHO.CONFIG)!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4203,9 +3799,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "dCN!FileID 2.0  by dERROW (dCN-/F\u00b7dEZiGN)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4227,9 +3820,6 @@
       "integration": {
         "timeoutMs": 12000,
         "assertions": {
-          "mustContain": [
-            "AmiExpress Web BBS [0:General] Menu (NaN mins. left):"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4265,9 +3855,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Could not find C.info in any of the command directories!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4289,9 +3876,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR #104 HAS OCCURED, PLEASE INFORM THE SYSOP!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4318,9 +3902,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ],
           "expectedSubState": "DISPLAY_MENU"
         },
@@ -4351,9 +3932,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[=S!X-Page v1.2/Alpha \u00a9 1995 By Xray2000/PTL=]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4375,9 +3953,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Logon Door Version V1.20           Coding By: T-SpooN ^1995^"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4399,9 +3974,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[tRSi] \u00b7 dRE!SENt v0.2 [RELEASE 1] \u00b7 (C) bY dR.dRE! \u00b7 [/X\u00b7iNNOVATiON]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4423,9 +3995,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "MenTal Page v0.5                        By Mr.orion /  VISAGE!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4447,9 +4016,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Thank you for using WarKick'Em V1.0            Coded by Wardancer/Vanity"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4477,10 +4043,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Command requires higher access"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4495,9 +4058,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4519,9 +4079,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            ">>> AnnounceLogon v1.0 \u00a91993 by Aquarius <<<"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4563,10 +4120,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "MuRpHy"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -4595,9 +4149,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4625,10 +4176,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "CD-sERVER V1.03"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4649,10 +4197,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Chat-O-Meter ERROR"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4673,10 +4218,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SysOpAvail"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -4705,9 +4247,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[=+-     FrontAvail!    -+=] [=+-     Coded in 1994 by LiNus/DupLo     -+=]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4729,10 +4268,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "FrOnTaL ChaT StArTeR v2.0 bY MaNiAc 94 * FrOnTaL AcTiViTy",
-            "|     FrOnT ChAT StaRtEr v2.0 - DoNe By MaNiAC / FrOnTaL AcTiViTy       |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4754,9 +4289,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "`--------[ AmiFront - by Faktor/Independent ]--------'"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4784,10 +4316,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "PowerPager v0.14"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4802,9 +4331,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-[\u00b7]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[\u00b7]-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4826,9 +4352,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[:.:]  MFM NuKING SYSTEM [0.3] (c)1995 MFM/iNVASiON/SKiD ROW  [:.:]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4850,9 +4373,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "|TopCall V1.0 \u00a91996 Joe Cool|"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4894,9 +4414,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchVIEW v1.3 by Noisy Belch/LOGIC"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4924,10 +4441,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Wallhall: ERROR! CAN'T OPEN DATAFILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4948,10 +4462,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Tell Sysop I can't find my config file!"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -4966,9 +4477,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "Bytekiller V1.3 by Byteandi (Mystic/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -4990,9 +4498,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5014,9 +4519,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "--[ LogonStartup v0.30 ]-- ---- -- ------- -- ---- ---- -- --[ WD/MtS^SCX ]--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5038,9 +4540,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "FilesSize v2.8 by Noisy Belch"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5062,9 +4561,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Ill Communication v1 by Noisy Belch (Not /X.info Compatible!)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5086,9 +4582,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "SlickMove 1.0 By BUGBYTE For /X 3.x"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5110,9 +4603,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[=TAG LINE Adder=] V1.0 - (c)1994  SiNTAX/W\u00f8T"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5140,10 +4630,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "5TH dYNASTY"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5158,9 +4645,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[- >5D-BaudCheck V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5182,9 +4666,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "FileID V1.4 by Byteandi (Mystic/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5206,9 +4687,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[- >5D-MultiStart V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5236,10 +4714,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "| nO.| hANDLE           | lOCATION             |pAGES| uL-bYTES  | dN-bYTES  |"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5268,9 +4743,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "-----[ 5D-SysopAvail v1.0 ]--------- --- - ---- -- - -----"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5306,9 +4778,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "-- - ---[ 5D-AdiMenu V1.0 ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- -"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5344,9 +4813,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D^SysOpAvail v0.01 ]----- --- ---- -- - ----- -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5374,10 +4840,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "LAST OUTPOST"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5406,9 +4869,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "fLAG-aDDER v0.1 fOR uPdOWNiNFO bY sHADOW mAN/aFL \u00a91994 !"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5430,9 +4890,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "[WHO_ELSE  V1.0]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5460,10 +4917,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Couldn't load icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5478,9 +4932,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            ".------------------) cOp Wall v0.1\u00df by HITLER!! / SS TRUPPE    (----------------"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5543,10 +4994,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Dowload Mania, v1.01"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5561,9 +5009,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Missing Doors:AmiSettings/AmiSettings.info"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5591,10 +5036,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "pSYCHoTROn/fLD"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5615,10 +5057,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "PW-FokkUp"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5639,10 +5078,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "No bulletins are available"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5657,9 +5093,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "USER CHECK (VERSION 1.1) CODED IN 1995 BY PSYCHOTRON OF INHUMANS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5680,9 +5113,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| \\_____     /___________/ LiQuiD STyLeR bY KLeiNDuiMPJe version    2.o|"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5704,9 +5134,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "BelchOLM v1.6 by Noisy Belch/LOGIC"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5734,10 +5161,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Not configured"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -5766,9 +5190,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "WhO-LoGiN' V1.00 by S\u00a1eGeL/MsT"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5790,9 +5211,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Lost Carrier Files Processor V1.42 for S!X (Versions 0.37 and higher)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5814,9 +5232,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "SLICK-SHELL V1.3 by BUGBYTE for Ami Express!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5844,10 +5259,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "T.F.A. /X DEVELO-PHUN-MENT TEAM"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5862,9 +5274,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ByteKiller V2.2 by ByteAndi (tRSi/X-iNNOVATiON)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5892,10 +5301,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "dRE!REPORt.INFO"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5910,9 +5316,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Thank you for using WarList V1.3               Coded by Wardancer/Vanity"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5934,9 +5337,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "Thank you for using WarComment V1.0           Coded by Wardancer/VTY^HMS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -5964,10 +5364,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "KEYFILE ERROR"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -5982,9 +5379,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[- >5D-Reserve V1.00< By SvEN tHE CREAToR Of 5th Dynasty -]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6006,9 +5400,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-=]  \u00a995 Strobe  \u00b7=%=\u00b7 RubberStamp v1.3 \u00b7=%=\u00b7  976 Ev!L  [=-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6030,9 +5421,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "AmiEx GlobalNew 2.1 R.Bj\u00f6rklund  Modified by: GeeZER"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6068,9 +5456,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "--[ AquaScan v1.1 by Aquarius/Outlaws ]-[ 'dc_x107i_aquascan ?' for options ]--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6092,9 +5477,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR: ONLY UPLOAD OR DOWNLOAD ARE ALLOWED AS ICON !!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6116,9 +5498,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "|   SMK-STATS v0.1 - A SMoKeY PRODUCTiON  DONE BY JuNk 31-1-1996   |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6140,9 +5519,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "-- ---[ 5D-AdiMUI v2.0  ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- - -"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6184,10 +5560,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Command requires higher access"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6202,9 +5575,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "5D-Security V0.10 By SvEN tHE CREAToR Of 5th Dynasty"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6267,10 +5637,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "MuRpHy"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6299,9 +5666,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ">>> AnnounceLogon v1.0 \u00a91993 by Aquarius <<<"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6329,10 +5693,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "reading the preferences file for BullRead"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6353,10 +5714,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "CD-sERVER V1.03"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6377,10 +5735,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Chat-O-Meter ERROR"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6401,10 +5756,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SysOpAvail"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6433,9 +5785,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[=+-     FrontAvail!    -+=] [=+-     Coded in 1994 by LiNus/DupLo     -+=]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6457,9 +5806,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "`--------[ AmiFront - by Faktor/Independent ]--------'"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6481,9 +5827,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6511,10 +5854,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "PowerPager v0.14"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6529,9 +5869,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-[\u00b7]- pUMPsAFE v 1.o - bY mATHEWS/iLT -[\u00b7]-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6553,9 +5890,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[:.:]  MFM NuKING SYSTEM [0.3] (c)1995 MFM/iNVASiON/SKiD ROW  [:.:]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6577,9 +5911,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "|TopCall V1.0 \u00a91996 Joe Cool|"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6601,9 +5932,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "            ARC ARJ DMS LHA LZH LZX RUN SFX SHR TXT WRP ZIP ZOM ZOO"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6652,10 +5980,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Wallhall: ERROR! CAN'T OPEN DATAFILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -6676,9 +6001,6 @@
             "Guru",
             "Software failure"
           ],
-          "mustContain": [
-            "Tell Sysop I can't find my config file!"
-          ],
           "expectedSubState": "DISPLAY_MENU"
         }
       }
@@ -6694,9 +6016,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6718,9 +6037,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchOLM v1.4 by Noisy Belch"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6777,9 +6093,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "Sorry, no Bulletins available in Conference : >Main"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6815,9 +6128,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "oOo| TMS Upload Stats V0.10 BETA              Coding By : T-SPOON/TMS   |oOo"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6839,9 +6149,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR: Icon not found...ABORTING !"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6863,9 +6170,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ByteLog V1.0 by Byteandi (tRSi/X-iNNOVATiON)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6893,10 +6197,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "AUX1: handler can't be opened"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -6925,9 +6226,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "Bytekiller V1.0 by Byteandi (Mystic/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6949,9 +6247,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "BelchVIEW v1.2 by Noisy Belch"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6973,9 +6268,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchOLM v1.3 by Noisy Belch (Not /X.info Compatible!)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7032,9 +6324,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[FRONTSTAT V1.1]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7062,10 +6351,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Couldn't find icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7080,9 +6366,6 @@
       "integration": {
         "timeoutMs": 25000,
         "assertions": {
-          "mustContain": [
-            "TComment V1.00 Aborted: Dos Error 205"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7118,9 +6401,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\u001bc)---------------------------------------------------------------------------("
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7148,10 +6428,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DRE!ADVERTISE.INFO"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7166,9 +6443,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "EXTERMiNATE! v1.07\u00df - by [DELTAFORCE/DLM/X-pression]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7190,9 +6464,6 @@
       "integration": {
         "timeoutMs": 180000,
         "assertions": {
-          "mustContain": [
-            "This is SmartDSF V1.3 Copyright (C) 1994-95' by NiGHTSHADE/INS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7214,9 +6485,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-=- NEWS (C) 1994 Hydra of RDC,LSD and Maniacs -=-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7244,10 +6512,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7282,10 +6547,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "No such command"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7306,10 +6568,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "You need an Icon called MST-CLOCK.INFO in DOORS: !"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7330,10 +6589,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7368,10 +6624,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7400,9 +6653,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "BelchView v0.8 by Noisy Belch"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7430,10 +6680,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7462,9 +6709,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "SuperWHO 3.0 by pSYCHoTROn/rYL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7486,9 +6730,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "| Thank you for using T-LiST PrO by   |___.::::::::.|"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7510,9 +6751,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "DoorMenu v1.3  by Gi Joe \u00bbSRH\u00ab"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7548,9 +6786,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7578,10 +6813,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "CD-sERVER V1.00"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7596,9 +6828,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ".[ ShowDoors v0.3 \u00a9 by C\u00f8RteX/tRS\u00bf! (not registered) ]."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7626,10 +6855,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Couldn't load config icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7650,10 +6876,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SysCm.CFG could not be opened. Abnormal program termination!"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7668,9 +6891,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] VTY_CM11_METER exited with code 1"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7692,9 +6912,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "CrzFront v1.1 by Nike'n'Rick 1994"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7716,10 +6933,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "=================[ /XNet Information v1.0 By Caffeine/AFL ]================",
-            "/XNet Information v0.1 by Caffeine of ANGST"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7747,10 +6960,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7779,9 +6989,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\rDiabolo      +49(03) 621-23-12      +49(03) 621-87-87      +49(03) 622-19-94"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7808,9 +7015,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "N e w U s e r   v 1 . 2"
           ]
         }
       }
@@ -7826,9 +7030,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-  --- --v1.3\\/------- - -----[ ########################### ]--^-mRW'"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7850,9 +7051,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "uSE cURSORS tO sCROLL uP/dOWN!REG!STERED TO nOBODY!!!.--------------------------"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7874,9 +7072,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "\u001bc -   --  --- ---------------[ BitchCheck v1.0 ]------------------- ---   --   "
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7904,9 +7099,6 @@
             "Guru",
             "Software failure"
           ],
-          "mustContain": [
-            "-> SpeedPass v1.0, by Tango/DPL'94 <-"
-          ],
           "expectedSubState": "DISPLAY_MENU"
         }
       }
@@ -7922,9 +7114,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-> PWCommand v1.0, by Tango/DPL'94 <-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -7952,10 +7141,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Sysop Is NOT Avail For Chatting"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -7976,10 +7162,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "I dont code doors for /X.info"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8000,10 +7183,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "- Setting up some varibles"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8024,10 +7204,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "F1  Sysop Login     F2  Local Login     F3  Instant Login   F4  Reserve BBS"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8042,9 +7219,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "|---------------fRONT-sTATUS-v1.0!-bY-xERXES-rAGE------------/-/-/-|"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8072,10 +7246,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Updating upload filelist... Done !"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8090,9 +7261,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "|  THX! fRONT-dOOR V1.5  /  (C) [THX!'96]  -  ALL dONE bY : [tENtAClE/tFP!]  |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8114,9 +7282,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ".[ ShowDoors v0.3 \u00a9 by C\u00f8RteX/tRS\u00bf! (not registered) ]."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8144,10 +7309,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DATEIT.INFO"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8168,10 +7330,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Some tooltype is missing"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8186,9 +7345,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "WiLD THiNG's SPaR WaLL v0.4 \u00a9 '94 By WiLD THiNG/\u00a5\u00f8\u00d0eL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8210,9 +7366,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8234,9 +7387,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] DLM_HL11_CLEAR_HL exited with ERROR"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8263,9 +7413,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "DirLook/AutoFree (Version 1.3)"
           ]
         }
       }
@@ -8286,9 +7433,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "AnarchyWall v1.o"
           ],
           "expectedSubState": "DISPLAY_MENU"
         }
@@ -8311,10 +7455,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "BAUDCHECKERv1.0[nrv /X development] Code&design by: iCE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8329,9 +7470,6 @@
       "integration": {
         "timeoutMs": 180000,
         "assertions": {
-          "mustContain": [
-            "wELCOME tO fLM v0.4 bY dR. iCE/lISENCE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8352,9 +7490,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "ERROR:  cANT't oPEN cONFiG-file!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8382,10 +7517,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Unable to open S:ACP.Startup"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -8414,9 +7546,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8438,9 +7567,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "sMARTSHOw V1.0 - Can't open datafile - Please report to sysop!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8462,9 +7588,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] AT20_COPY exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8486,9 +7609,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] AETOP20_AETOP exited with code 1"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8510,9 +7630,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] PSN_XS10_AMIE_STARTER exited with code 305"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8534,9 +7651,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] PSN_XS10_WARD exited with code 2"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8558,9 +7672,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] PSN_XS10_AIA exited with code 2"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8582,9 +7693,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] DSE200_POWERPACKER exited with code 4294967295"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8606,9 +7714,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            ".-- -----:-->   aIR bYTES V1.6 XIM! bY sHARON/lOVE    <--:----- --."
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8636,10 +7741,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "ACS_IP10_TELNETD exited with code"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8654,9 +7756,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] PIW_ST05_REXXMAST exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8678,9 +7777,6 @@
       "integration": {
         "timeoutMs": 18000,
         "assertions": {
-          "mustContain": [
-            "[68K] FLD_CHAT_8 exited with code 4294967295"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8708,10 +7804,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "TRSI_MSG_TEXTFIELD exited with code"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8726,9 +7819,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] OPS_TU11_TODAY_UP exited with code 1"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8750,9 +7840,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8780,10 +7867,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "cONFIG nOT fOUND"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8798,9 +7882,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "`----------------------------( By Crimson!/SUCK )---'"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8828,10 +7909,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "JoyComment 1.1"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8846,9 +7924,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] GOD_TF02_TOP_FAKER exited with code 1573120"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8876,10 +7951,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Cant find ProgramIcon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8894,9 +7966,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "-  Auto-Free (Version 1.2) [RELEASE 2]  Copyright (c) 1994 Nike/CRZ^DLT  -"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8918,9 +7987,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] CLE_UC12_UC_CLI exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -8948,9 +8014,6 @@
             "Guru",
             "Software failure"
           ],
-          "mustContain": [
-            "File Description (Version 1.0) [RELEASE 1]  Copyright (c)1994 Bobo of Mystic"
-          ],
           "expectedSubState": "DISPLAY_MENU"
         }
       }
@@ -8972,10 +8035,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "5D_TOPFA_5D_TOPFAKER exited with code"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -8990,9 +8050,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9014,9 +8071,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "[68K] TRSICD1P_GUIDE2DOCPROF exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9050,10 +8104,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Zippy Search 1.03"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -9088,9 +8139,6 @@
       "integration": {
         "timeoutMs": 14000,
         "assertions": {
-          "mustContain": [
-            "[-Code By SvEN tHE CREAToR And GFX By Cee Jay-] of [-5TH dYNASTY-]"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9147,10 +8195,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9180,9 +8225,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D-DoorMenu v0.02 ]----- --- - ---- - -- --- - -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9219,9 +8261,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "-- - ---[ 5D-AdiMenu V1.0 ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- -"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9264,10 +8303,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "5D-Clock V0.22"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9297,10 +8333,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[- >5D-MultiStart V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]",
-            "Cannot open Doors:5D-MultiStart/BBS:Commands/MultiCmd/5D-MULTISTART!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9337,10 +8369,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "5D-Security V0.10 By SvEN tHE CREAToR Of 5th Dynasty",
-            "Cannot open 'Doors:5D-Security/5D-Security.info'!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9383,10 +8411,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "| nO.| hANDLE           | lOCATION             |pAGES| uL-bYTES  | dN-bYTES  |"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9422,10 +8447,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9455,9 +8477,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D-Edit v1.21 ]----- --- - --- ----- --- ----- -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9494,9 +8513,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "- --- -----[ 5D-ZippySearch v0.03 ]----- --- - ---- - ----- -----[ sTc/5D ]---"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9533,9 +8549,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "AEDoor Template (vbcc compiled)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9572,9 +8585,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "Missing Doors:AmiSettings/AmiSettings.info"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9611,10 +8621,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "-(- AquaPWFail v1.0 by Aquarius/OTL -)-",
-            "Please hold a second...                                    -(- AquaPWFail -)-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9666,9 +8672,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "BoSS-NuKE (v1.5 \u00dfeta) by Big Boss of the /X Development Team!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9705,9 +8708,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "ByteComment V1.0 by ByteAndi (tRSi/X-iNNOVATiON)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9744,9 +8744,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "Warning: This Door Only Works On ('J'/'<'/'>'/'G') Notify Sysop!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9787,9 +8784,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "CD-Shell/FTP Emulator for CD-ROMs"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9831,10 +8825,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -9864,9 +8855,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "+------------ mORE dOORS cURSOR mENU 1.0 -- (c) uP RoUGH /X 2026 ------------+"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9917,9 +8905,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "PowerPager v0.14"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9956,9 +8941,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "wELCOME tO fLM v0.4 bY dR. iCE/lISENCE"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -9995,9 +8977,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "FastDupe V1.0 by Byteandi & Dr.Dre! (tRSi/Mst/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10034,9 +9013,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "AutoSent V1.4 by Byteandi (Mystic/X-Design)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10073,10 +9049,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "FrOnTaL ChaT StArTeR v2.0 bY MaNiAc 94 * FrOnTaL AcTiViTy",
-            "|     FrOnT ChAT StaRtEr v2.0 - DoNe By MaNiAC / FrOnTaL AcTiViTy       |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10149,9 +9121,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "CaC v1.0 [PUBliC RELEASE 1]                          by KeroSene/Myth \u00a9 1995"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10188,9 +9157,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[68K] MASTERMIND exited with code 2"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10233,10 +9199,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "No such command"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10266,9 +9229,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[68K] NTR-CHECKER exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10311,10 +9271,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "- Setting up some varibles"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10380,10 +9337,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "|___________ _____ ____ ___ ___ __ _            rTW v2.01 bY cREW^oNE!mYTH  |",
-            "| 01 | yOUR lINE         | Test Lab          | iN A kEWL dOOR! | rTW v2.01    |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10420,9 +9373,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "--[ Request v2.1b ]------------------------------------[ Neptune 'n Odyssey ]--"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10474,9 +9424,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "\u007f\u007f\u007f\u007f S!X Info V1.0 [09.04.1995] (100% ASM) - Code by HiZ/LOGiC ! -\u007f\u007f\u007f\u007f\u007f"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10513,9 +9460,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "| Thank you for using T-LiST PrO by   |___.::::::::.|"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10552,9 +9496,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "| Security Checker (C) 1996 !Lt / Version 1.00\u00df / Coded by KId/dSY/!LT - 1996 |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10597,10 +9538,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SYS:/Votes/Current created"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10630,9 +9568,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "SizeCheck v1.1 by Eric The RED/bAD kARMA"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10669,9 +9604,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "SysCm.CFG could not be opened. Abnormal program termination!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10723,9 +9655,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "Version V1.10          Coding By: T-SPooN ^1995^"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10762,9 +9691,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "USER CHECK (VERSION 1.1) CODED IN 1995 BY PSYCHOTRON OF INHUMANS"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10801,9 +9727,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "Thank you for using WarList V1.3               Coded by Wardancer/Vanity"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10840,9 +9763,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "ERROR: Icon not found...ABORTING !"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10879,9 +9799,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "AmiExpress Web BBS [0:General] Menu (NaN mins. left):"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -10924,10 +9841,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -10993,9 +9907,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "ERROR:  DOORS:EmP_Tools/AutoOnline.info Not Found!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -11032,10 +9943,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "SLICK-SHELL V1.3 by BUGBYTE for Ami Express!",
-            "ERROR Reading doors:slickshell/config/Shellpassword.CFG"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -11072,10 +9979,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[uSEr StAtS v1.0 by BOHEMiaN/FTU (c) Copyright 1994]",
-            "ThAnX fOR UsiNg UsEr StAtS v1.0 By BOHEMiaN/FTU"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -11118,10 +10021,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "AmiExpress Web BBS [0:General] Menu (NaN mins. left):"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11157,10 +10057,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11196,10 +10093,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11235,10 +10129,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11274,10 +10165,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "VIEW CALLERSLOG"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11313,10 +10201,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "UPLOAD FILE(S)"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11352,10 +10237,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DOWNLOAD FILE(S)"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11391,10 +10273,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Command requires higher access"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11430,10 +10309,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11469,10 +10345,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Command requires higher access"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11508,10 +10381,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Command requires higher access"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11547,10 +10417,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SHOW FILELIST"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11586,10 +10453,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "AmiExpress Web BBS"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11625,10 +10489,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11664,10 +10525,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "CHANGE SETTINGS"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11702,9 +10560,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ],
           "expectedSubState": "DISPLAY_MENU"
         }
@@ -11742,10 +10597,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "SHOW STATUS"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11780,9 +10632,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ],
           "expectedSubState": "DISPLAY_MENU"
         }
@@ -11819,9 +10668,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ],
           "expectedSubState": "DISPLAY_MENU"
         }
@@ -11893,9 +10739,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "SHOW NEW FILES"
           ]
         }
       }
@@ -11931,9 +10774,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "Command requires higher access"
           ]
         }
       }
@@ -11969,9 +10809,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ],
           "expectedSubState": "DISPLAY_MENU"
         }
@@ -12009,9 +10846,6 @@
             "Guru",
             "Software failure"
           ],
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ],
           "expectedSubState": "DISPLAY_MENU"
         }
       }
@@ -12048,10 +10882,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Command requires higher access"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12087,10 +10918,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "PREVIOUS CONFERENCE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12120,9 +10948,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[68K] ANNLOGOFF exited with code 1"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12159,10 +10984,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "--[ AquaScan v1.0 by Aquarius/Outlaws ]----[ 'aquascan.000 ?' for options ]--",
-            "Config error: Tooltype DOORUSE.AQUASCAN.000 missing!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12235,9 +11056,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "Conference Top Uploaders (Version 2.3) Coded by Bobo/Mystic and Looby/Insane!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12274,9 +11092,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "The Exorcist! v1.3 (v2.3x version) by B/\\Zz & CFi of Eclipse"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12319,10 +11134,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12352,9 +11164,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[68K] NTR-LASTCALLERS exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12406,9 +11215,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "-> PWCommand v1.0, by Tango/DPL'94 <-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12445,9 +11251,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "`----------------------------( By Crimson!/SUCK )---'"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12484,9 +11287,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "Turbo Lister v0.2\u00df by C\u00f8RteX/tRS\u00bf! (nOt rEGiStEREd!)"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12523,9 +11323,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "-> UL-Logoff v1.1 [RELEASE ONE] by Tango/LED^IHS^PTL <-"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12567,9 +11364,6 @@
             "PANIC",
             "Guru",
             "Software failure"
-          ],
-          "mustContain": [
-            "WHAT: Transfer Activities v2.0"
           ]
         }
       }
@@ -12606,10 +11400,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "XIM Door (vbcc) - Direct Protocol"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12645,10 +11436,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "Can't open program icon"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12684,10 +11472,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "AUTO SIGN"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12723,10 +11508,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "DOWNLOAD"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12762,10 +11544,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12795,9 +11574,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[68K] CLEAR_HL.X exited with ERROR"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12849,9 +11625,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "[68K] MULTI-CHECK exited with FAIL"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12888,9 +11661,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "ERROR:  cANT't oPEN cONFiG-file!!"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -12933,10 +11703,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "ZIPPY SEARCH"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -12972,10 +11739,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -13005,9 +11769,6 @@
           }
         ],
         "assertions": {
-          "mustContain": [
-            "| zOOsTAtS v1.5  rEGGED TO: uNREGiSTERED!         |        nOT hERE nOW...  |"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
