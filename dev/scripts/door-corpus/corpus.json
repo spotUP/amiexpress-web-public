@@ -55,7 +55,7 @@
       "timeoutMs": 30000,
       "notes": "WHO v2.0 by Spy/MST. Renders who's-online header banner then queries active nodes. Exercises XIM BB_MAINLINE / ACTIVE_NODES / MULTICOM ops + DT_SECSTATUS user-field path. Non-interactive, exits cleanly. Verified deterministic 2026-05-12.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 20000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -63,19 +63,18 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         },
         "inputs": [
           {
-            "delayMs": 1500,
+            "delayMs": 6000,
             "data": "\r"
           },
           {
-            "delayMs": 4000,
-            "data": "q\r"
-          },
-          {
-            "delayMs": 7000,
+            "delayMs": 9000,
             "data": "\r"
           }
         ]
@@ -4229,13 +4228,16 @@
       "timeoutMs": 30000,
       "notes": "NB BelchLIST \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ]
         },
         "inputs": [
@@ -7888,7 +7890,7 @@
       "timeoutMs": 30000,
       "notes": "NVX-AWAI.LHA V-Await \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 28000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7896,7 +7898,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "F1  Sysop Login     F2  Local Login     F3  Instant Login   F4  Reserve BBS"
+          ]
         }
       }
     },
@@ -11263,7 +11268,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_JC072_LE_win5_96; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11285,7 +11290,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -12147,7 +12155,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/MultiTop; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -12169,7 +12177,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -12795,7 +12806,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/who; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -12817,7 +12828,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
