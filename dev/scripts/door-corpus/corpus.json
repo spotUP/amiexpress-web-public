@@ -36,7 +36,13 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
         }
       }
     },
