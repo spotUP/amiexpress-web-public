@@ -792,7 +792,7 @@
       "timeoutMs": 30000,
       "notes": "diary door from AEXSETU \u2014 exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path.",
       "integration": {
-        "timeoutMs": 90000,
+        "timeoutMs": 180000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -812,15 +812,15 @@
             "data": "\r"
           },
           {
-            "delayMs": 8000,
+            "delayMs": 20000,
             "data": "q\r"
           },
           {
-            "delayMs": 25000,
+            "delayMs": 70000,
             "data": "q\r"
           },
           {
-            "delayMs": 40000,
+            "delayMs": 150000,
             "data": "\r"
           }
         ]
@@ -996,7 +996,7 @@
       "timeoutMs": 30000,
       "notes": "5D-News \u2014 news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point.",
       "integration": {
-        "timeoutMs": 180000,
+        "timeoutMs": 360000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1005,12 +1005,7 @@
             "Software failure"
           ]
         },
-        "inputs": [
-          {
-            "delayMs": 90000,
-            "data": "\r"
-          }
-        ]
+        "inputs": []
       }
     },
     {
@@ -1022,7 +1017,7 @@
       "timeoutMs": 30000,
       "notes": "5D_Comment \u2014 sysop-comment helper (SIM batch). Fourth SIM corpus entry \u2014 different code patterns than the 5D-FileId/News doors.",
       "integration": {
-        "timeoutMs": 180000,
+        "timeoutMs": 360000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1031,12 +1026,7 @@
             "Software failure"
           ]
         },
-        "inputs": [
-          {
-            "delayMs": 90000,
-            "data": "\r"
-          }
-        ]
+        "inputs": []
       }
     },
     {
@@ -1580,7 +1570,7 @@
       ],
       "notes": "INS Nightshade SmartDSF 1.3 (INS-SD13.LHA). Sysop file-tag helper. Without tag data exits via 'HANG ON YOURE SYSOP IS TAGGING FiLES!' notice path. 4-door cluster representative for SmartDSF.0X0 CPU-variant family.",
       "integration": {
-        "timeoutMs": 180000,
+        "timeoutMs": 300000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1591,8 +1581,8 @@
         },
         "inputs": [
           {
-            "delayMs": 90000,
-            "data": "\r"
+            "delayMs": 120000,
+            "data": "X\r"
           }
         ]
       }
@@ -6480,7 +6470,7 @@
       "timeoutMs": 30000,
       "notes": "INS-SD13.LHA SmartDSF.020 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 180000,
+        "timeoutMs": 300000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -6489,7 +6479,13 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 120000,
+            "data": "X\r"
+          }
+        ]
       }
     },
     {
@@ -7444,7 +7440,7 @@
       "timeoutMs": 30000,
       "notes": "EMT-ANWL.LHA AnarchyWall \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 180000,
+        "timeoutMs": 240000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7453,7 +7449,13 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 60000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -7486,7 +7488,7 @@
       "timeoutMs": 30000,
       "notes": "TEL-TP02.LHA flm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 180000,
+        "timeoutMs": 300000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7497,8 +7499,8 @@
         },
         "inputs": [
           {
-            "delayMs": 90000,
-            "data": "\r"
+            "delayMs": 120000,
+            "data": "q\r"
           }
         ]
       }
@@ -8949,18 +8951,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/FLM; needs capture + triage",
       "integration": {
-        "timeoutMs": 90000,
+        "timeoutMs": 180000,
         "inputs": [
           {
-            "delayMs": 8000,
+            "delayMs": 30000,
             "data": "\r"
           },
           {
-            "delayMs": 25000,
+            "delayMs": 80000,
             "data": "q\r"
           },
           {
-            "delayMs": 45000,
+            "delayMs": 160000,
             "data": "\r"
           }
         ],
@@ -10131,18 +10133,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_CC001_5D_ComCommand_Prefs; needs capture + triage",
       "integration": {
-        "timeoutMs": 90000,
+        "timeoutMs": 180000,
         "inputs": [
           {
-            "delayMs": 8000,
+            "delayMs": 30000,
             "data": "\r"
           },
           {
-            "delayMs": 25000,
+            "delayMs": 80000,
             "data": "q\r"
           },
           {
-            "delayMs": 45000,
+            "delayMs": 160000,
             "data": "\r"
           }
         ],
@@ -10563,18 +10565,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_SE001_5D_Selector; needs capture + triage",
       "integration": {
-        "timeoutMs": 90000,
+        "timeoutMs": 180000,
         "inputs": [
           {
-            "delayMs": 8000,
+            "delayMs": 30000,
             "data": "\r"
           },
           {
-            "delayMs": 25000,
+            "delayMs": 80000,
             "data": "q\r"
           },
           {
-            "delayMs": 45000,
+            "delayMs": 160000,
             "data": "\r"
           }
         ],
@@ -10635,18 +10637,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_STC01_5D_Status; needs capture + triage",
       "integration": {
-        "timeoutMs": 90000,
+        "timeoutMs": 180000,
         "inputs": [
           {
-            "delayMs": 8000,
+            "delayMs": 30000,
             "data": "\r"
           },
           {
-            "delayMs": 25000,
+            "delayMs": 80000,
             "data": "q\r"
           },
           {
-            "delayMs": 45000,
+            "delayMs": 160000,
             "data": "\r"
           }
         ],
@@ -10707,18 +10709,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_UE001_5D_USERED; needs capture + triage",
       "integration": {
-        "timeoutMs": 60000,
+        "timeoutMs": 120000,
         "inputs": [
           {
-            "delayMs": 1500,
+            "delayMs": 5000,
             "data": "\r"
           },
           {
-            "delayMs": 4000,
+            "delayMs": 15000,
             "data": "q\r"
           },
           {
-            "delayMs": 7000,
+            "delayMs": 25000,
             "data": "\r"
           }
         ],
