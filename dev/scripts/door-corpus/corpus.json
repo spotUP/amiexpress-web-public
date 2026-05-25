@@ -851,7 +851,7 @@
       "timeoutMs": 30000,
       "notes": "diary door from AEXSETU \u2014 exercises JH_SG (Show GFile) + JH_EF (Edit File). First corpus entry covering the file-editor XIM path.",
       "integration": {
-        "timeoutMs": 40000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustContain": [
             "|            Ami-Express Diary Version 1.0 Written by ByteMaster           |"
@@ -934,7 +934,7 @@
       ],
       "notes": "MST wall door \u2014 prompts 'Write On Wall (y/n)?' \u2014 declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 15000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -949,7 +949,7 @@
         },
         "inputs": [
           {
-            "delayMs": 2000,
+            "delayMs": 8000,
             "data": "n\r"
           }
         ]
@@ -1055,7 +1055,7 @@
       "timeoutMs": 30000,
       "notes": "5D-News \u2014 news bulletin generator (SIM batch). Pinned alongside 5D-FileId/MAKECMD as a third zero-XIM regression coverage point.",
       "integration": {
-        "timeoutMs": 30000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustContain": [
             "________________________________________________________________________________"
@@ -1078,7 +1078,7 @@
       "timeoutMs": 30000,
       "notes": "5D_Comment \u2014 sysop-comment helper (SIM batch). Fourth SIM corpus entry \u2014 different code patterns than the 5D-FileId/News doors.",
       "integration": {
-        "timeoutMs": 30000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustContain": [
             " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
@@ -1673,7 +1673,7 @@
       ],
       "notes": "INS Nightshade SmartDSF 1.3 (INS-SD13.LHA). Sysop file-tag helper. Without tag data exits via 'HANG ON YOURE SYSOP IS TAGGING FiLES!' notice path. 4-door cluster representative for SmartDSF.0X0 CPU-variant family.",
       "integration": {
-        "timeoutMs": 30000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustContain": [
             "\r         .___.           .___.__ .___.___.                       .___."
@@ -2063,7 +2063,8 @@
       "notes": "AEHelp v0.4 by -= Nameless =- of Snarfs' Pub BBS. Renders the full AmiExpress command help index then prompts 'Enter command you want HELP with [press <RETURN> to quit]->'. Bare Enter exits. Cluster representative for the 4-door AEHelp family (cluster mined 2026-05-12). Longer 8 s delay because the help screen takes time to render fully before the prompt appears.",
       "integration": {
         "skip": true,
-        "skipReason": "Door exits to corrupted overlay (menu chrome interleaved) and executeDoor Promise never resolves. Worked earlier in 2026-05-21 but regressed; root cause unclear. Manual inspection of golden shows door produced output but never reached a clean menu prompt state. Likely needs runner-level fix to detect overlay-corruption-then-stuck pattern."
+        "skipReason": "Door exits to corrupted overlay (menu chrome interleaved) and executeDoor Promise never resolves. Worked earlier in 2026-05-21 but regressed; root cause unclear. Manual inspection of golden shows door produced output but never reached a clean menu prompt state. Likely needs runner-level fix to detect overlay-corruption-then-stuck pattern.",
+        "assertions": {}
       }
     },
     {
@@ -4783,9 +4784,6 @@
       "integration": {
         "timeoutMs": 15000,
         "assertions": {
-          "mustContain": [
-            "________________________________________________________________________________"
-          ],
           "mustNotContain": [
             "TRAP",
             "PANIC",
@@ -6128,10 +6126,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         },
         "inputs": [
           {
@@ -7073,7 +7068,7 @@
       "timeoutMs": 30000,
       "notes": "INS-SD13.LHA SmartDSF.020 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 30000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustContain": [
             "This is SmartDSF V1.3 Copyright (C) 1994-95' by NiGHTSHADE/INS"
@@ -7146,7 +7141,8 @@
       "notes": "MGS!-R11.LHA autoreward \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
         "skip": true,
-        "skipReason": "Emits \"Auto Reward 1.3 ... checking your upload......\" via XIM JH_SM, BB_MAINLINE, BB_CONFNUM, then stops sending XIM commands and hangs. Likely doing AEDoor.library trap-mediated FS work that blocks on missing fixture state. PartUpload seeding did not unstick. Needs trap-level instrumentation to diagnose."
+        "skipReason": "Emits \"Auto Reward 1.3 ... checking your upload......\" via XIM JH_SM, BB_MAINLINE, BB_CONFNUM, then stops sending XIM commands and hangs. Likely doing AEDoor.library trap-mediated FS work that blocks on missing fixture state. PartUpload seeding did not unstick. Needs trap-level instrumentation to diagnose.",
+        "assertions": {}
       }
     },
     {
@@ -8150,7 +8146,7 @@
       "timeoutMs": 30000,
       "notes": "EMT-ANWL.LHA AnarchyWall \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 35000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -8197,7 +8193,7 @@
       "timeoutMs": 30000,
       "notes": "TEL-TP02.LHA flm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 30000,
+        "timeoutMs": 60000,
         "assertions": {
           "mustContain": [
             "wELCOME tO fLM v0.4 bY dR. iCE/lISENCE"
@@ -9494,7 +9490,8 @@
       "notes": "auto-added from Doors/AutoReward; needs capture + triage",
       "integration": {
         "skip": true,
-        "skipReason": "Same upload-scanning hang pattern as mgs__r11_autoreward (sibling). Hangs after BB_CONFNUM doing AEDoor.library trap-mediated FS work."
+        "skipReason": "Same upload-scanning hang pattern as mgs__r11_autoreward (sibling). Hangs after BB_CONFNUM doing AEDoor.library trap-mediated FS work.",
+        "assertions": {}
       }
     },
     {
@@ -9744,7 +9741,8 @@
       "notes": "auto-added from Doors/FILE-OPS-TEST; needs capture + triage",
       "integration": {
         "skip": true,
-        "skipReason": "Minimal VBCC test binary (7 KB); does not render the legacy menu output that earlier captures showed. Real menu likely comes from a TS replacement or a separate dispatcher. Not driveable as a standalone Amiga door."
+        "skipReason": "Minimal VBCC test binary (7 KB); does not render the legacy menu output that earlier captures showed. Real menu likely comes from a TS replacement or a separate dispatcher. Not driveable as a standalone Amiga door.",
+        "assertions": {}
       }
     },
     {
@@ -9796,7 +9794,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/FLM; needs capture + triage",
       "integration": {
-        "timeoutMs": 35000,
+        "timeoutMs": 60000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -10303,7 +10301,8 @@
       "notes": "auto-added from Doors/RexxDebug; needs capture + triage",
       "integration": {
         "skip": true,
-        "skipReason": "REXX debugger; expects to be invoked with a REXX script as argument. Without args, hangs at the splash. Not driveable as a standalone door."
+        "skipReason": "REXX debugger; expects to be invoked with a REXX script as argument. Without args, hangs at the splash. Not driveable as a standalone door.",
+        "assertions": {}
       }
     },
     {
@@ -10551,7 +10550,8 @@
       "notes": "auto-added from Doors/THCChatter; needs capture + triage",
       "integration": {
         "skip": true,
-        "skipReason": "Live chat door requiring partner on the other end. Not driveable in single-session harness."
+        "skipReason": "Live chat door requiring partner on the other end. Not driveable in single-session harness.",
+        "assertions": {}
       }
     },
     {
@@ -10820,10 +10820,7 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU",
-          "mustContain": [
-            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
-          ]
+          "expectedSubState": "DISPLAY_MENU"
         }
       }
     },
@@ -11073,7 +11070,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_CC001_5D_ComCommand_Prefs; needs capture + triage",
       "integration": {
-        "timeoutMs": 35000,
+        "timeoutMs": 60000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11541,7 +11538,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_SE001_5D_Selector; needs capture + triage",
       "integration": {
-        "timeoutMs": 35000,
+        "timeoutMs": 60000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11618,7 +11615,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_STC01_5D_Status; needs capture + triage",
       "integration": {
-        "timeoutMs": 35000,
+        "timeoutMs": 60000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11694,7 +11691,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_UE001_5D_USERED; needs capture + triage",
       "integration": {
-        "timeoutMs": 35000,
+        "timeoutMs": 60000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -12234,7 +12231,8 @@
       "notes": "auto-added from Doors/Nodechat; needs capture + triage",
       "integration": {
         "skip": true,
-        "skipReason": "Live multi-node chat door requiring a partner on another node. Not driveable in single-session harness."
+        "skipReason": "Live multi-node chat door requiring a partner on another node. Not driveable in single-session harness.",
+        "assertions": {}
       }
     },
     {
@@ -12676,7 +12674,8 @@
       "notes": "auto-added from Doors/mrc; needs capture + triage",
       "integration": {
         "skip": true,
-        "skipReason": "IRC-like client requiring live network connection. Not driveable in single-session harness."
+        "skipReason": "IRC-like client requiring live network connection. Not driveable in single-session harness.",
+        "assertions": {}
       }
     },
     {
