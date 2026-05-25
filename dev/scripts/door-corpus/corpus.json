@@ -11802,6 +11802,43 @@
           "expectedSubState": "DISPLAY_MENU"
         }
       }
+    },
+    {
+      "id": "hydra_h_news",
+      "binary": "Doors/HydraTools/H-News/H-News",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 15000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "war_kickem",
+      "binary": "Doors/!!!War!!!/WarKick'Em/WarKick'Em",
+      "doorType": "XIM",
+      "integration": {
+        "skip": true,
+        "skipReason": "Opens dos.library then hangs with 0 output \u2014 no XIM messages sent. Likely requires AEDoor.library interface not yet emulated.",
+        "assertions": {}
+      }
+    },
+    {
+      "id": "war_olm",
+      "binary": "Doors/!!!War!!!/WarOLM/WarOLM",
+      "doorType": "XIM",
+      "integration": {
+        "skip": true,
+        "skipReason": "Same hang pattern as war_kickem \u2014 opens dos.library, sends no XIM messages, hangs indefinitely.",
+        "assertions": {}
+      }
     }
   ]
 }

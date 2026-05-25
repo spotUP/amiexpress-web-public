@@ -1,604 +1,304 @@
 
 
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                                        
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                            \________   ___________ ________.
-                                                    _\__\___    _ /s      . |
-                                                    //     /    //        | |
-                                                        ________/         : |
-                                                           .     COMMANDS . |
-                                                                      :.    |
-                                                                   __:::____|
-                                                                      .Y
-
-                                                                           
-                                                                            
-                                                                             
-                                                                            
-                                                                               
-                                                                          
-                                                                     
-                                                                              
-                                                                     
-                                                                              
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                          _/\________   ___________ ________.
-                                             \__    _\__\___    _ /s      . |
-                                              \/    //     /    //        | |
-                                                   o/   ________/         : |
-                                                   /     /|.     COMMANDS . |
-                                                        /_||          :.    |
-                                                     ___ /|__________:::____|
-                                                       \/             .Y
-
-                                                          ] - ZMODEM UPLOAD
-                                                            - ALTER FILEFLAG
-                                                              FULL CONF STATS
-                                                               EAD NEW MSG'S
-                                                                 W TXT/LHA FILE
-                                                                  R ON/OFF
-                                                                    F
-                                                                      CRIPTION
-                                                                     
-                                                                         NAIRE
-
-                                                                            
-                                                                         
-                                                                       
-                                                                                
-
-                                         __/\________   ___________ ________.
-                                          // \__    _\__\___    _ /s      . |
-                                              \/    //     /    //        | |
-                                              /    o/   ________/         : |
-                                             /     /     /|.     COMMANDS . |
-                                                  /     /_||          :.    |
-                                               __/______ /|__________:::____|
-                                                       \/             .Y
-
-                                                  S)   [RZ] - ZMODEM UPLOAD
-                                                       [A]  - ALTER FILEFLAG
-                                                       [FS] - FULL CONF STATS
-                                                       [R]  - READ NEW MSG'S
-                                                       [V]  - VIEW TXT/LHA FILE
-                                                       [M]  - COLOR ON/OFF
-                                                        G]  - LOG OFF
-                                                         D] - EDIT DESCRIPTION
-                                                          ] - RELOGON
-                                                           ST] - QUESTIONNAIRE
-
-                                                             ACCOUNT EDITING
-                                                              -sactivated
-                                                               SOP VIEW
-                                                                ________________
-
-                                         __/\________   ___________ ________.
-                                          // \__    _\__\___    _ /s      . |
-                                          .   \/    //     /    //        | |
-                                              /    o/   ________/         : |
-                                             /     /     /|.     COMMANDS . |
-                                            /     /     /_||          :.    |
-                                             ____/______ /|__________:::____|
-                                                       \/             .Y
-
-                                              ILE(S)   [RZ] - ZMODEM UPLOAD
-                                               ST      [A]  - ALTER FILEFLAG
-                                               FLAGS   [FS] - FULL CONF STATS
-                                                 USER  [R]  - READ NEW MSG'S
-                                                 GS    [V]  - VIEW TXT/LHA FILE
-                                                       [M]  - COLOR ON/OFF
-                                                       [G]  - LOG OFF
-                                                  E    [ED] - EDIT DESCRIPTION
-                                                       [RL] - RELOGON
-                                                   GE  [QUEST] - QUESTIONNAIRE
-
-                                                       [1] - ACCOUNT EDITING
-                                                       [4] - D-sactivated
-                                                       [VS]- SYSOP VIEW
-                                                      __________________________
-
-                                         __/\________   ___________ ________.
-                                         _// \__    _\__\___    _ /s      . |
-                                         /.   \/    //     /    //        | |
-                                              /    o/   ________/         : |
-                                             /     /     /|.     COMMANDS . |
-                                            /     /     /_||          :.    |
-                                          _______/______ /|__________:::____|
-                                                       \/             .Y
-
-                                           D FILE(S)   [RZ] - ZMODEM UPLOAD
-                                           LELIST      [A]  - ALTER FILEFLAG
-                                            CE FLAGS   [FS] - FULL CONF STATS
-                                            G TO USER  [R]  - READ NEW MSG'S
-                                            ETTINGS    [V]  - VIEW TXT/LHA FILE
-                                             FF        [M]  - COLOR ON/OFF
-                                             P         [G]  - LOG OFF
-                                             ERENCE    [ED] - EDIT DESCRIPTION
-                                             ERENCE    [RL] - RELOGON
-                                              MESSAGE  [QUEST] - QUESTIONNAIRE
-
-                                              SS       [1] - ACCOUNT EDITING
-                                              ed       [4] - D-sactivated
-                                               OAD     [VS]- SYSOP VIEW
-                                               _________________________________
-
-                                        ___/\________   ___________ ________.
-                                        __// \__    _\__\___    _ /s      . |
-                                        \/.   \/    //     /    //        | |
-                                        /     /    o/   ________/         : |
-                                             /     /     /|.     COMMANDS . |
-                                            /     /     /_||          :.    |
-                                        _________/______ /|__________:::____|
-                                                       \/             .Y
-
-                                        LOAD FILE(S)   [RZ] - ZMODEM UPLOAD
-                                         FILELIST      [A]  - ALTER FILEFLAG
-                                        ERENCE FLAGS   [FS] - FULL CONF STATS
-                                        E MSG TO USER  [R]  - READ NEW MSG'S
-                                        GE SETTINGS    [V]  - VIEW TXT/LHA FILE
-                                         ON/OFF        [M]  - COLOR ON/OFF
-                                         SYSOP         [G]  - LOG OFF
-                                         CONFERENCE    [ED] - EDIT DESCRIPTION
-                                         CONFERENCE    [RL] - RELOGON
-                                         LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
-                                        L ACCESS       [1] - ACCOUNT EDITING
-                                        ctivated       [4] - D-sactivated
-                                        P DOWNLOAD     [VS]- SYSOP VIEW
-                                        ________________________________________
-
-                                        ___/\________   ___________ ________.
-                                        __// \__    _\__\___    _ /s      . |
-                                        \/.   \/    //     /    //        | |
-                                       //     /    o/   ________/         : |
-                                       /     /     /     /|.     COMMANDS . |
-                                            /     /     /_||          :.    |
-                                       __________/______ /|__________:::____|
-                                                       \/             .Y
-
-                                      WNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
-                                      OW FILELIST      [A]  - ALTER FILEFLAG
-                                     ONFERENCE FLAGS   [FS] - FULL CONF STATS
-                                     EAVE MSG TO USER  [R]  - READ NEW MSG'S
-                                     HANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
-                                    MENU ON/OFF        [M]  - COLOR ON/OFF
-                                    PAGE SYSOP         [G]  - LOG OFF
-                                    JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-                                    NEXT CONFERENCE    [RL] - RELOGON
-                                    - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
-                                    SHELL ACCESS       [1] - ACCOUNT EDITING
-                                    D-sactivated       [4] - D-sactivated
-                                  - SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-                                  ______________________________________________
-
-                                        ___/\________   ___________ ________.
-                                       ___// \__    _\__\___    _ /s      . |
-                                        \/.   \/    //     /    //        | |
-                                       //     /    o/   ________/         : |
-                                      o/     /     /     /|.     COMMANDS . |
-                                      /     /     /     /_||          :.    |
-                                    _/\__________/______ /|__________:::____|
-                                                       \/             .Y
-
-                                    DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
-                                  - SHOW FILELIST      [A]  - ALTER FILEFLAG
-                                  - CONFERENCE FLAGS   [FS] - FULL CONF STATS
-                                  - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
-                                ] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
-                                ] - MENU ON/OFF        [M]  - COLOR ON/OFF
-                               O] - PAGE SYSOP         [G]  - LOG OFF
-                               J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-                              [>] - NEXT CONFERENCE    [RL] - RELOGON
-                              [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
-                              [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
-                              [3] - D-sactivated       [4] - D-sactivated
-                              [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-                           _____________________________________________________
-
-                                       ____/\________   ___________ ________.
-                                      ____// \__    _\__\___    _ /s      . |
-                                        \/.   \/    //     /    //        | |
-                                       //     /    o/   ________/         : |
-                                      o/     /     /     /|.     COMMANDS . |
-                                      /     /     /     /_||          :.    |
-                                 ____/\__________/______ /|__________:::____|
-                                                       \/             .Y
-
-                              [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
-                              [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
-                              [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
-                              [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
-                              [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
-                              [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
-                        CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
-                              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-                      ENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
-                              [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
-                              [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
-                  SLOG        [3] - D-sactivated       [4] - D-sactivated
-                 TORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-                ________________________________________________________________
-
-                                       ____/\________   ___________ ________.
-                                     _____// \__    _\__\___    _ /s      . |
-                                        \/.   \/    //     /    //        | |
-                                  /    //     /    o/   ________/         : |
-                                 /    o/     /     /     /|.     COMMANDS . |
-                                /     /     /     /     /_||          :.    |
-                            _________/\__________/______ /|__________:::____|
-                                                       \/             .Y
-
-                              [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
-                              [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
-                              [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
-                  O SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
-                US            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
-               P PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
-             OCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
-            MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
-         EVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
-        - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
-    !] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
-  2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
-                                     ______/\________   ___________ ________.
-                                    ______// \__    _\__\___    _ /s      . |
-                             /\____     \/.   \/    //     /    //        | |
-                           //     /    //     /    o/   ________/         : |
-                           /     /    o/     /     /     /|.     COMMANDS . |
-                    /     /     /     /     /     /     /_||          :.    |
-              __________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
-   ] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
- .____ ____________/\______________________/\________   ___________ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
- |. /     /     /     /    //     /    //     /    o/   ________/         : |
- | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /     /     /     /     /     /     /_||          :.    |
- /___________/__________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
- .____ ____________/\______________________/\________   ___________ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
- |. /     /     /     /    //     /    //     /    o/   ________/         : |
- | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /     /     /     /     /     /     /_||          :.    |
- /___________/__________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
- .____ ____________/\______________________/\________   ___________ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
- |. /     /     /     /    //     /    //     /    o/   ________/         : |
- | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /     /     /     /     /     /     /_||          :.    |
- /___________/__________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
- .____ ____________/\______________________/\________   ___________ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
- |. /     /     /     /    //     /    //     /    o/   ________/         : |
- | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /     /     /     /     /     /     /_||          :.    |
- /___________/__________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
- .____ ____________/\______________________/\________   ___________ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
- |. /     /     /     /    //     /    //     /    o/   ________/         : |
- | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /     /     /     /     /     /     /_||          :.    |
- /___________/__________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
-
- .____ ____________/\______________________/\________   ___________ ________.
- |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
- ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
- |. /     /     /     /    //     /    //     /    o/   ________/         : |
- | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
- :/     /    ./     /     /     /     /     /     /     /_||          :.    |
- /___________/__________ /___________/\__________/______ /|__________:::____|
-                       \/                              \/             .Y
-
- [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
- [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
- [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
- [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
- [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
- [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
- [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
- [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
- [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
- [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
-
- [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
- [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
- [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
-________________________________________________________________________________
+■▀▄█▐▀▒█■▓▄▓▀▀▌░▫□▌▒█■▓▌□□▪▀▒▄█▪▄▀▓■▄▒█▫▓▐█□▪▒▓█░░▀□▀□▓□■▄▓▪▒▀▒▀░□▫░▪█░▄▫░▓▓□
+▄▌▌▄▌█▒■▌▫▄■░██░■█▌▀■▀▌□▪▄▄▌▐▓▐▄■■▄█▌█▫□░▐▐▪▓▄▓▒▀▀▐□□■▪░▌▐▓▓■▒▫██□▫□▪░■█□█■▄█
+▫▫▪██□█▀█▀▓□▫█▪▀▓▌▌▐▐█□▐□▪▄■▓■■░▪■█▪▓▪▒▫▀▐▄▒■▀▫▐▐▪█■▌▫▫▌▒▀█□▄▓□▀■▒▫▀□░▐■▫▌▪□▀
+▪▓▄■▪▒░░▀▪▒■█▪▄▫▫▌▪▌▐▪▄▪▄□□█▫▫▫▄▐▀▐▐░▄▫□■▄▓▫▪▫░▐▒▒▒■█▓░▀░▪▫▄▌▄▄□□▐░▓▄█▀▪▌▫▓▀▀
+▐░░▌▀░□■■▀□▄■▐▌▀□▫▐▫□▄▫□█▫▄▄▪▀▌□▒▄□▓░▐▄█▓░▫▪░▪▪▌░▌▒▓▒▫▄■▒▀▪▓▫▀□▐▒▐▄▪▄▀▌▀□□▄░▌
+▪▌▒░▌█▓█▐▒▀██▓▐▪■■░■□■■█□▓▪▄▪▄□▀▄░▄▄□▫▀▓▀▄▐▀█□▐▐░▫▀▄▐██▓▓░██▓█▄■▐▀▐□▓▓▪░▀▓▒▐▪
+□▪▒▀▫▓▫▀□░▓□░▀▐▄□▄▪■▫■□▪▌▪▪▄▀█▄□□▫░░■▌▪□▐▄▐▪▐▪▒█▓▪▌█□░░▀▀▫▫█▓□▪■▐▌▌█▌□▄▪▄▒▫▓█
+▪█▌▌▌░▓░▪▫▪▌▪▌░▀█□▒▌█▓░▌▓▒□▫□▌▒▪▌░▀░▒▓▓▐█▓▪▪▪▀▀▐▌□▫▄▀□□▐▪▫▪▄█▓▪▐▒▓█▐▀█▓▄
+
+▌▌▫■░▐▀█▪▐█■░▓▓■░▫□▓▌□▐▐▓▫▪▐□█□▌▀░▫▄■█▓▒▌▪▓▀▒▫▄▄▐▄▐█□▓▪░▓█■▓█□▒□░■▓▄▪█▪▓▐▓■
+▪░▄□░▀▫█▪▫▐░▫▀■░▌░▪▄▌▐▀░▪█▌░▌▌▌░▓▫░■█□□░▒▓▌■▌▄▀▌▓▪▐▐▀█▐▫▀■▀█▫░▓▒███▪▄▄▄▄▐░▒▓
+▓█▐▌░▓□░▒█░▪█□▀▓█▪▫■■██▓▫▄▫▀▄█▀▐▌▒▫▫▫▫▐▓▪▐▫▓░▀▪▄■▌▪■▫□▫▌▓▒▐▌▌▐▪█□░█▄□▌▓■▄▀■▐▓
+▄▪█░██▪■▄▫▌■▓▐░▌▄▓▄▀▫▒▌□░▪░▄▀█▄▒■▪▓▀□░░■▄▀▄▌▐□▓▌░▌▪▒░█▪▌▫▌██▪▄▄▓■█■▪▫▌▒▓▫▄▒▀
+▀▐▫░▄▪▌▒█▓▀▐▫▐▐▫□▄▌▫▪▓▀▐□■▌█▄□■▪▄□▫▀□▄▐▀░░█▫▄▫▓▌▐▒██▓▒▐▐▫□▒▪░□▀▌▫▀▌▒▓▌▄▀▪■▒█□▐▐
+▒░█▪█□■▌▀■▄▀░■■▀░▪■□▄▒█▪▓▐▀▒▐▄■█□░■▫▫■▫▄▀▫░▌▓▫■▐▒▀▫█▀▒▀□□▒█■■▐▓▌▫▒▌▫▐█■▫▐▄
+■□■■▪▌▪░▪▫■█░▫□▓▪▌▄■▓▀▓▌▒█▓▓░▐■▫█▌▫▀▐▪▒▪██▌▒░▓▪▪▒■▪█▫■▓▫▓▄■▪▌▓▄▒▌▫▀▐▫
+□□■▀▫▓▀▐▀▀▌▒■▐■▒▌▐□▌▐▪▌█▌▪▫▓▌▄▄▒▀▌□▌▄█░□░▒■■□▫▐■▒░░▐■■▀▪█▪■█▀■□▒░▄▒▒▪▐▐▀▫░▀▓▌░
+▀▫▀▒▪▪▄□▌▀▀▐■▓▓█■▐□▐▀▓▓▪□▐██░▫▒□▀□▌▐▒▒▓□▄▒▄░▫□□██▪▒▀□▐■█▄■█░▌▪▄▄▒▄■▄▀
+██▫▀▐▐▪▪▫▀█▀█▒▄▀▓█■▒▐▪▪▌▄▀▌▪▐▀▌▄▫□░▐░▄▓▌▐▓■▫▄□▫▄▀▫▄□▀░▒□▄□▀■▫▄▓▪▐▐█▀■□░▐▌□□▄▓▐
+
+▄□▫▪▄▐▄▪▀▐▀▌▐▓□▄▌▓▐▐▫█▐▌■░░▪▐▫▄█▒▒█□▪░▄░▒□▪■░▐■▓▀▀█■█▪▌█▐▐▌█▌░▒▌▀■▐░░▄▒▄▫█□▫
+▌▓▒▐▀▀▪▐▓▓▀▓▌▓▓▒▒■■░▐▫██▪▄▒▒▫□▐░▓░█▪▀▌█▄▌□█▫□□▄▀▪▄▐▌□▌▀▀▪▒▓▐▓□■▀■░▄▪█▒□▒■
+▄▀▫▄█▐□□█▀▒▪▫▄▌▐▫■█░▐▀░▄■▒▪▒▐■▒▐▌▀■▄▐▄▌▄□■▀▐░▌░▓██▫▀▪▐□■▐▒▐▐▌█□▀□▫▌▒▓▓▓
+█▀■▒▐▀▪▫■■▫▀▓▄▐█▐▀▄░░▀▐▪▫█■■▓░█░█▐▒▪▫▄▓▄▐■▀▒▄□█■▫█▀▒▀▓▄▒▓▒□▌█■▌▓█▓▄▐▌□▫▀░▒▓▓▫▄░▌
+
+▒░▌▄░▪▓▪▀▪__■▪■▐▪▄▐░▄_▀█▌▪▫■░▫░░▐▓█▀■■▓▐▓█▌█▓░▌▄_▪░__▒██░▌▄▪▐_▪□░_□▪█▒▓▀□█▌░▌
+▌░▄□█▄▫▀▒▌▐■■▐▫_▌▒/▫  □█░□▄□█▪█■▄▒▪▌░▐□□▄▫/□■▄▪■▐▓□▌▌▓▐▀▌▒■_█□░▐▄▌░▓█░▌▓▐▐▪▐░
+▫▄■□█▐▄▪▓■▓▒ ■ ▌▓▌■▐░▄▌▫□▐▓▄▓/■▓▐░▌▒ ▫▄▒▪▪░▫▪▓\▫▒▫▓ ▪█░▐▐▒▄/□ ▓▒▄▪▓■■▄▌ ▒█▫▫▓
+▀█░▌▌▄▄▄░□▐ ▐▐■▒▄□▀■▌▄▓▫▐░▐▌/▐ ▌▫□▫▪▫▪□▐▫ ■▐  ░▐▄□█▒▫▄▒▀▌▌▄▄█▒▌▫▓ ▓▓▫░▒▌░▓░ ▫
+▐▀█▄▒▌▓▓█▌▄▫▌░▀■□░▌▐▒▒▐▀░□▌▀▌▪▓▒▀█▪ ▪▪o▒▫▓■ ▫▫■▫▓▓■▓▪▪▓▌▐█▐▄■▀█▓ ▌▌▌▪A■▐▀▒▄▐▓
+ ▒▌▀ □▀▒░▌ ▄■■□▄▒▒▪▪□▌░▐▄□■▓□░▄ ▌█▓▪■▪▓▒▐▪▌▪▒■▫▫▄▌▀█ ■▫▫▌□▓░▒▓▫▪▄▪▓▓▓░□□□ ▐▪□
+▪■▒▪▒▐▒█▒_▀█□█▀▫░□▒░□▓▫▌□□█▓■□▌▀█▄▐□▌▌▒▄░▓▓█□▀▫▫▪█▌▫▪▒░▐▄▫▐▀█▐█▌▄▀_▌▄▀▀▌□▐■▀▫
+▒▐▫▀■▄ ▫▓□█ ▄ ░▓ ▪██▒▓▒▪▌▫▄■▒▫▒▒ ▀▐▀▓▌▫ ▀▄□□▐□□▀▐▓■▫ ■□▌■▪■▫■▐▪▪▓▪█▄▀□▪▪
+
+▫░░█▓▫█▫▓▪▓A■□▓▐▐█▐▄▄▄▓▫▄▓░▫▓▐▫D▌█- ▌▒▒■■▄A▓░F░░▪█▀▀▪▒▓▓■▐]■█▓▒▒▄D█░▒▫██▫■▒
+░█▓░▐█▀S▒▌▐ ▓▒▄ F▪▀▀▪▐▀▐▓▒▀▓▌▪[░]▫▌▌▪▐■█▪▒▫▒░░▄▌▪▪■▄■▓▄▄▫▌▒▌-□□▌▪■□▪□□▒■F▌▒G
+▄░▐▌▄█▄▫□□▄▒░▒▓▫▫▐▀▐▀░▄▓▌░▀▄▓░▫▀▪▐▌▪■▫▀FE■▌■░▄ ▒■▫▐█▐▫░□█▫▪▀■▒■█▀██▒█N█▀▄T▪□░
+▄▫▄□□■░□▪■V▓▓▄■░▓▒▒▪▓▀░▫▐▪▌█▌▪■E■▫-▌▀▓A■▪▄▌▪░░▫▒■▒▄▓▓■■▐▒▄░▫▪■■▓▫▄■▒█▒■▪▪░▀▄
+▒■▪▌■▄▫□▄█▀░■■▫▄░▐▌■▄■▪▓▒□█▫▫ ▄▪▫▐▒▓▀▪▪▄▀▫▓▓░▌▪▐▪▒□■■▐▐▄▓▀░░▐ ▪▄□▄▄░▒█▪■▒▐▒▌▄▀■
+▪▐▀▄▒░▪▐□▓▓▐H▀▫▄▌▀▄▀▒▄▫■□▪▄▌▐□█□□□▫■▄▪▒▌▫▄N▪■▫▄▌▐▀▌▐▪░▒▐▪▀▐▒░▀▒▪▀▪R O▒▌▐▌▄
+░▒▒▪▓□▓█H▒▒ ▄░█□▓■□█░▀▐▀▄░▫▄▒░░▄▐■▒▓▒▫░▒ █░▓█▀▄□▄ ▐▓▐░▄[▀■ ▀▓▪■■G▪░▒▫
+░□▀▫ ▫□□▄▪▀▀▐E█▪▐█▓▒▓░▌■▀▀□▒▫▄□▄▓▌▌■▪□□▌▓█▓▓□█R▄N▌░▌■ ▀▄▌▀▌□▒▄▌█▓T░▌▌▫▪▐░░▓░▀N
+░▒█░░-▪▪▒□█░▄▓░■░▪▪█E■▌░▫■▀ ▀▪█▌▫▌▌■█▫░█░▐▪░▪░▀E█▒▫▐▪▓□▄▓L■▫-■▓▪▌■▫▪▒
+▫█□■▐▫▒▫▐█A▀█■■▄I▪▒▫ □▄▌ ▐▪▒▌■■□■░▪▄▐░O█□▄□▐█▒▫▪▐▒▒▫▓▄ ▐▒█■▄▐░▓▄▓▄U▌▐▫░■▐▀▪▫R▪
+
+▓▐EX!▌▀▐█░▪▒■░▀▓▄▒█□■░▄▪▫▫▒□▒▄▪▌□▐▓▪■▪■▄▫█□░□□▀▄▓░▫■░▐█▌□▐░▌□▫▓▫▀▪░▓▐▐▓▌T▐▒▐
+█▒▄▓▐▌■▒□▪□▐▪▒▌▪□▄▪L■▪▓▌  □▓▀▪[█▪▫▒ ▒□▫□▄▪□▪▌▫■▄▒▀▓▫▒■▐▓▪□▄□▪░▀□▒▀□▪▄█▌▐▄
+▫░▪▄▌▫■▒█▪░█▀▒▄▌▫▒░▌▄▀▓█▌▓░▒▒ □▐▌▐▓▪▓▌█▐▓□▓▫▐▪▐O▒░▫ ▌■▒▀V█▌▀▓▐▐▓▄□▄█□□▐
+░▓▐▪▄▓░▓▀▌▐■□_▀▫_█▌▒█▌▄_▒▫▓▫▓░█■▀□█▓▓▒░█▀▓▓■■▄_▀■█▌□▫_■_▪▪▐▄▄▒■░▄▫▌▪█_▀▓█▌▪█▄□▓□
+
+▄.▀██▌░__□■▀░■▒_▌░▀/▓▒_▓_▄▄_▐__▒■▫█▫▫_■▐_▓█▐▌▫▒□▫▌▓█▄▓▌■▐▒▒▌▄_▐▫▪■_▄▀▐▐▫■▌▐█▄
+▄█▀▄!░█▄▪■▐▌_█▒▓░▀░▀▄▫ ░░▐▌▀ ▌/█░▄□▓▐_▫_█▓□▪▌\▐■▀█▪▌▐□▐_▄▓_▌▌▀□▪_ ░░ ▐▒▀▒▌▫▌░
+░|▀  _▐█░■█▪□ □ □■░▐■_▪ ▪▀▓▌▀/▀░■▄_▓▓▄█■▌░▐□░▓▀█  ▐ ▓▒▒▀▐■▀░█▪▪▒░█▪░▀█▫▪▐▪|■■
+▐▒▪▫▄ ▫▓▪░░▒■▒▪▫▪▓▫█□█/▐▌▌██▀▄█▫▄ /▪▄ ▐▪▀▄▌▒■▀▒▒▀▌░▒█▌▫▫▪_▀□░__□▫▄■▫ ░░▫▀▒▪ |
+□|▪□   □░█▓░░▪░▄▓▓   ▀ ■ ▄░▪  □██▄▐▓▌▒o/▒ ▀▒▐■ ▪ ▫■░▐▪▒▒■▓▀▒ ▀■░■■O□▪A▄█▀▒▓▪█
+▐░░▒▓▓░ ▀   ▌▀/□▀■▫ ▪▒▒■▫ ▌ ▫▪▓▄▪░▪▌□░▫▄░▒▌■▄█▌▀■ ▀■▄█■▀▫■■▌▀▪▓ □▄░▓▄■░▌░█▪▀□
+▌■▪▀_▒▫▪██□■▄▌█_▌▒□█_▪▪_■░▪▒▓▒▄▐_▫▄░□▪▄▪█▀▐__▒▀_█▫▄▪■█▓▐ ▓░__▀▀▫_□▒▄▪:▒▐▪▒▌_█
+▌□ □▓▪█▓▌▌▌▄█□□▐░▌▐▌░▀█\□▓▪▌ ▐□▄▪ ▐▫▄▄▪▒▫█■▄░█▀▓▀▐■■▪▄░\░▒█■▀▒▫■▀□▪  ▐█▫
+
+▒█▪▓▐█□▀▪▓▓▒D░▓■▒▄▪S)▓▓▓▪▓█▄▒ □▐▒▒-▒▀□□▀▪▌■□□▄▌▓E▐▀▀▌▐░░░▒▓▒▐▐■█▌D▄▐ ▀▄▌▌□■
+░[N▓ ▒▫□█OW▓▐▫W ▒▓▌▄▌□□ ▓ □▪▐▀▄■▀▀-░□▄▒▄ ▌IL▒▌░▫▀■▄▓▫▄■[▫▀□▌▪█▪▌▫▒▓▓▄█▄▫F▪▓▪
+▐[■▓ ░▫Z▪■░█▌░□AR□▓█░▪▄▒■▄▫▓░██CF▀█▐▫▌N□▒□▄▄□▒□▄▌▄▒▄□█▫□■▓▓█■□▀□█L▓▪■□F█▫░A▐▌
+▪▒░□□▌ ■▫██E▓▄▐▫█▀░░■▄▓▒▓▌▪▐ ▐■▌▀▄▐▐▫▐░█▓■M□▫▐▒■▓█S▐■▌ ▐▀█▪□-□▌▐A▒▓■█W▫▓▄▓▀▌
+ ▓▄■▌-■░■▫█ S□▒T░▐ █▐▫▫▐▄▐ ▄▄░▀▫▄▐-▐░▪■□▐▓▓▒▀▐░▓▀□▒▐▀▫██░▫▪▐▀▀□██▌■▌□T▒■H▐■□IL▫
+▒▐H░■■▌■▀▓W░▓□□P█▓░▌▪▀▓■▄ ▄▪▐ ▀X▐▫- ▀▪▫▐▒▓▓█▐▪□▒█░▀▄▫▌ ▫M▫▐▌▐ ▓▀▐▌▌ ▒▪□▀▓▫
+▌▫▌▒ ■□▓▪□▒░▐░▄█░ □I░E▓(C▫▪█ □▐█▌▓▓░▀▌▄░ ▀YS░▪■▀□ ▄▌□▀▌▐■▓▌█░░█□██▐▒▀
+ ▒▓▒░▐▐S▒▪▒█▌█NU■ ░▀ ░□▄█ ▀▄  ▐▌▒ -▫▄▫I▀■█▓░F▐▫█▌▓▀▒■▄█▐E▀]▐▓▪▌□I▀▪D██▫▀▪▓▄■▐▒
+□▄■□▀░□P█E▌▀▐▀▪■▓▀▫F▓█▓■█▄▪▌▪▐██]█□▐▪▌░▌ ▪O□▒ER□▌□▫■ □█▐█□□ ▀▀□E■OG▄N
+▫▀█▒▌▪▓▫-▪▄▄T▪█S■GN█▌▀▄▐▄▪□▪▪ ▐▓█■▌▫▐▓▀▐ ▪■▌▒▄▓▫SS▀▐▄▪▓■▫▒▓S▌]▀-▫▫▒▓░█■▄■▓A░▌▀
+
+▐█E▄▄▀▒▫ ▫▄▓RCI▄▄█░▐▀■█■▫ ░■ ▀[■▒ -▓▌H░▄▫█▄C□□▪▀█□▫▒▐▫ □1]▄■□▄C■░▄▀██▌█■▒█NG
+ ▒2▓▄■██IE▒▀░▄▐▀▒▌▄L░▀□▪▒▀▫■▀■▀▀▀▐-▌D▀▒▀▐▫▌▀██▌▌□▌ □■ ░▀░▒▀▐▐▓-s▒▀▪▒▀a▫▓■
+▄▫▒]□▄■■█▐▐▀▄I▪▄▓▄░□▄▄▪▐▐■█▓▀□▄██]▄▐S▐█O█▫□OW▫L▀▐█▓▀□■▌[▫▫▐□▄▓█░▪■ ▪▪□▒
+■▓■▌▒□▐▫▪■▓■▪▐▄▀▄▫■_▫▪█▓█▄_■_▌▌□░█▐▌▓__▄▐▓▐▄▒▒__▓▫▄▒▒▐▐_▓_▐░___■░□█□__▄■▪▐_▫_■▓█
+
+░▐_▐▄_ ▪□▀_▌_▄_█▓░■▌\_■_▒_▫▀▓░▐□□□▪█__▀__▄▫/▓▪▌▫░░▫□_ ▪░■_▌▐░__▄▀▓▌░__░░▒▐_□█
+□▫▪█▄■▪▌ □▫■▪_▫▫▒_■ ▄░▪ /▓ ▐▒■▐▄■▐  ▄▪█▀__▫/▀▪_▫□▫■■▒\▫_\_░▒▀■▀▐▫▀▫s █▫ █ .▀█
+ ▒▀▫▐▒■▪□▓_▄ ▌ ░▌/█__□▫□▫▪▓▫□/\░▪__█ ▪▌▐\░▐▒ ▐▄▀▒ █▒░▓█▓▒■□/   ▐█□█▒ ░█   ▓ ▀
+▫|▫ /▫▫█▐█▄▌ ▫ ▒■□▓ ░▫▓ □▒□░/  ▫ ▐█ ▒ ▪▫/□░▌ □░▪■▐ ▓/▌ □▫▫▫▀▓_□_/▓ ■ ▄ ▄  ▀▐■
+ ▪░▐ █ ▫█/▐▓ ▀▌/▀██▒ ▓▓▐▌▪ /▀▓ █ ▌▐▓▌ o▫ ▄▒▀▒▌ █  □▀ ░▪░▄/▓▪▀■▒  C▫M▒A□▓▪ ▀ ▐
+░:▫█■▫▌▫█  ▓▐▐█ ▒▀▐▀█▫ □▐▫▫▒▄ ▄░/▐  ▒▫▓█ ▐□▌/░■  ▫/□ ▄ ▫▀_▓|▓▀▪▓ ▌  █▫▐▄ ▌▐■|
+░■■▌░□▒▒█░▫▌▓▪▒▫_▐_▪_▒▀█ ▐░□□_▪▐▌_▐_▓/\■▐▫▫▌▒▒▀__▄__▌▀_▓■□▪_░▐□□_▫▫__▐░:▫▄_░▀
+▫▄█▐▓▒▪ ▐▀█▌□▫■ ▄░▐▀▒▄█░▪░█ ▐▄■░░█▐▒□■▌▀■ ▄ █□  █▓▒ ░▄ \▀ ▪▌▌▐  ■▫▐▐▪▌▄Y
+
+▓[U▓▒-▐□P□█A▒ F▒▌▒(▀▌  ░▌▒▀ ▄▄▪▪□▪-█▓▄W▄▌O▀D▄FIL█▪S▐■  [▪▓▫▪▄▫□▒▌░■▫▄▄P▒▄A▀
+ ▄▪█▌-▪S▄▫▪ ▌E░▀▄▐▀░▪▒▓░▫ ▒ ▫░[▪▐▐▀▫░▒■W▌▒■L□▪I▫T ▄▌▌  ▀▫]■□█▓░█T▒R ▌I▒▫▒□A▫
+██Z▌■-▪□▌█░▄▒▫E░█▒▀▄▓▌  ▫▓░▒▓□[C░]■▓▄▄▀■▀▪E░C▐ ■█▄▫□▓ ▒▓▀█]□█░░■▫▫ CO■□□▄▓▐□▪
+ [▒█ ▪ L□█▫E ▌▪G▫█▒▪█▌█▄P■█▫  ▌E▐▫▪▀░E▌V▫□▓S▫▓□▌■US▀▓▄ [R]▐▪▒▒█■▄█ ▐▀▒▌M■G■▌
+▄▫▫▄▄▫█S█▒▒░▪T■▐US░▪▐▒▒▪▫▫□  ▓▐░▓░-▄□H▄▪▪▀▒█░▪TIN▓░▫▫  ▓V██ - ▄▐▀▄ T▪T□LH■ █▫■E
+▐▓H]▒▫▪▓▓░░■▪▐L▌▪▀A█E▌ ■ ▒■ ▌░▌▓]▌▫ M▐▀▐▪▪■░▫▐▓▒□ ▪▄▓▌■▫▀□■█-█▄O▀▓▪■▀N/▌▒▒
+▒[▒▌■-■S▌▌W L░▀▀▌ T▀▓░ ▐▫E░□▓■▪▐]▫- ▄▀█E▌▓▄S■▫▐▌▓█■▌ ■▐░G]▒ ■▫■O▀ ▒▀▀
+▀▌▌]░- █▒▓▒■M▓░▪▓▫▌ ▓ ▫ ▌▫ ▐▫▀▓J]▪-▄▄O■N░▐░N▪E▓■▄█▄ ▫ ▫▓ED] - ■█▓▒ ▀□░▌□I█T▄■▪
+□█▄□▪▄ PR▫■░O▌▐▌░▀▫▒█R▀▫▒□□▪▄▌[▫■█■▐N▪▄▄□C▄N░ERE▀░E▪ █░▐▌L▫▐□█▒▐L▐▒O▐
+█▪▐░■▀□█▪ ▄▫▌O ░▀G■□▄▫■▓ ▐  ▫ [■L■▓▪- ▪█▐▓▒░E□▫█▌▄A■▪▪░░▓U▫▫▓░ ▒░▒▀E▀T█■▌N▒■RE
+
+□▓▓▀█▄□-▀■▪▐█▄I▄T▀▪▫▌▓□▒  █■▒ [▒]▓▀□□▪□▄▀░▄█C▓█■ ▓▓▀▪ ▐[1▄▒▫■▀▀█□▪▓T░▌▪▌░I▪▪
+░[▓] █▀▐▄▀▪ ■▌▀□■R▪L▓▄■▫█■ ▒▪▓■□░▄▪▀░▫sa▓t□vated█▄▓□▓ ▄▀▀▫▌▪▓▐█s□▐▫i▓▓▀□▐
+▒■5] ▀□■▪▄▫▄DI▪□░▓OR▀■▀▪▓█▀▒▫▀□D□█░▄S▀▪▓P▒▫▀▪▫█▫▒▐█ □ ▓▫▫▌▐■▫SY▄▀▌█V▐▫▌
+▌▓■█░_▀__▫■▄▫▀░_▒▫▫▀□█▫□▄■▫▪_░_■□█_____□▫▌▐▐▄■██▫■▫□░░_▌█░█░__█▐▓▄_▪▄▐▫▄_▐_░_▀▀█
+
+▐▄▒▐□▄■_□□_▌_▀_▒_░_/▫___▪□_▐▌▌□▫▄▫▐░_░▓▒▓_░/░░_░__▓▐█□▫▌■■▒█□█__▀▌▓ ■░▐■▄□░█.
+▐▓□k██/▀ ▒ □_▌█▒▐_█▓▄□▄□▪▓▀▒ ▪▀▐▐▐▄▓_░▌▓▪██□▄▓_▓▒□▫ ░▒_▄▌▪_▐ ▪▫░_■░□  █▐▐■□█□
+▒□▀▓▫█▓▪__▌▀■▀▀□▐▓▄▌__■ ■▐ ▒▌/\▄_░▀▪▓ ▪□▫□. ▄▒░□▐ ▀▀▄▀▒ ▒■░/▐□▐▓▓▓ ▫▪▪ ██□|■■
+■░▪▌▀■▀▒ ▓□▀□ ▄▫░▫▀▓▪▌▐██ ▓//▀▫ ▐▫/▄█▌▫// ▪ █▓▄░  █o■▪ ▀▐□▫□░□■▌▪ ▫ ▫▪  ▫▒░█▄
+▪|□/░▀ ■▐□ ■ □▌█▫  ▒▐/■▌▐ ░▓░█   / ▌□▄▓/░  ▌▀█░▪▄□ ▫ ░   ▪▌▒■    COMMA▒▐▪□▄ ■
+ ▒▓□▫▄▄ /  ▓▪▒▌  ▌▄▌░     /▄▪ ▓ ▐▄ ▀ ▪▄ ▓▓▓ /▀ ▫▒ ░□▒█▪▒▐_|▫ ▀▄▀▌▓▪   ░.    ▐
+ /▒_▐▀_▄▒__□_▐▒▪_▫▄░_▌_□▄/_▫_▪▀■▫▓█▒█/▐▓■■▌■_▐__█▌_▀█__▀▓▌▀░▌_■▀▓▒░▫▌□▐▐_▄▌▓░
+▌      ▓ ▀ ▄ ▪▪  ▌▫▀░  ▌/▪▐▀ ▄    ▓ ▀  ▓▌░▌  ░□▫■▒▒▫ ▓▓▌▀▄▐▒  ▀▄ ▫ ▐ ■.■
+
+■[▒▐▫▒▄▒PLO▀■ FI▪▀(▓□▄ ▓  ▀▌  █▀▫▪▀▐░O▫NL▫▀▌█▒■LE(▫▐▐■ [░▄▐ -▀▒MO▓▪M ▀▫█▄▒▐
+▪□▒▫▐█▄□█O▒ ▪▫▫ ░I▫■▌▒▫   ▐ ▐ [▓▪▓▓ █H■▄ ░▒▌▌▫IS■  ▪ ▌▒[▫░  ■▫░█▒▒▪▓▄█▀▓F▀A▪
+ ▒Z□ ▪▐▀■P░Y S▀▐░▪H█▀ ■ ░▄□■  ▪CF]▐ CON□ER▌NC▀▒░▐▪GS□▄▌▪F▪] ▪▓□▀▌▄▄▐O▄F░▒TA▪S
+ ▐▫▄■░□▪E▄▀E▌M▌G▓■▒ ▓▀▒▓P▪ ▫▓ ▪░] ▌░□▓▀V▀□░▀G▄T▀ □□▫▫▓ █R▪▒▀█▐▄▫▀▌▌▀E▪▄M□▒'▀
+ ░■] ▀ ▪▐OW▄░█░▀U▌█░ ▀ ▐  ░ ▌▪[▐▐ ▐▪░H■NGE▄▄E▒TIN▪▀  ■□[▄■■▄-▒▄▫▫▀ T▐T▫▀■□▫░IL█
+ [H□▄█ SH▌▪ ▪EL▓ ▒█▀E▪▓▀   ░ ▀[░]█-░ME▐▒ O▀/▀▀F▀ ▒▪▌░  ▐▄▒  □▓C▒▌OR ▫▪▐▌□▀
+□▫▐▀▪▫ SH■W▐L░C▄□■▫I▓▒ ▌CET▒▒ [▒]▐-■▄■▌E ▄□SO░█▐  □▌□█▒▀□░▓▪-▌▀O░□░F□
+▓[▌▓▒▐ SH■W ME▐▀█▒■ ▓□ ▓▌▒▓▓▪▓▓▪■ -█▓□█N □▀▀FER▀▐C▀▄▐▀▀▐▌■]▒▀▌E▪░▄▫▐E░░▄I□░IO▐
+■▪▀▓░□▪▄R█VI░█S▐■▫N▒■R▫NCE░░▌ ▒■░░▒ N▐▀░ █▪N▐▪▒▌▒░E █▪▐▌▓▀░▐▄█▌▌LOG▐░
+ [█E■T░▪□ ▫□░▌ ▓▄▒N ■▒▌▐□▫▐ ■▒░█▫▒▓▒▐█ON■▌▒■E █E▄S▪▪▄ ▫▫▫U█S░▒□-▀▫▀▄S▄▒ON▒▄▫▌E
+
+▌[▒▄▓] █□▐░OR▫IS▒░  □▐▄ ▒ ▐█  ▫0░▄░ ▫▒▪█L▐■▄C▐SS▐▫  ▄□▄▓▓]■▪▄▫C█▫U▀▪▐▪D▓▪▪■G
+ ▌░] ▄█▫█E▐▫░A▌LE░█▐■■▓█ ▀█  ▫□░▫▀□ ▫▌□▫ct▌v▒□█d▪▓█▀▐░▄[▀▀▀░▒D-▀▀c□▐░▫t▀▐
+ ▄5█ ▄▄▀▌EW ▪I■▌□▀▄R■  ▀▒   ▪▀▓DS▄-▄▐□░■▌ ■O▀N▓▪A▒░▒ █▐[V█]▓▒▌YSOP▪▀■▓■
+▀□▓_█░_■▐▪■___▌_▪▒▌_■▀▫▓_□_▌__▫_■▓▄_▌__▫▄▌□▀□▪_▫▒__□▌_▐_▒▫_■__▀_▪▄▀_▐__■▌▒▀▒□▓■▀
+
+ ▫□█_▐ ▒▒▀_░_□▒▄▪_▐░■_▄▀▫_░_■▄□▄▌___▪_▀▀■_░/▪_▄_█___□ ▀▌▓__▓□_■_▫▒▐ ▐_▫□__░_▒
+▄░▌k!n/▐░▒▪▌░■▄_▀□▪▌ ■▒▀/▓□ □█/ ▌ █▄■_▄_█░▌/▫▌_█ ▐▄ _▀_▓\_░_ ▫▫□_░▄s ▒  ▫▀.█▄
+▐||▐▄░▀■_▀▫▒▀■▐■▐/▌▫▄__  ■▌ ▀▌▫_▓█▫░▄ ▐ \▫.  ▪▫/▐░□ // ▄ ■▫/  ▐░▒█▌▀   ▪ ░|▫▫
+█▐.■/ ▓▫  ▓  ▄▒▐░ ▫  ▐/ ▪█▐▐■ ▓   /    ░▪ ▫   /▐▫█ o█ ▐▒▒__▀▀▪_▐░▪▒▓▌█▫░  :□|
+▄□ ▐▄ ▒  / ■■▄▄/▪▪■█▄▪▄█░ ▫/ ▌▌▫▌▐ ▪▀ ▀/  ░  ▌   ▄▄/▪▐▪░■▐□.▀▀□█░▄░M▒A▌DS . ▌
+▒▫▄■■ ▫▓/   ▄▫▒▓□█  ▐ ▫▐  /  ■▪█▌▪ ▓ ▄/ ▪ □ █▒ ▀░▫/ ░▌  /▫|■   ■▫▓  ▐ :▪  ▀ ░
+ ■▄▪□_▐▫_█▐▒_▒▀▐▪▓_▫█▓_▓ /_▫▫▫▄_▪_■▫_/▫█_□▄▐░▀___/▐_▌_▀_ /█__■▓░__▒▀▌▫▀:▓▀_▫▐
+▀ ▐▓ ▄▐■▫▒▒▄▪▓▒█ ▀▒■█ ▫\/▄ ▪□ ▐▪ ▫▓▐□ □  ▪□□□▌ █▐□□▒▓█▐■▄ □▓░    □  ▐ ▌▐
+
+█[▫] -▐▒▓LO▓█░░▐▒E(▒)     ▫█▓ ▒█]▪▀▐DO▪N□▀▒▌▒F■LE█▒░▐▐ ▌▌▀■ ░█▌M▪□E▐▒▒▪▌▄▓▒
+▪▪▓□■-░S▄O□▀□▐▄ FI▀ES ■▌█ ░ ░░▫F█ ▀█▫HOW▀▐I▐E▄▪▌T▄ ■▐▄▓▄A░▪░□▓▪L░▓R ▓▫LE▓▌▀█
+▒□▌▌▓▫ ■■▀▒▓ ▄EA▪CH▓█ ▒■▀ ▫▄ ■[█▀]▫ CON▄E▪█▐CE▄F░A▓▐■ ▫▒FS]▫▒ FULL▪CO▓▀ S█■T▓
+▌[▀▄ ▪■□▐▫V█ ▐█▄ TO▪S■▐▄█■▒▌ ▒█▓░█-▒▀▪A■▀▒█▌G ░▄▌U█▓R▐ ▄R█▒█▀░READ▓░░■▓MSG'S
+▒[□]▪-▪▪HOW ▪TA▫▓▫■▓▌░▌ ■ ▓ ▌ [W]█▪□C▌░▌GE █ET▒ING▄▪  ░▀▓░□■□▐▄I■▓ ▓▄T▄░▪A░░I▄▒
+▐█H▀ █░□H□W■H▐LP▓P▒G▌  ▐ ▓  ▪▄[██░▀ ▓▐NU■■▓▌O▄□     ▪□▀[▄]■█▒██O■■▐▫□▒▀O▐▒
+ ▐T▐░▄▌SH░▄□LOC▒▐▄T▄ME □C█▌█▒ ▓O]□▪ ▐▄G▫█S▐▐O▒ ▀ █ ▀▒  [▪]□ - LO■■O▫F
+ ░▫█ ▫▪▌H▄W▒M▄N▫ ▪▓  █▫ ▫▓▌■□ [J▀ ▌■▒░▒N ░■▓■E▐▫▐C▪█ ▐▀[▌▒▄ ■ □█▒T░▒ES▄▓I▐■I▪N
+▓▌▀▪▌-□▄R▒▫▓O▪▌ C▐█▒E■▓▄C█▪■▒ □▪]▓▀█▓▐▫█▪█░▀FE▫E▌C█▄▒▓▪░▓▪▪▌▓ ■EL▌GO□
+▌[▀▫■T]▪▄▄▀UTO ▌□■▌▒ ▓  ░    ▪[O░▄▒▫-▌░▌▐L▌N▐ M░S▫▒G▫▀▫■■U▒ST]▓░▀▒▪▌▫T█O▌N▄■▄▀
+
+ [EX!▪▌▫█▫▒O▪▪█▒▒ ▒▓ ▐▫□   ▄▫ [▄]▐▒ ▓H■■L▐▓▫CE■S□▀█□▐  [░█▒- ■C▄▐▐■▪■▪▓I█▫▌░
+▌[▪] - □□█W █A□L▪R■■O□□▒▐▪█□  ▪3] ■ ▌▫▒a░tiva░▄d ▫  ▀  ▒4▫ ▌█░-sa▀t▌v▄▓ed
+▀[5▀▫- ▓▪▒▓□DIRE□TOR▌   ▫▄   ▀▪D▪]▪█□▒▌OP█▀▫▌□▀■A█ ▫▫ ▓░VS▌- SYS░▫▄VI░█
+▀■▌_▫▄____▀▐_▄▄▌_▫▐▀_▫_▄__█□▒__□_▓▌░_▒_▓__▄___▒_█□_▓███▌▌▒▒░▌_█▐░■▀□▀░▐█__░_□_▌▪
+
+▫._▄□_□▫■▪░■█░▄__▌▀/\_▪■▄__█▀▌_▀__░_■▫□__█▪/▌____█▪__ ▒ _▫____▀█■▓_ _▐__▌▀▐▓▓
+□▌■k▌▐/ ▒ ■▪▌_█__■/▌   ▓/□    /   ▀ □▌░_▄_//▒\__ ▐ ■_\▄_□▒_▀    ▀▄/s▫  ▐■▪. |
+□||□ _\▀░__ ▫▌ □\░▒_■__  ▪ █▒▌▀___▄▫█ ░ \/.  █▌/ ▐  ▐▀█░  █/▌ ▒▀/■  ■  ▓  ▄ |
+ ▄██▐  ▓  /▓▪ ▌▒/ ▀ ▫▐▌    //  ▓ ▒▌░   ▫▒■  □▄▓░▓▄▒■□   ▪__▫■▫_▓/▄■▄  ▫   █ □
+░| ▫░ □▒ / ▒■▄/▄▄▌■▐▌/ ▐   /▒■□ ▌▐  ▐█▓/ ▓   ■▪    ▄█▫   ▄|.█▄ ▪ C▓MM□ND█░. |
+ ▄/ ▪▫ ▐/ ▀■ .▒▒▌■  ▐    ▌/▄□ ■ ▀  ▄▪ ▄  ▓ █▒▄□ ▪ ▄   ■ ▪_▀▫▌▫▒ ▌▒▪▐▪█:. ■■ |
+ /▫▌_■____▪_█/__□_▒_▫_▐_ /▄▀_█_▫▀▫_░■▪□_▫_█_▒░_▓_▒▫■■█▄░■/|_▄■__▌█▀__▫::__□_▀
+   □    ▌▒▌▫     ▓  █▄░\/▓□▓▐ █ ▫▪  ▄ ▌ ▌▓▌▫  ▫ ▒▫ ▌▌ ▌▒■▒ ▄▌■▄ ▓▄▪▓▫▪▫□
+
+ [■]▫- ▓□▫O▓D▄█▌L▫(▒█■█    █□ ▀▄▐■▫ █OWN▀░▌D▌▓▐▒▓(S)▄▒ ▄▒▀▓□■ ▄M■▄▄M█UP▐O▒▀
+ [▌]▐▓ ▄HOW■N▄W▓F░█ES   ▐    ▓▒▄▒ - S░O■ █▪LELI▫T▫  ▀ ▌[A]▄ ░ ALTER█F▐▪E░LA□
+█[Z▀▓- ▪I▀P░ SEARC▪ ▪   ▪ ▫■▐▐▐▄F]-▄C▓█FER▀░C■ ▌█▪G□▌▫■[F▒▌ -▄▒U▪L▌▄O▫▐▀ST▌TS
+ ▐□■ ▌▓█▪▌▄E M█G TO▄S▫S░P ▐░■░▀E□ ▪ LE▒▌E ■░█ T▀▓US▀R▒█[R▌▫■-░▄EAD ▐E▐▀M▪▐▓S
+ ▫S]□-▀SHOW S□ATU▫ ▒ ▐░       ▪W▐□-□▪HA▪▀E ▪ETT▓█GS  ▒ [V█ ▀▓ V▀E▫ T█T/LHA▓▫ILE
+▐[H▄ ▫ ▌▪O▫ HE■P▓P░▪░ █▐░▫   ▒[▌█ ■ ▐ENU ON□▓▌□░▪▫■▐  ▐[▄] ▀- C▄▪▄█▓▀▐▀▌▄F
+ [T] -▌SHOW L█CA▀ ▐I▐E░▓■■▫)█ ▄▫]▓▄ P▓G▄▀S▒▀█P▐▌▄▒█  ▓ [G▫ ▌- █O▌ O□F
+ [▐░ - ▒▀OW▪□▌▓▌  ▄█▐     ▒▐■▫▄J] █ J■IN░C▄▪F░█E▀C▌    ▀ED] - EDI▀□▓▐SCRI▒▪IO█
+ [<]▄▒ ▒□▪V▀O░▄ C░N▪E▌▀▐▒E ░  [█▀▌□▫▐□▄T ░ON■ER▌N▪E  ▓ [RL]▒- R▀L▫GO▒
+░[SENT] - AU□O■SIGN ▒ ▄▪ ▐ ░▀ █O▓▪] -□ON L■NE▓▪E▌▌AG▐░▀▒QU▫ST■■- QUE▐▌▐O█▐█IR█
+
+■▀▀X■]▌- ░░O▀▪▒▄▫▀□         ▫░[0] ▪ ▌HELL░▀CCE▓S▒█▫  ▪▌[1] - ACC▓U□▌▄ED█TI▫G
+█░▫] -▒█I▪▄▌CALL▪■S░▌G▄ ░▪▀  ▫[▐█ -█▫-sa▄□░va▀■d▓ ▌  ▫▄▐▫]▪- ▌-░▪ctiv█▓e▓
+▀[▒▓░▫▌VIEW□▀▄░▄█░▒RY▄ □ ░█ ▀ [DS]■▐S▄S■░ D▒░N■▒□D▪▐▄▒▄[VS]■ SY■O▓ ■I▌█
+__▒▐__▪□_____□_▀_░_░___▪_▒_□▐▪▐_▓▫▌___▓▀▒_□__▪■_■__▫▒░▐░_▪___■__▌▐_▓▪_▪__▐▫____▪
+
+ ■__▐▓ ____■__░_▪_▌░\_▫___▪__░____▪_▌█_▒___▫\___□▫__▐  ▐_▓▐__▐___▪▀ ▐___■_░░▓
+ |■k!n▒    ▓█▄_▀▓░█   ▒▫/    ▀/ █▫■ █▄▀_█_▀/ \▪▐  ▓ _\__\░__▪   ▌▌/s□█    . |
+ |□  ▓\____   ▀░\/▀▐___█ ▀  ■/■___█     ▀░. ▪ \▀█ ▒ //▒    ░ █□ //  ▒▓▫  ▒▓□|
+ █. / ▪   / ░  ▄▪▌    /▄▐  /▓ ▪   /   ▄/▒■ ▌▀█/▓ ▌ █/▓  ______■_/ ▫▌░▪ ▒█▄: |
+▄|▫/░▒░  / ▪ ▐▫/▓  ▀▒▀▀□▀ █▪▒▐  ▐/   ■o/  ▓▫ /  ▪▀█▀▫▄░▫ ■|.■▐ ▪ CO▪MA▀DS .▒|
+░:/▫■  ░/ ▫▫▪░▫▓   ░/ ▌   /▓■   /▓  ▒ / □  □/  ▐ ▌/ □ ▫ /_|■  ░  ░ ▄□ :▄▀   |
+ /__█■■____▀_▀_____░____ /█__▓▀▒▄▒□▪_/\______▫▫■_/___▒__ /|__▒__░_▒_■■::▌▀░_■
+▄  ▫    █▒▐  ▐▌ ■▓ ▄  ▄▄/  ▀■       █▒ ▪     ▒▪  □ ▀□░ \□▓▒ ■        ░.▓
+
+▒[▌░ □ ▪▐L░▐D□▀I█E▄S▀□ ▓     ▫[D▒▫▫█D▄W▐L█AD FI▀E(S▫▫▄ [RZ]▀▌▐▄MODE▌▌▓▐LOAD
+ ░N] - SHOW▫NE▐ FI▀E□  ▪ ▄ ▒  [▄▐▪▀ ■▪O▐▒F█LELI▀T  ▄ ▀ ▪▐]▓ -█■▀T▫R▓FI░EFLA▌
+ [Z] ▀ ZIPPY ▌EARCH ▓■■ ▌■    [▀▓]▪▪▐ONFERENCE□F▫A▀░▀ ▀[FS] █ ░▒■L■C▪NF S▐ATS
+░▓C■▀-▐L▄▄VE MSG█▄O SY■█□ ▐█▌▒[E] -▓LEAVE▌▌▒▒ ▐▪ USER▪ [R▐  -░RE█D▫░▐▓ M▄G'▌
+▄[S] - SHO▄ S█A▓■S ▫    ▌▫ □▫▪[W]█- ▫HANGE SETT▌▐GS ■▫▄[V▌▄▌-▐VIE▒▄T█□▪L░A FI□E
+▄[▫] - SH▫W HEL■▀█▓■▄▒▫░▓ ░▓  [█] -▓ME▓░ █N/░FF  ▓ ▒ █ ░M▀  -□▓░L▓R▌ON▫O■F
+▓█▓□▪█ ▓▪▀W▀L▀□▒▌ TI▌E▌▄CE█□  [■] ░▪■A▌▫█SY▐OP    ▪ ▄░□[G] □-█LO▀ ▪▒F
+ [?□■▓▌▐HOW □■NU▐ █▐      □ ▒ [J] - JO▀N□C■▪■EREN▄E ▓ ▫▒ED] -▀▓DI█▫▌E▐C▄▀PT▐▪N
+▌█▒] ▄█▪R▐VI▄U■ CON▌▌R█▐CE█ ▐ [>▫░-░N▒▐T■▒O░F▪▌▒N▒E▪  ▐[RL▄ -▪REL■GON
+ ▒SENT▌ -▀A▫TO ▪I▌N▓▪  ▒  ▒▒  [OLM▌ ▌▀O▄▒LINE ■□█▫░G■▄ [▄UES▐▐ - ▫UESTI▀N▌▓▌RE
+
+ [EX▓▄▓▓▫□XORC▫ST▄ ░         ░[0] - SHELL ░CCE▐▒    ▓▐ [▌] ██▀▫■□UNT EDI▓I▒G
+ ░2■ - V□■W■█▓■L■▀SLOG  ░ ■▌ ░[3] - ▀░▒acti▪▒t▐▪  ▪□ ▪ ▐░] - D-sacti▌▄te▐
+□■5▌ ▌ ▐I■W ▐IR■▪T▐R▌ □  ▓  ▌□■░S□-▒S▒S▄P DO▒▫□OAD    ░[V▫]░▪▒YS▪P ▪I░W
+___█_□_■_▫__■▓█▒▄□_█_■▌__█_▄__█___■__▐_▒_▪▐___▪▌░__■______▄__▐___▒▫__▐_▓_____▐□░
+
+ ._▓█_ _▫________▒▌■\___▐_▫█__▐▒__▒__█■__▪_/▌__▫__▀▓▄   _░____▀__▌_ _■█_____.
+ █Sk▄▫/ □   □_▄▓__/  ░  / ▪   /▫▐ ▄ ______□/ \__   ▪_▒_▌\___░▒ ▓_ /▄▄□  ▌ ▒ |
+ ▌|  _\___▒    ▀▓/__□▐▪ ▓▀  ./\_█_▓■▐ ▒ \/.■▀ ▪/   ▒//▫▌▓ ▪░▀   //▪▐░  ■  ■ |
+ ▒. /     /▪    /  ▌▌ /▐ ▒░/▪ ░  ■/█▄ ░/▐ ▌   /█  ▓o/ ░▌▪___■■__/   ▐▒▀▒▀ ▫ |
+ | / █  ▄/▓▒  //     ▌  ▪▄▌/   □ /▫  ░o▪    □/ ▓ ▐□/▓    /▒▌▀ ▄  COM▫AND▒ ■▒▐
+ ▄/▒▪   / ▀  ./█  ▀ ▄ ▄   /▐▐ ▄■/▐    █   ▀ ░▀    ▫ ▒   ▄_|█          :.   ▓▄
+▫▪▒▫____▒□_▫▌■_█____█▐_▓▪/_________▐_/\░■_▄_▪____█__▀_▓_ ▓▪_____▒____█:▫_■█▫|
+  ▌   □  ▫   ▫    ▫  █▒\▫  ▄    ▪█      ■▓ ▐ ▄    ▓▓   \▌  ▫ ▄  ▒▐ █  ■▓
+
+▪[U▪ - UPL▫A▌ FILE(S) ▓░▀    ░[D]▄▓ DO▄▄LO░D FI░▒(S▪ □□[RZ]▒▌ □M■D▫M UPLO▐D
+ ▒░▀ ▐□S░OW▓NE▀█F□▐ES ▐       [F▪ - SH▓░ ▫ILELI█T ▓▒  ▄[A]  -█AL▀ER F□L█FL▒G
+ [Z▓ - ▓IPPY SE▫RCH▀□█▒▄  ▌   [▀▀▀░▓▒O□FE□E▫█E ▄L▒GS  ▒▫F▐] ■ F▀LL ▒▓▫F STATS
+▀[C] -□LEAV▌ MSG▐T▌ ▫▪▪OP░▐   ▄E] ▐ ▫E▪V░▌□SG TO ▌SER █▓R▒  ░ R▌A░ NE□ ▄SG'S
+ [S] - S■▪W▓STATUS█ ▀ █░     ■[▪░▄- CHA█▓E SET▫INGS    [▒▐ ▫█▌░▫▓W T▌■░LHA FI▓E
+▪[H] ▓ S□OW ▀E■P▪▌A▓▫▄    ▒   [X] ▄▪▐EN▄ ▌N/O▀▒   ▐▄▄▌ ▫▐] ▌-█▫OLOR■ON█OFF
+ [T▫▀- SH▒▀ ▫O▪AL TIME ░C□T)▫□[O▌ - PA█▀ ▀YSOP ■▓□  ▐■ [G]▐▒□█LOG▫O▌F
+ [?] - S□OW▓ME▀U   ▓▐      ■  ▪█░ - ▐░IN CON■█▀▓NC▄ ▀░▄[ED] - ■DIT■D▒S▪RIPT▫O▀
+ [<░▪-□PRE▌IO▀S▐▓▌NFERE▒C□    ▐▓] - N▌X▌ C▌▒█EREN▀E  ░▒[RL] - R□L▐GON
+ ▄▐EN▐▫□-▪AUTO ▫IGN  ░        ▓OLM]▌-▌ON■▒I▓E ▓ESS■GE▀▫[▒UEST] □ ▀U□STIO■NA▫R□
+
+■[EX■]▓-▐▪X▀▫CIS▀   ▄      ■  □0■ - ░▒▐LL ■CC▄SS   ░   ▒▫] - ACCO▒▌T ▄D▀█ING
+ [▄]▫- VI□□ C▐LL▄RS▓OG▄▄   ▀  [3▫ -▌D-s▀ct□va▪▐▐ ▫▒ □▓ [4] - D■▌ac▐▀vated
+■[░▪░-■VIE▒ ▫IRECTORY▐ □ ▌□ ▪ [DS]░ █□SOP▒▫OW▀▌O▫▪▪    [VS▐- SYS■P ▓IE░
+_░_▓__□___▒_▌□▫___□________▫░__▄___▐▌_____□_░__▀____░□▐▪▄____■░__▒▀__░_░_▐_▪▌▫__
+
+ .____ ▫__▄▌__▒____/\__■________▀_________▒/\__▐_____ █ ▀__________ ▐▄_░_░__▓
+ |▌k!▒/ ▓  █_▄__▫_/ □   /█    /  □  ___▪_▌█▐□\_▄    _\__\▄▒_    _ /s █    . |
+ ||  ▐\____     \/__■__▄ ▀  ./\____   ▪▪\/.  ▫■▀▫  ■// ▒░  /   ▒//      ▀ ▐ ▄
+ |. ▫   ▄ /▌    / ▀  ▒/  ▓ /▀   █ / □  ▄▒  █  ▓    o/  ▒▪░▓____▀▓█  ▪ ▪   ▓ ▪
+ | ▌  █  ■   ▄░/     /□ ▌  / ░ ▒ /    ▒▌   ■ /     /    ▫/|.    ░COMMA▫DS▄. ▀
+ ▐/     /▌   □/▐▓   ▒   ▄▓/   ▌ /    ■/ ▄■  /  ▒ ▐/   ■▫/▄▪|     ▄    :. ▪  ░
+ /_□__■▫___■_/_█________ /_▫________▄▀\_▌▓__▌_▓__░____□▫ /|▐□______█_::█__█_|
+ █▪ ▪▫        ▌ ▄   ■  \/    ▐                  □     ▄■/     ▪▐   █  .Y
+
+ ▪U]□- ▌PL▪AD F▒LE(S) ▄   □  ▄[D▐ - DO▄■LOAD FIL▌(▌) ▄ ▌RZ] - Z▓ODEM UPLOAD
+ [N] - SHOW NEW░FILES □■      █▒] - SHOW FILELIS▪      [A]  - ▪L▀ER FILE▫L▫G
+ [Z] -▫Z□PPY SEARCH      ░▄   [CF█- CO▄FERENC▐▫▓L▄▒S  ▀[▌S▒▪- F▓▪▪▓CON□ S▪AT▐
+ [C] - L▫▫■E░M▌G░▓O SYS█□   ▓▀[░]▀■ LEAVE ▌▌G TO USE▄  ▒R▐▄ - ▒■AD▓NEW MSG'S
+ ▀▄] - SHOW ST□T▫S     ▓   ■  [W] ▓■CH▪NGE S▒TTINGS    ▪V]  - VI▓W ▀XT/LH▒ ▫█▐E
+ ░H] - SH▓W ▓E▐█ PAG■         [X] -▓ME▌U █N/OFF    ▌░  [M▓■ - ▓OLO▫ ▄N/O▫F
+ □T] - SH▪▀ LO▪A■ TI░▪ (CET) ▄[O█ - ▫AGE █■SOP    ▓    ▫G] ▀- ▫▀▀ O░F
+■[?] ▪ SH▓W MENU  ▐    ░  ▫▫  [J] - JO▀N CONFER▒█CE▄   [■D▄▒▫░E▌I▪ ▀ESCR▌█TION
+ [<▄ - PR▄▪▒▄US CONF█▒E▓CE    [>] ▒ NEX▀ CONF▄░E▐CE    [RL]▐- RELOGON
+ [▪ENT] ▓ AUTO■SIGN  █▐ ▐▫  ▫▓[OLM] - ON LINE ME▄SAGE□ [QUES▌] - QU▌STI▀NNAIRE
+
+▒[EX!▓ -□EX▄R▪IS█▫          █▌[0▫▒- SH□LL A▓CES▒▓  ▀   [1] -▄AC□OUNT EDI□IN▀
+ [2▪ - V█EW CALLER░▌OG   ▐    [3▫ ▀█D█sactivated ▌     ■▒] - ▄■▐a▪█▐va■▀d
+ [5▌ -▌VIE▐▌■I▐E▄█ORY   ▌  ■  █D░▀- ▒Y▐OP D□WNLOA▐ ▄   [V▄▒- SY░OP V█EW
+___▀▌_▪▒___▀_______▪______▒_▒_░___________▪______■____□▐_▓____▐__________▒_____▓
+
+▀._▫__░____________/▄______□_■___▒__█______/\_____■__   _______■___░■____▓__▌
+ |Sk!n/     ▒░▀___/▌    /     / ▪ █ _▄____// \__▌   _\▪▐\___░▐  _ /▀    ▄ . |
+ || ▓_\____  ▓  \░_____     .▒\____     ▫/■░  \/   ▒//   ▐█/    ▐/        | |
+ |. /     /     /     /    //   ░ /    //     ▄    ▄/ ▀▒________▫ □       ▓ |
+ |▄/ ▓   /    //     /   ▄ ▒ ▓  ░/  ░ o/█    /     ▓     /|.     CO▐MANDS▐█ |
+ :/     ▓    ./     /□░   / ▄ ░ /    ▐▪    ▒/    ▪/     /_||     ▀    :.    |
+ /__▓________▌__________ ░__▪_□__▄_▌_/\▫____▐_□▌_/_____▀ /|______□__▫:::____|
+▪        ▐      ▒ ▓    \/  ░                    ▫ ▌▫□ ■\/      ■      .Y
+
+ [U] ■ UPLOAD F▐LE(S)□  ▌ ▄ █ [D▒ - DOWNLOAD FILE(█)   [RZ░ - ZMODEM▀UPL▪▒D
+ ▪N] - SHOW N█W FI▓□S         [F] - S░OW FIL▓L■▌T      [▌]  - ALT▒R□▫ILEFLAG
+ [▌]▓- ZIPPY SEA▒CH  ▌  █▀▒ █ [CF▒- CONF▐RENCE FLAG█   ■FS] - ▄ULL CONF STATS
+ [C] - █EAVE▄▓▄G▀TO▫▄YSOP ■   [▄]█- LE▄VE MS▌ ▒■ ░SER  [▫]  - READ NEW MSG'S
+ [▪] ▫ SHOW STATUS░  ▄        [W]▪- CHAN▪E SETTINGS    [□]  - VIEW TXT/LHA ▐ILE
+▀[H] - S▪░W HELP PAGE         [X] - M█NU ■N/OFF ■▐    ▐[M]  - COL▀R ON/OFF
+ ▀T] - SH▒▫ L□CAL TIME (CET)  [O] - PAG▐ SY▌OP    ▐ ▄  [G]  -▐LOG OFF
+ [?] -░SHOW ME▌U       ▄▀     [█]▀- J□I█ CONFERENCE    ▫ED]▐- EDIT▒DESCRIPT░O▄
+ ░<▫ ▀ PR█V▀░U▐▫CONFERENCE    [▄] -▄NEXT CONFE▐E▒CE    [▌▫] ▐ REL█GON
+ [SENT] - AUT▄ S░█N ▌   ▪▪    □░LM] - ON LINE MESSA▒E ▐■▀UEST] ▓ QUE█T▄ONNAI▒E
+
+ [EX□] - EXORCIST░           ▄[0▄ ▀ SHELL▀ACCES▒  ▓ ▫  [1▫ - ▫CCOUN█ EDITING
+ [2]▫- VIEW▒█ALL▒RSLOG    ▀ █ [3] █ D-sactivated      ░[4]▓- D-sactivat▀d
+ [5] - VIEW DIRECT█RY       □ ▀DS▒- SYSOP D▫WNLOAD     ■VS▄- ▀YSOP VIEW
+_▐___________█▀_______■_█▀_____▒▓__________▓_▄____▀__▫░__█__▀_▀__█_▓_░□▓▐_____■▫
+
+ .____□___▀________/\_▀_________________▄__/\________   ___________ __■__▌__.
+ |Sk█n/    □______/     /  ▫  /     ______// ▄__  ▄ _▐▓_\___ ▫  _ /s      . |
+ ▄|  ■\____     \/____▒     ./\___▌     \/.   \/    /▐     /    //        |□|
+ ▌. /     /     /  ░ █/    //     /▐ ▀ // ▒   /    o/   ▓__▫____/         ▀ |
+ | /▌▪   /    █/     /     /     /    ■/   ▄ /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /■    /   ░ /▄    /_||  ■       :■▪   |
+▒/___________/__________ /_□_______█_/\______▫▄__/______ /|__________:::__█_|
+  ▒                    \/ ▌          ▪       ░     ▓   \/    ▌        .Y
+
+ [U] ■ UPLOAD FILE(S) █  ▄    [D] - DOWNLOAD FILE(S▄   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW▪FILES         [F] - S▫OW▫FILELIST      [A]  - ALT■R FILEFLAG
+ [Z░ - ZIP░Y SEARCH    ▀  ▪   [CF]- CONFERE▐C▫ FLAGS   [▀S] - FULL CONF STATS
+ [C] ▌▒LEAVE M▌G TO SY█OP▐    ▀▒] -▪LEAV▀ MS▐ TO US▫R  [R]  - █EAD NEW M▀G'S
+▒[S] - SHOW STA▫US           █[W] - CHANGE SETTINGS  ▒ [V]  - VIEW TXT□LHA F▌LE
+ [▌] - SHOW HEL▓ PAGE         [X▌ -▐MENU ON/OFF     █  [M]  ▄ COLOR ON/OF▫
+ [T] - SHOW■LOCA▪ TI▀E (CET)  [▒] - PAGE SYSOP     ▪   [G▌  ▓ LOG OFF
+ ▫?] - S▄OW MENU    ▀         [J] - JOIN CONF▐RENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CON▄▌RENCE    [>]▫- NEXT C░▒▄ERENCE   ▪[▀L] -▀RELOGON
+ [SENT] -■A▒TO SIGN           [OLM] - ON■LINE□MESS▓GE  [QU░ST] - QUES□I□□NAIRE
+
+ [EX!] - EXORCIST    ▓    ▐  ▀[0] - SHELL ACCES▒       [1] - ▌CCOU▄T EDITING
+ [2■ - VIEW CA█LERSLOG      ▪ [3▫ - D-sactivated       [4] - D-sactivated
+ [5] -▐VIEW■DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS▓- SYSOP VIEW
+__▒_________________█______________▀____▪________░________________________□_____
 
  .____ ____________/\______________________/\________   ___________ ________.
  |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
