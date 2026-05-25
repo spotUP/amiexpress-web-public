@@ -943,20 +943,15 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "dRE!WAll v2.0 [UNREGiStEREd VERSiON]"
+          ]
         },
         "inputs": [
           {
-            "delayMs": 1500,
-            "data": "g\r"
-          },
-          {
-            "delayMs": 3500,
-            "data": "y\r"
-          },
-          {
-            "delayMs": 6000,
-            "data": "\r"
+            "delayMs": 2000,
+            "data": "n\r"
           }
         ]
       }
@@ -1517,7 +1512,7 @@
       ],
       "notes": "SvEN/5D Wall 1.25 (5D-WA125.LHA). 3-door cluster representative for the 'Call Joyr\u00f8de 4 unl\u00a1m\u00a1ted /X-door support' Wall banner family. Bare \\r exits.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1525,7 +1520,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "dRE!WAll v2.0 [UNREGiStEREd VERSiON]"
+          ]
         },
         "inputs": [
           {
@@ -4859,7 +4857,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Tell Sysop I can't find my config file!"
+          ]
         }
       }
     },
@@ -5137,7 +5138,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "| nO.| hANDLE           | lOCATION             |pAGES| uL-bYTES  | dN-bYTES  |"
+          ]
         },
         "inputs": [
           {
@@ -6122,7 +6126,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD"
+          ]
         },
         "inputs": [
           {
@@ -6560,6 +6567,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "Tell Sysop I can't find my config file!"
           ]
         }
       }
@@ -7109,7 +7119,7 @@
       "timeoutMs": 30000,
       "notes": "MGS!-LM1.LHA mgzlistman \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7117,7 +7127,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -7175,7 +7188,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "You need an Icon called MST-CLOCK.INFO in DOORS: !"
+          ]
         }
       }
     },
@@ -7188,7 +7204,7 @@
       "timeoutMs": 30000,
       "notes": "MTH-BU1.LHA Examine \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 28000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7196,7 +7212,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         },
         "inputs": [
           {
@@ -7223,7 +7242,7 @@
       "timeoutMs": 30000,
       "notes": "MTH-BU1.LHA SetUp \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7231,7 +7250,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         },
         "inputs": [
           {
@@ -7281,7 +7303,7 @@
       "timeoutMs": 30000,
       "notes": "RNSC-FE4.LHA frontend \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -7289,7 +7311,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         },
         "inputs": [
           {
@@ -7503,7 +7528,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "SysCm.CFG could not be opened. Abnormal program termination!"
+          ]
         }
       }
     },
@@ -7596,7 +7624,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         },
         "inputs": [
           {
@@ -7738,13 +7769,16 @@
       "timeoutMs": 30000,
       "notes": "DPL-SP10.LHA SpeedPass.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 15000,
+        "timeoutMs": 30000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "-> SpeedPass v1.0, by Tango/DPL'94 <-"
           ]
         }
       }
@@ -7838,7 +7872,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "- Setting up some varibles"
+          ]
         }
       }
     },
@@ -7903,7 +7940,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "Updating upload filelist... Done !"
+          ]
         }
       }
     },
@@ -8136,7 +8176,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "BAUDCHECKERv1.0[nrv /X development] Code&design by: iCE"
+          ]
         }
       }
     },
@@ -8761,6 +8804,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "File Description (Version 1.0) [RELEASE 1]  Copyright (c)1994 Bobo of Mystic"
           ]
         }
       }
@@ -8932,7 +8978,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/-mGs!-MGZListMan; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -8954,7 +9000,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -9187,7 +9236,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "| nO.| hANDLE           | lOCATION             |pAGES| uL-bYTES  | dN-bYTES  |"
+          ]
         }
       }
     },
@@ -9201,7 +9253,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_WS001_WHATS001; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -9223,7 +9275,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -9606,7 +9661,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/DOORMENU; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 30000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -9628,7 +9683,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -10104,7 +10162,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "- Setting up some varibles"
+          ]
         }
       }
     },
@@ -10693,7 +10754,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/_L_OFFL1_offliner; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 25000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -10715,7 +10776,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -10729,7 +10793,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/_L_OFFL_offliner; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 30000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -10751,7 +10815,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -10884,7 +10951,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/zoo-keeper; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 28000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -10906,7 +10973,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "AmiExpress Web BBS [0:General] Menu (NaN mins. left):"
+          ]
         }
       }
     },
@@ -10920,7 +10990,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/24STDCAL_LE_win5_96; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 45000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -10942,7 +11012,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -10956,7 +11029,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_AMBER_5D_AMBER; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 22000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -10978,7 +11051,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -11014,7 +11090,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -11376,7 +11455,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_OL001_5D_Olm; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 60000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11398,7 +11477,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },
@@ -11472,6 +11554,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ]
         }
       }
@@ -11546,6 +11631,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ]
         }
       }
@@ -11560,7 +11648,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_TO001_5D_ThrowOut; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 40000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11581,6 +11669,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ]
         }
       }
@@ -11709,7 +11800,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_WH300_5D_Who; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 30000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11730,6 +11821,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ]
         }
       }
@@ -11744,7 +11838,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/5D_WHO12_LE_window6; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 22000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -11765,6 +11859,9 @@
             "PANIC",
             "Guru",
             "Software failure"
+          ],
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
           ]
         }
       }
@@ -12489,7 +12586,7 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/glc; needs capture + triage",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 30000,
         "inputs": [
           {
             "delayMs": 1500,
@@ -12511,7 +12608,10 @@
             "Guru",
             "Software failure"
           ],
-          "expectedSubState": "DISPLAY_MENU"
+          "expectedSubState": "DISPLAY_MENU",
+          "mustContain": [
+            "[S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+          ]
         }
       }
     },

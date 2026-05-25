@@ -10,8 +10,8 @@ name: Corpus Integration
 #   - pull_request to main (full gate as a merge precondition)
 #   - manual workflow_dispatch
 #
-# Runtime: ~25 min at -j 2 on GitHub-hosted runners. Cap at 60 min
-# to catch runaway emulator hangs.
+# Runtime: ~60–90 min at -j 2 on GitHub-hosted runners with 420 doors.
+# Per-door timeouts reach 60 s; tsx startup adds ~3 s/door overhead.
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
   corpus-all:
     name: corpus:integration:all (421 doors)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
 
     steps:
       - uses: actions/checkout@v4
