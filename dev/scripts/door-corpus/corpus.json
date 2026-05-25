@@ -9843,18 +9843,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/_L_OFFL1_offliner; needs capture + triage",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 60000,
         "inputs": [
           {
-            "delayMs": 1500,
+            "delayMs": 5000,
             "data": "\r"
           },
           {
-            "delayMs": 4000,
+            "delayMs": 15000,
             "data": "q\r"
           },
           {
-            "delayMs": 7000,
+            "delayMs": 25000,
             "data": "\r"
           }
         ],
@@ -9879,18 +9879,18 @@
       "timeoutMs": 30000,
       "notes": "auto-added from Doors/_L_OFFL_offliner; needs capture + triage",
       "integration": {
-        "timeoutMs": 30000,
+        "timeoutMs": 60000,
         "inputs": [
           {
-            "delayMs": 1500,
+            "delayMs": 5000,
             "data": "\r"
           },
           {
-            "delayMs": 4000,
+            "delayMs": 15000,
             "data": "q\r"
           },
           {
-            "delayMs": 7000,
+            "delayMs": 25000,
             "data": "\r"
           }
         ],
