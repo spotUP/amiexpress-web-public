@@ -1,0 +1,28 @@
+.key node
+bbs:doors/bytekiller/Bytekillhandler bbs:node0/callerslog
+doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.txt
+; doors:multitop/mtop doors:multitop/designs/mtopulbytes1.dsg bbs:bulletins/bull1.txt ignoresysop userdata bbs:user.data
+; doors:multitop/mtop doors:multitop/designs/mtopdlbytes1.dsg bbs:bulletins/bull2.txt ignoresysop userdata bbs:user.data
+; doors:multitop/mtop doors:multitop/designs/mtopmsgs1.dsg bbs:bulletins/bull3.txt ignoresysop userdata bbs:user.data
+; doors:multitop/mtop doors:multitop/designs/mtopulcps1.dsg bbs:bulletins/bull4.txt ignoresysop userdata bbs:user.data
+; doors:multitop/mtop doors:multitop/designs/mtopdlcps1.dsg bbs:bulletins/bull5.txt ignoresysop userdata bbs:user.data
+; WORK:BBS/Doors/MultiTop/multitop doors:multitop/designs/mtopulbytes1.dsg bbs:bulletins/bull1.txt bbs:user.data
+; WORK:BBS/Doors/MultiTop/multitop doors:multitop/designs/mtopdlbytes1.dsg bbs:bulletins/bull2.txt bbs:user.data
+; WORK:BBS/Doors/MultiTop/multitop doors:multitop/designs/mtopmsgs1.dsg bbs:bulletins/bull3.txt bbs:user.data
+; WORK:BBS/Doors/MultiTop/multitop doors:multitop/designs/mtopulcps1.dsg bbs:bulletins/bull4.txt bbs:user.data
+; WORK:BBS/Doors/MultiTop/multitop doors:multitop/designs/mtopdlcps1.dsg bbs:bulletins/bull5.txt bbs:user.data
+; copy bbs:bulletins/lastc.txt bbs:bulletins/bull6.txt
+; doors:slicktop/slicktop bbs:bulletins/bull11.txt bbs:conf14/conf.db 20 3 "bAUD bOY bATTLE"
+; WORK:BBS/Doors/slicktop/slicktop2.2 bbs:bulletins/bull1.txt bbs:user.data 20 2 "Top Uploaders"
+; WORK:BBS/Doors/slicktop/slicktop2.2 bbs:bulletins/bull2.txt bbs:user.data 20 6 "Top Uploaders"
+; WORK:BBS/Doors/slicktop/slicktop2.2 bbs:bulletins/bull3.txt bbs:user.data 20 9 "Top Uploaders"
+; WORK:BBS/Doors/slicktop/slicktop2.2 bbs:bulletins/bull4.txt bbs:user.data 20 10 "Top Uploaders"
+; doors:sceptic/f!-last/sad-last.exe 1
+; doors:ntr-lastcallers/ntr-lastcallers 0
+; BBS:UTILS/SAmiLog -U"1" -O"bbs:screens/BULL20.TXT"10
+; SYS:rexxc/rx BBS:Utils/sar.rexx BBS:Screens/Callers.txt 15
+; BBS:utils/SAD-CLC.exe bbs:node1/CallersLog 100 
+bbs:utils/strip bbs:node1/DoorLog 100000 bbs:node1/DLogBackup
+bbs:utils/strip bbs:node1/Callerslog 100000 bbs:node1/CLogBackup
+; TypeScript SAmiLog - generates last callers bulletin (replaces 68K binary)
+typescript:samilog -UC"1" -O"BBS:Bulletins/bull6.txt"15
