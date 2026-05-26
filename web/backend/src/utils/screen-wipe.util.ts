@@ -583,7 +583,10 @@ export function parseWipeMCI(content: string): { wipeType: WipeType | null; cont
   };
 
   const wipeType = wipeMap[code] || null;
-  const cleanedContent = content.replace(wipeRegex, '');
+  // Strip the wipe code plus its trailing newline (the code occupies its own line).
+  // Without stripping the \n, contentForMci would start with a blank line, causing
+  // the allowMCI check to see an empty first line and disable all MCI substitution.
+  const cleanedContent = content.replace(/~W[MHVSCRBNTEX]\r?\n?/i, '');
 
   return { wipeType, content: cleanedContent };
 }

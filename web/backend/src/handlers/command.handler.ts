@@ -777,7 +777,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // express.e:28556 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
         // Note: quickFlag does NOT skip BULL — it only skips LOGON (express.e:29853)
         displayFlowLog('showing BULL');
-        const shown = await displayScreen(socket, session, 'BULL');
+        const shown = await displayScreen(socket, session, 'BULL', true, /* silent */ true);
         if (shown && pauseDisplayFlow(socket, session)) {
           session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
           displayFlowLog('pause after BULL');
@@ -1028,7 +1028,13 @@ console.log('session.subState:', session.subState);
   // drop into READ_COMMAND so the keystroke is handled instead of being eaten by the
   // display-flow loop. We only keep DISPLAY_MENU when handleCommand is invoked with
   // an empty string (internal advanceDisplayFlow tick).
-  if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
+  // IMPORTANT: Skip this shortcut when paginatedScreen is set — that means we are
+  // paused before the menu (e.g. the menuPause doPause after conference join). The
+  // paginatedScreen handler below will dismiss the pause and then call advanceDisplayFlow
+  // which shows the menu. Prematurely changing subState to READ_COMMAND here would make
+  // isDisplayFlowState() return false afterwards, so advanceDisplayFlow would be skipped
+  // and the user would see no menu until they pressed Enter a second time.
+  if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '' && !session.paginatedScreen) {
     session.subState = LoggedOnSubState.READ_COMMAND;
     // Display the menu once BEFORE allowing command input IF we are in an internal tick (data === '').
     // But since we are here with data !== '', we just transition to READ_COMMAND

@@ -456,7 +456,7 @@ export async function handleLocationInput(socket: Socket, session: any, input: s
  */
 function promptForPhone(socket: Socket, session: any) {
   // express.e:30204: aePuts('Phone Number: ')
-  socket.emit('ansi-output', 'Phone Number: ');
+  socket.emit('ansi-output', '\r\nPhone Number: ');
   session.inputBuffer = '';
 }
 
@@ -611,6 +611,10 @@ function finishIntroAndPromptName(socket: Socket, session: any) {
 
   // WEB_: retreat-on-blank disabled; required fields re-prompt instead of jumping back.
   // Diverges from express.e:30135 "Blank line to retreat" UX by design.
+
+  // Blank line separates the intro screen (join.txt ends without trailing newline)
+  // from the first registration prompt, matching the visual spacing in express.e.
+  socket.emit('ansi-output', '\r\n');
 
   // Always ask for handle first (express.e jLoop1)
   session.subState = LoggedOnSubState.NEW_USER_NAME;

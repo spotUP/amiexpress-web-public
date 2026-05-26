@@ -1493,7 +1493,10 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       }
     } else if (screenDirType === ScreenDirType.GLOBAL) {
       searchLocations.push({ dir: globalScreensDir, desc: 'Screens' });
-      searchLocations.push({ dir: path.join(baseDir, 'Bulletins'), desc: 'Bulletins' });
+      // Bulletins/ is intentionally excluded: it holds numbered bulletin DATA files
+      // (bull1.txt–bull10.txt etc). findSecurityScreen would misinterpret bull10.txt
+      // as "BULL screen for sec-level 10", displaying the AquaPWFail password-failure
+      // bulletin as the global BULL index screen on every login for sec-10 users.
     }
 
     // Add standard fallbacks based on screen type to ensure compatibility
@@ -2762,15 +2765,22 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
     }
-    if (paged.onComplete) paged.onComplete();
-
     // Check for remaining screen segments (~SP processing)
     // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
+    // IMPORTANT: process segments BEFORE firing onComplete so all screen content is
+    // shown before any callback (e.g. promptForName) emits its own output.
+    // Migrate paged.onComplete → screenSegments.onComplete so it fires after the
+    // last segment (processNextScreenSegment calls it when segments run out).
     if (session.screenSegments && session.screenSegments.segments.length > 0) {
+      if (paged.onComplete && !(session.screenSegments as any).onComplete) {
+        (session.screenSegments as any).onComplete = paged.onComplete;
+      }
       await processNextScreenSegment(socket, session);
       restoreModemState(socket, session);
       return true;
     }
+
+    if (paged.onComplete) paged.onComplete();
 
     // Restore modem state before final return
     restoreModemState(socket, session);
@@ -2835,10 +2845,15 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
   }
 
   // All segments processed, clean up
+  const segOnComplete = (segState as any).onComplete;
   session.screenSegments = undefined;
   session.lastScreenHadPause = false;
 
   screenDebug(`[processNextScreenSegment] All segments processed for ${segState.screenName}`);
+  // Fire any callback registered for after-all-segments (e.g. promptForName in new-user flow,
+  // continueJoinAfterBull in conference join). Migrated here from paginatedScreen.onComplete
+  // so it fires AFTER the last segment is emitted, not before.
+  if (typeof segOnComplete === 'function') segOnComplete();
   return true;
 }
 
