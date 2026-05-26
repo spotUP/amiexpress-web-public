@@ -16917,6 +16917,1638 @@
           ]
         }
       }
+    },
+    {
+      "id": "mtd_ap07_al_page",
+      "binary": "Doors/MTD-AP07/AL-PAGE.REXX",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "rlg_ae12_alpha_edit_2",
+      "binary": "Doors/RLG-AE12/aLPHA-eDIT.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "joe_s_tl_olm",
+      "binary": "Doors/JOE_S!TL/Olm.000",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "m_uas11_answer",
+      "binary": "Doors/M!UAS11/Answer.exe",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "otl_qk10_aquaquickconfig",
+      "binary": "Doors/OTL-QK10/AquaQuickConfig",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "otl_tc10_aquatopchatstart",
+      "binary": "Doors/OTL-TC10/AquaTopChatStart",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_frd4_ascii",
+      "binary": "Doors/PTL-FRD4/ascii.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "aexsetu_scanner",
+      "binary": "Doors/AEXSETU/scanner.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "acsbad41_baudrate",
+      "binary": "Doors/ACSBAD41/Baudrate.EXE",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_ba_bbsadd",
+      "binary": "Doors/TRSI-BA/bbsadd.AiM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_bd11_birthday",
+      "binary": "Doors/PTL-BD11/birthday.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trs_udc_change",
+      "binary": "Doors/TRS_UDC/CHANGE.EXE",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "s_x39n2_chat",
+      "binary": "Doors/S!X39N2/chat",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_caf_chatax",
+      "binary": "Doors/TRSI.CAF/chatax.AiM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "check200",
+      "binary": "Doors/CHECK200/Check",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "afl_cw14_colorwall_2",
+      "binary": "Doors/AFL-CW14/COLORWALL.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "afl_pack_comment",
+      "binary": "Doors/AFL_PACK/comment.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_msc_comment",
+      "binary": "Doors/TRSI_MSC/Comment.x",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ils_ae43_comsam",
+      "binary": "Doors/ILS_AE43/CoMSaM.Rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "hny_lb02_d_lost_bulls_2",
+      "binary": "Doors/HNY-LB02/d-lOSt_bULLs.020",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "dcn_f_x2_dcn_fileid_020",
+      "binary": "Doors/DCN!F-X2/dCN!FileID.020+",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "logic100_digiclock",
+      "binary": "Doors/LOGIC100/dIGIcLOCK.exe",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fth_fdd_dirdl",
+      "binary": "Doors/FTH-FDD/dirdl.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "rj_diz10_2",
+      "binary": "Doors/RJ-DIZ10/Diz.0x0",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "atx_pbx2_dm_normal",
+      "binary": "Doors/ATX-PBX2/DM_Normal.x",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_muc_drecom",
+      "binary": "Doors/TRSI-MUC/DreCom.AiM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_dft_drefront9",
+      "binary": "Doors/TRSI-DFT/drefront9.XiM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_who_drewho9",
+      "binary": "Doors/TRSI-WHO/drewho9.XiM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mst_edit_edit_010",
+      "binary": "Doors/MST-EDIT/edit.010",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fsh_ad10_epad",
+      "binary": "Doors/FSH_AD10/EPAD.Rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ves_fac1_face",
+      "binary": "Doors/VES-FAC1/FACE.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "dc_x107i_filecheck",
+      "binary": "Doors/DC-X107I/FileCheck",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mst_fd11_filedescription020",
+      "binary": "Doors/MST-FD11/FileDescription020.x",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fileid_3",
+      "binary": "Doors/FILEID/FILEID.000",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "shk_fpro_fileid",
+      "binary": "Doors/SHK-FPRO/FILEID.XIM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "lsd_fld",
+      "binary": "Doors/LSD-FLD/fld.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ns_jf11_frontend",
+      "binary": "Doors/NS_JF11/FrontEnd.xim",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "dds_gu11_getup",
+      "binary": "Doors/DDS-GU11/GETUP.exe",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "aeinf10_info_sysop",
+      "binary": "Doors/AEINF10/INFO-SYSOP.EXE",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trb_ki16_kingsinfo",
+      "binary": "Doors/TRB_KI16/KingsInfo.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trb_wf11_kingswtf",
+      "binary": "Doors/TRB_WF11/KingsWTF.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "thr_lhap_lhapacker10_2",
+      "binary": "Doors/THR_LHAP/lhapacker10.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "otl_ls21_listspeeder_2",
+      "binary": "Doors/OTL-LS21/ListSpeeder.020",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "stn_a335_lognet",
+      "binary": "Doors/STN_A335/lognet",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "go_out_logoff",
+      "binary": "Doors/GO_OUT/logoff.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_log_logoff",
+      "binary": "Doors/TRSI-LOG/Logoff.x",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_dls_logosnap",
+      "binary": "Doors/TRSI-DLS/LogoSnap.AiM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "lsd_lo24_lottery",
+      "binary": "Doors/LSD-LO24/Lottery.XIM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "otl_mc10_mcomment",
+      "binary": "Doors/OTL-MC10/MComment",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "vty_cm11_meter",
+      "binary": "Doors/VTY-CM11/Meter.040",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fsh_ms10_modsam",
+      "binary": "Doors/FSH_MS10/MoDSaM.Rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "te_nfv11_newfront",
+      "binary": "Doors/TE-NFV11/NewFront.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "lsd_nuq2_newuser",
+      "binary": "Doors/LSD_NUQ2/Newuser.Rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_frdc_nextmessage",
+      "binary": "Doors/PTL-FRDC/nextmessage.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_nus_nup_comment",
+      "binary": "Doors/TRSI-NUS/Nup-Comment.AiM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ltx_olm1",
+      "binary": "Doors/LTX_OLM1/olm.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mst_olmu_olm_9",
+      "binary": "Doors/MST-OLMU/OLM_9",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "afl_p21_pager21_2",
+      "binary": "Doors/AFL-P21/Pager21.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "hny_pc12_privilege_checker",
+      "binary": "Doors/HNY-PC12/Privilege-Checker",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "psy_log_psy_logoff_010",
+      "binary": "Doors/PSY_LOG/PSY_LogOff.010.Xim",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "psy_real_psy_realname_010",
+      "binary": "Doors/PSY_REAL/PSY_RealName.010.Xim",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "vty_ql11_qlogon_2",
+      "binary": "Doors/VTY-QL11/QLogon.040",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "vty_rw10_realtimewho_2",
+      "binary": "Doors/VTY-RW10/RealtimeWho.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "afl_boot_reboot",
+      "binary": "Doors/AFL_BOOT/REBOOT",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "reboot10",
+      "binary": "Doors/REBOOT10/ReBoot.x",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_rt11_reset",
+      "binary": "Doors/PTL_RT11/reset.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "shk_prpr_reward",
+      "binary": "Doors/SHK-PRPR/reward.xim",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ins_sb27_sbull27r5_res",
+      "binary": "Doors/INS-SB27/SBull27r5.res.020",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "scx_st10_scx_status",
+      "binary": "Doors/SCX-ST10/scx-Status.XIM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "tds_sc11_secchecker_2",
+      "binary": "Doors/TDS_SC11/SecChecker.020",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "tds_sc10_secchecker_2",
+      "binary": "Doors/TDS_SC10/SecChecker.0x0",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "m_sans01_sendanswer",
+      "binary": "Doors/M!SANS01/SendAnswer.exe",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "afl_sw16_shadow_w_2",
+      "binary": "Doors/AFL-SW16/sHADOW-w.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cax_sign_signoff",
+      "binary": "Doors/CAX-SIGN/SIGNOFF.REXX",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_si12_sinfo",
+      "binary": "Doors/PTL_SI12/sinfo.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "slickw20_slickwho2_2",
+      "binary": "Doors/SLICKW20/Slickwho2.030",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ins_sd13_smartdsf_020",
+      "binary": "Doors/INS-SD13/SmartDSF.020.Res",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "sne_who",
+      "binary": "Doors/SNE_WHO/sNE_wHO.aIM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fld_sc12_spli7front",
+      "binary": "Doors/FLD-SC12/Spli7Front",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "oset10_startintern",
+      "binary": "Doors/OSET10/StartIntern",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trsi_fus_status",
+      "binary": "Doors/TRSI-FUS/status.AiM",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "pgs_ss10_status",
+      "binary": "Doors/PGS-SS10/Status.XiM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "pi_st10a_statussys",
+      "binary": "Doors/PI-ST10A/statussys",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_si26_strip_id",
+      "binary": "Doors/PTL-SI26/STRIP_ID",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ptl_sw12_swall",
+      "binary": "Doors/PTL_SW12/swall.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "aesi258_sysinfo258",
+      "binary": "Doors/AESI258/SYSINFO258.EXE",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cax_talk",
+      "binary": "Doors/CAX-TALK/TALK.REXX",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "famel400_ulclear",
+      "binary": "Doors/FAMEL400/ULclear",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "lgc_ul40_upload",
+      "binary": "Doors/LGC-UL40/upload.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "humuss11",
+      "binary": "Doors/HUMUSS11/USS.exe",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "vdpage",
+      "binary": "Doors/VDPAGE/VDPage",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "vdstat11",
+      "binary": "Doors/VDSTAT11/VDStat",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mst_wall_wall_010",
+      "binary": "Doors/MST-WALL/wall.010",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "lsd_bw23_wall",
+      "binary": "Doors/LSD-BW23/Wall.XIM",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fth_mw1o_want",
+      "binary": "Doors/FTH-MW1O/want.rexx",
+      "doorType": "REXX",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
+    },
+    {
+      "id": "mst_who_who_010",
+      "binary": "Doors/MST_WHO/who.010",
+      "doorType": "XIM",
+      "integration": {
+        "timeoutMs": 30000,
+        "inputs": [],
+        "assertions": {
+          "mustNotContain": [
+            "TRAP",
+            "PANIC",
+            "Guru",
+            "Software failure"
+          ]
+        }
+      }
     }
   ]
 }
