@@ -267,7 +267,7 @@ jobs:
             # actually lands when the BBS doesn't tee to a file).
             if [ "${FILE_BYTES:-0}" -lt 1024 ]; then
               echo ""
-              echo "== file too small / empty, falling back to `docker logs --tail $TAIL_INPUT` =="
+              echo "== file too small / empty, falling back to docker logs --tail $TAIL_INPUT =="
               if [ -n "$GREP_INPUT" ]; then
                 docker logs --tail "$TAIL_INPUT" "$CID" 2>&1 | grep -aE "$GREP_INPUT" || echo "(no matches in docker logs)"
               else
