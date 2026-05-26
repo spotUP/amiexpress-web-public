@@ -324,7 +324,6 @@ a.out
 # (Commented out to include bulletins in git)
 # Bulletins/bull*.txt
 bbsConfig.info.txt
-Node[0-9]*/
 
 # Runtime BBS data
 User.data
