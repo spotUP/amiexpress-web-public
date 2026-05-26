@@ -35,6 +35,24 @@ export async function displayMainMenu(
   forceMenuDisplay: boolean = false,
   bypassDebounce: boolean = false,
 ) {
+  try {
+    return await _displayMainMenuImpl(socket, session, forceMenuDisplay, bypassDebounce);
+  } catch (err: any) {
+    const { appendFileSync } = require('fs');
+    const msg = `[displayMainMenu ERROR] ${new Date().toISOString()} subState=${session.subState} err=${err?.message}\nStack: ${err?.stack}\n`;
+    try { appendFileSync('/app/logs/backend.log', msg); } catch {}
+    try { appendFileSync('/tmp/menu-error.log', msg); } catch {}
+    console.error('[displayMainMenu] CAUGHT ERROR:', err?.message, err?.stack);
+    throw err;
+  }
+}
+
+async function _displayMainMenuImpl(
+  socket: any,
+  session: BBSSession,
+  forceMenuDisplay: boolean = false,
+  bypassDebounce: boolean = false,
+) {
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu once after the entire scan finishes
   if ((session as any).inConfScan && !forceMenuDisplay) {
