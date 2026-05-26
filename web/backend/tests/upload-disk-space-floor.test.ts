@@ -66,4 +66,17 @@ describe('displayUploadInterface enforces a free-space floor before starting upl
     expect(m).not.toBeNull();
     expect(m![1]).toMatch(/readFreeBytes\s*\(\s*dirPath\s*\)/);
   });
+
+  test('readFreeBytes resolves Amiga assigns (BBS:, NODE0:, …) before calling statfs (regression: "0.0 MB available for uploading")', () => {
+    // Bug: readFreeBytes called statfsSync("BBS:Conf2/Upload/") directly —
+    // not a real path, so statfs threw, catch returned 0, display showed "0.0 MB".
+    // Fix: detect assign-style paths and resolve via BBSPaths.resolveAmigaPath first.
+    const m = src.match(/function readFreeBytes\([^)]*\)[^{]*\{([\s\S]*?)\n\}/);
+    expect(m).not.toBeNull();
+    const body = m![1];
+    // Must detect Amiga assign pattern before probing
+    expect(body).toMatch(/test.*dirPath/);       // tests the input path
+    expect(body).toMatch(/resolveAmigaPath/);   // BBSPaths resolution
+    expect(body).toMatch(/BBSPaths/);           // uses the canonical resolver
+  });
 });

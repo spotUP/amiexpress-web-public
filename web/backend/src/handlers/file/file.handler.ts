@@ -761,18 +761,32 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
  * Read actual free bytes at path using fs.statfsSync (Node >= 18.8) or df(1) fallback.
  * Returns 0 if both probes fail. Used both for the human-readable display
  * (formatSpaceValue) and the upload-floor gate.
+ *
+ * Amiga-style assigns (BBS:, NODE0:, DOORS:, etc.) are resolved to real
+ * filesystem paths before probing — statfsSync fails on virtual paths.
  */
 function readFreeBytes(dirPath: string): number {
+  // Resolve Amiga assigns (BBS:, NODE0:, DOORS:, …) to real FS paths.
+  let resolvedPath = dirPath;
+  if (/^[A-Z]+:/i.test(dirPath)) {
+    try {
+      const { BBSPaths } = require('../../utils/bbs-paths.util');
+      const bbsRoot = config.get('dataDir');
+      const paths = new BBSPaths(bbsRoot);
+      resolvedPath = paths.resolveAmigaPath(dirPath);
+    } catch { /* fall through to original path */ }
+  }
+
   let freeBytes = 0;
   try {
     const fs = require('fs');
     if (typeof fs.statfsSync === 'function') {
-      const st = fs.statfsSync(dirPath);
+      const st = fs.statfsSync(resolvedPath);
       freeBytes = st.bfree * st.bsize;
     } else {
       // df -k: 1K blocks; column 4 is "Available"
       const { execSync } = require('child_process');
-      const out: string = execSync(`df -k "${dirPath}"`, { encoding: 'utf-8' });
+      const out: string = execSync(`df -k "${resolvedPath}"`, { encoding: 'utf-8' });
       const line = out.trim().split('\n').pop() || '';
       const avail = parseInt(line.trim().split(/\s+/)[3], 10);
       if (!isNaN(avail)) freeBytes = avail * 1024;
