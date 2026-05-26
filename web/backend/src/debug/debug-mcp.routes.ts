@@ -245,9 +245,12 @@ export function createDebugMcpRouter(bbsRoot: string): Router {
    */
   router.post("/sessions/:node/input", async (req, res) => {
     const nodeId = parseNum(req.params.node);
-    const text = typeof req.body?.text === "string" ? req.body.text : "";
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
     if (!Number.isFinite(nodeId) || nodeId <= 0) return res.status(400).json({ error: "bad_node" });
-    if (text === "") return res.status(400).json({ error: "empty_text" });
+    if (rawText === "") return res.status(400).json({ error: "empty_text" });
+    // Convert JSON-style escape sequences that tool callers send as literal strings
+    // (e.g. "\\r" → CR, "\\n" → LF) so BBS input routing sees the actual control bytes.
+    const text = rawText.replace(/\\r/g, '\r').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
 
     // Optional: wait for post-input output to settle and return it in one response.
     // Caller passes waitMs (total budget) and optional quietMs (idle before "settled").

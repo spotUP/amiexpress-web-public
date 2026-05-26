@@ -16,6 +16,8 @@ import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
 
 const DATE_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DATE_WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -839,13 +841,12 @@ debugLog(
             );
           } else {
             // express.e:3857-3858: msg.command:=checkSecurity(msg.data)
+            // msg.data is an ACS permission index, not a bitmask.
             // CRITICAL: Result goes in msg.command field, NOT msg.data!
-            const result = (currentFlags & bitMask) !== 0 ? 1 : 0;
+            const result = checkSecurity(user ?? null, bitMask as ACSPermission) ? 1 : 0;
             this.messageParser.writeCommand(msg.msgAddr, result);
 debugLog(
-              `  [READ] DT_QUERYBIT: mask=0x${bitMask.toString(
-                16
-              )}, result=${result} (in msg.command)`
+              `  [READ] DT_QUERYBIT: permIndex=${bitMask} (${ACSPermission[bitMask] ?? '?'}), result=${result} (in msg.command)`
             );
             // Don't set replyData - result already written to msg.command
             return;

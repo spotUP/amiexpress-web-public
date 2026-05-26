@@ -9,6 +9,8 @@ import { ExecLibrary } from "../api/ExecLibrary.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
 import { DoorConfig, DoorConstants, AEDoorCommand } from "../DoorTypes.js";
 import { logDoorMessage } from "../../utils/door-logging.util";
+import { checkSecurity } from "../../utils/acs.util.js";
+import { ACSPermission } from "../../constants/acs-permissions.js";
 import { populateDoorInfoStructs } from "./door-info.util.js";
 import { parseMciCodes } from "../../handlers/screen.handler.js";
 import { parseInfoFile } from "../../utils/amiga-command-parser.util.js";
@@ -1775,14 +1777,11 @@ debugLog(`[DoorMessageHandler]   DT_REMBIT: Removing bit ${data}`);
         break;
 
       case XIMCommand.DT_QUERYBIT:
-        // express.e:3857-3858: Query security bit - returns 1 if set, 0 if not
+        // express.e:3857-3858: msg.command:=checkSecurity(msg.data)
         {
           const session = this.config.bbsSession as any;
-          const flags = session?.tempSecurityFlags || 0;
-          const userFlags = session?.user?.accessFlags || 0;
-          const allFlags = flags | userFlags;
-          const hasFlag = (allFlags & (1 << data)) !== 0 ? 1 : 0;
-debugLog(`[DoorMessageHandler]   DT_QUERYBIT: bit ${data} = ${hasFlag}`);
+          const hasFlag = checkSecurity(session?.user ?? null, data as ACSPermission) ? 1 : 0;
+debugLog(`[DoorMessageHandler]   DT_QUERYBIT: bit ${data} (${ACSPermission[data] ?? '?'}) = ${hasFlag}`);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, hasFlag);
         }
         break;

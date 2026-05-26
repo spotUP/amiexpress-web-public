@@ -817,6 +817,10 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
       env: spawnEnv,
       detached: true, // Create new process group so we can kill the entire tree
     });
+    // run-amiga-door.ts waits for stdin EOF when not a TTY (to support
+    // scripted-input from the corpus runner). Batch doors have no input
+    // script — close stdin immediately so the runner doesn't block forever.
+    child.stdin?.end();
 
     // Timeout to prevent stuck doors from running forever
     // - XIM doors (interactive): 300s to allow for user interaction
