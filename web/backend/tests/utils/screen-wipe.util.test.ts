@@ -392,4 +392,37 @@ describe('screen-wipe.util', () => {
       expect(frames.length).toBeGreaterThan(0);
     });
   });
+
+  describe('parseAnsiToGrid — cursor-sequence isolation', () => {
+    // Regression: parseAnsiToGrid was setting currentAnsi to cursor-movement
+    // sequences (e.g. \x1b[H from ~f clear-screen). gridToAnsi would then
+    // re-emit those sequences as "color" codes before the first character on
+    // the next row, moving the cursor to home mid-render and offsetting the
+    // entire first line of ANSI art.
+
+    it('wipe frames from content starting with ~f clear-screen do not contain raw \\x1b[H in frame text', () => {
+      // Simulate the parsed content that arrives after ~f substitution:
+      // \x1b[2J\x1b[H followed by real ANSI art content.
+      const content = '\x1b[2J\x1b[H\r\nABCDE\r\nFGHIJ';
+      const frames = getWipeFrames('matrix', content);
+      expect(frames.length).toBeGreaterThan(0);
+      // The frame body (after the leading \x1b[2J\x1b[H that wipe adds itself)
+      // must not re-emit \x1b[H inside the rendered rows — that would offset chars.
+      // Strip the expected leading clear+home prefix, then check the remainder.
+      for (const frame of frames) {
+        const body = frame.content.replace(/^\x1b\[2J\x1b\[H/, '');
+        // \x1b[H (cursor home, no row/col) must not appear in the rendered grid
+        expect(body).not.toContain('\x1b[H');
+      }
+    });
+
+    it('color sequences are preserved across lines in wipe frames', () => {
+      const content = '\x1b[32mGreen line\r\n\x1b[31mRed line';
+      const frames = getWipeFrames('typewriter', content);
+      const lastFrame = frames[frames.length - 1];
+      // Final frame must contain both color codes
+      expect(lastFrame.content).toContain('\x1b[32m');
+      expect(lastFrame.content).toContain('\x1b[31m');
+    });
+  });
 });

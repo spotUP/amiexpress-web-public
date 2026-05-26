@@ -59,7 +59,15 @@ function parseAnsiToGrid(content: string): Array<Array<{ char: string; ansi: str
           j++;
         }
         if (j < line.length) {
-          currentAnsi = line.substring(i, j + 1);
+          const finalChar = line[j];
+          // Only track color/attribute sequences (ending in 'm').
+          // Cursor-movement (H, A, B, C, D, f, J, K) and other control
+          // sequences are positional — meaningless in the grid model and
+          // harmful if re-emitted by gridToAnsi (e.g. \x1b[H from ~f
+          // would move the cursor to home mid-render, offsetting the row).
+          if (finalChar === 'm') {
+            currentAnsi = line.substring(i, j + 1);
+          }
           i = j + 1;
           continue;
         }

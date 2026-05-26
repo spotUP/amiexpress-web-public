@@ -2850,9 +2850,11 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
   session.lastScreenHadPause = false;
 
   screenDebug(`[processNextScreenSegment] All segments processed for ${segState.screenName}`);
-  // Fire any callback registered for after-all-segments (e.g. promptForName in new-user flow,
-  // continueJoinAfterBull in conference join). Migrated here from paginatedScreen.onComplete
-  // so it fires AFTER the last segment is emitted, not before.
+  // Flush the ANSI output buffer before firing the callback. Inline-mode parseMciCodes
+  // queues output through a 16ms buffer; if the callback (e.g. promptForName) emits
+  // directly to the socket before that buffer drains, it arrives at the client first and
+  // the subsequent flush (which may include a ~f clear-screen) wipes it.
+  flushOutput(socket);
   if (typeof segOnComplete === 'function') segOnComplete();
   return true;
 }
