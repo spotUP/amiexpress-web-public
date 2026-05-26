@@ -265,12 +265,11 @@ jobs:
             # If the file is small / empty, fall back to docker logs (the
             # container's stdout/stderr — where Node's plain console.log
             # actually lands when the BBS doesn't tee to a file).
+            # Always grep docker logs — the container stdout can be very large
+            # and an unfiltered tail will timeout the SSH session.
             if [ "${FILE_BYTES:-0}" -lt 1024 ]; then
               echo ""
-              echo "== file too small / empty, falling back to docker logs --tail $TAIL_INPUT =="
-              if [ -n "$GREP_INPUT" ]; then
-                docker logs --tail "$TAIL_INPUT" "$CID" 2>&1 | grep -aE "$GREP_INPUT" || echo "(no matches in docker logs)"
-              else
-                docker logs --tail "$TAIL_INPUT" "$CID" 2>&1
-              fi
+              DOCKER_GREP="${GREP_INPUT:-Error|error|CAUGHT|throw|TypeError|Cannot read}"
+              echo "== file too small / empty, falling back to docker logs --tail $TAIL_INPUT | grep -E '$DOCKER_GREP' =="
+              docker logs --tail "$TAIL_INPUT" "$CID" 2>&1 | grep -aE "$DOCKER_GREP" || echo "(no matches in docker logs)"
             fi
