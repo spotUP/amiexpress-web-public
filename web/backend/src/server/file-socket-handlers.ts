@@ -786,7 +786,16 @@ console.log("[Upload] Last file in batch upload, auto-completing");
         },
         config
       );
-      session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+      // Only set UPLOAD_DESC_INPUT if the batch is still active.
+      // handleDizExtractionAndDescription calls processBatchFile for the last
+      // file when FILE_ID.DIZ is found, which clears tempData and sets
+      // subState=DISPLAY_MENU via handleUploadBatchComplete→runPostUpload.
+      // Overwriting that would put the session in UPLOAD_DESC_INPUT with
+      // tempData=undefined → TypeError: Cannot read properties of undefined
+      // (reading 'currentLineBuffer') on the next keypress.
+      if (session.tempData) {
+        session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+      }
       return;
     }
 
