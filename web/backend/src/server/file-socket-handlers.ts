@@ -561,6 +561,18 @@ console.error(
           // Don't fail upload on FILES.BBS write error - it's supplementary
         }
       }
+
+      // Update Conftop-II ctop.data — mirrors express.e calling the Conftop door
+      // with the uploaded filename after a successful non-duplicate active upload.
+      if (!foundDupe && fileStatus === 'active') {
+        try {
+          const { appendCtopRecord } = await import('../utils/ctop-updater.util');
+          const userLocation = (session.user as any).location || '';
+          await appendCtopRecord(conferencePath, session.user!.username, userLocation, data.size);
+        } catch (ctopErr: any) {
+console.error(`[Conftop] Error updating ctop.data: ${ctopErr.message}`);
+        }
+      }
     } catch (error: any) {
 console.error(`[Upload] Error writing DIR file: ${error.message}`);
       // Don't fail upload on DIR write error
