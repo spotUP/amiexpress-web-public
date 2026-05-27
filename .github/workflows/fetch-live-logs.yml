@@ -281,32 +281,33 @@ jobs:
                 ;;
               fix-ndirs)
                 echo "== Fixing NDIRS files on live server =="
-                docker exec "$CID" sh -lc '
+                docker exec "$CID" sh -lc "
                   BBSROOT=/app/data/bbs
                   for cn in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
-                    BASE="$BBSROOT/Conf${cn}"
-                    [ -d "$BASE" ] || continue
+                    BASE=\"\$BBSROOT/Conf\${cn}\"
+                    [ -d \"\$BASE\" ] || continue
                     highest=0
-                    for f in "$BASE"/DIR*; do
-                      [ -f "$f" ] || continue
-                      bn=$(basename "$f")
-                      num=${bn#DIR}
-                      case "$num" in ''|*[!0-9]*) continue ;; esac
-                      [ "$num" -gt "$highest" ] && highest=$num
+                    for f in \"\$BASE\"/DIR*; do
+                      [ -f \"\$f\" ] || continue
+                      bn=\$(basename \"\$f\")
+                      num=\${bn#DIR}
+                      [ -z \"\$num\" ] && continue
+                      echo \"\$num\" | grep -qE '^[0-9]+\$' || continue
+                      [ \"\$num\" -gt \"\$highest\" ] && highest=\$num
                     done
-                    if [ "$highest" -eq 0 ]; then
-                      echo "Conf${cn}: no numbered DIR files, skipping"
+                    if [ \"\$highest\" -eq 0 ]; then
+                      echo \"Conf\${cn}: no numbered DIR files, skipping\"
                       continue
                     fi
-                    current=$(cat "$BASE/NDIRS" 2>/dev/null || echo "missing")
-                    if [ "$current" != "$highest" ]; then
-                      echo "Conf${cn}: updating NDIRS $current -> $highest"
-                      printf "%d" "$highest" > "$BASE/NDIRS"
+                    current=\$(cat \"\$BASE/NDIRS\" 2>/dev/null || echo missing)
+                    if [ \"\$current\" != \"\$highest\" ]; then
+                      echo \"Conf\${cn}: updating NDIRS \$current -> \$highest\"
+                      printf '%d' \"\$highest\" > \"\$BASE/NDIRS\"
                     else
-                      echo "Conf${cn}: NDIRS already correct ($highest)"
+                      echo \"Conf\${cn}: NDIRS already correct (\$highest)\"
                     fi
                   done
-                ' 2>&1
+                " 2>&1
                 FILE="$LOGS_DIR/backend.log"
                 ;;
               *) FILE="$LOGS_DIR/$LOG_INPUT" ;;
