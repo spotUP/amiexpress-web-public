@@ -1,13 +1,17 @@
 /**
- * Regression: upload code must update NDIRS after writing to DIR{n}.
+ * Regression: upload code must always write to DIR1 (the sysop-configured upload area).
  *
- * AquaScan and express.e both read the NDIRS file to know how many DIR
- * files exist in a conference. Before this fix, NDIRS was never updated
- * when new DIR files were created, so doors saw only DIR1 forever even
- * when 21 directories existed on disk.
+ * Root cause: uploadDirNum was computed as getDirFiles().length — the count of
+ * existing DIR files on disk. Each upload that landed in a new DIR incremented
+ * the count, so the next upload targeted yet another new DIR. This created 29
+ * separate file areas instead of appending to DIR1.
  *
- * This test verifies that updateNdirsIfNeeded() is exported from
- * dir-file.util and that file-socket-handlers imports and calls it.
+ * Fix: uploadDirNum is hardcoded to 1.  express.e reads NDIRS from ConfConfig.info
+ * (set at install time, typically 1); it is NOT derived from how many DIR files
+ * currently exist on disk.
+ *
+ * The updateNdirsIfNeeded helper is retained for other callers but is no longer
+ * invoked from the upload path — NDIRS is sysop config, not a dynamic counter.
  */
 
 import * as fs from 'fs';
@@ -72,25 +76,23 @@ describe('updateNdirsIfNeeded', () => {
   });
 });
 
-describe('file-socket-handlers calls updateNdirsIfNeeded', () => {
-  test('import of updateNdirsIfNeeded appears in file-socket-handlers.ts', () => {
+describe('upload always targets DIR1', () => {
+  test('uploadDirNum is hardcoded to 1 in file-socket-handlers.ts', () => {
     const src = fs.readFileSync(
       path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
       'utf8'
     );
-    expect(src).toMatch(/updateNdirsIfNeeded/);
-    // Must be imported from dir-file.util
-    expect(src).toMatch(/import.*updateNdirsIfNeeded.*from.*dir-file\.util/);
+    // Must use the literal constant 1, not a dynamic getDirFiles/getMaxDirs count
+    expect(src).toMatch(/const uploadDirNum = 1/);
+    expect(src).not.toMatch(/getMaxDirs/);
   });
 
-  test('updateNdirsIfNeeded is awaited after writeUploadToDirFile', () => {
+  test('file-socket-handlers does not import updateNdirsIfNeeded', () => {
+    // NDIRS is sysop config; uploads must not auto-increment it
     const src = fs.readFileSync(
       path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
       'utf8'
     );
-    // Find the block between writeUploadToDirFile call and FILES.BBS comment
-    const m = src.match(/writeUploadToDirFile\([\s\S]*?Write to FILES\.BBS/);
-    expect(m).not.toBeNull();
-    expect(m && m[0]).toMatch(/await updateNdirsIfNeeded/);
+    expect(src).not.toMatch(/updateNdirsIfNeeded/);
   });
 });

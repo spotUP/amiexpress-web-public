@@ -18,8 +18,7 @@ import {
 import { formatFileSize, formatUploadDate } from "../utils/file-upload.util";
 import { testFile, TestResult } from "../utils/file-test.util";
 import { moveUploadedFile, getConferenceDir } from "../utils/file-hold.util";
-import { writeUploadToDirFile, updateNdirsIfNeeded } from "../utils/dir-file.util";
-import { getMaxDirs } from "../utils/max-dirs.util";
+import { writeUploadToDirFile } from "../utils/dir-file.util";
 import {
   updateSysopUploadStats,
   doUploadNotify,
@@ -505,18 +504,16 @@ console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile
     }
 
     // Write to DIR file (express.e:19473-19509)
-    // Express.e: Uploads go to DIR{maxDirs} - always numbered, never named
+    // Uploads always go to DIR1 — the sysop-configured upload area.
+    // express.e reads NDIRS from ConfConfig.info (set at install time, typically 1).
+    // Using getDirFiles().length was wrong: it grew with every upload and caused
+    // each file to land in a new DIR instead of the upload area.
     try {
       const conferencePath = getConferenceDir(
         session.currentConf,
         config.get("dataDir")
       );
-      // Get maxDirs for this conference (express.e:19475-19478)
-      const maxDirs = await getMaxDirs(
-        session.currentConf,
-        config.get("dataDir")
-      );
-      const uploadDirNum = maxDirs > 0 ? maxDirs : 1; // Default to DIR1 if no dirs exist
+      const uploadDirNum = 1; // DIR1 is the upload area (express.e:19475-19478)
 
       // Get SENTBY_FILES setting from node config (express.e:19506)
       // checkToolTypeExists(TOOLTYPE_NODE, node, 'SENTBY_FILES')
@@ -533,16 +530,12 @@ console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile
         session.user!.username, // express.e:19507 uses loggedOnUser.name which is the BBS handle
         conferencePath,
         fileStatus,
-        uploadDirNum, // express.e: uploads go to DIR{maxDirs}
+        uploadDirNum,
         addSentBy // SENTBY_FILES from node config
       );
 console.log(
         `[Upload] Wrote DIR entry for ${currentFile.filename} to DIR${uploadDirNum}`
       );
-
-      // Keep NDIRS in sync so AquaScan and express.e see all directories
-      // express.e reads NDIRS to know the upper bound for directory scanning
-      await updateNdirsIfNeeded(conferencePath, uploadDirNum);
 
       // Write to FILES.BBS for third-party door compatibility (e.g., AquaScan)
       // FILES.BBS uses the same format as DIR files but is always in the Upload directory
