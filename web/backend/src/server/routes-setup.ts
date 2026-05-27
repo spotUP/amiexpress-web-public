@@ -466,6 +466,19 @@ console.log(`[Download] Serving file: ${actualFilename} from ${filePath} (${stat
 
       // Use standard fs for streaming (amigafs doesn't have createReadStream)
       const fileStream = fs.createReadStream(filePath);
+      // Without an error handler the stream emits 'error' as an unhandled
+      // EventEmitter error, which kills the Node process. Guard both the
+      // readable and the response so a client disconnect (EPIPE/ECONNRESET)
+      // or a mid-read disk error never crashes the server.
+      fileStream.on('error', (err) => {
+        console.error('[Download] Stream read error:', err.message);
+        if (!res.headersSent) res.status(500).json({ error: 'File read error' });
+        else res.destroy();
+      });
+      res.on('error', (err) => {
+        console.error('[Download] Response write error (client disconnect?):', err.message);
+        fileStream.destroy();
+      });
       fileStream.pipe(res);
     } catch (error) {
 console.error('[Download] Error:', error);
@@ -519,6 +532,15 @@ console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
       res.setHeader('Content-Length', fileEntry.size.toString());
 
       const fileStream = fs.createReadStream(filePath);
+      fileStream.on('error', (err) => {
+        console.error('[Download] Stream read error (legacy):', err.message);
+        if (!res.headersSent) res.status(500).json({ error: 'File read error' });
+        else res.destroy();
+      });
+      res.on('error', (err) => {
+        console.error('[Download] Response write error (legacy, client disconnect?):', err.message);
+        fileStream.destroy();
+      });
       fileStream.pipe(res);
     } catch (error) {
 console.error('[Download] Error:', error);
