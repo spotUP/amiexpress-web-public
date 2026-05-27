@@ -97,6 +97,32 @@ jobs:
                 docker exec "$CID" sh -lc 'ls -la /app/data/bbs/Doors 2>/dev/null; echo "---"; ls -la /app/Doors 2>/dev/null' || true
                 FILE="$LOGS_DIR/backend.log"
                 ;;
+              dirfiles)
+                echo "== Conf2 DIR files (upload listing) =="
+                docker exec "$CID" sh -lc '
+                  BASE=/app/data/bbs/Conf2
+                  echo "--- DIR files in $BASE ---"
+                  ls -la "$BASE"/DIR* "$BASE"/dir* 2>/dev/null || echo "(none found)"
+                  echo ""
+                  for f in "$BASE"/DIR* "$BASE"/dir* 2>/dev/null; do
+                    [ -f "$f" ] || continue
+                    echo "=== $f ==="
+                    cat "$f" 2>/dev/null
+                    echo ""
+                  done
+                  echo "--- Conf2 FILES dir ---"
+                  ls -la "$BASE/FILES/" 2>/dev/null | head -30 || echo "(no FILES dir)"
+                  echo "--- Conf2 HOLD/HELD ---"
+                  cat "$BASE/HOLD/HELD" 2>/dev/null || echo "(no HELD file)"
+                  echo "--- file_entries in DB ---"
+                  for db in /app/data/bbs/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/amiexpress.db; do
+                    [ -f "$db" ] || continue
+                    echo "==== $db ===="
+                    sqlite3 "$db" "SELECT id, filename, size, uploader, status, checked, uploadDate FROM file_entries ORDER BY id DESC LIMIT 20;" 2>/dev/null
+                  done
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
               confs)
                 echo "== ConfConfig.info strings on live =="
                 docker exec "$CID" sh -lc 'find /app -maxdepth 4 -iname "ConfConfig.info" 2>/dev/null | head -5' || true
