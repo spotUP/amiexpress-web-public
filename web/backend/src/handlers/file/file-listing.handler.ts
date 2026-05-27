@@ -44,6 +44,7 @@ export class FileListingHandler {
 
     // Check if conference has file areas
     const maxDirs = await getMaxDirs(session.currentConf, bbsDataPath);
+console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relConfNum=${session.relConfNum} maxDirs=${maxDirs} reverse=${reverse} params="${params}"`);
     if (maxDirs === 0) {
       socket.emit('ansi-output', '\x1b[31mSorry, No file areas available.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -167,11 +168,14 @@ export class FileListingHandler {
 
     // Get list of DIR files (express.e: numbered DIR1, DIR2, etc. only)
     const allDirFiles = await getDirFiles(session.currentConf, bbsDataPath);
+console.log(`[FileList] getDirFiles returned ${allDirFiles.length} dirs for conf=${session.currentConf} path=${conferencePath}`);
+console.log(`[FileList] dirSpan=${JSON.stringify(dirSpan)}`);
 
     // Filter to the requested range (1-indexed)
     let dirsToShow = allDirFiles.filter(df =>
       df.index >= dirSpan.startDir && df.index <= dirSpan.endDir
     );
+console.log(`[FileList] dirsToShow after filter: ${dirsToShow.length} dirs`);
 
     // Handle HOLD directory if requested
     if (dirSpan.startDir === -1 || dirSpan.endDir === -1) {
