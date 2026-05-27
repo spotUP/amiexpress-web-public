@@ -71,14 +71,98 @@ jobs:
           SKIP_SDK_PREPARE: '1'
         run: npm ci --no-audit --no-fund
 
+      # workflow_dispatch only: download the pass cache from the most
+      # recent successful corpus run and skip doors that already passed.
+      # push/pull_request always run the full gate.
+      - name: Load pass cache (resume mode)
+        if: github.event_name == 'workflow_dispatch'
+        id: pass-cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREV_RUN=$(gh run list \
+            --workflow=corpus-integration.yml \
+            --status=success \
+            --limit=5 \
+            --json databaseId,conclusion \
+            -q '[.[] | select(.conclusion=="success")][0].databaseId' 2>/dev/null || true)
+          if [[ -n "$PREV_RUN" && "$PREV_RUN" != "null" ]]; then
+            mkdir -p /tmp/pass-cache
+            gh run download "$PREV_RUN" \
+              --name corpus-pass-cache \
+              --dir /tmp/pass-cache 2>/dev/null || true
+          fi
+          if [[ -f /tmp/pass-cache/corpus-pass-ids.txt && -s /tmp/pass-cache/corpus-pass-ids.txt ]]; then
+            CACHED=$(wc -l < /tmp/pass-cache/corpus-pass-ids.txt)
+            FULL=$(wc -l < dev/scripts/door-corpus/integration-smoke-all.txt)
+            REMAINING=$(grep -cxvF -f /tmp/pass-cache/corpus-pass-ids.txt \
+              dev/scripts/door-corpus/integration-smoke-all.txt || true)
+            echo "Resume: $CACHED/$FULL cached passes, running $REMAINING doors"
+            echo "has-cache=true" >> "$GITHUB_OUTPUT"
+            echo "remaining=$REMAINING" >> "$GITHUB_OUTPUT"
+          else
+            echo "No pass cache found — running all doors"
+            echo "has-cache=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Build filtered door list when resuming (exclude cached passes).
+      - name: Build resume door list
+        if: github.event_name == 'workflow_dispatch' && steps.pass-cache.outputs.has-cache == 'true'
+        run: |
+          grep -xvF -f /tmp/pass-cache/corpus-pass-ids.txt \
+            dev/scripts/door-corpus/integration-smoke-all.txt \
+            > /tmp/doors-to-run.txt || true
+          echo "CORPUS_DOOR_LIST=/tmp/doors-to-run.txt" >> "$GITHUB_ENV"
+
       - name: Run corpus:integration:ci (with retry)
         id: corpus
         working-directory: web/backend
+        env:
+          DOOR_LIST: ${{ env.CORPUS_DOOR_LIST || '../../dev/scripts/door-corpus/integration-smoke-all.txt' }}
         run: |
           set -o pipefail
-          npm run corpus:integration:ci 2>&1 | tee /tmp/corpus.log
-          # Surface tally to the step summary
+          bash ../../dev/scripts/door-corpus/per-door-test.sh \
+            -j 2 --retry 1 --list "$DOOR_LIST" 2>&1 | tee /tmp/corpus.log
           tail -1 /tmp/corpus.log >> "$GITHUB_STEP_SUMMARY"
+
+      # Always save a pass cache after the run (even on failure) so the
+      # next resume skips doors that passed this time. Merge with the
+      # existing cache and evict any doors that failed this run.
+      - name: Save pass cache
+        if: always()
+        run: |
+          # Extract IDs of doors that passed this run
+          grep -oE '^\s+\S+: pass' /tmp/corpus.log 2>/dev/null \
+            | sed 's/^[[:space:]]*//; s/: pass$//' \
+            > /tmp/new-passes.txt || true
+
+          # Extract IDs of doors that failed this run (to evict from cache)
+          grep -oE '^\s+\S+: FAIL' /tmp/corpus.log 2>/dev/null \
+            | sed 's/^[[:space:]]*//; s/: FAIL$//' \
+            > /tmp/new-fails.txt || true
+
+          # Merge: previous cache + new passes, then remove new failures
+          cat /tmp/pass-cache/corpus-pass-ids.txt /tmp/new-passes.txt 2>/dev/null \
+            | sort -u > /tmp/merged-passes.txt || cp /tmp/new-passes.txt /tmp/merged-passes.txt
+
+          if [[ -s /tmp/new-fails.txt ]]; then
+            grep -xvF -f /tmp/new-fails.txt /tmp/merged-passes.txt \
+              > /tmp/corpus-pass-ids.txt || true
+          else
+            cp /tmp/merged-passes.txt /tmp/corpus-pass-ids.txt
+          fi
+
+          COUNT=$(wc -l < /tmp/corpus-pass-ids.txt 2>/dev/null || echo 0)
+          echo "Saved $COUNT passing door IDs to pass cache" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pass cache
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-pass-cache
+          path: /tmp/corpus-pass-ids.txt
+          retention-days: 30
+          overwrite: true
 
       - name: Upload corpus log on failure
         if: failure()
