@@ -284,3 +284,24 @@ export async function writeUploadToDirFile(
     fileStatus === 'lcfiles'
   );
 }
+
+/**
+ * Update NDIRS file if dirNum exceeds current value.
+ * AquaScan and express.e read NDIRS to know how many DIR files exist in a
+ * conference. The upload code writes to DIR{maxDirs} but historically never
+ * updated NDIRS, so doors saw only DIR1 forever.
+ */
+export async function updateNdirsIfNeeded(conferencePath: string, dirNum: number): Promise<void> {
+  const ndirsPath = path.join(conferencePath, 'NDIRS');
+  let current = 0;
+  try {
+    const raw = await fs.readFile(ndirsPath, 'utf8');
+    current = parseInt(raw.trim(), 10) || 0;
+  } catch {
+    // NDIRS doesn't exist yet — treat as 0
+  }
+  if (dirNum > current) {
+    await fs.writeFile(ndirsPath, String(dirNum), 'utf8');
+console.log(`[DIR] Updated NDIRS from ${current} to ${dirNum} in ${path.basename(conferencePath)}`);
+  }
+}

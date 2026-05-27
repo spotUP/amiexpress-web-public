@@ -18,7 +18,7 @@ import {
 import { formatFileSize, formatUploadDate } from "../utils/file-upload.util";
 import { testFile, TestResult } from "../utils/file-test.util";
 import { moveUploadedFile, getConferenceDir } from "../utils/file-hold.util";
-import { writeUploadToDirFile } from "../utils/dir-file.util";
+import { writeUploadToDirFile, updateNdirsIfNeeded } from "../utils/dir-file.util";
 import { getMaxDirs } from "../utils/max-dirs.util";
 import {
   updateSysopUploadStats,
@@ -539,6 +539,10 @@ console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile
 console.log(
         `[Upload] Wrote DIR entry for ${currentFile.filename} to DIR${uploadDirNum}`
       );
+
+      // Keep NDIRS in sync so AquaScan and express.e see all directories
+      // express.e reads NDIRS to know the upper bound for directory scanning
+      await updateNdirsIfNeeded(conferencePath, uploadDirNum);
 
       // Write to FILES.BBS for third-party door compatibility (e.g., AquaScan)
       // FILES.BBS uses the same format as DIR files but is always in the Upload directory
