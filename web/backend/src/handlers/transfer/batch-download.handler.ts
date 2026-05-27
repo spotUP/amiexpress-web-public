@@ -16,6 +16,7 @@ import { ConferenceRepository } from '../../database/conference-repository';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import { getConferenceDir } from '../../utils/file-hold.util';
 
 /**
@@ -263,25 +264,30 @@ export class BatchDownloadHandler {
   ): Promise<any | null> {
     const confPath = getConferenceDir(confNum, dataDir);
 
-    // Search through all DIR# directories
-    for (let dirNum = 1; dirNum <= 20; dirNum++) {
-      const dirPath = path.join(confPath, `Dir${dirNum}`);
+    // Files live in Files/ or Upload/ — Dir1..DirN are AmiExpress
+    // metadata text files, not directories containing downloadable files.
+    const searchDirs = [
+      path.join(confPath, 'Files'),
+      path.join(confPath, 'Upload'),
+    ];
 
-      if (!fs.existsSync(dirPath)) continue;
+    for (const dir of searchDirs) {
+      if (!fs.existsSync(dir)) continue;
 
-      const filePath = path.join(dirPath, filename);
+      const filePath = path.join(dir, filename);
+      const resolved = amigafs.resolvePath(filePath); // case-insensitive
+      if (!resolved) continue;
 
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
+      const stats = fs.statSync(resolved);
+      if (!stats.isFile()) continue;
 
-        return {
-          name: filename,
-          size: stats.size,
-          confNum: confNum,
-          dirNum: dirNum,
-          fullPath: filePath
-        };
-      }
+      return {
+        name: path.basename(resolved), // actual on-disk case
+        size: stats.size,
+        confNum,
+        dirNum: 1,
+        fullPath: resolved,
+      };
     }
 
     return null;

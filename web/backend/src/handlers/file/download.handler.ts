@@ -25,6 +25,7 @@ import { db } from '../../database';
 import { config } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { userFileManager } from '../../services/UserFileManager';
@@ -786,9 +787,10 @@ export class DownloadHandler {
         }
       } else {
         const fp = path.join(dir, pattern);
-        if (fs.existsSync(fp)) {
-          const st = fs.statSync(fp);
-          if (st.isFile()) matchingFiles.push({ name: pattern, size: st.size, confNum, dirNum: 1, fullPath: fp });
+        const resolved = amigafs.resolvePath(fp); // case-insensitive on Linux
+        if (resolved) {
+          const st = fs.statSync(resolved);
+          if (st.isFile()) matchingFiles.push({ name: path.basename(resolved), size: st.size, confNum, dirNum: 1, fullPath: resolved });
         }
       }
     }
