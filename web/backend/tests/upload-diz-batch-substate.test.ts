@@ -62,3 +62,27 @@ describe('processBatchFile: UPLOAD_DESC_INPUT only set when tempData still exist
     expect(src).toMatch(/isWebUploadMode[\s\S]*?handleUploadBatchComplete/);
   });
 });
+
+describe('initial handleDizExtractionAndDescription callers also guard UPLOAD_DESC_INPUT', () => {
+  function readSrc(file: string) {
+    return fs.readFileSync(path.join(__dirname, '..', 'src', 'handlers', 'commands', file), 'utf8');
+  }
+
+  for (const file of ['user-commands.handler.ts', 'transfer-misc-commands.handler.ts']) {
+    test(`${file}: UPLOAD_DESC_INPUT assignment after handleDizExtractionAndDescription is guarded by session.tempData`, () => {
+      const src = readSrc(file);
+      // Match from the await call up to the actual subState assignment (not the comment).
+      const m = src.match(
+        /await handleDizExtractionAndDescription\([\s\S]*?session\.subState\s*=\s*LoggedOnSubState\.UPLOAD_DESC_INPUT/
+      );
+      expect(m).not.toBeNull();
+      const block = m![0];
+      // The if(session.tempData) guard must appear before the assignment
+      expect(block).toMatch(/if\s*\(\s*session\.tempData\s*\)/);
+      const guardIdx = block.indexOf('if (session.tempData)');
+      const assignIdx = block.lastIndexOf('UPLOAD_DESC_INPUT');
+      expect(guardIdx).toBeGreaterThan(-1);
+      expect(guardIdx).toBeLessThan(assignIdx);
+    });
+  }
+});

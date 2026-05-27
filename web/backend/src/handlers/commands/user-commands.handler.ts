@@ -225,7 +225,12 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
               size: firstSize,
               path: firstPath,
             }, appConfig);
-            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+            // Only set UPLOAD_DESC_INPUT if the batch is still active.
+            // When all files have FILE_ID.DIZ the recursive chain clears
+            // tempData and sets subState=DISPLAY_MENU before returning here.
+            if (session.tempData) {
+              session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+            }
           } catch (err: any) {
             console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
             socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');

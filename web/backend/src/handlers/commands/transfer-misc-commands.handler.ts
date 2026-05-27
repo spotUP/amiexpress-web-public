@@ -264,12 +264,16 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
               size: firstSize,
               path: firstPath,
             }, appConfig);
-            // If handleDiz returned false (waiting for description),
-            // session.subState was set to UPLOAD_DESC_INPUT. The state
-            // machine drives the rest. Don't run cleanPlayPen here —
-            // playpen still has the file rz wrote, processBatchFile
-            // moves it to FILES/LCFILES.
-            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+            // Only set UPLOAD_DESC_INPUT if the batch is still active.
+            // When all files have FILE_ID.DIZ the recursive chain
+            // processBatchFile → handleDizExtractionAndDescription →
+            // processBatchFile → handleUploadBatchComplete clears tempData
+            // and sets subState=DISPLAY_MENU before returning here.
+            // Overwriting would put the session in UPLOAD_DESC_INPUT with
+            // tempData=undefined → TypeError on next keypress.
+            if (session.tempData) {
+              session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+            }
           } catch (err: any) {
             console.error('[ZMODEM-UL-RZ] handleDizExtractionAndDescription failed:', err?.message || err);
             socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
