@@ -307,7 +307,7 @@ export class BatchDownloadHandler {
     await applyDownloadStats(user, fileInfo.size, isFree);
 
     // Save to database
-    const db = require('../database').db;
+    const db = require('../../database').db;
     await db.updateUser(user.id, {
       downloads: user.downloads,
       bytesDownload: user.bytesDownload,
@@ -338,7 +338,7 @@ console.log(`[BATCH DOWNLOAD] User ${user.username} downloaded ${fileInfo.name} 
       target.downloads = (target.downloads || 0) + 1;
       target.bytesDownload = (target.bytesDownload || 0) + (fileInfo.size || 0);
 
-      const rawDb = (require('../database').db as any).db ?? require('../database').db;
+      const rawDb = (require('../../database').db as any).db ?? require('../../database').db;
       const repo = new ConferenceRepository(rawDb);
       await repo.updateConference(target.id, {
         downloads: target.downloads,
@@ -354,7 +354,7 @@ console.error('[BATCH DOWNLOAD] Failed to persist conference download stats', er
       return session.conferences;
     }
     try {
-      const repo = new ConferenceRepository(require('../database').db);
+      const repo = new ConferenceRepository(require('../../database').db);
       const confs = await repo.getConferences();
       session.conferences = confs;
       return confs;
