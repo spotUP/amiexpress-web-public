@@ -113,8 +113,9 @@ jobs:
                       echo "--- Conf${cn}: no DIR files ---"
                       continue
                     fi
-                    ndirs=$(cat "$BASE/NDIRS" 2>/dev/null || echo "?")
-                    echo "--- Conf${cn}: NDIRS=${ndirs} ---"
+                    ndirs_upper=$(cat "$BASE/NDIRS" 2>/dev/null || echo "missing")
+                    ndirs_lower=$(cat "$BASE/ndirs" 2>/dev/null || echo "missing")
+                    echo "--- Conf${cn}: NDIRS(upper)=${ndirs_upper} ndirs(lower)=${ndirs_lower} ---"
                     ls -lrt "$BASE"/DIR* "$BASE"/dir* 2>/dev/null
                     if [ -f "$BASE/Upload/FILES.BBS" ]; then
                       echo "  FILES.BBS: $(wc -l < "$BASE/Upload/FILES.BBS") lines, $(wc -c < "$BASE/Upload/FILES.BBS") bytes"
