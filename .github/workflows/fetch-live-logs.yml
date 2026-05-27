@@ -113,14 +113,9 @@ jobs:
                       echo "--- Conf${cn}: no DIR files ---"
                       continue
                     fi
-                    echo "--- DIR files in Conf${cn} ---"
+                    ndirs=$(cat "$BASE/NDIRS" 2>/dev/null || echo "?")
+                    echo "--- Conf${cn}: NDIRS=${ndirs} ---"
                     ls -la "$BASE"/DIR* "$BASE"/dir* 2>/dev/null | head -10
-                    echo "(first file):"
-                    for f in "$BASE"/DIR* "$BASE"/dir*; do
-                      [ -f "$f" ] || continue
-                      head -3 "$f" 2>/dev/null
-                      break
-                    done
                     echo ""
                   done
                   echo "--- file_entries in DB (newest 10) ---"
