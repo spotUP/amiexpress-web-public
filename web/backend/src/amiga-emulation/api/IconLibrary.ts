@@ -685,6 +685,25 @@ console.log(`[icon.library]   No match found`);
           }
         }
 
+        // Count actual numbered DIR files on disk — ConfConfig.info NDIRS is often stale
+        // (e.g. set to 1 at install time and never updated as uploads create new directories).
+        // Use whichever value is higher so AquaScan always sees all real directories.
+        try {
+          const confDir = path.join(this.bbsRoot, `Conf${confNum}`);
+          const confEntries = fs.readdirSync(confDir);
+          let highestDir = 0;
+          for (const name of confEntries) {
+            const m = name.match(/^[Dd][Ii][Rr](\d+)$/);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > highestDir) highestDir = n;
+            }
+          }
+          if (highestDir > ndirs) ndirs = highestDir;
+        } catch {
+          // Conference directory unreadable — keep ndirs from ConfConfig.info
+        }
+
         // Fall back to conventional Upload/ directory if ConfConfig.info missing or incomplete
         if (!ulpath) {
           const uploadDir = path.join(this.bbsRoot, `Conf${confNum}`, 'Upload');
