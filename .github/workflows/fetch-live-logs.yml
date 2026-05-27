@@ -122,11 +122,21 @@ jobs:
                     fi
                     echo ""
                   done
+                  echo "--- newest DIR22-DIR24 content (Conf2) ---"
+                  for n in 22 23 24; do
+                    f="/app/data/bbs/Conf2/DIR${n}"
+                    if [ -f "$f" ]; then
+                      echo "=== DIR${n} ==="
+                      cat "$f"
+                    fi
+                  done
+                  echo "--- find sqlite DB ---"
+                  find /app -name "amiexpress.db" 2>/dev/null | head -5
                   echo "--- file_entries in DB (newest 10) ---"
-                  for db in /app/data/bbs/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/amiexpress.db; do
+                  for db in /app/data/bbs/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/amiexpress.db /app/web/backend/database.sqlite /app/database.sqlite; do
                     [ -f "$db" ] || continue
                     echo "==== $db ===="
-                    sqlite3 "$db" "SELECT id, filename, size, uploader, status, checked, uploadDate, conferenceId FROM file_entries ORDER BY id DESC LIMIT 10;" 2>/dev/null
+                    sqlite3 "$db" "SELECT id, filename, size, uploader, status, checked, uploadDate, conferenceId FROM file_entries ORDER BY id DESC LIMIT 10;" 2>/dev/null || true
                   done
                 ' 2>&1 || true
                 FILE="$LOGS_DIR/backend.log"
