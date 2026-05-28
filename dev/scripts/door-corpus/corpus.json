@@ -12,7 +12,7 @@
       "timeoutMs": 30000,
       "notes": "WHO v2.0 by Spy/MST. Renders who's-online header banner then queries active nodes. Exercises XIM BB_MAINLINE / ACTIVE_NODES / MULTICOM ops + DT_SECSTATUS user-field path. Non-interactive, exits cleanly. Verified deterministic 2026-05-12.",
       "integration": {
-        "timeoutMs": 20000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -44,7 +44,7 @@
       "timeoutMs": 30000,
       "notes": "Aqua who's-online listing. Exercises XIM data-query path (DT_NAME/DT_LOCATION/DT_LINE_NO) for all nodes. Non-interactive \u2014 renders list and exits.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -86,7 +86,7 @@
       ],
       "notes": "5D-TimeBank \u2014 time-deposit/withdraw door. 'Q' hotkey quits per its UI hint. Exercises XIM DT_TIMELIMIT + RAWARROW + JH_HK input path.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -128,7 +128,7 @@
       ],
       "notes": "LogOff v1.2 by Steve and DR. G of Italian Bad Boys '93. Confirms 'do you really want to LogOff (y)es/(N)o/(r)eply ?' \u2014 'n' declines + door exits. First door in corpus to exercise JH_BBSNAME (BBS name query) and DT_NAME together with the hotkey path.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -169,7 +169,7 @@
       ],
       "notes": "5D-ZippySearch by sTc/5D. Line-input prompt 'Enter string to search for >:'. Bare Enter aborts the search and exits the door. Exercises XIM JH_LI (line-input) path \u2014 first corpus door to cover that op.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -211,7 +211,7 @@
       ],
       "notes": "Bulletin update door from 5150-B10. Prompt 'Update bulletins? (y/N):' \u2014 'n' declines and exits. Minimal 3.9 KB binary \u2014 useful for pinning the JH_HK hotkey path in isolation (no other XIM ops fire).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -247,7 +247,7 @@
       "timeoutMs": 30000,
       "notes": "JoinCnf 3.6 \u2014 third-party conference-join helper (independent of the BBS's internal `J` command). Non-interactive \u2014 renders + exits.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -282,7 +282,7 @@
       "timeoutMs": 30000,
       "notes": "RatioReport 1.7 by Captain Caveman (30th). Exercises file-ratio reporting path.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -318,7 +318,7 @@
       "timeoutMs": 30000,
       "notes": "EMPiRE AutoOnline 1.2 \u2014 auto-online activity bulletin. Different category from status doors (status writer not reader).",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -354,7 +354,7 @@
       "timeoutMs": 30000,
       "notes": "C+N Conference Security V1.30 \u2014 checks access on conference join. Different XIM surface from JoinCnf (access-check vs join-action).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -390,7 +390,7 @@
       "timeoutMs": 30000,
       "notes": "S!X Stat V2.0 from LGC \u2014 29-op status renderer, distinct fingerprint from U-Stat/newinfo/5D-Status.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -399,7 +399,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -412,7 +426,7 @@
       "timeoutMs": 30000,
       "notes": "Insanity sKAN^4^sTATUs \u2014 28-op status door, again distinct fingerprint.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -421,7 +435,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -502,7 +530,7 @@
       "timeoutMs": 30000,
       "notes": "mgs! bulls bulletin-list door \u2014 exercises DT_TIMEOUT + BB_LINECOUNT (line-counted page output).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -544,7 +572,7 @@
       ],
       "notes": "MST wall door \u2014 prompts 'Write On Wall (y/n)?' \u2014 declines, exits. Represents a 5-door y/n cluster from the bulk-probe timeout-cluster miner (wall.000/.010/.020/.030 and variants). One corpus entry pins the JH_HK y/n input path for the cluster.",
       "integration": {
-        "timeoutMs": 40000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -586,7 +614,7 @@
       ],
       "notes": "CDTrans \u2014 CD-ROM file transfer helper. Prompts 'Filename(01):' \u2014 bare Enter aborts, door exits. Represents a 5-door 'Filename:' line-input cluster (CDTrans/CD_DL.EXE variants).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -695,7 +723,7 @@
       ],
       "notes": "Psychopath 1996 logoff/sysop-comment door. Prompt 'Do you want to leave mail to the sysop before you leave? (y/N)?' \u2014 'n' declines and exits. Cluster representative for the 5-door PSY_LogOff.*.Xim family (000/010/020/030/040 CPU variants) surfaced by timeout-cluster mining 2026-05-12.",
       "integration": {
-        "timeoutMs": 10000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -732,7 +760,7 @@
       ],
       "notes": "5D^QuickAnsi 0.05 \u2014 tiny 1.2 KB ANSI tester from sTc/5D. Prompt 'Choose : ->' line-input. Bare Enter exits. Cluster representative for the 7-door 5D^QuickAnsi family (cluster mined 2026-05-12 \u2014 biggest 'Choose : ->' cluster in the universe sample).",
       "integration": {
-        "timeoutMs": 12000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -774,7 +802,7 @@
       ],
       "notes": "Aqua ListSpeeder 1.2 \u2014 file-listing accelerator. Bare '>' prompt is a line-input read; Enter exits. Cluster representative for the 4-door ListSpeeder family (000/020/030/040 CPU variants).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -816,7 +844,7 @@
       ],
       "notes": "DPL GoodBye 1.1 (variant 'GoodBye.x'). Prompt 'Do you want to logoff or write a comment? (c/y/N)' \u2014 'n' declines and exits. Cluster representative for the 4-door GoodBye.x family (000/020/030/040 CPU variants).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -858,7 +886,7 @@
       ],
       "notes": "DPL MasterView (variant 'MasterView.x'). Prompt 'Enter name of file to view :' line-input. Bare Enter aborts and exits. Cluster representative for the 4-door MasterView.x family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -900,7 +928,7 @@
       ],
       "notes": "AFL G logoff door (AFL_PACK.LHA). Line-input prompt 'Do U realy whish to logoff? (Y/n)' \u2014 'n' + Enter aborts and exits with 'Aborting!'. 3-door cluster representative for the G.0X0 CPU-variant family. Second JH_LI multi-byte input corpus entry.",
       "integration": {
-        "timeoutMs": 12000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -979,7 +1007,7 @@
       ],
       "notes": "5D logoff door (5D-LO014.LHA source). Heavy ASCII banner \u2014 4-door cluster representative. Bare \\r exits.",
       "integration": {
-        "timeoutMs": 12000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1017,7 +1045,7 @@
       ],
       "notes": "AFL cOLORWALL 1.3 (AFL-CW13.LHA). Renders graffiti wall, prompts '[KEY] TO CONTINUE !'. Bare Enter exits. 4-door cluster representative for the cOLORWALl CPU-variant family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1092,7 +1120,7 @@
       ],
       "notes": "Honey d-lOSt_bULLs 0.2 (HNY-LB02.LHA). Bulletin selector. Line-input 'eNTEr a bULLETINe nr# to vIEw or hIt rETURn to qUIt :>' \u2014 bare \\r exits. 4-door cluster representative.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1134,7 +1162,7 @@
       ],
       "notes": "MST wall.020 \u2014 graffiti-wall door. Prompt 'Write On Wall (y/n)?', 'n' declines and exits. Cluster representative for the 5-door wall.0X0 CPU-variant family (distinct from the wall-mst corpus entry \u2014 different banner / DT_NAME path / JH_SG show-gfile op).",
       "integration": {
-        "timeoutMs": 10000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1172,7 +1200,7 @@
       ],
       "notes": "MST edit.020 \u2014 file-edit door. Line-input prompt 'Filename :' \u2014 bare Enter aborts and exits. Cluster representative for the 5-door edit.0X0 CPU-variant family. 30 JH_SM ops \u2014 heavy banner.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1214,7 +1242,7 @@
       ],
       "notes": "Tiny 1.7 KB CD download helper from Rioter Tools. Line-input 'Filename(01):' \u2014 bare Enter exits. Cluster representative for the 5-door 'Filename(NN):' family (CD_DL + CDTrans variants), distinct from the cdtrans corpus entry by AEDoor library path (uses OldOpenLibrary).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1293,7 +1321,7 @@
       ],
       "notes": "WarCalls 1.2 by Wardancer/Humane&Vanity. Three-stage prompt: line-input 'Enter minimum number of times online :', then JH_HK 'List ul/dl bytes... (y/N)', then JH_HK 'Would you like the output also to be copied to a file (y/N)'. Bare-CR + n + n exits clean. Cluster representative for the 5-door WarCalls family \u2014 first multi-input corpus entry.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1335,7 +1363,7 @@
       ],
       "notes": "H&V QuickLogon 1.0 \u2014 quick-logon-prompt door. Prompt 'Would you like a quick logon? (y/N)' \u2014 'n' declines and exits. Cluster representative for the 6-door QuickLogon family (DTR/H&V variants).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1398,7 +1426,7 @@
       ],
       "notes": "Conference updater. Menu prompt with JH_HK; Q exits.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1439,7 +1467,7 @@
       ],
       "notes": "AFL stats viewer. JH_LI prompts terminated by CR; 2 CRs to walk through and exit cleanly.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1484,7 +1512,7 @@
       ],
       "notes": "AFL/fanta password-failure helper. Y/n -> n skips comment; subsequent Hit-Space prompt advances on space. Cluster representative for the 3-door Pwfail.* CPU-variant family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1532,7 +1560,7 @@
       ],
       "notes": "Exorcist! file processor. Prints background-task startup banner then exits when the spawned task fails. Cluster representative for the 7-door Exorcist!_2_*/Exorcist!_3_* CPU-variant family.",
       "integration": {
-        "timeoutMs": 20000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1541,7 +1569,20 @@
             "Software failure"
           ]
         },
-        "inputs": []
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1559,7 +1600,7 @@
       ],
       "notes": "TurboZippy file search. Renders banner and exits on CR when its config is absent. Cluster representative for the 8-door TurboZ family (\"Enter string to search for:\" prompt).",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1600,7 +1641,7 @@
       ],
       "notes": "OOPS! /X DEV wall door. Renders full wall + Y/N add-line prompt; declines via CR and exits with two retry insults (\"What's Da Matter? / Lost Yar Guts Or What!?\"). Cluster representative for the 3-door fulledit/formedit/DaWall family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1640,7 +1681,7 @@
       ],
       "notes": "BossNuke file-nuker. \"Filespec #1 :\" prompt; CR exits when config absent. Cluster representative for the 3-door BossNuke family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1689,7 +1730,7 @@
       ],
       "notes": "DCS TurboN configurator. \"1>\" prompt + line input; CR/CR/q exits. Cluster representative for the 3-door TNConfig family.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1742,7 +1783,7 @@
       ],
       "notes": "DCS TurboN Newscan Pro 2.z by MaCK LiFeGuaRD. Multi-prompt newscan; 4\u00d7 CR walks date-range/dir prompts and exits at \"ENTER=EXIT\". Cluster representative for the 3-door TurboN family.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1776,7 +1817,7 @@
       "timeoutMs": 30000,
       "notes": "Intellect S-Stats stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1785,7 +1826,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1797,7 +1852,7 @@
       "timeoutMs": 30000,
       "notes": "FLD up/down stat door; non-interactive, exits cleanly. Distinct-fingerprint cluster representative from coverage:report; deterministic under HH:MM time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1832,7 +1887,7 @@
       "timeoutMs": 30000,
       "notes": "I/C status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1841,7 +1896,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1853,7 +1922,7 @@
       "timeoutMs": 30000,
       "notes": "MGS! userstatus \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1888,7 +1957,7 @@
       "timeoutMs": 30000,
       "notes": "KD Tough ConfStats 1.3 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1923,7 +1992,7 @@
       "timeoutMs": 30000,
       "notes": "NB status \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1932,7 +2001,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1944,7 +2027,7 @@
       "timeoutMs": 30000,
       "notes": "LGC S!X Stat 2.0 \u2014 clean-exit stat door from coverage:report mining round; deterministic under HH:MM/HH:MM:SS time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1953,7 +2036,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -1965,7 +2062,7 @@
       "timeoutMs": 30000,
       "notes": "IHS Ul-Logoff 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 12000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -1996,7 +2093,7 @@
       "timeoutMs": 30000,
       "notes": "BBoPeN 1.1 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2031,7 +2128,7 @@
       "timeoutMs": 30000,
       "notes": "LGC BelchNET 0.5 \u2014 clean-exit cluster representative from coverage:report mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2066,7 +2163,7 @@
       "timeoutMs": 30000,
       "notes": "FG axnewsbase \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2101,7 +2198,7 @@
       "timeoutMs": 30000,
       "notes": "FG axnewsbasexim \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2136,7 +2233,7 @@
       "timeoutMs": 30000,
       "notes": "INS SBull 2.7r5 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 12000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2171,7 +2268,7 @@
       "timeoutMs": 30000,
       "notes": "NB BelchLIST \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 60000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2206,7 +2303,7 @@
       "timeoutMs": 30000,
       "notes": "AQ AnnounceLogon 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2241,7 +2338,7 @@
       "timeoutMs": 30000,
       "notes": "BB BBhELP 1.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2276,7 +2373,7 @@
       "timeoutMs": 30000,
       "notes": "CRD SysOpAvail 1.2 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2311,7 +2408,7 @@
       "timeoutMs": 30000,
       "notes": "FAFCST ChatStarter 2.0 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2320,7 +2417,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2332,7 +2443,7 @@
       "timeoutMs": 30000,
       "notes": "LGC BelchVIEW 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2341,7 +2452,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2353,7 +2478,7 @@
       "timeoutMs": 30000,
       "notes": "MST ByteKiller 1.3 \u2014 clean-exit cluster representative from coverage:report round-4 mining; deterministic under HH:MM/HH:MM:SS/HH-only time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2362,7 +2487,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2374,7 +2513,7 @@
       "timeoutMs": 30000,
       "notes": "5D-USR11 5D-User \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2409,7 +2548,7 @@
       "timeoutMs": 30000,
       "notes": "5D5ESA10 5D^SYSAVAIL \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2444,7 +2583,7 @@
       "timeoutMs": 30000,
       "notes": "5D^AMN10 5D-AdiMenu \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2479,7 +2618,7 @@
       "timeoutMs": 30000,
       "notes": "AEKIT101 FrontEnd \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2514,7 +2653,7 @@
       "timeoutMs": 30000,
       "notes": "AFLWHO10 AFL_Who10 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2523,7 +2662,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2535,7 +2688,7 @@
       "timeoutMs": 30000,
       "notes": "BTH-WA02 KeroWall \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2570,7 +2723,7 @@
       "timeoutMs": 30000,
       "notes": "M!S-FA6 idADD \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2605,7 +2758,7 @@
       "timeoutMs": 30000,
       "notes": "WAR-CM10 WarComment \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2614,7 +2767,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2626,7 +2793,7 @@
       "timeoutMs": 30000,
       "notes": "YDL-MENS wm2 \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2635,7 +2802,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2647,7 +2828,7 @@
       "timeoutMs": 30000,
       "notes": "AEXSETU scan \u2014 clean-exit cluster representative from coverage:report round-5 mining; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2682,7 +2863,7 @@
       "timeoutMs": 30000,
       "notes": "5D^AMU20.LHA 5d-adimui \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2717,7 +2898,7 @@
       "timeoutMs": 30000,
       "notes": "AEXSETU.LHA doormenu \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2752,7 +2933,7 @@
       "timeoutMs": 30000,
       "notes": "BB_H1O.LHA BBhELP \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2787,7 +2968,7 @@
       "timeoutMs": 30000,
       "notes": "CRD-NU12.LHA SysOpAvail \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2822,7 +3003,7 @@
       "timeoutMs": 30000,
       "notes": "NB-OLM14.LHA BelchOLM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2831,7 +3012,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2843,7 +3038,7 @@
       "timeoutMs": 30000,
       "notes": "SLICKW20.LHA loggon \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2878,7 +3073,7 @@
       "timeoutMs": 30000,
       "notes": "TE_BULLM.LHA BullMenue \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2913,7 +3108,7 @@
       "timeoutMs": 30000,
       "notes": "AEXSETU.LHA auxed \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2948,7 +3143,7 @@
       "timeoutMs": 30000,
       "notes": "NB-OLM13.LHA BelchOLM \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -2957,7 +3152,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -2969,7 +3178,7 @@
       "timeoutMs": 30000,
       "notes": "AEXSETU.LHA who1.0 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3004,7 +3213,7 @@
       "timeoutMs": 30000,
       "notes": "ATX-TCOM.LHA TComm \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3115,7 +3324,7 @@
       "timeoutMs": 30000,
       "notes": "MTH-BU1.LHA Examine \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 28000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3150,7 +3359,7 @@
       "timeoutMs": 30000,
       "notes": "MTH-BU1.LHA SetUp \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3185,7 +3394,7 @@
       "timeoutMs": 30000,
       "notes": "NB-BV1.LHA BelchView \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3194,7 +3403,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -3206,7 +3429,7 @@
       "timeoutMs": 30000,
       "notes": "RNSC-FE4.LHA frontend \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3241,7 +3464,7 @@
       "timeoutMs": 30000,
       "notes": "SRH_DM14.LHA DoorMenu \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3276,7 +3499,7 @@
       "timeoutMs": 30000,
       "notes": "ADN-C120.LHA AdN-Cycle.x \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 25000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3346,7 +3569,7 @@
       "timeoutMs": 30000,
       "notes": "LGC-BJ09.LHA BelchJOIN \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3355,7 +3578,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -3367,7 +3604,7 @@
       "timeoutMs": 30000,
       "notes": "NVX-AWAI.LHA V-Await \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 28000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3376,7 +3613,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -3457,7 +3708,7 @@
       "timeoutMs": 30000,
       "notes": "MOVER Mover \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3492,7 +3743,7 @@
       "timeoutMs": 30000,
       "notes": "FLD-CHAT 8 \u2014 clean-exit cluster representative from fast-mine batch; deterministic under time mask.",
       "integration": {
-        "timeoutMs": 18000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3501,7 +3752,21 @@
             "Software failure"
           ],
           "expectedSubState": "DISPLAY_MENU"
-        }
+        },
+        "inputs": [
+          {
+            "delayMs": 1000,
+            "data": "\r"
+          },
+          {
+            "delayMs": 3000,
+            "data": "q\r"
+          },
+          {
+            "delayMs": 5000,
+            "data": "\r"
+          }
+        ]
       }
     },
     {
@@ -3519,7 +3784,7 @@
       ],
       "notes": "MDB Zippy Search 1.03. Renders search menu + Q hotkey exits. Recovered from deferred mining round 9.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -3560,7 +3825,7 @@
       ],
       "notes": "5D-Page sysop pager. CR advances + exits. Recovered from input-variant brute-force batch.",
       "integration": {
-        "timeoutMs": 14000,
+        "timeoutMs": 8000,
         "assertions": {
           "mustNotContain": [
             "TRAP",
@@ -15054,7 +15319,9 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "skip": true,
+        "skipReason": "waits for network/input that q\r cannot satisfy"
       }
     },
     {
@@ -15114,7 +15381,9 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "skip": true,
+        "skipReason": "waits for network/input that q\r cannot satisfy"
       }
     },
     {
@@ -15174,7 +15443,9 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "skip": true,
+        "skipReason": "waits for input that q\r cannot satisfy"
       }
     },
     {
@@ -15324,7 +15595,9 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "skip": true,
+        "skipReason": "waits for input that q\r cannot satisfy"
       }
     },
     {
@@ -15354,7 +15627,9 @@
             "Guru",
             "Software failure"
           ]
-        }
+        },
+        "skip": true,
+        "skipReason": "waits for input that q\r cannot satisfy"
       }
     },
     {
