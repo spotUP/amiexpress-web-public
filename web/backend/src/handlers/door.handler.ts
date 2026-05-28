@@ -2739,6 +2739,13 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     await amigaSession.start();
     console.log(`[TIMING] after amigaSession.start() (door exited): ${Date.now() - __doorT0}ms`);
 
+    // Flush any buffered door stdout before processing RETURNCOMMAND output.
+    // emitText() batches writes in a 16ms window; RETURNCOMMAND handlers call
+    // socket.emit() directly (immediate). Without this flush the door's trailing
+    // \r\n arrives at the client AFTER the filespec/menu prompt, moving the
+    // cursor one row below where it should land.
+    flushOutput(socket);
+
     // Log door exit to Node{N}/DoorLog
     logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
 
