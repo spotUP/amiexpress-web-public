@@ -1579,11 +1579,6 @@ console.log(`[executeDoor] Door ${door.name} completed during segment processing
       // prompt). Do NOT overwrite — the prompt's own state machine
       // owns the next input.
       console.log(`[executeDoor] interactive prompt active (${session.subState}), skipping menu transition`);
-    } else if (door.command?.toUpperCase() === 'D') {
-      // D command (UploadDetector ratio gate) exited cleanly — proceed with download
-      session.menuPause = false;
-      const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
-      await BatchDownloadHandler.handleBatchDownload(socket, session);
     } else {
       // Normal door completion - return to menu (express.e behavior after doors)
       session.menuPause = false;

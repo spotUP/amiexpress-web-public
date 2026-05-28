@@ -43,6 +43,13 @@
  *   --capture               write captured output as the integration
  *                           golden instead of asserting
  *   --keep-ansi             keep raw ANSI in goldens (default: strip)
+ *   --reset                 delete saved progress and start from scratch
+ *
+ * Progress / resume:
+ *   Results are saved to dev/scripts/door-corpus/corpus-progress.json
+ *   after every door. On restart the runner skips doors that already
+ *   have status=pass or status=captured in that file. Failed doors are
+ *   always retried. Use --reset to wipe the checkpoint.
  *
  * Goldens: dev/scripts/door-corpus/goldens/<id>/integration.txt
  */
@@ -54,6 +61,7 @@ import "reflect-metadata";
 
 import { EventEmitter } from "events";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 import type { Door } from "../types";
@@ -65,6 +73,7 @@ import { EnvStat } from "../constants/env-codes";
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
 const CORPUS = path.join(REPO_ROOT, "dev/scripts/door-corpus/corpus.json");
 const GOLDENS = path.join(REPO_ROOT, "dev/scripts/door-corpus/goldens");
+const PROGRESS_FILE = path.join(REPO_ROOT, "dev/scripts/door-corpus/corpus-progress.json");
 
 const ANSI_STRIP = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
@@ -113,6 +122,39 @@ interface RunResult {
    *  expectedSubState assertion to record for the door. Logged
    *  when CORPUS_LEARN_SUBSTATE=1 is set. */
   finalSubState?: string;
+}
+
+interface ProgressEntry {
+  status: "pass" | "fail" | "skip" | "captured";
+  wallMs: number;
+  completedAt: string;
+  detail?: string;
+}
+
+interface ProgressFile {
+  version: 1;
+  startedAt: string;
+  results: Record<string, ProgressEntry>;
+}
+
+function loadProgress(): ProgressFile {
+  if (fs.existsSync(PROGRESS_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+      if (parsed?.version === 1 && parsed.results) return parsed as ProgressFile;
+    } catch { /* corrupt — start fresh */ }
+  }
+  return { version: 1, startedAt: new Date().toISOString(), results: {} };
+}
+
+function saveOneResult(id: string, entry: ProgressEntry): void {
+  // Re-read from disk so concurrent/external writes (e.g. pre-population)
+  // are preserved — we only add/update the one entry we just finished.
+  const current = loadProgress();
+  current.results[id] = entry;
+  const tmp = PROGRESS_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(current, null, 2));
+  fs.renameSync(tmp, PROGRESS_FILE);
 }
 
 class MockSocket extends EventEmitter {
@@ -372,19 +414,34 @@ async function pool<T, R>(
 async function main() {
   const args = process.argv.slice(2);
   let only: Set<string> | null = null;
-  let concurrency = 4;
+  // 68K doors (XIM/AIM/SIM/TIM/IIM) share Moira — serialize them.
+  // TS/native/AREXX doors are independent — run as many as CPU allows.
+  const cpus = os.cpus().length;
+  let concurrency68k = 1;
+  let concurrencyTs = Math.max(2, cpus - 2); // leave 2 cores for system
   let capture = false;
   let captureAll = false;
   let keepAnsi = false;
+  let reset = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--only") only = new Set(args[++i].split(",").map((s) => s.trim()));
-    else if (a === "--concurrency") concurrency = parseInt(args[++i], 10);
+    else if (a === "--concurrency") {
+      concurrency68k = parseInt(args[++i], 10);
+      concurrencyTs = concurrency68k; // honour explicit override for both
+    } else if (a === "--concurrency-68k") concurrency68k = parseInt(args[++i], 10);
+    else if (a === "--concurrency-ts") concurrencyTs = parseInt(args[++i], 10);
     else if (a === "--capture") capture = true;
     else if (a === "--capture-all") {
       capture = true;
       captureAll = true;
     } else if (a === "--keep-ansi") keepAnsi = true;
+    else if (a === "--reset") reset = true;
+  }
+
+  if (reset && fs.existsSync(PROGRESS_FILE)) {
+    fs.unlinkSync(PROGRESS_FILE);
+    process.stdout.write("[integration] progress reset — starting from scratch\n");
   }
 
   // Boot only the BBS bits we need: door registry. Skip database +
@@ -465,6 +522,8 @@ async function main() {
     };
   };
 
+  const progress = loadProgress();
+
   const corpus = JSON.parse(fs.readFileSync(CORPUS, "utf8")) as {
     doors: CorpusEntry[];
   };
@@ -480,41 +539,138 @@ async function main() {
     process.exit(0);
   }
 
+  // Skip doors already completed (pass/captured) unless --only was used
+  // to explicitly target them. Failed and skipped doors always re-run.
+  const alreadyDone = entries.filter(
+    (e) => !only?.has(e.id) &&
+      (progress.results[e.id]?.status === "pass" ||
+       progress.results[e.id]?.status === "captured"),
+  );
+  const toRun = entries.filter((e) => !alreadyDone.includes(e));
+
+  if (alreadyDone.length > 0) {
+    process.stdout.write(
+      `[integration] resuming: ${alreadyDone.length} already done, ${toRun.length} remaining\n`,
+    );
+  }
+
+  const is68k = (e: CorpusEntry) =>
+    ["XIM","AIM","SIM","TIM","IIM"].includes((e.doorType || "").toUpperCase());
+
+  const toRun68k = toRun.filter(is68k);
+  const toRunTs  = toRun.filter((e) => !is68k(e));
+
   process.stdout.write(
-    `[integration] ${entries.length} doors, concurrency=${concurrency}${capture ? ", CAPTURE" : ""}\n`,
+    `[integration] ${toRun.length} doors to run` +
+    ` (68K:${toRun68k.length}@c=${concurrency68k} TS/native:${toRunTs.length}@c=${concurrencyTs})` +
+    `${capture ? " CAPTURE" : ""}\n`,
   );
 
+  if (toRun.length === 0) {
+    process.stdout.write("[integration] all doors complete — use --reset to re-run\n");
+    // Still report totals from saved progress
+    const all = Object.values(progress.results);
+    const pass = all.filter((r) => r.status === "pass").length;
+    const fail = all.filter((r) => r.status === "fail").length;
+    const skip = all.filter((r) => r.status === "skip").length;
+    const cap = all.filter((r) => r.status === "captured").length;
+    process.stdout.write(`\n[integration] pass=${pass} fail=${fail} skip=${skip} captured=${cap}\n`);
+    process.exit(fail > 0 ? 1 : 0);
+  }
+
+  const runStart = Date.now();
+  let freshDone = 0;
+  let freshPass = 0;
+  let freshFail = 0;
+  let freshSkip = 0;
+  const totalAll = entries.length;
+
+  function renderBar(): string {
+    const totalDone = alreadyDone.length + freshDone;
+    const pct = Math.floor((totalDone / totalAll) * 100);
+    const BAR = 30;
+    const filled = Math.floor((totalDone / totalAll) * BAR);
+    const bar = "=".repeat(filled) + (filled < BAR ? ">" : "") + " ".repeat(Math.max(0, BAR - filled - 1));
+
+    const elapsed = Date.now() - runStart;
+    const rate = freshDone > 0 ? elapsed / freshDone : 0;
+    const etaMs = rate > 0 ? (toRun.length - freshDone) * rate : 0;
+    const etaStr = etaMs > 0
+      ? etaMs > 3600000
+        ? `${Math.floor(etaMs / 3600000)}h${Math.floor((etaMs % 3600000) / 60000)}m`
+        : etaMs > 60000
+          ? `${Math.floor(etaMs / 60000)}m${Math.floor((etaMs % 60000) / 1000)}s`
+          : `${Math.floor(etaMs / 1000)}s`
+      : "--";
+
+    return `[${bar}] ${pct}% ${totalDone}/${totalAll} | pass:${alreadyDone.length + freshPass} fail:${freshFail} skip:${freshSkip} | ETA:${etaStr}`;
+  }
+
   let nodeCounter = 1;
-  const results = await pool(entries, concurrency, async (entry) => {
+
+  async function runPool(entries: CorpusEntry[], concurrency: number) {
+    return pool(entries, concurrency, async (entry) => {
     const nodeId = nodeCounter++;
     const r = await runOne(entry, executeDoor, findDoor, {
       capture,
       keepAnsi,
       nodeId,
     });
+    // Save progress after every door — merge into disk state so external
+    // pre-population of goldens is never clobbered.
+    saveOneResult(r.id, {
+      status: r.status,
+      wallMs: r.wallMs,
+      completedAt: new Date().toISOString(),
+      detail: r.detail,
+    });
+
+    freshDone++;
+    if (r.status === "pass" || r.status === "captured") freshPass++;
+    else if (r.status === "fail") freshFail++;
+    else freshSkip++;
+
     const tag =
-      r.status === "pass" ? "pass" :
-      r.status === "captured" ? `captured (${r.captured?.length ?? 0}B)` :
-      r.status === "skip" ? `SKIP ${r.detail}` :
-      `FAIL ${r.detail}`;
+      r.status === "pass" ? "PASS" :
+      r.status === "captured" ? `CAPTURED(${r.captured?.length ?? 0}B)` :
+      r.status === "skip" ? `SKIP` :
+      `FAIL`;
     const subStateSuffix =
       process.env.CORPUS_LEARN_SUBSTATE === "1" && r.finalSubState
-        ? ` [subState=${r.finalSubState}]`
+        ? ` [${r.finalSubState}]`
         : "";
-    process.stdout.write(
-      `  ${r.id}: ${tag} (${r.wallMs}ms)${subStateSuffix}\n`,
-    );
-    return r;
-  });
+    const detail = (r.status === "fail" || r.status === "skip") && r.detail
+      ? ` — ${r.detail.slice(0, 80)}`
+      : "";
 
-  const pass = results.filter((r) => r.status === "pass").length;
-  const fail = results.filter((r) => r.status === "fail").length;
-  const skip = results.filter((r) => r.status === "skip").length;
-  const cap = results.filter((r) => r.status === "captured").length;
+    // Clear progress bar line, print result, reprint bar
+    process.stdout.write(`\r${" ".repeat(100)}\r`);
+    process.stdout.write(`  ${tag} ${r.id} (${r.wallMs}ms)${subStateSuffix}${detail}\n`);
+    process.stdout.write(renderBar());
+
+    return r;
+    });
+  }
+
+  // Run 68K (serialized) and TS/native (parallel) concurrently with each other.
+  const [results68k, resultsTs] = await Promise.all([
+    runPool(toRun68k, concurrency68k),
+    runPool(toRunTs, concurrencyTs),
+  ]);
+  const freshResults = [...results68k, ...resultsTs];
+
+  process.stdout.write("\n");
+
+  // Merge fresh results with previously-completed for final totals
+  const allResults = Object.values(progress.results);
+  const pass = allResults.filter((r) => r.status === "pass").length;
+  const fail = allResults.filter((r) => r.status === "fail").length;
+  const skip = allResults.filter((r) => r.status === "skip").length;
+  const cap = allResults.filter((r) => r.status === "captured").length;
   process.stdout.write(
-    `\n[integration] pass=${pass} fail=${fail} skip=${skip} captured=${cap}\n`,
+    `\n[integration] pass=${pass} fail=${fail} skip=${skip} captured=${cap} (total across all runs)\n`,
   );
-  process.exit(fail > 0 ? 1 : 0);
+  process.exit(freshFail > 0 ? 1 : 0);
 }
 
 main().catch((e) => {

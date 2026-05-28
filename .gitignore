@@ -467,3 +467,4 @@ System/Rexxc/
 # - thoughts/searchable/   — hard links for searching, GIT-IGNORED
 thoughts/spot/
 thoughts/searchable/
+dev/scripts/door-corpus/corpus-progress.json
