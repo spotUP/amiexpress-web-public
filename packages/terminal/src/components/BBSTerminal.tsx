@@ -622,7 +622,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       rows: 25,
     });
 
-    term.open(terminalRef.current);
+    // xterm.js 5.5.0 registers touchstart with {passive:true} but calls
+    // preventDefault() inside it, producing console warnings. Intercept
+    // addEventListener on this element before open() so touchstart is
+    // forced non-passive.
+    const el = terminalRef.current;
+    const _origAddEvent = el.addEventListener.bind(el);
+    el.addEventListener = (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) => {
+      if (type === 'touchstart' && options && typeof options === 'object' && options.passive) {
+        options = { ...options, passive: false };
+      }
+      _origAddEvent(type, listener, options);
+    };
+    term.open(el);
+    el.addEventListener = _origAddEvent; // restore immediately after open()
     terminalInstance.current = term;
 
     // When keepFocused is set, auto-refocus whenever the terminal loses focus.
@@ -2633,7 +2650,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         onMouseUp={handleMouseUp}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { mouseButtonDown.current = false; }}
-        onWheel={handleWheel}
         onContextMenu={handleContextMenu}
         tabIndex={0}
         style={{
