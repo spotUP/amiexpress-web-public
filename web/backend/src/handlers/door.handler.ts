@@ -1572,12 +1572,12 @@ console.log(`[executeDoor] Door ${door.name} completed during segment processing
       session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
       session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
       session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
-      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT
+      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT ||
+      session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT ||
+      session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT
     ) {
-      // Door's RETURNCOMMAND chain parked us in an interactive
-      // transfer/prompt state (e.g. UL-LOGOFF → RZ → resumeStuff Y/N
-      // prompt). Do NOT overwrite — the prompt's own state machine
-      // owns the next input.
+      // Door's RETURNCOMMAND chain parked us in an interactive prompt state.
+      // Do NOT overwrite — the prompt's own state machine owns the next input.
       console.log(`[executeDoor] interactive prompt active (${session.subState}), skipping menu transition`);
     } else {
       // Normal door completion - return to menu (express.e behavior after doors)
@@ -2887,15 +2887,13 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
       session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
       session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
       session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
-      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT
+      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT ||
+      session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT ||
+      session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT
     ) {
-      // RETURNCOMMAND parked us in a transfer-class state (FILES_UPLOAD /
-      // FILES_DOWNLOAD for active ZMODEM, UPLOAD_RESUME_PROMPT /
-      // UPLOAD_RESUME_DELETE for the partial-upload Y/N prompt).
-      // Do NOT render the menu prompt — it overwrites the active
-      // interactive prompt and steals its input handler. The
-      // prompt's own state machine transitions back to DISPLAY_MENU
-      // when the user resolves it.
+      // RETURNCOMMAND parked us in an interactive prompt state — do NOT
+      // overwrite subState or render the menu. The prompt's own state
+      // machine transitions back to DISPLAY_MENU when the user resolves it.
       console.log(`[executeAmigaDoor] interactive prompt active (${session.subState}), skipping displayMainMenu`);
     } else {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
