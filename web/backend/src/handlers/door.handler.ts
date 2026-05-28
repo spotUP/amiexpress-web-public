@@ -980,7 +980,9 @@ console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err)
       session.subState !== LoggedOnSubState.FILES_DOWNLOAD &&
       session.subState !== LoggedOnSubState.UPLOAD_RESUME_PROMPT &&
       session.subState !== LoggedOnSubState.UPLOAD_RESUME_DELETE &&
-      session.subState !== LoggedOnSubState.UPLOAD_RENAME_PROMPT
+      session.subState !== LoggedOnSubState.UPLOAD_RENAME_PROMPT &&
+      session.subState !== LoggedOnSubState.DOWNLOAD_FILENAME_INPUT &&
+      session.subState !== LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT
     ) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.menuPause = false;

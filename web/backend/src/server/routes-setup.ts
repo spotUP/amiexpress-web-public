@@ -429,6 +429,7 @@ console.error('[Door Reload] Unexpected error:', error);
       // Use amigafs for case-insensitive matching (AmigaOS is case-insensitive)
       const possiblePaths = [
         path.join(conferencePath, 'Files', filename),
+        path.join(conferencePath, 'Upload', filename),
         path.join(conferencePath, `Dir${dirNum}`, filename),
         path.join(dataDir, 'Node0', 'Playpen', filename),
         path.join(conferencePath, 'HOLD', filename),
