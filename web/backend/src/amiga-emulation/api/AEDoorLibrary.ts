@@ -287,8 +287,10 @@ console.warn("[AEDoorLibrary] CreateComm: CreatePort failed");
   private populateBBSInfo(difaceAddr: number): void {
 console.log(`[AEDoorLibrary] Populating BBSInfo at DIFace 0x${difaceAddr.toString(16)}`);
 
-    // BBSInfo is at DIFace + 0x46
-    const bbsInfoAddr = difaceAddr + 0x46;
+    // dif_BBSInfo at DIF+0x46 is a POINTER to the separately-allocated BBSInfo buffer.
+    // Read the pointer first; writing to difaceAddr+0x46 directly (old behaviour) corrupted
+    // the pointer and left the actual buffer all-zeros, breaking doors that dereference it.
+    const bbsInfoAddr = this.emulator.readMemory32(difaceAddr + DIFACE_BBS_INFO_OFFSET);
 
     // Get user data from session
     const username = this.sessionData?.user?.username || 'Guest';
@@ -334,14 +336,20 @@ console.log(`[AEDoorLibrary] Wrote node ID ${nodeId} to BBSInfo+0xf`);
     const timeRemaining = sessionTimeRemaining ?? Math.floor((this.sessionData?.user?.timeLimit ?? 3600) / 60);
     const uploads = this.sessionData?.user?.uploads ?? 0;
     const downloads = this.sessionData?.user?.downloads ?? 0;
+    const bytesUpload = this.sessionData?.user?.bytesUpload ?? 0;
+    const bytesDownload = this.sessionData?.user?.bytesDownload ?? 0;
+    const bytesUploadKB = Math.floor(bytesUpload / 1024);
+    const bytesDownloadKB = Math.floor(bytesDownload / 1024);
 
-    // Write numeric values to BBSInfo structure (16-bit integers, big-endian for 68K)
-    this.emulator.writeMemory16(bbsInfoAddr + 0x00, userSlot);      // User slot at +0x00
-    this.emulator.writeMemory16(bbsInfoAddr + 0x02, secLevel);      // Security level at +0x02
-    this.emulator.writeMemory16(bbsInfoAddr + 0x04, conference);    // Conference at +0x04
-    this.emulator.writeMemory16(bbsInfoAddr + 0x06, timeRemaining); // Time remaining at +0x06
-    this.emulator.writeMemory16(bbsInfoAddr + 0x08, uploads);       // Uploads at +0x08
-    this.emulator.writeMemory16(bbsInfoAddr + 0x0a, downloads);     // Downloads at +0x0a
+    // Write numeric values to BBSInfo structure (big-endian for 68K)
+    this.emulator.writeMemory16(bbsInfoAddr + 0x00, userSlot);        // User slot at +0x00
+    this.emulator.writeMemory16(bbsInfoAddr + 0x02, secLevel);        // Security level at +0x02
+    this.emulator.writeMemory16(bbsInfoAddr + 0x04, conference);      // Conference at +0x04
+    this.emulator.writeMemory16(bbsInfoAddr + 0x06, timeRemaining);   // Time remaining at +0x06
+    this.emulator.writeMemory16(bbsInfoAddr + 0x08, uploads);         // Upload count at +0x08
+    this.emulator.writeMemory16(bbsInfoAddr + 0x0a, downloads);       // Download count at +0x0a
+    this.emulator.writeMemory32(bbsInfoAddr + 0x0c, bytesUploadKB);   // Upload KB at +0x0c
+    this.emulator.writeMemory32(bbsInfoAddr + 0x10, bytesDownloadKB); // Download KB at +0x10
 
 console.log(`[AEDoorLibrary] Numeric fields: slot=${userSlot} secLevel=${secLevel} conf=${conference} time=${timeRemaining}`);
 

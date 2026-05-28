@@ -968,6 +968,16 @@ debugLog(
     const pc = this.emulator.getRegister(CPURegister.PC);
     const sp = this.emulator.getRegister(CPURegister.A7);
 
+    // Guard against garbage lengths (e.g. from missing CFG leaving D3 uninitialized).
+    // 1 MB is a generous upper bound; any real BBS door write is well under this.
+    const MAX_WRITE = 1024 * 1024;
+    if (length > MAX_WRITE) {
+      this.logDoorFile(
+        `WRITE oversized — rejected: handle=${handle} len=0x${length.toString(16)} bufAddr=0x${bufferAddr.toString(16)} pc=0x${pc.toString(16)}`
+      );
+      return -1;
+    }
+
     // DEBUG: Log all registers when writing to dRE!WAll file
     if (handle === 4 && length === 100) {
       const regs = {
