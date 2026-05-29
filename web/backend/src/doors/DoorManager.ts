@@ -43,6 +43,15 @@ import {
   handleInfoEditorInput
 } from './DoorManagerInfoEditor';
 import { registerDoor } from '../services/door-install.service';
+import { CatalogEntry } from './door-catalog.service';
+import {
+  CatalogContext,
+  loadCatalogEntries,
+  showRepoList,
+  showCatalogInfo,
+  handleRepoInput,
+  handleCatalogInfoInput,
+} from './DoorManagerCatalog';
 
 interface DoorInfo {
   id: string;
@@ -63,7 +72,8 @@ interface DoorInfo {
 }
 
 interface DoorManagerState {
-  mode: 'list' | 'info' | 'upload' | 'docs' | 'browse-archive' | 'view-file' | 'edit-info';
+  mode: 'list' | 'info' | 'upload' | 'docs' | 'browse-archive' | 'view-file' | 'edit-info' | 'repo' | 'catalog-info';
+  listMode: 'installed' | 'repo';
   selectedIndex: number;
   doors: DoorInfo[];
   currentDoor?: DoorInfo;
@@ -85,6 +95,11 @@ interface DoorManagerState {
   };
   // Info editor state (uses InfoEditorState from DoorManagerInfoEditor)
   infoEditorState?: InfoEditorState;
+  // Repo mode state
+  catalogEntries: CatalogEntry[];
+  catalogSelectedIndex: number;
+  catalogFilter?: string;
+  currentCatalogEntry?: CatalogEntry;
 }
 
 export class DoorManager {
@@ -110,11 +125,14 @@ export class DoorManager {
 
     this.state = {
       mode: 'list',
+      listMode: 'installed',
       selectedIndex: 0,
       doors: [],
       lastReloadStatus: {},
       lastReloadLog: {},
-      scrollOffset: 0
+      scrollOffset: 0,
+      catalogEntries: [],
+      catalogSelectedIndex: 0,
     };
 
     // Set session flag to prevent main command handler from interfering
@@ -1381,6 +1399,12 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       case 'edit-info':
         this.handleInfoEditorInput(key, data);
         break;
+      case 'repo':
+        this.handleRepoInput(key, data);
+        break;
+      case 'catalog-info':
+        this.handleCatalogInfoInput(key);
+        break;
     }
   }
 
@@ -1428,6 +1452,23 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
         this.state.currentDoor = this.state.doors[this.state.selectedIndex];
         this.state.mode = 'info';
         this.showInfo();
+      }
+      return;
+    }
+
+    // Tab - Toggle Installed/Repo mode
+    if (rawData === '\t') {
+      if (this.state.listMode === 'installed') {
+        this.state.listMode = 'repo';
+        this.state.catalogSelectedIndex = 0;
+        this.state.scrollOffset = 0;
+        this.loadCatalogEntries();
+        this.showRepoList();
+      } else {
+        this.state.listMode = 'installed';
+        this.state.selectedIndex = 0;
+        this.state.scrollOffset = 0;
+        this.showList();
       }
       return;
     }
@@ -1685,7 +1726,7 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
     const lines = this.state.viewingFile.content.split('\n');
     const pageSize = 20;
 
-    // Arrow keys for scrolling
+    // Arrow keys / PgUp / PgDn for scrolling
     if (rawData === '\x1b[A' || rawData === '\x1b\x5b\x41') { // Up arrow
       this.state.scrollOffset = Math.max(0, this.state.scrollOffset - 1);
       this.showFileViewer();
@@ -1693,16 +1734,33 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
     }
 
     if (rawData === '\x1b[B' || rawData === '\x1b\x5b\x42') { // Down arrow
-      this.state.scrollOffset = Math.min(lines.length - pageSize, this.state.scrollOffset + 1);
+      this.state.scrollOffset = Math.min(Math.max(0, lines.length - pageSize), this.state.scrollOffset + 1);
       this.showFileViewer();
       return;
     }
 
-    // B - Back to archive browser
+    if (rawData === '\x1b[5~' || key === ' ') { // PgUp or Space
+      this.state.scrollOffset = Math.max(0, this.state.scrollOffset - pageSize);
+      this.showFileViewer();
+      return;
+    }
+
+    if (rawData === '\x1b[6~' || key === '\r' || key === '\n') { // PgDn or Enter
+      this.state.scrollOffset = Math.min(Math.max(0, lines.length - pageSize), this.state.scrollOffset + pageSize);
+      this.showFileViewer();
+      return;
+    }
+
+    // B - Back (to archive browser, or catalog-info if opened from catalog)
     if (key === 'b') {
-      this.state.mode = 'browse-archive';
-      this.state.scrollOffset = 0;
-      this.showArchiveBrowser();
+      if (this.state.currentCatalogEntry && !this.state.currentDoor) {
+        this.state.scrollOffset = 0;
+        this.showCatalogInfo();
+      } else {
+        this.state.mode = 'browse-archive';
+        this.state.scrollOffset = 0;
+        this.showArchiveBrowser();
+      }
       return;
     }
 
@@ -1725,6 +1783,29 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       return;
     }
   }
+
+  // ─── Repo / Catalog mode (delegates to DoorManagerCatalog) ─────────────────
+
+  private catalogCtx(): CatalogContext {
+    return {
+      socket: this.socket,
+      doorsPath: this.doorsPath,
+      projectRoot: this.projectRoot,
+      pad: this.pad.bind(this),
+      showFileViewer: this.showFileViewer.bind(this),
+      showList: this.showList.bind(this),
+      cleanup: this.cleanup.bind(this),
+      state: this.state,
+    };
+  }
+
+  private loadCatalogEntries(): void { loadCatalogEntries(this.catalogCtx()); }
+  private showRepoList(): void { showRepoList(this.catalogCtx()); }
+  private showCatalogInfo(): void { showCatalogInfo(this.catalogCtx()); }
+  private handleRepoInput(key: string, rawData: string): void { handleRepoInput(this.catalogCtx(), key, rawData); }
+  private handleCatalogInfoInput(key: string): void { handleCatalogInfoInput(this.catalogCtx(), key); }
+
+  // ─── End Repo / Catalog mode ─────────────────────────────────────────────
 
   /**
    * Utility: Pad string to width

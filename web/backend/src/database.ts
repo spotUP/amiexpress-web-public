@@ -1700,6 +1700,38 @@ console.error('Error running migrations:', error);
       `);
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_door_files_command ON door_installed_files(door_command)');
 
+      // Door Catalog — indexes all archives in the door repository
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS door_catalog (
+          id                  TEXT PRIMARY KEY,
+          archive_name        TEXT NOT NULL UNIQUE,
+          archive_path        TEXT NOT NULL,
+          binary_name         TEXT,
+          door_type           TEXT DEFAULT 'XIM',
+          name                TEXT NOT NULL,
+          version             TEXT,
+          author              TEXT,
+          release_group       TEXT,
+          description         TEXT,
+          file_id_diz         TEXT,
+          doc_filename        TEXT,
+          doc_raw             TEXT,
+          suggested_tooltypes TEXT,
+          category            TEXT,
+          archive_size        INTEGER DEFAULT 0,
+          junk_count          INTEGER DEFAULT 0,
+          installed           INTEGER DEFAULT 0,
+          installed_as        TEXT,
+          install_dir         TEXT,
+          corpus_id           TEXT,
+          source              TEXT DEFAULT 'scan',
+          indexed_at          INTEGER DEFAULT (strftime('%s','now'))
+        )
+      `);
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_installed ON door_catalog(installed)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_category ON door_catalog(category)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_name ON door_catalog(name)');
+
       // System Languages (Singleton - TOOLTYPE_LANGUAGES)
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS system_languages (

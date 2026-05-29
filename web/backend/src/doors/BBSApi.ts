@@ -1330,6 +1330,26 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
         location: doorPath,
         resolvedPath,
       };
+    }).map((door: any) => {
+      // Overlay catalog metadata (name, description, category, version) when available
+      try {
+        const { searchCatalog } = require('./door-catalog.service');
+        const results = searchCatalog(door.command, true);
+        const match = results.find((e: any) =>
+          (e.installed_as || '').toUpperCase() === (door.command || '').toUpperCase()
+        );
+        if (match) {
+          return {
+            ...door,
+            name: match.name || door.name,
+            description: match.description || door.description,
+            category: match.category || door.category,
+            version: match.version || undefined,
+            releaseGroup: match.release_group || undefined,
+          };
+        }
+      } catch { /* catalog not yet built — return door as-is */ }
+      return door;
     });
   }
 

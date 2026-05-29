@@ -24,7 +24,10 @@
     "clusters:report": "cd ../.. && npx tsx dev/scripts/door-probe/timeout-clusters.ts",
     "corpus:integration:per-door": "bash ../../dev/scripts/door-corpus/per-door-test.sh --list ../../dev/scripts/door-corpus/integration-smoke-isolated.txt",
     "corpus:integration:all": "bash ../../dev/scripts/door-corpus/per-door-test.sh -j 1 --list ../../dev/scripts/door-corpus/integration-smoke-all.txt",
-    "corpus:integration:ci": "bash ../../dev/scripts/door-corpus/per-door-test.sh -j 2 --retry 1 --list ../../dev/scripts/door-corpus/integration-smoke-all.txt"
+    "corpus:integration:ci": "bash ../../dev/scripts/door-corpus/per-door-test.sh -j 2 --retry 1 --list ../../dev/scripts/door-corpus/integration-smoke-all.txt",
+    "catalog:build": "NODE_PATH=node_modules npx tsx ../../dev/scripts/door-corpus/build-door-catalog.ts",
+    "catalog:build:dry": "NODE_PATH=node_modules npx tsx ../../dev/scripts/door-corpus/build-door-catalog.ts --skip-reextract",
+    "stripper:dry": "NODE_PATH=node_modules npx tsx ../../dev/scripts/ami-stripper.ts --dry-run"
   },
   "keywords": [],
   "author": "",
