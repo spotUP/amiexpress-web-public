@@ -23,9 +23,20 @@ export async function callersLog(userId: string | null, username: string, action
       'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES (?, ?, ?, ?, ?)',
       [nodeId, userId, username, action, details || null]
     );
-  } catch (error) {
-console.error('Error logging caller activity:', error);
-    // Fail silently like express.e would
+  } catch (error: unknown) {
+    // FK violation: userId not in users table (e.g. corpus mock sessions) — retry with null
+    if (error instanceof Error && error.message.includes('FOREIGN KEY')) {
+      try {
+        await db.run(
+          'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES (?, ?, ?, ?, ?)',
+          [nodeId, null, username, action, details || null]
+        );
+        return;
+      } catch {
+        // fall through to silent failure below
+      }
+    }
+    console.error('Error logging caller activity:', error);
   }
 }
 
