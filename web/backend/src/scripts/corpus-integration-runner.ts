@@ -357,7 +357,11 @@ async function runOne(
   for (const must of a.mustNotContain ?? []) {
     if (raw.includes(must)) failures.push(`contains forbidden "${must}"`);
   }
+  // Only assert subState when the door actually completed — a timed-out
+  // door leaves subState=door_running which is meaningless noise on top
+  // of the timeout failure itself.
   if (
+    !timedOut &&
     a.expectedSubState &&
     session.subState !== LoggedOnSubState[a.expectedSubState]
   ) {
@@ -643,9 +647,11 @@ async function main() {
       ? ` — ${r.detail.slice(0, 80)}`
       : "";
 
-    // Clear progress bar line, print result, reprint bar
+    // Clear progress bar line; only print FAIL/CAPTURED rows — pass/skip are noise
     process.stdout.write(`\r${" ".repeat(100)}\r`);
-    process.stdout.write(`  ${tag} ${r.id} (${r.wallMs}ms)${subStateSuffix}${detail}\n`);
+    if (r.status === "fail" || r.status === "captured") {
+      process.stdout.write(`  ${tag} ${r.id} (${r.wallMs}ms)${subStateSuffix}${detail}\n`);
+    }
     process.stdout.write(renderBar());
 
     return r;
