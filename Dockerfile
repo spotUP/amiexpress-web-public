@@ -110,9 +110,9 @@ RUN apk add --no-cache python3 make g++ build-base curl autoconf automake libtoo
 
 # Build original lha (jca02266 fork of Japanese lha) — supports 'a' (create) unlike lhasa
 RUN set -eux; \
-    curl -fsSL https://github.com/jca02266/lha/archive/refs/heads/current.tar.gz -o /tmp/lha.tgz; \
+    curl -fsSL https://github.com/jca02266/lha/archive/refs/heads/master.tar.gz -o /tmp/lha.tgz; \
     cd /tmp && tar xzf lha.tgz; \
-    cd lha-current; \
+    cd lha-master; \
     autoreconf -fi 2>/dev/null || true; \
     ./configure --prefix=/usr/local; \
     make -j"$(nproc)"; \
