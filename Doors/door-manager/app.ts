@@ -103,16 +103,13 @@ function dizFirstLine(entry: CatalogEntry): string {
 }
 
 function formatCatalogItem(entry: CatalogEntry, width: number): string {
-  const inst = entry.installed ? '{green-fg}*{/green-fg}' : '{grey-fg}-{/grey-fg}';
-  const type = ((entry.door_type ?? 'XIM').substring(0, 2)).padEnd(2);
-  // Two columns: archive name left, first DIZ line right
-  const leftWidth = Math.max(8, Math.floor(width * 0.35));
-  const rightWidth = Math.max(8, width - leftWidth - 2);
-  const archiveName = entry.archive_name.replace(/\.(lha|lzx|lzh)$/i, '');
-  const left = archiveName.length > leftWidth ? archiveName.slice(0, leftWidth - 1) + '…' : archiveName.padEnd(leftWidth);
-  const diz = dizFirstLine(entry);
-  const right = diz.length > rightWidth ? diz.slice(0, rightWidth - 1) + '…' : diz;
-  return `${inst} [${type}] ${left}  ${right}`;
+  const inst = entry.installed ? '{green-fg}*{/green-fg}' : ' ';
+  const sz = entry.archive_size ? `${Math.round(entry.archive_size / 1024)}k` : '   ?';
+  const szStr = sz.padStart(6);
+  const nameWidth = Math.max(8, width - szStr.length - 3);
+  const archiveName = entry.archive_name;
+  const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth - 1) + '…' : archiveName.padEnd(nameWidth);
+  return `${inst} ${name} ${szStr}`;
 }
 
 async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
@@ -153,24 +150,15 @@ function buildInfoContent(door: DoorInfo): string {
 }
 
 function buildCatalogInfoContent(entry: CatalogEntry): string {
-  const lines: string[] = [];
-  lines.push(`{yellow-fg}Archive:{/yellow-fg} ${entry.archive_name}`);
-  lines.push(`{yellow-fg}Type:{/yellow-fg}    ${entry.door_type ?? 'XIM'}`);
-  if (entry.archive_size) lines.push(`{yellow-fg}Size:{/yellow-fg}    ${(entry.archive_size / 1024).toFixed(1)}k`);
-  lines.push(`{yellow-fg}Junk:{/yellow-fg}    ${entry.junk_count > 0 ? `${entry.junk_count} ad files` : 'clean'}`);
-  if (entry.installed) {
-    lines.push(`{yellow-fg}Installed:{/yellow-fg} {green-fg}${entry.installed_as}{/green-fg}`);
-    if (entry.install_dir) lines.push(`{yellow-fg}Dir:{/yellow-fg}     ${entry.install_dir}`);
-  } else {
-    lines.push(`{yellow-fg}Installed:{/yellow-fg} {grey-fg}no{/grey-fg}`);
-  }
+  const meta: string[] = [];
+  meta.push(`{yellow-fg}${entry.archive_name}{/yellow-fg}  ${entry.door_type ?? 'XIM'}  ${entry.archive_size ? Math.round(entry.archive_size / 1024) + 'k' : ''}${entry.installed ? `  {green-fg}[${entry.installed_as}]{/green-fg}` : ''}${entry.junk_count > 0 ? `  {red-fg}${entry.junk_count} ad files{/red-fg}` : ''}`);
   if (entry.file_id_diz) {
-    lines.push('', '{cyan-fg}FILE_ID.DIZ:{/cyan-fg}');
-    lines.push(...entry.file_id_diz.split('\n').map(l => `{white-fg}${l.replace(/[^\x20-\x7E]/g, '')}{/white-fg}`));
-  } else if (entry.description) {
-    lines.push('', `{white-fg}${entry.description}{/white-fg}`);
+    meta.push('');
+    meta.push(...entry.file_id_diz.split('\n').map(l => l.replace(/[^\x20-\x7E]/g, '')));
+  } else {
+    meta.push('', '{grey-fg}(no FILE_ID.DIZ){/grey-fg}');
   }
-  return lines.join('\n');
+  return meta.join('\n');
 }
 
 // --- main --------------------------------------------------------------------
