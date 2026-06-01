@@ -98,13 +98,12 @@ function dizFirstLine(entry) {
     return '';
 }
 function formatCatalogItem(entry, width) {
-    const inst = entry.installed ? '{green-fg}*{/green-fg}' : ' ';
-    const sz = entry.archive_size ? `${Math.round(entry.archive_size / 1024)}k` : '   ?';
-    const szStr = sz.padStart(6);
-    const nameWidth = Math.max(8, width - szStr.length - 3);
+    const inst = entry.installed ? '*' : ' ';
+    const sz = entry.archive_size ? `${Math.round(entry.archive_size / 1024)}k` : '?';
+    const nameWidth = Math.max(4, width - sz.length - 3);
     const archiveName = entry.archive_name;
-    const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth - 1) + '…' : archiveName.padEnd(nameWidth);
-    return `${inst} ${name} ${szStr}`;
+    const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth) : archiveName.padEnd(nameWidth);
+    return `${inst} ${name} ${sz}`;
 }
 async function fetchDoors(bbs) {
     if (!bbs.getDoorList)
