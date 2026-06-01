@@ -103,7 +103,7 @@ export function showRepoList(ctx: CatalogContext): void {
   ctx.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Nav  ');
   ctx.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Info  ');
   ctx.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
-  ctx.socket.emit('ansi-output', '\x1b[33mTab\x1b[0m Installed  ');
+  ctx.socket.emit('ansi-output', '\x1b[33mTab/B\x1b[0m Installed  ');
   ctx.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
 }
 
@@ -203,6 +203,14 @@ export function handleRepoInput(ctx: CatalogContext, key: string, rawData: strin
 
   if (key === 'f') {
     promptCatalogFilter(ctx);
+    return;
+  }
+
+  if (key === 'b') {
+    ctx.state.listMode = 'installed';
+    ctx.state.mode = 'list';
+    ctx.state.scrollOffset = 0;
+    ctx.showList();
     return;
   }
 
