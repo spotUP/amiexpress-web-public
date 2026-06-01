@@ -93,15 +93,26 @@ function formatListItem(door: DoorInfo, width: number): string {
   return `${badge} ${name} ${status} ${sz}`;
 }
 
+function dizFirstLine(entry: CatalogEntry): string {
+  if (!entry.file_id_diz) return '';
+  for (const line of entry.file_id_diz.split('\n')) {
+    const clean = line.replace(/[^\x20-\x7E]/g, '').trim();
+    if (clean.length > 3) return clean;
+  }
+  return '';
+}
+
 function formatCatalogItem(entry: CatalogEntry, width: number): string {
   const inst = entry.installed ? '{green-fg}*{/green-fg}' : '{grey-fg}-{/grey-fg}';
   const type = ((entry.door_type ?? 'XIM').substring(0, 2)).padEnd(2);
-  const cmd = (entry.installed_as ?? '').substring(0, 8).padEnd(8);
-  const nameWidth = Math.max(10, width - 16);
-  const name = (entry.name ?? '').length > nameWidth
-    ? (entry.name ?? '').slice(0, nameWidth - 1) + '...'
-    : (entry.name ?? '').padEnd(nameWidth);
-  return `${inst} [${type}] ${cmd} ${name}`;
+  // Two columns: archive name left, first DIZ line right
+  const leftWidth = Math.max(8, Math.floor(width * 0.35));
+  const rightWidth = Math.max(8, width - leftWidth - 2);
+  const archiveName = entry.archive_name.replace(/\.(lha|lzx|lzh)$/i, '');
+  const left = archiveName.length > leftWidth ? archiveName.slice(0, leftWidth - 1) + '…' : archiveName.padEnd(leftWidth);
+  const diz = dizFirstLine(entry);
+  const right = diz.length > rightWidth ? diz.slice(0, rightWidth - 1) + '…' : diz;
+  return `${inst} [${type}] ${left}  ${right}`;
 }
 
 async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
@@ -142,29 +153,22 @@ function buildInfoContent(door: DoorInfo): string {
 }
 
 function buildCatalogInfoContent(entry: CatalogEntry): string {
-  const lines: string[] = [
-    `{yellow-fg}Name:{/yellow-fg}    ${entry.name ?? ''}`,
-  ];
-  if (entry.version) lines.push(`{yellow-fg}Version:{/yellow-fg} ${entry.version}`);
-  if (entry.author) lines.push(`{yellow-fg}Author:{/yellow-fg}  ${entry.author}`);
-  if (entry.release_group) lines.push(`{yellow-fg}Group:{/yellow-fg}   ${entry.release_group}`);
+  const lines: string[] = [];
   lines.push(`{yellow-fg}Archive:{/yellow-fg} ${entry.archive_name}`);
   lines.push(`{yellow-fg}Type:{/yellow-fg}    ${entry.door_type ?? 'XIM'}`);
-  if (entry.category) lines.push(`{yellow-fg}Category:{/yellow-fg}${entry.category}`);
   if (entry.archive_size) lines.push(`{yellow-fg}Size:{/yellow-fg}    ${(entry.archive_size / 1024).toFixed(1)}k`);
   lines.push(`{yellow-fg}Junk:{/yellow-fg}    ${entry.junk_count > 0 ? `${entry.junk_count} ad files` : 'clean'}`);
   if (entry.installed) {
-    lines.push(`{yellow-fg}Installed:{/yellow-fg}{green-fg}yes — ${entry.installed_as}{/green-fg}`);
+    lines.push(`{yellow-fg}Installed:{/yellow-fg} {green-fg}${entry.installed_as}{/green-fg}`);
     if (entry.install_dir) lines.push(`{yellow-fg}Dir:{/yellow-fg}     ${entry.install_dir}`);
   } else {
-    lines.push(`{yellow-fg}Installed:{/yellow-fg}{grey-fg}no{/grey-fg}`);
-  }
-  if (entry.description) {
-    lines.push('', `{white-fg}${entry.description}{/white-fg}`);
+    lines.push(`{yellow-fg}Installed:{/yellow-fg} {grey-fg}no{/grey-fg}`);
   }
   if (entry.file_id_diz) {
     lines.push('', '{cyan-fg}FILE_ID.DIZ:{/cyan-fg}');
-    lines.push(...entry.file_id_diz.split('\n').slice(0, 12).map(l => `{white-fg}${l}{/white-fg}`));
+    lines.push(...entry.file_id_diz.split('\n').map(l => `{white-fg}${l.replace(/[^\x20-\x7E]/g, '')}{/white-fg}`));
+  } else if (entry.description) {
+    lines.push('', `{white-fg}${entry.description}{/white-fg}`);
   }
   return lines.join('\n');
 }
