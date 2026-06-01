@@ -206,7 +206,7 @@ async function createApp(session) {
     });
     const listPanel = new blessed_1.Panel({
         parent: screen,
-        top: 3, left: 0, width: '50%', height: '100%-6',
+        top: 3, left: 0, width: '35%', height: '100%-6',
         label: ' INSTALLED DOORS ',
         tags: true,
         style: { border: { fg: 'cyan' } },
@@ -226,7 +226,7 @@ async function createApp(session) {
     });
     const infoPanel = new blessed_1.Panel({
         parent: screen,
-        top: 3, left: '50%', width: '50%', height: '100%-6',
+        top: 3, left: '35%', width: '65%', height: '100%-6',
         label: ' DOOR INFO ',
         tags: true,
         style: { border: { fg: 'blue' } },
@@ -241,7 +241,7 @@ async function createApp(session) {
     let statusTimer = null;
     // --- helpers ---------------------------------------------------------------
     function getListWidth() {
-        return Math.floor(screen.width / 2) - 4;
+        return Math.floor(screen.width * 0.35) - 4;
     }
     function selectedDoor() {
         if (mode !== 'installed')
@@ -353,7 +353,7 @@ async function createApp(session) {
         }
         else {
             infoPanel.show();
-            listPanel.width = '50%';
+            listPanel.width = '35%';
         }
         if (mode === 'installed')
             populateInstalledList(doorList.selected ?? 0);

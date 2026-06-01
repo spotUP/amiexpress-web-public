@@ -227,7 +227,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   const listPanel = new Panel({
     parent: screen,
-    top: 3, left: 0, width: '50%', height: '100%-6',
+    top: 3, left: 0, width: '35%', height: '100%-6',
     label: ' INSTALLED DOORS ',
     tags: true,
     style: { border: { fg: 'cyan' } },
@@ -249,7 +249,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   const infoPanel = new Panel({
     parent: screen,
-    top: 3, left: '50%', width: '50%', height: '100%-6',
+    top: 3, left: '35%', width: '65%', height: '100%-6',
     label: ' DOOR INFO ',
     tags: true,
     style: { border: { fg: 'blue' } },
@@ -268,7 +268,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   // --- helpers ---------------------------------------------------------------
 
   function getListWidth(): number {
-    return Math.floor((screen as any).width / 2) - 4;
+    return Math.floor((screen as any).width * 0.35) - 4;
   }
 
   function selectedDoor(): DoorInfo | null {
@@ -376,7 +376,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       (listPanel as any).width = '100%';
     } else {
       (infoPanel as any).show();
-      (listPanel as any).width = '50%';
+      (listPanel as any).width = '35%';
     }
     if (mode === 'installed') populateInstalledList((doorList as any).selected ?? 0);
     else populateCatalogList((doorList as any).selected ?? 0);
