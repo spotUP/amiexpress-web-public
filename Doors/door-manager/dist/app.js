@@ -109,8 +109,6 @@ function formatCatalogItem(entry, width) {
     const archiveName = (entry.installed ? '*' : '') + entry.archive_name;
     const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth) : archiveName.padEnd(nameWidth);
     const line = `${name} ${sz}`;
-    if (entry.archive_name === '!ALSTER.LHA')
-        console.log('[doorman] item width:', width, 'line:', JSON.stringify(line), 'len:', line.length);
     return line;
 }
 async function fetchDoors(bbs) {
@@ -547,6 +545,19 @@ async function createApp(session) {
         renderFiles();
         doorList.focus();
     }
+    function discoverDoorDir(archiveName) {
+        const base = archiveName.replace(/\.(lha|lzx|lzh)$/i, '');
+        const doorsDir = path.join(PROJECT_ROOT, 'Doors');
+        if (!fs.existsSync(doorsDir))
+            return null;
+        try {
+            const match = fs.readdirSync(doorsDir).find(e => e.toLowerCase() === base.toLowerCase() && fs.statSync(path.join(doorsDir, e)).isDirectory());
+            return match ? path.join(doorsDir, match) : null;
+        }
+        catch {
+            return null;
+        }
+    }
     async function stripAds(entry, onDone, overrideDir) {
         const lib = getStripLib();
         if (!lib) {
@@ -559,16 +570,12 @@ async function createApp(session) {
             overrideDir ?? null,
             entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null,
             entry.installed_as ? path.join(PROJECT_ROOT, 'Doors', entry.installed_as) : null,
+            discoverDoorDir(entry.archive_name),
         ].filter((d) => !!(d && fs.existsSync(d)));
         const installDirAbs = candidateDirs[0] ?? null;
         const hasDir = !!installDirAbs;
         if (!hasArchive && !hasDir) {
-            if (!entry.installed) {
-                setStatus(`${entry.archive_name}: install first to strip`, 'yellow');
-            }
-            else {
-                setStatus(`${entry.archive_name}: install dir not found on this server`, 'yellow');
-            }
+            setStatus(`${entry.archive_name}: not installed on this server`, 'yellow');
             onDone();
             return;
         }
@@ -641,7 +648,28 @@ async function createApp(session) {
         updateFooter();
         doorList.focus();
     });
-    screen.key(['q', 'Q', 'escape'], () => {
+    screen.key(['escape'], () => {
+        if (stripOverlayActive) {
+            if (_stripCancel)
+                _stripCancel();
+            return;
+        }
+        if (mode === 'repo') {
+            mode = 'installed';
+            populateInstalledList(0);
+            refreshHeader();
+            updateInfoPane();
+            updateFooter();
+            doorList.focus();
+        }
+        else {
+            if (statusTimer)
+                clearTimeout(statusTimer);
+            inputManager.disable();
+            screen.destroy();
+        }
+    });
+    screen.key(['q', 'Q'], () => {
         if (stripOverlayActive) {
             if (_stripCancel)
                 _stripCancel();
