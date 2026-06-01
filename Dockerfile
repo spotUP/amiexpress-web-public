@@ -214,6 +214,7 @@ COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dis
 # Copy backend source files (backend runs TypeScript directly with tsx)
 COPY web/backend/src ./web/backend/src
 COPY web/backend/scripts ./web/backend/scripts
+COPY web/backend/seeds ./web/backend/seeds
 # tsconfig.json MUST be present at runtime — tsx delegates to esbuild,
 # which only enables experimentalDecorators / emitDecoratorMetadata when
 # it can read them from a tsconfig.json walking up from each source
