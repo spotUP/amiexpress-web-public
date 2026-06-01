@@ -636,7 +636,7 @@ console.error('Error extracting door info:', error);
       }
     }
 
-    if (door.installed) this.socket.emit('ansi-output', '\x1b[33mS\x1b[0m Strip Ads  ');
+    if ((door as any).command) this.socket.emit('ansi-output', '\x1b[33mS\x1b[0m Strip Ads  ');
     this.socket.emit('ansi-output', '\x1b[33mE\x1b[0m Edit .info  ');
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
@@ -1565,7 +1565,7 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
     }
 
     // S - Strip ad files from source archive, then re-extract clean
-    if (key === 's' && door.installed) {
+    if (key === 's' && (door as any).command) {
       const cmd = ((door as any).command ?? '') as string;
       if (!cmd) { this.socket.emit('ansi-output', '\r\n\x1b[33mNo BBS command — cannot strip.\x1b[0m\r\n'); return; }
       stripInstalledDoor(this.catalogCtx(), cmd, () => { this.state.mode = 'info'; this.showInfo(); });

@@ -157,8 +157,11 @@ function isValidTooltypeString(str: string): boolean {
     // Strip leading non-alpha chars (NewIcons length prefixes like '%')
     const keyMatch = key.match(/[A-Za-z][A-Za-z0-9_.]*/);
     if (!keyMatch) return false;
+    const cleanKey = keyMatch[0].toUpperCase();
     // Key must be a reasonable tooltype name
-    if (keyMatch[0].length < 2) return false;
+    if (cleanKey.length < 2) return false;
+    // NewIcons stores icon image data as IM1=/IM2= tooltypes — reject them
+    if (/^IM\d+$/.test(cleanKey)) return false;
   }
 
   return true;
