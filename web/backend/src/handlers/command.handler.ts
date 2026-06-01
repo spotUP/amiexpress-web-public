@@ -4364,30 +4364,6 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       await displayDoorMenu(socket, session, params);
       return;
 
-    case 'DOORMAN': { // Door Manager plugin - for installing/managing doors
-      try {
-console.log('[DOORMAN] Starting Door Manager...');
-        const { executeDoor } = await import('../doors/DoorManager');
-console.log('[DOORMAN] Module imported successfully');
-        await executeDoor(socket, session);
-console.log('[DOORMAN] executeDoor completed');
-      } catch (error) {
-console.error('[DOORMAN] Fatal error:', error);
-        emitText(socket, '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
-        emitText(socket, `${(error as Error).message}\r\n`);
-        emitText(socket, `${(error as Error).stack}\r\n\r\n`);
-        emitPrompt(socket, 'Press any key to return to main menu...\r\n');
-
-        // Clean up session state
-        if (session.inDoorManager) {
-          delete session.inDoorManager;
-        }
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-      }
-      return;
-    }
-
     // NOTE: Test door commands (GA, MULTITOP, WH) removed - door-specific hacks
     // Doors should be accessed through proper door system:
     // 1. Register door with .info file in Commands/
