@@ -45,8 +45,14 @@ const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const child_process_1 = require("child_process");
-const LHA_BIN = '/opt/homebrew/bin/lha';
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const LHA_BIN = [
+    '/app/data/bbs/tools/bin/lha',
+    '/opt/homebrew/bin/lha',
+    '/usr/bin/lha',
+    '/usr/local/bin/lha',
+].find(p => fs.existsSync(p)) ?? 'lha';
+// __dirname = Doors/door-manager/dist/ → ../../.. = BBS root (data/bbs/ on server, project root locally)
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 function fromCache(marker) {
     // The BBS server has already loaded this module via tsx. Retrieve it from
     // the shared require cache rather than re-transpiling the .ts source.

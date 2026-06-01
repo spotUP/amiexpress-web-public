@@ -27,8 +27,15 @@ interface CatalogEntry {
   installed: number; installed_as: string | null; install_dir: string | null; corpus_id: string | null;
 }
 
-const LHA_BIN = '/opt/homebrew/bin/lha';
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const LHA_BIN = [
+  '/app/data/bbs/tools/bin/lha',
+  '/opt/homebrew/bin/lha',
+  '/usr/bin/lha',
+  '/usr/local/bin/lha',
+].find(p => fs.existsSync(p)) ?? 'lha';
+
+// __dirname = Doors/door-manager/dist/ → ../../.. = BBS root (data/bbs/ on server, project root locally)
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 function fromCache(marker: string): any {
   // The BBS server has already loaded this module via tsx. Retrieve it from
