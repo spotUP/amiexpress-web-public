@@ -149,12 +149,16 @@ function buildInfoContent(door: DoorInfo): string {
   ].join('\n');
 }
 
+function escapeTags(s: string): string {
+  return s.replace(/[^\x20-\x7E]/g, '').replace(/[{}]/g, '\\$&');
+}
+
 function buildCatalogInfoContent(entry: CatalogEntry): string {
   const meta: string[] = [];
   meta.push(`{yellow-fg}${entry.archive_name}{/yellow-fg}  ${entry.door_type ?? 'XIM'}  ${entry.archive_size ? Math.round(entry.archive_size / 1024) + 'k' : ''}${entry.installed ? `  {green-fg}[${entry.installed_as}]{/green-fg}` : ''}${entry.junk_count > 0 ? `  {red-fg}${entry.junk_count} ad files{/red-fg}` : ''}`);
   if (entry.file_id_diz) {
     meta.push('');
-    meta.push(...entry.file_id_diz.split('\n').map(l => l.replace(/[^\x20-\x7E]/g, '')));
+    meta.push(...entry.file_id_diz.split('\n').map(escapeTags));
   } else {
     meta.push('', '{grey-fg}(no FILE_ID.DIZ){/grey-fg}');
   }
