@@ -244,7 +244,7 @@ async function createApp(session) {
     let statusTimer = null;
     // --- helpers ---------------------------------------------------------------
     function getListWidth() {
-        return Math.floor(screen.width * 0.35) - 4;
+        return Math.floor(screen.width * 0.35) - 6; // -4 borders, -2 selection marker
     }
     function selectedDoor() {
         if (mode !== 'installed')

@@ -272,7 +272,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   // --- helpers ---------------------------------------------------------------
 
   function getListWidth(): number {
-    return Math.floor((screen as any).width * 0.35) - 4;
+    return Math.floor((screen as any).width * 0.35) - 6; // -4 borders, -2 selection marker
   }
 
   function selectedDoor(): DoorInfo | null {
