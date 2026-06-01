@@ -14,10 +14,10 @@ import * as crypto from 'crypto';
 import { spawnSync } from 'child_process';
 
 const LHA_BIN = [
-  '/app/data/bbs/tools/bin/lha',
-  '/opt/homebrew/bin/lha',
-  '/usr/bin/lha',
+  '/usr/bin/lha',       // Alpine lhasa package
   '/usr/local/bin/lha',
+  '/opt/homebrew/bin/lha',
+  '/app/data/bbs/tools/bin/lha',
 ].find(p => fs.existsSync(p)) ?? 'lha';
 
 const SEEDS_DIR = path.join(__dirname, '..', '..', 'seeds');

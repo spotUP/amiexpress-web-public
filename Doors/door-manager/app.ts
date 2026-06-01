@@ -28,10 +28,10 @@ interface CatalogEntry {
 }
 
 const LHA_BIN = [
-  '/app/data/bbs/tools/bin/lha',
-  '/opt/homebrew/bin/lha',
-  '/usr/bin/lha',
+  '/usr/bin/lha',       // Alpine lhasa package
   '/usr/local/bin/lha',
+  '/opt/homebrew/bin/lha',
+  '/app/data/bbs/tools/bin/lha',
 ].find(p => fs.existsSync(p)) ?? 'lha';
 
 // __dirname = Doors/door-manager/dist/ → ../../.. = BBS root (data/bbs/ on server, project root locally)
@@ -248,7 +248,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   const doorList = new List({
     parent: listPanel,
     top: 1, left: 1, width: '100%-2', height: '100%-2',
-    keys: true, vi: true, mouse: true,
+    keys: true, vi: false, mouse: true,
     scrollable: true, alwaysScroll: true,
     tags: true,
     wrapItems: false,

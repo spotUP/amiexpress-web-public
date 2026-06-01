@@ -159,7 +159,8 @@ RUN apk add --no-cache \
     curl \
     build-base \
     g++ \
-    make
+    make \
+    lhasa
 
 # lrzsz binaries built in backend-builder (Alpine v3.23 dropped the package).
 # Copy the real binaries (lsz/lrz) and recreate the classic sz/rz symlinks
