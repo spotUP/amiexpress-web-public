@@ -101,6 +101,7 @@ interface DoorManagerState {
   catalogSelectedIndex: number;
   catalogFilter?: string;
   currentCatalogEntry?: CatalogEntry;
+  browseFromCatalog?: boolean;
 }
 
 export class DoorManager {
@@ -635,9 +636,7 @@ console.error('Error extracting door info:', error);
       }
     }
 
-    if (door.installed) {
-      this.socket.emit('ansi-output', '\x1b[33mS\x1b[0m Strip Ads  ');
-    }
+    if (door.installed) this.socket.emit('ansi-output', '\x1b[33mS\x1b[0m Strip Ads  ');
     this.socket.emit('ansi-output', '\x1b[33mE\x1b[0m Edit .info  ');
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
@@ -1565,9 +1564,11 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       return;
     }
 
-    // S - Strip ad files from source archive and re-extract
+    // S - Strip ad files from source archive, then re-extract clean
     if (key === 's' && door.installed) {
-      this.doStripInstalledDoor(door);
+      const cmd = ((door as any).command ?? '') as string;
+      if (!cmd) { this.socket.emit('ansi-output', '\r\n\x1b[33mNo BBS command — cannot strip.\x1b[0m\r\n'); return; }
+      stripInstalledDoor(this.catalogCtx(), cmd, () => { this.state.mode = 'info'; this.showInfo(); });
       return;
     }
 
@@ -1590,18 +1591,6 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       this.socket.emit('door-exit');
       return;
     }
-  }
-
-  private doStripInstalledDoor(door: DoorInfo): void {
-    const command = ((door as any).command ?? '') as string;
-    if (!command) {
-      this.socket.emit('ansi-output', '\r\n\x1b[33mNo BBS command for this door — cannot strip.\x1b[0m\r\n');
-      return;
-    }
-    stripInstalledDoor(this.catalogCtx(), command, () => {
-      this.state.mode = 'info';
-      this.showInfo();
-    });
   }
 
   /**
@@ -1723,11 +1712,17 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       return;
     }
 
-    // B - Back to info
+    // B - Back to info (or catalog-info if entered from repo)
     if (key === 'b') {
-      this.state.mode = 'info';
       this.state.scrollOffset = 0;
-      this.showInfo();
+      if (this.state.browseFromCatalog) {
+        this.state.browseFromCatalog = false;
+        this.state.mode = 'catalog-info';
+        this.showCatalogInfo();
+      } else {
+        this.state.mode = 'info';
+        this.showInfo();
+      }
       return;
     }
 
@@ -1817,6 +1812,11 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       showFileViewer: this.showFileViewer.bind(this),
       showList: this.showList.bind(this),
       cleanup: this.cleanup.bind(this),
+      browseCatalogArchive: (archivePath: string) => {
+        this.state.currentDoor = { id: 'catalog-browse', name: path.basename(archivePath), filename: path.basename(archivePath), type: 'archive', size: 0, uploadDate: new Date(), installed: false, archivePath };
+        this.state.browseFromCatalog = true;
+        this.browseArchive();
+      },
       state: this.state,
     };
   }

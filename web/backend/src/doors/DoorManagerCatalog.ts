@@ -30,6 +30,7 @@ export interface CatalogContext {
   showFileViewer: () => void;
   showList: () => void;
   cleanup: () => void;
+  browseCatalogArchive: (archivePath: string) => void;
   state: {
     mode: string;
     listMode: string;
@@ -148,6 +149,7 @@ export function showCatalogInfo(ctx: CatalogContext): void {
 
   const actions: string[] = [];
   if (entry.doc_raw) actions.push('\x1b[33mD\x1b[0m Doc');
+  if (entry.archive_path && fs.existsSync(entry.archive_path)) actions.push('\x1b[33mA\x1b[0m Browse Archive');
   if (!entry.installed) actions.push('\x1b[33mI\x1b[0m Install');
   if (entry.installed) actions.push('\x1b[33mI\x1b[0m Uninstall');
   if (entry.archive_path && fs.existsSync(entry.archive_path)) actions.push('\x1b[33mS\x1b[0m Strip Ads');
@@ -236,6 +238,11 @@ export function handleCatalogInfoInput(ctx: CatalogContext, key: string): void {
     } else {
       installFromCatalog(ctx, entry);
     }
+    return;
+  }
+
+  if (key === 'a' && entry.archive_path && fs.existsSync(entry.archive_path)) {
+    ctx.browseCatalogArchive(entry.archive_path);
     return;
   }
 
