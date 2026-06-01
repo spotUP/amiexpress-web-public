@@ -250,9 +250,7 @@ async function createApp(session) {
     let statusTimer = null;
     // --- helpers ---------------------------------------------------------------
     function getListWidth() {
-        const w = Math.floor(screen.width * 0.35) - 6;
-        console.log('[doorman] screen.width:', screen.width, 'listWidth:', w);
-        return w;
+        return Math.floor(screen.width * 0.35) - 8; // borders(4) + selection marker(2) + scrollbar(1) + slack(1)
     }
     function selectedDoor() {
         if (mode !== 'installed')
@@ -554,21 +552,20 @@ async function createApp(session) {
             return;
         }
         const hasArchive = !!(entry.archive_path && fs.existsSync(entry.archive_path));
-        const c1 = overrideDir ?? null;
-        const c2 = entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null;
-        const c3 = entry.installed_as ? path.join(PROJECT_ROOT, 'Doors', entry.installed_as) : null;
-        console.log('[stripAds] __dirname:', __dirname);
-        console.log('[stripAds] PROJECT_ROOT:', PROJECT_ROOT);
-        console.log('[stripAds] archive_path:', entry.archive_path, 'exists:', hasArchive);
-        console.log('[stripAds] overrideDir:', c1, 'exists:', c1 ? fs.existsSync(c1) : false);
-        console.log('[stripAds] install_dir candidate:', c2, 'exists:', c2 ? fs.existsSync(c2) : false);
-        console.log('[stripAds] installed_as candidate:', c3, 'exists:', c3 ? fs.existsSync(c3) : false);
-        const candidateDirs = [c1, c2, c3].filter((d) => !!(d && fs.existsSync(d)));
+        const candidateDirs = [
+            overrideDir ?? null,
+            entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null,
+            entry.installed_as ? path.join(PROJECT_ROOT, 'Doors', entry.installed_as) : null,
+        ].filter((d) => !!(d && fs.existsSync(d)));
         const installDirAbs = candidateDirs[0] ?? null;
         const hasDir = !!installDirAbs;
-        console.log('[stripAds] installDirAbs:', installDirAbs, 'hasDir:', hasDir);
         if (!hasArchive && !hasDir) {
-            setStatus('No archive or install directory found', 'yellow');
+            if (!entry.installed) {
+                setStatus(`${entry.archive_name}: install first to strip`, 'yellow');
+            }
+            else {
+                setStatus(`${entry.archive_name}: install dir not found on this server`, 'yellow');
+            }
             onDone();
             return;
         }
