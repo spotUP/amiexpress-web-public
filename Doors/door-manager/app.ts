@@ -110,12 +110,11 @@ function dizFirstLine(entry: CatalogEntry): string {
 }
 
 function formatCatalogItem(entry: CatalogEntry, width: number): string {
-  const inst = entry.installed ? '*' : ' ';
   const sz = entry.archive_size ? `${Math.round(entry.archive_size / 1024)}k` : '?';
-  const nameWidth = Math.max(4, width - sz.length - 3);
-  const archiveName = entry.archive_name;
+  const nameWidth = Math.max(4, width - sz.length - 1);
+  const archiveName = (entry.installed ? '*' : '') + entry.archive_name;
   const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth) : archiveName.padEnd(nameWidth);
-  return `${inst} ${name} ${sz}`;
+  return `${name} ${sz}`;
 }
 
 async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
