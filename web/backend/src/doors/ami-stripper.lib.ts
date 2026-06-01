@@ -249,17 +249,18 @@ export async function stripArchive(archivePath: string, outPath: string, preserv
       try { if (fs.existsSync(abs)) fs.unlinkSync(abs); } catch { /* ignore */ }
     }
 
-    // Try to repack (only works if lha supports 'a' — macOS lha, not lhasa)
-    const lhaResult = spawnSync(LHA_BIN, ['a', outPath, '.'], {
-      cwd: tmpDir,
-      timeout: 30000,
-    });
-    if (lhaResult.status !== 0) {
-      // Fallback: copy clean dir to outPath dir instead of repacking
-      fs.mkdirSync(outPath, { recursive: true });
-      const cpResult = spawnSync('cp', ['-r', `${tmpDir}/.`, `${outPath}/`], { timeout: 30000 });
-      if (cpResult.status !== 0) throw new Error('copy fallback failed');
+    // Try to repack using lha (macOS) then 7za (Alpine/Linux)
+    let repacked = false;
+    const lhaResult = spawnSync(LHA_BIN, ['a', outPath, '.'], { cwd: tmpDir, timeout: 30000 });
+    if (lhaResult.status === 0) {
+      repacked = true;
+    } else {
+      // Fallback: 7za (p7zip) can create LHA archives on Alpine
+      const sevenZa = ['/usr/bin/7za', '/usr/local/bin/7za'].find(p => fs.existsSync(p)) ?? '7za';
+      const z7Result = spawnSync(sevenZa, ['a', '-tlha', outPath, '.'], { cwd: tmpDir, timeout: 60000 });
+      if (z7Result.status === 0) repacked = true;
     }
+    if (!repacked) throw new Error('No tool available to create LHA archives (need lha or 7za)');
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }

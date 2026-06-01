@@ -630,28 +630,24 @@ export async function createApp(session: DoorSession): Promise<void> {
         setStatus(`Stripping ${toStrip.length} file(s)...`);
         try {
           if (hasArchive) {
-            // Extract to tmpDir, delete junk, copy clean to install dir
-            const tmpDir = entry.archive_path + `.strip_${Date.now()}`;
-            fs.mkdirSync(tmpDir, { recursive: true });
-            try {
-              spawnSync(LHA_BIN, [`xw=${tmpDir}`, entry.archive_path], { timeout: 60000 });
-              lib.stripFilesFromDirectory(tmpDir, toStrip.map((f: any) => f.path as string));
-              if (installDirAbs) {
-                fs.mkdirSync(installDirAbs, { recursive: true });
-                spawnSync('cp', ['-r', `${tmpDir}/.`, `${installDirAbs}/`], { timeout: 30000 });
-              }
-            } finally {
-              try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+            // Strip archive in-place: repack to tmp, replace original
+            const tmpOut = entry.archive_path + '.strip_tmp';
+            await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
+            if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
+              fs.renameSync(tmpOut, entry.archive_path); // replace original LHA
+            } else if (fs.existsSync(tmpOut)) {
+              fs.rmSync(tmpOut, { recursive: true, force: true });
+            }
+            if (installDirAbs) {
+              fs.mkdirSync(installDirAbs, { recursive: true });
+              spawnSync(LHA_BIN, [`xw=${installDirAbs}`, entry.archive_path], { timeout: 30000 });
             }
           } else if (hasDir) {
             lib.stripFilesFromDirectory(installDirAbs, toStrip.map((f: any) => f.path));
           }
           const svc = getCatalogSvc();
           if (svc) { try { svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length); } catch { /* ignore */ } }
-          const msg = hasArchive && !installDirAbs
-            ? `Stripped ${toStrip.length} ad file(s) — install to apply`
-            : `Stripped ${toStrip.length} ad file(s)`;
-          setStatus(msg, 'green', 4000);
+          setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
         } catch (err) {
           setStatus(`Strip failed: ${(err as Error).message}`, 'red');
         }

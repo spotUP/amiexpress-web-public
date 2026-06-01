@@ -606,22 +606,18 @@ async function createApp(session) {
             setStatus(`Stripping ${toStrip.length} file(s)...`);
             try {
                 if (hasArchive) {
-                    // Extract to tmpDir, delete junk, copy clean to install dir
-                    const tmpDir = entry.archive_path + `.strip_${Date.now()}`;
-                    fs.mkdirSync(tmpDir, { recursive: true });
-                    try {
-                        (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${tmpDir}`, entry.archive_path], { timeout: 60000 });
-                        lib.stripFilesFromDirectory(tmpDir, toStrip.map((f) => f.path));
-                        if (installDirAbs) {
-                            fs.mkdirSync(installDirAbs, { recursive: true });
-                            (0, child_process_1.spawnSync)('cp', ['-r', `${tmpDir}/.`, `${installDirAbs}/`], { timeout: 30000 });
-                        }
+                    // Strip archive in-place: repack to tmp, replace original
+                    const tmpOut = entry.archive_path + '.strip_tmp';
+                    await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
+                    if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
+                        fs.renameSync(tmpOut, entry.archive_path); // replace original LHA
                     }
-                    finally {
-                        try {
-                            fs.rmSync(tmpDir, { recursive: true, force: true });
-                        }
-                        catch { /* ignore */ }
+                    else if (fs.existsSync(tmpOut)) {
+                        fs.rmSync(tmpOut, { recursive: true, force: true });
+                    }
+                    if (installDirAbs) {
+                        fs.mkdirSync(installDirAbs, { recursive: true });
+                        (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDirAbs}`, entry.archive_path], { timeout: 30000 });
                     }
                 }
                 else if (hasDir) {
@@ -634,10 +630,7 @@ async function createApp(session) {
                     }
                     catch { /* ignore */ }
                 }
-                const msg = hasArchive && !installDirAbs
-                    ? `Stripped ${toStrip.length} ad file(s) — install to apply`
-                    : `Stripped ${toStrip.length} ad file(s)`;
-                setStatus(msg, 'green', 4000);
+                setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
             }
             catch (err) {
                 setStatus(`Strip failed: ${err.message}`, 'red');
