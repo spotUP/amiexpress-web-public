@@ -106,7 +106,17 @@ RUN echo "[Build] Doors stage - copying pre-built doors only"
 FROM node:20-alpine AS backend-builder
 
 # Install build tools needed for native modules (deasync, better-sqlite3)
-RUN apk add --no-cache python3 make g++ build-base curl
+RUN apk add --no-cache python3 make g++ build-base curl autoconf automake libtool
+
+# Build lhasa (lha archive tool) from source — not in Alpine repos
+RUN set -eux; \
+    curl -fsSL https://github.com/fragglet/lhasa/releases/download/v0.3.1/lhasa-0.3.1.tar.gz -o /tmp/lhasa.tgz; \
+    cd /tmp && tar xzf lhasa.tgz; \
+    cd lhasa-0.3.1; \
+    ./configure --prefix=/usr/local; \
+    make -j"$(nproc)"; \
+    make install; \
+    rm -rf /tmp/lhasa*
 
 # lrzsz: not in any Alpine repo. Build from upstream sources, but tell
 # gcc 14 to treat the K&R-era code as C89 (`-std=gnu89`) so `func()`
@@ -159,14 +169,14 @@ RUN apk add --no-cache \
     curl \
     build-base \
     g++ \
-    make \
-    lhasa
+    make
 
 # lrzsz binaries built in backend-builder (Alpine v3.23 dropped the package).
 # Copy the real binaries (lsz/lrz) and recreate the classic sz/rz symlinks
 # in the production layer — symlinks don't always survive COPY --from cleanly.
 COPY --from=backend-builder /usr/local/bin/lsz /usr/local/bin/lsz
 COPY --from=backend-builder /usr/local/bin/lrz /usr/local/bin/lrz
+COPY --from=backend-builder /usr/local/bin/lha /usr/local/bin/lha
 RUN ln -sf /usr/local/bin/lsz /usr/local/bin/sz \
  && ln -sf /usr/local/bin/lsz /usr/local/bin/sb \
  && ln -sf /usr/local/bin/lsz /usr/local/bin/sx \
