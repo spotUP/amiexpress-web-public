@@ -114,7 +114,9 @@ function formatCatalogItem(entry: CatalogEntry, width: number): string {
   const nameWidth = Math.max(4, width - sz.length - 1);
   const archiveName = (entry.installed ? '*' : '') + entry.archive_name;
   const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth) : archiveName.padEnd(nameWidth);
-  return `${name} ${sz}`;
+  const line = `${name} ${sz}`;
+  if (entry.archive_name === '!ALSTER.LHA') console.log('[doorman] item width:', width, 'line:', JSON.stringify(line), 'len:', line.length);
+  return line;
 }
 
 async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
