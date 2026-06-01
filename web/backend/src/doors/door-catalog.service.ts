@@ -7,7 +7,7 @@ const DB_PATH = path.join(
   process.env.DATABASE_FILE || 'database.sqlite'
 );
 
-const SEED_PATH = path.join(__dirname, '..', '..', '..', '..', 'dev', 'scripts', 'door-corpus', 'door-catalog-seed.sql');
+const SEED_PATH = path.join(__dirname, '..', '..', 'seeds', 'door-catalog-seed.sql');
 
 function seedIfEmpty(db: Database.Database): void {
   try {
