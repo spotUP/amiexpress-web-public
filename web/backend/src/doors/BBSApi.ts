@@ -27,6 +27,7 @@ import {
   enableGameMode as enableGameModeForSession,
   disableGameMode as disableGameModeForSession,
 } from '../services/game-mode.service';
+import { searchCatalog as _searchCatalog } from './door-catalog.service';
 
 export interface BBSUser {
   id: string;
@@ -1333,8 +1334,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     }).map((door: any) => {
       // Overlay catalog metadata (name, description, category, version) when available
       try {
-        const { searchCatalog } = require('./door-catalog.service');
-        const results = searchCatalog(door.command, true);
+        const results = _searchCatalog(door.command, true);
         const match = results.find((e: any) =>
           (e.installed_as || '').toUpperCase() === (door.command || '').toUpperCase()
         );
