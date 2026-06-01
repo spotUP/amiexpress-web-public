@@ -186,6 +186,11 @@ export async function createApp(session: DoorSession): Promise<void> {
   let catalogEntries: CatalogEntry[] = [];
   let catalogFilter = '';
 
+  // Strip selector overlay state
+  let stripOverlayActive = false;
+  let _stripConfirm: (() => void) | null = null;
+  let _stripCancel: (() => void) | null = null;
+
   // --- screen ----------------------------------------------------------------
 
   const screen = new Screen({
@@ -356,6 +361,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   }
 
   function updateInfoPane(): void {
+    if (stripOverlayActive) return;
     if (mode === 'installed') {
       const door = selectedDoor();
       if (!door) { (infoBox as any).setContent('No door selected.'); return; }
@@ -489,53 +495,133 @@ export async function createApp(session: DoorSession): Promise<void> {
     } as any).display();
   }
 
+  function showStripSelector(
+    entry: CatalogEntry,
+    stripped: any[],
+    reasons: Record<string, string>,
+    onConfirm: (preservePaths: Set<string>) => void,
+    onCancel: () => void
+  ): void {
+    stripOverlayActive = true;
+    const checked = new Array(stripped.length).fill(true);
+    const origListLabel = (listPanel as any).options?.label ?? ' INSTALLED DOORS ';
+
+    (listPanel as any).setLabel(` ${entry.archive_name} — deselect false positives `);
+
+    function renderFiles(): void {
+      const items = stripped.map((f: any, i: number) => {
+        const box = checked[i] ? '[X]' : '[ ]';
+        const name = (f.path as string).length > 24
+          ? (f.path as string).slice(0, 23) + '>'
+          : (f.path as string).padEnd(24);
+        return `${box} ${name}`;
+      });
+      (doorList as any).setItems(items);
+
+      const sel = (doorList as any).selected ?? 0;
+      const selFile = stripped[sel];
+      const selCount = checked.filter(Boolean).length;
+      (infoBox as any).setContent(
+        `{yellow-fg}${selCount} of ${stripped.length} files selected to strip{/yellow-fg}\n\n` +
+        (selFile ? `{cyan-fg}${selFile.path}{/cyan-fg}\nReason: ${reasons[selFile.path] ?? '?'}\n` : '') +
+        '\n{grey-fg}[Space] Toggle  [A] All  [N] None\n[S] Strip selected  [Esc] Cancel{/grey-fg}'
+      );
+      screen.render();
+    }
+
+    function exitOverlay(): void {
+      stripOverlayActive = false;
+      _stripConfirm = null;
+      _stripCancel = null;
+      (listPanel as any).setLabel(origListLabel);
+      if (mode === 'repo') populateCatalogList((doorList as any).selected ?? 0);
+      else populateInstalledList((doorList as any).selected ?? 0);
+      updateInfoPane();
+      (doorList as any).focus();
+    }
+
+    _stripConfirm = () => {
+      const preserve = new Set(stripped.filter((_: any, i: number) => !checked[i]).map((f: any) => f.path as string));
+      exitOverlay();
+      onConfirm(preserve);
+    };
+    _stripCancel = () => { exitOverlay(); onCancel(); };
+
+    // Space to toggle
+    const spaceKey = () => {
+      if (!stripOverlayActive) return;
+      const idx = (doorList as any).selected ?? 0;
+      if (idx < checked.length) { checked[idx] = !checked[idx]; renderFiles(); }
+    };
+    const allKey = () => { if (!stripOverlayActive) return; checked.fill(true); renderFiles(); };
+    const noneKey = () => { if (!stripOverlayActive) return; checked.fill(false); renderFiles(); };
+    (screen as any).key([' '], spaceKey);
+    (screen as any).key(['a', 'A'], allKey);
+    (screen as any).key(['n', 'N'], noneKey);
+    (doorList as any).once('destroy', () => {
+      (screen as any).unkey([' '], spaceKey);
+      (screen as any).unkey(['a', 'A'], allKey);
+      (screen as any).unkey(['n', 'N'], noneKey);
+    });
+
+    renderFiles();
+    (doorList as any).focus();
+  }
+
   async function stripAds(entry: CatalogEntry, onDone: () => void): Promise<void> {
     const lib = getStripLib();
     if (!lib) { setStatus('Stripper library not available', 'red'); onDone(); return; }
-    if (!entry.archive_path || !fs.existsSync(entry.archive_path)) {
-      setStatus(`Archive not found: ${entry.archive_name}`, 'red'); onDone(); return;
+
+    const hasArchive = !!(entry.archive_path && fs.existsSync(entry.archive_path));
+    const installDirAbs = entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null;
+    const hasDir = !!(installDirAbs && fs.existsSync(installDirAbs));
+
+    if (!hasArchive && !hasDir) {
+      setStatus('No archive or install directory found', 'yellow'); onDone(); return;
     }
+
     setStatus('Analyzing for ad files...');
     let result: any;
-    try { result = await lib.analyzeArchive(entry.archive_path); }
-    catch (err) { setStatus(`Analysis failed: ${(err as Error).message}`, 'red'); onDone(); return; }
-
-    if (result.stripped.length === 0) {
-      setStatus('No ad files found — archive is clean', 'green', 3000); onDone(); return;
+    try {
+      result = hasArchive
+        ? await lib.analyzeArchive(entry.archive_path)
+        : await lib.analyzeDirectory(installDirAbs);
+    } catch (err) {
+      setStatus(`Analysis failed: ${(err as Error).message}`, 'red'); onDone(); return;
     }
 
-    new ConfirmModal({
-      parent: screen,
-      title: ' Strip Ad Files ',
-      content: `Found {red-fg}${result.stripped.length} ad file(s){/red-fg} in {yellow-fg}${entry.archive_name}{/yellow-fg}.\n\n${result.stripped.slice(0, 6).map((f: any) => `  ${f.path}`).join('\n')}${result.stripped.length > 6 ? `\n  ... and ${result.stripped.length - 6} more` : ''}\n\n${entry.install_dir ? `Will re-extract clean archive to ${entry.install_dir}` : 'Will create cleaned archive alongside original'}`,
-      confirmText: 'Strip',
-      cancelText: 'Cancel',
-      confirmColor: 'red',
-      cancelColor: 'green',
-      style: { border: { fg: 'yellow' } },
-      onConfirm: async () => {
-        const outPath = entry.archive_path.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
-        setStatus(`Stripping ${result.stripped.length} file(s)...`);
+    if (result.stripped.length === 0) {
+      setStatus('No ad files found — clean', 'green', 3000); onDone(); return;
+    }
+
+    showStripSelector(entry, result.stripped, result.reason,
+      async (preservePaths: Set<string>) => {
+        const toStrip = result.stripped.filter((f: any) => !preservePaths.has(f.path));
+        if (toStrip.length === 0) {
+          setStatus('Nothing to strip', 'yellow', 2000); onDone(); return;
+        }
+        setStatus(`Stripping ${toStrip.length} file(s)...`);
         try {
-          await lib.stripArchive(entry.archive_path, outPath);
-          if (entry.install_dir) {
-            const abs = path.join(PROJECT_ROOT, entry.install_dir);
-            fs.mkdirSync(abs, { recursive: true });
-            spawnSync(LHA_BIN, ['e', '-q', outPath, abs + '/'], { timeout: 30000 });
+          if (hasArchive) {
+            const outPath = entry.archive_path.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
+            await lib.stripArchive(entry.archive_path, outPath, preservePaths);
+            if (installDirAbs) {
+              fs.mkdirSync(installDirAbs, { recursive: true });
+              spawnSync(LHA_BIN, ['e', '-q', outPath, installDirAbs + '/'], { timeout: 30000 });
+            }
+          } else if (hasDir) {
+            lib.stripFilesFromDirectory(installDirAbs, toStrip.map((f: any) => f.path));
           }
           const svc = getCatalogSvc();
-          if (svc) { try { svc.updateJunkCount(entry.id, 0); } catch { /* ignore */ } }
-          setStatus(`Stripped ${result.stripped.length} ad file(s)`, 'green', 4000);
+          if (svc) { try { svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length); } catch { /* ignore */ } }
+          setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
         } catch (err) {
           setStatus(`Strip failed: ${(err as Error).message}`, 'red');
         }
-        const idx = (doorList as any).selected ?? 0;
-        populateCatalogList(idx);
-        updateInfoPane();
         onDone();
       },
-      onCancel: () => { onDone(); },
-    } as any).display();
+      onDone
+    );
   }
 
   // --- key handlers ----------------------------------------------------------
@@ -557,6 +643,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['q', 'Q', 'escape'], () => {
+    if (stripOverlayActive) { if (_stripCancel) _stripCancel(); return; }
     if (statusTimer) clearTimeout(statusTimer);
     inputManager.disable();
     (screen as any).destroy();
@@ -597,6 +684,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['s', 'S'], async () => {
+    if (stripOverlayActive) { if (_stripConfirm) _stripConfirm(); return; }
     if (mode === 'installed') {
       const door = selectedDoor();
       if (!door) return;

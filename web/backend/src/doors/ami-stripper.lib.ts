@@ -13,9 +13,16 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { spawnSync } from 'child_process';
 
-const LHA_BIN = '/opt/homebrew/bin/lha';
-const PATTERNS_JSON = path.join(__dirname, '..', '..', '..', '..', 'dev/scripts/door-corpus/scene-strip-patterns.json');
-const FINGERPRINTS_JSON = path.join(__dirname, '..', '..', '..', '..', 'dev/scripts/door-corpus/junk-fingerprints.json');
+const LHA_BIN = [
+  '/app/data/bbs/tools/bin/lha',
+  '/opt/homebrew/bin/lha',
+  '/usr/bin/lha',
+  '/usr/local/bin/lha',
+].find(p => fs.existsSync(p)) ?? 'lha';
+
+const SEEDS_DIR = path.join(__dirname, '..', '..', 'seeds');
+const PATTERNS_JSON = path.join(SEEDS_DIR, 'scene-strip-patterns.json');
+const FINGERPRINTS_JSON = path.join(SEEDS_DIR, 'junk-fingerprints.json');
 
 export interface StripEntry {
   path: string;
@@ -197,7 +204,8 @@ export async function analyzeArchive(archivePath: string): Promise<StripResult> 
   return { kept, stripped, reason };
 }
 
-export async function stripArchive(archivePath: string, outPath: string): Promise<StripResult> {
+// preservePaths: files that were flagged but the user chose to keep (false positives)
+export async function stripArchive(archivePath: string, outPath: string, preservePaths?: Set<string>): Promise<StripResult> {
   const result = await analyzeArchive(archivePath);
 
   if (result.stripped.length === 0) {
@@ -205,14 +213,17 @@ export async function stripArchive(archivePath: string, outPath: string): Promis
     return result;
   }
 
-  const strippedSet = new Set(result.stripped.map(e => e.path));
+  // Files to actually extract: kept + user-preserved false positives
+  const toExtract = [
+    ...result.kept,
+    ...(preservePaths ? result.stripped.filter(e => preservePaths.has(e.path)) : []),
+  ];
 
-  // Extract kept files to a temp dir, then repack
   const tmpDir = `${outPath}.tmp_${Date.now()}`;
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
-    for (const entry of result.kept) {
+    for (const entry of toExtract) {
       const buf = lhaExtractFile(archivePath, entry.path);
       if (!buf) continue;
       const dest = path.join(tmpDir, entry.path);
@@ -220,7 +231,6 @@ export async function stripArchive(archivePath: string, outPath: string): Promis
       fs.writeFileSync(dest, buf);
     }
 
-    // Repack with lha
     const lhaResult = spawnSync(LHA_BIN, ['a', outPath, '.'], {
       cwd: tmpDir,
       timeout: 30000,
@@ -233,4 +243,43 @@ export async function stripArchive(archivePath: string, outPath: string): Promis
   }
 
   return result;
+}
+
+export async function analyzeDirectory(dirPath: string): Promise<StripResult> {
+  const patterns = loadPatterns();
+  const fingerprints = loadFingerprints();
+  const kept: StripEntry[] = [];
+  const stripped: StripEntry[] = [];
+  const reason: Record<string, 'pattern' | 'md5' | 'content-scan'> = {};
+
+  function scanDir(absDir: string, relPrefix: string): void {
+    let entries: string[];
+    try { entries = fs.readdirSync(absDir); } catch { return; }
+    for (const name of entries) {
+      const absPath = path.join(absDir, name);
+      const relPath = relPrefix ? `${relPrefix}/${name}` : name;
+      const stat = fs.statSync(absPath);
+      if (stat.isDirectory()) { scanDir(absPath, relPath); continue; }
+      let buf: Buffer;
+      try { buf = fs.readFileSync(absPath); } catch { continue; }
+      const md5 = crypto.createHash('md5').update(buf).digest('hex');
+      const verdict = classifyFile(relPath, buf, patterns.filenamePatterns, fingerprints);
+      if (verdict) {
+        stripped.push({ path: relPath, size: stat.size, md5 });
+        reason[relPath] = verdict;
+      } else {
+        kept.push({ path: relPath, size: stat.size, md5 });
+      }
+    }
+  }
+
+  scanDir(dirPath, '');
+  return { kept, stripped, reason };
+}
+
+export function stripFilesFromDirectory(dirPath: string, relPaths: string[]): void {
+  for (const rel of relPaths) {
+    const abs = path.join(dirPath, rel);
+    try { if (fs.existsSync(abs)) fs.unlinkSync(abs); } catch { /* ignore */ }
+  }
 }

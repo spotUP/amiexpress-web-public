@@ -28,6 +28,7 @@ import {
   disableGameMode as disableGameModeForSession,
 } from '../services/game-mode.service';
 import { searchCatalog as _searchCatalog } from './door-catalog.service';
+import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
 export interface BBSUser {
   id: string;
