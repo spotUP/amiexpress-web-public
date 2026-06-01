@@ -347,7 +347,7 @@ async function createApp(session) {
     }
     function applyResponsive() {
         const w = screen.width;
-        if (w < 100) {
+        if (w < 70) {
             infoPanel.hide();
             listPanel.width = '100%';
         }

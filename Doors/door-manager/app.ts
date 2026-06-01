@@ -371,7 +371,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   function applyResponsive(): void {
     const w = (screen as any).width;
-    if (w < 100) {
+    if (w < 70) {
       (infoPanel as any).hide();
       (listPanel as any).width = '100%';
     } else {
