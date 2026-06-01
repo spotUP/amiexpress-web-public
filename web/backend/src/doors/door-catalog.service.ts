@@ -1,7 +1,22 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 
-const DB_PATH = path.join(__dirname, '..', '..', '..', '..', 'database.sqlite');
+const DB_PATH = path.join(
+  process.env.DATABASE_DIR || path.join(__dirname, '..', '..', '..', '..'),
+  process.env.DATABASE_FILE || 'database.sqlite'
+);
+
+const SEED_PATH = path.join(__dirname, '..', '..', '..', '..', 'dev', 'scripts', 'door-corpus', 'door-catalog-seed.sql');
+
+function seedIfEmpty(db: Database.Database): void {
+  try {
+    const count = (db.prepare('SELECT count(*) as n FROM door_catalog').get() as any)?.n ?? 0;
+    if (count > 0 || !fs.existsSync(SEED_PATH)) return;
+    const sql = fs.readFileSync(SEED_PATH, 'utf-8');
+    db.exec(sql);
+  } catch { /* ignore seed errors */ }
+}
 
 export interface CatalogEntry {
   id: string;
@@ -28,7 +43,9 @@ export interface CatalogEntry {
 }
 
 function openDb(): Database.Database {
-  return new Database(DB_PATH, { readonly: false });
+  const db = new Database(DB_PATH, { readonly: false });
+  seedIfEmpty(db);
+  return db;
 }
 
 export function searchCatalog(query: string, installedOnly?: boolean): CatalogEntry[] {

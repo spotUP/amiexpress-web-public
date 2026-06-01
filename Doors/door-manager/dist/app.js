@@ -47,17 +47,33 @@ const fs = __importStar(require("fs"));
 const child_process_1 = require("child_process");
 const LHA_BIN = '/opt/homebrew/bin/lha';
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+function findBackendPath(relative) {
+    let dir = __dirname;
+    for (let i = 0; i < 8; i++) {
+        const candidate = path.join(dir, relative);
+        if (fs.existsSync(candidate + '.ts') || fs.existsSync(candidate + '.js'))
+            return candidate;
+        dir = path.dirname(dir);
+    }
+    return null;
+}
 function getCatalogSvc() {
+    const p = findBackendPath('web/backend/src/doors/door-catalog.service');
+    if (!p)
+        return null;
     try {
-        return require('../../web/backend/src/doors/door-catalog.service');
+        return require(p);
     }
     catch {
         return null;
     }
 }
 function getStripLib() {
+    const p = findBackendPath('web/backend/src/doors/ami-stripper.lib');
+    if (!p)
+        return null;
     try {
-        return require('../../web/backend/src/doors/ami-stripper.lib');
+        return require(p);
     }
     catch {
         return null;
