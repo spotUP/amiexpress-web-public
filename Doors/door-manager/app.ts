@@ -576,13 +576,19 @@ export async function createApp(session: DoorSession): Promise<void> {
     (doorList as any).focus();
   }
 
-  async function stripAds(entry: CatalogEntry, onDone: () => void): Promise<void> {
+  async function stripAds(entry: CatalogEntry, onDone: () => void, overrideDir?: string): Promise<void> {
     const lib = getStripLib();
     if (!lib) { setStatus('Stripper library not available', 'red'); onDone(); return; }
 
     const hasArchive = !!(entry.archive_path && fs.existsSync(entry.archive_path));
-    const installDirAbs = entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null;
-    const hasDir = !!(installDirAbs && fs.existsSync(installDirAbs));
+    // overrideDir: live resolved path from door scan (more reliable than stale catalog install_dir)
+    const candidateDirs = [
+      overrideDir,
+      entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null,
+      entry.installed_as ? path.join(PROJECT_ROOT, 'Doors', entry.installed_as) : null,
+    ].filter((d): d is string => !!(d && fs.existsSync(d)));
+    const installDirAbs = candidateDirs[0] ?? null;
+    const hasDir = !!installDirAbs;
 
     if (!hasArchive && !hasDir) {
       setStatus('No archive or install directory found', 'yellow'); onDone(); return;
@@ -701,7 +707,11 @@ export async function createApp(session: DoorSession): Promise<void> {
       let entry: CatalogEntry | null = null;
       try { entry = svc.getCatalogEntryByCmd(door.command); } catch { /* ignore */ }
       if (!entry) { setStatus(`${door.command} not in catalog`, 'yellow'); return; }
-      await stripAds(entry, () => { (doorList as any).focus(); screen.render(); });
+      // Derive live install dir from resolvedPath (more reliable than stale catalog install_dir)
+      const liveDir = (door as any).resolvedPath
+        ? path.dirname((door as any).resolvedPath as string)
+        : ((door as any).location ? path.join(PROJECT_ROOT, (door as any).location as string) : undefined);
+      await stripAds(entry, () => { (doorList as any).focus(); screen.render(); }, liveDir);
     } else {
       const entry = selectedCatalogEntry();
       if (!entry) return;

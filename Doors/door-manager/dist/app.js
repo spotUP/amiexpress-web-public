@@ -545,7 +545,7 @@ async function createApp(session) {
         renderFiles();
         doorList.focus();
     }
-    async function stripAds(entry, onDone) {
+    async function stripAds(entry, onDone, overrideDir) {
         const lib = getStripLib();
         if (!lib) {
             setStatus('Stripper library not available', 'red');
@@ -553,8 +553,14 @@ async function createApp(session) {
             return;
         }
         const hasArchive = !!(entry.archive_path && fs.existsSync(entry.archive_path));
-        const installDirAbs = entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null;
-        const hasDir = !!(installDirAbs && fs.existsSync(installDirAbs));
+        // overrideDir: live resolved path from door scan (more reliable than stale catalog install_dir)
+        const candidateDirs = [
+            overrideDir,
+            entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null,
+            entry.installed_as ? path.join(PROJECT_ROOT, 'Doors', entry.installed_as) : null,
+        ].filter((d) => !!(d && fs.existsSync(d)));
+        const installDirAbs = candidateDirs[0] ?? null;
+        const hasDir = !!installDirAbs;
         if (!hasArchive && !hasDir) {
             setStatus('No archive or install directory found', 'yellow');
             onDone();
@@ -701,7 +707,11 @@ async function createApp(session) {
                 setStatus(`${door.command} not in catalog`, 'yellow');
                 return;
             }
-            await stripAds(entry, () => { doorList.focus(); screen.render(); });
+            // Derive live install dir from resolvedPath (more reliable than stale catalog install_dir)
+            const liveDir = door.resolvedPath
+                ? path.dirname(door.resolvedPath)
+                : (door.location ? path.join(PROJECT_ROOT, door.location) : undefined);
+            await stripAds(entry, () => { doorList.focus(); screen.render(); }, liveDir);
         }
         else {
             const entry = selectedCatalogEntry();
