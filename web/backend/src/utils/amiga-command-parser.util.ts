@@ -110,11 +110,11 @@ const GG_HEIGHT = 14;         // WORD
 const GG_GADGET_RENDER = 22;  // APTR (flag for 1st image)
 const GG_SELECT_RENDER = 26;  // APTR (flag for 2nd image)
 
-// Image structure size
+// Image structure size (struct Image { LeftEdge, TopEdge, Width, Height, Depth, ... })
 const IMAGE_STRUCT_SIZE = 20;
-const IMG_WIDTH = 0;          // WORD
-const IMG_HEIGHT = 2;         // WORD
-const IMG_DEPTH = 4;          // WORD
+const IMG_WIDTH = 4;          // WORD — offset past LeftEdge(2)+TopEdge(2)
+const IMG_HEIGHT = 6;         // WORD
+const IMG_DEPTH = 8;          // WORD
 
 // DrawerData structure size
 const DRAWER_DATA_SIZE = 56;
