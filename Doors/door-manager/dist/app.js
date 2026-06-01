@@ -47,38 +47,17 @@ const fs = __importStar(require("fs"));
 const child_process_1 = require("child_process");
 const LHA_BIN = '/opt/homebrew/bin/lha';
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-function findBackendPath(relative) {
-    let dir = __dirname;
-    for (let i = 0; i < 8; i++) {
-        const candidate = path.join(dir, relative);
-        if (fs.existsSync(candidate + '.ts') || fs.existsSync(candidate + '.js'))
-            return candidate;
-        dir = path.dirname(dir);
+function fromCache(marker) {
+    // The BBS server has already loaded this module via tsx. Retrieve it from
+    // the shared require cache rather than re-transpiling the .ts source.
+    for (const key of Object.keys(require.cache)) {
+        if (key.includes(marker))
+            return require.cache[key]?.exports ?? null;
     }
     return null;
 }
-function getCatalogSvc() {
-    const p = findBackendPath('web/backend/src/doors/door-catalog.service');
-    if (!p)
-        return null;
-    try {
-        return require(p);
-    }
-    catch {
-        return null;
-    }
-}
-function getStripLib() {
-    const p = findBackendPath('web/backend/src/doors/ami-stripper.lib');
-    if (!p)
-        return null;
-    try {
-        return require(p);
-    }
-    catch {
-        return null;
-    }
-}
+function getCatalogSvc() { return fromCache('door-catalog.service'); }
+function getStripLib() { return fromCache('ami-stripper.lib'); }
 const HEADER_PREFIX = `{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}`;
 // --- helpers -----------------------------------------------------------------
 function formatSize(bytes) {
