@@ -630,18 +630,21 @@ export async function createApp(session: DoorSession): Promise<void> {
         setStatus(`Stripping ${toStrip.length} file(s)...`);
         try {
           if (hasArchive) {
-            const outPath = entry.archive_path.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
-            await lib.stripArchive(entry.archive_path, outPath, preservePaths);
+            // Strip archive in-place: repack to tmp, then replace original
+            const tmpOut = entry.archive_path + '.stripping';
+            await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
+            fs.renameSync(tmpOut, entry.archive_path);
+            setStatus(`Repacked. Re-extracting...`);
             if (installDirAbs) {
               fs.mkdirSync(installDirAbs, { recursive: true });
-              spawnSync(LHA_BIN, ['e', '-q', outPath, installDirAbs + '/'], { timeout: 30000 });
+              spawnSync(LHA_BIN, ['e', '-q', entry.archive_path, installDirAbs + '/'], { timeout: 30000 });
             }
           } else if (hasDir) {
             lib.stripFilesFromDirectory(installDirAbs, toStrip.map((f: any) => f.path));
           }
           const svc = getCatalogSvc();
           if (svc) { try { svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length); } catch { /* ignore */ } }
-          setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
+          setStatus(`Stripped ${toStrip.length} ad file(s) — archive updated`, 'green', 4000);
         } catch (err) {
           setStatus(`Strip failed: ${(err as Error).message}`, 'red');
         }

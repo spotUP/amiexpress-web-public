@@ -606,11 +606,14 @@ async function createApp(session) {
             setStatus(`Stripping ${toStrip.length} file(s)...`);
             try {
                 if (hasArchive) {
-                    const outPath = entry.archive_path.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
-                    await lib.stripArchive(entry.archive_path, outPath, preservePaths);
+                    // Strip archive in-place: repack to tmp, then replace original
+                    const tmpOut = entry.archive_path + '.stripping';
+                    await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
+                    fs.renameSync(tmpOut, entry.archive_path);
+                    setStatus(`Repacked. Re-extracting...`);
                     if (installDirAbs) {
                         fs.mkdirSync(installDirAbs, { recursive: true });
-                        (0, child_process_1.spawnSync)(LHA_BIN, ['e', '-q', outPath, installDirAbs + '/'], { timeout: 30000 });
+                        (0, child_process_1.spawnSync)(LHA_BIN, ['e', '-q', entry.archive_path, installDirAbs + '/'], { timeout: 30000 });
                     }
                 }
                 else if (hasDir) {
@@ -623,7 +626,7 @@ async function createApp(session) {
                     }
                     catch { /* ignore */ }
                 }
-                setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
+                setStatus(`Stripped ${toStrip.length} ad file(s) — archive updated`, 'green', 4000);
             }
             catch (err) {
                 setStatus(`Strip failed: ${err.message}`, 'red');
