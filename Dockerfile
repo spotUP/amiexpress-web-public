@@ -113,7 +113,7 @@ RUN set -eux; \
     curl -fsSL https://github.com/fragglet/lhasa/releases/download/v0.3.1/lhasa-0.3.1.tar.gz -o /tmp/lhasa.tgz; \
     cd /tmp && tar xzf lhasa.tgz; \
     cd lhasa-0.3.1; \
-    ./configure --prefix=/usr/local; \
+    ./configure --prefix=/usr/local --enable-static --disable-shared; \
     make -j"$(nproc)"; \
     make install; \
     rm -rf /tmp/lhasa*
