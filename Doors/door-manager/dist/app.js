@@ -227,6 +227,7 @@ async function createApp(session) {
         keys: true, vi: true, mouse: true,
         scrollable: true, alwaysScroll: true,
         tags: true,
+        wrapItems: false,
         scrollbar: { ch: ' ', style: { bg: 'blue' } },
         style: {
             selected: { bg: 'blue', fg: 'white' },
