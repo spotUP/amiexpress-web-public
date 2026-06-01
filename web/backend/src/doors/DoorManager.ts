@@ -529,11 +529,11 @@ console.error('Error extracting door info:', error);
     this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Navigate  ');
     this.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Info  ');
+    this.socket.emit('ansi-output', '\x1b[33mTab\x1b[0m Repo  ');
     this.socket.emit('ansi-output', '\x1b[33mU\x1b[0m Upload  ');
     this.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit  ');
     this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Logs\r\n');
-    this.socket.emit('ansi-output', '\x1b[90m[H=hot reload; Filter: name/cmd/type; L=reload log]\x1b[0m\r\n');
   }
 
   /**
