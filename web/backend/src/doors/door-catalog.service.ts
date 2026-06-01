@@ -101,6 +101,26 @@ export function markUninstalled(id: string): void {
   }
 }
 
+export function getCatalogEntryByCmd(cmd: string): CatalogEntry | null {
+  const db = openDb();
+  try {
+    return (
+      (db.prepare('SELECT * FROM door_catalog WHERE installed_as = ? COLLATE NOCASE').get(cmd) as CatalogEntry) ?? null
+    );
+  } finally {
+    db.close();
+  }
+}
+
+export function updateJunkCount(id: string, count: number): void {
+  const db = openDb();
+  try {
+    db.prepare('UPDATE door_catalog SET junk_count = ? WHERE id = ?').run(count, id);
+  } finally {
+    db.close();
+  }
+}
+
 export function catalogStats(): { total: number; installed: number } {
   const db = openDb();
   try {

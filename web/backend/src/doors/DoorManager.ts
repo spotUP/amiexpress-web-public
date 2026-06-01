@@ -51,6 +51,7 @@ import {
   showCatalogInfo,
   handleRepoInput,
   handleCatalogInfoInput,
+  stripInstalledDoor,
 } from './DoorManagerCatalog';
 
 interface DoorInfo {
@@ -634,6 +635,9 @@ console.error('Error extracting door info:', error);
       }
     }
 
+    if (door.installed) {
+      this.socket.emit('ansi-output', '\x1b[33mS\x1b[0m Strip Ads  ');
+    }
     this.socket.emit('ansi-output', '\x1b[33mE\x1b[0m Edit .info  ');
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
@@ -1561,6 +1565,12 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       return;
     }
 
+    // S - Strip ad files from source archive and re-extract
+    if (key === 's' && door.installed) {
+      this.doStripInstalledDoor(door);
+      return;
+    }
+
     // E - Edit .info file
     if (key === 'e') {
       this.openInfoEditor();
@@ -1580,6 +1590,18 @@ console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
       this.socket.emit('door-exit');
       return;
     }
+  }
+
+  private doStripInstalledDoor(door: DoorInfo): void {
+    const command = ((door as any).command ?? '') as string;
+    if (!command) {
+      this.socket.emit('ansi-output', '\r\n\x1b[33mNo BBS command for this door — cannot strip.\x1b[0m\r\n');
+      return;
+    }
+    stripInstalledDoor(this.catalogCtx(), command, () => {
+      this.state.mode = 'info';
+      this.showInfo();
+    });
   }
 
   /**

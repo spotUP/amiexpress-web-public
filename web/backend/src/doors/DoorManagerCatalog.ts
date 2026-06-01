@@ -15,6 +15,8 @@ import {
   catalogStats,
   markInstalled,
   markUninstalled,
+  getCatalogEntryByCmd,
+  updateJunkCount,
 } from './door-catalog.service';
 
 const LHA_BIN = '/opt/homebrew/bin/lha';
@@ -148,6 +150,7 @@ export function showCatalogInfo(ctx: CatalogContext): void {
   if (entry.doc_raw) actions.push('\x1b[33mD\x1b[0m Doc');
   if (!entry.installed) actions.push('\x1b[33mI\x1b[0m Install');
   if (entry.installed) actions.push('\x1b[33mI\x1b[0m Uninstall');
+  if (entry.archive_path && fs.existsSync(entry.archive_path)) actions.push('\x1b[33mS\x1b[0m Strip Ads');
   actions.push('\x1b[33mB\x1b[0m Back');
   actions.push('\x1b[33mQ\x1b[0m Quit');
   ctx.socket.emit('ansi-output', actions.join('  ') + '\r\n');
@@ -233,6 +236,11 @@ export function handleCatalogInfoInput(ctx: CatalogContext, key: string): void {
     } else {
       installFromCatalog(ctx, entry);
     }
+    return;
+  }
+
+  if (key === 's' && entry.archive_path && fs.existsSync(entry.archive_path)) {
+    stripCatalogEntry(ctx, entry);
     return;
   }
 
@@ -366,4 +374,101 @@ function extractCatalogArchive(entry: CatalogEntry, outDir: string): void {
 function writeXimInfoFile(infoPath: string, tooltypes: Record<string, string>): void {
   const lines = Object.entries(tooltypes).map(([k, v]) => `${k}=${v}`).join('\n');
   fs.writeFileSync(infoPath, lines + '\n', 'latin1');
+}
+
+// Called from DoorManager installed-door info view
+export function stripInstalledDoor(ctx: CatalogContext, command: string, onDone: () => void): void {
+  const entry = getCatalogEntryByCmd(command);
+  if (!entry || !entry.archive_path) {
+    ctx.socket.emit('ansi-output', `\r\n\x1b[33mDoor not in catalog — cannot strip.\x1b[0m\r\n`);
+    setTimeout(onDone, 1200);
+    return;
+  }
+  stripCatalogEntry(ctx, entry, onDone);
+}
+
+function stripCatalogEntry(ctx: CatalogContext, entry: CatalogEntry, onDone?: () => void): void {
+  const done = onDone ?? (() => showCatalogInfo(ctx));
+
+  if (!fs.existsSync(entry.archive_path)) {
+    ctx.socket.emit('ansi-output', `\r\n\x1b[31mArchive not found: ${entry.archive_path}\x1b[0m\r\n`);
+    setTimeout(done, 1500);
+    return;
+  }
+
+  ctx.socket.emit('ansi-output', '\r\n\x1b[36mAnalyzing for ad files...\x1b[0m ');
+
+  let stripLib: any;
+  try {
+    stripLib = require('./ami-stripper.lib');
+  } catch {
+    ctx.socket.emit('ansi-output', '\r\n\x1b[31mStripper library unavailable.\x1b[0m\r\n');
+    setTimeout(done, 1200);
+    return;
+  }
+
+  (stripLib.analyzeArchive(entry.archive_path) as Promise<any>).then((result: any) => {
+    ctx.socket.emit('ansi-output', `done. ${result.kept.length + result.stripped.length} files.\r\n\r\n`);
+
+    if (result.stripped.length === 0) {
+      ctx.socket.emit('ansi-output', '\x1b[32mNo ad files found — archive is clean.\x1b[0m\r\n');
+      setTimeout(done, 1200);
+      return;
+    }
+
+    ctx.socket.emit('ansi-output', `\x1b[31mAd files to remove (${result.stripped.length}):\x1b[0m\r\n`);
+    for (const f of (result.stripped as any[]).slice(0, 10)) {
+      const reason = result.reason[f.path] ?? '';
+      ctx.socket.emit('ansi-output', `  \x1b[31m${(f.path as string).substring(0, 42).padEnd(42)}\x1b[0m \x1b[90m[${reason}]\x1b[0m\r\n`);
+    }
+    if (result.stripped.length > 10) {
+      ctx.socket.emit('ansi-output', `  \x1b[90m... and ${result.stripped.length - 10} more\x1b[0m\r\n`);
+    }
+
+    const target = entry.install_dir ? ` and re-extract to ${entry.install_dir}` : '';
+    ctx.socket.emit('ansi-output', `\r\n\x1b[33mStrip archive${target}? (Y/N):\x1b[0m `);
+
+    const onConfirm = (data: string) => {
+      ctx.socket.off('command', onConfirm);
+      if (data.trim().toLowerCase() !== 'y') {
+        ctx.socket.emit('ansi-output', '\x1b[33mAborted.\x1b[0m\r\n');
+        setTimeout(done, 800);
+        return;
+      }
+
+      const outPath = entry.archive_path.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
+      ctx.socket.emit('ansi-output', '\r\n\x1b[36mStripping...\x1b[0m ');
+
+      (stripLib.stripArchive(entry.archive_path, outPath) as Promise<any>).then(() => {
+        ctx.socket.emit('ansi-output', 'done.\r\n');
+
+        if (entry.install_dir) {
+          const installDirAbs = path.join(ctx.projectRoot, entry.install_dir);
+          ctx.socket.emit('ansi-output', `\x1b[36mRe-extracting to ${entry.install_dir}...\x1b[0m `);
+          try {
+            extractCatalogArchive({ ...entry, archive_path: outPath }, installDirAbs);
+            ctx.socket.emit('ansi-output', 'done.\r\n');
+          } catch (err) {
+            ctx.socket.emit('ansi-output', `\r\n\x1b[31mRe-extract failed: ${(err as Error).message}\x1b[0m\r\n`);
+          }
+        }
+
+        try { updateJunkCount(entry.id, 0); } catch { /* catalog may not be built */ }
+        if (ctx.state.currentCatalogEntry?.id === entry.id) {
+          ctx.state.currentCatalogEntry = { ...entry, junk_count: 0 };
+        }
+
+        ctx.socket.emit('ansi-output', `\x1b[32mDone. Removed ${result.stripped.length} ad file(s).\x1b[0m\r\n`);
+        setTimeout(done, 1200);
+      }).catch((err: Error) => {
+        ctx.socket.emit('ansi-output', `\r\n\x1b[31mStrip failed: ${err.message}\x1b[0m\r\n`);
+        setTimeout(done, 1500);
+      });
+    };
+
+    ctx.socket.once('command', onConfirm);
+  }).catch((err: Error) => {
+    ctx.socket.emit('ansi-output', `\r\n\x1b[31mAnalysis failed: ${err.message}\x1b[0m\r\n`);
+    setTimeout(done, 1500);
+  });
 }
