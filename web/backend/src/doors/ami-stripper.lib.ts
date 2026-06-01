@@ -24,6 +24,7 @@ const SEEDS_DIR = path.join(__dirname, '..', '..', 'seeds');
 const PATTERNS_JSON = path.join(SEEDS_DIR, 'scene-strip-patterns.json');
 const FINGERPRINTS_JSON = path.join(SEEDS_DIR, 'junk-fingerprints.json');
 
+
 export interface StripEntry {
   path: string;
   size: number;
@@ -249,18 +250,10 @@ export async function stripArchive(archivePath: string, outPath: string, preserv
       try { if (fs.existsSync(abs)) fs.unlinkSync(abs); } catch { /* ignore */ }
     }
 
-    // Try to repack using lha (macOS) then 7za (Alpine/Linux)
-    let repacked = false;
     const lhaResult = spawnSync(LHA_BIN, ['a', outPath, '.'], { cwd: tmpDir, timeout: 30000 });
-    if (lhaResult.status === 0) {
-      repacked = true;
-    } else {
-      // Fallback: 7za (p7zip) can create LHA archives on Alpine
-      const sevenZa = ['/usr/bin/7za', '/usr/local/bin/7za'].find(p => fs.existsSync(p)) ?? '7za';
-      const z7Result = spawnSync(sevenZa, ['a', '-tlha', outPath, '.'], { cwd: tmpDir, timeout: 60000 });
-      if (z7Result.status === 0) repacked = true;
+    if (lhaResult.status !== 0) {
+      throw new Error(`lha repack failed (status ${lhaResult.status}): ${lhaResult.stderr?.toString()}`);
     }
-    if (!repacked) throw new Error('No tool available to create LHA archives (need lha or 7za)');
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }

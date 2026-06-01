@@ -108,15 +108,16 @@ FROM node:20-alpine AS backend-builder
 # Install build tools needed for native modules (deasync, better-sqlite3)
 RUN apk add --no-cache python3 make g++ build-base curl autoconf automake libtool
 
-# Build lhasa (lha archive tool) from source — not in Alpine repos
+# Build original lha (jca02266 fork of Japanese lha) — supports 'a' (create) unlike lhasa
 RUN set -eux; \
-    curl -fsSL https://github.com/fragglet/lhasa/releases/download/v0.3.1/lhasa-0.3.1.tar.gz -o /tmp/lhasa.tgz; \
-    cd /tmp && tar xzf lhasa.tgz; \
-    cd lhasa-0.3.1; \
-    ./configure --prefix=/usr/local --enable-static --disable-shared; \
+    curl -fsSL https://github.com/jca02266/lha/archive/refs/heads/current.tar.gz -o /tmp/lha.tgz; \
+    cd /tmp && tar xzf lha.tgz; \
+    cd lha-current; \
+    autoreconf -fi 2>/dev/null || true; \
+    ./configure --prefix=/usr/local; \
     make -j"$(nproc)"; \
-    make install; \
-    rm -rf /tmp/lhasa*
+    install -m 755 src/lha /usr/local/bin/lha; \
+    rm -rf /tmp/lha*
 
 # lrzsz: not in any Alpine repo. Build from upstream sources, but tell
 # gcc 14 to treat the K&R-era code as C89 (`-std=gnu89`) so `func()`
