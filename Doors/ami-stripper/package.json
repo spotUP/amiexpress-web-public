@@ -1,0 +1,26 @@
+{
+  "name": "ami-stripper",
+  "version": "1.0.0",
+  "description": "Interactive Amiga archive ad-stripper door",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "amiexpress": {
+    "doorName": "AmiStripper",
+    "command": "STRIP",
+    "description": "Remove BBS ad files from Amiga archives using scene stripper databases",
+    "version": "1.0.0",
+    "author": "AmiExpress-Web",
+    "minSecurityLevel": 100,
+    "multiNode": false
+  }
+}

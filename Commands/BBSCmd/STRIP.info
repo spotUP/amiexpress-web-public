@@ -1,0 +1,8 @@
+BBSCMD=STRIP
+TYPE=TS
+LOCATION=Doors/ami-stripper
+DESCRIPTION=AmiStripper - remove BBS ad files from Amiga archives
+ACCESS=100
+MULTINODE=NO
+PRIORITY=SAME
+CATEGORY=Utilities
