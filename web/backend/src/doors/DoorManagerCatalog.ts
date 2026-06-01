@@ -19,7 +19,11 @@ import {
   updateJunkCount,
 } from './door-catalog.service';
 
-const LHA_BIN = '/opt/homebrew/bin/lha';
+const LHA_BIN = [
+  '/usr/local/bin/lha',
+  '/opt/homebrew/bin/lha',
+  '/usr/bin/lha',
+].find(p => require('fs').existsSync(p)) ?? 'lha';
 
 // Minimal interface of DoorManager state needed here
 export interface CatalogContext {
@@ -380,7 +384,7 @@ function uninstallCatalogDoor(ctx: CatalogContext, entry: CatalogEntry): void {
 
 function extractCatalogArchive(entry: CatalogEntry, outDir: string): void {
   fs.mkdirSync(outDir, { recursive: true });
-  const result = spawnSync(LHA_BIN, ['e', '-q', entry.archive_path, outDir + '/'], { timeout: 30000 });
+  const result = spawnSync(LHA_BIN, [`xw=${outDir}`, entry.archive_path], { timeout: 30000 });
   if (result.status !== 0 && result.status !== 1) {
     throw new Error(`lha extract failed (status ${result.status})`);
   }

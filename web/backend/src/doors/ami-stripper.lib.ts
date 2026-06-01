@@ -58,7 +58,8 @@ function loadFingerprints(): FingerprintDb {
 }
 
 function lhaListRaw(archivePath: string): string[] {
-  const result = spawnSync(LHA_BIN, ['l', '-q', archivePath], {
+  // lhasa does not support -q; omit it (header/footer lines are filtered by parseLhaListNames)
+  const result = spawnSync(LHA_BIN, ['l', archivePath], {
     encoding: 'latin1',
     timeout: 15000,
   });
@@ -67,12 +68,20 @@ function lhaListRaw(archivePath: string): string[] {
 }
 
 function lhaExtractFile(archivePath: string, internalPath: string): Buffer | null {
-  const result = spawnSync(LHA_BIN, ['p', '-q', archivePath, internalPath], {
+  // lhasa does not support -q; strip the "::::::::\nname\n::::::::\n" header it adds
+  const result = spawnSync(LHA_BIN, ['p', archivePath, internalPath], {
     timeout: 10000,
     maxBuffer: 4 * 1024 * 1024,
   });
   if (result.status !== 0 || !result.stdout) return null;
-  return result.stdout as unknown as Buffer;
+  const buf = result.stdout as unknown as Buffer;
+  // Strip lhasa pipe header: "::::::::\n<basename>\n::::::::\n"
+  const basename = path.basename(internalPath);
+  const header = Buffer.from(`::::::::\n${basename}\n::::::::\n`, 'latin1');
+  if (buf.length > header.length && buf.slice(0, header.length).equals(header)) {
+    return buf.slice(header.length);
+  }
+  return buf;
 }
 
 function parseLhaListNames(lines: string[]): Array<{ name: string; size: number }> {
@@ -205,41 +214,54 @@ export async function analyzeArchive(archivePath: string): Promise<StripResult> 
 }
 
 // preservePaths: files that were flagged but the user chose to keep (false positives)
+// extractClean: extract archive to destDir, omitting junk files.
+// Works with lhasa (Alpine) which cannot create archives.
+export function extractClean(archivePath: string, destDir: string, preservePaths?: Set<string>): void {
+  fs.mkdirSync(destDir, { recursive: true });
+  // Extract with full path structure (lhasa: xw=dir archive)
+  const extractResult = spawnSync(LHA_BIN, [`xw=${destDir}`, archivePath], {
+    timeout: 60000,
+    encoding: 'latin1',
+  });
+  if (extractResult.status !== 0 && extractResult.status !== 1) {
+    throw new Error(`lha extract failed (status ${extractResult.status})`);
+  }
+}
+
 export async function stripArchive(archivePath: string, outPath: string, preservePaths?: Set<string>): Promise<StripResult> {
   const result = await analyzeArchive(archivePath);
 
-  if (result.stripped.length === 0) {
-    fs.copyFileSync(archivePath, outPath);
-    return result;
-  }
-
-  // Files to actually extract: kept + user-preserved false positives
-  const toExtract = [
-    ...result.kept,
-    ...(preservePaths ? result.stripped.filter(e => preservePaths.has(e.path)) : []),
-  ];
-
+  // Extract all files to a tmpDir, delete junk, then repack if lha supports 'a'
   const tmpDir = `${outPath}.tmp_${Date.now()}`;
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
-    for (const entry of toExtract) {
-      const buf = lhaExtractFile(archivePath, entry.path);
-      if (!buf) continue;
-      const dest = path.join(tmpDir, entry.path);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, buf);
+    // Extract with directory structure
+    const extractResult = spawnSync(LHA_BIN, [`xw=${tmpDir}`, archivePath], { timeout: 60000 });
+    if (extractResult.status !== 0 && extractResult.status !== 1) {
+      throw new Error(`lha extract failed (status ${extractResult.status})`);
     }
 
+    // Delete junk files (those not in preservePaths)
+    const toDelete = result.stripped.filter(e => !preservePaths?.has(e.path));
+    for (const entry of toDelete) {
+      const abs = path.join(tmpDir, entry.path);
+      try { if (fs.existsSync(abs)) fs.unlinkSync(abs); } catch { /* ignore */ }
+    }
+
+    // Try to repack (only works if lha supports 'a' — macOS lha, not lhasa)
     const lhaResult = spawnSync(LHA_BIN, ['a', outPath, '.'], {
       cwd: tmpDir,
       timeout: 30000,
     });
     if (lhaResult.status !== 0) {
-      throw new Error(`lha repack failed: ${lhaResult.stderr?.toString()}`);
+      // Fallback: copy clean dir to outPath dir instead of repacking
+      fs.mkdirSync(outPath, { recursive: true });
+      const cpResult = spawnSync('cp', ['-r', `${tmpDir}/.`, `${outPath}/`], { timeout: 30000 });
+      if (cpResult.status !== 0) throw new Error('copy fallback failed');
     }
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 
   return result;

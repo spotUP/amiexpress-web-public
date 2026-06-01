@@ -418,7 +418,7 @@ async function createApp(session) {
             const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
             setStatus(`Extracting ${entry.archive_name}...`);
             fs.mkdirSync(installDir, { recursive: true });
-            const result = (0, child_process_1.spawnSync)(LHA_BIN, ['e', '-q', entry.archive_path, installDir + '/'], { timeout: 30000 });
+            const result = (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDir}`, entry.archive_path], { timeout: 30000 });
             if (result.status !== 0 && result.status !== 1) {
                 setStatus(`Extract failed (lha status ${result.status})`, 'red');
                 return;
@@ -606,14 +606,22 @@ async function createApp(session) {
             setStatus(`Stripping ${toStrip.length} file(s)...`);
             try {
                 if (hasArchive) {
-                    // Strip archive in-place: repack to tmp, then replace original
-                    const tmpOut = entry.archive_path + '.stripping';
-                    await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
-                    fs.renameSync(tmpOut, entry.archive_path);
-                    setStatus(`Repacked. Re-extracting...`);
-                    if (installDirAbs) {
-                        fs.mkdirSync(installDirAbs, { recursive: true });
-                        (0, child_process_1.spawnSync)(LHA_BIN, ['e', '-q', entry.archive_path, installDirAbs + '/'], { timeout: 30000 });
+                    // Extract to tmpDir, delete junk, copy clean to install dir
+                    const tmpDir = entry.archive_path + `.strip_${Date.now()}`;
+                    fs.mkdirSync(tmpDir, { recursive: true });
+                    try {
+                        (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${tmpDir}`, entry.archive_path], { timeout: 60000 });
+                        lib.stripFilesFromDirectory(tmpDir, toStrip.map((f) => f.path));
+                        if (installDirAbs) {
+                            fs.mkdirSync(installDirAbs, { recursive: true });
+                            (0, child_process_1.spawnSync)('cp', ['-r', `${tmpDir}/.`, `${installDirAbs}/`], { timeout: 30000 });
+                        }
+                    }
+                    finally {
+                        try {
+                            fs.rmSync(tmpDir, { recursive: true, force: true });
+                        }
+                        catch { /* ignore */ }
                     }
                 }
                 else if (hasDir) {
@@ -626,7 +634,10 @@ async function createApp(session) {
                     }
                     catch { /* ignore */ }
                 }
-                setStatus(`Stripped ${toStrip.length} ad file(s) — archive updated`, 'green', 4000);
+                const msg = hasArchive && !installDirAbs
+                    ? `Stripped ${toStrip.length} ad file(s) — install to apply`
+                    : `Stripped ${toStrip.length} ad file(s)`;
+                setStatus(msg, 'green', 4000);
             }
             catch (err) {
                 setStatus(`Strip failed: ${err.message}`, 'red');

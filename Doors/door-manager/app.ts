@@ -445,7 +445,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
       setStatus(`Extracting ${entry.archive_name}...`);
       fs.mkdirSync(installDir, { recursive: true });
-      const result = spawnSync(LHA_BIN, ['e', '-q', entry.archive_path, installDir + '/'], { timeout: 30000 });
+      const result = spawnSync(LHA_BIN, [`xw=${installDir}`, entry.archive_path], { timeout: 30000 });
       if (result.status !== 0 && result.status !== 1) {
         setStatus(`Extract failed (lha status ${result.status})`, 'red');
         return;
@@ -630,21 +630,28 @@ export async function createApp(session: DoorSession): Promise<void> {
         setStatus(`Stripping ${toStrip.length} file(s)...`);
         try {
           if (hasArchive) {
-            // Strip archive in-place: repack to tmp, then replace original
-            const tmpOut = entry.archive_path + '.stripping';
-            await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
-            fs.renameSync(tmpOut, entry.archive_path);
-            setStatus(`Repacked. Re-extracting...`);
-            if (installDirAbs) {
-              fs.mkdirSync(installDirAbs, { recursive: true });
-              spawnSync(LHA_BIN, ['e', '-q', entry.archive_path, installDirAbs + '/'], { timeout: 30000 });
+            // Extract to tmpDir, delete junk, copy clean to install dir
+            const tmpDir = entry.archive_path + `.strip_${Date.now()}`;
+            fs.mkdirSync(tmpDir, { recursive: true });
+            try {
+              spawnSync(LHA_BIN, [`xw=${tmpDir}`, entry.archive_path], { timeout: 60000 });
+              lib.stripFilesFromDirectory(tmpDir, toStrip.map((f: any) => f.path as string));
+              if (installDirAbs) {
+                fs.mkdirSync(installDirAbs, { recursive: true });
+                spawnSync('cp', ['-r', `${tmpDir}/.`, `${installDirAbs}/`], { timeout: 30000 });
+              }
+            } finally {
+              try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
             }
           } else if (hasDir) {
             lib.stripFilesFromDirectory(installDirAbs, toStrip.map((f: any) => f.path));
           }
           const svc = getCatalogSvc();
           if (svc) { try { svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length); } catch { /* ignore */ } }
-          setStatus(`Stripped ${toStrip.length} ad file(s) — archive updated`, 'green', 4000);
+          const msg = hasArchive && !installDirAbs
+            ? `Stripped ${toStrip.length} ad file(s) — install to apply`
+            : `Stripped ${toStrip.length} ad file(s)`;
+          setStatus(msg, 'green', 4000);
         } catch (err) {
           setStatus(`Strip failed: ${(err as Error).message}`, 'red');
         }
