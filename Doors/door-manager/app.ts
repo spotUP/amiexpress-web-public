@@ -206,6 +206,9 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   // True while the filter input box has focus
   let filterInputFocused = false;
+  // Use blessed's own focus state as the authoritative check — the flag can
+  // lag on rapid paste events, but .focused is always current.
+  function isFilterActive(): boolean { return filterInputFocused || !!(filterBox as any)?.focused; }
 
   // --- screen ----------------------------------------------------------------
 
@@ -803,7 +806,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['tab'], () => {
-    if (filterInputFocused) {
+    if (isFilterActive()) {
       // Tab from filter → move to list
       filterInputFocused = false;
       (doorList as any).focus();
@@ -833,7 +836,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   (screen as any).key(['escape'], () => {
     if (stripOverlayActive) { if (_stripCancel) _stripCancel(); return; }
-    if (filterInputFocused) {
+    if (isFilterActive()) {
       filterInputFocused = false;
       (doorList as any).focus();
       screen.render();
@@ -898,7 +901,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['s', 'S'], async () => {
-    if (filterInputFocused) return;
+    if (isFilterActive()) return;
     if (stripOverlayActive) { if (_stripConfirm) _stripConfirm(); return; }
     if (mode === 'installed') {
       const door = selectedDoor();
@@ -921,7 +924,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['v', 'V'], () => {
-    if (filterInputFocused) return;
+    if (isFilterActive()) return;
     if (mode === 'repo') {
       const entry = selectedCatalogEntry();
       if (!entry?.doc_raw) { setStatus('No documentation available', 'yellow'); return; }
@@ -1058,7 +1061,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   // / or F in repo mode focuses the filter input
   (screen as any).key(['/', 'f', 'F'], () => {
     if (mode !== 'repo') return;
-    if (filterInputFocused) return;
+    if (isFilterActive()) return;
     filterInputFocused = true;
     (filterBox as any).focus();
     screen.render();

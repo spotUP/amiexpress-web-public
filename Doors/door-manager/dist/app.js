@@ -189,6 +189,9 @@ async function createApp(session) {
     function popOverlay() { overlayDepth = Math.max(0, overlayDepth - 1); }
     // True while the filter input box has focus
     let filterInputFocused = false;
+    // Use blessed's own focus state as the authoritative check — the flag can
+    // lag on rapid paste events, but .focused is always current.
+    function isFilterActive() { return filterInputFocused || !!filterBox?.focused; }
     // --- screen ----------------------------------------------------------------
     const screen = new blessed_1.Screen({
         smartCSR: true,
@@ -787,7 +790,7 @@ async function createApp(session) {
         }, 0);
     });
     screen.key(['tab'], () => {
-        if (filterInputFocused) {
+        if (isFilterActive()) {
             // Tab from filter → move to list
             filterInputFocused = false;
             doorList.focus();
@@ -821,7 +824,7 @@ async function createApp(session) {
                 _stripCancel();
             return;
         }
-        if (filterInputFocused) {
+        if (isFilterActive()) {
             filterInputFocused = false;
             doorList.focus();
             screen.render();
@@ -894,7 +897,7 @@ async function createApp(session) {
         screen.render();
     });
     screen.key(['s', 'S'], async () => {
-        if (filterInputFocused)
+        if (isFilterActive())
             return;
         if (stripOverlayActive) {
             if (_stripConfirm)
@@ -933,7 +936,7 @@ async function createApp(session) {
         }
     });
     screen.key(['v', 'V'], () => {
-        if (filterInputFocused)
+        if (isFilterActive())
             return;
         if (mode === 'repo') {
             const entry = selectedCatalogEntry();
@@ -1095,7 +1098,7 @@ async function createApp(session) {
     screen.key(['/', 'f', 'F'], () => {
         if (mode !== 'repo')
             return;
-        if (filterInputFocused)
+        if (isFilterActive())
             return;
         filterInputFocused = true;
         filterBox.focus();
