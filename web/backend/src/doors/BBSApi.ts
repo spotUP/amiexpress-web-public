@@ -892,9 +892,10 @@ console.error(`[BBSApi] Error reading .info file ${filename}:`, error);
 
       // Write back to file
       writeInfoFile(infoFile);
+console.log(`[BBSApi] writeInfoFile OK: ${fullPath} (${tooltypes.length} tooltypes)`);
       return true;
     } catch (error) {
-console.error(`[BBSApi] Error writing .info file ${filename}:`, error);
+console.error(`[BBSApi] writeInfoFile FAILED: ${filename}:`, error);
       return false;
     }
   }

@@ -952,13 +952,9 @@ export async function createApp(session: DoorSession): Promise<void> {
     bbs.write('\r\n\x1b[31mAccess Denied: SysOp only\x1b[0m\r\n'); return;
   }
 
-  // Hide cursor and clear screen immediately — emit directly on socket to
-  // bypass any bbs.write() buffering that would delay the clear.
-  try { session.socket.emit('ansi-output', '\x1b[?25l\x1b[2J\x1b[H'); } catch { bbs.write('\x1b[?25l\x1b[2J\x1b[H'); }
-
   let doors = await fetchDoors(bbs);
   if (doors.length === 0) {
-    bbs.write('\x1b[?25h\r\n\x1b[36mNo doors installed.\x1b[0m\r\n'); return;
+    bbs.write('\r\n\x1b[36mNo doors installed.\x1b[0m\r\n'); return;
   }
 
   const screen = new Screen({ smartCSR: true, fullUnicode: true, title: 'DOORMAN v2',
@@ -972,8 +968,11 @@ export async function createApp(session: DoorSession): Promise<void> {
   const vm = new ViewManager(screen);
 
   screen.on('resize', () => { screen.render(); });
-  screen.on('destroy', () => { inputManager.disable(); try { session.socket.emit('ansi-output', '\x1b[?25h'); } catch { bbs.write('\x1b[?25h'); } });
+  screen.on('destroy', () => { inputManager.disable(); bbs.write('\x1b[?25h'); });
 
+  // Hide cursor right before first render — after Screen setup, so the Screen
+  // init sequences don't override it.
+  bbs.write('\x1b[?25l');
   vm.push(new InstalledView(layout, bbs, doors));
 
   await new Promise<void>(resolve => { screen.on('destroy', resolve); });

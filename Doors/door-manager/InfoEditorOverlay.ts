@@ -148,7 +148,7 @@ export class InfoEditorOverlay {
         this.dirty = true;
         this.renderList();
         (this.listWidget as any).select(idx);
-        this.updateFooter('Unsaved changes -- Ctrl+S to save');
+        this.updateFooter('Unsaved changes — press S to save');
       }
       this.screen.render();
     });
@@ -164,7 +164,7 @@ export class InfoEditorOverlay {
     this.dirty = true;
     this.renderList();
     (this.listWidget as any).select(idx);
-    this.updateFooter('Unsaved changes -- Ctrl+S to save');
+    this.updateFooter('Unsaved changes — press S to save');
     this.screen.render();
   }
 
