@@ -639,11 +639,18 @@ async function createApp(session) {
         }, onDone);
     }
     // --- key handlers ----------------------------------------------------------
-    // Consume action keys on the List widget to prevent type-ahead search from
-    // also processing them and jumping the selection.
-    const ACTION_KEYS = ['s', 'S', 'i', 'I', 'd', 'D', 'e', 'E', 'u', 'U', 't', 'T',
-        'r', 'R', 'f', 'F', 'a', 'A', 'n', 'N', 'q', 'Q', '/', ' '];
-    doorList.key(ACTION_KEYS, () => { });
+    // Disable type-ahead search in the List — all letter/digit keys are action keys
+    // handled by screen.key(). _onKeypress runs before key() listeners, so patch it.
+    const _origKeypress = doorList._onKeypress?.bind(doorList);
+    if (_origKeypress) {
+        doorList._onKeypress = function (ch, key) {
+            // Skip the type-ahead block for printable chars; let screen.key handle them
+            if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
+                return false;
+            }
+            return _origKeypress(ch, key);
+        };
+    }
     screen.key(['tab'], () => {
         const idx = doorList.selected ?? 0;
         if (mode === 'installed') {
