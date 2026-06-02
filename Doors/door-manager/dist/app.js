@@ -1,7 +1,8 @@
 "use strict";
 /**
- * DOORMAN v2 - SysOp Door Management Tool
- * Spot / Up Rough
+ * DOORMAN v2 — SysOp Door Management Tool
+ * Rewritten around a ViewManager / view stack so each screen owns its
+ * own key bindings and ESC always pops cleanly.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -38,132 +39,834 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
+const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const child_process_1 = require("child_process");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
 const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
 const AmigaGuideViewer_1 = require("./AmigaGuideViewer");
-const path = __importStar(require("path"));
-const fs = __importStar(require("fs"));
-const child_process_1 = require("child_process");
+const ViewManager_1 = require("./ViewManager");
+// ─── Constants ────────────────────────────────────────────────────────────────
 const LHA_BIN = [
-    '/usr/bin/lha', // Alpine lhasa package
-    '/usr/local/bin/lha',
-    '/opt/homebrew/bin/lha',
+    '/usr/bin/lha', '/usr/local/bin/lha', '/opt/homebrew/bin/lha',
     '/app/data/bbs/tools/bin/lha',
 ].find(p => fs.existsSync(p)) ?? 'lha';
-// __dirname = Doors/door-manager/dist/ → ../../.. = BBS root (data/bbs/ on server, project root locally)
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
-function fromCache(marker) {
-    // The BBS server has already loaded this module via tsx. Retrieve it from
-    // the shared require cache rather than re-transpiling the .ts source.
-    for (const key of Object.keys(require.cache)) {
-        if (key.includes(marker))
-            return require.cache[key]?.exports ?? null;
-    }
-    return null;
-}
-function getCatalogSvc() { return fromCache('door-catalog.service'); }
-function getStripLib() { return fromCache('ami-stripper.lib'); }
-const HEADER_PREFIX = `{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Spot/Up Rough{/white-fg}`;
-// --- helpers -----------------------------------------------------------------
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatSize(bytes) {
     if (bytes === 0)
-        return '  0 B ';
+        return '0 B';
     if (bytes < 1024)
-        return `${bytes} B`.padStart(6);
-    if (bytes < 1024 * 1024)
-        return `${Math.round(bytes / 1024)} KB`.padStart(6);
-    return `${Math.round(bytes / (1024 * 1024))} MB`.padStart(6);
+        return `${bytes} B`;
+    if (bytes < 1048576)
+        return `${Math.round(bytes / 1024)} KB`;
+    return `${Math.round(bytes / 1048576)} MB`;
 }
 function typeBadge(type) {
-    const map = {
-        'TS': 'TS', 'typescript': 'TS', 'SDK': 'TS',
-        'XIM': '68', 'SIM': 'SI', 'TIM': 'TI',
-        'AMI': '68', 'amiga': '68',
-    };
-    return map[type] || '??';
+    return { TS: 'TS', typescript: 'TS', SDK: 'TS', XIM: '68', SIM: 'SI', TIM: 'TI',
+        AMI: '68', amiga: '68' }[type] ?? '??';
 }
-function formatListItem(door, width) {
-    const badge = `[${typeBadge(door.type)}]`;
-    const status = door.enabled ? '{green-fg}*{/green-fg}' : '{red-fg}-{/red-fg}';
-    const sz = formatSize(door.size);
-    const nameWidth = Math.max(10, width - 18);
-    const name = door.name.length > nameWidth
-        ? door.name.slice(0, nameWidth - 1) + '...'
-        : door.name.padEnd(nameWidth);
-    return `${badge} ${name} ${status} ${sz}`;
+function getCatalogSvc() {
+    for (const k of Object.keys(require.cache))
+        if (k.includes('door-catalog.service'))
+            return require.cache[k]?.exports ?? null;
+    return null;
 }
-function dizFirstLine(entry) {
-    if (!entry.file_id_diz)
-        return '';
-    for (const line of entry.file_id_diz.split('\n')) {
-        const clean = line.replace(/[^\x20-\x7E]/g, '').trim();
-        if (clean.length > 3)
-            return clean;
-    }
-    return '';
-}
-function formatCatalogItem(entry, width) {
-    const sz = entry.archive_size ? `${Math.round(entry.archive_size / 1024)}k` : '?';
-    const nameWidth = Math.max(4, width - sz.length - 1);
-    const archiveName = (entry.installed ? '*' : '') + entry.archive_name;
-    const name = archiveName.length > nameWidth ? archiveName.slice(0, nameWidth) : archiveName.padEnd(nameWidth);
-    const line = `${name} ${sz}`;
-    return line;
+function getStripLib() {
+    for (const k of Object.keys(require.cache))
+        if (k.includes('ami-stripper.lib'))
+            return require.cache[k]?.exports ?? null;
+    return null;
 }
 async function fetchDoors(bbs) {
     if (!bbs.getDoorList)
         return [];
-    const raw = await bbs.getDoorList();
-    return raw.map((d) => ({
-        id: d.id || d.command,
-        command: d.command || d.id,
-        name: d.name || d.command || d.id,
-        description: d.description || '',
-        type: d.type || 'AMI',
-        size: d.size || 0,
-        accessLevel: d.accessLevel || 0,
-        location: d.location || d.path || '',
-        resolvedPath: d.resolvedPath || undefined,
+    return (await bbs.getDoorList()).map((d) => ({
+        id: d.id || d.command, command: d.command || d.id,
+        name: d.name || d.command || d.id, description: d.description || '',
+        type: d.type || 'AMI', size: d.size || 0, accessLevel: d.accessLevel || 0,
+        location: d.location || d.path || '', resolvedPath: d.resolvedPath,
         enabled: d.enabled !== false,
     }));
 }
-function buildInfoContent(door) {
-    const status = door.enabled
-        ? '{green-fg}[ON] ENABLED{/green-fg}'
-        : '{red-fg}[OFF] DISABLED{/red-fg}';
-    const loc = door.location.length > 30
-        ? door.location.slice(0, 29) + '...'
-        : door.location || '(unknown)';
-    return [
-        `{yellow-fg}Name:{/yellow-fg}    ${door.name}`,
-        `{yellow-fg}Type:{/yellow-fg}    ${door.type}`,
-        `{yellow-fg}Command:{/yellow-fg} ${door.command}`,
-        `{yellow-fg}Access:{/yellow-fg}  ${door.accessLevel}${door.accessLevel === 0 ? ' (all users)' : ''}`,
-        `{yellow-fg}Size:{/yellow-fg}    ${formatSize(door.size).trim()}`,
-        `{yellow-fg}Status:{/yellow-fg}  ${status}`,
-        `{yellow-fg}Path:{/yellow-fg}    ${loc}`,
-        '',
-        `{white-fg}${door.description}{/white-fg}`,
-    ].join('\n');
-}
-function escapeTags(s) {
-    return s.replace(/[^\x20-\x7E]/g, '').replace(/[{}]/g, '\\$&');
-}
-function buildCatalogInfoContent(entry) {
-    const meta = [];
-    meta.push(`{yellow-fg}${entry.archive_name}{/yellow-fg}  ${entry.door_type ?? 'XIM'}  ${entry.archive_size ? Math.round(entry.archive_size / 1024) + 'k' : ''}${entry.installed ? `  {green-fg}[${entry.installed_as}]{/green-fg}` : ''}${entry.junk_count > 0 ? `  {red-fg}${entry.junk_count} ad files{/red-fg}` : ''}`);
-    if (entry.file_id_diz) {
-        meta.push('');
-        meta.push(...entry.file_id_diz.split('\n').map(escapeTags));
+function discoverDoorDir(archiveName) {
+    const base = archiveName.replace(/\.(lha|lzx|lzh)$/i, '');
+    const doorsDir = path.join(PROJECT_ROOT, 'Doors');
+    if (!fs.existsSync(doorsDir))
+        return null;
+    try {
+        const match = fs.readdirSync(doorsDir).find(e => e.toLowerCase() === base.toLowerCase() &&
+            fs.statSync(path.join(doorsDir, e)).isDirectory());
+        return match ? path.join(doorsDir, match) : null;
     }
-    else {
-        meta.push('', '{grey-fg}(no FILE_ID.DIZ){/grey-fg}');
+    catch {
+        return null;
     }
-    return meta.join('\n');
 }
-// --- main --------------------------------------------------------------------
+// ─── Shared Layout ───────────────────────────────────────────────────────────
+// A single set of panels that all views update in-place.
+class DoormanLayout {
+    constructor(screen, nodeId) {
+        this.screen = screen;
+        this.width = Math.floor(screen.width * 0.35) - 8;
+        this.header = new blessed_1.Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3,
+            tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } }, focusable: false });
+        this.footer = new blessed_1.Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
+            tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } }, focusable: false });
+        this.filterPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: 3,
+            tags: true, style: { border: { fg: 'grey' } }, focusable: false });
+        this.filterBox = new blessed_1.Textbox({ parent: this.filterPanel, top: 0, left: 1, width: '100%-2',
+            height: 1, inputOnFocus: true, mouse: true,
+            style: { fg: 'white', focus: { fg: 'yellow' } } });
+        this.filterPanel.hide();
+        this.listPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6',
+            tags: true, style: { border: { fg: 'cyan' } }, focusable: false });
+        this.doorList = new blessed_1.List({ parent: this.listPanel, top: 1, left: 1, width: '100%-2',
+            height: '100%-2', keys: true, vi: false, mouse: true, scrollable: true,
+            alwaysScroll: true, tags: true, wrapItems: false,
+            scrollbar: { ch: ' ', style: { bg: 'blue' } },
+            style: { selected: { bg: 'blue', fg: 'white' }, item: { fg: 'white' } } });
+        this.infoPanel = new blessed_1.Panel({ parent: screen, top: 3, left: '35%', width: '65%',
+            height: '100%-6', tags: true, style: { border: { fg: 'blue' } }, focusable: false });
+        this.infoBox = new blessed_1.ScrollableBox({ parent: this.infoPanel, top: 1, left: 1,
+            width: '100%-2', height: '100%-2', tags: true, scrollable: true, keys: true,
+            style: { fg: 'white' } });
+        // Disable type-ahead on doorList (re-add keypress without the type-ahead block)
+        const _nav = this.doorList._onKeypress?.bind(this.doorList);
+        this.doorList.removeAllListeners('keypress');
+        if (_nav) {
+            this.doorList.on('keypress', (ch, key) => {
+                if (ch?.length === 1 && /[a-zA-Z0-9/ ]/.test(ch))
+                    return;
+                if (key?.name === 'escape' || ch === '\x1b')
+                    return;
+                return _nav(ch, key);
+            });
+        }
+        this.setHeader(`{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}Node ${nodeId}{/white-fg}{/center}`);
+    }
+    setHeader(content) { this.header.setContent(content); }
+    setFooter(content) { this.footer.setContent(content); }
+    setListLabel(label) { this.listPanel.setLabel(label); }
+    setListItems(items) { this.doorList.setItems(items); }
+    setListSelect(idx) { this.doorList.select(idx); }
+    get listSelected() { return this.doorList.selected ?? 0; }
+    setInfo(content) { this.infoBox.setContent(content); }
+    focusList() { this.doorList.focus(); }
+    focusFilter() { this.filterBox.focus(); }
+    showRepoLayout() {
+        this.filterPanel.show();
+        this.listPanel.top = 6;
+        this.listPanel.height = '100%-9';
+    }
+    showInstalledLayout() {
+        this.filterPanel.hide();
+        this.listPanel.top = 3;
+        this.listPanel.height = '100%-6';
+    }
+    render() { this.screen.render(); }
+}
+// ─── Views ────────────────────────────────────────────────────────────────────
+// ── Installed Doors ──────────────────────────────────────────────────────────
+class InstalledView extends ViewManager_1.BaseView {
+    constructor(layout, bbs, doors) {
+        super();
+        this.doors = [];
+        this.statusTimer = null;
+        this.layout = layout;
+        this.bbs = bbs;
+        this.doors = doors;
+    }
+    door() { return this.doors[this.layout.listSelected] ?? null; }
+    setStatus(msg, col = 'yellow', ms = 3000) {
+        clearTimeout(this.statusTimer);
+        this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
+        this.layout.render();
+        this.statusTimer = setTimeout(() => this.refreshHeader(), ms);
+    }
+    refreshHeader() {
+        const ec = this.doors.filter(d => d.enabled).length;
+        this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2{/cyan-fg}  {white-fg}${this.doors.length} doors, ${ec} enabled{/white-fg}{/center}`);
+    }
+    refresh(selectIdx = 0) {
+        const w = this.layout.width;
+        const items = this.doors.map(d => {
+            const badge = `[${typeBadge(d.type)}]`;
+            const sz = formatSize(d.size).padStart(6);
+            const nameW = Math.max(6, w - 14);
+            const name = d.name.length > nameW ? d.name.slice(0, nameW - 1) + '…' : d.name.padEnd(nameW);
+            const st = d.enabled ? '{green-fg}*{/green-fg}' : '{red-fg}-{/red-fg}';
+            return `${badge} ${name} ${st} ${sz}`;
+        });
+        this.layout.setListLabel(' INSTALLED DOORS ');
+        this.layout.setListItems(items);
+        this.layout.setListSelect(selectIdx);
+        this.updateInfo();
+        this.updateFooter();
+        this.refreshHeader();
+    }
+    updateInfo() {
+        const d = this.door();
+        if (!d) {
+            this.layout.setInfo('No door selected.');
+            return;
+        }
+        const st = d.enabled ? '{green-fg}ENABLED{/green-fg}' : '{red-fg}DISABLED{/red-fg}';
+        this.layout.setInfo([
+            `{yellow-fg}Name:{/yellow-fg}    ${d.name}`,
+            `{yellow-fg}Command:{/yellow-fg} ${d.command}`,
+            `{yellow-fg}Type:{/yellow-fg}    ${d.type}`,
+            `{yellow-fg}Size:{/yellow-fg}    ${formatSize(d.size)}`,
+            `{yellow-fg}Status:{/yellow-fg}  ${st}`,
+            d.description ? `\n{white-fg}${d.description}{/white-fg}` : '',
+        ].join('\n'));
+    }
+    updateFooter() {
+        const d = this.door();
+        const en = (!d || d.enabled) ? 'Dis' : 'En';
+        this.layout.setFooter(`{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles ` +
+            `{yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} ` +
+            `{yellow-fg}S{/yellow-fg}trip {yellow-fg}Tab{/yellow-fg}=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
+    }
+    enter() {
+        this.layout.showInstalledLayout();
+        this.refresh(this.layout.listSelected);
+        this.layout.focusList();
+        this.layout.render();
+        this.layout.doorList.on('select item', this._onSelectItem = () => {
+            this.updateInfo();
+            this.updateFooter();
+            this.layout.render();
+        });
+        this.keys.key(['tab'], () => {
+            this.vm.push(new RepoView(this.layout, this.bbs));
+        });
+        this.keys.key(['q', 'Q'], () => {
+            clearTimeout(this.statusTimer);
+            this.vm.destroy();
+            this.layout.screen.destroy();
+        });
+        this.keys.key(['u', 'U'], () => this.doUpload());
+        this.keys.key(['i', 'I'], () => this.doInfoEditor());
+        this.keys.key(['f', 'F'], () => this.doFileExplorer());
+        this.keys.key(['d', 'D'], () => this.doDelete());
+        this.keys.key(['v', 'V'], () => this.doViewDoc());
+        this.keys.key(['e', 'E'], () => this.doToggleEnabled());
+        this.keys.key(['s', 'S'], () => this.doStripAds());
+    }
+    exit() {
+        this.layout.doorList.off('select item', this._onSelectItem);
+        this.keys.release();
+    }
+    onEsc() { }
+    doUpload() {
+        this.setStatus('Waiting for file upload...');
+        this.bbs.requestArchiveUpload?.().then((r) => {
+            this.setStatus(`Installing ${r.filename}...`);
+            return this.bbs.installDoor?.(r.path);
+        }).then((result) => {
+            if (result?.success) {
+                this.setStatus(`Installed: ${result.command}`, 'green');
+                fetchDoors(this.bbs).then(doors => { this.doors = doors; this.refresh(0); });
+            }
+            else {
+                this.setStatus(`Install failed: ${result?.message}`, 'red');
+            }
+        }).catch((e) => this.setStatus(`Error: ${e.message}`, 'red'));
+    }
+    doInfoEditor() {
+        const d = this.door();
+        if (!d)
+            return;
+        this.vm.push(new InfoEditorOverlayView(this.layout, this.bbs, d.command));
+    }
+    doFileExplorer() {
+        const d = this.door();
+        if (!d)
+            return;
+        let doorPath = d.resolvedPath || d.location || `Doors/${d.command}`;
+        const m = /^([A-Za-z][A-Za-z0-9]*):(.*)$/.exec(doorPath);
+        if (m) {
+            const assign = m[1].toUpperCase(), sub = m[2].replace(/^\/+/, '');
+            if (assign === 'DOORS')
+                doorPath = `Doors/${sub}`;
+            else if (assign === 'BBS' || assign === 'WORK')
+                doorPath = sub;
+        }
+        this.vm.push(new FileExplorerOverlayView(this.layout, doorPath));
+    }
+    doDelete() {
+        const d = this.door();
+        if (!d)
+            return;
+        const idx = this.layout.listSelected;
+        this.vm.push(new ConfirmView(this.layout, `Delete {yellow-fg}${d.name}{/yellow-fg}?\n\n{red-fg}This cannot be undone.{/red-fg}`, 'Delete', 'Cancel', async () => {
+            this.setStatus(`Deleting ${d.name}...`);
+            const isTS = ['TS', 'typescript', 'SDK'].includes(d.type);
+            const id = isTS ? (d.location?.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0] || d.command) : d.command;
+            try {
+                const r = await this.bbs.deleteDoor(id, isTS);
+                if (r.success) {
+                    this.setStatus(`${d.name} deleted`, 'green');
+                    this.doors = await fetchDoors(this.bbs);
+                    this.refresh(Math.max(0, idx - 1));
+                }
+                else {
+                    this.setStatus(`Failed: ${r.message}`, 'red');
+                }
+            }
+            catch (e) {
+                this.setStatus(`Error: ${e.message}`, 'red');
+            }
+        }));
+    }
+    doViewDoc() {
+        const d = this.door();
+        if (!d)
+            return;
+        const svc = getCatalogSvc();
+        if (!svc) {
+            this.setStatus('Catalog not available', 'yellow');
+            return;
+        }
+        try {
+            const entry = svc.getCatalogEntryByCmd(d.command);
+            if (entry?.doc_raw) {
+                this.vm.push(new DocView(this.layout, entry.doc_filename ?? entry.archive_name, entry.doc_raw));
+            }
+            else {
+                this.setStatus('No documentation in catalog', 'yellow');
+            }
+        }
+        catch {
+            this.setStatus('Catalog lookup failed', 'red');
+        }
+    }
+    doToggleEnabled() {
+        const d = this.door();
+        if (!d)
+            return;
+        const idx = this.layout.listSelected;
+        d.enabled = !d.enabled;
+        this.bbs.setDoorEnabled?.(d.command, d.enabled).then((r) => {
+            this.setStatus(r.message, r.success ? 'green' : 'red');
+        }).catch(() => {
+            this.setStatus(`${d.name} ${d.enabled ? 'enabled' : 'disabled'} (session only)`, 'yellow');
+        });
+        this.refresh(idx);
+    }
+    doStripAds() {
+        const d = this.door();
+        if (!d)
+            return;
+        const svc = getCatalogSvc();
+        if (!svc) {
+            this.setStatus('Catalog not available', 'yellow');
+            return;
+        }
+        try {
+            const entry = svc.getCatalogEntryByCmd(d.command);
+            if (!entry) {
+                this.setStatus(`${d.command} not in catalog`, 'yellow');
+                return;
+            }
+            const liveDir = d.resolvedPath ? path.dirname(d.resolvedPath) :
+                (d.location ? path.join(PROJECT_ROOT, d.location) : undefined);
+            this.vm.push(new StripView(this.layout, entry, liveDir, (stripped) => { if (stripped)
+                this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000); }));
+        }
+        catch {
+            this.setStatus('Catalog lookup failed', 'red');
+        }
+    }
+}
+// ── Repo Browser ──────────────────────────────────────────────────────────────
+class RepoView extends ViewManager_1.BaseView {
+    constructor(layout, bbs) {
+        super();
+        this.entries = [];
+        this.filter = '';
+        this.statusTimer = null;
+        this.layout = layout;
+        this.bbs = bbs;
+    }
+    entry() { return this.entries[this.layout.listSelected] ?? null; }
+    setStatus(msg, col = 'yellow', ms = 3000) {
+        clearTimeout(this.statusTimer);
+        this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
+        this.layout.render();
+        this.statusTimer = setTimeout(() => this.refreshHeader(), ms);
+    }
+    refreshHeader() {
+        const svc = getCatalogSvc();
+        let stats = '';
+        try {
+            const s = svc?.catalogStats();
+            if (s)
+                stats = `${s.total} in repo, ${s.installed} installed`;
+        }
+        catch { }
+        this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}{/center}`);
+    }
+    loadEntries() {
+        const svc = getCatalogSvc();
+        if (!svc) {
+            this.entries = [];
+            return;
+        }
+        try {
+            this.entries = svc.searchCatalog(this.filter);
+        }
+        catch {
+            this.entries = [];
+        }
+    }
+    refresh(selectIdx = 0) {
+        this.loadEntries();
+        const w = this.layout.width;
+        const items = this.entries.map(e => {
+            const inst = e.installed ? '*' : ' ';
+            const sz = e.archive_size ? `${Math.round(e.archive_size / 1024)}k` : '?';
+            const nameW = Math.max(4, w - sz.length - 2);
+            const name = (inst + e.archive_name).length > nameW
+                ? (inst + e.archive_name).slice(0, nameW) : (inst + e.archive_name).padEnd(nameW);
+            return `${name} ${sz}`;
+        });
+        this.layout.setListLabel(` REPO (${this.entries.length}) `);
+        this.layout.setListItems(items);
+        this.layout.setListSelect(selectIdx);
+        this.updateInfo();
+        this.updateFooter();
+        this.refreshHeader();
+    }
+    updateInfo() {
+        const e = this.entry();
+        if (!e) {
+            this.layout.setInfo('No entry selected.');
+            return;
+        }
+        let content = `{yellow-fg}${e.archive_name}{/yellow-fg}  ${e.door_type ?? 'XIM'}` +
+            (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
+            (e.installed ? `  {green-fg}[${e.installed_as}]{/green-fg}` : '') +
+            (e.junk_count > 0 ? `  {red-fg}${e.junk_count} ad files{/red-fg}` : '');
+        if (e.file_id_diz) {
+            content += '\n\n' + e.file_id_diz.split('\n')
+                .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`)).join('\n');
+        }
+        else if (e.description) {
+            content += `\n\n{white-fg}${e.description.replace(/[{}]/g, c => `\\${c}`)}{/white-fg}`;
+        }
+        this.layout.setInfo(content);
+    }
+    updateFooter() {
+        const e = this.entry();
+        const inst = e?.installed ? 'Uninst' : 'Inst';
+        const hasDoc = !!e?.doc_raw;
+        const hasJunk = (e?.junk_count ?? 0) > 0;
+        const parts = [
+            `{yellow-fg}R{/yellow-fg}=${inst}`,
+            hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,
+            hasDoc ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
+            `{yellow-fg}F{/yellow-fg}=Filter`,
+            `{yellow-fg}ESC{/yellow-fg}=Back`,
+            `{yellow-fg}Q{/yellow-fg}uit`,
+        ].filter(Boolean).join('  ');
+        this.layout.setFooter(`{center}${parts}{/center}`);
+    }
+    enter() {
+        this.layout.showRepoLayout();
+        this.refresh(0);
+        this.layout.focusList();
+        this.layout.render();
+        this.layout.doorList.on('select item', this._onSelectItem = () => {
+            this.updateInfo();
+            this.updateFooter();
+            this.layout.render();
+        });
+        this.layout.doorList.on('focus', this._onListFocus = () => {
+            this.layout.filterBox.setValue(this.filter);
+        });
+        // Filter input live update
+        this.layout.filterBox.on('keypress', this._onFilterKey = (_ch, key) => {
+            setTimeout(() => {
+                const val = this.layout.filterBox.getValue() ?? '';
+                if (val !== this.filter) {
+                    this.filter = val;
+                    this.refresh(0);
+                    this.layout.render();
+                }
+                if (key?.name === 'down' || key?.name === 'enter' || key?.name === 'return') {
+                    this.layout.focusList();
+                    this.layout.render();
+                }
+                if (key?.name === 'escape') {
+                    this.filter = '';
+                    this.layout.filterBox.setValue('');
+                    this.refresh(0);
+                    this.layout.focusList();
+                    this.layout.render();
+                }
+            }, 0);
+        });
+        this.keys.key(['tab'], () => {
+            // Tab cycles: list → filter → list
+            if (this.layout.filterBox.focused) {
+                this.layout.focusList();
+            }
+            else {
+                this.layout.focusFilter();
+            }
+            this.layout.render();
+        });
+        this.keys.key(['f', 'F', '/'], () => { this.layout.focusFilter(); this.layout.render(); });
+        this.keys.key(['r', 'R'], () => this.doInstallUninstall());
+        this.keys.key(['s', 'S'], () => this.doStrip());
+        this.keys.key(['v', 'V'], () => this.doViewDoc());
+        this.keys.key(['q', 'Q'], () => {
+            clearTimeout(this.statusTimer);
+            this.vm.destroy();
+            this.layout.screen.destroy();
+        });
+    }
+    exit() {
+        this.layout.doorList.off('select item', this._onSelectItem);
+        this.layout.doorList.off('focus', this._onListFocus);
+        this.layout.filterBox.off('keypress', this._onFilterKey);
+        clearTimeout(this.statusTimer);
+        this.keys.release();
+    }
+    onEsc() { this.vm.pop(); } // returns to installed list
+    doInstallUninstall() {
+        const e = this.entry();
+        if (!e)
+            return;
+        if (e.installed) {
+            this.vm.push(new ConfirmView(this.layout, `Uninstall {yellow-fg}${e.installed_as}{/yellow-fg}?\n\nRemoves .info + Doors/${e.installed_as}/`, 'Uninstall', 'Cancel', () => {
+                const svc = getCatalogSvc();
+                const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
+                const infoPath = path.join(bbsCmdDir, `${e.installed_as}.info`);
+                if (fs.existsSync(infoPath))
+                    fs.unlinkSync(infoPath);
+                if (e.install_dir) {
+                    const abs = path.join(PROJECT_ROOT, e.install_dir);
+                    if (fs.existsSync(abs))
+                        fs.rmSync(abs, { recursive: true, force: true });
+                }
+                svc?.markUninstalled(e.id);
+                this.setStatus(`Uninstalled ${e.installed_as}`, 'green', 4000);
+                this.refresh(this.layout.listSelected);
+            }));
+        }
+        else {
+            if (!e.archive_path || !fs.existsSync(e.archive_path)) {
+                this.setStatus(`Archive not on server`, 'yellow');
+                return;
+            }
+            const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
+                .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
+            this.vm.push(new InputView(this.layout, `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested, (cmd) => {
+                if (!cmd)
+                    return;
+                const finalCmd = cmd.trim().toUpperCase() || suggested;
+                const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
+                fs.mkdirSync(installDir, { recursive: true });
+                const res = (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDir}`, e.archive_path], { timeout: 30000 });
+                if (res.status !== 0 && res.status !== 1) {
+                    this.setStatus(`Extract failed`, 'red');
+                    return;
+                }
+                const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
+                const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
+                fs.writeFileSync(infoPath, `TYPE=XIM\nLOCATION=Doors:${finalCmd}/${e.binary_name ?? finalCmd}\nSTACK=65536\nACCESS=0\n`, 'latin1');
+                getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`);
+                this.setStatus(`Installed as ${finalCmd}`, 'green', 4000);
+                this.refresh(this.layout.listSelected);
+            }));
+        }
+    }
+    doStrip() {
+        const e = this.entry();
+        if (!e)
+            return;
+        const hasArchive = !!(e.archive_path && fs.existsSync(e.archive_path));
+        const candidates = [
+            e.install_dir ? path.join(PROJECT_ROOT, e.install_dir) : null,
+            e.installed_as ? path.join(PROJECT_ROOT, 'Doors', e.installed_as) : null,
+            discoverDoorDir(e.archive_name),
+        ].filter((d) => !!(d && fs.existsSync(d)));
+        const installDir = candidates[0] ?? null;
+        if (!hasArchive && !installDir) {
+            this.setStatus(e.installed ? 'Install dir not found on server' : 'Install first to strip', 'yellow');
+            return;
+        }
+        this.vm.push(new StripView(this.layout, e, installDir ?? undefined, (stripped) => { if (stripped) {
+            this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000);
+            this.refresh(this.layout.listSelected);
+        } }));
+    }
+    doViewDoc() {
+        const e = this.entry();
+        if (!e?.doc_raw) {
+            this.setStatus('No documentation available', 'yellow');
+            return;
+        }
+        this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
+    }
+}
+// ── Document Viewer ───────────────────────────────────────────────────────────
+class DocView extends ViewManager_1.BaseView {
+    constructor(layout, title, content) {
+        super();
+        this.layout = layout;
+        this.title = title;
+        this.content = content;
+    }
+    enter() {
+        const isGuide = /^@(?:database|node)\b/im.test(this.content);
+        if (isGuide) {
+            (0, AmigaGuideViewer_1.showAmigaGuideViewer)(this.layout.screen, this.content, this.title, () => this.vm.pop());
+            return;
+        }
+        // Plain text viewer
+        const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+        const text = this.content.replace(/[^\x09\x0a\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`);
+        this.panel = new Panel({ parent: this.layout.screen, top: 0, left: 0, width: '100%',
+            height: '100%-3', label: ` ${this.title} `, tags: true, style: { border: { fg: 'cyan' } } });
+        const box = new ScrollableBox({ parent: this.panel, top: 1, left: 1, width: '100%-2',
+            height: '100%-2', tags: false, scrollable: true, alwaysScroll: true, content: text });
+        this.hint = new Panel({ parent: this.layout.screen, bottom: 0, left: 0, width: '100%', height: 3,
+            tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
+            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } } });
+        this.layout.screen.render();
+        this.keys.key(['up', 'down', 'pageup', 'pagedown'], (_, key) => {
+            const n = key?.name ?? '';
+            if (n === 'up')
+                box.scroll(-1);
+            else if (n === 'down')
+                box.scroll(1);
+            else if (n === 'pageup')
+                box.scroll(-20);
+            else if (n === 'pagedown')
+                box.scroll(20);
+            this.layout.render();
+        });
+        this.keys.key(['q', 'Q'], () => this.vm.pop());
+    }
+    exit() {
+        this.keys.release();
+        if (this.panel) {
+            this.panel.destroy();
+            this.panel = null;
+        }
+        if (this.hint) {
+            this.hint.destroy();
+            this.hint = null;
+        }
+        this.layout.render();
+    }
+}
+// ── Strip Selector ────────────────────────────────────────────────────────────
+class StripView extends ViewManager_1.BaseView {
+    constructor(layout, entry, overrideDir, onDone) {
+        super();
+        this.checked = [];
+        this.files = [];
+        this.reasons = {};
+        this.origLabel = '';
+        this.layout = layout;
+        this.entry = entry;
+        this.overrideDir = overrideDir;
+        this.onDone = onDone;
+    }
+    enter() {
+        const lib = getStripLib();
+        if (!lib) {
+            this.layout.setFooter('{center}{red-fg}Stripper library not available{/red-fg}{/center}');
+            this.vm.pop();
+            return;
+        }
+        const hasArchive = !!(this.entry.archive_path && fs.existsSync(this.entry.archive_path));
+        const installDir = this.overrideDir;
+        this.layout.setFooter('{center}{cyan-fg}Analyzing...{/cyan-fg}{/center}');
+        this.layout.render();
+        (hasArchive ? lib.analyzeArchive(this.entry.archive_path) : lib.analyzeDirectory(installDir))
+            .then((result) => {
+            if (result.stripped.length === 0) {
+                this.layout.setInfo('{green-fg}No ad files found — archive is clean.{/green-fg}');
+                this.layout.render();
+                setTimeout(() => this.vm.pop(), 1200);
+                return;
+            }
+            this.files = result.stripped;
+            this.reasons = result.reason;
+            this.checked = new Array(this.files.length).fill(true);
+            this.origLabel = '';
+            try {
+                this.origLabel = this.layout.listPanel.options?.label ?? '';
+            }
+            catch { }
+            this.renderFiles();
+            this.keys.key([' '], () => {
+                const idx = this.layout.listSelected;
+                if (idx < this.checked.length) {
+                    this.checked[idx] = !this.checked[idx];
+                    this.renderFiles();
+                }
+            });
+            this.keys.key(['a', 'A'], () => { this.checked.fill(true); this.renderFiles(); });
+            this.keys.key(['n', 'N'], () => { this.checked.fill(false); this.renderFiles(); });
+            this.keys.key(['s', 'S'], () => this.doStrip(lib, hasArchive, installDir));
+            this.keys.key(['q', 'Q'], () => { this.vm.pop(); this.onDone(null); });
+        })
+            .catch((e) => { this.layout.setInfo(`{red-fg}Analysis failed: ${e.message}{/red-fg}`); this.layout.render(); setTimeout(() => this.vm.pop(), 1500); });
+    }
+    renderFiles() {
+        const items = this.files.map((f, i) => {
+            const box = this.checked[i] ? '[X]' : '[ ]';
+            const fpath = f.path;
+            const name = fpath.length > 24 ? '<' + fpath.slice(fpath.length - 23) : fpath.padEnd(24);
+            return `${box} ${name}`;
+        });
+        const selCount = this.checked.filter(Boolean).length;
+        this.layout.listPanel.setLabel(` ${this.entry.archive_name} — Strip Ads `);
+        this.layout.setListItems(items);
+        const sel = this.files[this.layout.listSelected];
+        this.layout.setInfo(`{yellow-fg}${selCount}/${this.files.length} selected{/yellow-fg}\n\n` +
+            (sel ? `{cyan-fg}${sel.path}{/cyan-fg}\nReason: ${this.reasons[sel.path] ?? '?'}\n` : '') +
+            '\n{grey-fg}[Space] Toggle  [A] All  [N] None  [S] Strip  [ESC/Q] Cancel{/grey-fg}');
+        this.layout.setFooter('{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {yellow-fg}S{/yellow-fg}=Strip  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}');
+        this.layout.render();
+    }
+    doStrip(lib, hasArchive, installDir) {
+        const toStrip = this.files.filter((_, i) => this.checked[i]);
+        if (toStrip.length === 0) {
+            this.vm.pop();
+            this.onDone(null);
+            return;
+        }
+        const preservePaths = new Set(this.files.filter((_, i) => !this.checked[i]).map((f) => f.path));
+        this.layout.setFooter('{center}{cyan-fg}Stripping...{/cyan-fg}{/center}');
+        this.layout.render();
+        (async () => {
+            try {
+                if (hasArchive) {
+                    const tmpOut = this.entry.archive_path + '.strip_tmp';
+                    await lib.stripArchive(this.entry.archive_path, tmpOut, preservePaths);
+                    if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
+                        fs.renameSync(tmpOut, this.entry.archive_path);
+                    }
+                    else if (fs.existsSync(tmpOut)) {
+                        fs.rmSync(tmpOut, { recursive: true, force: true });
+                    }
+                    if (installDir) {
+                        fs.mkdirSync(installDir, { recursive: true });
+                        (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDir}`, this.entry.archive_path], { timeout: 30000 });
+                    }
+                }
+                else if (installDir) {
+                    lib.stripFilesFromDirectory(installDir, toStrip.map((f) => f.path));
+                }
+                const svc = getCatalogSvc();
+                if (svc) {
+                    try {
+                        svc.updateJunkCount(this.entry.id, this.files.length - toStrip.length);
+                    }
+                    catch { }
+                    try {
+                        svc.removeArchiveFiles(this.entry.id, toStrip.map((f) => f.path));
+                    }
+                    catch { }
+                }
+                this.vm.pop();
+                this.onDone(toStrip.length);
+            }
+            catch (e) {
+                this.layout.setInfo(`{red-fg}Strip failed: ${e.message}{/red-fg}`);
+                this.layout.render();
+                setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2000);
+            }
+        })();
+    }
+    exit() {
+        if (this.origLabel)
+            try {
+                this.layout.listPanel.setLabel(this.origLabel);
+            }
+            catch { }
+        this.keys.release();
+    }
+    onEsc() { this.vm.pop(); this.onDone(null); }
+}
+// ── Confirm Dialog ────────────────────────────────────────────────────────────
+class ConfirmView extends ViewManager_1.BaseView {
+    constructor(layout, content, confirmText, cancelText, onConfirm) {
+        super();
+        this.layout = layout;
+        this.content = content;
+        this.confirmText = confirmText;
+        this.cancelText = cancelText;
+        this.onConfirm = onConfirm;
+    }
+    enter() {
+        new blessed_1.ConfirmModal({
+            parent: this.layout.screen, title: ` ${this.confirmText} `,
+            content: this.content, confirmText: this.confirmText, cancelText: this.cancelText,
+            confirmColor: 'red', cancelColor: 'green', style: { border: { fg: 'yellow' } },
+            onConfirm: () => { this.onConfirm(); this.vm.pop(); },
+            onCancel: () => this.vm.pop(),
+        }).display();
+    }
+    exit() { this.keys.release(); }
+}
+// ── Text Input ────────────────────────────────────────────────────────────────
+class InputView extends ViewManager_1.BaseView {
+    constructor(layout, prompt, defaultValue, onSubmit) {
+        super();
+        this.layout = layout;
+        this.prompt = prompt;
+        this.defaultValue = defaultValue;
+        this.onSubmit = onSubmit;
+    }
+    enter() {
+        const p = new blessed_1.Prompt({ parent: this.layout.screen, top: 'center', left: 'center',
+            width: 50, height: 7, tags: true, style: { border: { fg: 'yellow' } }, overlay: true });
+        p.showInput(this.prompt, this.defaultValue, (_err, val) => {
+            p.destroy();
+            this.vm.pop();
+            this.onSubmit(val ?? null);
+        });
+        this.layout.render();
+    }
+    exit() { this.keys.release(); }
+    onEsc() { this.vm.pop(); this.onSubmit(null); }
+}
+// ── Info Editor Overlay ───────────────────────────────────────────────────────
+class InfoEditorOverlayView extends ViewManager_1.BaseView {
+    constructor(layout, bbs, command) {
+        super();
+        this.layout = layout;
+        this.bbs = bbs;
+        this.command = command;
+    }
+    enter() {
+        new InfoEditorOverlay_1.InfoEditorOverlay({ screen: this.layout.screen, command: this.command, bbs: this.bbs,
+            onClose: () => this.vm.pop() });
+        this.layout.render();
+    }
+    exit() { this.keys.release(); }
+}
+// ── File Explorer Overlay ─────────────────────────────────────────────────────
+class FileExplorerOverlayView extends ViewManager_1.BaseView {
+    constructor(layout, doorPath) { super(); this.layout = layout; this.doorPath = doorPath; }
+    enter() {
+        new FileExplorerOverlay_1.FileExplorerOverlay({ screen: this.layout.screen, doorPath: this.doorPath,
+            onClose: () => this.vm.pop() });
+    }
+    exit() { this.keys.release(); }
+}
+// ─── Entry Point ──────────────────────────────────────────────────────────────
 async function createApp(session) {
     const { bbs, user } = session;
     if (!user || (user.secLevel ?? 0) < 250) {
@@ -175,942 +878,16 @@ async function createApp(session) {
         bbs.write('\r\n\x1b[36mNo doors installed.\x1b[0m\r\n');
         return;
     }
-    // --- state -----------------------------------------------------------------
-    let mode = 'installed';
-    let catalogEntries = [];
-    let catalogFilter = '';
-    // Strip selector overlay state
-    let stripOverlayActive = false;
-    let _stripConfirm = null;
-    let _stripCancel = null;
-    // Generic overlay depth — ESC is blocked when > 0 so modals can handle it
-    let overlayDepth = 0;
-    function pushOverlay() { overlayDepth++; }
-    function popOverlay() { overlayDepth = Math.max(0, overlayDepth - 1); }
-    // True while the filter input box has focus
-    let filterInputFocused = false;
-    function isFilterActive() { return filterInputFocused; }
-    // Block ESC from switching modes for one tick after a viewer closes,
-    // so the viewer's popOverlay doesn't race with the DOORMAN ESC handler.
-    let blockEscModeSwitch = false;
-    // --- screen ----------------------------------------------------------------
-    const screen = new blessed_1.Screen({
-        smartCSR: true,
-        fullUnicode: true,
-        title: 'DOORMAN v2',
-        output: (data) => bbs.write(data),
-    });
-    const inputManager = new blessed_helpers_1.DoorInputManager(session, screen, {
-        enableGameMode: false,
-        enableGrabKeys: false,
-        enableMouse: true,
-    });
+    const screen = new blessed_1.Screen({ smartCSR: true, fullUnicode: true, title: 'DOORMAN v2',
+        output: (data) => bbs.write(data) });
+    const inputManager = new blessed_helpers_1.DoorInputManager(session, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
     inputManager.enable();
     const nodeId = session.bbsSession?.nodeId ?? '?';
-    // --- layout ----------------------------------------------------------------
-    const header = new blessed_1.Panel({
-        parent: screen,
-        top: 0, left: 0, width: '100%', height: 3,
-        tags: true,
-        content: '',
-        style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-        focusable: false,
-    });
-    const footer = new blessed_1.Panel({
-        parent: screen,
-        bottom: 0, left: 0, width: '100%', height: 3,
-        tags: true,
-        content: '',
-        style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-        focusable: false,
-    });
-    const listPanel = new blessed_1.Panel({
-        parent: screen,
-        top: 3, left: 0, width: '35%', height: '100%-6',
-        label: ' INSTALLED DOORS ',
-        tags: true,
-        style: { border: { fg: 'cyan' } },
-        focusable: false,
-    });
-    const doorList = new blessed_1.List({
-        parent: listPanel,
-        top: 1, left: 1, width: '100%-2', height: '100%-2',
-        keys: true, vi: false, mouse: true,
-        scrollable: true, alwaysScroll: true,
-        tags: true,
-        wrapItems: false,
-        scrollbar: { ch: ' ', style: { bg: 'blue' } },
-        style: {
-            selected: { bg: 'blue', fg: 'white' },
-            item: { fg: 'white' },
-        },
-    });
-    // Filter input shown above list in repo mode
-    const filterPanel = new blessed_1.Panel({
-        parent: screen,
-        top: 3, left: 0, width: '35%', height: 3,
-        tags: true,
-        style: { border: { fg: 'grey' } },
-        focusable: false,
-    });
-    const { Textbox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
-    const filterBox = new Textbox({
-        parent: filterPanel,
-        top: 0, left: 1, width: '100%-2', height: 1,
-        inputOnFocus: true, mouse: true,
-        style: { fg: 'white', focus: { fg: 'yellow' } },
-        value: catalogFilter,
-    });
-    filterPanel.hide(); // hidden until repo mode
-    const infoPanel = new blessed_1.Panel({
-        parent: screen,
-        top: 3, left: '35%', width: '65%', height: '100%-6',
-        label: ' DOOR INFO ',
-        tags: true,
-        style: { border: { fg: 'blue' } },
-        focusable: false,
-    });
-    const infoBox = new blessed_1.ScrollableBox({
-        parent: infoPanel,
-        top: 1, left: 1, width: '100%-2', height: '100%-2',
-        tags: true, scrollable: true, keys: true,
-        style: { fg: 'white' },
-    });
-    let statusTimer = null;
-    // --- helpers ---------------------------------------------------------------
-    function getListWidth() {
-        return Math.floor(screen.width * 0.35) - 8; // borders(4) + selection marker(2) + scrollbar(1) + slack(1)
-    }
-    function selectedDoor() {
-        if (mode !== 'installed')
-            return null;
-        const idx = doorList.selected ?? 0;
-        return doors[idx] ?? null;
-    }
-    function selectedCatalogEntry() {
-        if (mode !== 'repo')
-            return null;
-        const idx = doorList.selected ?? 0;
-        return catalogEntries[idx] ?? null;
-    }
-    function refreshHeader() {
-        if (mode === 'installed') {
-            const ec = doors.filter(d => d.enabled).length;
-            header.setContent(HEADER_PREFIX +
-                `  * ${doors.length} doors  * ${ec} enabled  * Node ${nodeId}{/center}`);
-        }
-        else {
-            const svc = getCatalogSvc();
-            let statsStr = '';
-            try {
-                if (svc) {
-                    const st = svc.catalogStats();
-                    statsStr = `  * ${st.total} in repo  * ${st.installed} installed`;
-                }
-            }
-            catch { /* catalog not built */ }
-            const filterStr = catalogFilter ? `  * filter: ${catalogFilter}` : '';
-            header.setContent(HEADER_PREFIX +
-                `${statsStr}${filterStr}  * Node ${nodeId}{/center}`);
-        }
-    }
-    function setStatus(msg, color = 'yellow', durationMs = 3000) {
-        header.setContent(HEADER_PREFIX + `  {${color}-fg}${msg}{/${color}-fg}{/center}`);
-        screen.render();
-        if (statusTimer)
-            clearTimeout(statusTimer);
-        statusTimer = setTimeout(() => { refreshHeader(); screen.render(); }, durationMs);
-    }
-    function updateFooter() {
-        if (mode === 'installed') {
-            const door = selectedDoor();
-            const en = (!door || door.enabled) ? 'Dis' : 'En';
-            footer.setContent(`{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles {yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} {yellow-fg}S{/yellow-fg}trip {yellow-fg}T{/yellow-fg}ab=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
-        }
-        else {
-            const entry = selectedCatalogEntry();
-            const inst = entry?.installed ? 'Uninst' : 'Inst';
-            const hasDoc = !!entry?.doc_raw;
-            const hasJunk = (entry?.junk_count ?? 0) > 0;
-            const parts = [
-                `{yellow-fg}R{/yellow-fg}=${inst}`,
-                hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,
-                hasDoc ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
-                `{yellow-fg}F{/yellow-fg}=Filter`,
-                `{yellow-fg}ESC{/yellow-fg}=Back`,
-                `{yellow-fg}Q{/yellow-fg}uit`,
-            ].filter(Boolean).join(' ');
-            footer.setContent(`{center}${parts}{/center}`);
-        }
-    }
-    function populateInstalledList(selectIndex = 0) {
-        const items = doors.map(d => formatListItem(d, getListWidth()));
-        doorList.setItems(items);
-        if (doors.length > 0)
-            doorList.select(Math.min(selectIndex, doors.length - 1));
-        listPanel.setLabel(' INSTALLED DOORS ');
-        screen.render();
-    }
-    function loadCatalog() {
-        const svc = getCatalogSvc();
-        if (!svc) {
-            catalogEntries = [];
-            return;
-        }
-        try {
-            catalogEntries = svc.searchCatalog(catalogFilter);
-        }
-        catch {
-            catalogEntries = [];
-        }
-    }
-    function populateCatalogList(selectIndex = 0) {
-        loadCatalog();
-        const items = catalogEntries.map(e => formatCatalogItem(e, getListWidth()));
-        doorList.setItems(items);
-        if (catalogEntries.length > 0)
-            doorList.select(Math.min(selectIndex, catalogEntries.length - 1));
-        const label = catalogFilter ? ` REPO (${catalogEntries.length} results) ` : ` REPO (${catalogEntries.length} doors) `;
-        listPanel.setLabel(label);
-        screen.render();
-    }
-    function updateInfoPane() {
-        if (stripOverlayActive)
-            return;
-        if (mode === 'installed') {
-            const door = selectedDoor();
-            if (!door) {
-                infoBox.setContent('No door selected.');
-                return;
-            }
-            infoBox.setContent(buildInfoContent(door));
-        }
-        else {
-            const entry = selectedCatalogEntry();
-            if (!entry) {
-                infoBox.setContent('No entry selected.');
-                return;
-            }
-            infoBox.setContent(buildCatalogInfoContent(entry));
-        }
-        screen.render();
-    }
-    function applyRepoFilterLayout() {
-        if (mode === 'repo') {
-            filterPanel.show();
-            listPanel.top = 6;
-            listPanel.height = '100%-9';
-        }
-        else {
-            filterPanel.hide();
-            listPanel.top = 3;
-            listPanel.height = '100%-6';
-        }
-    }
-    function applyResponsive() {
-        const w = screen.width;
-        if (w < 70) {
-            infoPanel.hide();
-            listPanel.width = '100%';
-            filterPanel.width = '100%';
-        }
-        else {
-            infoPanel.show();
-            listPanel.width = '35%';
-            filterPanel.width = '35%';
-        }
-        applyRepoFilterLayout();
-        if (mode === 'installed')
-            populateInstalledList(doorList.selected ?? 0);
-        else
-            populateCatalogList(doorList.selected ?? 0);
-    }
-    // --- initial render --------------------------------------------------------
-    refreshHeader();
-    populateInstalledList(0);
-    updateInfoPane();
-    updateFooter();
-    applyResponsive();
-    doorList.focus();
-    screen.on('resize', () => { applyResponsive(); screen.render(); });
-    doorList.on('select item', () => { updateInfoPane(); updateFooter(); });
-    doorList.on('focus', () => { filterInputFocused = false; });
-    // --- catalog operations ----------------------------------------------------
-    function stripAmigaGuide(text) {
-        return text
-            .replace(/@\{"[^"]*"\s+link\s+[^}]*\}/gi, (m) => { const t = m.match(/@\{"([^"]*)"/); return t ? t[1] : ''; })
-            .replace(/@\{[^}]*\}/gi, '')
-            .replace(/^@(database|node|endnode|title|toc|next|prev|help|index|remark|rem|master|keywords|wordwrap|smartwrap).*$/gim, '')
-            .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, '')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim();
-    }
-    function showDocViewer(title, content, onDone) {
-        pushOverlay();
-        const done = () => {
-            popOverlay();
-            blockEscModeSwitch = true;
-            setTimeout(() => { blockEscModeSwitch = false; }, 50);
-            onDone();
-        };
-        const isGuide = content.match(/^@database\b/im) || content.match(/^@node\b/im);
-        if (isGuide) {
-            (0, AmigaGuideViewer_1.showAmigaGuideViewer)(screen, content, title, done);
-        }
-        else {
-            // Plain text viewer
-            const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
-            const plain = stripAmigaGuide(content);
-            const panel = new Panel({
-                parent: screen, top: 0, left: 0, width: '100%', height: '100%-3',
-                label: ` ${title} `, tags: true, style: { border: { fg: 'cyan' } },
-            });
-            const box = new ScrollableBox({
-                parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
-                tags: false, scrollable: true, alwaysScroll: true,
-                style: { fg: 'white' }, content: plain,
-            });
-            const hint = new Panel({
-                parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-                tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
-                style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-            });
-            screen.render();
-            function closeDoc() {
-                screen.unkey(['escape', 'q', 'Q'], closeDoc);
-                screen.unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
-                panel.destroy();
-                hint.destroy();
-                done();
-                screen.render();
-            }
-            function scrollKey(_, key) {
-                const n = key?.name ?? '';
-                if (n === 'up')
-                    box.scroll(-1);
-                else if (n === 'down')
-                    box.scroll(1);
-                else if (n === 'pageup')
-                    box.scroll(-20);
-                else if (n === 'pagedown')
-                    box.scroll(20);
-                screen.render();
-            }
-            screen.key(['escape', 'q', 'Q'], closeDoc);
-            screen.key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
-        }
-    }
-    function installFromCatalog(entry) {
-        if (!entry.archive_path || !fs.existsSync(entry.archive_path)) {
-            setStatus(`Archive not found: ${entry.archive_name}`, 'red');
-            return;
-        }
-        const suggested = (entry.installed_as ?? entry.binary_name ?? entry.name ?? 'DOOR')
-            .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
-        pushOverlay();
-        const prompt = new blessed_1.Prompt({
-            parent: screen,
-            top: 'center', left: 'center', width: 50, height: 7,
-            tags: true,
-            style: { border: { fg: 'yellow' } },
-            overlay: true,
-        });
-        prompt.showInput(`{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested, (_err, cmd) => {
-            popOverlay();
-            prompt.destroy();
-            const finalCmd = (cmd ?? '').trim().toUpperCase() || suggested;
-            const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
-            const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
-            setStatus(`Extracting ${entry.archive_name}...`);
-            fs.mkdirSync(installDir, { recursive: true });
-            const result = (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDir}`, entry.archive_path], { timeout: 30000 });
-            if (result.status !== 0 && result.status !== 1) {
-                setStatus(`Extract failed (lha status ${result.status})`, 'red');
-                return;
-            }
-            const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
-            const location = `Doors:${finalCmd}/${entry.binary_name ?? finalCmd}`;
-            const lines = [`TYPE=XIM`, `LOCATION=${location}`, `STACK=65536`, `ACCESS=0`].join('\n');
-            fs.writeFileSync(infoPath, lines + '\n', 'latin1');
-            const svc = getCatalogSvc();
-            if (svc) {
-                try {
-                    svc.markInstalled(entry.id, finalCmd, `Doors/${finalCmd}`);
-                }
-                catch { /* ignore */ }
-            }
-            setStatus(`Installed as ${finalCmd}`, 'green', 4000);
-            const idx = doorList.selected ?? 0;
-            populateCatalogList(idx);
-            updateInfoPane();
-            updateFooter();
-            doorList.focus();
-        });
-        screen.render();
-    }
-    function uninstallFromCatalog(entry) {
-        pushOverlay();
-        new blessed_1.ConfirmModal({
-            parent: screen,
-            title: ' Uninstall Door ',
-            content: `Uninstall {yellow-fg}${entry.installed_as}{/yellow-fg}?\n\nThis removes the .info file and Doors/${entry.installed_as} directory.`,
-            confirmText: 'Uninstall',
-            cancelText: 'Cancel',
-            confirmColor: 'red',
-            cancelColor: 'green',
-            style: { border: { fg: 'red' } },
-            onConfirm: async () => {
-                popOverlay();
-                const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
-                const infoPath = path.join(bbsCmdDir, `${entry.installed_as}.info`);
-                if (fs.existsSync(infoPath))
-                    fs.unlinkSync(infoPath);
-                if (entry.install_dir) {
-                    const abs = path.join(PROJECT_ROOT, entry.install_dir);
-                    if (fs.existsSync(abs))
-                        fs.rmSync(abs, { recursive: true, force: true });
-                }
-                const svc = getCatalogSvc();
-                if (svc) {
-                    try {
-                        svc.markUninstalled(entry.id);
-                    }
-                    catch { /* ignore */ }
-                }
-                setStatus(`Uninstalled ${entry.installed_as}`, 'green', 4000);
-                const idx = doorList.selected ?? 0;
-                populateCatalogList(idx);
-                updateInfoPane();
-                updateFooter();
-                doorList.focus();
-            },
-            onCancel: () => { popOverlay(); doorList.focus(); screen.render(); },
-        }).display();
-    }
-    function showStripSelector(entry, stripped, reasons, onConfirm, onCancel) {
-        stripOverlayActive = true;
-        const checked = new Array(stripped.length).fill(true);
-        const origListLabel = listPanel.options?.label ?? ' INSTALLED DOORS ';
-        listPanel.setLabel(` ${entry.archive_name} — deselect false positives `);
-        function renderFiles() {
-            const items = stripped.map((f, i) => {
-                const box = checked[i] ? '[X]' : '[ ]';
-                const name = f.path.length > 24
-                    ? '<' + f.path.slice(f.path.length - 23)
-                    : f.path.padEnd(24);
-                return `${box} ${name}`;
-            });
-            doorList.setItems(items);
-            const sel = doorList.selected ?? 0;
-            const selFile = stripped[sel];
-            const selCount = checked.filter(Boolean).length;
-            infoBox.setContent(`{yellow-fg}${selCount} of ${stripped.length} files selected to strip{/yellow-fg}\n\n` +
-                (selFile ? `{cyan-fg}${selFile.path}{/cyan-fg}\nReason: ${reasons[selFile.path] ?? '?'}\n` : '') +
-                '\n{grey-fg}[Space] Toggle  [A] All  [N] None\n[S] Strip selected  [Esc] Cancel{/grey-fg}');
-            screen.render();
-        }
-        function exitOverlay() {
-            stripOverlayActive = false;
-            _stripConfirm = null;
-            _stripCancel = null;
-            listPanel.setLabel(origListLabel);
-            if (mode === 'repo')
-                populateCatalogList(doorList.selected ?? 0);
-            else
-                populateInstalledList(doorList.selected ?? 0);
-            updateInfoPane();
-            doorList.focus();
-        }
-        _stripConfirm = () => {
-            const preserve = new Set(stripped.filter((_, i) => !checked[i]).map((f) => f.path));
-            exitOverlay();
-            onConfirm(preserve);
-        };
-        _stripCancel = () => { exitOverlay(); onCancel(); };
-        // Space to toggle
-        const spaceKey = () => {
-            if (!stripOverlayActive)
-                return;
-            const idx = doorList.selected ?? 0;
-            if (idx < checked.length) {
-                checked[idx] = !checked[idx];
-                renderFiles();
-            }
-        };
-        const allKey = () => { if (!stripOverlayActive)
-            return; checked.fill(true); renderFiles(); };
-        const noneKey = () => { if (!stripOverlayActive)
-            return; checked.fill(false); renderFiles(); };
-        screen.key([' ', 'space', '\r', '\n'], spaceKey);
-        screen.key(['a', 'A'], allKey);
-        screen.key(['n', 'N'], noneKey);
-        doorList.once('destroy', () => {
-            screen.unkey([' ', 'space', '\r', '\n'], spaceKey);
-            screen.unkey(['a', 'A'], allKey);
-            screen.unkey(['n', 'N'], noneKey);
-        });
-        renderFiles();
-        doorList.focus();
-    }
-    function discoverDoorDir(archiveName) {
-        const base = archiveName.replace(/\.(lha|lzx|lzh)$/i, '');
-        const doorsDir = path.join(PROJECT_ROOT, 'Doors');
-        if (!fs.existsSync(doorsDir))
-            return null;
-        try {
-            const match = fs.readdirSync(doorsDir).find(e => e.toLowerCase() === base.toLowerCase() && fs.statSync(path.join(doorsDir, e)).isDirectory());
-            return match ? path.join(doorsDir, match) : null;
-        }
-        catch {
-            return null;
-        }
-    }
-    async function stripAds(entry, onDone, overrideDir) {
-        const lib = getStripLib();
-        if (!lib) {
-            setStatus('Stripper library not available', 'red');
-            onDone();
-            return;
-        }
-        const hasArchive = !!(entry.archive_path && fs.existsSync(entry.archive_path));
-        const candidateDirs = [
-            overrideDir ?? null,
-            entry.install_dir ? path.join(PROJECT_ROOT, entry.install_dir) : null,
-            entry.installed_as ? path.join(PROJECT_ROOT, 'Doors', entry.installed_as) : null,
-            discoverDoorDir(entry.archive_name),
-        ].filter((d) => !!(d && fs.existsSync(d)));
-        const installDirAbs = candidateDirs[0] ?? null;
-        const hasDir = !!installDirAbs;
-        if (!hasArchive && !hasDir) {
-            setStatus(`${entry.archive_name}: not installed on this server`, 'yellow');
-            onDone();
-            return;
-        }
-        setStatus('Analyzing for ad files...');
-        let result;
-        try {
-            result = hasArchive
-                ? await lib.analyzeArchive(entry.archive_path)
-                : await lib.analyzeDirectory(installDirAbs);
-        }
-        catch (err) {
-            setStatus(`Analysis failed: ${err.message}`, 'red');
-            onDone();
-            return;
-        }
-        if (result.stripped.length === 0) {
-            setStatus('No ad files found — clean', 'green', 3000);
-            onDone();
-            return;
-        }
-        showStripSelector(entry, result.stripped, result.reason, async (preservePaths) => {
-            const toStrip = result.stripped.filter((f) => !preservePaths.has(f.path));
-            if (toStrip.length === 0) {
-                setStatus('Nothing to strip', 'yellow', 2000);
-                onDone();
-                return;
-            }
-            setStatus(`Stripping ${toStrip.length} file(s)...`);
-            try {
-                if (hasArchive) {
-                    // Strip archive in-place: repack to tmp, replace original
-                    const tmpOut = entry.archive_path + '.strip_tmp';
-                    await lib.stripArchive(entry.archive_path, tmpOut, preservePaths);
-                    if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
-                        fs.renameSync(tmpOut, entry.archive_path); // replace original LHA
-                    }
-                    else if (fs.existsSync(tmpOut)) {
-                        fs.rmSync(tmpOut, { recursive: true, force: true });
-                    }
-                    if (installDirAbs) {
-                        fs.mkdirSync(installDirAbs, { recursive: true });
-                        (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDirAbs}`, entry.archive_path], { timeout: 30000 });
-                    }
-                }
-                else if (hasDir) {
-                    lib.stripFilesFromDirectory(installDirAbs, toStrip.map((f) => f.path));
-                }
-                const svc = getCatalogSvc();
-                if (svc) {
-                    try {
-                        svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length);
-                    }
-                    catch { /* ignore */ }
-                    try {
-                        svc.removeArchiveFiles(entry.id, toStrip.map((f) => f.path));
-                    }
-                    catch { /* ignore */ }
-                }
-                setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
-            }
-            catch (err) {
-                setStatus(`Strip failed: ${err.message}`, 'red');
-            }
-            onDone();
-        }, onDone);
-    }
-    // --- key handlers ----------------------------------------------------------
-    // Disable type-ahead search — _onKeypress was already .bind(this) at construction
-    // so patching the instance method has no effect. Remove all keypress listeners
-    // and add our own that skips printable chars (which are action keys on screen.key).
-    {
-        const _nav = doorList._onKeypress?.bind(doorList);
-        doorList.removeAllListeners('keypress');
-        if (_nav) {
-            doorList.on('keypress', (ch, key) => {
-                if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
-                    return; // printable: let screen.key handle, skip type-ahead
-                }
-                if (key?.name === 'escape' || ch === '\x1b') {
-                    return; // let screen.key('escape') handle it, don't let List emit 'cancel'
-                }
-                return _nav(ch, key); // arrows, enter, page up/down etc.
-            });
-        }
-    }
-    // Live filter: re-query catalog on every keypress in filterBox
-    filterBox.on('keypress', (_ch, key) => {
-        setTimeout(() => {
-            const val = filterBox.getValue() ?? '';
-            if (val !== catalogFilter) {
-                catalogFilter = val;
-                loadCatalog();
-                populateCatalogList(0);
-                updateInfoPane();
-            }
-            // Down arrow or Enter → move focus to list
-            if (key?.name === 'down' || key?.name === 'enter' || key?.name === 'return') {
-                filterInputFocused = false;
-                doorList.focus();
-                screen.render();
-            }
-            // ESC → clear filter, focus list
-            if (key?.name === 'escape') {
-                catalogFilter = '';
-                filterBox.setValue('');
-                loadCatalog();
-                populateCatalogList(0);
-                filterInputFocused = false;
-                doorList.focus();
-                screen.render();
-            }
-        }, 0);
-    });
-    screen.key(['tab'], () => {
-        if (overlayDepth > 0)
-            return; // let overlay handle Tab
-        if (isFilterActive()) {
-            // Tab from filter → move focus to list only
-            filterInputFocused = false;
-            doorList.focus();
-            screen.render();
-            return;
-        }
-        // Tab in installed mode → enter repo (only direction; ESC exits repo)
-        if (mode === 'installed') {
-            mode = 'repo';
-            loadCatalog();
-            populateCatalogList(0);
-            applyRepoFilterLayout();
-            filterInputFocused = true;
-            filterBox.focus();
-            refreshHeader();
-            updateInfoPane();
-            updateFooter();
-        }
-        // Tab in repo mode with list focused → focus filter input
-        else if (mode === 'repo') {
-            filterInputFocused = true;
-            filterBox.focus();
-            screen.render();
-        }
-    });
-    screen.key(['escape'], () => {
-        if (stripOverlayActive) {
-            if (_stripCancel)
-                _stripCancel();
-            return;
-        }
-        if (isFilterActive()) {
-            filterInputFocused = false;
-            doorList.focus();
-            screen.render();
-            return;
-        }
-        if (overlayDepth > 0 || blockEscModeSwitch)
-            return;
-        if (mode === 'repo') {
-            mode = 'installed';
-            filterInputFocused = false;
-            applyRepoFilterLayout();
-            populateInstalledList(0);
-            refreshHeader();
-            updateInfoPane();
-            updateFooter();
-        }
-        // Installed mode: ESC re-focuses list (no-op); Q is the only exit
-        doorList.focus();
-    });
-    screen.key(['q', 'Q'], () => {
-        if (stripOverlayActive) {
-            if (_stripCancel)
-                _stripCancel();
-            return;
-        }
-        if (overlayDepth > 0)
-            return; // let overlay handle Q
-        if (statusTimer)
-            clearTimeout(statusTimer);
-        inputManager.disable();
-        screen.destroy();
-    });
-    // --- installed-mode keys ---------------------------------------------------
-    screen.key(['f', 'F'], () => {
-        if (mode !== 'installed')
-            return;
-        const door = selectedDoor();
-        if (!door)
-            return;
-        let doorPath = door.resolvedPath || door.location || `Doors/${door.command}`;
-        const assignMatch = /^([A-Za-z][A-Za-z0-9]*):(.*)$/.exec(doorPath);
-        if (assignMatch) {
-            const assign = assignMatch[1].toUpperCase();
-            const subpath = assignMatch[2].replace(/^\/+/, '');
-            if (assign === 'BBS' || assign === 'WORK')
-                doorPath = subpath;
-            else if (assign === 'DOORS')
-                doorPath = `Doors/${subpath}`;
-        }
-        pushOverlay();
-        new FileExplorerOverlay_1.FileExplorerOverlay({
-            screen,
-            doorPath,
-            onClose: () => { popOverlay(); doorList.focus(); screen.render(); },
-        });
-    });
-    screen.key(['i', 'I'], () => {
-        if (mode !== 'installed')
-            return;
-        const door = selectedDoor();
-        if (!door)
-            return;
-        pushOverlay();
-        new InfoEditorOverlay_1.InfoEditorOverlay({
-            screen,
-            command: door.command,
-            bbs,
-            onClose: () => { popOverlay(); doorList.focus(); screen.render(); },
-        });
-        screen.render();
-    });
-    screen.key(['s', 'S'], async () => {
-        if (isFilterActive())
-            return;
-        if (stripOverlayActive) {
-            if (_stripConfirm)
-                _stripConfirm();
-            return;
-        }
-        if (mode === 'installed') {
-            const door = selectedDoor();
-            if (!door)
-                return;
-            const svc = getCatalogSvc();
-            if (!svc) {
-                setStatus('Catalog not available', 'yellow');
-                return;
-            }
-            let entry = null;
-            try {
-                entry = svc.getCatalogEntryByCmd(door.command);
-            }
-            catch { /* ignore */ }
-            if (!entry) {
-                setStatus(`${door.command} not in catalog`, 'yellow');
-                return;
-            }
-            // Derive live install dir from resolvedPath (more reliable than stale catalog install_dir)
-            const liveDir = door.resolvedPath
-                ? path.dirname(door.resolvedPath)
-                : (door.location ? path.join(PROJECT_ROOT, door.location) : undefined);
-            await stripAds(entry, () => { doorList.focus(); screen.render(); }, liveDir);
-        }
-        else {
-            const entry = selectedCatalogEntry();
-            if (!entry)
-                return;
-            await stripAds(entry, () => { doorList.focus(); screen.render(); });
-        }
-    });
-    screen.key(['v', 'V'], () => {
-        if (isFilterActive())
-            return;
-        if (mode === 'repo') {
-            const entry = selectedCatalogEntry();
-            if (!entry?.doc_raw) {
-                setStatus('No documentation available', 'yellow');
-                return;
-            }
-            showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
-        }
-        else {
-            const door = selectedDoor();
-            if (!door || !door.command)
-                return;
-            const svc = getCatalogSvc();
-            if (!svc) {
-                setStatus('Catalog not available', 'yellow');
-                return;
-            }
-            try {
-                const entry = svc.getCatalogEntryByCmd(door.command);
-                if (entry?.doc_raw) {
-                    showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
-                }
-                else {
-                    setStatus('No documentation in catalog for this door', 'yellow');
-                }
-            }
-            catch {
-                setStatus('Catalog lookup failed', 'red');
-            }
-        }
-    });
-    screen.key(['u', 'U'], async () => {
-        if (mode !== 'installed')
-            return;
-        setStatus('Waiting for file selection...');
-        let uploadResult;
-        try {
-            uploadResult = await bbs.requestArchiveUpload();
-        }
-        catch (err) {
-            setStatus(`Upload cancelled: ${err.message}`, 'yellow');
-            return;
-        }
-        setStatus(`Installing ${uploadResult.filename}...`);
-        try {
-            const result = await bbs.installDoor(uploadResult.path);
-            if (result.success) {
-                setStatus(`Installed: ${result.command} (${result.type})`, 'green');
-                doors = await fetchDoors(bbs);
-                populateInstalledList(0);
-                updateInfoPane();
-            }
-            else {
-                setStatus(`Install failed: ${result.message}`, 'red');
-            }
-        }
-        catch (err) {
-            setStatus(`Error: ${err.message}`, 'red');
-        }
-    });
-    screen.key(['e', 'E'], async () => {
-        if (mode !== 'installed')
-            return;
-        const door = selectedDoor();
-        if (!door)
-            return;
-        const idx = doorList.selected ?? 0;
-        door.enabled = !door.enabled;
-        setStatus(`${door.enabled ? 'Enabling' : 'Disabling'} ${door.name}...`);
-        try {
-            if (bbs.setDoorEnabled) {
-                const result = await bbs.setDoorEnabled(door.command, door.enabled);
-                setStatus(result.message, result.success ? 'green' : 'red');
-            }
-            else {
-                setStatus(`${door.name} ${door.enabled ? 'enabled' : 'disabled'} (session only)`, 'yellow');
-            }
-        }
-        catch (err) {
-            door.enabled = !door.enabled;
-            setStatus(`Error: ${err.message}`, 'red');
-        }
-        populateInstalledList(idx);
-        updateInfoPane();
-        updateFooter();
-    });
-    screen.key(['t', 'T'], () => {
-        if (mode !== 'installed')
-            return;
-        const door = selectedDoor();
-        if (!door)
-            return;
-        if (bbs.runCommand)
-            bbs.runCommand(door.command);
-        else
-            setStatus('Test: use BBS menu to run the door', 'yellow');
-    });
-    screen.key(['d', 'D'], () => {
-        if (mode !== 'installed')
-            return;
-        // installed mode: delete
-        const door = selectedDoor();
-        if (!door)
-            return;
-        pushOverlay();
-        new blessed_1.ConfirmModal({
-            parent: screen,
-            title: ' Delete Door ',
-            content: `Delete this door?\n\n  {yellow-fg}${door.name}{/yellow-fg}${door.command !== door.name ? `\n  Command: ${door.command}` : ''}\n\n{red-fg}This cannot be undone.{/red-fg}`,
-            confirmText: 'Delete',
-            cancelText: 'Cancel',
-            confirmColor: 'red',
-            cancelColor: 'green',
-            style: { border: { fg: 'red' } },
-            onConfirm: async () => {
-                popOverlay();
-                const idx = doorList.selected ?? 0;
-                const isTS = ['TS', 'typescript', 'SDK'].includes(door.type);
-                const identifier = isTS
-                    ? (door.location
-                        ? door.location.replace(/^Doors[\\/]/i, '').split(/[\\/]/)[0] || door.command
-                        : door.command)
-                    : door.command;
-                setStatus(`Deleting ${door.name}...`);
-                try {
-                    const result = await bbs.deleteDoor(identifier, isTS);
-                    if (result.success) {
-                        setStatus(`${door.name} deleted`, 'green');
-                        doors = await fetchDoors(bbs);
-                        populateInstalledList(Math.max(0, idx - 1));
-                        updateInfoPane();
-                    }
-                    else {
-                        setStatus(`Delete failed: ${result.message}`, 'red');
-                    }
-                }
-                catch (err) {
-                    setStatus(`Error: ${err.message}`, 'red');
-                }
-                doorList.focus();
-            },
-            onCancel: () => { popOverlay(); doorList.focus(); screen.render(); },
-        }).display();
-    });
-    // --- repo-mode keys --------------------------------------------------------
-    screen.key(['r', 'R'], () => {
-        if (mode !== 'repo')
-            return;
-        const entry = selectedCatalogEntry();
-        if (!entry)
-            return;
-        if (entry.installed)
-            uninstallFromCatalog(entry);
-        else
-            installFromCatalog(entry);
-    });
-    // / or F in repo mode focuses the filter input
-    screen.key(['/', 'f', 'F'], () => {
-        if (mode !== 'repo')
-            return;
-        if (isFilterActive())
-            return;
-        filterInputFocused = true;
-        filterBox.focus();
-        screen.render();
-    });
+    const layout = new DoormanLayout(screen, nodeId);
+    const vm = new ViewManager_1.ViewManager(screen);
+    screen.on('resize', () => { screen.render(); });
+    screen.on('destroy', () => { inputManager.disable(); });
+    vm.push(new InstalledView(layout, bbs, doors));
     await new Promise(resolve => { screen.on('destroy', resolve); });
 }
 //# sourceMappingURL=app.js.map
