@@ -203,6 +203,9 @@ export async function createApp(session: DoorSession): Promise<void> {
   function pushOverlay() { overlayDepth++; }
   function popOverlay() { overlayDepth = Math.max(0, overlayDepth - 1); }
 
+  // True while the filter input box has focus
+  let filterInputFocused = false;
+
   // --- screen ----------------------------------------------------------------
 
   const screen = new Screen({
@@ -263,6 +266,24 @@ export async function createApp(session: DoorSession): Promise<void> {
       item: { fg: 'white' },
     },
   } as any);
+
+  // Filter input shown above list in repo mode
+  const filterPanel = new Panel({
+    parent: screen,
+    top: 3, left: 0, width: '35%', height: 3,
+    tags: true,
+    style: { border: { fg: 'grey' } },
+    focusable: false,
+  } as any);
+  const { Textbox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+  const filterBox = new Textbox({
+    parent: filterPanel,
+    top: 0, left: 1, width: '100%-2', height: 1,
+    inputOnFocus: true, mouse: true,
+    style: { fg: 'white', focus: { fg: 'yellow' } },
+    value: catalogFilter,
+  } as any);
+  (filterPanel as any).hide(); // hidden until repo mode
 
   const infoPanel = new Panel({
     parent: screen,
@@ -344,7 +365,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       const entry = selectedCatalogEntry();
       const inst = entry?.installed ? 'Uninst' : 'Inst';
       (footer as any).setContent(
-        `{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}/{/yellow-fg}Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`
+        `{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}F{/yellow-fg}=Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`
       );
     }
   }
@@ -387,15 +408,30 @@ export async function createApp(session: DoorSession): Promise<void> {
     screen.render();
   }
 
+  function applyRepoFilterLayout(): void {
+    if (mode === 'repo') {
+      (filterPanel as any).show();
+      (listPanel as any).top = 6;
+      (listPanel as any).height = '100%-9';
+    } else {
+      (filterPanel as any).hide();
+      (listPanel as any).top = 3;
+      (listPanel as any).height = '100%-6';
+    }
+  }
+
   function applyResponsive(): void {
     const w = (screen as any).width;
     if (w < 70) {
       (infoPanel as any).hide();
       (listPanel as any).width = '100%';
+      (filterPanel as any).width = '100%';
     } else {
       (infoPanel as any).show();
       (listPanel as any).width = '35%';
+      (filterPanel as any).width = '35%';
     }
+    applyRepoFilterLayout();
     if (mode === 'installed') populateInstalledList((doorList as any).selected ?? 0);
     else populateCatalogList((doorList as any).selected ?? 0);
   }
@@ -726,14 +762,56 @@ export async function createApp(session: DoorSession): Promise<void> {
     }
   }
 
+  // Live filter: re-query catalog on every keypress in filterBox
+  (filterBox as any).on('keypress', (_ch: string, key: any) => {
+    setTimeout(() => {
+      const val: string = (filterBox as any).getValue() ?? '';
+      if (val !== catalogFilter) {
+        catalogFilter = val;
+        loadCatalog();
+        populateCatalogList(0);
+        updateInfoPane();
+      }
+      // Down arrow or Enter → move focus to list
+      if (key?.name === 'down' || key?.name === 'enter' || key?.name === 'return') {
+        filterInputFocused = false;
+        (doorList as any).focus();
+        screen.render();
+      }
+      // ESC → clear filter, focus list
+      if (key?.name === 'escape') {
+        catalogFilter = '';
+        (filterBox as any).setValue('');
+        loadCatalog();
+        populateCatalogList(0);
+        filterInputFocused = false;
+        (doorList as any).focus();
+        screen.render();
+      }
+    }, 0);
+  });
+
   (screen as any).key(['tab'], () => {
+    if (filterInputFocused) {
+      // Tab from filter → move to list
+      filterInputFocused = false;
+      (doorList as any).focus();
+      screen.render();
+      return;
+    }
     const idx = (doorList as any).selected ?? 0;
     if (mode === 'installed') {
       mode = 'repo';
       loadCatalog();
       populateCatalogList(0);
+      applyRepoFilterLayout();
+      // Focus the filter input in repo mode
+      filterInputFocused = true;
+      (filterBox as any).focus();
     } else {
       mode = 'installed';
+      filterInputFocused = false;
+      applyRepoFilterLayout();
       populateInstalledList(idx);
     }
     refreshHeader();
@@ -744,9 +822,17 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   (screen as any).key(['escape'], () => {
     if (stripOverlayActive) { if (_stripCancel) _stripCancel(); return; }
+    if (filterInputFocused) {
+      filterInputFocused = false;
+      (doorList as any).focus();
+      screen.render();
+      return;
+    }
     if (overlayDepth > 0) return; // let overlay handle ESC via its own key binding
     if (mode === 'repo') {
       mode = 'installed';
+      filterInputFocused = false;
+      applyRepoFilterLayout();
       populateInstalledList(0);
       refreshHeader();
       updateInfoPane();
@@ -801,6 +887,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['s', 'S'], async () => {
+    if (filterInputFocused) return;
     if (stripOverlayActive) { if (_stripConfirm) _stripConfirm(); return; }
     if (mode === 'installed') {
       const door = selectedDoor();
@@ -823,6 +910,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['v', 'V'], () => {
+    if (filterInputFocused) return;
     if (mode === 'repo') {
       const entry = selectedCatalogEntry();
       if (!entry) return;
@@ -960,26 +1048,12 @@ export async function createApp(session: DoorSession): Promise<void> {
     else installFromCatalog(entry);
   });
 
-  (screen as any).key(['/'], () => {
+  // / or F in repo mode focuses the filter input
+  (screen as any).key(['/', 'f', 'F'], () => {
     if (mode !== 'repo') return;
-    pushOverlay();
-    const prompt = new Prompt({
-      parent: screen,
-      top: 'center', left: 'center', width: 50, height: 7,
-      tags: true,
-      style: { border: { fg: 'cyan' } },
-      overlay: true,
-    } as any);
-    (prompt as any).showInput('{cyan-fg}Filter (name/author/group), blank to clear:{/cyan-fg}', catalogFilter, (_err: any, val: string | undefined) => {
-      popOverlay();
-      (prompt as any).destroy();
-      catalogFilter = (val ?? '').trim();
-      populateCatalogList(0);
-      refreshHeader();
-      updateInfoPane();
-      updateFooter();
-      (doorList as any).focus();
-    });
+    if (filterInputFocused) return;
+    filterInputFocused = true;
+    (filterBox as any).focus();
     screen.render();
   });
 

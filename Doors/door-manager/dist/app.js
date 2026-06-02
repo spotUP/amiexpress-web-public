@@ -186,6 +186,8 @@ async function createApp(session) {
     let overlayDepth = 0;
     function pushOverlay() { overlayDepth++; }
     function popOverlay() { overlayDepth = Math.max(0, overlayDepth - 1); }
+    // True while the filter input box has focus
+    let filterInputFocused = false;
     // --- screen ----------------------------------------------------------------
     const screen = new blessed_1.Screen({
         smartCSR: true,
@@ -238,6 +240,23 @@ async function createApp(session) {
             item: { fg: 'white' },
         },
     });
+    // Filter input shown above list in repo mode
+    const filterPanel = new blessed_1.Panel({
+        parent: screen,
+        top: 3, left: 0, width: '35%', height: 3,
+        tags: true,
+        style: { border: { fg: 'grey' } },
+        focusable: false,
+    });
+    const { Textbox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+    const filterBox = new Textbox({
+        parent: filterPanel,
+        top: 0, left: 1, width: '100%-2', height: 1,
+        inputOnFocus: true, mouse: true,
+        style: { fg: 'white', focus: { fg: 'yellow' } },
+        value: catalogFilter,
+    });
+    filterPanel.hide(); // hidden until repo mode
     const infoPanel = new blessed_1.Panel({
         parent: screen,
         top: 3, left: '35%', width: '65%', height: '100%-6',
@@ -306,7 +325,7 @@ async function createApp(session) {
         else {
             const entry = selectedCatalogEntry();
             const inst = entry?.installed ? 'Uninst' : 'Inst';
-            footer.setContent(`{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}/{/yellow-fg}Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`);
+            footer.setContent(`{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}F{/yellow-fg}=Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`);
         }
     }
     function populateInstalledList(selectIndex = 0) {
@@ -361,16 +380,31 @@ async function createApp(session) {
         }
         screen.render();
     }
+    function applyRepoFilterLayout() {
+        if (mode === 'repo') {
+            filterPanel.show();
+            listPanel.top = 6;
+            listPanel.height = '100%-9';
+        }
+        else {
+            filterPanel.hide();
+            listPanel.top = 3;
+            listPanel.height = '100%-6';
+        }
+    }
     function applyResponsive() {
         const w = screen.width;
         if (w < 70) {
             infoPanel.hide();
             listPanel.width = '100%';
+            filterPanel.width = '100%';
         }
         else {
             infoPanel.show();
             listPanel.width = '35%';
+            filterPanel.width = '35%';
         }
+        applyRepoFilterLayout();
         if (mode === 'installed')
             populateInstalledList(doorList.selected ?? 0);
         else
@@ -703,15 +737,56 @@ async function createApp(session) {
             });
         }
     }
+    // Live filter: re-query catalog on every keypress in filterBox
+    filterBox.on('keypress', (_ch, key) => {
+        setTimeout(() => {
+            const val = filterBox.getValue() ?? '';
+            if (val !== catalogFilter) {
+                catalogFilter = val;
+                loadCatalog();
+                populateCatalogList(0);
+                updateInfoPane();
+            }
+            // Down arrow or Enter → move focus to list
+            if (key?.name === 'down' || key?.name === 'enter' || key?.name === 'return') {
+                filterInputFocused = false;
+                doorList.focus();
+                screen.render();
+            }
+            // ESC → clear filter, focus list
+            if (key?.name === 'escape') {
+                catalogFilter = '';
+                filterBox.setValue('');
+                loadCatalog();
+                populateCatalogList(0);
+                filterInputFocused = false;
+                doorList.focus();
+                screen.render();
+            }
+        }, 0);
+    });
     screen.key(['tab'], () => {
+        if (filterInputFocused) {
+            // Tab from filter → move to list
+            filterInputFocused = false;
+            doorList.focus();
+            screen.render();
+            return;
+        }
         const idx = doorList.selected ?? 0;
         if (mode === 'installed') {
             mode = 'repo';
             loadCatalog();
             populateCatalogList(0);
+            applyRepoFilterLayout();
+            // Focus the filter input in repo mode
+            filterInputFocused = true;
+            filterBox.focus();
         }
         else {
             mode = 'installed';
+            filterInputFocused = false;
+            applyRepoFilterLayout();
             populateInstalledList(idx);
         }
         refreshHeader();
@@ -725,10 +800,18 @@ async function createApp(session) {
                 _stripCancel();
             return;
         }
+        if (filterInputFocused) {
+            filterInputFocused = false;
+            doorList.focus();
+            screen.render();
+            return;
+        }
         if (overlayDepth > 0)
             return; // let overlay handle ESC via its own key binding
         if (mode === 'repo') {
             mode = 'installed';
+            filterInputFocused = false;
+            applyRepoFilterLayout();
             populateInstalledList(0);
             refreshHeader();
             updateInfoPane();
@@ -790,6 +873,8 @@ async function createApp(session) {
         screen.render();
     });
     screen.key(['s', 'S'], async () => {
+        if (filterInputFocused)
+            return;
         if (stripOverlayActive) {
             if (_stripConfirm)
                 _stripConfirm();
@@ -827,6 +912,8 @@ async function createApp(session) {
         }
     });
     screen.key(['v', 'V'], () => {
+        if (filterInputFocused)
+            return;
         if (mode === 'repo') {
             const entry = selectedCatalogEntry();
             if (!entry)
@@ -986,27 +1073,14 @@ async function createApp(session) {
         else
             installFromCatalog(entry);
     });
-    screen.key(['/'], () => {
+    // / or F in repo mode focuses the filter input
+    screen.key(['/', 'f', 'F'], () => {
         if (mode !== 'repo')
             return;
-        pushOverlay();
-        const prompt = new blessed_1.Prompt({
-            parent: screen,
-            top: 'center', left: 'center', width: 50, height: 7,
-            tags: true,
-            style: { border: { fg: 'cyan' } },
-            overlay: true,
-        });
-        prompt.showInput('{cyan-fg}Filter (name/author/group), blank to clear:{/cyan-fg}', catalogFilter, (_err, val) => {
-            popOverlay();
-            prompt.destroy();
-            catalogFilter = (val ?? '').trim();
-            populateCatalogList(0);
-            refreshHeader();
-            updateInfoPane();
-            updateFooter();
-            doorList.focus();
-        });
+        if (filterInputFocused)
+            return;
+        filterInputFocused = true;
+        filterBox.focus();
         screen.render();
     });
     await new Promise(resolve => { screen.on('destroy', resolve); });
