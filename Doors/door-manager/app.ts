@@ -375,7 +375,7 @@ export async function createApp(session: DoorSession): Promise<void> {
         hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,
         hasDoc  ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
         `{yellow-fg}F{/yellow-fg}=Filter`,
-        `{yellow-fg}T{/yellow-fg}ab=List`,
+        `{yellow-fg}ESC{/yellow-fg}=Back`,
         `{yellow-fg}Q{/yellow-fg}uit`,
       ].filter(Boolean).join(' ');
       (footer as any).setContent(`{center}${parts}{/center}`);
@@ -806,33 +806,32 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['tab'], () => {
-    if (overlayDepth > 0) return; // let overlay handle Tab (field navigation)
+    if (overlayDepth > 0) return; // let overlay handle Tab
     if (isFilterActive()) {
-      // Tab from filter → move to list
+      // Tab from filter → move focus to list only
       filterInputFocused = false;
       (doorList as any).focus();
       screen.render();
       return;
     }
-    const idx = (doorList as any).selected ?? 0;
+    // Tab in installed mode → enter repo (only direction; ESC exits repo)
     if (mode === 'installed') {
       mode = 'repo';
       loadCatalog();
       populateCatalogList(0);
       applyRepoFilterLayout();
-      // Focus the filter input in repo mode
       filterInputFocused = true;
       (filterBox as any).focus();
-    } else {
-      mode = 'installed';
-      filterInputFocused = false;
-      applyRepoFilterLayout();
-      populateInstalledList(idx);
+      refreshHeader();
+      updateInfoPane();
+      updateFooter();
     }
-    refreshHeader();
-    updateInfoPane();
-    updateFooter();
-    (doorList as any).focus();
+    // Tab in repo mode with list focused → focus filter input
+    else if (mode === 'repo') {
+      filterInputFocused = true;
+      (filterBox as any).focus();
+      screen.render();
+    }
   });
 
   (screen as any).key(['escape'], () => {
