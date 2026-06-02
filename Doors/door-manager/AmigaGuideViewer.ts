@@ -108,7 +108,7 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
     (screen as any).unkey(['up','down','pageup','pagedown'], onScroll);
     (screen as any).unkey(['1','2','3','4','5','6','7','8','9'], onNum);
     (screen as any).unkey(['tab'], onTab);
-    (screen as any).unkey(['enter','return'], onEnter);
+    (screen as any).unkey(['enter','return','\r','\n'], onEnter);
     (header as any).destroy(); (contentPanel as any).destroy(); (footer as any).destroy();
     onDone(); screen.render();
   }
@@ -170,7 +170,7 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
   (screen as any).key(['up','down','pageup','pagedown'], onScroll);
   (screen as any).key(['1','2','3','4','5','6','7','8','9'], onNum);
   (screen as any).key(['tab'], onTab);
-  (screen as any).key(['enter','return'], onEnter);
+  (screen as any).key(['enter','return','\r','\n'], onEnter);
   render();
 }
 
