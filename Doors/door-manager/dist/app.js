@@ -659,7 +659,10 @@ async function createApp(session) {
                 if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
                     return; // printable: let screen.key handle, skip type-ahead
                 }
-                return _nav(ch, key); // arrows, enter, esc, page up/down etc.
+                if (key?.name === 'escape' || ch === '\x1b') {
+                    return; // let screen.key('escape') handle it, don't let List emit 'cancel'
+                }
+                return _nav(ch, key); // arrows, enter, page up/down etc.
             });
         }
     }
