@@ -8,13 +8,15 @@ const DB_PATH = path.join(
 );
 
 const SEED_PATH = path.join(__dirname, '..', '..', 'seeds', 'door-catalog-seed.sql');
+const FILES_SEED_PATH = path.join(__dirname, '..', '..', 'seeds', 'door-catalog-files-seed.sql');
 
 function seedIfEmpty(db: Database.Database): void {
   try {
     const count = (db.prepare('SELECT count(*) as n FROM door_catalog').get() as any)?.n ?? 0;
-    if (count > 0 || !fs.existsSync(SEED_PATH)) return;
-    const sql = fs.readFileSync(SEED_PATH, 'utf-8');
-    db.exec(sql);
+    if (count === 0 && fs.existsSync(SEED_PATH)) db.exec(fs.readFileSync(SEED_PATH, 'utf-8'));
+    // Seed files table separately (may be populated independently)
+    const fileCount = (db.prepare('SELECT count(*) as n FROM door_catalog_files').get() as any)?.n ?? 0;
+    if (fileCount === 0 && fs.existsSync(FILES_SEED_PATH)) db.exec(fs.readFileSync(FILES_SEED_PATH, 'utf-8'));
   } catch { /* ignore seed errors */ }
 }
 

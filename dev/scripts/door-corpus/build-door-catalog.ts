@@ -862,6 +862,19 @@ async function main() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_category ON door_catalog(category)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_name ON door_catalog(name)');
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS door_catalog_files (
+      catalog_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      size INTEGER DEFAULT 0,
+      is_junk INTEGER DEFAULT 0,
+      junk_reason TEXT,
+      PRIMARY KEY (catalog_id, path)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_dcf_catalog_id ON door_catalog_files(catalog_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_dcf_is_junk ON door_catalog_files(is_junk)');
+
   const corpus = loadCorpus();
   log(`Corpus entries loaded: ${corpus.size}`);
 
