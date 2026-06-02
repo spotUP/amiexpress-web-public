@@ -645,7 +645,7 @@ async function createApp(session) {
     if (_origKeypress) {
         doorList._onKeypress = function (ch, key) {
             // Skip the type-ahead block for printable chars; let screen.key handle them
-            if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
+            if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/]/.test(ch)) {
                 return false;
             }
             return _origKeypress(ch, key);
