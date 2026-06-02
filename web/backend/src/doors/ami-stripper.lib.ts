@@ -175,9 +175,9 @@ function classifyFile(
     if (matchesPattern(base, pat)) return 'pattern';
   }
 
-  if (['.doc', '.readme', '.txt', '.nfo', ''].includes(ext) && !isBinaryContent(buf)) {
-    if (hasAdSignals(buf)) return 'content-scan';
-  }
+  // Intentionally NOT content-scanning .txt/.doc/.readme/.nfo — too many false
+  // positives (phone numbers, "connect to" etc. appear in legitimate docs).
+  // Those files are flagged only by filename pattern or MD5 fingerprint above.
 
   return null;
 }
