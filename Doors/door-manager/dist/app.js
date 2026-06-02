@@ -489,7 +489,7 @@ async function createApp(session) {
             const items = stripped.map((f, i) => {
                 const box = checked[i] ? '[X]' : '[ ]';
                 const name = f.path.length > 24
-                    ? f.path.slice(0, 23) + '>'
+                    ? '<' + f.path.slice(f.path.length - 23)
                     : f.path.padEnd(24);
                 return `${box} ${name}`;
             });

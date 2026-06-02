@@ -520,7 +520,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       const items = stripped.map((f: any, i: number) => {
         const box = checked[i] ? '[X]' : '[ ]';
         const name = (f.path as string).length > 24
-          ? (f.path as string).slice(0, 23) + '>'
+          ? '<' + (f.path as string).slice((f.path as string).length - 23)
           : (f.path as string).padEnd(24);
         return `${box} ${name}`;
       });
