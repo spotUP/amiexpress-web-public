@@ -250,7 +250,7 @@ export class AmigaGuideParser {
 
       while ((match = linkRegex.exec(line)) !== null) {
         links.push({
-          text: match[1].trim(),
+          text: match[1].trim().replace(/^["']|["']$/g, ''),
           target: match[2].trim(),
           line: lineNum,
           index: linkIndex++
@@ -349,10 +349,11 @@ export class AmigaGuideParser {
     line = line.replace(/@\{i\}/gi, '\x1b[3m');
     line = line.replace(/@\{ui\}/gi, '\x1b[23m');
 
-    // Links: @{text link target} -> [n] text
+    // Links: @{"text" link target} -> [n] text  (strip surrounding quotes)
     let linkNum = 1;
-    line = line.replace(/@\{([^}]+)\s+link\s+([^}\s]+)(?:\s+\d+)?\}/gi, (match, text, target) => {
-      return `\x1b[36m[${linkNum++}]\x1b[0m \x1b[33m${text}\x1b[0m`;
+    line = line.replace(/@\{([^}]+)\s+link\s+([^}\s]+)(?:\s+\d+)?\}/gi, (match, text) => {
+      const clean = text.trim().replace(/^["']|["']$/g, '');
+      return `\x1b[36m[${linkNum++}]\x1b[0m \x1b[33m${clean}\x1b[0m`;
     });
 
     // Simple links: @{target}

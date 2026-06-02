@@ -70,7 +70,7 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
       links.forEach((l: any, i: number) => {
         const num = i + 1;
         const isSelected = selectedLink === num;
-        const linkText = l.text.replace(/[{}]/g, '');
+        const linkText = l.text.replace(/^["']|["']$/g, '').replace(/[{}]/g, '').trim();
         if (isSelected) {
           content += `\x1b[30;43m [${num}] ${linkText} \x1b[0m\n`;
         } else {
