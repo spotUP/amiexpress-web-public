@@ -206,9 +206,10 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   // True while the filter input box has focus
   let filterInputFocused = false;
-  // Use blessed's own focus state as the authoritative check — the flag can
-  // lag on rapid paste events, but .focused is always current.
   function isFilterActive(): boolean { return filterInputFocused; }
+  // Block ESC from switching modes for one tick after a viewer closes,
+  // so the viewer's popOverlay doesn't race with the DOORMAN ESC handler.
+  let blockEscModeSwitch = false;
 
   // --- screen ----------------------------------------------------------------
 
@@ -475,7 +476,12 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   function showDocViewer(title: string, content: string, onDone: () => void): void {
     pushOverlay();
-    const done = () => { popOverlay(); onDone(); };
+    const done = () => {
+      popOverlay();
+      blockEscModeSwitch = true;
+      setTimeout(() => { blockEscModeSwitch = false; }, 50);
+      onDone();
+    };
     const isGuide = content.match(/^@database\b/im) || content.match(/^@node\b/im);
     if (isGuide) {
       showAmigaGuideViewer(screen, content, title, done);
@@ -843,7 +849,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       screen.render();
       return;
     }
-    if (overlayDepth > 0) return; // let overlay handle ESC via its own key binding
+    if (overlayDepth > 0 || blockEscModeSwitch) return;
     if (mode === 'repo') {
       mode = 'installed';
       filterInputFocused = false;
