@@ -639,6 +639,11 @@ async function createApp(session) {
         }, onDone);
     }
     // --- key handlers ----------------------------------------------------------
+    // Consume action keys on the List widget to prevent type-ahead search from
+    // also processing them and jumping the selection.
+    const ACTION_KEYS = ['s', 'S', 'i', 'I', 'd', 'D', 'e', 'E', 'u', 'U', 't', 'T',
+        'r', 'R', 'f', 'F', 'a', 'A', 'n', 'N', 'q', 'Q', '/', ' '];
+    doorList.key(ACTION_KEYS, () => { });
     screen.key(['tab'], () => {
         const idx = doorList.selected ?? 0;
         if (mode === 'installed') {

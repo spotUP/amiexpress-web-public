@@ -659,6 +659,12 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   // --- key handlers ----------------------------------------------------------
 
+  // Consume action keys on the List widget to prevent type-ahead search from
+  // also processing them and jumping the selection.
+  const ACTION_KEYS = ['s', 'S', 'i', 'I', 'd', 'D', 'e', 'E', 'u', 'U', 't', 'T',
+                       'r', 'R', 'f', 'F', 'a', 'A', 'n', 'N', 'q', 'Q', '/', ' '];
+  (doorList as any).key(ACTION_KEYS, () => { /* consumed — screen.key handles it */ });
+
   (screen as any).key(['tab'], () => {
     const idx = (doorList as any).selected ?? 0;
     if (mode === 'installed') {
