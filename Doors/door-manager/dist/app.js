@@ -521,11 +521,28 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout.doorList.on('focus', this._onListFocus = () => {
             this.layout.filterBox.setValue(this.filter);
         });
+        // Tab debounce: prevents the focus-filter action from immediately firing
+        // a second Tab event when the Textbox also emits keypress for the same key.
+        let tabAt = 0;
+        const tabDebounce = () => {
+            const now = Date.now();
+            if (now - tabAt < 120)
+                return; // same physical keypress
+            tabAt = now;
+            if (this.layout.filterBox.focused) {
+                this.layout.focusList();
+            }
+            else {
+                this.layout.focusFilter();
+            }
+            this.layout.render();
+        };
+        this.keys.key(['tab'], tabDebounce);
         // Filter input live update + navigation keys
         this.layout.filterBox.on('keypress', this._onFilterKey = (_ch, key) => {
-            // Handle navigation immediately (before setTimeout) to avoid focus races
             const kn = key?.name ?? '';
-            if (kn === 'tab' || kn === 'down' || kn === 'enter' || kn === 'return') {
+            // Tab is already handled by screen.key (tabDebounce) — don't double-handle
+            if (kn === 'down' || kn === 'enter' || kn === 'return') {
                 this.layout.focusList();
                 this.layout.render();
                 return;
@@ -547,13 +564,6 @@ class RepoView extends ViewManager_1.BaseView {
                     this.layout.render();
                 }
             }, 0);
-        });
-        // Tab on the LIST widget (only fires when list is focused) → focus filter
-        // Using doorList.key() instead of screen.key() prevents the double-fire that
-        // caused the filter to flash and immediately defocus.
-        this.layout.doorList.key(['tab'], this._onListTab = () => {
-            this.layout.focusFilter();
-            this.layout.render();
         });
         this.keys.key(['f', 'F', '/'], () => { this.layout.focusFilter(); this.layout.render(); });
         this.keys.key(['r', 'R'], () => this.doInstallUninstall());
