@@ -976,8 +976,14 @@ async function createApp(session) {
         bbs.write('\r\n\x1b[31mAccess Denied: SysOp only\x1b[0m\r\n');
         return;
     }
-    // Hide cursor and clear screen while loading doors
-    bbs.write('\x1b[?25l\x1b[2J\x1b[H');
+    // Hide cursor and clear screen immediately — emit directly on socket to
+    // bypass any bbs.write() buffering that would delay the clear.
+    try {
+        session.socket.emit('ansi-output', '\x1b[?25l\x1b[2J\x1b[H');
+    }
+    catch {
+        bbs.write('\x1b[?25l\x1b[2J\x1b[H');
+    }
     let doors = await fetchDoors(bbs);
     if (doors.length === 0) {
         bbs.write('\x1b[?25h\r\n\x1b[36mNo doors installed.\x1b[0m\r\n');
@@ -991,7 +997,12 @@ async function createApp(session) {
     const layout = new DoormanLayout(screen, nodeId);
     const vm = new ViewManager_1.ViewManager(screen);
     screen.on('resize', () => { screen.render(); });
-    screen.on('destroy', () => { inputManager.disable(); bbs.write('\x1b[?25h'); });
+    screen.on('destroy', () => { inputManager.disable(); try {
+        session.socket.emit('ansi-output', '\x1b[?25h');
+    }
+    catch {
+        bbs.write('\x1b[?25h');
+    } });
     vm.push(new InstalledView(layout, bbs, doors));
     await new Promise(resolve => { screen.on('destroy', resolve); });
 }
