@@ -619,6 +619,14 @@ async function indexArchives(
     for (const row of rows) upsert.run(row);
   });
 
+  const upsertFile = db.prepare(
+    'INSERT OR REPLACE INTO door_catalog_files (catalog_id, path, size, is_junk, junk_reason) VALUES (?, ?, ?, ?, ?)'
+  );
+  const insertFiles = db.transaction((catalogId: string, files: Array<{ path: string; size: number; is_junk: number; junk_reason: string | null }>) => {
+    db.prepare('DELETE FROM door_catalog_files WHERE catalog_id = ?').run(catalogId);
+    for (const f of files) upsertFile.run(catalogId, f.path, f.size, f.is_junk, f.junk_reason);
+  });
+
   let processed = 0;
   const batchSize = 50;
   let batch: any[] = [];
@@ -668,16 +676,18 @@ async function indexArchives(
       }
     }
 
-    // Count junk files — name-pattern check only (no extraction for speed)
+    // Count junk files and build file list for door_catalog_files
     let junkCount = 0;
-    for (const line of listLines) {
-      const parts = line.split(/\s+/);
-      const fname = parts[parts.length - 1];
-      if (!fname || fname.endsWith('/')) continue;
-      const base = path.basename(fname).toLowerCase();
+    const fileRows: Array<{ path: string; size: number; is_junk: number; junk_reason: string | null }> = [];
+    for (const entry of entries) {
+      if (entry.name.endsWith('/')) continue;
+      const base = path.basename(entry.name).toLowerCase();
+      let isJunk = 0;
+      let junkReason: string | null = null;
       for (const pat of filenamePatterns) {
-        if (matchesPattern(base, pat)) { junkCount++; break; }
+        if (matchesPattern(base, pat)) { isJunk = 1; junkReason = 'pattern'; junkCount++; break; }
       }
+      fileRows.push({ path: entry.name, size: entry.size, is_junk: isJunk, junk_reason: junkReason });
     }
 
     // Corpus lookup
@@ -732,6 +742,9 @@ async function indexArchives(
       corpus_id: corpusEntry?.id ?? null,
       source: 'scan',
     });
+
+    // Store file listing immediately (outside batch, each archive individually)
+    insertFiles(baseId, fileRows);
 
     processed++;
 

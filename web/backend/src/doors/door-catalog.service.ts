@@ -190,3 +190,50 @@ export function upsertCatalogEntry(entry: Omit<CatalogEntry, never>): void {
     db.close();
   }
 }
+
+export interface ArchiveFile {
+  catalog_id: string;
+  path: string;
+  size: number;
+  is_junk: number;
+  junk_reason: string | null;
+}
+
+export function getArchiveFiles(catalogId: string): ArchiveFile[] {
+  const db = openDb();
+  try {
+    return db.prepare('SELECT * FROM door_catalog_files WHERE catalog_id = ? ORDER BY path ASC')
+      .all(catalogId) as ArchiveFile[];
+  } finally {
+    db.close();
+  }
+}
+
+export function upsertArchiveFiles(catalogId: string, files: Array<{ path: string; size: number; is_junk: number; junk_reason: string | null }>): void {
+  const db = openDb();
+  try {
+    const stmt = db.prepare(
+      'INSERT OR REPLACE INTO door_catalog_files (catalog_id, path, size, is_junk, junk_reason) VALUES (?, ?, ?, ?, ?)'
+    );
+    const insertAll = db.transaction(() => {
+      for (const f of files) stmt.run(catalogId, f.path, f.size, f.is_junk, f.junk_reason);
+    });
+    insertAll();
+  } finally {
+    db.close();
+  }
+}
+
+export function removeArchiveFiles(catalogId: string, paths: string[]): void {
+  if (paths.length === 0) return;
+  const db = openDb();
+  try {
+    const stmt = db.prepare('DELETE FROM door_catalog_files WHERE catalog_id = ? AND path = ?');
+    const deleteAll = db.transaction(() => {
+      for (const p of paths) stmt.run(catalogId, p);
+    });
+    deleteAll();
+  } finally {
+    db.close();
+  }
+}

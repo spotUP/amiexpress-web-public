@@ -738,7 +738,10 @@ export async function createApp(session: DoorSession): Promise<void> {
             lib.stripFilesFromDirectory(installDirAbs, toStrip.map((f: any) => f.path));
           }
           const svc = getCatalogSvc();
-          if (svc) { try { svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length); } catch { /* ignore */ } }
+          if (svc) {
+            try { svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length); } catch { /* ignore */ }
+            try { svc.removeArchiveFiles(entry.id, toStrip.map((f: any) => f.path as string)); } catch { /* ignore */ }
+          }
           setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
         } catch (err) {
           setStatus(`Strip failed: ${(err as Error).message}`, 'red');

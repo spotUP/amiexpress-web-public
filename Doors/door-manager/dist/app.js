@@ -719,6 +719,10 @@ async function createApp(session) {
                         svc.updateJunkCount(entry.id, result.stripped.length - toStrip.length);
                     }
                     catch { /* ignore */ }
+                    try {
+                        svc.removeArchiveFiles(entry.id, toStrip.map((f) => f.path));
+                    }
+                    catch { /* ignore */ }
                 }
                 setStatus(`Stripped ${toStrip.length} ad file(s)`, 'green', 4000);
             }
