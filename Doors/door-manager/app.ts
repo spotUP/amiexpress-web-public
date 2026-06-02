@@ -344,7 +344,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       const entry = selectedCatalogEntry();
       const inst = entry?.installed ? 'Uninst' : 'Inst';
       (footer as any).setContent(
-        `{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}D{/yellow-fg}oc {yellow-fg}/{/yellow-fg}Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`
+        `{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}/{/yellow-fg}Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`
       );
     }
   }
@@ -801,20 +801,30 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['v', 'V'], () => {
-    if (mode !== 'installed') return;
-    const door = selectedDoor();
-    if (!door || !(door as any).command) return;
-    const svc = getCatalogSvc();
-    if (!svc) { setStatus('Catalog not available', 'yellow'); return; }
-    try {
-      const entry = svc.getCatalogEntryByCmd((door as any).command);
-      if (entry?.doc_raw) {
+    if (mode === 'repo') {
+      const entry = selectedCatalogEntry();
+      if (!entry) return;
+      if (entry.doc_raw) {
         showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw,
           () => { (doorList as any).focus(); });
       } else {
-        setStatus('No documentation in catalog for this door', 'yellow');
+        setStatus('No documentation available', 'yellow');
       }
-    } catch { setStatus('Catalog lookup failed', 'red'); }
+    } else {
+      const door = selectedDoor();
+      if (!door || !(door as any).command) return;
+      const svc = getCatalogSvc();
+      if (!svc) { setStatus('Catalog not available', 'yellow'); return; }
+      try {
+        const entry = svc.getCatalogEntryByCmd((door as any).command);
+        if (entry?.doc_raw) {
+          showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw,
+            () => { (doorList as any).focus(); });
+        } else {
+          setStatus('No documentation in catalog for this door', 'yellow');
+        }
+      } catch { setStatus('Catalog lookup failed', 'red'); }
+    }
   });
 
   (screen as any).key(['u', 'U'], async () => {
@@ -875,17 +885,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['d', 'D'], () => {
-    if (mode === 'repo') {
-      const entry = selectedCatalogEntry();
-      if (!entry) return;
-      if (entry.doc_raw) {
-        showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw,
-          () => { (doorList as any).focus(); });
-      } else {
-        setStatus('No documentation available', 'yellow');
-      }
-      return;
-    }
+    if (mode !== 'installed') return;
     // installed mode: delete
     const door = selectedDoor();
     if (!door) return;
