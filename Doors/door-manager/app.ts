@@ -806,6 +806,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
 
   (screen as any).key(['tab'], () => {
+    if (overlayDepth > 0) return; // let overlay handle Tab (field navigation)
     if (isFilterActive()) {
       // Tab from filter → move to list
       filterInputFocused = false;

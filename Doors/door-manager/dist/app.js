@@ -790,6 +790,8 @@ async function createApp(session) {
         }, 0);
     });
     screen.key(['tab'], () => {
+        if (overlayDepth > 0)
+            return; // let overlay handle Tab (field navigation)
         if (isFilterActive()) {
             // Tab from filter → move to list
             filterInputFocused = false;
