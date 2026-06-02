@@ -191,7 +191,7 @@ async function createApp(session) {
     let filterInputFocused = false;
     // Use blessed's own focus state as the authoritative check — the flag can
     // lag on rapid paste events, but .focused is always current.
-    function isFilterActive() { return filterInputFocused || !!filterBox?.focused; }
+    function isFilterActive() { return filterInputFocused; }
     // --- screen ----------------------------------------------------------------
     const screen = new blessed_1.Screen({
         smartCSR: true,
@@ -433,6 +433,7 @@ async function createApp(session) {
     doorList.focus();
     screen.on('resize', () => { applyResponsive(); screen.render(); });
     doorList.on('select item', () => { updateInfoPane(); updateFooter(); });
+    doorList.on('focus', () => { filterInputFocused = false; });
     // --- catalog operations ----------------------------------------------------
     function stripAmigaGuide(text) {
         return text

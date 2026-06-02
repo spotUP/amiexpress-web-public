@@ -208,7 +208,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   let filterInputFocused = false;
   // Use blessed's own focus state as the authoritative check — the flag can
   // lag on rapid paste events, but .focused is always current.
-  function isFilterActive(): boolean { return filterInputFocused || !!(filterBox as any)?.focused; }
+  function isFilterActive(): boolean { return filterInputFocused; }
 
   // --- screen ----------------------------------------------------------------
 
@@ -459,6 +459,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   screen.on('resize', () => { applyResponsive(); screen.render(); });
   (doorList as any).on('select item', () => { updateInfoPane(); updateFooter(); });
+  (doorList as any).on('focus', () => { filterInputFocused = false; });
 
   // --- catalog operations ----------------------------------------------------
 
