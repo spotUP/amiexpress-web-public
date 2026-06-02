@@ -386,21 +386,35 @@ async function createApp(session) {
     screen.on('resize', () => { applyResponsive(); screen.render(); });
     doorList.on('select item', () => { updateInfoPane(); updateFooter(); });
     // --- catalog operations ----------------------------------------------------
-    function showDocViewer(entry) {
-        if (!entry.doc_raw) {
-            setStatus('No documentation available', 'yellow');
-            return;
-        }
+    function showDocViewer(title, content, onDone) {
         pushOverlay();
-        new InfoEditorOverlay_1.InfoEditorOverlay({
-            screen,
-            command: '__doc__',
-            bbs,
-            docContent: entry.doc_raw,
-            docTitle: entry.doc_filename ?? 'Documentation',
-            onClose: () => { popOverlay(); doorList.focus(); screen.render(); },
+        const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+        const panel = new Panel({
+            parent: screen, top: 0, left: 0, width: '100%', height: '100%-3',
+            label: ` ${title} `, tags: true,
+            style: { border: { fg: 'cyan' } },
         });
+        const box = new ScrollableBox({
+            parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
+            tags: false, scrollable: true, keys: true, alwaysScroll: true,
+            style: { fg: 'white' },
+            content: content.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, ''),
+        });
+        const hint = new Panel({
+            parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
+            tags: true, content: '{center}[ESC/Q] Close  [↑/↓] Scroll{/center}',
+            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+        });
+        box.focus();
         screen.render();
+        function closeDoc() {
+            popOverlay();
+            panel.destroy();
+            hint.destroy();
+            onDone();
+            screen.render();
+        }
+        screen.key(['escape', 'q', 'Q'], closeDoc);
     }
     function installFromCatalog(entry) {
         if (!entry.archive_path || !fs.existsSync(entry.archive_path)) {
@@ -688,10 +702,8 @@ async function createApp(session) {
                 _stripCancel();
             return;
         }
-        if (overlayDepth > 0) {
-            popOverlay();
-            return;
-        } // close overlay, correct depth
+        if (overlayDepth > 0)
+            return; // let overlay handle ESC via its own key binding
         if (mode === 'repo') {
             mode = 'installed';
             populateInstalledList(0);
@@ -858,9 +870,32 @@ async function createApp(session) {
     screen.key(['d', 'D'], () => {
         if (mode === 'repo') {
             const entry = selectedCatalogEntry();
-            if (entry)
-                showDocViewer(entry);
+            if (!entry)
+                return;
+            if (entry.doc_raw) {
+                showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
+            }
+            else {
+                setStatus('No documentation available', 'yellow');
+            }
             return;
+        }
+        // installed mode: try catalog doc first, then fall through to delete
+        if (mode === 'installed') {
+            const door = selectedDoor();
+            if (door && door.command) {
+                const svc = getCatalogSvc();
+                if (svc) {
+                    try {
+                        const entry = svc.getCatalogEntryByCmd(door.command);
+                        if (entry?.doc_raw) {
+                            showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
+                            return;
+                        }
+                    }
+                    catch { /* ignore */ }
+                }
+            }
         }
         // installed mode: delete
         const door = selectedDoor();
