@@ -42,6 +42,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
 const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
+const AmigaGuideViewer_1 = require("./AmigaGuideViewer");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const child_process_1 = require("child_process");
@@ -441,47 +442,53 @@ async function createApp(session) {
     }
     function showDocViewer(title, content, onDone) {
         pushOverlay();
-        const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
-        const panel = new Panel({
-            parent: screen, top: 0, left: 0, width: '100%', height: '100%-3',
-            label: ` ${title} `, tags: true,
-            style: { border: { fg: 'cyan' } },
-        });
-        const box = new ScrollableBox({
-            parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
-            tags: false, scrollable: true, alwaysScroll: true,
-            style: { fg: 'white' },
-            content: stripAmigaGuide(content),
-        });
-        const hint = new Panel({
-            parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-            tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
-            style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-        });
-        screen.render();
-        function closeDoc() {
-            screen.unkey(['escape', 'q', 'Q'], closeDoc);
-            screen.unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
-            popOverlay();
-            panel.destroy();
-            hint.destroy();
-            onDone();
-            screen.render();
+        const done = () => { popOverlay(); onDone(); };
+        const isGuide = content.match(/^@database\b/im) || content.match(/^@node\b/im);
+        if (isGuide) {
+            (0, AmigaGuideViewer_1.showAmigaGuideViewer)(screen, content, title, done);
         }
-        function scrollKey(_, key) {
-            const name = key?.name ?? '';
-            if (name === 'up')
-                box.scroll(-1);
-            else if (name === 'down')
-                box.scroll(1);
-            else if (name === 'pageup')
-                box.scroll(-20);
-            else if (name === 'pagedown')
-                box.scroll(20);
+        else {
+            // Plain text viewer
+            const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+            const plain = stripAmigaGuide(content);
+            const panel = new Panel({
+                parent: screen, top: 0, left: 0, width: '100%', height: '100%-3',
+                label: ` ${title} `, tags: true, style: { border: { fg: 'cyan' } },
+            });
+            const box = new ScrollableBox({
+                parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
+                tags: false, scrollable: true, alwaysScroll: true,
+                style: { fg: 'white' }, content: plain,
+            });
+            const hint = new Panel({
+                parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
+                tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
+                style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+            });
             screen.render();
+            function closeDoc() {
+                screen.unkey(['escape', 'q', 'Q'], closeDoc);
+                screen.unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
+                panel.destroy();
+                hint.destroy();
+                done();
+                screen.render();
+            }
+            function scrollKey(_, key) {
+                const n = key?.name ?? '';
+                if (n === 'up')
+                    box.scroll(-1);
+                else if (n === 'down')
+                    box.scroll(1);
+                else if (n === 'pageup')
+                    box.scroll(-20);
+                else if (n === 'pagedown')
+                    box.scroll(20);
+                screen.render();
+            }
+            screen.key(['escape', 'q', 'Q'], closeDoc);
+            screen.key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
         }
-        screen.key(['escape', 'q', 'Q'], closeDoc);
-        screen.key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
     }
     function installFromCatalog(entry) {
         if (!entry.archive_path || !fs.existsSync(entry.archive_path)) {

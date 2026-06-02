@@ -14,6 +14,7 @@ import {
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { FileExplorerOverlay } from './FileExplorerOverlay';
 import { InfoEditorOverlay } from './InfoEditorOverlay';
+import { showAmigaGuideViewer } from './AmigaGuideViewer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawnSync } from 'child_process';
@@ -470,44 +471,43 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   function showDocViewer(title: string, content: string, onDone: () => void): void {
     pushOverlay();
-    const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
-    const panel = new Panel({
-      parent: screen, top: 0, left: 0, width: '100%', height: '100%-3',
-      label: ` ${title} `, tags: true,
-      style: { border: { fg: 'cyan' } },
-    } as any);
-    const box = new ScrollableBox({
-      parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
-      tags: false, scrollable: true, alwaysScroll: true,
-      style: { fg: 'white' },
-      content: stripAmigaGuide(content),
-    } as any);
-    const hint = new Panel({
-      parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-      tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-    } as any);
-    screen.render();
-
-    function closeDoc() {
-      (screen as any).unkey(['escape', 'q', 'Q'], closeDoc);
-      (screen as any).unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
-      popOverlay();
-      (panel as any).destroy();
-      (hint as any).destroy();
-      onDone();
+    const done = () => { popOverlay(); onDone(); };
+    const isGuide = content.match(/^@database\b/im) || content.match(/^@node\b/im);
+    if (isGuide) {
+      showAmigaGuideViewer(screen, content, title, done);
+    } else {
+      // Plain text viewer
+      const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+      const plain = stripAmigaGuide(content);
+      const panel = new Panel({
+        parent: screen, top: 0, left: 0, width: '100%', height: '100%-3',
+        label: ` ${title} `, tags: true, style: { border: { fg: 'cyan' } },
+      } as any);
+      const box = new ScrollableBox({
+        parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
+        tags: false, scrollable: true, alwaysScroll: true,
+        style: { fg: 'white' }, content: plain,
+      } as any);
+      const hint = new Panel({
+        parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
+        tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
+        style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
+      } as any);
       screen.render();
+      function closeDoc() {
+        (screen as any).unkey(['escape', 'q', 'Q'], closeDoc);
+        (screen as any).unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
+        (panel as any).destroy(); (hint as any).destroy(); done(); screen.render();
+      }
+      function scrollKey(_: any, key: any) {
+        const n = key?.name ?? '';
+        if (n === 'up') (box as any).scroll(-1); else if (n === 'down') (box as any).scroll(1);
+        else if (n === 'pageup') (box as any).scroll(-20); else if (n === 'pagedown') (box as any).scroll(20);
+        screen.render();
+      }
+      (screen as any).key(['escape', 'q', 'Q'], closeDoc);
+      (screen as any).key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
     }
-    function scrollKey(_: any, key: any) {
-      const name = key?.name ?? '';
-      if (name === 'up') (box as any).scroll(-1);
-      else if (name === 'down') (box as any).scroll(1);
-      else if (name === 'pageup') (box as any).scroll(-20);
-      else if (name === 'pagedown') (box as any).scroll(20);
-      screen.render();
-    }
-    (screen as any).key(['escape', 'q', 'Q'], closeDoc);
-    (screen as any).key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
   }
 
   function installFromCatalog(entry: CatalogEntry): void {
