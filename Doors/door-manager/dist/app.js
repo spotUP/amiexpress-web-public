@@ -447,10 +447,31 @@ class RepoView extends ViewManager_1.BaseView {
             this.layout.setInfo('No entry selected.');
             return;
         }
+        // Try to get per-file listing from door_catalog_files
+        const svc = getCatalogSvc();
+        let fileLines = '';
+        try {
+            const files = svc?.getArchiveFiles?.(e.id) ?? [];
+            if (files.length > 0) {
+                const junk = files.filter((f) => f.is_junk).length;
+                const junkTag = junk > 0 ? `  {red-fg}${junk} ad files{/red-fg}` : '  {green-fg}clean{/green-fg}';
+                fileLines = `\n\n{grey-fg}─── ${files.length} files${junkTag}{/grey-fg}  {grey-fg}──────────────────────{/grey-fg}\n`;
+                for (const f of files.slice(0, 25)) {
+                    const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
+                    const junkMark = f.is_junk ? '{red-fg}!{/red-fg}' : ' ';
+                    const name = f.path.length > 34
+                        ? '<' + f.path.slice(f.path.length - 33)
+                        : f.path;
+                    fileLines += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
+                }
+                if (files.length > 25)
+                    fileLines += `{grey-fg}  ... and ${files.length - 25} more{/grey-fg}\n`;
+            }
+        }
+        catch { /* ignore */ }
         let content = `{yellow-fg}${e.archive_name}{/yellow-fg}  ${e.door_type ?? 'XIM'}` +
             (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
-            (e.installed ? `  {green-fg}[${e.installed_as}]{/green-fg}` : '') +
-            (e.junk_count > 0 ? `  {red-fg}${e.junk_count} ad files{/red-fg}` : '');
+            (e.installed ? `  {green-fg}[${e.installed_as}]{/green-fg}` : '');
         if (e.file_id_diz) {
             content += '\n\n' + e.file_id_diz.split('\n')
                 .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`)).join('\n');
@@ -458,13 +479,25 @@ class RepoView extends ViewManager_1.BaseView {
         else if (e.description) {
             content += `\n\n{white-fg}${e.description.replace(/[{}]/g, c => `\\${c}`)}{/white-fg}`;
         }
+        content += fileLines;
         this.layout.setInfo(content);
+    }
+    getEntryJunkCount(e) {
+        // Prefer live file-level count over catalog's potentially stale junk_count
+        try {
+            const svc = getCatalogSvc();
+            const files = svc?.getArchiveFiles?.(e.id) ?? [];
+            if (files.length > 0)
+                return files.filter((f) => f.is_junk).length;
+        }
+        catch { }
+        return e.junk_count;
     }
     updateFooter() {
         const e = this.entry();
         const inst = e?.installed ? 'Uninst' : 'Inst';
         const hasDoc = !!e?.doc_raw;
-        const hasJunk = (e?.junk_count ?? 0) > 0;
+        const hasJunk = e ? this.getEntryJunkCount(e) > 0 : false;
         const parts = [
             `{yellow-fg}R{/yellow-fg}=${inst}`,
             hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,

@@ -49,13 +49,25 @@ const door = new bbs_door_sdk_1.CoreDoor({
 });
 door.onStart(async (ctx) => {
     const { output, input } = ctx;
-    // Resolve stripper lib relative to this file at runtime
-    let stripperLib;
-    try {
-        stripperLib = require('../../web/backend/src/doors/ami-stripper.lib');
+    // Load from require cache (BBS server has already imported it via BBSApi)
+    // Fall back to path probing for local dev.
+    function getLib() {
+        for (const k of Object.keys(require.cache))
+            if (k.includes('ami-stripper.lib'))
+                return require.cache[k]?.exports ?? null;
+        // Path probe: __dirname = Doors/ami-stripper/dist/ → up 3 levels = project root
+        for (const rel of ['../../../web/backend/src/doors/ami-stripper.lib',
+            '../../../../web/backend/src/doors/ami-stripper.lib']) {
+            try {
+                return require(path.resolve(__dirname, rel));
+            }
+            catch { /* next */ }
+        }
+        return null;
     }
-    catch {
-        await output.write('\r\n\x1b[31mStripper library not found. Run catalog:build first.\x1b[0m\r\n');
+    const stripperLib = getLib();
+    if (!stripperLib) {
+        await output.write('\r\n\x1b[31mStripper library not available.\x1b[0m\r\n');
         return;
     }
     function formatSize(bytes) {
@@ -63,10 +75,16 @@ door.onStart(async (ctx) => {
     }
     function patternCount() {
         try {
-            const pf = path.join(__dirname, '..', '..', 'dev', 'scripts', 'door-corpus', 'scene-strip-patterns.json');
-            if (fs.existsSync(pf)) {
-                const db = JSON.parse(fs.readFileSync(pf, 'utf-8'));
-                return String((db.filenamePatterns?.length ?? 0) + (db.dizPatterns?.length ?? 0));
+            // Pattern files live in web/backend/seeds/ (same logic as ami-stripper.lib)
+            const candidates = [
+                path.resolve(__dirname, '../../../web/backend/seeds/scene-strip-patterns.json'),
+                path.resolve(__dirname, '../../../../web/backend/seeds/scene-strip-patterns.json'),
+            ];
+            for (const pf of candidates) {
+                if (fs.existsSync(pf)) {
+                    const db = JSON.parse(fs.readFileSync(pf, 'utf-8'));
+                    return String((db.filenamePatterns?.length ?? 0) + (db.dizPatterns?.length ?? 0));
+                }
             }
         }
         catch { /* ignore */ }
@@ -110,34 +128,44 @@ door.onStart(async (ctx) => {
             const reason = result.reason[entry.path] ?? '';
             await output.write(`  \x1b[31m${entry.path.substring(0, 38).padEnd(38)}\x1b[0m ${formatSize(entry.size).padStart(7)}  \x1b[90m[${reason}]\x1b[0m\r\n`);
         }
-        if (result.stripped.length > 20) {
+        if (result.stripped.length > 20)
             await output.write(`  \x1b[90m... and ${result.stripped.length - 20} more\x1b[0m\r\n`);
-        }
         await output.write(`\r\n\x1b[32mFILES KEPT (${result.kept.length}):\x1b[0m\r\n`);
-        for (const entry of result.kept.slice(0, 10)) {
+        for (const entry of result.kept.slice(0, 10))
             await output.write(`  ${entry.path.substring(0, 40).padEnd(40)} ${formatSize(entry.size).padStart(7)}\r\n`);
-        }
-        if (result.kept.length > 10) {
+        if (result.kept.length > 10)
             await output.write(`  \x1b[90m... and ${result.kept.length - 10} more\x1b[0m\r\n`);
-        }
         await output.write('\r\n\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
-        await output.write('\x1b[33mS\x1b[0m Strip and repack  \x1b[33mA\x1b[0m Abort\r\n');
+        await output.write('\x1b[33mS\x1b[0m Strip in-place  \x1b[33mA\x1b[0m Abort\r\n');
         const choice = await input.getChar();
         if (choice.toLowerCase() !== 's') {
             await output.write('\r\n\x1b[33mAborted.\x1b[0m\r\n\r\n');
             continue;
         }
-        const outPath = archivePath.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
-        await output.write(`\r\n\x1b[36mStripping and repacking -> ${path.basename(outPath)}...\x1b[0m\r\n`);
+        const tmpOut = archivePath + '.strip_tmp';
+        await output.write(`\r\n\x1b[36mStripping and repacking...\x1b[0m\r\n`);
         try {
-            await stripperLib.stripArchive(archivePath, outPath);
-            const origSize = fs.statSync(archivePath).size;
-            const newSize = fs.statSync(outPath).size;
-            const saved = origSize - newSize;
-            await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(origSize)} -> ${formatSize(newSize)} (saved ${formatSize(saved)})\r\n`);
-            await output.write(`\x1b[32mWritten: ${outPath}\x1b[0m\r\n\r\n`);
+            await stripperLib.stripArchive(archivePath, tmpOut);
+            if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
+                const origSize = fs.statSync(archivePath).size;
+                fs.renameSync(tmpOut, archivePath);
+                const newSize = fs.statSync(archivePath).size;
+                const saved = origSize - newSize;
+                await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(origSize)} -> ${formatSize(newSize)} (saved ${formatSize(saved)})\r\n`);
+                await output.write(`\x1b[32mArchive updated in-place.\x1b[0m\r\n\r\n`);
+            }
+            else {
+                if (fs.existsSync(tmpOut))
+                    fs.rmSync(tmpOut, { recursive: true, force: true });
+                await output.write(`\x1b[31mRepack produced unexpected output.\x1b[0m\r\n\r\n`);
+            }
         }
         catch (err) {
+            if (fs.existsSync(tmpOut))
+                try {
+                    fs.unlinkSync(tmpOut);
+                }
+                catch { }
             await output.write(`\x1b[31mRepack failed: ${err.message}\x1b[0m\r\n\r\n`);
         }
         await output.write('\x1b[90mPress ENTER to continue...\x1b[0m');
