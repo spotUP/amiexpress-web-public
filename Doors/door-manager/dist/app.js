@@ -534,11 +534,11 @@ async function createApp(session) {
             return; checked.fill(true); renderFiles(); };
         const noneKey = () => { if (!stripOverlayActive)
             return; checked.fill(false); renderFiles(); };
-        screen.key([' '], spaceKey);
+        screen.key([' ', 'space', '\r', '\n'], spaceKey);
         screen.key(['a', 'A'], allKey);
         screen.key(['n', 'N'], noneKey);
         doorList.once('destroy', () => {
-            screen.unkey([' '], spaceKey);
+            screen.unkey([' ', 'space', '\r', '\n'], spaceKey);
             screen.unkey(['a', 'A'], allKey);
             screen.unkey(['n', 'N'], noneKey);
         });
@@ -645,7 +645,7 @@ async function createApp(session) {
     if (_origKeypress) {
         doorList._onKeypress = function (ch, key) {
             // Skip the type-ahead block for printable chars; let screen.key handle them
-            if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/]/.test(ch)) {
+            if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
                 return false;
             }
             return _origKeypress(ch, key);

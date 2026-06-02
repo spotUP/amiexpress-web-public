@@ -563,11 +563,11 @@ export async function createApp(session: DoorSession): Promise<void> {
     };
     const allKey = () => { if (!stripOverlayActive) return; checked.fill(true); renderFiles(); };
     const noneKey = () => { if (!stripOverlayActive) return; checked.fill(false); renderFiles(); };
-    (screen as any).key([' '], spaceKey);
+    (screen as any).key([' ', 'space', '\r', '\n'], spaceKey);
     (screen as any).key(['a', 'A'], allKey);
     (screen as any).key(['n', 'N'], noneKey);
     (doorList as any).once('destroy', () => {
-      (screen as any).unkey([' '], spaceKey);
+      (screen as any).unkey([' ', 'space', '\r', '\n'], spaceKey);
       (screen as any).unkey(['a', 'A'], allKey);
       (screen as any).unkey(['n', 'N'], noneKey);
     });
@@ -665,7 +665,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   if (_origKeypress) {
     (doorList as any)._onKeypress = function(ch: string, key: any) {
       // Skip the type-ahead block for printable chars; let screen.key handle them
-      if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/]/.test(ch)) {
+      if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
         return false;
       }
       return _origKeypress(ch, key);
