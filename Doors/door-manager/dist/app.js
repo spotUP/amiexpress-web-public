@@ -648,17 +648,20 @@ async function createApp(session) {
         }, onDone);
     }
     // --- key handlers ----------------------------------------------------------
-    // Disable type-ahead search in the List — all letter/digit keys are action keys
-    // handled by screen.key(). _onKeypress runs before key() listeners, so patch it.
-    const _origKeypress = doorList._onKeypress?.bind(doorList);
-    if (_origKeypress) {
-        doorList._onKeypress = function (ch, key) {
-            // Skip the type-ahead block for printable chars; let screen.key handle them
-            if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
-                return false;
-            }
-            return _origKeypress(ch, key);
-        };
+    // Disable type-ahead search — _onKeypress was already .bind(this) at construction
+    // so patching the instance method has no effect. Remove all keypress listeners
+    // and add our own that skips printable chars (which are action keys on screen.key).
+    {
+        const _nav = doorList._onKeypress?.bind(doorList);
+        doorList.removeAllListeners('keypress');
+        if (_nav) {
+            doorList.on('keypress', (ch, key) => {
+                if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9/ ]/.test(ch)) {
+                    return; // printable: let screen.key handle, skip type-ahead
+                }
+                return _nav(ch, key); // arrows, enter, esc, page up/down etc.
+            });
+        }
     }
     screen.key(['tab'], () => {
         const idx = doorList.selected ?? 0;
