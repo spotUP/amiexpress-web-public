@@ -198,6 +198,11 @@ export async function createApp(session: DoorSession): Promise<void> {
   let _stripConfirm: (() => void) | null = null;
   let _stripCancel: (() => void) | null = null;
 
+  // Generic overlay depth — ESC is blocked when > 0 so modals can handle it
+  let overlayDepth = 0;
+  function pushOverlay() { overlayDepth++; }
+  function popOverlay() { overlayDepth = Math.max(0, overlayDepth - 1); }
+
   // --- screen ----------------------------------------------------------------
 
   const screen = new Screen({
@@ -411,13 +416,14 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   function showDocViewer(entry: CatalogEntry): void {
     if (!entry.doc_raw) { setStatus('No documentation available', 'yellow'); return; }
+    pushOverlay();
     new InfoEditorOverlay({
       screen,
       command: '__doc__',
       bbs,
       docContent: entry.doc_raw,
       docTitle: entry.doc_filename ?? 'Documentation',
-      onClose: () => { (doorList as any).focus(); screen.render(); },
+      onClose: () => { popOverlay(); (doorList as any).focus(); screen.render(); },
     } as any);
     screen.render();
   }
@@ -430,6 +436,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     const suggested = (entry.installed_as ?? entry.binary_name ?? entry.name ?? 'DOOR')
       .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
 
+    pushOverlay();
     const prompt = new Prompt({
       parent: screen,
       top: 'center', left: 'center', width: 50, height: 7,
@@ -438,6 +445,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       overlay: true,
     } as any);
     (prompt as any).showInput(`{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested, (_err: any, cmd: string | undefined) => {
+      popOverlay();
       (prompt as any).destroy();
       const finalCmd = (cmd ?? '').trim().toUpperCase() || suggested;
       const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
@@ -472,6 +480,7 @@ export async function createApp(session: DoorSession): Promise<void> {
   }
 
   function uninstallFromCatalog(entry: CatalogEntry): void {
+    pushOverlay();
     new ConfirmModal({
       parent: screen,
       title: ' Uninstall Door ',
@@ -482,6 +491,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       cancelColor: 'green',
       style: { border: { fg: 'red' } },
       onConfirm: async () => {
+        popOverlay();
         const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
         const infoPath = path.join(bbsCmdDir, `${entry.installed_as}.info`);
         if (fs.existsSync(infoPath)) fs.unlinkSync(infoPath);
@@ -499,7 +509,7 @@ export async function createApp(session: DoorSession): Promise<void> {
         updateFooter();
         (doorList as any).focus();
       },
-      onCancel: () => { (doorList as any).focus(); screen.render(); },
+      onCancel: () => { popOverlay(); (doorList as any).focus(); screen.render(); },
     } as any).display();
   }
 
@@ -690,6 +700,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   (screen as any).key(['escape'], () => {
     if (stripOverlayActive) { if (_stripCancel) _stripCancel(); return; }
+    if (overlayDepth > 0) return; // let modal/overlay handle it
     if (mode === 'repo') {
       mode = 'installed';
       populateInstalledList(0);
@@ -725,10 +736,11 @@ export async function createApp(session: DoorSession): Promise<void> {
       if (assign === 'BBS' || assign === 'WORK') doorPath = subpath;
       else if (assign === 'DOORS') doorPath = `Doors/${subpath}`;
     }
+    pushOverlay();
     new FileExplorerOverlay({
       screen,
       doorPath,
-      onClose: () => { (doorList as any).focus(); screen.render(); },
+      onClose: () => { popOverlay(); (doorList as any).focus(); screen.render(); },
     });
   });
 
@@ -736,11 +748,12 @@ export async function createApp(session: DoorSession): Promise<void> {
     if (mode !== 'installed') return;
     const door = selectedDoor();
     if (!door) return;
+    pushOverlay();
     new InfoEditorOverlay({
       screen,
       command: door.command,
       bbs,
-      onClose: () => { (doorList as any).focus(); screen.render(); },
+      onClose: () => { popOverlay(); (doorList as any).focus(); screen.render(); },
     });
     screen.render();
   });
@@ -833,6 +846,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     // installed mode: delete
     const door = selectedDoor();
     if (!door) return;
+    pushOverlay();
     new ConfirmModal({
       parent: screen,
       title: ' Delete Door ',
@@ -843,6 +857,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       cancelColor: 'green',
       style: { border: { fg: 'red' } },
       onConfirm: async () => {
+        popOverlay();
         const idx = (doorList as any).selected ?? 0;
         const isTS = ['TS', 'typescript', 'SDK'].includes(door.type);
         const identifier = isTS
@@ -866,7 +881,7 @@ export async function createApp(session: DoorSession): Promise<void> {
         }
         (doorList as any).focus();
       },
-      onCancel: () => { (doorList as any).focus(); screen.render(); },
+      onCancel: () => { popOverlay(); (doorList as any).focus(); screen.render(); },
     } as any).display();
   });
 
@@ -882,6 +897,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   (screen as any).key(['/'], () => {
     if (mode !== 'repo') return;
+    pushOverlay();
     const prompt = new Prompt({
       parent: screen,
       top: 'center', left: 'center', width: 50, height: 7,
@@ -890,6 +906,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       overlay: true,
     } as any);
     (prompt as any).showInput('{cyan-fg}Filter (name/author/group), blank to clear:{/cyan-fg}', catalogFilter, (_err: any, val: string | undefined) => {
+      popOverlay();
       (prompt as any).destroy();
       catalogFilter = (val ?? '').trim();
       populateCatalogList(0);
