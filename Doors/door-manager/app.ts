@@ -338,7 +338,7 @@ export async function createApp(session: DoorSession): Promise<void> {
       const door = selectedDoor();
       const en = (!door || door.enabled) ? 'Dis' : 'En';
       (footer as any).setContent(
-        `{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles {yellow-fg}D{/yellow-fg}el {yellow-fg}E{/yellow-fg}=${en} {yellow-fg}S{/yellow-fg}trip {yellow-fg}T{/yellow-fg}ab=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`
+        `{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles {yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} {yellow-fg}S{/yellow-fg}trip {yellow-fg}T{/yellow-fg}ab=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`
       );
     } else {
       const entry = selectedCatalogEntry();
@@ -798,6 +798,23 @@ export async function createApp(session: DoorSession): Promise<void> {
       if (!entry) return;
       await stripAds(entry, () => { (doorList as any).focus(); screen.render(); });
     }
+  });
+
+  (screen as any).key(['v', 'V'], () => {
+    if (mode !== 'installed') return;
+    const door = selectedDoor();
+    if (!door || !(door as any).command) return;
+    const svc = getCatalogSvc();
+    if (!svc) { setStatus('Catalog not available', 'yellow'); return; }
+    try {
+      const entry = svc.getCatalogEntryByCmd((door as any).command);
+      if (entry?.doc_raw) {
+        showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw,
+          () => { (doorList as any).focus(); });
+      } else {
+        setStatus('No documentation in catalog for this door', 'yellow');
+      }
+    } catch { setStatus('Catalog lookup failed', 'red'); }
   });
 
   (screen as any).key(['u', 'U'], async () => {

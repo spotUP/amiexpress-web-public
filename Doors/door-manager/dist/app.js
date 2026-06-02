@@ -301,7 +301,7 @@ async function createApp(session) {
         if (mode === 'installed') {
             const door = selectedDoor();
             const en = (!door || door.enabled) ? 'Dis' : 'En';
-            footer.setContent(`{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles {yellow-fg}D{/yellow-fg}el {yellow-fg}E{/yellow-fg}=${en} {yellow-fg}S{/yellow-fg}trip {yellow-fg}T{/yellow-fg}ab=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
+            footer.setContent(`{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles {yellow-fg}D{/yellow-fg}el {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}E{/yellow-fg}=${en} {yellow-fg}S{/yellow-fg}trip {yellow-fg}T{/yellow-fg}ab=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
         }
         else {
             const entry = selectedCatalogEntry();
@@ -799,6 +799,30 @@ async function createApp(session) {
             if (!entry)
                 return;
             await stripAds(entry, () => { doorList.focus(); screen.render(); });
+        }
+    });
+    screen.key(['v', 'V'], () => {
+        if (mode !== 'installed')
+            return;
+        const door = selectedDoor();
+        if (!door || !door.command)
+            return;
+        const svc = getCatalogSvc();
+        if (!svc) {
+            setStatus('Catalog not available', 'yellow');
+            return;
+        }
+        try {
+            const entry = svc.getCatalogEntryByCmd(door.command);
+            if (entry?.doc_raw) {
+                showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
+            }
+            else {
+                setStatus('No documentation in catalog for this door', 'yellow');
+            }
+        }
+        catch {
+            setStatus('Catalog lookup failed', 'red');
         }
     });
     screen.key(['u', 'U'], async () => {
