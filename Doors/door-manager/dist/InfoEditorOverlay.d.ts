@@ -19,6 +19,7 @@ export declare class InfoEditorOverlay {
     private listWidget;
     private tooltypes;
     private dirty;
+    private closed;
     private infoPath;
     constructor(opts: InfoEditorOptions);
     private buildUI;

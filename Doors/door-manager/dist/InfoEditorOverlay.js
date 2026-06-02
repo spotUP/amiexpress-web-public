@@ -10,6 +10,7 @@ class InfoEditorOverlay {
     constructor(opts) {
         this.tooltypes = [];
         this.dirty = false;
+        this.closed = false;
         this.screen = opts.screen;
         this.command = opts.command.toUpperCase();
         this.bbs = opts.bbs;
@@ -131,21 +132,27 @@ class InfoEditorOverlay {
         this.screen.render();
     }
     async save() {
+        if (this.closed)
+            return;
         const ok = await this.bbs.writeInfoFile(this.infoPath, this.tooltypes);
         if (ok) {
             this.dirty = false;
-            this.updateFooter('Saved', 'green');
-            setTimeout(() => { this.close(); }, 800);
+            this.updateFooter('Saved — closing...', 'green');
+            this.screen.render();
+            setTimeout(() => { this.close(); }, 600);
         }
         else {
             this.updateFooter('Save failed', 'red');
+            this.screen.render();
         }
-        this.screen.render();
     }
     updateFooter(msg, color = 'yellow') {
         this.footer.setContent(`{center}{${color}-fg}${msg}{/${color}-fg}{/center}`);
     }
     close() {
+        if (this.closed)
+            return; // prevent double-close from stale key listeners
+        this.closed = true;
         this.overlay.destroy();
         this.onClose();
     }

@@ -33,6 +33,7 @@ export class InfoEditorOverlay {
   private listWidget: any;
   private tooltypes: Tooltype[] = [];
   private dirty = false;
+  private closed = false;
   private infoPath: string;
 
   constructor(opts: InfoEditorOptions) {
@@ -168,15 +169,17 @@ export class InfoEditorOverlay {
   }
 
   private async save(): Promise<void> {
+    if (this.closed) return;
     const ok = await this.bbs.writeInfoFile(this.infoPath, this.tooltypes);
     if (ok) {
       this.dirty = false;
-      this.updateFooter('Saved', 'green');
-      setTimeout(() => { this.close(); }, 800);
+      this.updateFooter('Saved — closing...', 'green');
+      this.screen.render();
+      setTimeout(() => { this.close(); }, 600);
     } else {
       this.updateFooter('Save failed', 'red');
+      this.screen.render();
     }
-    this.screen.render();
   }
 
   private updateFooter(msg: string, color: 'yellow' | 'green' | 'red' = 'yellow'): void {
@@ -186,6 +189,8 @@ export class InfoEditorOverlay {
   }
 
   private close(): void {
+    if (this.closed) return; // prevent double-close from stale key listeners
+    this.closed = true;
     this.overlay.destroy();
     this.onClose();
   }
