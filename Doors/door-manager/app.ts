@@ -414,6 +414,16 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   // --- catalog operations ----------------------------------------------------
 
+  function stripAmigaGuide(text: string): string {
+    return text
+      .replace(/@\{"[^"]*"\s+link\s+[^}]*\}/gi, (m) => { const t = m.match(/@\{"([^"]*)"/); return t ? t[1] : ''; })
+      .replace(/@\{[^}]*\}/gi, '')
+      .replace(/^@(database|node|endnode|title|toc|next|prev|help|index|remark|rem|master|keywords|wordwrap|smartwrap).*$/gim, '')
+      .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
   function showDocViewer(title: string, content: string, onDone: () => void): void {
     pushOverlay();
     const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
@@ -424,25 +434,36 @@ export async function createApp(session: DoorSession): Promise<void> {
     } as any);
     const box = new ScrollableBox({
       parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
-      tags: false, scrollable: true, keys: true, alwaysScroll: true,
+      tags: false, scrollable: true, alwaysScroll: true,
       style: { fg: 'white' },
-      content: content.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, ''),
+      content: stripAmigaGuide(content),
     } as any);
     const hint = new Panel({
       parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-      tags: true, content: '{center}[ESC/Q] Close  [↑/↓] Scroll{/center}',
+      tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
       style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
     } as any);
-    (box as any).focus();
     screen.render();
+
     function closeDoc() {
+      (screen as any).unkey(['escape', 'q', 'Q'], closeDoc);
+      (screen as any).unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
       popOverlay();
       (panel as any).destroy();
       (hint as any).destroy();
       onDone();
       screen.render();
     }
+    function scrollKey(_: any, key: any) {
+      const name = key?.name ?? '';
+      if (name === 'up') (box as any).scroll(-1);
+      else if (name === 'down') (box as any).scroll(1);
+      else if (name === 'pageup') (box as any).scroll(-20);
+      else if (name === 'pagedown') (box as any).scroll(20);
+      screen.render();
+    }
     (screen as any).key(['escape', 'q', 'Q'], closeDoc);
+    (screen as any).key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
   }
 
   function installFromCatalog(entry: CatalogEntry): void {
@@ -737,6 +758,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   (screen as any).key(['q', 'Q'], () => {
     if (stripOverlayActive) { if (_stripCancel) _stripCancel(); return; }
+    if (overlayDepth > 0) return; // let overlay handle Q
     if (statusTimer) clearTimeout(statusTimer);
     inputManager.disable();
     (screen as any).destroy();

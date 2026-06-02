@@ -386,6 +386,15 @@ async function createApp(session) {
     screen.on('resize', () => { applyResponsive(); screen.render(); });
     doorList.on('select item', () => { updateInfoPane(); updateFooter(); });
     // --- catalog operations ----------------------------------------------------
+    function stripAmigaGuide(text) {
+        return text
+            .replace(/@\{"[^"]*"\s+link\s+[^}]*\}/gi, (m) => { const t = m.match(/@\{"([^"]*)"/); return t ? t[1] : ''; })
+            .replace(/@\{[^}]*\}/gi, '')
+            .replace(/^@(database|node|endnode|title|toc|next|prev|help|index|remark|rem|master|keywords|wordwrap|smartwrap).*$/gim, '')
+            .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
     function showDocViewer(title, content, onDone) {
         pushOverlay();
         const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
@@ -396,25 +405,39 @@ async function createApp(session) {
         });
         const box = new ScrollableBox({
             parent: panel, top: 1, left: 1, width: '100%-2', height: '100%-2',
-            tags: false, scrollable: true, keys: true, alwaysScroll: true,
+            tags: false, scrollable: true, alwaysScroll: true,
             style: { fg: 'white' },
-            content: content.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, ''),
+            content: stripAmigaGuide(content),
         });
         const hint = new Panel({
             parent: screen, bottom: 0, left: 0, width: '100%', height: 3,
-            tags: true, content: '{center}[ESC/Q] Close  [↑/↓] Scroll{/center}',
+            tags: true, content: '{center}[ESC/Q] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
             style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
         });
-        box.focus();
         screen.render();
         function closeDoc() {
+            screen.unkey(['escape', 'q', 'Q'], closeDoc);
+            screen.unkey(['up', 'down', 'pageup', 'pagedown'], scrollKey);
             popOverlay();
             panel.destroy();
             hint.destroy();
             onDone();
             screen.render();
         }
+        function scrollKey(_, key) {
+            const name = key?.name ?? '';
+            if (name === 'up')
+                box.scroll(-1);
+            else if (name === 'down')
+                box.scroll(1);
+            else if (name === 'pageup')
+                box.scroll(-20);
+            else if (name === 'pagedown')
+                box.scroll(20);
+            screen.render();
+        }
         screen.key(['escape', 'q', 'Q'], closeDoc);
+        screen.key(['up', 'down', 'pageup', 'pagedown'], scrollKey);
     }
     function installFromCatalog(entry) {
         if (!entry.archive_path || !fs.existsSync(entry.archive_path)) {
@@ -720,6 +743,8 @@ async function createApp(session) {
                 _stripCancel();
             return;
         }
+        if (overlayDepth > 0)
+            return; // let overlay handle Q
         if (statusTimer)
             clearTimeout(statusTimer);
         inputManager.disable();
