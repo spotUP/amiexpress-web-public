@@ -66,7 +66,7 @@ export class InfoEditorOverlay {
       parent: this.overlay,
       bottom: 0, left: 0, width: '100%', height: 3,
       tags: true,
-      content: `{center}{yellow-fg}Enter{/yellow-fg}=Edit  {yellow-fg}!{/yellow-fg}=Toggle comment  {yellow-fg}Ctrl+S{/yellow-fg}=Save  {yellow-fg}ESC{/yellow-fg}=Cancel{/center}`,
+      content: `{center}{yellow-fg}Enter{/yellow-fg}=Edit  {yellow-fg}!{/yellow-fg}=Toggle  {yellow-fg}S{/yellow-fg}=Save+Close  {yellow-fg}ESC{/yellow-fg}=Cancel{/center}`,
       style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
       focusable: false,
     } as any);
@@ -84,7 +84,8 @@ export class InfoEditorOverlay {
 
     this.listWidget.key(['enter'], () => { this.editSelected(); });
     this.listWidget.key(['!'], () => { this.toggleComment(); });
-    this.overlay.key(['C-s'], async () => { await this.save(); });
+    this.listWidget.key(['s', 'S'], async () => { await this.save(); });
+    this.overlay.key(['s', 'S'], async () => { await this.save(); });
     this.overlay.key(['escape'], () => { this.close(); });
 
     this.listWidget.focus();
