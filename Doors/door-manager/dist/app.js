@@ -502,6 +502,7 @@ class RepoView extends ViewManager_1.BaseView {
             `{yellow-fg}R{/yellow-fg}=${inst}`,
             hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,
             hasDoc ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
+            `{yellow-fg}A{/yellow-fg}rchive`,
             `{yellow-fg}F{/yellow-fg}=Filter`,
             `{yellow-fg}ESC{/yellow-fg}=Back`,
             `{yellow-fg}Q{/yellow-fg}uit`,
@@ -569,6 +570,7 @@ class RepoView extends ViewManager_1.BaseView {
         this.keys.key(['r', 'R'], () => this.doInstallUninstall());
         this.keys.key(['s', 'S'], () => this.doStrip());
         this.keys.key(['v', 'V'], () => this.doViewDoc());
+        this.keys.key(['a', 'A'], () => this.doBrowseArchive());
         this.keys.key(['q', 'Q'], () => {
             clearTimeout(this.statusTimer);
             this.vm.destroy();
@@ -659,6 +661,62 @@ class RepoView extends ViewManager_1.BaseView {
         }
         this.vm.push(new DocView(this.layout, e.doc_filename ?? e.archive_name, e.doc_raw));
     }
+    doBrowseArchive() {
+        const e = this.entry();
+        if (!e)
+            return;
+        const svc = getCatalogSvc();
+        if (!svc?.getArchiveFiles) {
+            this.setStatus('File catalog not available', 'yellow');
+            return;
+        }
+        let files;
+        try {
+            files = svc.getArchiveFiles(e.id);
+        }
+        catch {
+            this.setStatus('Could not load file list', 'red');
+            return;
+        }
+        if (!files.length) {
+            this.setStatus('No file data in catalog', 'yellow');
+            return;
+        }
+        this.vm.push(new ArchiveBrowseView(this.layout, e.archive_name, files));
+    }
+}
+// ── Archive Browser (from catalog, no lha needed) ────────────────────────────
+class ArchiveBrowseView extends ViewManager_1.BaseView {
+    constructor(layout, archiveName, files) {
+        super();
+        this.layout = layout;
+        this.archiveName = archiveName;
+        this.files = files;
+    }
+    enter() {
+        const junk = this.files.filter(f => f.is_junk).length;
+        const items = this.files.map((f) => {
+            const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
+            const mark = f.is_junk ? '{red-fg}!{/red-fg}' : ' ';
+            const w = this.layout.width - 6;
+            const name = f.path.length > w
+                ? '<' + f.path.slice(f.path.length - w + 1)
+                : f.path;
+            return `${mark} ${name.padEnd(w)} ${sz.padStart(5)}`;
+        });
+        this.layout.setListLabel(` ${this.archiveName} (${this.files.length} files, ${junk} junk) `);
+        this.layout.setListItems(items);
+        this.layout.setListSelect(0);
+        this.layout.setInfo(`{yellow-fg}${this.archiveName}{/yellow-fg}\n\n` +
+            `{white-fg}${this.files.length} files{/white-fg}  ` +
+            (junk > 0 ? `{red-fg}${junk} ad files{/red-fg}` : '{green-fg}clean{/green-fg}') +
+            '\n\n{grey-fg}! = flagged as ad file{/grey-fg}');
+        this.layout.setFooter('{center}{yellow-fg}↑/↓{/yellow-fg} Navigate  {yellow-fg}ESC/Q{/yellow-fg} Back{/center}');
+        this.layout.focusList();
+        this.layout.render();
+        this.keys.key(['q', 'Q'], () => this.vm.pop());
+    }
+    exit() { this.keys.release(); }
 }
 // ── Document Viewer ───────────────────────────────────────────────────────────
 class DocView extends ViewManager_1.BaseView {
