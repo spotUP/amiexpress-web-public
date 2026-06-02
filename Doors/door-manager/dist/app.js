@@ -300,13 +300,13 @@ async function createApp(session) {
     function updateFooter() {
         if (mode === 'installed') {
             const door = selectedDoor();
-            const toggleLabel = (!door || door.enabled) ? 'Disable' : 'Enable';
-            footer.setContent(`{center}{yellow-fg}[U]{/yellow-fg}pload  {yellow-fg}[I]{/yellow-fg}nfo  {yellow-fg}[F]{/yellow-fg}iles  {yellow-fg}[D]{/yellow-fg}elete  {yellow-fg}[E]{/yellow-fg}${toggleLabel}  {yellow-fg}[S]{/yellow-fg}trip Ads  {yellow-fg}[T]{/yellow-fg}ab Repo  {yellow-fg}[Q]{/yellow-fg}uit{/center}`);
+            const en = (!door || door.enabled) ? 'Dis' : 'En';
+            footer.setContent(`{center}{yellow-fg}U{/yellow-fg}pload {yellow-fg}I{/yellow-fg}nfo {yellow-fg}F{/yellow-fg}iles {yellow-fg}D{/yellow-fg}el {yellow-fg}E{/yellow-fg}=${en} {yellow-fg}S{/yellow-fg}trip {yellow-fg}T{/yellow-fg}ab=Repo {yellow-fg}Q{/yellow-fg}uit{/center}`);
         }
         else {
             const entry = selectedCatalogEntry();
-            const instLabel = entry?.installed ? 'Uninstall' : 'Install';
-            footer.setContent(`{center}{yellow-fg}[I]{/yellow-fg}${instLabel}  {yellow-fg}[S]{/yellow-fg}trip Ads  {yellow-fg}[D]{/yellow-fg}oc  {yellow-fg}[F]{/yellow-fg}ilter  {yellow-fg}[/]{/yellow-fg}Clear filter  {yellow-fg}[T]{/yellow-fg}ab Installed  {yellow-fg}[Q]{/yellow-fg}uit{/center}`);
+            const inst = entry?.installed ? 'Uninst' : 'Inst';
+            footer.setContent(`{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}D{/yellow-fg}oc {yellow-fg}/{/yellow-fg}Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`);
         }
     }
     function populateInstalledList(selectIndex = 0) {
@@ -879,23 +879,6 @@ async function createApp(session) {
                 setStatus('No documentation available', 'yellow');
             }
             return;
-        }
-        // installed mode: try catalog doc first, then fall through to delete
-        if (mode === 'installed') {
-            const door = selectedDoor();
-            if (door && door.command) {
-                const svc = getCatalogSvc();
-                if (svc) {
-                    try {
-                        const entry = svc.getCatalogEntryByCmd(door.command);
-                        if (entry?.doc_raw) {
-                            showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
-                            return;
-                        }
-                    }
-                    catch { /* ignore */ }
-                }
-            }
         }
         // installed mode: delete
         const door = selectedDoor();
