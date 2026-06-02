@@ -118,7 +118,7 @@ class DoormanLayout {
         this.filterPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: 3,
             tags: true, style: { border: { fg: 'grey' } }, focusable: false });
         this.filterBox = new blessed_1.Textbox({ parent: this.filterPanel, top: 0, left: 1, width: '100%-2',
-            height: 1, inputOnFocus: true, mouse: true,
+            height: 1, mouse: true,
             style: { fg: 'white', focus: { fg: 'yellow' } } });
         this.filterPanel.hide();
         this.listPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6',
@@ -521,33 +521,21 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout.doorList.on('focus', this._onListFocus = () => {
             this.layout.filterBox.setValue(this.filter);
         });
-        // Tab debounce: prevents the focus-filter action from immediately firing
-        // a second Tab event when the Textbox also emits keypress for the same key.
-        let tabAt = 0;
-        const tabDebounce = () => {
-            const now = Date.now();
-            if (now - tabAt < 120)
-                return; // same physical keypress
-            tabAt = now;
-            if (this.layout.filterBox.focused) {
-                this.layout.focusList();
-            }
-            else {
-                this.layout.focusFilter();
-            }
-            this.layout.render();
-        };
-        this.keys.key(['tab'], tabDebounce);
-        // Filter input live update + navigation keys
-        this.layout.filterBox.on('keypress', this._onFilterKey = (_ch, key) => {
+        // Manual filter input — screen.on('keypress') gives us full control
+        // regardless of which widget has focus, so Tab always works.
+        let filterActive = false;
+        const filterKeypress = (ch, key) => {
+            if (!filterActive)
+                return;
             const kn = key?.name ?? '';
-            // Tab is already handled by screen.key (tabDebounce) — don't double-handle
-            if (kn === 'down' || kn === 'enter' || kn === 'return') {
+            if (kn === 'tab' || kn === 'down' || kn === 'enter' || kn === 'return') {
+                filterActive = false;
                 this.layout.focusList();
                 this.layout.render();
                 return;
             }
             if (kn === 'escape') {
+                filterActive = false;
                 this.filter = '';
                 this.layout.filterBox.setValue('');
                 this.refresh(0);
@@ -555,17 +543,29 @@ class RepoView extends ViewManager_1.BaseView {
                 this.layout.render();
                 return;
             }
-            // Printable input: update filter after Textbox processes the character
-            setTimeout(() => {
-                const val = this.layout.filterBox.getValue() ?? '';
-                if (val !== this.filter) {
-                    this.filter = val;
-                    this.refresh(0);
-                    this.layout.render();
-                }
-            }, 0);
+            if (kn === 'backspace' || kn === 'delete') {
+                this.filter = this.filter.slice(0, -1);
+            }
+            else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
+                this.filter += ch;
+            }
+            else {
+                return;
+            }
+            this.layout.filterBox.setValue(this.filter);
+            this.refresh(0);
+            this.layout.render();
+        };
+        this.layout.screen.on('keypress', filterKeypress);
+        this._onFilterKey = filterKeypress;
+        // F/Tab from the LIST → enter filter mode
+        this.keys.key(['f', 'F', '/', 'tab'], () => {
+            if (filterActive)
+                return; // already in filter
+            filterActive = true;
+            this.layout.focusFilter();
+            this.layout.render();
         });
-        this.keys.key(['f', 'F', '/'], () => { this.layout.focusFilter(); this.layout.render(); });
         this.keys.key(['r', 'R'], () => this.doInstallUninstall());
         this.keys.key(['s', 'S'], () => this.doStrip());
         this.keys.key(['v', 'V'], () => this.doViewDoc());
@@ -578,9 +578,7 @@ class RepoView extends ViewManager_1.BaseView {
     exit() {
         this.layout.doorList.off('select item', this._onSelectItem);
         this.layout.doorList.off('focus', this._onListFocus);
-        this.layout.filterBox.off('keypress', this._onFilterKey);
-        if (this._onListTab)
-            this.layout.doorList.unkey(['tab'], this._onListTab);
+        this.layout.screen.off('keypress', this._onFilterKey);
         clearTimeout(this.statusTimer);
         this.keys.release();
     }
