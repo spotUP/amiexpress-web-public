@@ -688,22 +688,19 @@ async function createApp(session) {
                 _stripCancel();
             return;
         }
-        if (overlayDepth > 0)
-            return; // let modal/overlay handle it
+        if (overlayDepth > 0) {
+            popOverlay();
+            return;
+        } // close overlay, correct depth
         if (mode === 'repo') {
             mode = 'installed';
             populateInstalledList(0);
             refreshHeader();
             updateInfoPane();
             updateFooter();
-            doorList.focus();
         }
-        else {
-            if (statusTimer)
-                clearTimeout(statusTimer);
-            inputManager.disable();
-            screen.destroy();
-        }
+        // Installed mode: ESC re-focuses list (no-op); Q is the only exit
+        doorList.focus();
     });
     screen.key(['q', 'Q'], () => {
         if (stripOverlayActive) {

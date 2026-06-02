@@ -706,19 +706,16 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   (screen as any).key(['escape'], () => {
     if (stripOverlayActive) { if (_stripCancel) _stripCancel(); return; }
-    if (overlayDepth > 0) return; // let modal/overlay handle it
+    if (overlayDepth > 0) { popOverlay(); return; } // close overlay, correct depth
     if (mode === 'repo') {
       mode = 'installed';
       populateInstalledList(0);
       refreshHeader();
       updateInfoPane();
       updateFooter();
-      (doorList as any).focus();
-    } else {
-      if (statusTimer) clearTimeout(statusTimer);
-      inputManager.disable();
-      (screen as any).destroy();
     }
+    // Installed mode: ESC re-focuses list (no-op); Q is the only exit
+    (doorList as any).focus();
   });
 
   (screen as any).key(['q', 'Q'], () => {
