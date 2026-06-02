@@ -325,7 +325,17 @@ async function createApp(session) {
         else {
             const entry = selectedCatalogEntry();
             const inst = entry?.installed ? 'Uninst' : 'Inst';
-            footer.setContent(`{center}{yellow-fg}R{/yellow-fg}=${inst} {yellow-fg}S{/yellow-fg}trip {yellow-fg}V{/yellow-fg}iew doc {yellow-fg}F{/yellow-fg}=Filter {yellow-fg}T{/yellow-fg}ab=List {yellow-fg}Q{/yellow-fg}uit{/center}`);
+            const hasDoc = !!entry?.doc_raw;
+            const hasJunk = (entry?.junk_count ?? 0) > 0;
+            const parts = [
+                `{yellow-fg}R{/yellow-fg}=${inst}`,
+                hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,
+                hasDoc ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
+                `{yellow-fg}F{/yellow-fg}=Filter`,
+                `{yellow-fg}T{/yellow-fg}ab=List`,
+                `{yellow-fg}Q{/yellow-fg}uit`,
+            ].filter(Boolean).join(' ');
+            footer.setContent(`{center}${parts}{/center}`);
         }
     }
     function populateInstalledList(selectIndex = 0) {
@@ -916,14 +926,11 @@ async function createApp(session) {
             return;
         if (mode === 'repo') {
             const entry = selectedCatalogEntry();
-            if (!entry)
-                return;
-            if (entry.doc_raw) {
-                showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
-            }
-            else {
+            if (!entry?.doc_raw) {
                 setStatus('No documentation available', 'yellow');
+                return;
             }
+            showDocViewer(entry.doc_filename ?? entry.archive_name, entry.doc_raw, () => { doorList.focus(); });
         }
         else {
             const door = selectedDoor();
