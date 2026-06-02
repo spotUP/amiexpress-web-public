@@ -61,13 +61,13 @@ export function searchCatalog(query: string, installedOnly?: boolean): CatalogEn
     if (query.trim()) {
       const like = `%${query.trim()}%`;
       conditions.push(
-        '(name LIKE ? OR author LIKE ? OR release_group LIKE ? OR description LIKE ? OR installed_as LIKE ?)'
+        '(archive_name LIKE ? OR name LIKE ? OR author LIKE ? OR release_group LIKE ? OR description LIKE ? OR installed_as LIKE ?)'
       );
-      params.push(like, like, like, like, like);
+      params.push(like, like, like, like, like, like);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM door_catalog ${where} ORDER BY name COLLATE NOCASE ASC LIMIT 500`;
+    const sql = `SELECT * FROM door_catalog ${where} ORDER BY archive_name COLLATE NOCASE ASC LIMIT 500`;
     return db.prepare(sql).all(...params) as CatalogEntry[];
   } finally {
     db.close();
