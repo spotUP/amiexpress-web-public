@@ -105,13 +105,14 @@ COPY Doors ./Doors
 # Build all TypeScript doors that have a dist/ convention.
 # This ensures dist/ is always fresh from source regardless of what was committed.
 WORKDIR /app/Doors/door-manager
-# npm ci would trigger the SDK's build scripts via the file: dependency.
-# Instead: install only typescript (the only devDep needed for tsc),
-# then manually symlink the pre-built SDK into node_modules and run tsc.
-RUN npm install --ignore-scripts --no-package-lock typescript && \
+# npm install reads package.json and triggers the SDK's build scripts via
+# the file: dependency even with --ignore-scripts. Bypass by installing
+# typescript globally (no package.json read), then symlinking the pre-built
+# SDK and running tsc directly.
+RUN npm install -g typescript && \
     mkdir -p node_modules/@amiexpress && \
     ln -sf /app/sdk node_modules/@amiexpress/bbs-door-sdk && \
-    npm run build
+    tsc
 WORKDIR /app
 
 # ============================================================================
