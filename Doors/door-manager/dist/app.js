@@ -988,11 +988,11 @@ async function createApp(session) {
     const nodeId = session.bbsSession?.nodeId ?? '?';
     const layout = new DoormanLayout(screen, nodeId);
     const vm = new ViewManager_1.ViewManager(screen);
+    // Hide cursor after every render — blessed re-shows it on each refresh.
+    // This is the only reliable way since blessed ignores external cursor state.
+    screen.on('render', () => { bbs.write('\x1b[?25l'); });
     screen.on('resize', () => { screen.render(); });
     screen.on('destroy', () => { inputManager.disable(); bbs.write('\x1b[?25h'); });
-    // Hide cursor right before first render — after Screen setup, so the Screen
-    // init sequences don't override it.
-    bbs.write('\x1b[?25l');
     vm.push(new InstalledView(layout, bbs, doors));
     await new Promise(resolve => { screen.on('destroy', resolve); });
 }
