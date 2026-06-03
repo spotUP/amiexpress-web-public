@@ -18,6 +18,7 @@ export declare class FileExplorerOverlay {
     private footer;
     private listWidget;
     private viewerBox;
+    private _keypressHandler;
     private viewerState;
     private viewerScrollOffset;
     private viewerLines;

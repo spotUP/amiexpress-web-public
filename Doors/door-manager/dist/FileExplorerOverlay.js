@@ -92,6 +92,7 @@ function getFileSize(fullPath) {
 class FileExplorerOverlay {
     constructor(opts) {
         this.viewerBox = null;
+        this._keypressHandler = null;
         this.viewerState = 'browser';
         this.viewerScrollOffset = 0;
         this.viewerLines = [];
@@ -187,38 +188,98 @@ class FileExplorerOverlay {
                 item: { fg: 'white' },
             },
         });
-        // Enter opens file/directory — NOT on 'select item' which fires on every arrow key
-        this.listWidget.on('select', (item) => {
-            const label = typeof item === 'string' ? item : (item?.content ?? '');
-            this.handleSelect(label);
-        });
-        this.listWidget.key(['backspace', 'b', 'B'], () => {
-            if (this.currentDir !== this.doorRoot) {
-                this.loadDirectory(path.dirname(this.currentDir));
-            }
-        });
-        this.overlay.key(['escape'], () => {
+        // All keys via screen.on('keypress') — widget.key() only fires when that
+        // specific widget is focused, which is unreliable with vi-mode lists.
+        this._keypressHandler = (ch, key) => {
+            if (this._promptHandler)
+                return; // prompt is active — let it handle keys
+            const kn = key?.name ?? '';
             if (this.viewerState === 'viewer') {
-                this.backFromViewer();
+                if (kn === 'escape' || kn === 'b' || ch === 'b' || ch === 'B') {
+                    this.backFromViewer();
+                    return;
+                }
+                if (kn === 'up' || ch === 'k') {
+                    this.viewerScrollOffset = Math.max(0, this.viewerScrollOffset - 1);
+                    this.refreshViewer();
+                    return;
+                }
+                if (kn === 'down' || ch === 'j') {
+                    this.viewerScrollOffset = Math.min(Math.max(0, this.viewerTotalLines - this.getViewerHeight()), this.viewerScrollOffset + 1);
+                    this.refreshViewer();
+                    return;
+                }
+                if (kn === 'pageup') {
+                    this.viewerScrollOffset = Math.max(0, this.viewerScrollOffset - this.getViewerHeight());
+                    this.refreshViewer();
+                    return;
+                }
+                if (kn === 'pagedown') {
+                    this.viewerScrollOffset = Math.min(Math.max(0, this.viewerTotalLines - this.getViewerHeight()), this.viewerScrollOffset + this.getViewerHeight());
+                    this.refreshViewer();
+                    return;
+                }
+                if (this.isGuide && ch && /[1-9]/.test(ch)) {
+                    const n = parseInt(ch, 10);
+                    const link = this.guideLinks.find((l) => l.index === n);
+                    if (link) {
+                        this.guideNodeHistory.push(this.guideCurrentNode);
+                        this.viewerScrollOffset = 0;
+                        this.renderGuideNode(link.target);
+                    }
+                    return;
+                }
+                if (this.isGuide && this.guideParser && (ch === 'p' || ch === 'P')) {
+                    const node = this.guideParser.getNode(this.guideCurrentNode);
+                    if (node?.prev) {
+                        this.guideNodeHistory.push(this.guideCurrentNode);
+                        this.viewerScrollOffset = 0;
+                        this.renderGuideNode(node.prev);
+                    }
+                    return;
+                }
+                if (this.isGuide && this.guideParser && (ch === 'n' || ch === 'N')) {
+                    const node = this.guideParser.getNode(this.guideCurrentNode);
+                    if (node?.next) {
+                        this.guideNodeHistory.push(this.guideCurrentNode);
+                        this.viewerScrollOffset = 0;
+                        this.renderGuideNode(node.next);
+                    }
+                    return;
+                }
             }
             else {
-                this.close();
+                if (kn === 'escape') {
+                    this.close();
+                    return;
+                }
+                if (kn === 'backspace' || kn === 'b' || ch === 'b' || ch === 'B') {
+                    if (this.currentDir !== this.doorRoot)
+                        this.loadDirectory(path.dirname(this.currentDir));
+                    return;
+                }
+                if (kn === 'enter' || kn === 'return' || ch === '\r') {
+                    const idx = this.listWidget.selected ?? 0;
+                    const items = this.listWidget.items ?? [];
+                    const raw = typeof items[idx] === 'string' ? items[idx] : '';
+                    this.handleSelect(raw);
+                    return;
+                }
+                if (ch === 'd' || ch === 'D') {
+                    this.deleteSelected();
+                    return;
+                }
+                if (ch === 'r' || ch === 'R') {
+                    this.renameSelected();
+                    return;
+                }
+                if (ch === 'q' || ch === 'Q') {
+                    this.close();
+                    return;
+                }
             }
-        });
-        this.listWidget.on('cancel', () => {
-            if (this.viewerState === 'browser')
-                this.close();
-        });
-        this.listWidget.key(['d', 'D'], () => {
-            if (this.viewerState !== 'browser')
-                return;
-            this.deleteSelected();
-        });
-        this.listWidget.key(['r', 'R'], () => {
-            if (this.viewerState !== 'browser')
-                return;
-            this.renameSelected();
-        });
+        };
+        this.screen.on('keypress', this._keypressHandler);
         this.listWidget.focus();
         this.updateHeader();
     }
@@ -364,58 +425,7 @@ class FileExplorerOverlay {
                 keys: true,
                 focusable: true,
             });
-            // B always returns to file list (not guide back-navigation)
-            this.viewerBox.key(['b', 'B'], () => this.backFromViewer());
-            this.viewerBox.key(['up', 'k'], () => {
-                this.viewerScrollOffset = Math.max(0, this.viewerScrollOffset - 1);
-                this.refreshViewer();
-            });
-            this.viewerBox.key(['down', 'j'], () => {
-                this.viewerScrollOffset = Math.min(Math.max(0, this.viewerTotalLines - this.getViewerHeight()), this.viewerScrollOffset + 1);
-                this.refreshViewer();
-            });
-            this.viewerBox.key(['pageup'], () => {
-                this.viewerScrollOffset = Math.max(0, this.viewerScrollOffset - this.getViewerHeight());
-                this.refreshViewer();
-            });
-            this.viewerBox.key(['pagedown'], () => {
-                this.viewerScrollOffset = Math.min(Math.max(0, this.viewerTotalLines - this.getViewerHeight()), this.viewerScrollOffset + this.getViewerHeight());
-                this.refreshViewer();
-            });
-            for (let n = 1; n <= 9; n++) {
-                const num = n;
-                this.viewerBox.key([`${num}`], () => {
-                    if (!this.isGuide || !this.guideLinks)
-                        return;
-                    const link = this.guideLinks.find((l) => l.index === num);
-                    if (link) {
-                        this.guideNodeHistory.push(this.guideCurrentNode);
-                        this.viewerScrollOffset = 0;
-                        this.renderGuideNode(link.target);
-                    }
-                });
-            }
-            this.viewerBox.key(['p', 'P'], () => {
-                if (!this.isGuide || !this.guideParser)
-                    return;
-                const node = this.guideParser.getNode(this.guideCurrentNode);
-                if (node?.prev) {
-                    this.guideNodeHistory.push(this.guideCurrentNode);
-                    this.viewerScrollOffset = 0;
-                    this.renderGuideNode(node.prev);
-                }
-            });
-            this.viewerBox.key(['n', 'N'], () => {
-                if (!this.isGuide || !this.guideParser)
-                    return;
-                const node = this.guideParser.getNode(this.guideCurrentNode);
-                if (node?.next) {
-                    this.guideNodeHistory.push(this.guideCurrentNode);
-                    this.viewerScrollOffset = 0;
-                    this.renderGuideNode(node.next);
-                }
-            });
-            this.viewerBox.key(['escape'], () => this.backFromViewer());
+            // All key handling is via screen.on('keypress') registered in buildUI()
         }
         else {
             this.viewerBox.show();
@@ -566,8 +576,13 @@ class FileExplorerOverlay {
         setTimeout(() => this.restoreFooter(), ms);
     }
     close() {
+        if (this._keypressHandler) {
+            this.screen.off('keypress', this._keypressHandler);
+            this._keypressHandler = null;
+        }
         if (this._promptHandler) {
             this.screen.off('keypress', this._promptHandler);
+            this._promptHandler = null;
         }
         this.overlay.destroy();
         this.onClose();
