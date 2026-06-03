@@ -86,13 +86,15 @@ class InfoEditorOverlay {
         const tt = this.tooltypes[idx];
         if (!tt)
             return;
-        const { Panel } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+        const blessed = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+        const Box = blessed.Box ?? blessed.box ?? blessed.Panel;
         const currentDisplay = tt.value ? `${tt.key}=${tt.value}` : tt.key;
         let buffer = currentDisplay;
-        // Inline edit panel showing current buffer
-        const editPanel = new Panel({
+        // Borderless edit box overlaying the selected row
+        const editPanel = new Box({
             parent: this.overlay, top: 3 + idx, left: 1, width: '100%-2', height: 1,
-            tags: false, style: { fg: 'yellow', bg: 'blue' },
+            tags: false, border: false,
+            style: { fg: 'yellow', bg: 'blue' },
             content: buffer + '_',
         });
         this.screen.render();

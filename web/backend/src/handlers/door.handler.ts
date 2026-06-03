@@ -1640,6 +1640,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 console.log(`[executeTypeScriptDoor] ===== EXEC ID: ${execId} =====`);
 console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
 console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
+
+  // Hide cursor immediately — before any door code runs or imports complete.
+  socket.emit('ansi-output', '\x1b[?25l');
+
   let wrappedSocket: any;
 
   // Save and disable modem speed throttling for TypeScript doors (they need full speed)
@@ -2004,6 +2008,8 @@ console.log(`[executeTypeScriptDoor] Cleared inDoorManager, doorInputHandler, mo
     // Notify frontend that door is stopped
     socket.emit('door:status', { status: 'stopped' });
     socket.emit('door-active', false);
+    // Restore cursor visibility now that the door has exited
+    socket.emit('ansi-output', '\x1b[?25h');
 
     // Restore modem speed emulation if it was active before door
     if (savedModemSpeed > 0) {
