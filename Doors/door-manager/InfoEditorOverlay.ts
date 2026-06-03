@@ -124,15 +124,25 @@ export class InfoEditorOverlay {
     const blessed = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
     const Box = blessed.Box ?? blessed.box ?? blessed.Panel;
     const currentDisplay = tt.value ? `${tt.key}=${tt.value}` : tt.key;
-    let buffer = currentDisplay;
+    let buf = currentDisplay;
+    let cur = buf.length; // cursor position (0 = before first char)
+
+    function renderEdit(): void {
+      // Show buffer with block cursor: chars before + '[' + char-at + ']' + chars-after
+      const pre = buf.slice(0, cur);
+      const at = cur < buf.length ? buf[cur] : ' ';
+      const post = cur < buf.length ? buf.slice(cur + 1) : '';
+      (editPanel as any).setContent(`${pre}\x1b[7m${at}\x1b[0m${post}`);
+      editPanel.screen?.render?.();
+    }
 
     // Borderless edit box overlaying the selected row
     const editPanel = new Box({
       parent: this.overlay, top: 3 + idx, left: 1, width: '100%-2', height: 1,
       tags: false, border: false,
       style: { fg: 'yellow', bg: 'blue' },
-      content: buffer + '_',
     } as any);
+    renderEdit();
     this.screen.render();
 
     const handler = (ch: string, key: any) => {
@@ -142,14 +152,22 @@ export class InfoEditorOverlay {
         commit();
       } else if (kn === 'escape' || ch === '\x1b') {
         cancel();
-      } else if (kn === 'backspace' || kn === 'delete' || ch === '\x7f' || ch === '\b') {
-        buffer = buffer.slice(0, -1);
-        (editPanel as any).setContent(buffer + '_');
-        this.screen.render();
+      } else if (kn === 'left') {
+        if (cur > 0) { cur--; renderEdit(); }
+      } else if (kn === 'right') {
+        if (cur < buf.length) { cur++; renderEdit(); }
+      } else if (kn === 'home') {
+        cur = 0; renderEdit();
+      } else if (kn === 'end') {
+        cur = buf.length; renderEdit();
+      } else if (kn === 'backspace' || ch === '\x7f' || ch === '\b') {
+        if (cur > 0) { buf = buf.slice(0, cur - 1) + buf.slice(cur); cur--; renderEdit(); }
+      } else if (kn === 'delete') {
+        if (cur < buf.length) { buf = buf.slice(0, cur) + buf.slice(cur + 1); renderEdit(); }
       } else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
-        buffer += ch;
-        (editPanel as any).setContent(buffer + '_');
-        this.screen.render();
+        buf = buf.slice(0, cur) + ch + buf.slice(cur);
+        cur++;
+        renderEdit();
       }
     };
 
@@ -163,7 +181,7 @@ export class InfoEditorOverlay {
       this.activeEditHandler = null;
       (editPanel as any).destroy();
       this.listWidget.focus();
-      const newRaw = buffer.trim();
+      const newRaw = buf.trim();
       if (newRaw !== currentDisplay && newRaw) {
         const eq = newRaw.indexOf('=');
         const newKey = eq === -1 ? newRaw : newRaw.slice(0, eq).trim();
