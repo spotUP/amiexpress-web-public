@@ -87,7 +87,11 @@ export class InfoEditorOverlay {
 
     // List vi-mode intercepts Enter and emits 'select' before key() fires
     (this.listWidget as any).on('select', () => {
-      if (this.blockNextSelect) { this.blockNextSelect = false; return; }
+      // Block if an edit is active (type-ahead may fire select) or just committed
+      if (this.activeEditHandler || this.blockNextSelect) {
+        this.blockNextSelect = false;
+        return;
+      }
       this.editSelected();
     });
     this.listWidget.key(['!'], () => { this.toggleComment(); });
