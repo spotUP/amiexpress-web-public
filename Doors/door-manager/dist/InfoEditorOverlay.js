@@ -11,6 +11,7 @@ class InfoEditorOverlay {
         this.tooltypes = [];
         this.dirty = false;
         this.closed = false;
+        this.activeEditHandler = null;
         this.screen = opts.screen;
         this.command = opts.command.toUpperCase();
         this.bbs = opts.bbs;
@@ -114,8 +115,10 @@ class InfoEditorOverlay {
                 this.screen.render();
             }
         };
+        this.activeEditHandler = handler;
         const commit = () => {
             this.screen.off('keypress', handler);
+            this.activeEditHandler = null;
             editPanel.destroy();
             this.listWidget.focus();
             const newRaw = buffer.trim();
@@ -133,6 +136,7 @@ class InfoEditorOverlay {
         };
         const cancel = () => {
             this.screen.off('keypress', handler);
+            this.activeEditHandler = null;
             editPanel.destroy();
             this.listWidget.focus();
             this.screen.render();
@@ -173,6 +177,11 @@ class InfoEditorOverlay {
         if (this.closed)
             return; // prevent double-close from stale key listeners
         this.closed = true;
+        // Clean up any active inline edit handler before destroying
+        if (this.activeEditHandler) {
+            this.screen.off('keypress', this.activeEditHandler);
+            this.activeEditHandler = null;
+        }
         this.overlay.destroy();
         this.onClose();
     }

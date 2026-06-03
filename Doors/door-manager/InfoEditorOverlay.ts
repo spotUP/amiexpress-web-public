@@ -35,6 +35,7 @@ export class InfoEditorOverlay {
   private dirty = false;
   private closed = false;
   private infoPath: string;
+  private activeEditHandler: ((ch: string, key: any) => void) | null = null;
 
   constructor(opts: InfoEditorOptions) {
     this.screen = opts.screen;
@@ -148,8 +149,11 @@ export class InfoEditorOverlay {
       }
     };
 
+    this.activeEditHandler = handler;
+
     const commit = () => {
       this.screen.off('keypress', handler);
+      this.activeEditHandler = null;
       (editPanel as any).destroy();
       this.listWidget.focus();
       const newRaw = buffer.trim();
@@ -168,6 +172,7 @@ export class InfoEditorOverlay {
 
     const cancel = () => {
       this.screen.off('keypress', handler);
+      this.activeEditHandler = null;
       (editPanel as any).destroy();
       this.listWidget.focus();
       this.screen.render();
@@ -211,6 +216,11 @@ export class InfoEditorOverlay {
   private close(): void {
     if (this.closed) return; // prevent double-close from stale key listeners
     this.closed = true;
+    // Clean up any active inline edit handler before destroying
+    if (this.activeEditHandler) {
+      this.screen.off('keypress', this.activeEditHandler);
+      this.activeEditHandler = null;
+    }
     this.overlay.destroy();
     this.onClose();
   }
