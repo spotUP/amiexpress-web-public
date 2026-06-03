@@ -155,7 +155,11 @@ export function showAmigaGuideViewer(screen: any, raw: string, title: string, on
   }
 
   function onEnter() {
-    if (selectedLink < 1) return;
+    const node = doc.nodes.get(currentNode);
+    const links = node?.links ?? [];
+    if (links.length === 0) return;
+    // If no link selected, auto-select and follow link 1
+    if (selectedLink < 1) selectedLink = 1;
     const link = parser.getLinkByIndex(currentNode, selectedLink);
     if (link) navigate(link.target);
   }
