@@ -969,6 +969,7 @@ class InfoEditorOverlayView extends ViewManager_1.BaseView {
         this.layout.render();
     }
     exit() { this.keys.release(); }
+    onEsc() { }
 }
 // ── File Explorer Overlay ─────────────────────────────────────────────────────
 class FileExplorerOverlayView extends ViewManager_1.BaseView {
@@ -978,6 +979,9 @@ class FileExplorerOverlayView extends ViewManager_1.BaseView {
             onClose: () => this.vm.pop() });
     }
     exit() { this.keys.release(); }
+    // Let FileExplorerOverlay handle all ESC internally via screen.on('keypress').
+    // The ViewManager's ESC would fire first and destroy the overlay prematurely.
+    onEsc() { }
 }
 // ─── Entry Point ──────────────────────────────────────────────────────────────
 async function createApp(session) {

@@ -938,6 +938,7 @@ class InfoEditorOverlayView extends BaseView {
   }
 
   exit(): void { this.keys.release(); }
+  onEsc(): void { /* InfoEditorOverlay handles ESC internally */ }
 }
 
 // ── File Explorer Overlay ─────────────────────────────────────────────────────
@@ -953,6 +954,10 @@ class FileExplorerOverlayView extends BaseView {
   }
 
   exit(): void { this.keys.release(); }
+
+  // Let FileExplorerOverlay handle all ESC internally via screen.on('keypress').
+  // The ViewManager's ESC would fire first and destroy the overlay prematurely.
+  onEsc(): void { /* no-op */ }
 }
 
 // ─── Entry Point ──────────────────────────────────────────────────────────────
