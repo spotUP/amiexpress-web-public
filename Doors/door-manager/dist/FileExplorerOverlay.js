@@ -259,7 +259,7 @@ class FileExplorerOverlay {
             .map((e) => e.name)
             .sort();
         const files = entries
-            .filter((e) => e.isFile())
+            .filter((e) => e.isFile() && !e.name.startsWith('.') && !e.name.startsWith('__'))
             .sort((a, b) => a.name.localeCompare(b.name));
         const items = [];
         if (absDir !== this.doorRoot) {
