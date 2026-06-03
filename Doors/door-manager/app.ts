@@ -55,7 +55,7 @@ function formatSize(bytes: number): string {
 
 function typeBadge(type: string): string {
   return ({ TS:'TS', typescript:'TS', SDK:'TS', XIM:'68', SIM:'SI', TIM:'TI',
-            AMI:'68', amiga:'68' } as any)[type] ?? '??';
+            AMI:'68', amiga:'68', RX:'RX', AREXX:'RX', ARexx:'RX', RXD:'RX' } as any)[type] ?? '??';
 }
 
 function getCatalogSvc(): any {
@@ -926,19 +926,20 @@ class InputView extends BaseView {
 
 class InfoEditorOverlayView extends BaseView {
   private layout: DoormanLayout; private bbs: any; private command: string;
+  private overlayInstance: InfoEditorOverlay | null = null;
 
   constructor(layout: DoormanLayout, bbs: any, command: string) {
     super(); this.layout = layout; this.bbs = bbs; this.command = command;
   }
 
   enter(): void {
-    new InfoEditorOverlay({ screen: this.layout.screen, command: this.command, bbs: this.bbs,
+    this.overlayInstance = new InfoEditorOverlay({ screen: this.layout.screen, command: this.command, bbs: this.bbs,
       onClose: () => this.vm.pop() });
     this.layout.render();
   }
 
   exit(): void { this.keys.release(); }
-  onEsc(): void { /* InfoEditorOverlay handles ESC internally */ }
+  onEsc(): void { this.overlayInstance?.requestClose(); }
 }
 
 // ── File Explorer Overlay ─────────────────────────────────────────────────────

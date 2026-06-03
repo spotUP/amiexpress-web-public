@@ -248,6 +248,8 @@ export class InfoEditorOverlay {
     );
   }
 
+  requestClose(): void { this.close(); }
+
   private close(): void {
     if (this.closed) return; // prevent double-close from stale key listeners
     this.closed = true;
