@@ -53,7 +53,8 @@ class InfoEditorOverlay {
                 item: { fg: 'white' },
             },
         });
-        this.listWidget.key(['enter'], () => { this.editSelected(); });
+        // List vi-mode intercepts Enter and emits 'select' before key() fires
+        this.listWidget.on('select', () => { this.editSelected(); });
         this.listWidget.key(['!'], () => { this.toggleComment(); });
         this.listWidget.key(['s', 'S'], async () => { await this.save(); });
         this.overlay.key(['s', 'S'], async () => { await this.save(); });
@@ -99,6 +100,10 @@ class InfoEditorOverlay {
         });
         this.screen.render();
         const handler = (ch, key) => {
+            if (skipFirst) {
+                skipFirst = false;
+                return;
+            }
             const kn = key?.name ?? '';
             if (kn === 'enter' || kn === 'return') {
                 commit();
@@ -117,6 +122,8 @@ class InfoEditorOverlay {
                 this.screen.render();
             }
         };
+        // Skip the first keypress event — it's the Enter that opened the edit
+        let skipFirst = true;
         this.activeEditHandler = handler;
         const commit = () => {
             this.screen.off('keypress', handler);
