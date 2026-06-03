@@ -97,8 +97,16 @@ RUN npm ci --ignore-scripts && npm run build
 # This dramatically speeds up Docker builds
 FROM node:20-alpine AS doors-builder
 WORKDIR /app
+# Copy SDK so door-manager's "file:../../sdk" dependency resolves
+COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
+COPY --from=sdk-builder /app/sdk/package.json ./sdk/package.json
+COPY --from=sdk-builder /app/sdk/node_modules ./sdk/node_modules
 COPY Doors ./Doors
-RUN echo "[Build] Doors stage - copying pre-built doors only"
+# Build all TypeScript doors that have a dist/ convention.
+# This ensures dist/ is always fresh from source regardless of what was committed.
+WORKDIR /app/Doors/door-manager
+RUN npm ci --ignore-scripts && npm run build
+WORKDIR /app
 
 # ============================================================================
 # Stage 7: Build Backend

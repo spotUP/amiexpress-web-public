@@ -129,9 +129,20 @@ BBS runs real Amiga binaries via MOIRA 68K emulator. Never trap library function
 
 Project-specific evidence chain (the global "no guessing" rule applies; this section spells out the *sources of evidence* for this codebase): `radare2` (disassemble), `strings` (extract text), `vamos` (reference run), `express.e` (implementation), MCP (NDK autodocs). Evidence = memory offset + structure definition + behavior confirmation + express.e reference. Workflow: logs → strings → radare2 → express.e → vamos → implement.
 
-### 5. TypeScript Doors Must Be Built
+### 5. TypeScript Doors Must Be Built — dist/ Is What Runs
 
-Doors in `Doors/` load `dist/index.js`, not source. Run `cd Doors/{name} && npm run build` before testing, or `npm run build:watch`. `start-servers.sh` auto-builds all TypeScript doors.
+Doors in `Doors/` load `dist/index.js`, **not the TypeScript source**. Editing `.ts` files has **zero effect** until `npm run build` is run and the resulting `dist/` files are committed.
+
+**Every change to a TypeScript door requires:**
+1. `cd Doors/{name} && npm run build` — rebuild dist/
+2. `git add Doors/{name}/dist/` — stage the compiled output
+3. Commit both the `.ts` source and the `dist/` together
+
+**Enforcement:**
+- **Pre-commit hook** — auto-runs `npm run build` and stages `dist/` whenever `.ts` files in a door directory are staged. Build failure blocks the commit.
+- **Dockerfile doors-builder stage** — always rebuilds `dist/` from source during CI/CD, so stale committed dist cannot reach production even if the hook was bypassed.
+
+Never commit `.ts` changes to a door without the matching `dist/` rebuild. The server runs the compiled JS — source-only commits are invisible at runtime. Burned by this 2026-06-03 (entire session of fixes unreachable because dist/ was never rebuilt).
 
 ### 6. Neo-Blessed Colors
 
