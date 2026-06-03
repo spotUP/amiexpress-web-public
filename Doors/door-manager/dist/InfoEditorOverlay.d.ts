@@ -21,6 +21,7 @@ export declare class InfoEditorOverlay {
     private dirty;
     private closed;
     private infoPath;
+    private blockNextSelect;
     private activeEditHandler;
     constructor(opts: InfoEditorOptions);
     private buildUI;

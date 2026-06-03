@@ -35,6 +35,7 @@ export class InfoEditorOverlay {
   private dirty = false;
   private closed = false;
   private infoPath: string;
+  private blockNextSelect = false;
   private activeEditHandler: ((ch: string, key: any) => void) | null = null;
 
   constructor(opts: InfoEditorOptions) {
@@ -85,7 +86,10 @@ export class InfoEditorOverlay {
     } as any);
 
     // List vi-mode intercepts Enter and emits 'select' before key() fires
-    (this.listWidget as any).on('select', () => { this.editSelected(); });
+    (this.listWidget as any).on('select', () => {
+      if (this.blockNextSelect) { this.blockNextSelect = false; return; }
+      this.editSelected();
+    });
     this.listWidget.key(['!'], () => { this.toggleComment(); });
     this.listWidget.key(['s', 'S'], async () => { await this.save(); });
     this.overlay.key(['s', 'S'], async () => { await this.save(); });
@@ -179,6 +183,7 @@ export class InfoEditorOverlay {
     const commit = () => {
       this.screen.off('keypress', handler);
       this.activeEditHandler = null;
+      this.blockNextSelect = true; // block the 'select' fired by the same Enter
       (editPanel as any).destroy();
       this.listWidget.focus();
       const newRaw = buf.trim();
@@ -198,6 +203,7 @@ export class InfoEditorOverlay {
     const cancel = () => {
       this.screen.off('keypress', handler);
       this.activeEditHandler = null;
+      this.blockNextSelect = true;
       (editPanel as any).destroy();
       this.listWidget.focus();
       this.screen.render();
