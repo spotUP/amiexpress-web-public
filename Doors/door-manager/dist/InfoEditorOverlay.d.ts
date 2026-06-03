@@ -23,6 +23,7 @@ export declare class InfoEditorOverlay {
     private infoPath;
     private blockNextSelect;
     private activeEditHandler;
+    private _globalKeyHandler;
     constructor(opts: InfoEditorOptions);
     private buildUI;
     private loadInfo;
@@ -31,6 +32,7 @@ export declare class InfoEditorOverlay {
     private toggleComment;
     private save;
     private updateFooter;
+    requestClose(): void;
     private close;
 }
 export {};

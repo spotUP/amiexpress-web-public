@@ -66,7 +66,7 @@ function formatSize(bytes) {
 }
 function typeBadge(type) {
     return { TS: 'TS', typescript: 'TS', SDK: 'TS', XIM: '68', SIM: 'SI', TIM: 'TI',
-        AMI: '68', amiga: '68' }[type] ?? '??';
+        AMI: '68', amiga: '68', RX: 'RX', AREXX: 'RX', ARexx: 'RX', RXD: 'RX' }[type] ?? '??';
 }
 function getCatalogSvc() {
     for (const k of Object.keys(require.cache))
@@ -959,17 +959,18 @@ class InputView extends ViewManager_1.BaseView {
 class InfoEditorOverlayView extends ViewManager_1.BaseView {
     constructor(layout, bbs, command) {
         super();
+        this.overlayInstance = null;
         this.layout = layout;
         this.bbs = bbs;
         this.command = command;
     }
     enter() {
-        new InfoEditorOverlay_1.InfoEditorOverlay({ screen: this.layout.screen, command: this.command, bbs: this.bbs,
+        this.overlayInstance = new InfoEditorOverlay_1.InfoEditorOverlay({ screen: this.layout.screen, command: this.command, bbs: this.bbs,
             onClose: () => this.vm.pop() });
         this.layout.render();
     }
     exit() { this.keys.release(); }
-    onEsc() { }
+    onEsc() { this.overlayInstance?.requestClose(); }
 }
 // ── File Explorer Overlay ─────────────────────────────────────────────────────
 class FileExplorerOverlayView extends ViewManager_1.BaseView {

@@ -13,6 +13,7 @@ class InfoEditorOverlay {
         this.closed = false;
         this.blockNextSelect = false;
         this.activeEditHandler = null;
+        this._globalKeyHandler = null;
         this.screen = opts.screen;
         this.command = opts.command.toUpperCase();
         this.bbs = opts.bbs;
@@ -63,10 +64,26 @@ class InfoEditorOverlay {
             }
             this.editSelected();
         });
-        this.listWidget.key(['!'], () => { this.toggleComment(); });
-        this.listWidget.key(['s', 'S'], async () => { await this.save(); });
-        this.overlay.key(['s', 'S'], async () => { await this.save(); });
-        this.overlay.key(['escape'], () => { this.close(); });
+        // All non-edit keys via screen.on('keypress') — widget.key() is unreliable
+        // when focus is on a child widget (proven pattern from FileExplorerOverlay).
+        this._globalKeyHandler = (ch, key) => {
+            if (this.activeEditHandler)
+                return; // edit session handles its own keys
+            const kn = key?.name ?? '';
+            if (kn === 'escape' || ch === '\x1b') {
+                this.close();
+                return;
+            }
+            if (ch === '!') {
+                this.toggleComment();
+                return;
+            }
+            if (ch === 's' || ch === 'S') {
+                this.save();
+                return;
+            }
+        };
+        this.screen.on('keypress', this._globalKeyHandler);
         this.listWidget.focus();
     }
     async loadInfo() {
@@ -229,14 +246,18 @@ class InfoEditorOverlay {
     updateFooter(msg, color = 'yellow') {
         this.footer.setContent(`{center}{${color}-fg}${msg}{/${color}-fg}{/center}`);
     }
+    requestClose() { this.close(); }
     close() {
         if (this.closed)
             return; // prevent double-close from stale key listeners
         this.closed = true;
-        // Clean up any active inline edit handler before destroying
         if (this.activeEditHandler) {
             this.screen.off('keypress', this.activeEditHandler);
             this.activeEditHandler = null;
+        }
+        if (this._globalKeyHandler) {
+            this.screen.off('keypress', this._globalKeyHandler);
+            this._globalKeyHandler = null;
         }
         this.overlay.destroy();
         this.onClose();
