@@ -119,28 +119,41 @@ export class InfoEditorOverlay {
     const tt = this.tooltypes[idx];
     if (!tt) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const blessed = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+    const { Panel } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
     const currentDisplay = tt.value ? `${tt.key}=${tt.value}` : tt.key;
-    const input = blessed.textbox({
-      parent: this.overlay,
-      top: 3 + idx,
-      left: 1,
-      width: '100%-2',
-      height: 1,
-      value: currentDisplay,
-      keys: true,
-      mouse: true,
-      inputOnFocus: true,
-      style: { fg: 'white', bg: 'black', focus: { bg: 'blue' } },
-    });
+    let buffer = currentDisplay;
 
-    input.focus();
-    input.readInput(() => {
-      const newRaw = (input.value as string).trim();
-      input.destroy();
+    // Inline edit panel showing current buffer
+    const editPanel = new Panel({
+      parent: this.overlay, top: 3 + idx, left: 1, width: '100%-2', height: 1,
+      tags: false, style: { fg: 'yellow', bg: 'blue' },
+      content: buffer + '_',
+    } as any);
+    this.screen.render();
+
+    const handler = (ch: string, key: any) => {
+      const kn = key?.name ?? '';
+      if (kn === 'enter' || kn === 'return') {
+        commit();
+      } else if (kn === 'escape') {
+        cancel();
+      } else if (kn === 'backspace' || kn === 'delete') {
+        buffer = buffer.slice(0, -1);
+        (editPanel as any).setContent(buffer + '_');
+        this.screen.render();
+      } else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
+        buffer += ch;
+        (editPanel as any).setContent(buffer + '_');
+        this.screen.render();
+      }
+    };
+
+    const commit = () => {
+      this.screen.off('keypress', handler);
+      (editPanel as any).destroy();
       this.listWidget.focus();
-      if (newRaw !== currentDisplay) {
+      const newRaw = buffer.trim();
+      if (newRaw !== currentDisplay && newRaw) {
         const eq = newRaw.indexOf('=');
         const newKey = eq === -1 ? newRaw : newRaw.slice(0, eq).trim();
         const newValue = eq === -1 ? '' : newRaw.slice(eq + 1).trim();
@@ -151,9 +164,16 @@ export class InfoEditorOverlay {
         this.updateFooter('Unsaved changes — press S to save');
       }
       this.screen.render();
-    });
+    };
 
-    this.screen.render();
+    const cancel = () => {
+      this.screen.off('keypress', handler);
+      (editPanel as any).destroy();
+      this.listWidget.focus();
+      this.screen.render();
+    };
+
+    this.screen.on('keypress', handler);
   }
 
   private toggleComment(): void {
