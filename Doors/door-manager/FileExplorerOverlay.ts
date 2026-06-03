@@ -154,7 +154,7 @@ export class FileExplorerOverlay {
       width: '100%',
       height: 3,
       tags: true,
-      content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
+      content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
       style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
       focusable: false,
     } as any);
@@ -209,6 +209,16 @@ export class FileExplorerOverlay {
       }
     });
 
+    this.listWidget.key(['d', 'D'], () => {
+      if (this.viewerState !== 'browser') return;
+      this.deleteSelected();
+    });
+
+    this.listWidget.key(['r', 'R'], () => {
+      if (this.viewerState !== 'browser') return;
+      this.renameSelected();
+    });
+
     this.listWidget.focus();
     this.updateHeader();
   }
@@ -237,8 +247,9 @@ export class FileExplorerOverlay {
       return;
     }
 
+    const SKIP_DIRS = new Set(['node_modules', '.git', 'tmp', 'temp', 'backup', 'bak', '__pycache__']);
     const dirs = entries
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name.toLowerCase()))
       .map((e) => e.name)
       .sort();
 
@@ -516,7 +527,91 @@ export class FileExplorerOverlay {
     );
   }
 
+  private getSelectedFilename(): string | null {
+    const idx = (this.listWidget as any).selected ?? 0;
+    const items: string[] = (this.listWidget as any).items ?? [];
+    const raw: string = typeof items[idx] === 'string' ? items[idx] : '';
+    // Strip tags and get filename (trim size suffix)
+    const clean = raw.replace(/\{[^}]+\}/g, '').trim();
+    if (!clean || clean.startsWith('[') || clean.startsWith('..')) return null;
+    return clean.split(/\s+/)[0].trim() || null;
+  }
+
+  private deleteSelected(): void {
+    const name = this.getSelectedFilename(); if (!name) return;
+    const fullPath = path.join(this.currentDir, name);
+    const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
+    this.promptInFooter(`Delete ${name}? (y/N): `, (answer) => {
+      if (answer.trim().toLowerCase() !== 'y') { this.restoreFooter(); return; }
+      try {
+        if (isDir) fs.rmSync(fullPath, { recursive: true, force: true });
+        else fs.unlinkSync(fullPath);
+        this.loadDirectory(this.currentDir);
+        this.restoreFooter();
+      } catch (e) {
+        this.showFooterMsg(`Error: ${(e as Error).message}`, 2000);
+      }
+    });
+  }
+
+  private renameSelected(): void {
+    const name = this.getSelectedFilename(); if (!name) return;
+    this.promptInFooter(`Rename ${name} to: `, (newName) => {
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === name) { this.restoreFooter(); return; }
+      try {
+        fs.renameSync(path.join(this.currentDir, name), path.join(this.currentDir, trimmed));
+        this.loadDirectory(this.currentDir);
+        this.restoreFooter();
+      } catch (e) {
+        this.showFooterMsg(`Error: ${(e as Error).message}`, 2000);
+      }
+    });
+  }
+
+  private _promptHandler: ((ch: string, key: any) => void) | null = null;
+
+  private promptInFooter(prompt: string, onSubmit: (value: string) => void): void {
+    let buf = '';
+    this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+    this.screen.render();
+    const handler = (ch: string, key: any) => {
+      const kn = key?.name ?? '';
+      if (kn === 'enter' || kn === 'return' || ch === '\r') {
+        this.screen.off('keypress', handler); this._promptHandler = null;
+        onSubmit(buf);
+      } else if (kn === 'escape') {
+        this.screen.off('keypress', handler); this._promptHandler = null;
+        this.restoreFooter();
+      } else if (kn === 'backspace' || ch === '\x7f' || ch === '\b') {
+        buf = buf.slice(0, -1);
+        this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+        this.screen.render();
+      } else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
+        buf += ch;
+        this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+        this.screen.render();
+      }
+    };
+    this._promptHandler = handler;
+    this.screen.on('keypress', handler);
+  }
+
+  private restoreFooter(): void {
+    this.footer.setContent(
+      `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`
+    );
+    this.screen.render();
+  }
+
+  private showFooterMsg(msg: string, ms = 2000): void {
+    this.footer.setContent(`{center}{red-fg}${msg}{/red-fg}{/center}`);
+    this.screen.render();
+    setTimeout(() => this.restoreFooter(), ms);
+  }
+
   private close(): void {
+    if (this._promptHandler) { this.screen.off('keypress', this._promptHandler); }
     this.overlay.destroy();
     this.onClose();
   }

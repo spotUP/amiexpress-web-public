@@ -42,6 +42,13 @@ export declare class FileExplorerOverlay {
     private updateHeader;
     private updateFooterBrowser;
     private updateFooterViewer;
+    private getSelectedFilename;
+    private deleteSelected;
+    private renameSelected;
+    private _promptHandler;
+    private promptInFooter;
+    private restoreFooter;
+    private showFooterMsg;
     private close;
 }
 export {};

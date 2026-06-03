@@ -102,6 +102,7 @@ class FileExplorerOverlay {
         this.guideNodeHistory = [];
         this.guideCurrentNode = '';
         this.guideLinks = [];
+        this._promptHandler = null;
         this.screen = opts.screen;
         this.onClose = opts.onClose;
         this.projectRoot = process.cwd();
@@ -167,7 +168,7 @@ class FileExplorerOverlay {
             width: '100%',
             height: 3,
             tags: true,
-            content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
+            content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
             style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
             focusable: false,
         });
@@ -216,6 +217,16 @@ class FileExplorerOverlay {
                 this.close();
             }
         });
+        this.listWidget.key(['d', 'D'], () => {
+            if (this.viewerState !== 'browser')
+                return;
+            this.deleteSelected();
+        });
+        this.listWidget.key(['r', 'R'], () => {
+            if (this.viewerState !== 'browser')
+                return;
+            this.renameSelected();
+        });
         this.listWidget.focus();
         this.updateHeader();
     }
@@ -242,8 +253,9 @@ class FileExplorerOverlay {
             this.screen.render();
             return;
         }
+        const SKIP_DIRS = new Set(['node_modules', '.git', 'tmp', 'temp', 'backup', 'bak', '__pycache__']);
         const dirs = entries
-            .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+            .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name.toLowerCase()))
             .map((e) => e.name)
             .sort();
         const files = entries
@@ -467,7 +479,103 @@ class FileExplorerOverlay {
             : '';
         this.footer.setContent(`{center}Lines ${line1}-${lineN}/${this.viewerTotalLines}  {yellow-fg}up/dn{/yellow-fg}=scroll${guideHint}  {yellow-fg}B{/yellow-fg}=back{/center}`);
     }
+    getSelectedFilename() {
+        const idx = this.listWidget.selected ?? 0;
+        const items = this.listWidget.items ?? [];
+        const raw = typeof items[idx] === 'string' ? items[idx] : '';
+        // Strip tags and get filename (trim size suffix)
+        const clean = raw.replace(/\{[^}]+\}/g, '').trim();
+        if (!clean || clean.startsWith('[') || clean.startsWith('..'))
+            return null;
+        return clean.split(/\s+/)[0].trim() || null;
+    }
+    deleteSelected() {
+        const name = this.getSelectedFilename();
+        if (!name)
+            return;
+        const fullPath = path.join(this.currentDir, name);
+        const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
+        this.promptInFooter(`Delete ${name}? (y/N): `, (answer) => {
+            if (answer.trim().toLowerCase() !== 'y') {
+                this.restoreFooter();
+                return;
+            }
+            try {
+                if (isDir)
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                else
+                    fs.unlinkSync(fullPath);
+                this.loadDirectory(this.currentDir);
+                this.restoreFooter();
+            }
+            catch (e) {
+                this.showFooterMsg(`Error: ${e.message}`, 2000);
+            }
+        });
+    }
+    renameSelected() {
+        const name = this.getSelectedFilename();
+        if (!name)
+            return;
+        this.promptInFooter(`Rename ${name} to: `, (newName) => {
+            const trimmed = newName.trim();
+            if (!trimmed || trimmed === name) {
+                this.restoreFooter();
+                return;
+            }
+            try {
+                fs.renameSync(path.join(this.currentDir, name), path.join(this.currentDir, trimmed));
+                this.loadDirectory(this.currentDir);
+                this.restoreFooter();
+            }
+            catch (e) {
+                this.showFooterMsg(`Error: ${e.message}`, 2000);
+            }
+        });
+    }
+    promptInFooter(prompt, onSubmit) {
+        let buf = '';
+        this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+        this.screen.render();
+        const handler = (ch, key) => {
+            const kn = key?.name ?? '';
+            if (kn === 'enter' || kn === 'return' || ch === '\r') {
+                this.screen.off('keypress', handler);
+                this._promptHandler = null;
+                onSubmit(buf);
+            }
+            else if (kn === 'escape') {
+                this.screen.off('keypress', handler);
+                this._promptHandler = null;
+                this.restoreFooter();
+            }
+            else if (kn === 'backspace' || ch === '\x7f' || ch === '\b') {
+                buf = buf.slice(0, -1);
+                this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+                this.screen.render();
+            }
+            else if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32) {
+                buf += ch;
+                this.footer.setContent(`{center}{yellow-fg}${prompt}{/yellow-fg}${buf}_`);
+                this.screen.render();
+            }
+        };
+        this._promptHandler = handler;
+        this.screen.on('keypress', handler);
+    }
+    restoreFooter() {
+        this.footer.setContent(`{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`);
+        this.screen.render();
+    }
+    showFooterMsg(msg, ms = 2000) {
+        this.footer.setContent(`{center}{red-fg}${msg}{/red-fg}{/center}`);
+        this.screen.render();
+        setTimeout(() => this.restoreFooter(), ms);
+    }
     close() {
+        if (this._promptHandler) {
+            this.screen.off('keypress', this._promptHandler);
+        }
         this.overlay.destroy();
         this.onClose();
     }
