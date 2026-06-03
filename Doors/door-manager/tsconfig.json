@@ -13,8 +13,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node",
-    "ignoreDeprecations": "5.0"
+    "moduleResolution": "node"
   },
   "include": ["index.ts", "app.ts", "FileExplorerOverlay.ts", "InfoEditorOverlay.ts"],
   "exclude": ["node_modules", "dist"]

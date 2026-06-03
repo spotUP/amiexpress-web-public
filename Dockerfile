@@ -109,7 +109,7 @@ WORKDIR /app/Doors/door-manager
 # the file: dependency even with --ignore-scripts. Bypass by installing
 # typescript globally (no package.json read), then symlinking the pre-built
 # SDK and running tsc directly.
-RUN npm install -g typescript && \
+RUN npm install -g typescript@5 && \
     mkdir -p node_modules/@amiexpress && \
     ln -sf /app/sdk node_modules/@amiexpress/bbs-door-sdk && \
     tsc
