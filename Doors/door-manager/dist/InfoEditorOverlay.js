@@ -105,13 +105,13 @@ class InfoEditorOverlay {
                 return;
             }
             const kn = key?.name ?? '';
-            if (kn === 'enter' || kn === 'return') {
+            if (kn === 'enter' || kn === 'return' || ch === '\r' || ch === '\n') {
                 commit();
             }
-            else if (kn === 'escape') {
+            else if (kn === 'escape' || ch === '\x1b') {
                 cancel();
             }
-            else if (kn === 'backspace' || kn === 'delete') {
+            else if (kn === 'backspace' || kn === 'delete' || ch === '\x7f' || ch === '\b') {
                 buffer = buffer.slice(0, -1);
                 editPanel.setContent(buffer + '_');
                 this.screen.render();
