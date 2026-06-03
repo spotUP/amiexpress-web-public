@@ -154,7 +154,7 @@ export class FileExplorerOverlay {
       width: '100%',
       height: 3,
       tags: true,
-      content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
+      content: `{center}{yellow-fg}Enter{/yellow-fg}=Open  {yellow-fg}D{/yellow-fg}el  {yellow-fg}R{/yellow-fg}ename  {yellow-fg}Bksp/B{/yellow-fg}=Up  {yellow-fg}ESC{/yellow-fg}=Close{/center}`,
       style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
       focusable: false,
     } as any);
@@ -175,19 +175,13 @@ export class FileExplorerOverlay {
       },
     } as any);
 
-    this.listWidget.on('select item', (item: any, _index: number) => {
+    // Enter opens file/directory — NOT on 'select item' which fires on every arrow key
+    this.listWidget.on('select', (item: any) => {
       const label: string = typeof item === 'string' ? item : (item?.content ?? '');
       this.handleSelect(label);
     });
 
-    this.listWidget.key(['enter'], () => {
-      const selected = this.listWidget.getSelectedItem ? this.listWidget.getSelectedItem() : undefined;
-      if (selected) {
-        this.handleSelect(selected);
-      }
-    });
-
-    this.listWidget.key(['backspace'], () => {
+    this.listWidget.key(['backspace', 'b', 'B'], () => {
       if (this.currentDir !== this.doorRoot) {
         this.loadDirectory(path.dirname(this.currentDir));
       }
@@ -201,12 +195,8 @@ export class FileExplorerOverlay {
       }
     });
 
-    // List widget emits 'cancel' when ESC is pressed (before overlay sees it),
-    // so we must also listen here to close the browser view.
     this.listWidget.on('cancel', () => {
-      if (this.viewerState === 'browser') {
-        this.close();
-      }
+      if (this.viewerState === 'browser') this.close();
     });
 
     this.listWidget.key(['d', 'D'], () => {
@@ -389,6 +379,7 @@ export class FileExplorerOverlay {
         focusable: true,
       } as any);
 
+      // B always returns to file list (not guide back-navigation)
       this.viewerBox.key(['b', 'B'], () => this.backFromViewer());
 
       this.viewerBox.key(['up', 'k'], () => {
