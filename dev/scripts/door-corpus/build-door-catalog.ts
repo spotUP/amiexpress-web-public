@@ -11,7 +11,14 @@
  *   4. Re-extract currently-installed doors (unless --skip-reextract)
  *
  * Usage:
- *   npx tsx dev/scripts/door-corpus/build-door-catalog.ts [--skip-reextract] [--verbose]
+ *   npx tsx dev/scripts/door-corpus/build-door-catalog.ts [--skip-reextract] [--verbose] [--archives-dir <path>]
+ *
+ * --archives-dir overrides which directory step 3 indexes (default: the
+ * AmiExpress archives dir). Step 3 resolves door_type from the extracted
+ * binary's bytes (detectDoorType from door-installer.ts) first, falling back
+ * to corpus.json's doorType hint, so e.g. FAMEDoorPort binaries land as FIM
+ * regardless of source directory. Steps 1/2 (stripper patterns, MD5
+ * fingerprints) always run against the AmiExpress reference corpus.
  */
 
 import * as fs from 'fs';
@@ -19,8 +26,13 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { execSync, spawnSync } from 'child_process';
 import Database from 'better-sqlite3';
+import { detectDoorType, AMIGA_68K_BINARY_EXT_RE } from '../../../web/backend/src/doors/door-installer';
+import { getExtractorForFile } from '../../../web/backend/src/utils/archive-extractor';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+// Reference corpus used to compile scene-stripper patterns + MD5 fingerprints
+// (steps 1/2). This stays fixed regardless of --archives-dir: those patterns
+// are cross-corpus junk signatures, not tied to which archives get indexed.
 const ARCHIVES_DIR = '~/Code/amiexpress_doors/Archives/AmiExpress';
 const DB_PATH = path.join(REPO_ROOT, 'database.sqlite');
 const CORPUS_JSON = path.join(REPO_ROOT, 'dev/scripts/door-corpus/corpus.json');
@@ -33,6 +45,15 @@ const LHA_BIN = '/opt/homebrew/bin/lha';
 const args = process.argv.slice(2);
 const SKIP_REEXTRACT = args.includes('--skip-reextract');
 const VERBOSE = args.includes('--verbose');
+
+// Directory actually indexed in step 3 (defaults to ARCHIVES_DIR, i.e. the
+// original AmiExpress-only behavior is unchanged when the flag is omitted).
+function parseArgValue(flag: string): string | null {
+  const idx = args.indexOf(flag);
+  if (idx === -1 || idx + 1 >= args.length) return null;
+  return args[idx + 1];
+}
+const INDEX_ARCHIVES_DIR = parseArgValue('--archives-dir') ?? ARCHIVES_DIR;
 
 function log(msg: string) { console.log(msg); }
 function verbose(msg: string) { if (VERBOSE) console.log('  ' + msg); }
@@ -159,6 +180,81 @@ function findInArchive(listLines: string[], target: string): string | null {
     }
   }
   return null;
+}
+
+// ─── Format-agnostic archive access (LHA/LZH via native lha, LZX via WASM) ───
+
+interface OpenArchive {
+  entries: Array<{ name: string; size: number }>;
+  extract: (internalPath: string) => Promise<Buffer | null>;
+}
+
+// LZX has no native `lha`-binary support here; reuse the app's own WASM-backed
+// unlzx port (web/backend/src/utils/extractors/lzx-wasm-extractor.ts) via the
+// shared extractor factory rather than re-implementing LZX parsing.
+async function openArchive(archivePath: string): Promise<OpenArchive> {
+  if (/\.lzx$/i.test(archivePath)) {
+    try {
+      const extractor = await getExtractorForFile(archivePath);
+      if (!extractor) return { entries: [], extract: async () => null };
+      const full = await extractor.getEntries(archivePath);
+      const byName = new Map<string, Buffer>();
+      for (const e of full) {
+        if (e.data) byName.set(e.name.toLowerCase(), Buffer.isBuffer(e.data) ? e.data : Buffer.from(e.data));
+      }
+      return {
+        entries: full.map(e => ({ name: e.name, size: e.size })),
+        extract: async (internalPath: string) => byName.get(internalPath.toLowerCase()) ?? null,
+      };
+    } catch (err) {
+      verbose(`LZX extract failed: ${archivePath}: ${(err as Error).message}`);
+      return { entries: [], extract: async () => null };
+    }
+  }
+  const entries = parseLhaList(lhaList(archivePath));
+  return {
+    entries,
+    extract: async (internalPath: string) => lhaExtractFile(archivePath, internalPath),
+  };
+}
+
+// Case-insensitive lookup by basename/suffix over a structured entry list
+// (mirrors findInArchive's matching rules, but works off {name,size} instead
+// of raw `lha -l` text lines so it applies equally to LZX entries).
+function findEntryByName(entries: Array<{ name: string; size: number }>, target: string): string | null {
+  const targetLower = target.toLowerCase();
+  const baseLower = path.basename(targetLower);
+  for (const e of entries) {
+    const nameLower = e.name.toLowerCase();
+    if (nameLower === targetLower || path.basename(nameLower) === baseLower) return e.name;
+    if (nameLower.endsWith('/' + targetLower) || nameLower.endsWith('/' + baseLower)) return e.name;
+  }
+  return null;
+}
+
+function findDocFileFromEntries(entries: Array<{ name: string; size: number }>): string | null {
+  for (const ext of DOC_EXTENSIONS) {
+    for (const e of entries) {
+      const nameLower = e.name.toLowerCase();
+      if (nameLower.endsWith(ext) && !nameLower.includes('install')) return e.name;
+    }
+  }
+  return null;
+}
+
+// A plausible primary door binary: either the classic dot-less AmiExpress
+// convention, or a known 68K binary extension (.exe/.xim/.aim/.sim/.tim/.fim)
+// per AMIGA_68K_BINARY_EXT_RE — the same gate door-installer.ts uses to find
+// the executable at install time (single source of truth for that regex).
+export function isCandidateBinaryEntry(entryName: string): boolean {
+  const base = path.basename(entryName);
+  return !base.includes('.') || AMIGA_68K_BINARY_EXT_RE.test(base);
+}
+
+// door_type resolution order: ground-truth binary sniff (detectDoorType on
+// the extracted bytes) > corpus.json hint > historical XIM default.
+export function resolveDoorType(detectedFromBinary: string | null, corpusDoorType: string | undefined): string {
+  return detectedFromBinary ?? corpusDoorType ?? 'XIM';
 }
 
 // ─── Step 1: Compile scene stripper pattern databases ───────────────────────
@@ -567,7 +663,7 @@ async function indexArchives(
 ): Promise<void> {
   log('\n[3/4] Indexing archives into door_catalog...');
 
-  const archives = fs.readdirSync(ARCHIVES_DIR)
+  const archives = fs.readdirSync(INDEX_ARCHIVES_DIR)
     .filter(f => /\.(lha|lzh|lzx)$/i.test(f))
     .sort();
 
@@ -628,22 +724,63 @@ async function indexArchives(
   });
 
   let processed = 0;
+  let skippedLzx = 0;
+  let collisions = 0;
   const batchSize = 50;
   let batch: any[] = [];
 
+  const existingRow = db.prepare('SELECT archive_name FROM door_catalog WHERE id = ?');
+  // Same-id archives already queued earlier in *this* run. A DB lookup alone
+  // isn't enough: rows are only flushed to disk every `batchSize` archives,
+  // so two colliding archives landing in the same unflushed batch would both
+  // see "no existing row" and silently clobber each other via ON CONFLICT.
+  const seenThisRun = new Map<string, string>(); // id -> archive_name
+
   for (const archiveName of toProcess) {
-    const archivePath = path.join(ARCHIVES_DIR, archiveName);
+    const archivePath = path.join(INDEX_ARCHIVES_DIR, archiveName);
     const archiveSize = fs.statSync(archivePath).size;
-    const listLines = lhaList(archivePath);
+    const isLzx = /\.lzx$/i.test(archiveName);
 
     // Make a stable ID from the archive name (strip extension, lowercase, replace non-alnum)
     const baseId = archiveName.replace(/\.(lha|lzx|lzh)$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '_');
 
+    // Same normalized id already claimed by a *different* archive_name —
+    // either earlier in this same run (e.g. D_NEW310.LHA / D!NEW310.LHA both
+    // normalize to "d_new310") or by a previous run indexing a different
+    // source directory (e.g. the same archive name shipped in both
+    // AmiExpress/ and FAME/): never clobber that row — skip and log instead.
+    // A re-run over the *same* archive (identical archive_name) is expected
+    // to update its own row, so that case falls through normally.
+    const queuedAs = seenThisRun.get(baseId);
+    if (queuedAs && queuedAs !== archiveName) {
+      log(`  SKIP (id collision with ${queuedAs}, already queued this run): ${archiveName}`);
+      collisions++;
+      continue;
+    }
+    const existing = existingRow.get(baseId) as { archive_name: string } | undefined;
+    if (existing && existing.archive_name !== archiveName) {
+      log(`  SKIP (id collision, already indexed as ${existing.archive_name}): ${archiveName}`);
+      collisions++;
+      continue;
+    }
+    seenThisRun.set(baseId, archiveName);
+
+    const { entries, extract } = await openArchive(archivePath);
+    if (entries.length === 0) {
+      if (isLzx) {
+        log(`  SKIP (LZX extraction failed): ${archiveName}`);
+        skippedLzx++;
+      } else {
+        log(`  SKIP (empty/unreadable archive): ${archiveName}`);
+      }
+      continue;
+    }
+
     // Find FILE_ID.DIZ
     let dizText: string | null = null;
-    const dizName = findInArchive(listLines, 'FILE_ID.DIZ');
+    const dizName = findEntryByName(entries, 'FILE_ID.DIZ');
     if (dizName) {
-      const buf = lhaExtractFile(archivePath, dizName);
+      const buf = await extract(dizName);
       if (buf) dizText = buf.toString('latin1');
     }
 
@@ -654,9 +791,9 @@ async function indexArchives(
     let docRaw: string | null = null;
     let suggestedTooltypes: Record<string, string> = {};
 
-    const docEntry = findDocFile(listLines);
+    const docEntry = findDocFileFromEntries(entries);
     if (docEntry) {
-      const buf = lhaExtractFile(archivePath, docEntry);
+      const buf = await extract(docEntry);
       if (buf) {
         docFilename = path.basename(docEntry);
         docRaw = buf.toString('latin1');
@@ -664,14 +801,18 @@ async function indexArchives(
       }
     }
 
-    // Find primary executable (HUNK binary)
+    // Find primary executable (HUNK binary) and sniff its real door_type
+    // from the extracted bytes (FAMEDoorPort/AEDoorPort/DoorControl) —
+    // single source of truth via door-installer.ts's detectDoorType.
     let binaryName: string | null = null;
-    const entries = parseLhaList(listLines);
+    let detectedDoorType: string | null = null;
     for (const entry of entries.slice(0, 30)) {
-      if (entry.name.endsWith('/') || entry.name.includes('.') || entry.size > 512 * 1024) continue;
-      const buf = lhaExtractFile(archivePath, entry.name);
+      if (entry.name.endsWith('/') || entry.size > 512 * 1024) continue;
+      if (!isCandidateBinaryEntry(entry.name)) continue;
+      const buf = await extract(entry.name);
       if (buf && isAmigaHunk(buf)) {
         binaryName = path.basename(entry.name);
+        detectedDoorType = detectDoorType(buf);
         break;
       }
     }
@@ -723,7 +864,7 @@ async function indexArchives(
       archive_name: archiveName,
       archive_path: archivePath,
       binary_name: binaryName,
-      door_type: corpusEntry?.doorType ?? 'XIM',
+      door_type: resolveDoorType(detectedDoorType, corpusEntry?.doorType),
       name,
       version: dizInfo.version ?? null,
       author: dizInfo.author ?? null,
@@ -760,7 +901,7 @@ async function indexArchives(
 
   if (batch.length > 0) insertMany(batch);
   process.stdout.write('\r' + ' '.repeat(60) + '\r');
-  log(`  Indexed ${processed} archives`);
+  log(`  Indexed ${processed} archives (skipped LZX: ${skippedLzx}, collisions: ${collisions})`);
 
   const count = (db.prepare('SELECT COUNT(*) as n FROM door_catalog').get() as { n: number }).n;
   log(`  door_catalog rows: ${count}`);
@@ -819,11 +960,11 @@ function reextractInstalledDoors(
 
 async function main() {
   log('=== AmiExpress Door Catalog Builder ===');
-  log(`Archives: ${ARCHIVES_DIR}`);
+  log(`Archives: ${INDEX_ARCHIVES_DIR}`);
   log(`Database: ${DB_PATH}`);
 
-  if (!fs.existsSync(ARCHIVES_DIR)) {
-    console.error(`ERROR: Archives directory not found: ${ARCHIVES_DIR}`);
+  if (!fs.existsSync(INDEX_ARCHIVES_DIR)) {
+    console.error(`ERROR: Archives directory not found: ${INDEX_ARCHIVES_DIR}`);
     process.exit(1);
   }
 
@@ -901,7 +1042,11 @@ async function main() {
   statsDb.close();
 }
 
-main().catch(err => {
-  console.error('FATAL:', err);
-  process.exit(1);
-});
+// Guard so the pure helpers above (resolveDoorType, isCandidateBinaryEntry)
+// can be imported from tests without triggering a full catalog run.
+if (require.main === module) {
+  main().catch(err => {
+    console.error('FATAL:', err);
+    process.exit(1);
+  });
+}
