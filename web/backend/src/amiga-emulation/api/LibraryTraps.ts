@@ -61,9 +61,11 @@ import {
   AMISSL_VECTORS,
   DREAMDOOR_VECTORS,
   REXXSYSLIB_VECTORS,
+  fameVectors,
 } from "./library-vectors";
 import { DreamDoorLibrary } from "./DreamDoorLibrary";
 import { RexxSysLibLibrary } from "./RexxSysLibLibrary";
+import { FameLibrary } from "./FameLibrary";
 
 // Performance: Verbose logging is disabled by default
 // Set DEBUG_LIBRARY_TRAPS=1 to enable detailed library call tracing
@@ -101,6 +103,7 @@ export class LibraryTraps {
   // other library handles so the trap dispatcher can route 10 LVO
   // offsets to the same RexxSysLibLibrary instance.
   private rexxSysLibLibrary: any = null;
+  private fameLibrary: FameLibrary | null = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -297,6 +300,13 @@ export class LibraryTraps {
    */
   setDreamDoorLibrary(lib: DreamDoorLibrary): void {
     this.dreamDoorLibrary = lib;
+  }
+
+  /**
+   * Set the fame.library instance
+   */
+  setFameLibrary(lib: FameLibrary): void {
+    this.fameLibrary = lib;
   }
 
   /**
@@ -1201,6 +1211,47 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
     }
 
     console.log(`[LibraryTraps] Installed ${DREAMDOOR_VECTORS.length} dreamdoor.library vectors`);
+  }
+
+  installFameVectors(): void {
+    if (!this.fameLibrary) {
+      console.error("[LibraryTraps] Cannot install fame vectors: library not set");
+      return;
+    }
+
+    const fameBase = this.execLibrary.getLibraryBase("fame.library");
+    if (fameBase === 0) {
+      console.error("[LibraryTraps] Cannot install fame vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing fame.library vectors at base 0x${fameBase.toString(16)}`);
+
+    for (const vector of fameVectors) {
+      const trapAddr = fameBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.fameLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.fameLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${fameVectors.length} fame.library vectors`);
+
+    // CRITICAL: Sync new trap addresses to MOIRA for batch execution.
+    // Unlike installDreamDoorVectors (never wired to an open callback),
+    // installFameVectors is invoked from LibraryManager's OpenLibrary
+    // callback, so newly installed traps must be pushed into MOIRA's
+    // trap set immediately or the WASM batch loop will run straight
+    // through them.
+    this.syncTrapAddressesToMoira();
   }
 
   /**

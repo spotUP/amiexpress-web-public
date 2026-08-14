@@ -199,6 +199,7 @@ export class ExecLibrary {
   private readonly DREAMDOOR_LIB_ADDR = 0x0f8000; // dreamdoor.library at 992KB
   private readonly REXXSUPPORT_LIB_ADDR = 0x0fa000; // rexxsupport.library at 1000KB
   private readonly REXXARPLIB_LIB_ADDR = 0x0fc000; // rexxarplib.library at 1008KB
+  private readonly FAME_LIB_ADDR = 0x0fe000; // fame.library at 1016KB
   private nextStubLibraryAddr = 0x100000; // fallback base for unknown stub libraries (1MB+)
   private readonly PORT_LIST_OFFSET = 392;
   private currentStackLower = 0;
@@ -1177,6 +1178,13 @@ debugLog(
           version: 34,
           revision: 0,
           stubJumpTableEntries: 30,
+        };
+      case "fame.library":
+        return {
+          address: this.FAME_LIB_ADDR,
+          version: 6,
+          revision: 0,
+          stubJumpTableEntries: 80,
         };
       default:
         return null;

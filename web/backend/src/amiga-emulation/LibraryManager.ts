@@ -21,6 +21,7 @@ import { IntuitionLibrary } from "./api/IntuitionLibrary";
 import { BsdSocketLibrary } from "./api/BsdSocketLibrary";
 import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./api/AmiSSLLibrary";
 import { DreamDoorLibrary } from "./api/DreamDoorLibrary";
+import { FameLibrary } from "./api/FameLibrary";
 import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
@@ -56,6 +57,7 @@ export class LibraryManager {
   public amisslMasterLibrary: AmiSSLMasterLibrary | null = null;
   public amisslLibrary: AmiSSLLibrary | null = null;
   public dreamDoorLibrary: DreamDoorLibrary | null = null;
+  public fameLibrary: FameLibrary | null = null;
   public libraryTraps: LibraryTraps | null = null;
   public ximProtocol: XIMProtocol | null = null;
   public bbsApiLibrary: BbsApiLibrary | null = null;
@@ -651,6 +653,14 @@ debugLog("[LibraryManager] Creating dreamdoor.library (DayDream BBS compatibilit
     // Set session data for DreamDoor operations
     this.dreamDoorLibrary.setSession(this.config.bbsSession, this.socket);
 
+debugLog("[LibraryManager] Creating fame.library (FAME BBS FIM compatibility)...");
+    this.fameLibrary = new FameLibrary(this.emulator, {
+      allocMem: (size: number, flags: number) => this.execLibrary!.allocMem(size, flags),
+      freeMem: (addr: number, size: number) => this.execLibrary!.freeMem(addr, size),
+    });
+    // Set session data for FAME operations
+    this.fameLibrary.setSession(this.config.bbsSession, this.socket);
+
 debugLog("[LibraryManager] Installing library call traps...");
 
     this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
@@ -686,6 +696,7 @@ debugLog("[LibraryManager] Installing library call traps...");
     this.libraryTraps.setAmiSSLMasterLibrary(this.amisslMasterLibrary);
     this.libraryTraps.setAmiSSLLibrary(this.amisslLibrary);
     this.libraryTraps.setDreamDoorLibrary(this.dreamDoorLibrary);
+    this.libraryTraps.setFameLibrary(this.fameLibrary);
 
     // Set up callback so OpenAmiSSL() triggers vector installation
     const libraryTrapsRef = this.libraryTraps;
@@ -782,6 +793,13 @@ debugLog("[LibraryManager] amissl.library opened, installing vectors...");
         this.libraryTraps!.installAmiSSLVectors();
         // CRITICAL: Sync new trap addresses to MOIRA for batch execution
         this.libraryTraps!.syncTrapAddressesToMoira();
+      }
+      if (name.toLowerCase() === "fame.library") {
+debugLog("[LibraryManager] fame.library opened, installing vectors...");
+        this.libraryTraps!.installFameVectors();
+        // syncTrapAddressesToMoira() is called inside installFameVectors()
+        // itself (see LibraryTraps.ts) so new traps are pushed to MOIRA
+        // immediately after install.
       }
       if (name.toLowerCase() === "graphics.library") {
 debugLog(
