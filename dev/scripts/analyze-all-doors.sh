@@ -4,8 +4,10 @@
 echo "=== DOOR TYPE ANALYSIS ==="
 echo ""
 
+FIM_COUNT=0
 XIM_COUNT=0
 SIM_COUNT=0
+DD_COUNT=0
 UNKNOWN_COUNT=0
 
 echo "Scanning doors directory..."
@@ -36,8 +38,10 @@ for dir in doors/*/; do
   fi
 
   # Analyze door
+  has_famedoorport=$(strings "$doorbin" 2>/dev/null | grep -i "FAMEDoorPort" | head -1)
   has_aedoorport=$(strings "$doorbin" 2>/dev/null | grep -i "AEDoorPort" | head -1)
   has_doorcontrol=$(strings "$doorbin" 2>/dev/null | grep -i "DoorControl" | head -1)
+  has_dreamdoor=$(strings "$doorbin" 2>/dev/null | grep -i "dreamdoor.library" | head -1)
   has_0x790=$(xxd "$doorbin" 2>/dev/null | grep "2079 0000 0790" | head -1)
   declared_xim=$(strings "$doorbin" 2>/dev/null | grep -i "XIM.*DOOR" | head -1)
   declared_sim=$(strings "$doorbin" 2>/dev/null | grep -i "SIM.*DOOR" | head -1)
@@ -46,7 +50,11 @@ for dir in doors/*/; do
   doortype="UNKNOWN"
   notes=""
 
-  if [ -n "$has_aedoorport" ]; then
+  if [ -n "$has_famedoorport" ]; then
+    doortype="FIM"
+    notes="Uses FAMEDoorPort"
+    FIM_COUNT=$((FIM_COUNT + 1))
+  elif [ -n "$has_aedoorport" ]; then
     doortype="XIM"
     notes="Uses AEDoorPort"
     XIM_COUNT=$((XIM_COUNT + 1))
@@ -58,6 +66,10 @@ for dir in doors/*/; do
     doortype="SIM"
     notes="Has 0x790 BBS API access"
     SIM_COUNT=$((SIM_COUNT + 1))
+  elif [ -n "$has_dreamdoor" ]; then
+    doortype="DD"
+    notes="Uses dreamdoor.library"
+    DD_COUNT=$((DD_COUNT + 1))
   else
     UNKNOWN_COUNT=$((UNKNOWN_COUNT + 1))
   fi
@@ -78,6 +90,8 @@ done
 
 echo ""
 echo "=== SUMMARY ==="
+echo "FIM Doors: $FIM_COUNT"
 echo "XIM Doors: $XIM_COUNT"
 echo "SIM Doors: $SIM_COUNT"
+echo "DD Doors: $DD_COUNT"
 echo "Unknown: $UNKNOWN_COUNT"

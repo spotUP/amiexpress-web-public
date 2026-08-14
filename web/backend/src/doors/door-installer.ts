@@ -42,7 +42,7 @@ export class DoorInstaller {
     }
 
     const strippedEntries = stripTopLevelDir(entries);
-    const detection = detectDoorType(strippedEntries);
+    const detection = detectArchiveType(strippedEntries);
     if (!detection) {
       const listing = strippedEntries.map(e => e.name).slice(0, 20).join(', ');
       return { success: false, message: `Cannot detect door type. Contents: ${listing}` };
@@ -73,7 +73,7 @@ export class DoorInstaller {
     if (detection.type === 'typescript') {
       return this.registerTypeScriptDoor(doorDir, doorName);
     } else {
-      return this.register68KDoor(doorDir, doorName, detection.infoEntryName!);
+      return this.register68KDoor(doorDir, doorName, detection.infoEntryName!, strippedEntries);
     }
   }
 
@@ -122,6 +122,7 @@ export class DoorInstaller {
     doorDir: string,
     doorName: string,
     infoEntryName: string,
+    entries: ArchiveEntry[],
   ): Promise<InstallResult> {
     const bbsCommandsDir = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
     const infoPath = path.join(doorDir, infoEntryName);
@@ -156,12 +157,18 @@ export class DoorInstaller {
 
     if (!fs.existsSync(bbsCommandsDir)) fs.mkdirSync(bbsCommandsDir, { recursive: true });
 
+    const binEntry = entries.find(
+      e => e.data && e.name !== infoEntryName &&
+        (!e.name.includes('.') || /\.(exe|xim|aim|sim|tim|fim)$/i.test(e.name)),
+    );
+    const doorType = binEntry?.data ? detectDoorType(Buffer.from(binEntry.data)) : 'XIM';
+
     const outInfoPath = path.join(bbsCommandsDir, `${cmdName}.info`);
     const description = get('DESCRIPTION') || get('TOOLTIP') || '';
     const access = get('ACCESS') || '0';
     const lines = [
       `BBSCMD=${cmdName}`,
-      `TYPE=XIM`,
+      `TYPE=${doorType}`,
       `LOCATION=${location}`,
       description ? `DESCRIPTION=${description}` : null,
       `ACCESS=${access}`,
@@ -170,7 +177,7 @@ export class DoorInstaller {
     fs.writeFileSync(outInfoPath, lines);
     await this.reload();
 
-    return { success: true, message: `Installed 68K door: ${cmdName}`, doorName, command: cmdName, type: 'XIM' };
+    return { success: true, message: `Installed 68K door: ${cmdName}`, doorName, command: cmdName, type: doorType };
   }
 
   private async reload(): Promise<void> {
@@ -203,7 +210,7 @@ interface Detection {
   infoEntryName?: string;
 }
 
-function detectDoorType(
+function detectArchiveType(
   entries: ArchiveEntry[],
 ): Detection | null {
   const pkgEntry = entries.find(e => e.name === 'package.json');
@@ -224,4 +231,25 @@ function detectDoorType(
   }
 
   return null;
+}
+
+/**
+ * Sniff a 68K door binary's IPC engine from its raw bytes.
+ *
+ * Runs after the caller has already confirmed the buffer is a native Amiga
+ * executable (Amiga hunk-magic 0x000003F3 header). Binaries are latin-1
+ * Amiga content, so we search bytes with a latin1-encoded needle rather than
+ * decoding as UTF-8 (which would corrupt high-bit bytes).
+ *
+ * FAMEDoorPort is checked before AEDoorPort: FAME (FIM) doors can carry
+ * generic Amiga door-port scaffolding alongside their FAME-specific IPC
+ * port name, so checking AEDoorPort first would misclassify a FAME binary
+ * as XIM. DoorControl (SIM) is checked last since it names a generic
+ * message port shared by SIM/TIM/IIM/SUP doors.
+ */
+export function detectDoorType(buf: Buffer): string {
+  if (buf.includes(Buffer.from('FAMEDoorPort', 'latin1'))) return 'FIM';
+  if (buf.includes(Buffer.from('AEDoorPort', 'latin1'))) return 'XIM';
+  if (buf.includes(Buffer.from('DoorControl', 'latin1'))) return 'SIM';
+  return 'XIM';
 }
