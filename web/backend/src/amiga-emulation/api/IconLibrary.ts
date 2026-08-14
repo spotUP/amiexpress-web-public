@@ -206,10 +206,11 @@ console.log(`[icon.library]   Returning DiskObject at 0x${diskObjAddr.toString(1
     const name = this.readString(namePtr);
 
 console.log(`[icon.library] PutDiskObject("${name}", 0x${diskObjPtr.toString(16)})`);
-console.log(`  Stub: pretending to save (not implemented)`);
+console.warn(`[icon.library]   .info write not implemented — returning FAILURE (0) so the door surfaces the error instead of silently losing data. No installed door uses this today; implement a real serializer when one does.`);
 
-    // Pretend success
-    this.emulator.setRegister(CPURegister.D0, 1);
+    // Honest failure — never fake success (would silently drop the door's
+    // saved config while telling it the write succeeded).
+    this.emulator.setRegister(CPURegister.D0, 0);
   }
 
   /**

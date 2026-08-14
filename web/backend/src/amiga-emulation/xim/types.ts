@@ -496,3 +496,22 @@ export const FieldLengths = {
   // See aedoor.library.asm lines 293-296, 406-409
   GENERIC_STRING: 198,   // Maximum embedded string (MESSAGE_STRING_CAPACITY)
 } as const;
+
+/**
+ * Does this XIM command belong to the command-info request family
+ * (menu-command-that-launched-the-door, or read a tooltype from the
+ * command's .info file)?
+ *
+ * Single source of truth for XIMProtocol's routing. Keys off the enum
+ * values, never numeric literals — a prior literal `551` here was a
+ * mislabel of GET_CMD_TOOLTYPE (707); since SETMCIOFF (551) is a system
+ * command caught upstream, that dead clause let GET_CMD_TOOLTYPE fall
+ * through to the unknown-command default and gave doors silently-wrong
+ * DOORUSE.<cmd> tooltype lookups.
+ */
+export function isCommandInfoRequestCommand(command: number): boolean {
+  return (
+    command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD ||
+    command === XIMCommand.GET_CMD_TOOLTYPE
+  );
+}

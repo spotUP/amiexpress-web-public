@@ -2457,6 +2457,14 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return this.sessionRepo!.getNodeSessions(...args);
   }
 
+  async markIdleSessionsDisconnected(...args: Parameters<SessionRepository['markIdleSessionsDisconnected']>) {
+    return this.sessionRepo!.markIdleSessionsDisconnected(...args);
+  }
+
+  async deleteOldNodeSessions(...args: Parameters<SessionRepository['deleteOldNodeSessions']>) {
+    return this.sessionRepo!.deleteOldNodeSessions(...args);
+  }
+
   // Chat management methods - delegate to ChatRepository
   async getUserByUsernameForOLM(...args: Parameters<ChatRepository['getUserByUsernameForOLM']>) {
     return this.chatRepo!.getUserByUsernameForOLM(...args);

@@ -134,4 +134,43 @@ describe('SessionRepository', () => {
       expect(Array.isArray(all)).toBe(true);
     });
   });
+
+  describe('DB session cleanup (regression: cleanup was a no-op)', () => {
+    // node_sessions.nodeid is UNIQUE — each row needs a distinct node id.
+    const idleId = `idle-${Date.now()}`;
+    const freshId = `fresh-${Date.now()}`;
+    const ancientId = `ancient-${Date.now()}`;
+
+    afterEach(() => {
+      for (const id of [idleId, freshId, ancientId]) {
+        rawDb.prepare('DELETE FROM node_sessions WHERE id = ?').run(id);
+      }
+    });
+
+    it('markIdleSessionsDisconnected flips only stale active rows', async () => {
+      const old = new Date(Date.now() - 60 * 60 * 1000); // 1h ago
+      await repo.createNodeSession(makeNodeSession(idleId, 88, { lastActivity: old, status: 'active' }));
+      await repo.createNodeSession(makeNodeSession(freshId, 89, { lastActivity: new Date(), status: 'active' }));
+
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000); // 30m
+      const changed = await repo.markIdleSessionsDisconnected(cutoff);
+      expect(changed).toBeGreaterThanOrEqual(1);
+
+      const sessions = await repo.getNodeSessions();
+      expect(sessions.find(s => s.id === idleId)!.status).toBe('disconnected');
+      expect(sessions.find(s => s.id === freshId)!.status).toBe('active');
+    });
+
+    it('deleteOldNodeSessions removes rows past the cutoff', async () => {
+      const ancient = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days
+      await repo.createNodeSession(makeNodeSession(ancientId, 90, { lastActivity: ancient }));
+
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const deleted = await repo.deleteOldNodeSessions(cutoff);
+      expect(deleted).toBeGreaterThanOrEqual(1);
+
+      const sessions = await repo.getNodeSessions();
+      expect(sessions.some(s => s.id === ancientId)).toBe(false);
+    });
+  });
 });

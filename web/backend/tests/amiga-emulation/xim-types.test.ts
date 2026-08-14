@@ -14,6 +14,7 @@ import {
   AEDoorError,
   DataDirection,
   FieldLengths,
+  isCommandInfoRequestCommand,
 } from '../../src/amiga-emulation/xim/types';
 
 describe('XIM Protocol Types (Critical for 68K Door Communication)', () => {
@@ -547,6 +548,28 @@ describe('XIM Protocol Types (Critical for 68K Door Communication)', () => {
       expect(XIMCommand.JH_SHUTDOWN).toBe(2);
       expect(XIMCommand.RETURNCOMMAND).toBe(136);
       expect(XIMCommand.CHAIN).toBe(502);
+    });
+  });
+
+  describe('isCommandInfoRequestCommand routing (regression: 551/707 mislabel)', () => {
+    it('admits GET_CMD_TOOLTYPE (707) so tooltype lookups reach their handler', () => {
+      expect(XIMCommand.GET_CMD_TOOLTYPE).toBe(707);
+      expect(isCommandInfoRequestCommand(XIMCommand.GET_CMD_TOOLTYPE)).toBe(true);
+    });
+
+    it('admits GET_CUSTOM_MSGBASE_MENUCMD (605)', () => {
+      expect(XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD).toBe(605);
+      expect(isCommandInfoRequestCommand(XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD)).toBe(true);
+    });
+
+    it('does NOT admit SETMCIOFF (551) — it is a system command handled upstream', () => {
+      expect(XIMCommand.SETMCIOFF).toBe(551);
+      expect(isCommandInfoRequestCommand(551)).toBe(false);
+    });
+
+    it('does not admit unrelated commands', () => {
+      expect(isCommandInfoRequestCommand(XIMCommand.JH_SM)).toBe(false);
+      expect(isCommandInfoRequestCommand(525)).toBe(false);
     });
   });
 });

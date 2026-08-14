@@ -15,7 +15,7 @@
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
 import { Socket } from 'socket.io';
-import { XIMCommand, BBSSessionData, XIMState, XIMMessage } from './xim/types';
+import { XIMCommand, BBSSessionData, XIMState, XIMMessage, isCommandInfoRequestCommand } from './xim/types';
 import { DoorConstants } from './DoorTypes';
 import { XIMMessageParser } from './xim/messages';
 import { XIMIOHandler } from './xim/io';
@@ -735,10 +735,9 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
     // Common values: 23 (user line length), 29 (default when no user logged in)
     // These appear to be capability/feature checks. Return 0 (not active/not supported).
     if (msg.command >= 21 && msg.command <= 99) {
-      const fs = require('fs');
-      const path = require('path');
-      const logPath = path.join(process.cwd(), '../../logs/door-68k.log');
-      fs.appendFileSync(logPath, `[XIMProtocol] CMD ${msg.command} (undefined range 21-99): data=${msg.data} -> replying 0\n`);
+      // Was a synchronous fs.appendFileSync per command on this hot path
+      // (~3-5ms disk I/O each). Route through the gated debug logger instead.
+      debugLog(`[XIMProtocol] CMD ${msg.command} (undefined range 21-99): data=${msg.data} -> replying 0`);
       this.sendReply(msg, 0);
       return;
     }
@@ -754,21 +753,13 @@ debugLog(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}
    * Check if command is a command-info request (GET_CUSTOM_MSGBASE_MENUCMD, GET_CMD_TOOLTYPE)
    */
   private isCommandInfoRequest(command: number): boolean {
-    // 605 = GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command used to launch door
-    // 551 = GET_CMD_TOOLTYPE - Reads tooltype from command's .info file
-    const is605 = command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD;
-    const is551 = command === 551;
-    if (is605 || is551) {
-debugLog(
-        `[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE (is605=${is605}, is551=${is551})`
-      );
+    // Single source of truth in xim/types.ts. 605 = GET_CUSTOM_MSGBASE_MENUCMD,
+    // 707 = GET_CMD_TOOLTYPE. (Historically checked literal 551, but 551 is
+    // SETMCIOFF — caught upstream by isSystemCommand — so that clause was dead
+    // and GET_CMD_TOOLTYPE fell through to the unknown-command default.)
+    if (isCommandInfoRequestCommand(command)) {
+debugLog(`[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE`);
       return true;
-    }
-    // Debug: log ALL commands in the 500-610 range to catch any we might be missing
-    if (command >= 500 && command <= 610) {
-debugLog(
-        `[XIMProtocol] isCommandInfoRequest(${command}) -> FALSE (command in 500-610 range but NOT GET_CUSTOM_MSGBASE_MENUCMD/551)`
-      );
     }
     return false;
   }

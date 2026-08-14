@@ -174,17 +174,14 @@ export class NodeManager {
     const cutoffTime = new Date(Date.now() - maxIdleMinutes * 60 * 1000);
 
     try {
-      // Update disconnected sessions in database
-      const sql = `UPDATE node_sessions SET status = 'disconnected' WHERE lastActivity < ? AND status = 'active'`;
-      await new Promise<void>((resolve, reject) => {
-        // Use db.updateNodeSession for proper abstraction
-        // For now, we'll skip this cleanup to avoid private access
-        resolve();
-      });
-
-      // Clean up very old sessions (7 days)
+      // Mark idle active sessions as disconnected.
+      const disconnected = await db.markIdleSessionsDisconnected(cutoffTime);
+      // Delete very old sessions (7 days) so node_sessions doesn't grow unbounded.
       const oldCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      // Skip cleanup for now to avoid private access issues
+      const deleted = await db.deleteOldNodeSessions(oldCutoff);
+      if (disconnected > 0 || deleted > 0) {
+console.log(`[NodeManager] DB session cleanup: ${disconnected} marked disconnected, ${deleted} old rows deleted`);
+      }
     } catch (error) {
 console.error('Error cleaning up database sessions:', error);
     }

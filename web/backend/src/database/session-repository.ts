@@ -187,4 +187,28 @@ export class SessionRepository extends BaseRepository<any> {
       updated: new Date(row.updated * 1000)
     }));
   }
+
+  /**
+   * Mark active node sessions idle past the cutoff as disconnected.
+   * @param cutoff sessions whose lastactivity is older than this are affected
+   * @returns number of rows updated
+   */
+  async markIdleSessionsDisconnected(cutoff: Date): Promise<number> {
+    const cutoffSecs = Math.floor(cutoff.getTime() / 1000);
+    const stmt = this.prepare(
+      `UPDATE node_sessions SET status = 'disconnected', updated = strftime('%s','now')
+       WHERE lastactivity < ? AND status = 'active'`
+    );
+    return stmt.run(cutoffSecs).changes;
+  }
+
+  /**
+   * Delete node sessions whose lastactivity is older than the cutoff.
+   * @returns number of rows deleted
+   */
+  async deleteOldNodeSessions(cutoff: Date): Promise<number> {
+    const cutoffSecs = Math.floor(cutoff.getTime() / 1000);
+    const stmt = this.prepare(`DELETE FROM node_sessions WHERE lastactivity < ?`);
+    return stmt.run(cutoffSecs).changes;
+  }
 }

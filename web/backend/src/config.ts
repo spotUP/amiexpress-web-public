@@ -170,21 +170,16 @@ export class ConfigManager {
   }
 
   private loadConfig(): void {
-    try {
-      // In a real implementation, this would read from a config file
-      // For now, we just use defaults
-    } catch (error) {
-console.warn('Failed to load config, using defaults:', error);
-    }
+    // Intentional no-op. This ConfigManager's source of truth is
+    // getDefaultConfig() overlaid with environment variables (and runtime
+    // updateConfig calls) — there is no JSON config file. BBS-level config
+    // lives in the Amiga config files (Conf.DB, *.info) parsed elsewhere.
   }
 
   public saveConfig(): void {
-    try {
-      // In a real implementation, this would write to a config file
-console.log('Configuration saved to:', this.configPath);
-    } catch (error) {
-console.error('Failed to save config:', error);
-    }
+    // Intentional no-op — see loadConfig(). Runtime config is not persisted
+    // to a file; env + defaults are authoritative on every boot. Kept for
+    // API compatibility; currently has no callers.
   }
 
   public getConfig(): BBSConfig {
