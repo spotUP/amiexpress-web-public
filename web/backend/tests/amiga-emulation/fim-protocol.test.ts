@@ -1,7 +1,14 @@
+jest.mock("../../src/utils/debug-log", () => ({
+  debugLog: jest.fn(),
+  debugWarn: jest.fn(),
+  isDebugEnabled: () => false,
+}));
+
 import { FIMProtocol } from "../../src/amiga-emulation/fim/fim-protocol";
 import { FDOM, FIM_CMD, FIM_RC } from "../../src/amiga-emulation/fim/fim-constants";
 // reuse MemStub from fame-library.test.ts (extract to tests/amiga-emulation/helpers/mem-stub.ts in this task)
 import { MemStub } from "./helpers/mem-stub";
+import * as debugLogModule from "../../src/utils/debug-log";
 
 function buildMsg(emu: MemStub, addr: number, cmd: number) {
   emu.writeMemory32(addr + FDOM.MN_REPLYPORT, 0x9000);
@@ -138,9 +145,11 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
 
-  it("CF_ShowText replies NOTIMPLEMENTED and never fakes success (no emit)", () => {
+  it("CF_ShowText replies NOTIMPLEMENTED, logs the opcode-specific message, and never fakes success (no emit)", () => {
     const emu = new MemStub();
     const out: string[] = [];
+    const logMock = debugLogModule.debugLog as jest.Mock;
+    logMock.mockClear();
     const proto = new FIMProtocol({ emulator: emu as never, execLibrary: { putMsg: () => undefined },
       socket: { emit: (_e, d) => { out.push(String(d)); return true; } }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
     const msg = 0x8000;
@@ -150,5 +159,9 @@ describe("FIMProtocol", () => {
     proto.handleMessage(msg);
     expect(out).toEqual([]);
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.NOTIMPLEMENTED);
+    // Distinguishes the dedicated CF_ShowText arm from the generic `default:`
+    // fallback, which logs "[FIM] not implemented: 400" instead — same rc,
+    // same no-emit behavior, different log content.
+    expect(logMock).toHaveBeenCalledWith("[FIM] CF_ShowText MENU");
   });
 });
