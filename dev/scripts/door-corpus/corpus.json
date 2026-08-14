@@ -108918,6 +108918,67 @@
      ]
     }
    }
+  },
+  {
+   "id": "fametest_1",
+   "name": "FAME TestDoor",
+   "category": "FIM-Reference",
+   "binary": "Doors/FAMETest/TestDoor.FIM",
+   "doorType": "FIM",
+   "command": "FAMETEST",
+   "timeoutMs": 30000,
+   "inputScript": [
+    {
+     "delayMs": 2000,
+     "data": "something\\r"
+    }
+   ],
+   "notes": "FAME.library reference door (FA_DE103 SDK sample, TestDoor.c). Exercises FIM lifecycle MC_DoorStart -> NR_PromptChars (PutString+GetString) -> MC_ShutDown. Prompts 'Tell me something>:' then echoes \"You've said: <input>\". Manually verified end-to-end 2026-08-14 (task-9) with a local diagnostic fix for a pre-existing bug: AmigaDoorSession.ts's setLibraryOpenedCallback (line ~759) overwrites LibraryManager's callback (LibraryManager.ts:726) instead of composing with it, so fame.library's vector-install branch (LibraryManager.ts:797-801) never runs and OpenLibrary(\"FAME.library\") returns a stub with an empty jump table -- the door then crashes with an invalid-PC fault the first time it calls into FAME.library, before FIMStart completes. Confirmed by temporarily adding the missing fame.library branch to AmigaDoorSession.ts's callback (reverted, not committed -- out of task-9's file scope). Not yet green via corpus-integration-runner pending that fix landing.",
+   "integration": {
+    "timeoutMs": 8000,
+    "assertions": {
+     "mustContain": [
+      "Tell me something",
+      "You've said: something"
+     ],
+     "mustNotContain": [
+      "TRAP",
+      "PANIC",
+      "Guru",
+      "Software failure"
+     ]
+    },
+    "inputs": [
+     {
+      "delayMs": 3000,
+      "data": "something\r"
+     }
+    ]
+   }
+  },
+  {
+   "id": "famewho_1",
+   "name": "FAMEWHO v1.2",
+   "category": "FIM-Reference",
+   "binary": "Doors/FAMEWho/FAMEWHO.FIM",
+   "doorType": "FIM",
+   "command": "FAMEWHO",
+   "timeoutMs": 30000,
+   "notes": "FAMEWHO v1.2 who's-online door for FAME BBS (FAMEWH12 SDK sample). Exercises FIM lifecycle plus who's-online formatting via FAMEAllocObject/RawDoFmt. Currently calls NR_GetArgument1 (FIM command 88), which fim-protocol.ts does not implement yet; FAME's own door code catches the NOTIMPLEMENTED reply and self-terminates via MC_ShutDownLastWords with a friendly 'Command 88 not implemented...' message. Our MC_ShutDownLastWords handler (fim-protocol.ts case at line ~122) never displays that lastWords text -- AmigaDoorSession.ts's onShutdown callback only debugLogs it -- so today the door exits with zero visible output. Also blocked earlier by the same OpenLibrary(\"FAME.library\") vector-install bug as fametest_1 (see that entry's notes). Manually verified 2026-08-14 (task-9) with the same local diagnostic OpenLibrary fix; NR_GetArgument1 and the lastWords display gap remain open follow-ups. Not yet green via corpus-integration-runner.",
+   "integration": {
+    "timeoutMs": 15000,
+    "assertions": {
+     "mustContain": [
+      "Command 88 not implemented"
+     ],
+     "mustNotContain": [
+      "TRAP",
+      "PANIC",
+      "Guru",
+      "Software failure"
+     ]
+    }
+   }
   }
  ],
  "_generated": "2026-05-26b"
