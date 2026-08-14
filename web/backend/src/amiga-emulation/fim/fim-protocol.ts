@@ -120,10 +120,20 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.MC_ShutDownLastWords: {
+        // FAMEDoorCommands.h: "IOString <- The string to be send to the
+        // user." Must reach the terminal, not just onShutdown's debug log —
+        // this is a door's documented, courteous way to explain WHY it is
+        // bailing out (e.g. FAMEWHO's "Command 88 not implemented..." when
+        // it hits something it can't handle), and was previously silently
+        // swallowed (see AR_SendStr/NR_SendStr above for the same
+        // ansi-output pattern this mirrors).
         const lastWords = this.readCString(
           msgAddr + FDOM.IOSTRING,
           FDOM.IOSTRING_LEN
         );
+        if (lastWords.length > 0) {
+          this.socket?.emit("ansi-output", lastWords);
+        }
         this.reply(msgAddr, FIM_RC.OK);
         this.onShutdown(0, lastWords);
         break;
@@ -188,6 +198,56 @@ export class FIMProtocol {
           this.bbsSession.doorParams || this.bbsSession.doorCommand || ""
         );
         this.writeCString(msgAddr + FDOM.IOSTRING, mainLine, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_GetFullArg: {
+        this.writeCString(
+          msgAddr + FDOM.IOSTRING,
+          this.buildFullArg(),
+          FDOM.IOSTRING_LEN
+        );
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_GetArgument1: {
+        this.writeCString(
+          msgAddr + FDOM.IOSTRING,
+          this.getArgument(1),
+          FDOM.IOSTRING_LEN
+        );
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_GetArgument2: {
+        this.writeCString(
+          msgAddr + FDOM.IOSTRING,
+          this.getArgument(2),
+          FDOM.IOSTRING_LEN
+        );
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_GetArgument3: {
+        this.writeCString(
+          msgAddr + FDOM.IOSTRING,
+          this.getArgument(3),
+          FDOM.IOSTRING_LEN
+        );
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_GetArgument4: {
+        this.writeCString(
+          msgAddr + FDOM.IOSTRING,
+          this.getArgument(4),
+          FDOM.IOSTRING_LEN
+        );
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }
@@ -346,6 +406,83 @@ export class FIMProtocol {
       this.emulator.writeMemory(addr + i, s.charCodeAt(i) & 0xff);
     }
     this.emulator.writeMemory(addr + i, 0);
+  }
+
+  /**
+   * The door's argument string, per FAMEDoorCommands.h's NR_GetFullArg /
+   * NR_GetArgument1-4 semantics: "you get ONLY the arguments, not the
+   * commandname". bbsSession.doorParams holds the FULL command line
+   * "COMMAND arg1 arg2..." (see door.handler.ts's fullCommandLine and
+   * NR_MainLine above, which reads the same field unstripped) — strip the
+   * leading doorCommand token to get pure arguments. No doorParams (or no
+   * match against doorCommand) falls back to "" — an absent/unparseable
+   * argument string, not an error.
+   */
+  private getArgString(): string {
+    const full = String(this.bbsSession.doorParams ?? "");
+    if (!full) {
+      return "";
+    }
+    const cmd = String(this.bbsSession.doorCommand ?? "");
+    if (cmd && full.toLowerCase().startsWith(cmd.toLowerCase())) {
+      return full.slice(cmd.length).replace(/^\s+/, "");
+    }
+    return full;
+  }
+
+  /** Whitespace-delimited argument tokens with their start offset in `args`. */
+  private tokenizeArgs(args: string): Array<{ text: string; index: number }> {
+    const tokens: Array<{ text: string; index: number }> = [];
+    const re = /\S+/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(args)) !== null) {
+      tokens.push({ text: m[0], index: m.index });
+    }
+    return tokens;
+  }
+
+  /**
+   * NR_GetFullArg (87): "The first 4 arguments will automaticly be sorted
+   * by FAME, arguments after argument with a single space between each
+   * other, but all other arguments behind 4 will be like they are typed
+   * it." — normalize whitespace between the first 4 tokens to single
+   * spaces, then append the 5th-and-beyond arguments verbatim (original
+   * spacing preserved) after a single separating space.
+   */
+  private buildFullArg(): string {
+    const args = this.getArgString();
+    const tokens = this.tokenizeArgs(args);
+    if (tokens.length === 0) {
+      return "";
+    }
+    const firstFour = tokens.slice(0, 4).map((t) => t.text).join(" ");
+    if (tokens.length <= 4) {
+      return firstFour;
+    }
+    const tail = args.slice(tokens[4].index);
+    return `${firstFour} ${tail}`;
+  }
+
+  /**
+   * NR_GetArgument1/2/3 (88/89/90): the Nth argument alone. NR_GetArgument4
+   * (91): "Get all other arguments" — "Will be the fourth and all other
+   * arguments", i.e. from the 4th token to the end of the string, verbatim
+   * (original spacing preserved), not just the single 4th token. Fewer than
+   * N arguments present -> "" (header does not document a
+   * fail/denied return code for a missing argument; every other
+   * absent-optional-field arm in this file — NR_BBSName, NR_SysOp, etc. —
+   * likewise replies OK with an empty string).
+   */
+  private getArgument(n: 1 | 2 | 3 | 4): string {
+    const args = this.getArgString();
+    const tokens = this.tokenizeArgs(args);
+    if (tokens.length < n) {
+      return "";
+    }
+    if (n === 4 && tokens.length > 4) {
+      return args.slice(tokens[3].index);
+    }
+    return tokens[n - 1].text;
   }
 
   /**

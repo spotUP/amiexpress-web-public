@@ -443,4 +443,135 @@ describe("FIMProtocol", () => {
     expect(putMsgCalls.length).toBe(2);
     expect(emu.readMemory32(msg2 + FDOM.DATA3)).toBe(101); // 'e', answered synchronously (type-ahead)
   });
+
+  describe("MC_ShutDownLastWords", () => {
+    it("emits IOString to the socket before shutdown, then fires onShutdown with the same text", () => {
+      const emu = new MemStub();
+      const out: string[] = [];
+      const shutdowns: Array<{ rc: number; lastWords?: string }> = [];
+      const proto = new FIMProtocol({
+        emulator: emu as never,
+        execLibrary: { putMsg: () => undefined },
+        socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+        bbsSession: {}, nodeId: 1,
+        onShutdown: (rc, lastWords) => { shutdowns.push({ rc, lastWords }); },
+      });
+      const msg = 0x8000;
+      emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+      emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.MC_ShutDownLastWords);
+      "Command 88 not implemented until now in this Version of FAME !"
+        .split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+      proto.handleMessage(msg);
+      expect(out).toEqual(["Command 88 not implemented until now in this Version of FAME !"]);
+      expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+      expect(shutdowns).toEqual([{ rc: 0, lastWords: "Command 88 not implemented until now in this Version of FAME !" }]);
+    });
+
+    it("empty IOString: does not emit, still fires onShutdown", () => {
+      const emu = new MemStub();
+      const out: string[] = [];
+      const shutdowns: number[] = [];
+      const proto = new FIMProtocol({
+        emulator: emu as never,
+        execLibrary: { putMsg: () => undefined },
+        socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+        bbsSession: {}, nodeId: 1,
+        onShutdown: (rc) => { shutdowns.push(rc); },
+      });
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.MC_ShutDownLastWords);
+      proto.handleMessage(msg);
+      expect(out).toEqual([]);
+      expect(shutdowns).toEqual([0]);
+    });
+  });
+
+  describe("NR_GetFullArg / NR_GetArgument1-4 (87-91)", () => {
+    // FAMEDoorCommands.h: doorParams holds the FULL command line
+    // "COMMAND arg1 arg2..." (same field NR_MainLine reads unstripped);
+    // these commands must strip the leading command-name token — "you get
+    // ONLY the arguments, not the commandname".
+    function argSession(doorParams: string, doorCommand: string) {
+      return { doorParams, doorCommand };
+    }
+
+    it("NR_GetArgument1-4 return each argument, stripping the leading commandname", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("FAMEWHO force node online", "FAMEWHO"));
+      const m1 = buildMsg(emu, 0x8000, FIM_CMD.NR_GetArgument1);
+      proto.handleMessage(m1);
+      expect(readIOStr(emu, m1)).toBe("force");
+
+      const m2 = buildMsg(emu, 0x8100, FIM_CMD.NR_GetArgument2);
+      proto.handleMessage(m2);
+      expect(readIOStr(emu, m2)).toBe("node");
+
+      const m3 = buildMsg(emu, 0x8200, FIM_CMD.NR_GetArgument3);
+      proto.handleMessage(m3);
+      expect(readIOStr(emu, m3)).toBe("online");
+      expect(emu.readMemory32(m3 + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+    });
+
+    it("NR_GetArgument4 returns the 4th token AND everything after it, verbatim spacing", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("FAMEWHO a  b c d   e f", "FAMEWHO"));
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_GetArgument4);
+      proto.handleMessage(msg);
+      expect(readIOStr(emu, msg)).toBe("d   e f");
+    });
+
+    it("NR_GetArgument4 with exactly 4 (or fewer) tokens returns just the 4th token", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("FAMEWHO a b c d", "FAMEWHO"));
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_GetArgument4);
+      proto.handleMessage(msg);
+      expect(readIOStr(emu, msg)).toBe("d");
+    });
+
+    it("NR_GetFullArg normalizes spacing across the first 4 args, keeps the rest verbatim", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("FAMEWHO a  b c d   e f", "FAMEWHO"));
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_GetFullArg);
+      proto.handleMessage(msg);
+      expect(readIOStr(emu, msg)).toBe("a b c d e f");
+    });
+
+    it("NR_GetFullArg with 4 or fewer args just normalizes spacing, no trailing tail", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("FAMEWHO  force   node ", "FAMEWHO"));
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_GetFullArg);
+      proto.handleMessage(msg);
+      expect(readIOStr(emu, msg)).toBe("force node");
+    });
+
+    it("missing argument index returns empty string with rc=OK (header documents no fail/denied for absent args)", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("FAMEWHO force", "FAMEWHO"));
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_GetArgument3);
+      proto.handleMessage(msg);
+      expect(readIOStr(emu, msg)).toBe("");
+      expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+    });
+
+    it("no doorParams at all: every arm returns empty string, rc=OK, never throws", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, {});
+      for (const cmd of [
+        FIM_CMD.NR_GetFullArg, FIM_CMD.NR_GetArgument1, FIM_CMD.NR_GetArgument2,
+        FIM_CMD.NR_GetArgument3, FIM_CMD.NR_GetArgument4,
+      ]) {
+        const msg = buildMsg(emu, 0x8000, cmd);
+        expect(() => proto.handleMessage(msg)).not.toThrow();
+        expect(readIOStr(emu, msg)).toBe("");
+        expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+      }
+    });
+
+    it("strips the commandname case-insensitively", () => {
+      const emu = new MemStub();
+      const { proto } = makeWith(emu, argSession("famewho force", "FAMEWHO"));
+      const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_GetArgument1);
+      proto.handleMessage(msg);
+      expect(readIOStr(emu, msg)).toBe("force");
+    });
+  });
 });

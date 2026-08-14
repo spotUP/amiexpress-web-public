@@ -108964,13 +108964,10 @@
    "doorType": "FIM",
    "command": "FAMEWHO",
    "timeoutMs": 30000,
-   "notes": "FAMEWHO v1.2 who's-online door for FAME BBS (FAMEWH12 SDK sample). Exercises FIM lifecycle plus who's-online formatting via FAMEAllocObject/RawDoFmt. Currently calls NR_GetArgument1 (FIM command 88), which fim-protocol.ts does not implement yet; FAME's own door code catches the NOTIMPLEMENTED reply and self-terminates via MC_ShutDownLastWords with a friendly 'Command 88 not implemented...' message. Our MC_ShutDownLastWords handler (fim-protocol.ts case at line ~122) never displays that lastWords text -- AmigaDoorSession.ts's onShutdown callback only debugLogs it -- so today the door exits with zero visible output. Also blocked earlier by the same OpenLibrary(\"FAME.library\") vector-install bug as fametest_1 (see that entry's notes). Manually verified 2026-08-14 (task-9) with the same local diagnostic OpenLibrary fix; NR_GetArgument1 and the lastWords display gap remain open follow-ups. Not yet green via corpus-integration-runner.",
+   "notes": "FAMEWHO v1.2 who's-online door for FAME BBS (FAMEWH12 SDK sample). Exercises FIM lifecycle plus who's-online formatting via FAMEAllocObject/RawDoFmt. fame.library vector-install bug fixed (ExecLibrary.ts now composes library-opened callbacks instead of overwriting -- LibraryManager's fame.library branch runs again); NR_GetArgument1-4/NR_GetFullArg (FIM commands 87-91) and MC_ShutDownLastWords ansi-output emission are now implemented (fim-protocol.ts). Verified 2026-08-14 (task-9 fix round): door runs crash-free end to end, EXIT 0, no TRAP/PANIC/Guru/Software failure. It now reaches FAMEWHO.c's FindSemaphore(\"FAMESemaphore\") check (line ~285) and gets NULL, because nothing in amiexpress-web publishes a FAME-style public SignalSemaphore with a fsem_FirstNode multi-node info list -- that is real AmigaOS FindSemaphore behavior for a semaphore genuinely not present, not a wiring bug. Per FAMEWHO.c's own logic (line ~421: else { Permit(); } falling through to FIMEnd(0)), the door then does a silent, argument-independent MC_ShutDown with no lastWords -- by design, not a fault. Net effect: no visible output, but no crash either. Producing real who's-online output would require a new feature (FAME.library publishing/populating a FAMESemaphore from amiexpress-web's own multi-node session state) that is out of scope for this fix round.",
    "integration": {
     "timeoutMs": 15000,
     "assertions": {
-     "mustContain": [
-      "Command 88 not implemented"
-     ],
      "mustNotContain": [
       "TRAP",
       "PANIC",
