@@ -57,13 +57,18 @@ export class FIMProtocol {
    * Raw terminal input not yet consumed by a command. The web terminal
    * delivers door:input per keystroke, so this is a plain string (not an
    * array of chunks): it holds type-ahead backlog when nothing is pending,
-   * and — while pendingKind==="line" — the queued tail of a partial line
-   * still being typed across multiple queueInput() calls (see
-   * feedLineChars()).
+   * and — while pendingKind==="line" or "key" — the queued tail still being
+   * typed across multiple queueInput() calls (see feedLineChars() /
+   * feedKeyChar()).
    */
   private inputBuffer = "";
 
-  /** Message currently deferred pending terminal input (paused emulator). */
+  /**
+   * Message currently deferred pending terminal input (paused emulator).
+   * Only NR_PromptChars ("line") and NR_WaitChar ("key") ever defer — the
+   * poll commands (AR_GetKey, NR_HotKey, AR_HotKey) always answer
+   * immediately and never populate this.
+   */
   private pendingMsg: number | null = null;
   private pendingKind: "line" | "key" | null = null;
   /** NR_PromptChars Data2 echo mode for the pending line request. */
@@ -85,10 +90,13 @@ export class FIMProtocol {
   /**
    * Deliver terminal input to the door. If NR_PromptChars is pending, feeds
    * the new chars through the per-keystroke line accumulator (echo,
-   * backspace, CR-completes). If a key command (AR_GetKey / NR_HotKey /
-   * AR_HotKey) is pending, consumes only the first char and leaves any
-   * remainder buffered. If nothing is pending, buffers the input
-   * (type-ahead) for the next input-style command to consume.
+   * backspace, CR-completes). If NR_WaitChar (the only blocking key
+   * command) is pending, consumes the first char and completes it. If
+   * nothing is pending, buffers the input (type-ahead) for the next
+   * input-style command to consume — including the non-blocking polls
+   * (AR_GetKey / NR_HotKey / AR_HotKey), which read straight from
+   * inputBuffer the next time they're called rather than through this
+   * deferred path.
    */
   queueInput(data: string): void {
     this.inputBuffer += data;
@@ -107,6 +115,15 @@ export class FIMProtocol {
   handleMessage(msgAddr: number): void {
     const command = this.emulator.readMemory32(msgAddr + FDOM.COMMAND);
 
+    // Per-command return-field convention (FAMEDoorCommands.h): each
+    // command documents its OWN mapping of which of Data2/Data3/IOString
+    // carries the result — there is no single fixed slot for "the value" or
+    // "the char". Mixing them up is an easy, silent bug: three commands in
+    // this file (NR_HotKey/AR_HotKey, AR_GetKey, NR_Uploads/NR_Downloads)
+    // previously wrote the wrong field because this convention lived only
+    // in a reviewer's memory, not in the code. When adding a new command,
+    // re-read its header comment block and match Data2 vs Data3 vs
+    // IOString exactly — don't infer from a neighboring command.
     switch (command) {
       case FIM_CMD.MC_DoorStart: {
         this.reply(msgAddr, FIM_RC.OK);
@@ -147,7 +164,11 @@ export class FIMProtocol {
         }
         const data1 = this.emulator.readMemory32(msgAddr + FDOM.DATA1);
         let text = this.readCString(stringPtr, FDOM.IOSTRING_LEN);
-        if (data1 === 1) {
+        // FAMEDoorCommands.h AR_SendStr: "Data1 <- if not 0 a \"\\r\\n\"
+        // combination will be send" — any nonzero value, not just 1.
+        // readMemory32 returns unsigned (>>> 0), so a door writing -1
+        // (0xFFFFFFFF) still compares !== 0 correctly here.
+        if (data1 !== 0) {
           text += "\r\n";
         }
         this.socket?.emit("ansi-output", text);
@@ -171,10 +192,19 @@ export class FIMProtocol {
         break;
       }
 
-      case FIM_CMD.AR_GetKey:
+      case FIM_CMD.AR_GetKey: {
+        this.handleGetKey(msgAddr);
+        break;
+      }
+
       case FIM_CMD.NR_HotKey:
       case FIM_CMD.AR_HotKey: {
-        this.handleKeyCommand(msgAddr);
+        this.handleHotKey(msgAddr);
+        break;
+      }
+
+      case FIM_CMD.NR_WaitChar: {
+        this.handleWaitChar(msgAddr);
         break;
       }
 
@@ -253,7 +283,7 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.NR_Name: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const user = this.getUser();
         const username = String(user.username ?? "");
         this.writeCString(msgAddr + FDOM.IOSTRING, username, FDOM.IOSTRING_LEN);
         this.reply(msgAddr, FIM_RC.OK);
@@ -268,7 +298,7 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.NR_Location: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const user = this.getUser();
         const location = String(user.location ?? "");
         this.writeCString(msgAddr + FDOM.IOSTRING, location, FDOM.IOSTRING_LEN);
         this.reply(msgAddr, FIM_RC.OK);
@@ -276,7 +306,7 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.NR_AccessLevel: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const user = this.getUser();
         const secLevel = Number(user.secLevel ?? 0);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, secLevel >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
@@ -299,23 +329,27 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.NR_Uploads: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        // FAMEDoorCommands.h: "Data3 -> Contains the User's number of
+        // uploads." (Data2 unused, unlike NR_AccessLevel/NR_TimeRemain).
+        const user = this.getUser();
         const uploads = Number(user.uploads ?? 0);
-        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, uploads >>> 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, uploads >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }
 
       case FIM_CMD.NR_Downloads: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        // FAMEDoorCommands.h: "Data3 -> Contains the User's number of
+        // downloads."
+        const user = this.getUser();
         const downloads = Number(user.downloads ?? 0);
-        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, downloads >>> 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, downloads >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }
 
       case FIM_CMD.NR_BytesUpload: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const user = this.getUser();
         const bytesUpload = Number(user.bytesUpload ?? 0);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA3, bytesUpload >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
@@ -323,7 +357,7 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.NR_BytesDownload: {
-        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const user = this.getUser();
         const bytesDownload = Number(user.bytesDownload ?? 0);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA3, bytesDownload >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
@@ -338,8 +372,15 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.SR_ConfNum: {
+        // FAMEDoorCommands.h: "Data2 -> The actual conferencenumber. /
+        // Data3 -> The relative conferencenumber." amiexpress-web has no
+        // separate relative-numbering scheme (conferences aren't
+        // per-user-renumbered), so Data3 mirrors Data2 rather than being
+        // left 0 — matches the header's own note that a relative number of
+        // 0 normally means "no access", which is never true here.
         const conferenceId = Number(this.bbsSession.conferenceId ?? 0);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, conferenceId >>> 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, conferenceId >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }
@@ -351,12 +392,17 @@ export class FIMProtocol {
       }
 
       case FIM_CMD.SR_FAMEVersion: {
+        // FAMEDoorCommands.h: "Data2 -> Contains the versionnumber of
+        // FAME. / Data3 -> Contains the revsionnumber of FAME." These are
+        // two separate fields (major version, revision), not one packed
+        // value — report version 6, revision 0.
         this.writeCString(
           msgAddr + FDOM.IOSTRING,
           "FAME 6.0 (amiexpress-web compat)",
           FDOM.IOSTRING_LEN
         );
-        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 60);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 6);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, 0);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }
@@ -374,6 +420,17 @@ export class FIMProtocol {
         break;
       }
     }
+  }
+
+  /**
+   * bbsSession.user, typed and defaulted to {} — shared by every FIM command
+   * that reads a user field (NR_Name, NR_Location, NR_AccessLevel,
+   * NR_Uploads, NR_Downloads, NR_BytesUpload, NR_BytesDownload). Extracted
+   * to a single helper so the (Record<string, unknown>) ?? {} idiom isn't
+   * duplicated at each call site.
+   */
+  private getUser(): Record<string, unknown> {
+    return (this.bbsSession.user as Record<string, unknown>) ?? {};
   }
 
   /**
@@ -488,9 +545,24 @@ export class FIMProtocol {
   /**
    * NR_PromptChars (14): prompt-and-read-a-line. Data1=max chars (0 falls
    * back to 201; the door's own max always wins, capped at 201 — the
-   * IOSTRING field width), Data2=echo mode (0 normal, 4 password echoed as
-   * '*'). Modes 1-3 are denied for MVP (mode 2 is denied on real FAME too).
-   * IOString on entry holds the prompt text, emitted before deferring.
+   * IOSTRING field width), Data2=echo mode. Modes implemented:
+   *   0 Normal line editing (also the fallback for mode 6, see below).
+   *   4 Password, echoed as '*' per typed char.
+   *   7 Password, NO echo at all — FAMEDoorCommands.h: "here will
+   *     definality no single char be typed on the screen. No single char
+   *     means also NO stars (*)." (the header's "Display Passwords to
+   *     SysOp" console-only exception is not implemented — no separate
+   *     sysop-facing echo channel exists in this emulation).
+   *   8 Numeric-only: non-digit printable chars are silently rejected
+   *     (same drop-not-error handling as an at-cap char), matching the
+   *     header's "Only alphanumeric chars can be typed and no alphabetical
+   *     ones" (i.e. digits accepted, letters/symbols rejected).
+   * Mode 6 ("real feature", full in-string cursor editing with
+   * insert/delete-at-position) is NOT implemented as a distinct editor —
+   * it degrades to mode-0 append-only line editing (no cursor movement,
+   * no mid-string insert/delete). Modes 1-3 are denied for MVP (mode 2 is
+   * denied on real FAME too). IOString on entry holds the prompt text,
+   * emitted before deferring.
    */
   private handlePromptChars(msgAddr: number): void {
     const mode = this.emulator.readMemory32(msgAddr + FDOM.DATA2);
@@ -524,12 +596,16 @@ export class FIMProtocol {
   /**
    * Feed buffered chars (inputBuffer) into the pending line request one at
    * a time: backspace (0x08/0x7F) drops the last buffered char and echoes
-   * "\b \b"; printable chars (0x20-0x7E) are appended and echoed (masked
-   * '*' for password mode) up to pendingCap, then silently ignored past
-   * cap; CR completes the request (a following LF is swallowed as part of
-   * the same CRLF pair). Other control chars are dropped. Stops as soon as
-   * the request completes or the buffer is exhausted — the rest of a
-   * partial line waits for a future queueInput() call.
+   * "\b \b" (mode 7 suppresses this echo too — "no single char" means NO
+   * visual feedback at all, not just no stars); printable chars (0x20-0x7E)
+   * are appended and echoed up to pendingCap, then silently ignored past
+   * cap — echo is '*' for mode 4, nothing for mode 7, the literal char
+   * otherwise; mode 8 additionally rejects (drops, doesn't error) any
+   * printable char that isn't a digit 0-9; CR completes the request (a
+   * following LF is swallowed as part of the same CRLF pair). Other
+   * control chars are dropped. Stops as soon as the request completes or
+   * the buffer is exhausted — the rest of a partial line waits for a
+   * future queueInput() call.
    */
   private feedLineChars(): void {
     while (this.pendingKind === "line" && this.inputBuffer.length > 0) {
@@ -548,14 +624,24 @@ export class FIMProtocol {
       if (code === 0x08 || code === 0x7f) {
         if (this.lineBuffer.length > 0) {
           this.lineBuffer = this.lineBuffer.slice(0, -1);
-          this.socket?.emit("ansi-output", "\b \b");
+          if (this.pendingMode !== 7) {
+            this.socket?.emit("ansi-output", "\b \b");
+          }
         }
         continue;
       }
 
       if (code >= 0x20 && code <= 0x7e && this.lineBuffer.length < this.pendingCap) {
+        const isDigit = code >= 0x30 && code <= 0x39;
+        if (this.pendingMode === 8 && !isDigit) {
+          continue; // numeric mode: reject non-digit chars silently
+        }
         this.lineBuffer += ch;
-        this.socket?.emit("ansi-output", this.pendingMode === 4 ? "*" : ch);
+        if (this.pendingMode === 4) {
+          this.socket?.emit("ansi-output", "*");
+        } else if (this.pendingMode !== 7) {
+          this.socket?.emit("ansi-output", ch);
+        }
       }
       // Non-printable, or already at cap: drop silently (backspace/CR still work).
     }
@@ -578,18 +664,61 @@ export class FIMProtocol {
   }
 
   /**
-   * AR_GetKey (800) / NR_HotKey (15) / AR_HotKey (861): read a single key.
-   * If input is already type-ahead buffered, answer synchronously without
-   * pausing the emulator — consuming only the first char and leaving any
-   * remainder in inputBuffer for the next input command (e.g. "yes\r" ->
-   * 'y' now, "es\r" stays queued). Otherwise defer until queueInput()
-   * delivers a key.
+   * AR_GetKey (800): "Look for a keypress without waiting for it." Per
+   * FAMEDoorCommands.h: "Data2 -> 0 means nothing happens, 1 means a key
+   * was pressed!" and "AR_GetKey is the same as NR_HotKey, but on
+   * AR_GetKey you wont get the char, only a notify that a char was
+   * present." This is a PEEK, not a consume: the char (if any) stays in
+   * inputBuffer so a following NR_HotKey/AR_HotKey still gets it. Always
+   * answers immediately — never pauses the emulator, never defers.
    */
-  private handleKeyCommand(msgAddr: number): void {
+  private handleGetKey(msgAddr: number): void {
+    const present = this.inputBuffer.length > 0 ? 1 : 0;
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA2, present);
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA3, 0); // 0 = console char
+    this.reply(msgAddr, FIM_RC.OK);
+  }
+
+  /**
+   * NR_HotKey (15) / AR_HotKey (861): "Gets a char without waiting for
+   * it." Per FAMEDoorCommands.h: "Data2 -> The char typed by the user. /
+   * Data3 -> 0 = Console char, 1 = Serial char." and "This command checks
+   * for a available char. If there is a char available you will get it
+   * immediatly, else you will get 0 in Data2." Non-blocking poll: if a
+   * char is buffered, consume exactly one and return it in Data2
+   * immediately; if the buffer is empty, Data2=0 immediately (rc=OK) — no
+   * pause, no pending/deferred state, unlike NR_WaitChar's blocking wait.
+   *
+   * AR_HotKey additionally documents a Data1 cursor-key base offset
+   * ("Data1+2 for UP, Data1+3 for DOWN, Data1+1 for RIGHT and Data1 for
+   * LEFT") for self-definable cursor-key return codes. NOT IMPLEMENTED:
+   * this emulation doesn't distinguish/report raw cursor-key escape
+   * sequences through the key-command path, so Data1 is never read here.
+   */
+  private handleHotKey(msgAddr: number): void {
+    let code = 0;
+    if (this.inputBuffer.length > 0) {
+      code = this.inputBuffer.charCodeAt(0) & 0xff;
+      this.inputBuffer = this.inputBuffer.slice(1);
+    }
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA2, code);
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA3, 0); // 0 = console char
+    this.reply(msgAddr, FIM_RC.OK);
+  }
+
+  /**
+   * NR_WaitChar (92): "Get a char with waiting for it." Per
+   * FAMEDoorCommands.h: "Data2 -> The char typed be the user. / Data3 -> 0
+   * = Console char, 1 = Serial char." This is the BLOCKING counterpart to
+   * NR_HotKey — reuses the same pendingKind:"key" pause/resume machinery
+   * NR_PromptChars uses for line input (see feedLineChars()/pendingKind
+   * "line"), but for a single char.
+   */
+  private handleWaitChar(msgAddr: number): void {
     if (this.inputBuffer.length > 0) {
       const key = this.inputBuffer[0];
       this.inputBuffer = this.inputBuffer.slice(1);
-      this.completeKeyInput(msgAddr, key);
+      this.completeWaitChar(msgAddr, key);
       return;
     }
 
@@ -599,9 +728,9 @@ export class FIMProtocol {
   }
 
   /**
-   * Consume the first buffered char for the pending key command, leaving
-   * any remainder in inputBuffer, complete it, and resume the emulator.
-   * No-ops if inputBuffer is still empty (waits for a future queueInput()).
+   * Consume the first buffered char for the pending NR_WaitChar request,
+   * complete it, and resume the emulator. No-ops if inputBuffer is still
+   * empty (waits for a future queueInput() call).
    */
   private feedKeyChar(): void {
     if (this.inputBuffer.length === 0) {
@@ -612,20 +741,18 @@ export class FIMProtocol {
     const msgAddr = this.pendingMsg!;
     this.pendingMsg = null;
     this.pendingKind = null;
-    this.completeKeyInput(msgAddr, key);
+    this.completeWaitChar(msgAddr, key);
     this.emulator.resume();
   }
 
   /**
-   * Complete a deferred (or type-ahead-answered) key command: per
-   * FAMEDoorCommands.h the key code returns in Data3; we also write it as
-   * the first (NUL-terminated) byte of IOString for doors that read it there.
+   * Complete a deferred NR_WaitChar: per FAMEDoorCommands.h the char
+   * returns in Data2 (Data3 is the console/serial flag, always 0 here).
    */
-  private completeKeyInput(msgAddr: number, data: string): void {
+  private completeWaitChar(msgAddr: number, data: string): void {
     const code = data.length > 0 ? data.charCodeAt(0) & 0xff : 0;
-    this.emulator.writeMemory32(msgAddr + FDOM.DATA3, code);
-    this.emulator.writeMemory(msgAddr + FDOM.IOSTRING, code);
-    this.emulator.writeMemory(msgAddr + FDOM.IOSTRING + 1, 0);
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA2, code);
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA3, 0);
     this.reply(msgAddr, FIM_RC.OK);
   }
 

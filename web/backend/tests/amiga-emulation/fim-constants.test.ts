@@ -23,6 +23,7 @@ describe("FIM constants", () => {
     expect(FIM_CMD.MC_ShutDownLastWords).toBe(3);
     expect(FIM_CMD.NR_SendStr).toBe(10);
     expect(FIM_CMD.NR_PromptChars).toBe(14);
+    expect(FIM_CMD.NR_WaitChar).toBe(92);
     expect(FIM_CMD.AR_SendStr).toBe(851);
     expect(FIM_RC.NOTIMPLEMENTED).toBe(4);
   });

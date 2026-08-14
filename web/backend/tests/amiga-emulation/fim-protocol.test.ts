@@ -79,6 +79,27 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
 
+  it("AR_SendStr with Data1=-1 (0xFFFFFFFF, sign-extended) still adds CRLF — 'if not 0', not '== 1'", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_ev, data) => { out.push(String(data)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+    });
+    const msg = 0x8000, str = 0x4000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_SendStr);
+    emu.writeMemory32(msg + FDOM.STRINGPTR, str);
+    emu.writeMemory32(msg + FDOM.DATA1, -1);
+    "HI".split("").forEach((c, i) => emu.writeMemory(str + i, c.charCodeAt(0)));
+    emu.writeMemory(str + 2, 0);
+    proto.handleMessage(msg);
+    expect(out).toEqual(["HI\r\n"]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
   it("AR_SendStr without CRLF (Data1=0) emits verbatim", () => {
     const emu = new MemStub();
     const out: string[] = [];
@@ -192,10 +213,38 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory(msg + FDOM.IOSTRING + 4)).toBe(0);
   });
 
-  it("AR_GetKey returns key code in Data3", () => {
+  it("AR_GetKey returns presence flag in Data2 (not the char) and does not consume it", () => {
     const emu = new MemStub();
-    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    let paused = false;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
     (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    proto.queueInput("y");
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_GetKey);
+    proto.handleMessage(msg);
+    // Replies immediately (synchronously) — never pauses, never defers.
+    expect(putMsgCalls.length).toBe(1);
+    expect(paused).toBe(false);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(1); // presence flag, not 'y' (121)
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(0); // 0 = console char
+
+    // The char was NOT consumed: a following NR_HotKey still gets it.
+    const msg2 = 0x8100;
+    emu.writeMemory32(msg2 + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg2 + FDOM.COMMAND, FIM_CMD.NR_HotKey);
+    proto.handleMessage(msg2);
+    expect(emu.readMemory32(msg2 + FDOM.DATA2)).toBe(121); // 'y'
+  });
+
+  it("AR_GetKey with an empty buffer returns Data2=0 immediately, never pauses", () => {
+    const emu = new MemStub();
+    let paused = false;
+    (emu as unknown as { pause(): void }).pause = () => { paused = true; };
     const putMsgCalls: number[] = [];
     const proto = new FIMProtocol({ emulator: emu as never,
       execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
@@ -204,9 +253,69 @@ describe("FIMProtocol", () => {
     emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
     emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_GetKey);
     proto.handleMessage(msg);
-    proto.queueInput("y");
     expect(putMsgCalls.length).toBe(1);
-    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(121);
+    expect(paused).toBe(false);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+  });
+
+  it("NR_HotKey / AR_HotKey with an empty buffer return Data2=0 immediately, never pause", () => {
+    const emu = new MemStub();
+    let paused = false;
+    (emu as unknown as { pause(): void }).pause = () => { paused = true; };
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    for (const cmd of [FIM_CMD.NR_HotKey, FIM_CMD.AR_HotKey]) {
+      const msg = 0x8000 + cmd;
+      emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+      emu.writeMemory32(msg + FDOM.COMMAND, cmd);
+      proto.handleMessage(msg);
+      expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+      expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(0);
+    }
+    expect(putMsgCalls.length).toBe(2);
+    expect(paused).toBe(false);
+  });
+
+  it("NR_WaitChar with an empty buffer defers (pauses), then completes with the char in Data2 on queueInput", () => {
+    const emu = new MemStub();
+    let paused = false, resumed = false;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => { resumed = true; };
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_WaitChar);
+    proto.handleMessage(msg);
+    expect(putMsgCalls.length).toBe(0); // no reply yet
+    expect(paused).toBe(true);
+    proto.queueInput("z");
+    expect(putMsgCalls.length).toBe(1);
+    expect(resumed).toBe(true);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(122); // 'z'
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(0);
+  });
+
+  it("NR_WaitChar answers synchronously (no pause) when a char is already type-ahead buffered", () => {
+    const emu = new MemStub();
+    let paused = false;
+    (emu as unknown as { pause(): void }).pause = () => { paused = true; };
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    proto.queueInput("q");
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_WaitChar);
+    proto.handleMessage(msg);
+    expect(putMsgCalls.length).toBe(1);
+    expect(paused).toBe(false);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(113); // 'q'
   });
 
   it("NR_PromptChars mode 4 echoes '*' per typed char, not the literal chars", () => {
@@ -230,6 +339,52 @@ describe("FIMProtocol", () => {
     expect(out).toEqual(["Pass:", "*", "*"]);
     let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
     expect(s).toBe("hi");
+  });
+
+  it("NR_PromptChars mode 7 echoes nothing at all (no stars, no chars, no backspace feedback)", () => {
+    const emu = new MemStub();
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const out: string[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_PromptChars);
+    emu.writeMemory32(msg + FDOM.DATA1, 50);
+    emu.writeMemory32(msg + FDOM.DATA2, 7); // no-echo password mode
+    "Pass:".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    proto.queueInput("hi\x08x\r"); // 'h','i',backspace,'x',CR
+    // Only the prompt is emitted — no per-char echo, no stars, no
+    // backspace erase sequence — but the line still accumulates correctly.
+    expect(out).toEqual(["Pass:"]);
+    let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("hx");
+    expect(emu.readMemory(msg + FDOM.IOSTRING + 2)).toBe(0);
+  });
+
+  it("NR_PromptChars mode 8 accepts digits, silently rejects letters", () => {
+    const emu = new MemStub();
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const out: string[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_PromptChars);
+    emu.writeMemory32(msg + FDOM.DATA1, 50);
+    emu.writeMemory32(msg + FDOM.DATA2, 8); // numeric-only mode
+    proto.handleMessage(msg);
+    proto.queueInput("1a2b3\r");
+    let s = ""; for (let i = 0; i < 3; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("123");
+    expect(out).toEqual(["1", "2", "3"]); // letters never echoed — rejected before echo
   });
 
   function makeWith(emu: MemStub, bbsSession: Record<string, unknown>, nodeId = 3) {
@@ -343,21 +498,21 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(59);
   });
 
-  it("NR_Uploads / NR_Downloads default to 0 when absent, otherwise return user counts in Data2", () => {
+  it("NR_Uploads / NR_Downloads default to 0 when absent, otherwise return user counts in Data3", () => {
     const emu = new MemStub();
     const { proto } = makeWith(emu, {});
     const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_Uploads);
     proto.handleMessage(msg);
-    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(0);
 
     const emu2 = new MemStub();
     const { proto: proto2 } = makeWith(emu2, { user: { uploads: 7, downloads: 12 } });
     const msgUp = buildMsg(emu2, 0x8000, FIM_CMD.NR_Uploads);
     proto2.handleMessage(msgUp);
-    expect(emu2.readMemory32(msgUp + FDOM.DATA2)).toBe(7);
+    expect(emu2.readMemory32(msgUp + FDOM.DATA3)).toBe(7);
     const msgDown = buildMsg(emu2, 0x8100, FIM_CMD.NR_Downloads);
     proto2.handleMessage(msgDown);
-    expect(emu2.readMemory32(msgDown + FDOM.DATA2)).toBe(12);
+    expect(emu2.readMemory32(msgDown + FDOM.DATA3)).toBe(12);
   });
 
   it("NR_BytesUpload / NR_BytesDownload return byte counts in Data3", () => {
@@ -379,12 +534,13 @@ describe("FIMProtocol", () => {
     expect(readIOStr(emu, msg)).toBe("General");
   });
 
-  it("SR_ConfNum returns bbsSession.conferenceId in Data2", () => {
+  it("SR_ConfNum returns bbsSession.conferenceId in Data2 (actual) and Data3 (relative)", () => {
     const emu = new MemStub();
     const { proto } = makeWith(emu, { conferenceId: 2 });
     const msg = buildMsg(emu, 0x8000, FIM_CMD.SR_ConfNum);
     proto.handleMessage(msg);
     expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(2);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(2);
   });
 
   it("SR_NodeNumber returns nodeId in Data2", () => {
@@ -395,13 +551,14 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(3);
   });
 
-  it("SR_FAMEVersion returns version string in IOString and 60 in Data2", () => {
+  it("SR_FAMEVersion returns version string in IOString, version 6 in Data2, revision 0 in Data3", () => {
     const emu = new MemStub();
     const { proto } = makeWith(emu, {});
     const msg = buildMsg(emu, 0x8000, FIM_CMD.SR_FAMEVersion);
     proto.handleMessage(msg);
     expect(readIOStr(emu, msg)).toBe("FAME 6.0 (amiexpress-web compat)");
-    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(60);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(6);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(0);
   });
 
   it("info commands never crash on absent user/bbsSession fields", () => {
@@ -419,7 +576,7 @@ describe("FIMProtocol", () => {
     }
   });
 
-  it("key command consumes first char only and requeues the remainder for the next input command", () => {
+  it("NR_HotKey consumes first char only and requeues the remainder for the next input command", () => {
     const emu = new MemStub();
     (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
     (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
@@ -428,20 +585,21 @@ describe("FIMProtocol", () => {
       execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
       socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
 
+    proto.queueInput("yes\r");
+
     const msg1 = 0x8000;
     emu.writeMemory32(msg1 + FDOM.MN_REPLYPORT, 0x9000);
-    emu.writeMemory32(msg1 + FDOM.COMMAND, FIM_CMD.AR_GetKey);
+    emu.writeMemory32(msg1 + FDOM.COMMAND, FIM_CMD.NR_HotKey);
     proto.handleMessage(msg1);
-    proto.queueInput("yes\r");
     expect(putMsgCalls.length).toBe(1);
-    expect(emu.readMemory32(msg1 + FDOM.DATA3)).toBe(121); // 'y' — 'es\r' stays buffered
+    expect(emu.readMemory32(msg1 + FDOM.DATA2)).toBe(121); // 'y' — 'es\r' stays buffered
 
     const msg2 = 0x9100;
     emu.writeMemory32(msg2 + FDOM.MN_REPLYPORT, 0x9000);
-    emu.writeMemory32(msg2 + FDOM.COMMAND, FIM_CMD.AR_GetKey);
+    emu.writeMemory32(msg2 + FDOM.COMMAND, FIM_CMD.NR_HotKey);
     proto.handleMessage(msg2);
     expect(putMsgCalls.length).toBe(2);
-    expect(emu.readMemory32(msg2 + FDOM.DATA3)).toBe(101); // 'e', answered synchronously (type-ahead)
+    expect(emu.readMemory32(msg2 + FDOM.DATA2)).toBe(101); // 'e'
   });
 
   describe("MC_ShutDownLastWords", () => {

@@ -50,6 +50,7 @@ export const FIM_CMD = {
   NR_SendStrSer: 13,
   NR_PromptChars: 14,
   NR_HotKey: 15,
+  NR_WaitChar: 92,
   NR_BBSName: 16,
   NR_SysOp: 17,
   NR_MainLine: 23,
