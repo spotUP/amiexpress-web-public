@@ -102,6 +102,40 @@ export class FIMProtocol {
         break;
       }
 
+      case FIM_CMD.AR_SendStr: {
+        const stringPtr = this.emulator.readMemory32(msgAddr + FDOM.STRINGPTR);
+        if (stringPtr === 0) {
+          this.reply(msgAddr, FIM_RC.FAIL);
+          break;
+        }
+        const data1 = this.emulator.readMemory32(msgAddr + FDOM.DATA1);
+        let text = this.readCString(stringPtr, FDOM.IOSTRING_LEN);
+        if (data1 === 1) {
+          text += "\r\n";
+        }
+        this.socket?.emit("ansi-output", text);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_SendStr:
+      case FIM_CMD.NR_SendStrCRLF: {
+        let text = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN);
+        if (command === FIM_CMD.NR_SendStrCRLF) {
+          text += "\r\n";
+        }
+        this.socket?.emit("ansi-output", text);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.CF_ShowText: {
+        const name = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN);
+        debugLog(`[FIM] CF_ShowText ${name}`);
+        this.reply(msgAddr, FIM_RC.NOTIMPLEMENTED);
+        break;
+      }
+
       default: {
         debugLog(`[FIM] not implemented: ${command}`);
         this.reply(msgAddr, FIM_RC.NOTIMPLEMENTED);

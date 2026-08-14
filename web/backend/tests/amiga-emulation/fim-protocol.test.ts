@@ -50,4 +50,105 @@ describe("FIMProtocol", () => {
     expect(putMsgCalls.length).toBe(1);
     expect(shutdowns).toEqual([0]);
   });
+
+  it("AR_SendStr derefs fdom_StringPtr and emits, Data1=1 adds CRLF", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_ev, data) => { out.push(String(data)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+    });
+    const msg = 0x8000, str = 0x4000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_SendStr);
+    emu.writeMemory32(msg + FDOM.STRINGPTR, str);
+    emu.writeMemory32(msg + FDOM.DATA1, 1);
+    "HI".split("").forEach((c, i) => emu.writeMemory(str + i, c.charCodeAt(0)));
+    emu.writeMemory(str + 2, 0);
+    proto.handleMessage(msg);
+    expect(out).toEqual(["HI\r\n"]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("AR_SendStr without CRLF (Data1=0) emits verbatim", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_ev, data) => { out.push(String(data)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+    });
+    const msg = 0x8000, str = 0x4000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_SendStr);
+    emu.writeMemory32(msg + FDOM.STRINGPTR, str);
+    "YO".split("").forEach((c, i) => emu.writeMemory(str + i, c.charCodeAt(0)));
+    emu.writeMemory(str + 2, 0);
+    proto.handleMessage(msg);
+    expect(out).toEqual(["YO"]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("AR_SendStr with NULL StringPtr replies FAIL, does not emit, does not crash", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_ev, data) => { out.push(String(data)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+    });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_SendStr);
+    emu.writeMemory32(msg + FDOM.STRINGPTR, 0);
+    proto.handleMessage(msg);
+    expect(out).toEqual([]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.FAIL);
+  });
+
+  it("NR_SendStr emits fdom_IOString verbatim", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never, execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_SendStr);
+    "OK>".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    expect(out).toEqual(["OK>"]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("NR_SendStrCRLF emits fdom_IOString with trailing CRLF", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never, execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_SendStrCRLF);
+    "Bye".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    expect(out).toEqual(["Bye\r\n"]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("CF_ShowText replies NOTIMPLEMENTED and never fakes success (no emit)", () => {
+    const emu = new MemStub();
+    const out: string[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never, execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.CF_ShowText);
+    "MENU".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    expect(out).toEqual([]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.NOTIMPLEMENTED);
+  });
 });
