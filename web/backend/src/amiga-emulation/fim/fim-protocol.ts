@@ -54,17 +54,24 @@ export class FIMProtocol {
   private onShutdown: (rc: number, lastWords?: string) => void;
 
   /**
-   * Type-ahead buffer: input that arrived via queueInput() while no command
-   * was waiting for it. Drained by the next input-style command
-   * (NR_PromptChars / AR_GetKey / NR_HotKey / AR_HotKey).
+   * Raw terminal input not yet consumed by a command. The web terminal
+   * delivers door:input per keystroke, so this is a plain string (not an
+   * array of chunks): it holds type-ahead backlog when nothing is pending,
+   * and — while pendingKind==="line" — the queued tail of a partial line
+   * still being typed across multiple queueInput() calls (see
+   * feedLineChars()).
    */
-  private inputQueue: string[] = [];
+  private inputBuffer = "";
 
   /** Message currently deferred pending terminal input (paused emulator). */
   private pendingMsg: number | null = null;
   private pendingKind: "line" | "key" | null = null;
-  /** NR_PromptChars Data2 mode for the pending line request (echo style). */
+  /** NR_PromptChars Data2 echo mode for the pending line request. */
   private pendingMode = 0;
+  /** NR_PromptChars max chars for the pending line request (Data1, capped at 201). */
+  private pendingCap = 201;
+  /** Chars accumulated so far for the pending line request. */
+  private lineBuffer = "";
 
   constructor(deps: FIMDeps) {
     this.emulator = deps.emulator;
@@ -76,26 +83,21 @@ export class FIMProtocol {
   }
 
   /**
-   * Deliver terminal input to the door. If a command is currently deferred
-   * waiting for input (NR_PromptChars / AR_GetKey / NR_HotKey / AR_HotKey),
-   * complete it and resume the emulator. Otherwise buffer the input
+   * Deliver terminal input to the door. If NR_PromptChars is pending, feeds
+   * the new chars through the per-keystroke line accumulator (echo,
+   * backspace, CR-completes). If a key command (AR_GetKey / NR_HotKey /
+   * AR_HotKey) is pending, consumes only the first char and leaves any
+   * remainder buffered. If nothing is pending, buffers the input
    * (type-ahead) for the next input-style command to consume.
    */
   queueInput(data: string): void {
-    if (this.pendingMsg === null) {
-      this.inputQueue.push(data);
-      return;
+    this.inputBuffer += data;
+    if (this.pendingKind === "line") {
+      this.feedLineChars();
+    } else if (this.pendingKind === "key") {
+      this.feedKeyChar();
     }
-    const msgAddr = this.pendingMsg;
-    const kind = this.pendingKind;
-    this.pendingMsg = null;
-    this.pendingKind = null;
-    if (kind === "line") {
-      this.completeLineInput(msgAddr, data, this.pendingMode);
-    } else {
-      this.completeKeyInput(msgAddr, data);
-    }
-    this.emulator.resume();
+    // else: nothing pending — data stays in inputBuffer as type-ahead.
   }
 
   /**
@@ -214,10 +216,11 @@ export class FIMProtocol {
   }
 
   /**
-   * NR_PromptChars (14): prompt-and-read-a-line. Data1=max chars,
-   * Data2=echo mode (0 normal, 4 password echoed as '*'). Modes 1-3 are
-   * denied for MVP (mode 2 is denied on real FAME too). IOString on entry
-   * holds the prompt text, emitted before deferring for input.
+   * NR_PromptChars (14): prompt-and-read-a-line. Data1=max chars (0 falls
+   * back to 201; the door's own max always wins, capped at 201 — the
+   * IOSTRING field width), Data2=echo mode (0 normal, 4 password echoed as
+   * '*'). Modes 1-3 are denied for MVP (mode 2 is denied on real FAME too).
+   * IOString on entry holds the prompt text, emitted before deferring.
    */
   private handlePromptChars(msgAddr: number): void {
     const mode = this.emulator.readMemory32(msgAddr + FDOM.DATA2);
@@ -231,38 +234,91 @@ export class FIMProtocol {
       this.socket?.emit("ansi-output", prompt);
     }
 
-    if (this.inputQueue.length > 0) {
-      const line = this.inputQueue.shift()!;
-      this.completeLineInput(msgAddr, line, mode);
-      return;
-    }
-
+    const data1 = this.emulator.readMemory32(msgAddr + FDOM.DATA1);
     this.pendingMsg = msgAddr;
     this.pendingKind = "line";
     this.pendingMode = mode;
-    this.emulator.pause();
+    this.pendingCap = Math.min(data1 > 0 ? data1 : 201, 201);
+    this.lineBuffer = "";
+
+    // Drain any input already buffered (type-ahead) through the same
+    // per-keystroke accumulator queueInput() uses. This may complete the
+    // request synchronously (a CR was already in the backlog), in which
+    // case pendingMsg is cleared and we must not pause.
+    this.feedLineChars();
+    if (this.pendingMsg !== null) {
+      this.emulator.pause();
+    }
   }
 
   /**
-   * Complete a deferred (or type-ahead-answered) NR_PromptChars: strip a
-   * trailing CR/LF, cap at 201 chars, write into IOSTRING NUL-terminated,
-   * echo what was typed (masked with '*' for password mode), and reply OK.
+   * Feed buffered chars (inputBuffer) into the pending line request one at
+   * a time: backspace (0x08/0x7F) drops the last buffered char and echoes
+   * "\b \b"; printable chars (0x20-0x7E) are appended and echoed (masked
+   * '*' for password mode) up to pendingCap, then silently ignored past
+   * cap; CR completes the request (a following LF is swallowed as part of
+   * the same CRLF pair). Other control chars are dropped. Stops as soon as
+   * the request completes or the buffer is exhausted — the rest of a
+   * partial line waits for a future queueInput() call.
    */
-  private completeLineInput(msgAddr: number, rawLine: string, mode: number): void {
-    const line = rawLine.replace(/[\r\n]+$/, "").slice(0, 201);
-    this.socket?.emit("ansi-output", mode === 4 ? "*".repeat(line.length) : line);
+  private feedLineChars(): void {
+    while (this.pendingKind === "line" && this.inputBuffer.length > 0) {
+      const ch = this.inputBuffer[0];
+      this.inputBuffer = this.inputBuffer.slice(1);
+
+      if (ch === "\r") {
+        if (this.inputBuffer[0] === "\n") {
+          this.inputBuffer = this.inputBuffer.slice(1); // LF following CR ignored
+        }
+        this.completeLineNow();
+        return;
+      }
+
+      const code = ch.charCodeAt(0);
+      if (code === 0x08 || code === 0x7f) {
+        if (this.lineBuffer.length > 0) {
+          this.lineBuffer = this.lineBuffer.slice(0, -1);
+          this.socket?.emit("ansi-output", "\b \b");
+        }
+        continue;
+      }
+
+      if (code >= 0x20 && code <= 0x7e && this.lineBuffer.length < this.pendingCap) {
+        this.lineBuffer += ch;
+        this.socket?.emit("ansi-output", this.pendingMode === 4 ? "*" : ch);
+      }
+      // Non-printable, or already at cap: drop silently (backspace/CR still work).
+    }
+  }
+
+  /**
+   * Complete the pending NR_PromptChars: write the accumulated line into
+   * IOSTRING NUL-terminated, reply OK, resume the emulator.
+   */
+  private completeLineNow(): void {
+    const msgAddr = this.pendingMsg!;
+    const line = this.lineBuffer;
+    this.pendingMsg = null;
+    this.pendingKind = null;
+    this.lineBuffer = "";
+    this.pendingMode = 0; // reset — stale value would otherwise leak if read before the next handlePromptChars() sets it
     this.writeCString(msgAddr + FDOM.IOSTRING, line, FDOM.IOSTRING_LEN);
     this.reply(msgAddr, FIM_RC.OK);
+    this.emulator.resume();
   }
 
   /**
    * AR_GetKey (800) / NR_HotKey (15) / AR_HotKey (861): read a single key.
    * If input is already type-ahead buffered, answer synchronously without
-   * pausing the emulator; otherwise defer until queueInput() delivers a key.
+   * pausing the emulator — consuming only the first char and leaving any
+   * remainder in inputBuffer for the next input command (e.g. "yes\r" ->
+   * 'y' now, "es\r" stays queued). Otherwise defer until queueInput()
+   * delivers a key.
    */
   private handleKeyCommand(msgAddr: number): void {
-    if (this.inputQueue.length > 0) {
-      const key = this.inputQueue.shift()!;
+    if (this.inputBuffer.length > 0) {
+      const key = this.inputBuffer[0];
+      this.inputBuffer = this.inputBuffer.slice(1);
       this.completeKeyInput(msgAddr, key);
       return;
     }
@@ -270,6 +326,24 @@ export class FIMProtocol {
     this.pendingMsg = msgAddr;
     this.pendingKind = "key";
     this.emulator.pause();
+  }
+
+  /**
+   * Consume the first buffered char for the pending key command, leaving
+   * any remainder in inputBuffer, complete it, and resume the emulator.
+   * No-ops if inputBuffer is still empty (waits for a future queueInput()).
+   */
+  private feedKeyChar(): void {
+    if (this.inputBuffer.length === 0) {
+      return;
+    }
+    const key = this.inputBuffer[0];
+    this.inputBuffer = this.inputBuffer.slice(1);
+    const msgAddr = this.pendingMsg!;
+    this.pendingMsg = null;
+    this.pendingKind = null;
+    this.completeKeyInput(msgAddr, key);
+    this.emulator.resume();
   }
 
   /**

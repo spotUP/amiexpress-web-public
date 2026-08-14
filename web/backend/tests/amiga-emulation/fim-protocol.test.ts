@@ -208,4 +208,52 @@ describe("FIMProtocol", () => {
     expect(putMsgCalls.length).toBe(1);
     expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(121);
   });
+
+  it("NR_PromptChars mode 4 echoes '*' per typed char, not the literal chars", () => {
+    const emu = new MemStub();
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const out: string[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_PromptChars);
+    emu.writeMemory32(msg + FDOM.DATA1, 50);
+    emu.writeMemory32(msg + FDOM.DATA2, 4); // password echo mode
+    "Pass:".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    proto.queueInput("hi\r");
+    // out[0] is the prompt; the two typed chars each echo '*', not 'h'/'i'.
+    expect(out).toEqual(["Pass:", "*", "*"]);
+    let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("hi");
+  });
+
+  it("key command consumes first char only and requeues the remainder for the next input command", () => {
+    const emu = new MemStub();
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+
+    const msg1 = 0x8000;
+    emu.writeMemory32(msg1 + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg1 + FDOM.COMMAND, FIM_CMD.AR_GetKey);
+    proto.handleMessage(msg1);
+    proto.queueInput("yes\r");
+    expect(putMsgCalls.length).toBe(1);
+    expect(emu.readMemory32(msg1 + FDOM.DATA3)).toBe(121); // 'y' — 'es\r' stays buffered
+
+    const msg2 = 0x9100;
+    emu.writeMemory32(msg2 + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg2 + FDOM.COMMAND, FIM_CMD.AR_GetKey);
+    proto.handleMessage(msg2);
+    expect(putMsgCalls.length).toBe(2);
+    expect(emu.readMemory32(msg2 + FDOM.DATA3)).toBe(101); // 'e', answered synchronously (type-ahead)
+  });
 });
