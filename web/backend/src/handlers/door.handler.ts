@@ -1424,6 +1424,43 @@ function padString(str: string, length: number): string {
 }
 
 /**
+ * Decide what the post-door exit path may do with the menu.
+ *
+ * - 'segments': door ran inline via a ~CC_ screen sentinel and more screen
+ *   segments follow (express.e:5455-5461) — never render the menu, the
+ *   display flow continues (conference join, bulletins, ...).
+ * - 'pause': a paginated-screen pause is active — display flow resumes it.
+ * - 'interactive': a RETURNCOMMAND chain parked the session in an
+ *   interactive prompt state that owns the next input.
+ * - 'menu': normal completion — return to menu.
+ */
+export type PostDoorAction = 'segments' | 'pause' | 'interactive' | 'menu';
+
+export function postDoorMenuAction(session: BBSSession): PostDoorAction {
+  if (session.screenSegments && session.screenSegments.segments.length > 0) {
+    return 'segments';
+  }
+  if (session.paginatedScreen) {
+    return 'pause';
+  }
+  // Use the direct import, not the setConstants-injected alias — this
+  // helper must work before dependency injection runs (and in tests).
+  const sub = session.subState;
+  if (
+    sub === LoggedOnSubStateImport.FILES_UPLOAD ||
+    sub === LoggedOnSubStateImport.FILES_DOWNLOAD ||
+    sub === LoggedOnSubStateImport.UPLOAD_RESUME_PROMPT ||
+    sub === LoggedOnSubStateImport.UPLOAD_RESUME_DELETE ||
+    sub === LoggedOnSubStateImport.UPLOAD_RENAME_PROMPT ||
+    sub === LoggedOnSubStateImport.DOWNLOAD_FILENAME_INPUT ||
+    sub === LoggedOnSubStateImport.DOWNLOAD_CONFIRM_INPUT
+  ) {
+    return 'interactive';
+  }
+  return 'menu';
+}
+
+/**
  * Execute door game/utility
  */
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
@@ -2894,18 +2931,18 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
     // The display flow will handle showing the menu after the user dismisses the pause.
     const doorName = door?.name || door?.command || 'Unknown';
     fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor EXIT: door="${doorName}", paginatedScreen=${!!session.paginatedScreen}, returnCommand=${(session as any).returnCommand || 'NONE'}\n`);
-    if (session.paginatedScreen) {
+    const postAction = postDoorMenuAction(session);
+    if (postAction === 'segments') {
+      // ~CC_ inline door ran inside screen-segment processing
+      // (express.e:5455-5461) — more segments follow (e.g. the conference
+      // join flow's "Joining Conference:" line). executeDoor restores the
+      // display-flow subState; rendering the menu here emits a premature
+      // menu prompt mid-screen (double-prompt bug, 2026-08-14).
+      console.log('[executeAmigaDoor] door completed during segment processing - skipping displayMainMenu');
+    } else if (postAction === 'pause') {
       console.log('[executeAmigaDoor] Pause is active, skipping displayMainMenu (will resume via display flow)');
       fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor: SKIPPING displayMainMenu (pause active)\n`);
-    } else if (
-      session.subState === LoggedOnSubState.FILES_UPLOAD ||
-      session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
-      session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
-      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
-      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT ||
-      session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT ||
-      session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT
-    ) {
+    } else if (postAction === 'interactive') {
       // RETURNCOMMAND parked us in an interactive prompt state — do NOT
       // overwrite subState or render the menu. The prompt's own state
       // machine transitions back to DISPLAY_MENU when the user resolves it.
