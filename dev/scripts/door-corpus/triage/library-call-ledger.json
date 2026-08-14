@@ -1,0 +1,307 @@
+{
+  "summary": {
+    "real": 26,
+    "stub": 0,
+    "missing": 0
+  },
+  "entries": [
+    {
+      "library": "exec.library",
+      "offset": -132,
+      "name": "Forbid",
+      "resolution": "real",
+      "count": 12,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -390,
+      "name": "FindPort",
+      "resolution": "real",
+      "count": 12,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -366,
+      "name": "PutMsg",
+      "resolution": "real",
+      "count": 11,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -138,
+      "name": "Permit",
+      "resolution": "real",
+      "count": 10,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -372,
+      "name": "GetMsg",
+      "resolution": "real",
+      "count": 9,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -384,
+      "name": "WaitPort",
+      "resolution": "real",
+      "count": 6,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -198,
+      "name": "AllocMem",
+      "resolution": "real",
+      "count": 5,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -552,
+      "name": "OpenLibrary",
+      "resolution": "real",
+      "count": 4,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -60,
+      "name": "Output",
+      "resolution": "real",
+      "count": 4,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -30,
+      "name": "Open",
+      "resolution": "real",
+      "count": 3,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -318,
+      "name": "Wait",
+      "resolution": "real",
+      "count": 3,
+      "doors": [
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -84,
+      "name": "Lock",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -126,
+      "name": "CurrentDir",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -306,
+      "name": "SetSignal",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -54,
+      "name": "Input",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -294,
+      "name": "FindTask",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -666,
+      "name": "CreateMsgPort",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -90,
+      "name": "UnLock",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -192,
+      "name": "DateStamp",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -48,
+      "name": "Write",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -36,
+      "name": "Close",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "icon.library",
+      "offset": -78,
+      "name": "GetDiskObject",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "icon.library",
+      "offset": -96,
+      "name": "FindToolType",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "icon.library",
+      "offset": -90,
+      "name": "FreeDiskObject",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -414,
+      "name": "CloseLibrary",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -330,
+      "name": "AllocSignal",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "afl_g_logoff"
+      ]
+    }
+  ]
+}
