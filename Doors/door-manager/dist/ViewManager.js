@@ -12,6 +12,18 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ViewManager = exports.BaseView = exports.KeyBinder = void 0;
+exports.sanitizeForTags = sanitizeForTags;
+/**
+ * Sanitize raw archive text (FILE_ID.DIZ art, descriptions) for a blessed
+ * box with tags:true: escape {}-runs so blessed doesn't parse art as tags,
+ * and drop non-printable/high-bit bytes that render as garbage glyphs.
+ */
+function sanitizeForTags(text) {
+    return text
+        .split('\n')
+        .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`))
+        .join('\n');
+}
 // ─── KeyBinder ────────────────────────────────────────────────────────────────
 class KeyBinder {
     constructor(screen) {

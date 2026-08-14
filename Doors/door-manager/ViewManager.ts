@@ -10,6 +10,18 @@
  * lifetime and automatically removes them when the view exits.
  */
 
+/**
+ * Sanitize raw archive text (FILE_ID.DIZ art, descriptions) for a blessed
+ * box with tags:true: escape {}-runs so blessed doesn't parse art as tags,
+ * and drop non-printable/high-bit bytes that render as garbage glyphs.
+ */
+export function sanitizeForTags(text: string): string {
+  return text
+    .split('\n')
+    .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`))
+    .join('\n');
+}
+
 // ─── KeyBinder ────────────────────────────────────────────────────────────────
 
 export class KeyBinder {

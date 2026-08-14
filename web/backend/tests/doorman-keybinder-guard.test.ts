@@ -54,3 +54,18 @@ describe('DOORMAN KeyBinder modal guard', () => {
     expect(screen.handlers.get('q')).toEqual([]);
   });
 });
+
+// Regression: InstalledView rendered raw FILE_ID.DIZ/description into a
+// tags:true blessed box — brace runs in ASCII art were parsed as tags and
+// the art rendered mangled. sanitizeForTags escapes braces and drops
+// non-printable/high-bit bytes.
+import { sanitizeForTags } from '../../../Doors/door-manager/ViewManager';
+
+describe('DOORMAN sanitizeForTags', () => {
+  it('escapes brace runs so blessed does not eat ASCII art', () => {
+    expect(sanitizeForTags('_{___}_')).toBe('_\\{___\\}_');
+  });
+  it('drops high-bit and control bytes, keeps printable ASCII and newlines', () => {
+    expect(sanitizeForTags('A\xb1B\x1b[31mC\nD')).toBe('AB[31mC\nD');
+  });
+});

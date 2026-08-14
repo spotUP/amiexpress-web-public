@@ -214,13 +214,25 @@ class InstalledView extends ViewManager_1.BaseView {
             return;
         }
         const st = d.enabled ? '{green-fg}ENABLED{/green-fg}' : '{red-fg}DISABLED{/red-fg}';
+        // FILE_ID.DIZ from the catalog when this door was installed from the
+        // repo (matched by installed_as == command); falls back to description.
+        // Both are raw archive text — sanitize or blessed parses the art as tags.
+        let body = '';
+        try {
+            const cat = getCatalogSvc()?.getCatalogEntryByCmd?.(d.command);
+            if (cat?.file_id_diz)
+                body = '\n' + (0, ViewManager_1.sanitizeForTags)(cat.file_id_diz);
+        }
+        catch { /* catalog optional */ }
+        if (!body && d.description)
+            body = `\n{white-fg}${(0, ViewManager_1.sanitizeForTags)(d.description)}{/white-fg}`;
         this.layout.setInfo([
             `{yellow-fg}Name:{/yellow-fg}    ${d.name}`,
             `{yellow-fg}Command:{/yellow-fg} ${d.command}`,
             `{yellow-fg}Type:{/yellow-fg}    ${d.type}`,
             `{yellow-fg}Size:{/yellow-fg}    ${formatSize(d.size)}`,
             `{yellow-fg}Status:{/yellow-fg}  ${st}`,
-            d.description ? `\n{white-fg}${d.description}{/white-fg}` : '',
+            body,
         ].join('\n'));
     }
     updateFooter() {
@@ -473,11 +485,10 @@ class RepoView extends ViewManager_1.BaseView {
             (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
             (e.installed ? `  {green-fg}[${e.installed_as}]{/green-fg}` : '');
         if (e.file_id_diz) {
-            content += '\n\n' + e.file_id_diz.split('\n')
-                .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`)).join('\n');
+            content += '\n\n' + (0, ViewManager_1.sanitizeForTags)(e.file_id_diz);
         }
         else if (e.description) {
-            content += `\n\n{white-fg}${e.description.replace(/[{}]/g, c => `\\${c}`)}{/white-fg}`;
+            content += `\n\n{white-fg}${(0, ViewManager_1.sanitizeForTags)(e.description)}{/white-fg}`;
         }
         content += fileLines;
         this.layout.setInfo(content);
