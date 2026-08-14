@@ -27,7 +27,6 @@
 5d_logoff
 5d_ms001_5d_multistart
 5d_multistart
-5d_newfiles
 5d_nf022_5d_newfiles
 5d_ol001_5d_olm
 5d_qa001_le_window6
@@ -35,7 +34,6 @@
 5d_sa001_5d_sysopavail
 5d_se001_5d_selector
 5d_se010_5d_security
-5d_security
 5d_security_2
 5d_srt02_le_window6
 5d_status
@@ -57,6 +55,7 @@
 5d_zippysearch
 5d_zippysearch_2
 5dpage28_5d_page
+5dsecurity
 976_rs13_rubberstamp
 acs_ip10_telnetd
 adn_c120_adn_cycle
@@ -68,17 +67,15 @@ aexsetu_auxed
 aexsetu_doormenu
 aexsetu_scan
 aexsetu_who1
-af_status
 afl_g_logoff
 afl_newfiles
 afl_newfiles1
 afl_newinfo
+afl_p21_pager21_2
 afl_pack_autoaxx
 afl_pack_order
-afl_pager
 afl_ri
 afl_security
-afl_status
 afl_ud10_updowninfo
 afl_ud12_flag_adder
 afl_ustat
@@ -92,7 +89,6 @@ aq_announcelogon
 aqannl10_announcelogon
 aquapwfail
 aquascan
-aquawho
 at20_copy
 atx_tcom_tcomm
 autoonline
@@ -117,15 +113,14 @@ cal_bcon_bestconf
 cal_pw13_pwcheck
 cd_dl
 cd_se103_cd_server
-cd_server
 cdshel_cdshell
 cdtrans
 chatsrc_chat_o_meter
-chatsrc_meter
+chatsrcmeter
 cle_uc12_uc_cli
 cnfscn_dl
 color_wall
-comment2_afl
+comment2
 confscan
 confsecurity
 confstats
@@ -155,7 +150,6 @@ doorsae_sysinfo
 doorsmenu
 downmani_dm_extra
 dpl_fa10_frontavail
-dpl_frontavail
 dpl_pc10_pwcommand
 dpl_sp10_speedpass
 dpl_stfc
@@ -175,7 +169,6 @@ ext107_exterminate_
 fafcst20_chatstarter
 fafcst_chatstarter
 fastdupe
-fd_amifront
 fd_cfg_amisettings
 fd_front_amifront
 fd_magicscan
@@ -187,7 +180,6 @@ fileid_2
 fld_chat_8
 fld_doors
 fld_p014_powerpager
-fld_powerpager
 fld_sw10_superwhofront
 flm
 front_act
@@ -207,16 +199,14 @@ ic_status
 ihs_uc11_usercheck
 ihs_ul_logoff
 ilt_ps10_pumpsafe
-ilt_pumpsafe
 ins_sbull
 ins_sd13_smartdsf
 ins_skanstatus
-ivn_mfmnukelog
 ivn_n05_mfm_nukelog
+ivnmfmnukelog
 joe_s_tl_topcall
-joe_topcall
+joetopcall
 joincnf
-jso_paycheck
 jso_pc12_paycheck
 jso_timestamp
 jso_tools
@@ -255,7 +245,6 @@ mgs__wh1_wallhall
 mgs_bulls
 mgs_mgzlistman
 mgs_userstatus
-mgs_wallhall
 mmh_grapestats
 modpager
 modpager_v_mpager
@@ -377,7 +366,7 @@ trsi_sd3_showdoors
 trsi_sd_showdoors
 trsi_sv3_superviser
 trsicd1p_guide2docprof
-tsn_comment
+tsn_lc10_comment
 tsn_sg10_speedguard
 turbolister
 turbon
@@ -402,7 +391,6 @@ warlist
 warpsearch
 wclock11_world_clock
 what
-who
 who_2
 wildstat
 wl7a_wildlist
