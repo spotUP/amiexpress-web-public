@@ -232,6 +232,193 @@ describe("FIMProtocol", () => {
     expect(s).toBe("hi");
   });
 
+  function makeWith(emu: MemStub, bbsSession: Record<string, unknown>, nodeId = 3) {
+    const putMsgCalls: Array<{ port: number; msg: number }> = [];
+    const proto = new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: (port, msg) => { putMsgCalls.push({ port, msg }); } },
+      socket: { emit: () => true },
+      bbsSession,
+      nodeId,
+      onShutdown: () => undefined,
+    });
+    return { proto, putMsgCalls };
+  }
+
+  function readIOStr(emu: MemStub, msg: number, max = FDOM.IOSTRING_LEN): string {
+    let s = "";
+    for (let i = 0; i < max; i++) {
+      const b = emu.readMemory(msg + FDOM.IOSTRING + i);
+      if (b === 0) break;
+      s += String.fromCharCode(b);
+    }
+    return s;
+  }
+
+  it("NR_BBSName returns bbsSession.bbsName in IOString", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { bbsName: "AmiExpress Web" });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_BBSName);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("AmiExpress Web");
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("NR_SysOp returns bbsSession.sysopName in IOString", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { sysopName: "Spot" });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_SysOp);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("Spot");
+  });
+
+  it("NR_MainLine returns doorParams when present", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { doorParams: "DOOR1 ARG1", doorCommand: "DOOR1" });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_MainLine);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("DOOR1 ARG1");
+  });
+
+  it("NR_MainLine falls back to doorCommand, then empty string", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { doorCommand: "DOOR1" });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_MainLine);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("DOOR1");
+
+    const emu2 = new MemStub();
+    const { proto: proto2 } = makeWith(emu2, {});
+    const msg2 = buildMsg(emu2, 0x8000, FIM_CMD.NR_MainLine);
+    proto2.handleMessage(msg2);
+    expect(readIOStr(emu2, msg2)).toBe("");
+  });
+
+  it("NR_Name returns username in IOString", () => {
+    const emu = new MemStub();
+    const proto = new FIMProtocol({ emulator: emu as never, execLibrary: { putMsg: () => undefined },
+      socket: { emit: () => true },
+      bbsSession: { user: { username: "SPOT", secLevel: 255 }, bbsName: "AmiExpress Web", timeRemaining: 59 },
+      nodeId: 3, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_Name);
+    proto.handleMessage(msg);
+    let s = ""; for (let i = 0; i < 4; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("SPOT");
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("NR_Password is DENIED and blank", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { password: "hunter2" } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_Password);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.DENIED);
+    expect(emu.readMemory(msg + FDOM.IOSTRING)).toBe(0);
+  });
+
+  it("NR_Location returns user.location in IOString", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { location: "Earth" } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_Location);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("Earth");
+  });
+
+  it("NR_AccessLevel returns user.secLevel in Data2", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { secLevel: 255 } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_AccessLevel);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(255);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("NR_TimeRemain returns bbsSession.timeRemaining in Data2 (minutes, header states no unit)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { timeRemaining: 59 });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_TimeRemain);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(59);
+  });
+
+  it("NR_Uploads / NR_Downloads default to 0 when absent, otherwise return user counts in Data2", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_Uploads);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+
+    const emu2 = new MemStub();
+    const { proto: proto2 } = makeWith(emu2, { user: { uploads: 7, downloads: 12 } });
+    const msgUp = buildMsg(emu2, 0x8000, FIM_CMD.NR_Uploads);
+    proto2.handleMessage(msgUp);
+    expect(emu2.readMemory32(msgUp + FDOM.DATA2)).toBe(7);
+    const msgDown = buildMsg(emu2, 0x8100, FIM_CMD.NR_Downloads);
+    proto2.handleMessage(msgDown);
+    expect(emu2.readMemory32(msgDown + FDOM.DATA2)).toBe(12);
+  });
+
+  it("NR_BytesUpload / NR_BytesDownload return byte counts in Data3", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { bytesUpload: 123456, bytesDownload: 654321 } });
+    const msgUp = buildMsg(emu, 0x8000, FIM_CMD.NR_BytesUpload);
+    proto.handleMessage(msgUp);
+    expect(emu.readMemory32(msgUp + FDOM.DATA3)).toBe(123456);
+    const msgDown = buildMsg(emu, 0x8100, FIM_CMD.NR_BytesDownload);
+    proto.handleMessage(msgDown);
+    expect(emu.readMemory32(msgDown + FDOM.DATA3)).toBe(654321);
+  });
+
+  it("SR_ConfName returns bbsSession.conferenceName in IOString", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { conferenceName: "General" });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.SR_ConfName);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("General");
+  });
+
+  it("SR_ConfNum returns bbsSession.conferenceId in Data2", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { conferenceId: 2 });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.SR_ConfNum);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(2);
+  });
+
+  it("SR_NodeNumber returns nodeId in Data2", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {}, 3);
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.SR_NodeNumber);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(3);
+  });
+
+  it("SR_FAMEVersion returns version string in IOString and 60 in Data2", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.SR_FAMEVersion);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("FAME 6.0 (amiexpress-web compat)");
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(60);
+  });
+
+  it("info commands never crash on absent user/bbsSession fields", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    for (const cmd of [
+      FIM_CMD.NR_BBSName, FIM_CMD.NR_SysOp, FIM_CMD.NR_MainLine, FIM_CMD.NR_Name,
+      FIM_CMD.NR_Location, FIM_CMD.NR_AccessLevel, FIM_CMD.NR_TimeRemain,
+      FIM_CMD.NR_Uploads, FIM_CMD.NR_Downloads, FIM_CMD.NR_BytesUpload,
+      FIM_CMD.NR_BytesDownload, FIM_CMD.SR_ConfName, FIM_CMD.SR_ConfNum,
+    ]) {
+      const msg = buildMsg(emu, 0x8000, cmd);
+      expect(() => proto.handleMessage(msg)).not.toThrow();
+      expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+    }
+  });
+
   it("key command consumes first char only and requeues the remainder for the next input command", () => {
     const emu = new MemStub();
     (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;

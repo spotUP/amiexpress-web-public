@@ -168,6 +168,139 @@ export class FIMProtocol {
         break;
       }
 
+      case FIM_CMD.NR_BBSName: {
+        const bbsName = String(this.bbsSession.bbsName ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, bbsName, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_SysOp: {
+        const sysopName = String(this.bbsSession.sysopName ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, sysopName, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_MainLine: {
+        // Same source as xim/bbs-info.ts:528-533 (BB_MAINLINE).
+        const mainLine = String(
+          this.bbsSession.doorParams || this.bbsSession.doorCommand || ""
+        );
+        this.writeCString(msgAddr + FDOM.IOSTRING, mainLine, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_Name: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const username = String(user.username ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, username, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_Password: {
+        // Never leak the password: deny and blank the reply string.
+        this.writeCString(msgAddr + FDOM.IOSTRING, "", FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.DENIED);
+        break;
+      }
+
+      case FIM_CMD.NR_Location: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const location = String(user.location ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, location, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_AccessLevel: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const secLevel = Number(user.secLevel ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, secLevel >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_TimeRemain: {
+        // FAMEDoorCommands.h's NR_TimeRemain comment ("Retrieve total time
+        // remaining" / "Data2 -> Contains the User's total time remain.")
+        // does not state a unit (checked all three shipped header copies:
+        // FA_DE103, FA_DE100, FAMECFPR pre-release — identical, no
+        // "seconds"/"minutes" wording, and no door source in the corpus
+        // consumes NR_TimeRemain to infer one from usage). bbsSession is
+        // the AmiExpress-native source of truth and stores minutes, so pass
+        // it through unconverted rather than guessing a conversion factor.
+        const timeRemaining = Number(this.bbsSession.timeRemaining ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, timeRemaining >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_Uploads: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const uploads = Number(user.uploads ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, uploads >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_Downloads: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const downloads = Number(user.downloads ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, downloads >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_BytesUpload: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const bytesUpload = Number(user.bytesUpload ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, bytesUpload >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_BytesDownload: {
+        const user = (this.bbsSession.user as Record<string, unknown>) ?? {};
+        const bytesDownload = Number(user.bytesDownload ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, bytesDownload >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.SR_ConfName: {
+        const conferenceName = String(this.bbsSession.conferenceName ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, conferenceName, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.SR_ConfNum: {
+        const conferenceId = Number(this.bbsSession.conferenceId ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, conferenceId >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.SR_NodeNumber: {
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, this.nodeId >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.SR_FAMEVersion: {
+        this.writeCString(
+          msgAddr + FDOM.IOSTRING,
+          "FAME 6.0 (amiexpress-web compat)",
+          FDOM.IOSTRING_LEN
+        );
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 60);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
       case FIM_CMD.CF_ShowText: {
         const name = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN);
         debugLog(`[FIM] CF_ShowText ${name}`);
