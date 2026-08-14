@@ -624,16 +624,29 @@ async function main() {
     return `[${bar}] ${pct}% ${totalDone}/${totalAll} | pass:${alreadyDone.length + freshPass} fail:${freshFail} skip:${freshSkip} | ETA:${etaStr}`;
   }
 
-  let nodeCounter = 1;
+  // Node ids come from a free-list so concurrent doors get distinct nodes but
+  // ids are reused across sequential runs. The old `nodeCounter++` handed every
+  // door a fresh id, littering the repo root with Node41..Node418 scaffolding
+  // during big sweeps (dirs are created on demand by DoorDropFileManager and
+  // never cleaned). High-water mark == pool concurrency, never the door count.
+  const freeNodeIds: number[] = [];
+  let nodeHighWater = 0;
+  const acquireNodeId = (): number => freeNodeIds.pop() ?? ++nodeHighWater;
+  const releaseNodeId = (id: number): void => { freeNodeIds.push(id); };
 
   async function runPool(entries: CorpusEntry[], concurrency: number) {
     return pool(entries, concurrency, async (entry) => {
-    const nodeId = nodeCounter++;
-    const r = await runOne(entry, executeDoor, findDoor, {
-      capture,
-      keepAnsi,
-      nodeId,
-    });
+    const nodeId = acquireNodeId();
+    let r: Awaited<ReturnType<typeof runOne>>;
+    try {
+      r = await runOne(entry, executeDoor, findDoor, {
+        capture,
+        keepAnsi,
+        nodeId,
+      });
+    } finally {
+      releaseNodeId(nodeId);
+    }
     // Save progress after every door — merge into disk state so external
     // pre-population of goldens is never clobbered.
     saveOneResult(r.id, {

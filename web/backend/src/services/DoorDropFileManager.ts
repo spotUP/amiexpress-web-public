@@ -95,6 +95,22 @@ console.log(`  Sysop: ${this.sysopName} (from bbsConfig.info)`);
     this.sysopName = bbsConfig.sysop_name || 'Sysop';
   }
 
+  /**
+   * Resolve (and validate) the Node<N> directory for a node id.
+   * AmiExpress supports nodes 0-255 (NodeStatusManager.MAX_NODES); anything
+   * outside that range is a caller bug — historically an unbounded per-door
+   * counter in the corpus runner littered the repo root with Node41..Node418.
+   * Throw instead of scaffolding a bogus directory.
+   */
+  private getNodeDir(nodeId: number): string {
+    if (!Number.isInteger(nodeId) || nodeId < 0 || nodeId > 255) {
+      throw new RangeError(
+        `[DoorDropFile] Invalid nodeId ${nodeId} — AmiExpress supports nodes 0-255`
+      );
+    }
+    return path.join(this.bbsRoot, `Node${nodeId}`);
+  }
+
   setBbsRoot(bbsRoot: string): void {
     this.bbsRoot = bbsRoot;
     // Reload config when BBS root changes
@@ -168,7 +184,7 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
    * This should be called by download handlers
    */
   updateDownloadBytesToday(nodeId: number, bytes: number): void {
-    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const nodeDir = this.getNodeDir(nodeId);
     const trackingPath = path.join(nodeDir, '.download_today');
     try {
       let total = 0;
@@ -192,7 +208,7 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
    * Get download bytes today for a node
    */
   private getDownloadBytesToday(nodeId: number): number {
-    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const nodeDir = this.getNodeDir(nodeId);
     const trackingPath = path.join(nodeDir, '.download_today');
     try {
       if (fs.existsSync(trackingPath)) {
@@ -220,7 +236,7 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
    * Create DOOR.SYS file for a door session
    */
   createDoorSys(nodeId: number, user: User, timeRemaining: number): void {
-    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const nodeDir = this.getNodeDir(nodeId);
     const doorSysPath = path.join(nodeDir, 'DOOR.SYS');
 
     // Ensure Node directory exists
@@ -303,7 +319,7 @@ console.log(`[DoorDropFile] Created DOOR.SYS for Node${nodeId}`);
    * Create DORINFOx.DEF file (alternative format)
    */
   createDorInfo(nodeId: number, user: User): void {
-    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const nodeDir = this.getNodeDir(nodeId);
     const dorInfoPath = path.join(nodeDir, `DORINFO${nodeId}.DEF`);
 
     // Ensure Node directory exists
@@ -337,7 +353,7 @@ console.log(`[DoorDropFile] Created DORINFO${nodeId}.DEF for Node${nodeId}`);
    * Delete drop files after door exit
    */
   cleanupDropFiles(nodeId: number): void {
-    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const nodeDir = this.getNodeDir(nodeId);
 
     // Delete DOOR.SYS
     const doorSysPath = path.join(nodeDir, 'DOOR.SYS');
