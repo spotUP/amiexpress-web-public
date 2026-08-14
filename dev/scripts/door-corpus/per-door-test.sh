@@ -87,12 +87,32 @@ fi
 RESULTS_FILE=$(mktemp -t per-door-results-XXXXXX)
 trap 'rm -f "$RESULTS_FILE"' EXIT
 
+# The runner prints rows only for FAIL/CAPTURED/SKIP ("  FAIL <id> (<ms>ms) — <detail>");
+# pass is silent and signalled by exit code 0. Derive the per-door verdict
+# from exit code + rows (the old "  <id>: pass" grep matched a long-gone
+# output format and silently tallied 0/0).
 run_one() {
   local id="$1"
-  cd web/backend && \
-    npx tsx src/scripts/corpus-integration-runner.ts \
-        --concurrency 1 $CAPTURE --only "$id" 2>&1 \
-      | grep -aE "^  $id: (pass|FAIL|SKIP|captured)" | head -1
+  local out rc detail
+  # tr: strip NULs (bash cmd-subst warning) and normalize the progress bar's
+  # bare \r into newlines so the "  SKIP <id> ..." rows start their own line.
+  out=$( set -o pipefail; cd web/backend && npx tsx src/scripts/corpus-integration-runner.ts \
+          --concurrency 1 $CAPTURE --only "$id" 2>&1 | tr -d '\000' | tr '\r' '\n' )
+  rc=$?
+  if [[ $rc -eq 2 ]]; then
+    echo "  $id: FAIL unknown corpus id"
+    return
+  fi
+  if printf '%s\n' "$out" | grep -qaE "^  SKIP ${id} "; then
+    echo "  $id: SKIP"
+  elif printf '%s\n' "$out" | grep -qaE "^  CAPTURED ${id} "; then
+    echo "  $id: captured"
+  elif [[ $rc -eq 0 ]]; then
+    echo "  $id: pass"
+  else
+    detail=$(printf '%s\n' "$out" | grep -aE "^  FAIL ${id} " | head -1 | sed "s/^  FAIL ${id} //")
+    echo "  $id: FAIL ${detail}"
+  fi
 }
 export -f run_one
 export CAPTURE

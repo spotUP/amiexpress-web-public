@@ -537,6 +537,14 @@ async function main() {
   if (only) entries = entries.filter((e) => only!.has(e.id));
 
   if (entries.length === 0) {
+    if (only) {
+      // Unknown --only ids must NOT exit 0 — per-door-test.sh reads exit
+      // code 0 as "pass" and a typo'd id would silently green the gate.
+      process.stderr.write(
+        `[integration] ERROR: no corpus entry matches --only ${[...only].join(",")}\n`,
+      );
+      process.exit(2);
+    }
     process.stdout.write(
       `[integration] no corpus entries with integration: {} (use --only <id> to force, or add integration: {} to corpus.json)\n`,
     );
@@ -647,9 +655,11 @@ async function main() {
       ? ` — ${r.detail.slice(0, 80)}`
       : "";
 
-    // Clear progress bar line; only print FAIL/CAPTURED rows — pass/skip are noise
+    // Clear progress bar line; print FAIL/CAPTURED/SKIP rows — pass is noise.
+    // SKIP rows are load-bearing: per-door-test.sh distinguishes skip from
+    // pass by this row (both exit 0).
     process.stdout.write(`\r${" ".repeat(100)}\r`);
-    if (r.status === "fail" || r.status === "captured") {
+    if (r.status === "fail" || r.status === "captured" || r.status === "skip") {
       process.stdout.write(`  ${tag} ${r.id} (${r.wallMs}ms)${subStateSuffix}${detail}\n`);
     }
     process.stdout.write(renderBar());
