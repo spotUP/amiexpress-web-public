@@ -37,8 +37,16 @@ describe("postDoorMenuAction", () => {
     expect(postDoorMenuAction(s)).toBe("segments");
   });
 
-  it("empty segment list falls through to normal menu return", () => {
+  it("door in the LAST segment (already shifted, length 0) still counts as segment processing", () => {
+    // ~CC_CONFTOP lives in the final join-screen segment: by the time the
+    // door runs, that segment was shift()ed so the list is empty, but
+    // session.screenSegments is only cleared after the parse returns.
     const s = session({ screenSegments: { segments: [] } });
+    expect(postDoorMenuAction(s)).toBe("segments");
+  });
+
+  it("cleared screenSegments (undefined) falls through to normal menu return", () => {
+    const s = session({ screenSegments: undefined });
     expect(postDoorMenuAction(s)).toBe("menu");
   });
 

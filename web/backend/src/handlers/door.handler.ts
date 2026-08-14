@@ -1437,7 +1437,11 @@ function padString(str: string, length: number): string {
 export type PostDoorAction = 'segments' | 'pause' | 'interactive' | 'menu';
 
 export function postDoorMenuAction(session: BBSSession): PostDoorAction {
-  if (session.screenSegments && session.screenSegments.segments.length > 0) {
+  // Presence check, NOT segments.length: a ~CC_ door in the LAST segment
+  // runs after that segment was already shift()ed (length === 0), but
+  // processNextScreenSegment only clears session.screenSegments once the
+  // whole parse returns — segment processing is still active either way.
+  if (session.screenSegments) {
     return 'segments';
   }
   if (session.paginatedScreen) {
@@ -1602,7 +1606,9 @@ console.error(`Unknown door type: ${door.type}`);
     // After door completes, check if we're in segment processing (~SP handling)
     // If so, DON'T change state - let segment processing continue
     // express.e:5455-5461 - ~SP causes pauses between segments, ~CC_ commands run within segments
-    if (session.screenSegments && session.screenSegments.segments.length > 0) {
+    // Presence check, not segments.length — a ~CC_ door in the LAST segment
+    // runs with length === 0 while screenSegments is still set.
+    if (session.screenSegments) {
 console.log(`[executeDoor] Door ${door.name} completed during segment processing - continuing segments`);
       // Restore subState so display flow can continue (was clobbered to DOOR_RUNNING)
       session.subState = originalSubState;
@@ -2080,7 +2086,9 @@ console.log(`[executeTypeScriptDoor] Sent door:status: stopped, door-active: fal
 
     // Check for segment processing first - takes priority
     // express.e:5455-5461 - ~CC_ commands run within segments, more segments follow
-    if (session.screenSegments && session.screenSegments.segments.length > 0) {
+    // Presence check, not segments.length — a ~CC_ door in the LAST segment
+    // runs with length === 0 while screenSegments is still set.
+    if (session.screenSegments) {
 console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment processing - continuing segments`);
       // Don't change state or show menu - segment processing will continue
       return;
