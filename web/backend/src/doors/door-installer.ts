@@ -10,6 +10,15 @@ import * as amigafs from '../utils/amigafs';
 
 const execAsync = promisify(exec);
 
+/**
+ * Filename extensions that mark an archive entry as a native Amiga 68K
+ * door binary (as opposed to docs, .info tooltype files, etc). Shared by
+ * the archive-level executable gate (`detectArchiveType`) and the
+ * install-time binary lookup (`register68KDoor`) — single source of truth
+ * so the two never drift out of sync.
+ */
+export const AMIGA_68K_BINARY_EXT_RE = /\.(exe|xim|aim|sim|tim|fim)$/i;
+
 export interface InstallResult {
   success: boolean;
   message: string;
@@ -159,7 +168,7 @@ export class DoorInstaller {
 
     const binEntry = entries.find(
       e => e.data && e.name !== infoEntryName &&
-        (!e.name.includes('.') || /\.(exe|xim|aim|sim|tim|fim)$/i.test(e.name)),
+        (!e.name.includes('.') || AMIGA_68K_BINARY_EXT_RE.test(e.name)),
     );
     const doorType = binEntry?.data ? detectDoorType(Buffer.from(binEntry.data)) : 'XIM';
 
@@ -224,7 +233,7 @@ function detectArchiveType(
 
   const infoEntry = entries.find(e => e.name.toLowerCase().endsWith('.info') && !e.name.includes('/'));
   const hasExecutable = entries.some(
-    e => !e.name.includes('.') || /\.(exe|xim|aim|sim|tim)$/i.test(e.name),
+    e => !e.name.includes('.') || AMIGA_68K_BINARY_EXT_RE.test(e.name),
   );
   if (infoEntry && hasExecutable) {
     return { type: '68k', infoEntryName: infoEntry.name };
@@ -236,10 +245,12 @@ function detectArchiveType(
 /**
  * Sniff a 68K door binary's IPC engine from its raw bytes.
  *
- * Runs after the caller has already confirmed the buffer is a native Amiga
- * executable (Amiga hunk-magic 0x000003F3 header). Binaries are latin-1
- * Amiga content, so we search bytes with a latin1-encoded needle rather than
- * decoding as UTF-8 (which would corrupt high-bit bytes).
+ * Runs after the caller has already selected this entry as the door binary
+ * via a filename heuristic (`AMIGA_68K_BINARY_EXT_RE` / no-extension check)
+ * — there is no hunk-magic (0x000003F3) validation of the buffer itself.
+ * Binaries are latin-1 Amiga content, so we search bytes with a
+ * latin1-encoded needle rather than decoding as UTF-8 (which would corrupt
+ * high-bit bytes).
  *
  * FAMEDoorPort is checked before AEDoorPort: FAME (FIM) doors can carry
  * generic Amiga door-port scaffolding alongside their FAME-specific IPC
