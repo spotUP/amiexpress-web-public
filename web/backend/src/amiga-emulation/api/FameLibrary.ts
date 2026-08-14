@@ -36,8 +36,6 @@ export interface FameMemAllocator {
 export class FameLibrary {
   private emulator: MoiraEmulator;
   private allocator: FameMemAllocator;
-  private bbsSession: any = {};
-  private socket: any = null;
 
   constructor(emulator: MoiraEmulator, allocator: FameMemAllocator) {
     this.emulator = emulator;
@@ -45,14 +43,15 @@ export class FameLibrary {
   }
 
   /**
-   * Set session data for door operations. Mirrors DreamDoorLibrary's
-   * setSession — FameLibrary doesn't yet need bbsSession/socket for the
-   * MVP subset, but the wiring is required so LibraryManager can call it
-   * uniformly with the other compat-layer libraries.
+   * Mirrors DreamDoorLibrary's setSession so LibraryManager can call it
+   * uniformly with the other compat-layer libraries. FameLibrary's MVP
+   * subset (object alloc/free, string copy, ascii-to-long, memset) doesn't
+   * actually need bbsSession/socket — unlike fim-protocol.ts's FIMProtocol,
+   * which is the class that talks to the terminal/session for FAME doors —
+   * so this is intentionally a no-op rather than storing unused fields.
    */
-  setSession(bbsSession: unknown, socket: unknown): void {
-    this.bbsSession = bbsSession || {};
-    this.socket = socket;
+  setSession(_bbsSession: unknown, _socket: unknown): void {
+    // Intentionally empty — see doc comment above.
   }
 
   /**

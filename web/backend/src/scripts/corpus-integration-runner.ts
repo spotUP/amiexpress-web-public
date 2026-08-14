@@ -510,7 +510,7 @@ async function main() {
     const ext = path.extname(entry.binary).toLowerCase();
     let type: Door["type"] = "native";
     const dt = (entry.doorType || "").toUpperCase();
-    if ((doorHandler as any).isAmiga68kDoorType?.(dt)) {
+    if (doorHandler.isAmiga68kDoorType(dt)) {
       type = dt as any; // executeDoor dispatches these to launchAmigaDoor.
     } else if (dt === "AREXX" || dt === "REXX" || ext === ".rexx") {
       type = "AREXX" as any;
@@ -573,7 +573,7 @@ async function main() {
   }
 
   const is68k = (e: CorpusEntry) =>
-    !!(doorHandler as any).isAmiga68kDoorType?.((e.doorType || "").toUpperCase());
+    doorHandler.isAmiga68kDoorType((e.doorType || "").toUpperCase());
 
   const toRun68k = toRun.filter(is68k);
   const toRunTs  = toRun.filter((e) => !is68k(e));

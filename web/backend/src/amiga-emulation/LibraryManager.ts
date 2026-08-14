@@ -723,7 +723,7 @@ debugLog("[LibraryManager] Pre-opening icon.library and installing vectors...");
     this.execLibrary.openLibraryHybrid("icon.library", 37, false);
     this.libraryTraps.installIconVectors();
 
-    this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
+    this.execLibrary.addLibraryOpenedCallback((name: string, addr: number) => {
       if (name.toLowerCase() === "dos.library") {
 debugLog(
           "[LibraryManager] dos.library opened, installing vectors..."

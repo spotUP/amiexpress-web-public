@@ -23,7 +23,7 @@ export enum DoorType {
   MCI = 'MCI',       // MCI command
   AEM = 'AEM',       // AmiExpress Module
   SUP = 'SUP',       // Support module
-  FIM = 'FIM',       // FAME Internal Module (FAME BBS door compat)
+  FIM = 'FIM',       // FAME Interface Module (FAME BBS door compat)
   TS = 'TS',         // TypeScript door (AmiExpress-Web extension)
   PYTHON = 'PYTHON', // Python door (AmiExpress-Web extension)
   PY = 'PY',         // Python door shorthand (AmiExpress-Web extension)

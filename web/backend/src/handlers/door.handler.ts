@@ -1579,7 +1579,7 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
           await executeAmigaDoor(socket, session, door, doorSession);
         }
         break;
-      case 'FIM': // FAME Internal Module (FAME BBS door compat) - FAMEDoorPort/FIMProtocol
+      case 'FIM': // FAME Interface Module (FAME BBS door compat) - FAMEDoorPort/FIMProtocol
         await executeAmigaDoor(socket, session, door, doorSession);
         break;
       default:

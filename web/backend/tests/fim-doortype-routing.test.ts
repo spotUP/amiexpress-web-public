@@ -1,5 +1,5 @@
 /**
- * FIM (FAME Internal Module) doorType plumbing.
+ * FIM (FAME Interface Module) doorType plumbing.
  *
  * FAME BBS door compat (Task 7): "FIM" must be a first-class doorType,
  * parsed the same way XIM/AIM/SIM/TIM/IIM are (2-3 char alias + access
