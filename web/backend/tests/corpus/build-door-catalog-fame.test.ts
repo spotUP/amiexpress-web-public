@@ -16,6 +16,12 @@
  *    `COCAiNE-StAtS.fiM`) and left binary_name/door_type unset for FAME
  *    archives entirely.
  */
+// better-sqlite3 lives in the repo-root node_modules (the builder script runs
+// under tsx from dev/scripts) — it is NOT resolvable from web/backend, so jest
+// needs a virtual mock before the builder module can load. The functions under
+// test are pure and never touch the DB.
+jest.mock('better-sqlite3', () => ({ __esModule: true, default: class {} }), { virtual: true });
+
 import { resolveDoorType, isCandidateBinaryEntry } from '../../../../dev/scripts/door-corpus/build-door-catalog';
 import { detectDoorType } from '../../src/doors/door-installer';
 
