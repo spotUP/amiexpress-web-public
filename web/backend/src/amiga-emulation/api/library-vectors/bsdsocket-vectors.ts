@@ -168,7 +168,13 @@ export const BSDSOCKET_VECTORS: LibraryVector[] = [
     offset: -114,
     name: "IoctlSocket",
     handler: (emu, lib: BsdSocketLibrary) => {
-      console.log(`[BsdSocketLibrary] IoctlSocket() - stub, returning 0`);
+      // Returns success (0). FIONBIO (set non-blocking) is effectively a
+      // no-op here because the socket layer is node net sockets, which are
+      // already async/non-blocking. No corpus door has been observed to break
+      // on this (2026-08-14 ledger sweep: called once by a door that passed).
+      // Revisit only if a real door is shown to depend on FIONREAD byte counts.
+      const cmd = emu.getRegister(1); // D1 = ioctl request
+      console.log(`[BsdSocketLibrary] IoctlSocket(cmd=0x${(cmd >>> 0).toString(16)}) -> 0 (node sockets are non-blocking)`);
       return 0;
     },
   },

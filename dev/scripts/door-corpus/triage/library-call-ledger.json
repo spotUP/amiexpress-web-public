@@ -1,32 +1,50 @@
 {
   "summary": {
-    "real": 26,
+    "real": 57,
     "stub": 0,
     "missing": 0
   },
   "entries": [
     {
       "library": "exec.library",
-      "offset": -132,
-      "name": "Forbid",
+      "offset": -372,
+      "name": "GetMsg",
       "resolution": "real",
-      "count": 12,
+      "count": 145514,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
       "library": "exec.library",
-      "offset": -390,
-      "name": "FindPort",
+      "offset": -378,
+      "name": "ReplyMsg",
       "resolution": "real",
-      "count": 12,
+      "count": 144979,
       "doors": [
-        "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
+        "conftop_2",
+        "fileid_2"
       ]
     },
     {
@@ -34,35 +52,29 @@
       "offset": -366,
       "name": "PutMsg",
       "resolution": "real",
-      "count": 11,
+      "count": 530,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
-      ]
-    },
-    {
-      "library": "exec.library",
-      "offset": -138,
-      "name": "Permit",
-      "resolution": "real",
-      "count": 10,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>",
-        "afl_g_logoff"
-      ]
-    },
-    {
-      "library": "exec.library",
-      "offset": -372,
-      "name": "GetMsg",
-      "resolution": "real",
-      "count": 9,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>",
-        "afl_g_logoff"
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
@@ -70,10 +82,26 @@
       "offset": -384,
       "name": "WaitPort",
       "resolution": "real",
-      "count": 6,
+      "count": 467,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
-        "<unknown>"
+        "<unknown>",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm"
       ]
     },
     {
@@ -81,80 +109,62 @@
       "offset": -198,
       "name": "AllocMem",
       "resolution": "real",
-      "count": 5,
+      "count": 132,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "glc",
+        "mgs_mgzlistman",
+        "mrc",
+        "multitop",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
       "library": "exec.library",
-      "offset": -552,
-      "name": "OpenLibrary",
+      "offset": -390,
+      "name": "FindPort",
       "resolution": "real",
-      "count": 4,
+      "count": 98,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
-      ]
-    },
-    {
-      "library": "dos.library",
-      "offset": -60,
-      "name": "Output",
-      "resolution": "real",
-      "count": 4,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>",
-        "afl_g_logoff"
-      ]
-    },
-    {
-      "library": "dos.library",
-      "offset": -30,
-      "name": "Open",
-      "resolution": "real",
-      "count": 3,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>",
-        "afl_g_logoff"
-      ]
-    },
-    {
-      "library": "exec.library",
-      "offset": -318,
-      "name": "Wait",
-      "resolution": "real",
-      "count": 3,
-      "doors": [
-        "<unknown>",
-        "afl_g_logoff"
-      ]
-    },
-    {
-      "library": "dos.library",
-      "offset": -84,
-      "name": "Lock",
-      "resolution": "real",
-      "count": 2,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>"
-      ]
-    },
-    {
-      "library": "dos.library",
-      "offset": -126,
-      "name": "CurrentDir",
-      "resolution": "real",
-      "count": 2,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>"
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
@@ -162,79 +172,114 @@
       "offset": -306,
       "name": "SetSignal",
       "resolution": "real",
-      "count": 2,
+      "count": 91,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "multitop",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
       "library": "dos.library",
-      "offset": -54,
-      "name": "Input",
+      "offset": -30,
+      "name": "Open",
       "resolution": "real",
-      "count": 2,
+      "count": 85,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "mrc",
+        "multitop",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
       "library": "exec.library",
-      "offset": -294,
-      "name": "FindTask",
+      "offset": -522,
+      "name": "RawDoFmt",
       "resolution": "real",
-      "count": 2,
+      "count": 77,
       "doors": [
-        "5d_zippysearch",
         "<unknown>",
-        "afl_g_logoff"
+        "mrc"
       ]
     },
     {
       "library": "exec.library",
-      "offset": -666,
-      "name": "CreateMsgPort",
+      "offset": -132,
+      "name": "Forbid",
       "resolution": "real",
-      "count": 1,
+      "count": 71,
       "doors": [
+        "5d_edit",
+        "5d_entermsg",
         "5d_zippysearch",
-        "<unknown>"
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "fileid_2",
+        "mgs_mgzlistman",
+        "mrc",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
-      "library": "dos.library",
-      "offset": -90,
-      "name": "UnLock",
+      "library": "exec.library",
+      "offset": -138,
+      "name": "Permit",
       "resolution": "real",
-      "count": 1,
+      "count": 66,
       "doors": [
+        "5d_edit",
+        "5d_entermsg",
         "5d_zippysearch",
-        "<unknown>"
-      ]
-    },
-    {
-      "library": "dos.library",
-      "offset": -192,
-      "name": "DateStamp",
-      "resolution": "real",
-      "count": 1,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>"
-      ]
-    },
-    {
-      "library": "dos.library",
-      "offset": -48,
-      "name": "Write",
-      "resolution": "real",
-      "count": 1,
-      "doors": [
-        "5d_zippysearch",
-        "<unknown>"
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "fileid_2",
+        "mgs_mgzlistman",
+        "mrc",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
@@ -242,43 +287,289 @@
       "offset": -36,
       "name": "Close",
       "resolution": "real",
-      "count": 1,
+      "count": 57,
       "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
         "5d_zippysearch",
-        "<unknown>"
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "mrc",
+        "multitop",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
       ]
     },
     {
-      "library": "icon.library",
-      "offset": -78,
-      "name": "GetDiskObject",
+      "library": "dos.library",
+      "offset": -66,
+      "name": "Seek",
       "resolution": "real",
-      "count": 1,
+      "count": 55,
       "doors": [
-        "5d_zippysearch",
-        "<unknown>"
+        "5d_user",
+        "<unknown>",
+        "conftop_2",
+        "mrc",
+        "sizecheck"
       ]
     },
     {
-      "library": "icon.library",
-      "offset": -96,
-      "name": "FindToolType",
+      "library": "exec.library",
+      "offset": -318,
+      "name": "Wait",
       "resolution": "real",
-      "count": 1,
+      "count": 53,
       "doors": [
-        "5d_zippysearch",
-        "<unknown>"
+        "5d_adimenu",
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "emp_tools",
+        "getanswer",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "zootility"
       ]
     },
     {
-      "library": "icon.library",
-      "offset": -90,
-      "name": "FreeDiskObject",
+      "library": "dos.library",
+      "offset": -84,
+      "name": "Lock",
       "resolution": "real",
-      "count": 1,
+      "count": 51,
+      "doors": [
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "mrc",
+        "zootility"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -42,
+      "name": "Read",
+      "resolution": "real",
+      "count": 51,
+      "doors": [
+        "5d_user",
+        "<unknown>",
+        "conftop_2",
+        "mrc",
+        "sizecheck",
+        "war_kickem",
+        "war_olm",
+        "zootility"
+      ]
+    },
+    {
+      "library": "aedoor.library",
+      "offset": -84,
+      "name": "WriteStr",
+      "resolution": "real",
+      "count": 46,
+      "doors": [
+        "<unknown>",
+        "mgs_mgzlistman",
+        "mrc"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -552,
+      "name": "OpenLibrary",
+      "resolution": "real",
+      "count": 42,
+      "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "glc",
+        "mgs_mgzlistman",
+        "mrc",
+        "multitop",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem",
+        "war_olm",
+        "zootility"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -48,
+      "name": "Write",
+      "resolution": "real",
+      "count": 41,
+      "doors": [
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "mrc",
+        "multitop",
+        "zootility"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -210,
+      "name": "FreeMem",
+      "resolution": "real",
+      "count": 37,
+      "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "glc",
+        "mgs_mgzlistman",
+        "multitop",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "war_kickem"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -60,
+      "name": "Output",
+      "resolution": "real",
+      "count": 32,
+      "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "glc",
+        "mgs_mgzlistman",
+        "mrc",
+        "multitop",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "zootility"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -192,
+      "name": "DateStamp",
+      "resolution": "real",
+      "count": 31,
       "doors": [
         "5d_zippysearch",
-        "<unknown>"
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "mrc",
+        "nodechat",
+        "zootility"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -294,
+      "name": "FindTask",
+      "resolution": "real",
+      "count": 25,
+      "doors": [
+        "5d_adimenu",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "glc",
+        "mgs_mgzlistman",
+        "mrc",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "zootility"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -54,
+      "name": "Input",
+      "resolution": "real",
+      "count": 21,
+      "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "glc",
+        "mgs_mgzlistman",
+        "mrc",
+        "multitop",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "zootility"
       ]
     },
     {
@@ -286,10 +577,95 @@
       "offset": -414,
       "name": "CloseLibrary",
       "resolution": "real",
-      "count": 1,
+      "count": 21,
+      "doors": [
+        "5d_adimenu",
+        "5d_edit",
+        "5d_entermsg",
+        "5d_zippysearch",
+        "<unknown>",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "glc",
+        "mgs_mgzlistman",
+        "multitop",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "war_kickem"
+      ]
+    },
+    {
+      "library": "icon.library",
+      "offset": -96,
+      "name": "FindToolType",
+      "resolution": "real",
+      "count": 20,
       "doors": [
         "5d_zippysearch",
-        "<unknown>"
+        "<unknown>",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "war_olm"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -564,
+      "name": "ObtainSemaphore",
+      "resolution": "real",
+      "count": 19,
+      "doors": [
+        "<unknown>",
+        "nodechat"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -132,
+      "name": "IoErr",
+      "resolution": "real",
+      "count": 18,
+      "doors": [
+        "5d_user",
+        "<unknown>",
+        "bossnuke",
+        "conftop_2",
+        "nodechat",
+        "sent_fe",
+        "war_olm"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -570,
+      "name": "ReleaseSemaphore",
+      "resolution": "real",
+      "count": 18,
+      "doors": [
+        "<unknown>",
+        "nodechat"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -90,
+      "name": "UnLock",
+      "resolution": "real",
+      "count": 15,
+      "doors": [
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "5d_zippysearch",
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "mrc",
+        "zootility"
       ]
     },
     {
@@ -297,10 +673,358 @@
       "offset": -330,
       "name": "AllocSignal",
       "resolution": "real",
+      "count": 15,
+      "doors": [
+        "5d_adimenu",
+        "5d_user",
+        "<unknown>",
+        "afl_g_logoff",
+        "bossnuke",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "getanswer",
+        "nodechat",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats",
+        "zootility"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -126,
+      "name": "CurrentDir",
+      "resolution": "real",
+      "count": 14,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "zootility"
+      ]
+    },
+    {
+      "library": "icon.library",
+      "offset": -78,
+      "name": "GetDiskObject",
+      "resolution": "real",
+      "count": 11,
+      "doors": [
+        "5d_edit",
+        "5d_zippysearch",
+        "<unknown>",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools",
+        "fileid_2",
+        "war_olm"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -354,
+      "name": "AddPort",
+      "resolution": "real",
+      "count": 9,
+      "doors": [
+        "5d_adimenu",
+        "5d_user",
+        "<unknown>",
+        "conftop_2",
+        "emp_tools",
+        "getanswer",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats"
+      ]
+    },
+    {
+      "library": "icon.library",
+      "offset": -90,
+      "name": "FreeDiskObject",
+      "resolution": "real",
+      "count": 7,
+      "doors": [
+        "5d_zippysearch",
+        "<unknown>",
+        "bytekiller",
+        "conftop_2",
+        "emp_tools"
+      ]
+    },
+    {
+      "library": "aedoor.library",
+      "offset": -108,
+      "name": "GetDT",
+      "resolution": "real",
+      "count": 7,
+      "doors": [
+        "<unknown>",
+        "mgs_mgzlistman",
+        "mrc"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -102,
+      "name": "Examine",
+      "resolution": "real",
+      "count": 7,
+      "doors": [
+        "5d_edit",
+        "5d_entermsg",
+        "5d_user",
+        "<unknown>",
+        "conftop_2",
+        "mrc"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -666,
+      "name": "CreateMsgPort",
+      "resolution": "real",
+      "count": 6,
+      "doors": [
+        "5d_edit",
+        "5d_entermsg",
+        "5d_zippysearch",
+        "<unknown>",
+        "rtw",
+        "war_kickem",
+        "war_olm"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -360,
+      "name": "RemPort",
+      "resolution": "real",
+      "count": 6,
+      "doors": [
+        "5d_adimenu",
+        "<unknown>",
+        "emp_tools",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -336,
+      "name": "FreeSignal",
+      "resolution": "real",
+      "count": 6,
+      "doors": [
+        "5d_adimenu",
+        "<unknown>",
+        "emp_tools",
+        "rtw",
+        "sent_fe",
+        "sizecheck",
+        "ustats"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -744,
+      "name": "DateToStr",
+      "resolution": "real",
+      "count": 6,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -732,
+      "name": "StackSwap",
+      "resolution": "real",
+      "count": 5,
+      "doors": [
+        "<unknown>",
+        "glc",
+        "rtw",
+        "zootility"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -66,
+      "name": "send",
+      "resolution": "real",
+      "count": 5,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -198,
+      "name": "Delay",
+      "resolution": "real",
+      "count": 4,
+      "doors": [
+        "<unknown>",
+        "fileid_2",
+        "mrc"
+      ]
+    },
+    {
+      "library": "exec.library",
+      "offset": -672,
+      "name": "DeleteMsgPort",
+      "resolution": "real",
+      "count": 3,
+      "doors": [
+        "5d_entermsg",
+        "<unknown>",
+        "rtw",
+        "war_kickem"
+      ]
+    },
+    {
+      "library": "aedoor.library",
+      "offset": -30,
+      "name": "CreateComm",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "<unknown>",
+        "mgs_mgzlistman",
+        "mrc"
+      ]
+    },
+    {
+      "library": "aedoor.library",
+      "offset": -72,
+      "name": "GetString",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "<unknown>",
+        "mgs_mgzlistman",
+        "mrc"
+      ]
+    },
+    {
+      "library": "aedoor.library",
+      "offset": -54,
+      "name": "SendDataCmd",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -72,
+      "name": "DeleteFile",
+      "resolution": "real",
+      "count": 2,
+      "doors": [
+        "5d_entermsg",
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "aedoor.library",
+      "offset": -36,
+      "name": "DeleteComm",
+      "resolution": "real",
       "count": 1,
       "doors": [
         "<unknown>",
-        "afl_g_logoff"
+        "mgs_mgzlistman"
+      ]
+    },
+    {
+      "library": "dos.library",
+      "offset": -798,
+      "name": "ReadArgs",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "glc"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -30,
+      "name": "socket",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -210,
+      "name": "gethostbyname",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -54,
+      "name": "connect",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -162,
+      "name": "Errno",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -114,
+      "name": "IoctlSocket",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "mrc"
+      ]
+    },
+    {
+      "library": "bsdsocket.library",
+      "offset": -78,
+      "name": "recv",
+      "resolution": "real",
+      "count": 1,
+      "doors": [
+        "<unknown>",
+        "mrc"
       ]
     }
   ]
