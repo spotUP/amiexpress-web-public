@@ -709,12 +709,27 @@ export class FIMProtocol {
   /**
    * NR_WaitChar (92): "Get a char with waiting for it." Per
    * FAMEDoorCommands.h: "Data2 -> The char typed be the user. / Data3 -> 0
-   * = Console char, 1 = Serial char." This is the BLOCKING counterpart to
+   * = Console char, 1 = Serial char. / IOString <- String will be
+   * displayed to the user." This is the BLOCKING counterpart to
    * NR_HotKey — reuses the same pendingKind:"key" pause/resume machinery
    * NR_PromptChars uses for line input (see feedLineChars()/pendingKind
-   * "line"), but for a single char.
+   * "line"), but for a single char. The IOString prompt is read and
+   * emitted BEFORE deferring/consuming, same as handlePromptChars —
+   * covers both the synchronous type-ahead-answered path and the deferred
+   * (pause-until-queueInput) path.
+   *
+   * NOT IMPLEMENTED: the header documents raw cursor-key return codes
+   * (UP=4, DOWN=5, RIGHT=3, LEFT=2) alongside the typed-char value for
+   * this command; this emulation doesn't distinguish/report raw
+   * cursor-key escape sequences through the key-command path (same gap
+   * disclosed on AR_HotKey's Data1 cursor-key remap above).
    */
   private handleWaitChar(msgAddr: number): void {
+    const prompt = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN);
+    if (prompt.length > 0) {
+      this.socket?.emit("ansi-output", prompt);
+    }
+
     if (this.inputBuffer.length > 0) {
       const key = this.inputBuffer[0];
       this.inputBuffer = this.inputBuffer.slice(1);

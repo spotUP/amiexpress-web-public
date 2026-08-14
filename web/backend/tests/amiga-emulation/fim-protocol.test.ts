@@ -318,6 +318,34 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(113); // 'q'
   });
 
+  it("NR_WaitChar emits its IOString prompt before deferring, then completes the key via queueInput", () => {
+    const emu = new MemStub();
+    let paused = false, resumed = false;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => { resumed = true; };
+    const out: string[] = [];
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_WaitChar);
+    "Press any key>".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    // Prompt emitted immediately, before the deferred wait.
+    expect(out).toEqual(["Press any key>"]);
+    expect(putMsgCalls.length).toBe(0);
+    expect(paused).toBe(true);
+    proto.queueInput("k");
+    expect(putMsgCalls.length).toBe(1);
+    expect(resumed).toBe(true);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(107); // 'k'
+    // No further emit beyond the prompt itself.
+    expect(out).toEqual(["Press any key>"]);
+  });
+
   it("NR_PromptChars mode 4 echoes '*' per typed char, not the literal chars", () => {
     const emu = new MemStub();
     (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
