@@ -539,6 +539,11 @@ class RepoView extends BaseView {
     (this.layout.screen as any).on('keypress', filterKeypress);
     this._onFilterKey = filterKeypress;
 
+    // While the filter box is active, suppress ALL view hotkeys — typing
+    // "a" must filter, not open [A]rchive browse (filterKeypress above is a
+    // raw keypress listener and is unaffected by this guard).
+    this.keys.setGuard(() => !filterActive);
+
     // F/Tab from the LIST → enter filter mode
     this.keys.key(['f', 'F', '/', 'tab'], () => {
       if (filterActive) return; // already in filter

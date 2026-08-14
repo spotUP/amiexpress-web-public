@@ -16,17 +16,33 @@ exports.ViewManager = exports.BaseView = exports.KeyBinder = void 0;
 class KeyBinder {
     constructor(screen) {
         this.bound = [];
+        this.guard = null;
         this.screen = screen;
     }
+    /**
+     * Modal-input guard: while `guard()` returns false, every hotkey bound
+     * through this binder is suppressed. Views with a text-input mode (e.g.
+     * RepoView's filter box) set this so typing "a" filters instead of firing
+     * the [A]rchive hotkey — guarding per-handler proved error-prone (only the
+     * 'f' binding was guarded; every other hotkey threw the user out of the
+     * filter input).
+     */
+    setGuard(guard) { this.guard = guard; }
     key(keys, handler) {
-        this.bound.push({ keys, handler });
-        this.screen.key(keys, handler);
+        const wrapped = (...a) => {
+            if (this.guard && !this.guard())
+                return;
+            handler(...a);
+        };
+        this.bound.push({ keys, handler: wrapped });
+        this.screen.key(keys, wrapped);
     }
     release() {
         for (const { keys, handler } of this.bound) {
             this.screen.unkey(keys, handler);
         }
         this.bound = [];
+        this.guard = null;
     }
 }
 exports.KeyBinder = KeyBinder;

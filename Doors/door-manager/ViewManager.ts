@@ -15,12 +15,27 @@
 export class KeyBinder {
   private screen: any;
   private bound: Array<{ keys: string[]; handler: (...a: any[]) => void }> = [];
+  private guard: (() => boolean) | null = null;
 
   constructor(screen: any) { this.screen = screen; }
 
+  /**
+   * Modal-input guard: while `guard()` returns false, every hotkey bound
+   * through this binder is suppressed. Views with a text-input mode (e.g.
+   * RepoView's filter box) set this so typing "a" filters instead of firing
+   * the [A]rchive hotkey — guarding per-handler proved error-prone (only the
+   * 'f' binding was guarded; every other hotkey threw the user out of the
+   * filter input).
+   */
+  setGuard(guard: (() => boolean) | null): void { this.guard = guard; }
+
   key(keys: string[], handler: (...a: any[]) => void): void {
-    this.bound.push({ keys, handler });
-    (this.screen as any).key(keys, handler);
+    const wrapped = (...a: any[]) => {
+      if (this.guard && !this.guard()) return;
+      handler(...a);
+    };
+    this.bound.push({ keys, handler: wrapped });
+    (this.screen as any).key(keys, wrapped);
   }
 
   release(): void {
@@ -28,6 +43,7 @@ export class KeyBinder {
       (this.screen as any).unkey(keys, handler);
     }
     this.bound = [];
+    this.guard = null;
   }
 }
 
