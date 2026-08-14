@@ -171,6 +171,40 @@ describe('DoorInstaller — 68K door', () => {
     expect(infoContent).toContain('LOCATION=Doors/who/WHO');
   });
 
+  test('picks the LOCATION-named binary over a data file that precedes it in the archive', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        // No extension, so it also matches the generic "no dot" binary
+        // heuristic, and it comes FIRST in the archive — the bug picked
+        // this file as binEntry and detected doorType off ITS bytes
+        // (defaulting to XIM) instead of the real binary's.
+        { name: 'CONFIG', size: 10, data: Buffer.from('plain data, no IPC marker') },
+        {
+          name: 'WHO',
+          size: 5000,
+          data: Buffer.concat([
+            Buffer.from('FAMEDoorPort'),
+            Buffer.alloc(4988, 0x4e),
+          ]),
+        },
+        {
+          name: 'WHO.info',
+          size: 200,
+          data: Buffer.from(
+            'BBSCMD=WHO\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online\nACCESS=0',
+          ),
+        },
+      ],
+    });
+
+    const result = await installer.install('/fake/who.lha');
+
+    expect(result.success).toBe(true);
+    // LOCATION says the binary is "WHO" — must detect FIM off WHO's bytes,
+    // not XIM off CONFIG's (the data file that happened to sort first).
+    expect(result.type).toBe('FIM');
+  });
+
   test('rejects archive with path traversal', async () => {
     (getExtractorForFile as jest.Mock).mockResolvedValue({
       getEntries: async () => [

@@ -89,6 +89,48 @@ export class DoorLoader {
   }
 
   /**
+   * Decide the door process's CLI argument list, given its declared door
+   * type, any explicit config.args, and its node number.
+   *
+   * XIM doors: express.e:4231 runDoor builds the CLI as "<cmd> <node>" —
+   * runtime parameters (e.g. 'S U' for `N S U`) ride on XIM messages (cmd
+   * 113/152), NOT the CLI. Honoring config.args verbatim broke AquaScan —
+   * its ReadArgs template "NODE/N/A" expects a number and got "S U" ->
+   * IoErr=115 -> RETURN_WARN during auto-newfiles-scan at login.
+   *
+   * FIM doors (FAME BBS protocol) follow the identical rule for the
+   * identical reason: FAME's own parameter channel is the
+   * NR_GetArgument1-4 / NR_GetFullArg FIM commands (87-91, see
+   * fim-protocol.ts) delivered over the FAMEDoorPort message port, not the
+   * CLI args string. A parameterized FIM door (e.g. "FAMEWHO force node
+   * online") must still see its NODE NUMBER on the CLI — losing it here
+   * previously broke every parameterized FIM door launch.
+   *
+   * Other door types (SIM/TIM/AIM/etc.) preserve explicit config.args when
+   * present — these use different IPC paths (DoorControl port, PARADOOR
+   * wrapper) and may rely on them.
+   *
+   * Single source of truth for both DoorLoader.setupCpuRegisters (CLI
+   * BSTR the door process reads at startup) and
+   * AmigaDoorSession.setupCliEnvironment (dos.library GetArgStr /
+   * GetCliProgramName helpers) — they must never drift apart.
+   */
+  static selectCliArgs(
+    doorType: string,
+    configArgs: string[],
+    nodeId: number,
+  ): string[] {
+    const type = (doorType || "").toUpperCase();
+    if (type === "XIM" || type === "FIM") {
+      return [nodeId.toString()];
+    }
+    if (configArgs.length > 0) {
+      return [...configArgs];
+    }
+    return [nodeId.toString()];
+  }
+
+  /**
    * Load door executable into emulator memory
    */
   async loadDoor(): Promise<void> {
@@ -358,29 +400,16 @@ debugLog(`[DoorLoader] sessionCommand="${sessionCommand}" type=${typeof sessionC
       : path.basename(this.config.executablePath);
 debugLog(`[DoorLoader] progName="${progName}" (from sessionCommand="${sessionCommand}" or basename)`);
 
-    let customArgs: string[] = [];
     const configArgs = Array.isArray(this.config.args) ? this.config.args : [];
-    // express.e:4231 runDoor: XIM/SIM/TIM/IIM/SUP all build CLI as "<cmd> <node>".
-    // Runtime params (e.g. 'S U' for `N S U`) ride on XIM messages (cmd 113/152),
-    // NOT on the CLI. Honoring config.args verbatim here broke AquaScan — its
-    // ReadArgs template "NODE/N/A" expects a number and got "S U" → IoErr=115
-    // → RETURN_WARN during auto-newfiles-scan at login.
-    if (doorType === 'XIM') {
-      if (configArgs.length > 0) {
-debugLog(`[DoorLoader] XIM door: ignoring config.args=${JSON.stringify(configArgs)} per express.e:4231 (params delivered via XIM messages)`);
-      }
-      customArgs = [nodeId.toString()];
-debugLog(`[DoorLoader] XIM door CLI args=["${nodeId}"] (node number only, matches express.e runDoor)`);
-    } else if (configArgs.length > 0) {
-      // Non-XIM (SIM/TIM/AIM/etc.): preserve existing behavior for now. These
-      // use different IPC paths (DoorControl port, PARADOOR wrapper) and may
-      // rely on explicit args. Revisit per-type if a concrete door breaks.
-      customArgs = [...configArgs];
-debugLog(`[DoorLoader] ${doorType} door with explicit args: ${JSON.stringify(customArgs)}`);
-    } else {
-      customArgs = [nodeId.toString()];
-debugLog(`[DoorLoader] ${doorType} door with default args: ["${nodeId}"]`);
+    // See DoorLoader.selectCliArgs for the full rationale: XIM and FIM
+    // doors always get node-number-only CLI args (runtime params ride on
+    // their own message channel instead); other types keep explicit
+    // config.args when present.
+    const customArgs = DoorLoader.selectCliArgs(doorType, configArgs, nodeId);
+    if ((doorType === 'XIM' || doorType === 'FIM') && configArgs.length > 0) {
+debugLog(`[DoorLoader] ${doorType} door: ignoring config.args=${JSON.stringify(configArgs)} per express.e:4231 (params delivered via ${doorType === 'FIM' ? 'FIM NR_GetArgument1-4' : 'XIM'} messages)`);
     }
+debugLog(`[DoorLoader] ${doorType} door CLI args=${JSON.stringify(customArgs)}`);
     const argStringBase = customArgs.join(" ").trim();
     // AmigaDOS requires argument string to be terminated with newline (0x0A), NOT null
     // This is critical - many doors check the argument length and parse differently

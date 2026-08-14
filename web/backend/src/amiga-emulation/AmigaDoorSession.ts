@@ -1001,20 +1001,23 @@ debugLog(
     );
 
     // Set CLI info for dos.library helpers (GetArgStr, GetCliProgramName)
-    // Note: isXimDoor already defined above
+    // Note: isXimDoor already defined above (still gates the separate
+    // pr_CLI-restore callback below, which is XIM-specific).
+    // Args selection itself uses DoorLoader.selectCliArgs — single source
+    // of truth shared with DoorLoader.setupCpuRegisters so XIM/FIM's
+    // node-only-CLI rule can't drift between the two call sites (FIM doors
+    // deliver runtime params via NR_GetArgument1-4/NR_GetFullArg, commands
+    // 87-91 — see fim-protocol.ts).
     const cliArgsRaw = Array.isArray(this.config.args) ? this.config.args : [];
-    let cliArgs: string[] = [];
-    if (isXimDoor) {
-      if (cliArgsRaw.length > 0) {
+    const cliArgs = DoorLoader.selectCliArgs(
+      this.config.doorType || "",
+      cliArgsRaw,
+      nodeId,
+    );
+    if (isXimDoor && cliArgsRaw.length > 0) {
 debugLog(
-          `[AmigaDoorSession] XIM doors ignore config.args for CLI (express.e runDoor); using node only`
-        );
-      }
-      cliArgs = [nodeId.toString()];
-    } else if (cliArgsRaw.length > 0) {
-      cliArgs = cliArgsRaw;
-    } else {
-      cliArgs = [nodeId.toString()];
+        `[AmigaDoorSession] XIM doors ignore config.args for CLI (express.e runDoor); using node only`
+      );
     }
     const argStringPlain =
       cliArgs.join(" ").trim() || nodeId.toString();

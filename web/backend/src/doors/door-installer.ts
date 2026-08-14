@@ -166,10 +166,21 @@ export class DoorInstaller {
 
     if (!fs.existsSync(bbsCommandsDir)) fs.mkdirSync(bbsCommandsDir, { recursive: true });
 
-    const binEntry = entries.find(
-      e => e.data && e.name !== infoEntryName &&
-        (!e.name.includes('.') || AMIGA_68K_BINARY_EXT_RE.test(e.name)),
-    );
+    // Prefer the entry whose basename matches the .info's LOCATION tooltype
+    // (execName, computed above) — that's the door's authoritative
+    // declaration of which archive entry is its binary. Fall back to the
+    // filename heuristic (no extension, or a known 68K binary extension)
+    // only when LOCATION doesn't resolve to a present entry: some archives
+    // ship a data/config file with no extension (e.g. "CONFIG") ahead of
+    // the real binary, and the heuristic alone would silently pick that
+    // data file, misdetecting doorType off the wrong bytes.
+    const isCandidate = (e: ArchiveEntry) =>
+      !!e.data && e.name !== infoEntryName &&
+      (!e.name.includes('.') || AMIGA_68K_BINARY_EXT_RE.test(e.name));
+    const binEntry =
+      entries.find(
+        e => isCandidate(e) && path.basename(e.name).toLowerCase() === execName.toLowerCase(),
+      ) ?? entries.find(isCandidate);
     const doorType = binEntry?.data ? detectDoorType(Buffer.from(binEntry.data)) : 'XIM';
 
     const outInfoPath = path.join(bbsCommandsDir, `${cmdName}.info`);
