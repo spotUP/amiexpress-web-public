@@ -782,17 +782,44 @@ debugLog(`[ExecLibrary]   pr_CLI at 0x${(addr + 0xac).toString(16)} = 0 (BBS doo
    *
    * Implementation: Return stub library structures for known libraries
    */
-  // Callback for when a library is opened (used to install traps)
-  private onLibraryOpened: ((name: string, addr: number) => void) | null = null;
+  // Callbacks for when a library is opened (used to install traps).
+  // Multiple independent consumers register here (LibraryManager installs
+  // library-specific trap vectors; AmigaDoorSession sends startup messages
+  // on AEDoor.library open, etc.) — this must be a compose/list, not a
+  // single overwritable slot. A single slot meant the second registration
+  // silently discarded the first (see the fame.library trap-install bug:
+  // LibraryManager's fame.library branch never ran because
+  // AmigaDoorSession.setupComponentCallbacks() replaced the whole callback).
+  private libraryOpenedCallbacks: Array<(name: string, addr: number) => void> = [];
   private nativeLibraryFlags = new Map<string, boolean>();
 
   /**
-   * Set callback for when a library is opened
+   * Register a callback for when a library is opened. All registered
+   * callbacks fire, in registration order, on every OpenLibrary() call site
+   * below (`notifyLibraryOpened`).
+   */
+  addLibraryOpenedCallback(
+    callback: (name: string, addr: number) => void
+  ): void {
+    this.libraryOpenedCallbacks.push(callback);
+  }
+
+  /**
+   * @deprecated Use addLibraryOpenedCallback — this now APPENDS rather than
+   * replaces (kept as an alias so existing call sites keep working without
+   * change; the old single-slot "last writer wins" behavior silently
+   * dropped every earlier registration, which is the root cause fixed here).
    */
   setLibraryOpenedCallback(
     callback: (name: string, addr: number) => void
   ): void {
-    this.onLibraryOpened = callback;
+    this.addLibraryOpenedCallback(callback);
+  }
+
+  private notifyLibraryOpened(name: string, addr: number): void {
+    for (const callback of this.libraryOpenedCallbacks) {
+      callback(name, addr);
+    }
   }
 
   isLibraryNative(name: string): boolean {
@@ -871,9 +898,7 @@ debugLog(
         );
         existingCheck.openCount = (existingCheck.openCount || 0) + 1;
         this.writeLibraryToMemory(existingCheck);
-        if (this.onLibraryOpened) {
-          this.onLibraryOpened(name, existingCheck.address);
-        }
+        this.notifyLibraryOpened(name, existingCheck.address);
 
         // CRITICAL: Create AEDoorPort dynamically when AEDoor.library is opened by the door
         this.createDynamicAEDoorPort(name);
@@ -910,9 +935,7 @@ debugLog(
           );
 
           // Notify callback with the real address
-          if (this.onLibraryOpened) {
-            this.onLibraryOpened(name, realLibrary.baseAddress);
-          }
+          this.notifyLibraryOpened(name, realLibrary.baseAddress);
 
           // CRITICAL: Create AEDoorPort dynamically when AEDoor.library is opened by the door
           this.createDynamicAEDoorPort(name);
@@ -936,9 +959,7 @@ debugLog(
         this.writeLibraryToMemory(lib);
 
         // Notify callback
-        if (this.onLibraryOpened) {
-          this.onLibraryOpened(name, realLibrary.baseAddress);
-        }
+        this.notifyLibraryOpened(name, realLibrary.baseAddress);
 
         // CRITICAL: Create AEDoorPort dynamically when AEDoor.library is opened by the door
         // (not on initial pre-open by LibraryManager)
@@ -993,9 +1014,7 @@ debugLog(
         );
         // CRITICAL FIX: Always call callback to ensure vectors are installed
         // This was missing, causing icon.library GetDiskObject traps to not work
-        if (this.onLibraryOpened) {
-          this.onLibraryOpened(name, existing.address);
-        }
+        this.notifyLibraryOpened(name, existing.address);
         return existing.address;
       }
 
@@ -1021,9 +1040,7 @@ debugLog(
           16
         )}, v${lib.version}.${lib.revision}`
       );
-      if (this.onLibraryOpened) {
-        this.onLibraryOpened(name, lib.address);
-      }
+      this.notifyLibraryOpened(name, lib.address);
       return lib.address;
     }
 
@@ -1042,9 +1059,7 @@ debugLog(
         )}, count=${existing.openCount}`
       );
       // CRITICAL FIX: Always call callback to ensure vectors are installed
-      if (this.onLibraryOpened) {
-        this.onLibraryOpened(name, existing.address);
-      }
+      this.notifyLibraryOpened(name, existing.address);
       return existing.address;
     }
 
@@ -1107,9 +1122,7 @@ debugLog(
     );
 
     // Notify callback (used to install library traps)
-    if (this.onLibraryOpened) {
-      this.onLibraryOpened(name, libAddr);
-    }
+    this.notifyLibraryOpened(name, libAddr);
 
     return libAddr;
   }

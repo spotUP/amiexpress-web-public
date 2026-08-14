@@ -754,9 +754,20 @@ debugLog(
       return;
     }
 
-    // Set up library opened callback
+    // Set up library opened callback. This APPENDS to the list of
+    // library-opened callbacks (ExecLibrary.addLibraryOpenedCallback) — it
+    // does NOT replace LibraryManager's own callback (LibraryManager.ts,
+    // registered earlier in initializeLibraries()). Both fire, in
+    // registration order, on every OpenLibrary(). Previously
+    // setLibraryOpenedCallback was a single overwritable slot, so this
+    // registration silently discarded LibraryManager's callback entirely —
+    // including its fame.library branch, which installs FAME.library's trap
+    // vectors. Every FIM (FAME-doorport) door crashed on its first
+    // FAME.library call as a result. Fixed at the root in ExecLibrary.ts
+    // (compose/list of callbacks) rather than duplicating LibraryManager's
+    // branches here.
 debugLog("[AmigaDoorSession] Setting library opened callback");
-    this.sharedState.execLibrary.setLibraryOpenedCallback(
+    this.sharedState.execLibrary.addLibraryOpenedCallback(
       (name: string, addr: number) => {
         if (name.toLowerCase() === "dos.library") {
 debugLog(
@@ -790,12 +801,17 @@ debugLog(
           this.sharedState.libraryTraps.installIconVectors();
         }
         if (name.toLowerCase() === "intuition.library") {
-          // S/stats regression: this callback overrides LibraryManager's
-          // (LibraryManager.ts:715), so any library not handled here gets
-          // its base back from openLibraryStub but never has its TRAP
-          // VECTORS installed. The stats door's SAS/C panic handler opens
-          // intuition.library, calls AutoRequest at LVO -348, and without
-          // vectors the JSR jumps into uninitialized memory at
+          // S/stats regression (historical root cause, now fixed at the
+          // ExecLibrary composition level — see addLibraryOpenedCallback
+          // above): this branch used to be the ONLY place installing
+          // intuition.library vectors, because this whole callback replaced
+          // LibraryManager's (LibraryManager.ts:775) rather than composing
+          // with it. LibraryManager also has its own intuition.library
+          // branch now that both callbacks run. This branch stays because
+          // it additionally calls syncTrapAddressesToMoira() (below), which
+          // LibraryManager's branch does not. The stats door's SAS/C panic
+          // handler opens intuition.library, calls AutoRequest at LVO -348,
+          // and without vectors the JSR jumps into uninitialized memory at
           // (intuitionBase + LVO) — door faults, runtime longjmps to its
           // recovery exit, and exits FAIL=20.
           //

@@ -501,14 +501,16 @@ async function main() {
       (d) => (d.command || "").toUpperCase() === up,
     );
     if (registered) return registered;
-    // Synthesize. The corpus declares the door type — XIM/AIM/SIM/TIM
-    // are all Amiga 68K binaries (different message protocols), 'native'
-    // in executeDoor's switch means Node.js scripts which is NOT what
-    // a corpus 'native' entry would be. Map appropriately.
+    // Synthesize. The corpus declares the door type — XIM/AIM/SIM/TIM/IIM/FIM
+    // are all Amiga 68K binaries (different message protocols — FIM is FAME
+    // BBS's FAMEDoorPort/FIMProtocol variant, see AMIGA_68K_DOOR_TYPES in
+    // door.handler.ts), 'native' in executeDoor's switch means Node.js
+    // scripts which is NOT what a corpus 'native' entry would be. Map
+    // appropriately.
     const ext = path.extname(entry.binary).toLowerCase();
     let type: Door["type"] = "native";
     const dt = (entry.doorType || "").toUpperCase();
-    if (["XIM", "AIM", "SIM", "TIM", "IIM"].includes(dt)) {
+    if ((doorHandler as any).isAmiga68kDoorType?.(dt)) {
       type = dt as any; // executeDoor dispatches these to launchAmigaDoor.
     } else if (dt === "AREXX" || dt === "REXX" || ext === ".rexx") {
       type = "AREXX" as any;
@@ -571,7 +573,7 @@ async function main() {
   }
 
   const is68k = (e: CorpusEntry) =>
-    ["XIM","AIM","SIM","TIM","IIM"].includes((e.doorType || "").toUpperCase());
+    !!(doorHandler as any).isAmiga68kDoorType?.((e.doorType || "").toUpperCase());
 
   const toRun68k = toRun.filter(is68k);
   const toRunTs  = toRun.filter((e) => !is68k(e));
