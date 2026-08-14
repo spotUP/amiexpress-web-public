@@ -6,6 +6,7 @@ import "reflect-metadata";
 import path from "path";
 import { EventEmitter } from "events";
 import { AmigaDoorSession } from "../amiga-emulation/AmigaDoorSession";
+import { libraryCallLedger } from "../amiga-emulation/instrumentation/library-call-ledger";
 
 class MockSocket extends EventEmitter {
   emit(event: string, data?: any): boolean {
@@ -194,7 +195,32 @@ function decodeEscapes(s: string): string {
   });
 }
 
+// Tier 2 measurement: dump this door's library-call ledger to stderr when
+// LEDGER=1, so single-door harness runs (reliable, unlike the corpus runner)
+// produce the real/stub/missing breakdown. Aggregated externally by door.
+// NB: ESM import (not require) so we share the SAME singleton instance that
+// LibraryTraps records into — under tsx, mixing import+require duplicates the
+// module and the dump reads an empty second copy.
+let ledgerDumped = false;
+function dumpLedgerIfEnabled(): void {
+  if (!libraryCallLedger.enabled || ledgerDumped) return;
+  ledgerDumped = true;
+  const snap = libraryCallLedger.snapshot();
+  process.stderr.write("[ledger-json] " + JSON.stringify({ summary: libraryCallLedger.summary(), entries: snap }) + "\n");
+}
+
+// Interactive doors never reach the graceful exit below — the sweep harness
+// times them out. Dump whatever the ledger recorded on SIGTERM/SIGINT (a call
+// census only needs the calls made before the door was killed), then exit.
+for (const sig of ["SIGTERM", "SIGINT"] as const) {
+  process.on(sig, () => {
+    dumpLedgerIfEnabled();
+    process.stderr.write("", () => process.exit(0));
+  });
+}
+
 main().then(() => {
+  dumpLedgerIfEnabled();
   // Force-exit after the door session resolves. Some XIM handlers
   // (notably JH_MCI's dynamic import of screen.handler) transitively
   // pull in the full BBS via index.ts, whose top-level IIFE spins up

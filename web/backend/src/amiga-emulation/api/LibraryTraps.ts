@@ -30,6 +30,7 @@ import { BsdSocketLibrary } from "./BsdSocketLibrary";
 import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./AmiSSLLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import { getLvoName } from "../constants/lvo-names.generated";
+import { libraryCallLedger } from "../instrumentation/library-call-ledger";
 import { debugLog } from "../../utils/debug-log";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -1229,6 +1230,7 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
       const vector: LibraryVector = {
         offset,
         name: getLvoName(normalized, offset) || `${normalized}-stub`,
+        isStub: true,
         handler: (emu: MoiraEmulator) => {
 console.log(
             `[LibraryTraps] Stubbed ${normalized} ${getLvoName(normalized, offset) || `offset ${offset}`} at PC=0x${trapAddr.toString(
@@ -1278,6 +1280,17 @@ console.log(
       debugLog(`[TRAP] ${vector.name} at PC=0x${pc.toString(16)}`);
     }
 
+    // Tier 2 measurement (LEDGER=1): record every resolved library call as
+    // 'real' (genuine handler) or 'stub' (pass-through). The !vector branch
+    // below records 'missing'. No-op unless the ledger is enabled.
+    if (libraryCallLedger.enabled && vector) {
+      // libraryMap holds the owning library instance per trap address — a more
+      // reliable name than address math (ExecBase lives outside `libraries`).
+      const lib = this.getLibraryName(this.libraryMap.get(pc)) ||
+        this.execLibrary.getLibraryNameForAddress(pc) || 'unknown';
+      libraryCallLedger.record(lib, vector.offset, vector.name, vector.isStub ? 'stub' : 'real');
+    }
+
     // DEBUG: Log AEDoor-related calls to trace trap matching. Same hot-path
     // concerns as above — gated.
     if (DEBUG_ENABLED) {
@@ -1307,6 +1320,7 @@ console.log(
       // Exec.library vectors are roughly from -700 to -30 from ExecBase
       if (pc >= execBase - 700 && pc < execBase && execOffset <= -30) {
         const execFnName = getLvoName('exec.library', execOffset) || `unknown(${execOffset})`;
+        libraryCallLedger.record('exec.library', execOffset, execFnName, 'missing');
 console.error(`[LibraryTraps] *** UNIMPLEMENTED EXEC FUNCTION: ${execFnName} ***`);
 console.error(`[LibraryTraps]   PC: 0x${pc.toString(16)}`);
 console.error(`[LibraryTraps]   ExecBase: 0x${execBase.toString(16)}`);
@@ -1381,6 +1395,7 @@ console.error(
       if (dosBase && pc >= dosBase - 300 && pc < dosBase && dosOffset <= -30) {
         const offset = pc - dosBase;
         const dosFnName = getLvoName('dos.library', offset) || `unknown(${offset})`;
+        libraryCallLedger.record('dos.library', offset, dosFnName, 'missing');
 console.error(`[LibraryTraps] *** UNIMPLEMENTED DOS FUNCTION: ${dosFnName} ***`);
 console.error(
           `[LibraryTraps]   PC: 0x${pc.toString(16)}, LVO: ${offset} = ${dosFnName}`
@@ -1862,6 +1877,12 @@ console.log(
     const libraries = this.offsetLibraryMap.get(offset);
 
     if (!vectors || vectors.length === 0) {
+      // Tier 2 measurement (LEDGER=1): a trapped call we have no handler for.
+      if (libraryCallLedger.enabled) {
+        const lib = this.execLibrary.getLibraryNameForAddress(baseAddr + offset) ||
+          this.execLibrary.getLibraryNameForAddress(baseAddr) || 'unknown';
+        libraryCallLedger.record(lib, offset, getLvoName(lib, offset) || `unknown(${offset})`, 'missing');
+      }
 console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
       return false;
     }
@@ -1874,6 +1895,14 @@ console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
     const vector = vectors[0];
     const library = libraries![0];
     const libraryName = this.getLibraryName(library);
+
+    // Tier 2 measurement (LEDGER=1): record this call as 'real' or 'stub'.
+    if (libraryCallLedger.enabled) {
+      const lib = (libraryName && libraryName !== 'unknown')
+        ? libraryName
+        : (this.execLibrary.getLibraryNameForAddress(baseAddr) || 'unknown');
+      libraryCallLedger.record(lib, offset, vector.name, vector.isStub ? 'stub' : 'real');
+    }
 
     if (DEBUG_LIBRARY_TRAPS) {
 console.log(

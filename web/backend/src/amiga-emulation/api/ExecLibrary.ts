@@ -2900,6 +2900,25 @@ debugLog(
   }
 
   /**
+   * Reverse of getLibraryBase: name of the library whose vector table contains
+   * `addr` (i.e. the library base >= addr and closest above it). Used by the
+   * call ledger to attribute a trap PC to a library. Returns '' if none match.
+   */
+  getLibraryNameForAddress(addr: number): string {
+    let best = '';
+    let bestBase = -1;
+    for (const [name, lib] of this.libraries) {
+      // Vectors live below the base (negative offsets). Accept a generous
+      // window (1KB) — real LVO tables are well within it.
+      if (addr <= lib.address && addr >= lib.address - 1024 && lib.address > bestBase) {
+        best = name;
+        bestBase = lib.address;
+      }
+    }
+    return best;
+  }
+
+  /**
    * Pre-register a library placeholder so getLibraryBase() returns a stable
    * address even before OpenLibrary is called.
    */

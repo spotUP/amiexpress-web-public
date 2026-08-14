@@ -68,6 +68,7 @@ import type { Door } from "../types";
 import type { BBSSession } from "../index";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { EnvStat } from "../constants/env-codes";
+import { libraryCallLedger } from "../amiga-emulation/instrumentation/library-call-ledger";
 
 // __dirname = web/backend/src/scripts → repo root is four levels up.
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
@@ -299,6 +300,9 @@ async function runOne(
       detail: `no Door registered for command "${command}"`,
     };
   }
+
+  // Tier 2 measurement: attribute this door's library calls in the ledger.
+  libraryCallLedger.setCurrentDoor(entry.id);
 
   const socket = new MockSocket();
   const session = makeSession(options.nodeId);
@@ -686,7 +690,47 @@ async function main() {
   process.stdout.write(
     `\n[integration] pass=${pass} fail=${fail} skip=${skip} captured=${cap} (total across all runs)\n`,
   );
+
+  // Tier 2 measurement: if LEDGER=1, write the library-call backlog report.
+  if (libraryCallLedger.enabled) {
+    writeLedgerReport();
+  }
+
   process.exit(freshFail > 0 ? 1 : 0);
+}
+
+/**
+ * Write the library-call ledger: JSON (machine) + a ranked human summary of
+ * what doors called that is stubbed or missing — the Tier 2 implement-me list.
+ */
+function writeLedgerReport(): void {
+  const snap = libraryCallLedger.snapshot();
+  const summary = libraryCallLedger.summary();
+  const outDir = path.join(REPO_ROOT, "dev/scripts/door-corpus/triage");
+  fs.mkdirSync(outDir, { recursive: true });
+  const jsonPath = path.join(outDir, "library-call-ledger.json");
+  fs.writeFileSync(jsonPath, JSON.stringify({ summary, entries: snap }, null, 2) + "\n");
+
+  const backlog = snap.filter((e) => e.resolution !== "real");
+  const lines: string[] = [];
+  lines.push(`# 68K library-call backlog (LEDGER run)`);
+  lines.push(``);
+  lines.push(`Distinct LVOs: real=${summary.real} stub=${summary.stub} missing=${summary.missing}`);
+  lines.push(`Implement-me (stub + missing), ranked by call count:`);
+  lines.push(``);
+  lines.push(`| calls | resolution | library | offset | function | doors |`);
+  lines.push(`|------:|------------|---------|-------:|----------|-------|`);
+  for (const e of backlog) {
+    const doors = e.doors.length <= 4 ? e.doors.join(", ") : `${e.doors.slice(0, 4).join(", ")} +${e.doors.length - 4}`;
+    lines.push(`| ${e.count} | ${e.resolution} | ${e.library} | ${e.offset} | ${e.name} | ${doors} |`);
+  }
+  const mdPath = path.join(outDir, "library-call-ledger.md");
+  fs.writeFileSync(mdPath, lines.join("\n") + "\n");
+
+  process.stdout.write(
+    `\n[ledger] real=${summary.real} stub=${summary.stub} missing=${summary.missing} distinct LVOs; ` +
+      `${backlog.length} in the implement-me backlog\n[ledger] report: ${mdPath}\n`,
+  );
 }
 
 main().catch((e) => {

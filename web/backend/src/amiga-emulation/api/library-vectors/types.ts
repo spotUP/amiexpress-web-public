@@ -15,4 +15,8 @@ export interface LibraryVector {
     library: any,
     returnAddr?: number
   ) => number; // Returns D0, optional returnAddr
+  // True for the pass-through stubs installStubVectorsForLibrary creates from
+  // LVOs.i (named but no real behaviour). Real vectors leave this undefined.
+  // Read by the library-call ledger to classify calls as 'stub' vs 'real'.
+  isStub?: boolean;
 }
