@@ -176,6 +176,18 @@ debugLog(
         return;
       }
 
+      // Route to FIM protocol if active. FAME BBS doors (doorType FIM) use a
+      // completely separate deferred-reply protocol (NR_PromptChars /
+      // AR_GetKey / NR_HotKey / AR_HotKey) — not XIM/TIM/DOS stdin — so
+      // forward and stop here to avoid double-delivering the same input.
+      if (this.fimProtocol) {
+debugLog(
+          `[AmigaDoorSession] Forwarding input to FIM protocol: "${data}"`
+        );
+        this.fimProtocol.queueInput(data);
+        return;
+      }
+
       // Check if XIM is waiting for input BEFORE queueing
       // IMPORTANT: We must check this BEFORE calling queueInput because
       // queueInput may complete a hotkey/line input which clears the waiting flag

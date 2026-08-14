@@ -164,4 +164,48 @@ describe("FIMProtocol", () => {
     // same no-emit behavior, different log content.
     expect(logMock).toHaveBeenCalledWith("[FIM] CF_ShowText MENU");
   });
+
+  it("NR_PromptChars defers reply until queueInput, echoes prompt first", () => {
+    const emu = new MemStub();
+    const out: string[] = []; const putMsgCalls: number[] = [];
+    let paused = false, resumed = false;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => { resumed = true; };
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_PromptChars);
+    emu.writeMemory32(msg + FDOM.DATA1, 50);
+    "Name>".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
+    proto.handleMessage(msg);
+    expect(out[0]).toBe("Name>");
+    expect(putMsgCalls.length).toBe(0);       // no reply yet
+    expect(paused).toBe(true);
+    proto.queueInput("spot\r");
+    expect(putMsgCalls.length).toBe(1);
+    expect(resumed).toBe(true);
+    let s = ""; for (let i = 0; i < 4; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("spot");
+    expect(emu.readMemory(msg + FDOM.IOSTRING + 4)).toBe(0);
+  });
+
+  it("AR_GetKey returns key code in Data3", () => {
+    const emu = new MemStub();
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const putMsgCalls: number[] = [];
+    const proto = new FIMProtocol({ emulator: emu as never,
+      execLibrary: { putMsg: (_p, m) => { putMsgCalls.push(m); } },
+      socket: { emit: () => true }, bbsSession: {}, nodeId: 1, onShutdown: () => undefined });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_GetKey);
+    proto.handleMessage(msg);
+    proto.queueInput("y");
+    expect(putMsgCalls.length).toBe(1);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(121);
+  });
 });

@@ -53,8 +53,18 @@ export class FIMProtocol {
   private nodeId: number;
   private onShutdown: (rc: number, lastWords?: string) => void;
 
-  /** Input queued via queueInput() for a future command that reads it. */
+  /**
+   * Type-ahead buffer: input that arrived via queueInput() while no command
+   * was waiting for it. Drained by the next input-style command
+   * (NR_PromptChars / AR_GetKey / NR_HotKey / AR_HotKey).
+   */
   private inputQueue: string[] = [];
+
+  /** Message currently deferred pending terminal input (paused emulator). */
+  private pendingMsg: number | null = null;
+  private pendingKind: "line" | "key" | null = null;
+  /** NR_PromptChars Data2 mode for the pending line request (echo style). */
+  private pendingMode = 0;
 
   constructor(deps: FIMDeps) {
     this.emulator = deps.emulator;
@@ -66,11 +76,26 @@ export class FIMProtocol {
   }
 
   /**
-   * Queue terminal input for the door to consume on its next input-style
-   * command (NR_* / AR_GetKey etc, wired in later tasks). Skeleton for now.
+   * Deliver terminal input to the door. If a command is currently deferred
+   * waiting for input (NR_PromptChars / AR_GetKey / NR_HotKey / AR_HotKey),
+   * complete it and resume the emulator. Otherwise buffer the input
+   * (type-ahead) for the next input-style command to consume.
    */
   queueInput(data: string): void {
-    this.inputQueue.push(data);
+    if (this.pendingMsg === null) {
+      this.inputQueue.push(data);
+      return;
+    }
+    const msgAddr = this.pendingMsg;
+    const kind = this.pendingKind;
+    this.pendingMsg = null;
+    this.pendingKind = null;
+    if (kind === "line") {
+      this.completeLineInput(msgAddr, data, this.pendingMode);
+    } else {
+      this.completeKeyInput(msgAddr, data);
+    }
+    this.emulator.resume();
   }
 
   /**
@@ -129,6 +154,18 @@ export class FIMProtocol {
         break;
       }
 
+      case FIM_CMD.NR_PromptChars: {
+        this.handlePromptChars(msgAddr);
+        break;
+      }
+
+      case FIM_CMD.AR_GetKey:
+      case FIM_CMD.NR_HotKey:
+      case FIM_CMD.AR_HotKey: {
+        this.handleKeyCommand(msgAddr);
+        break;
+      }
+
       case FIM_CMD.CF_ShowText: {
         const name = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN);
         debugLog(`[FIM] CF_ShowText ${name}`);
@@ -174,6 +211,78 @@ export class FIMProtocol {
       this.emulator.writeMemory(addr + i, s.charCodeAt(i) & 0xff);
     }
     this.emulator.writeMemory(addr + i, 0);
+  }
+
+  /**
+   * NR_PromptChars (14): prompt-and-read-a-line. Data1=max chars,
+   * Data2=echo mode (0 normal, 4 password echoed as '*'). Modes 1-3 are
+   * denied for MVP (mode 2 is denied on real FAME too). IOString on entry
+   * holds the prompt text, emitted before deferring for input.
+   */
+  private handlePromptChars(msgAddr: number): void {
+    const mode = this.emulator.readMemory32(msgAddr + FDOM.DATA2);
+    if (mode === 1 || mode === 2 || mode === 3) {
+      this.reply(msgAddr, FIM_RC.DENIED);
+      return;
+    }
+
+    const prompt = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN);
+    if (prompt.length > 0) {
+      this.socket?.emit("ansi-output", prompt);
+    }
+
+    if (this.inputQueue.length > 0) {
+      const line = this.inputQueue.shift()!;
+      this.completeLineInput(msgAddr, line, mode);
+      return;
+    }
+
+    this.pendingMsg = msgAddr;
+    this.pendingKind = "line";
+    this.pendingMode = mode;
+    this.emulator.pause();
+  }
+
+  /**
+   * Complete a deferred (or type-ahead-answered) NR_PromptChars: strip a
+   * trailing CR/LF, cap at 201 chars, write into IOSTRING NUL-terminated,
+   * echo what was typed (masked with '*' for password mode), and reply OK.
+   */
+  private completeLineInput(msgAddr: number, rawLine: string, mode: number): void {
+    const line = rawLine.replace(/[\r\n]+$/, "").slice(0, 201);
+    this.socket?.emit("ansi-output", mode === 4 ? "*".repeat(line.length) : line);
+    this.writeCString(msgAddr + FDOM.IOSTRING, line, FDOM.IOSTRING_LEN);
+    this.reply(msgAddr, FIM_RC.OK);
+  }
+
+  /**
+   * AR_GetKey (800) / NR_HotKey (15) / AR_HotKey (861): read a single key.
+   * If input is already type-ahead buffered, answer synchronously without
+   * pausing the emulator; otherwise defer until queueInput() delivers a key.
+   */
+  private handleKeyCommand(msgAddr: number): void {
+    if (this.inputQueue.length > 0) {
+      const key = this.inputQueue.shift()!;
+      this.completeKeyInput(msgAddr, key);
+      return;
+    }
+
+    this.pendingMsg = msgAddr;
+    this.pendingKind = "key";
+    this.emulator.pause();
+  }
+
+  /**
+   * Complete a deferred (or type-ahead-answered) key command: per
+   * FAMEDoorCommands.h the key code returns in Data3; we also write it as
+   * the first (NUL-terminated) byte of IOString for doors that read it there.
+   */
+  private completeKeyInput(msgAddr: number, data: string): void {
+    const code = data.length > 0 ? data.charCodeAt(0) & 0xff : 0;
+    this.emulator.writeMemory32(msgAddr + FDOM.DATA3, code);
+    this.emulator.writeMemory(msgAddr + FDOM.IOSTRING, code);
+    this.emulator.writeMemory(msgAddr + FDOM.IOSTRING + 1, 0);
+    this.reply(msgAddr, FIM_RC.OK);
   }
 
   /**
