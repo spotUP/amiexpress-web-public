@@ -7,6 +7,8 @@ import { Server, Socket } from "socket.io";
 import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
 import { XIMProtocol } from "./XIMProtocol.js";
+import { FIMProtocol } from "./fim/fim-protocol.js";
+import { fimPortName } from "./fim/fim-constants.js";
 import { KickstartRom } from "./KickstartRom.js";
 import * as path from "path";
 import { appendFileSync } from "fs";
@@ -71,6 +73,9 @@ export class AmigaDoorSession {
 
   // If we registered with DebugRegistry, this holds the nodeId used
   private registeredWithDebug: number | null = null;
+
+  // FIM protocol handler for FAME BBS doors (doorType === "FIM")
+  private fimProtocol: FIMProtocol | null = null;
 
   // Shared state between components
   private sharedState = {
@@ -679,8 +684,30 @@ debugLog(`[AmigaDoorSession] doorType="${doorType}" for ${this.config.executable
       const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
 debugLog(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)}`);
       this.createdDoorPort = true; // Delete on cleanup
+    } else if (doorType === "FIM") {
+      const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
+      const portName = fimPortName(nodeId);
+      this.doorPortName = portName;
+      const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
+debugLog(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)}`);
+      this.createdDoorPort = true; // Delete on cleanup
+
+      this.fimProtocol = new FIMProtocol({
+        emulator: this.emulator!,
+        execLibrary: this.sharedState.execLibrary,
+        socket: this.socket,
+        bbsSession: this.config.bbsSession || {},
+        nodeId,
+        onShutdown: (rc, lastWords) => {
+debugLog(`[AmigaDoorSession] FIM onShutdown(rc=${rc}, lastWords=${lastWords ?? ""})`);
+          this.terminate();
+        },
+      });
+      this.sharedState.execLibrary?.setFimMessageCallback((msgAddr: number) =>
+        this.fimProtocol!.handleMessage(msgAddr)
+      );
     } else {
-debugLog(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM or AIM`);
+debugLog(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM, AIM, or FIM`);
     }
 
     // Set up sysop debug callback for file errors

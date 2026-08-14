@@ -156,6 +156,11 @@ export class ExecLibrary {
     | ((portAddr: number, msgAddr: number) => void)
     | null = null;
 
+  // FIM message callback - called when a FAME BBS door PutMsg()s to
+  // FAMEDoorPort<node>. Mirrors doorMessageCallback but for the FIM
+  // protocol (FIMProtocol.handleMessage), registered by AmigaDoorSession.
+  private fimMessageCallback: ((msgAddr: number) => void) | null = null;
+
   // Flag set when WaitPort returns 0 (no messages) - signals execution loop to poll XIM
   // This fixes doors that use tight WaitPort loops (Bulls, FR) vs Wait() (AquaScan)
   private needsXIMPoll: boolean = false;
@@ -376,6 +381,14 @@ debugLog(
     callback: (portAddr: number, msgAddr: number) => void
   ): void {
     this.doorMessageCallback = callback;
+  }
+
+  /**
+   * Set callback for when a FAME BBS door sends a message to
+   * FAMEDoorPort<node>. Mirrors setDoorMessageCallback for the FIM protocol.
+   */
+  setFimMessageCallback(callback: (msgAddr: number) => void): void {
+    this.fimMessageCallback = callback;
   }
 
   /**
@@ -5334,6 +5347,9 @@ debugLog(
     // If this is an AEDoorPort, invoke callback for trap-based message processing
     // ONLY invoke for messages TO AEDoorPort (name check), not reply ports
     const isAEDoorPort = port.name?.toLowerCase().startsWith("aedoorport");
+    // FIM protocol (FAME BBS doors): PutMsg to FAMEDoorPort<node> routes to
+    // FIMProtocol.handleMessage via fimMessageCallback (AmigaDoorSession).
+    const isFimPort = port.name?.toLowerCase().startsWith("famedoorport");
     const isDoorTaskPort = originalPortAddr === this.currentTask.msgPort;
     const isDoorReplyPort = port.name
       ?.toLowerCase()
@@ -5372,6 +5388,16 @@ debugLog(
         )} (${label}) ***`
       );
       this.doorMessageCallback(originalPortAddr, msgAddr);
+    }
+
+    // If this is a FAMEDoorPort, invoke the FIM protocol callback.
+    if (!suppressDoorCallback && isFimPort && this.fimMessageCallback) {
+debugLog(
+        `[ExecLibrary]   *** Invoking FIM message callback for port 0x${originalPortAddr.toString(
+          16
+        )} (${port.name ?? "FAMEDoorPort"}) ***`
+      );
+      this.fimMessageCallback(msgAddr);
     }
   }
 
