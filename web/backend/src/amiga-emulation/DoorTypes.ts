@@ -4,7 +4,7 @@
 
 export interface DoorConfig {
   executablePath: string; // Path to Amiga door binary
-  doorType?: string; // Door type: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP (default: SIM)
+  doorType?: string; // Door type: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP, FIM (default: SIM)
   timeout?: number; // Max execution time in seconds (default: 300)
   bbsSession?: any; // BBS session data (user, system, node info)
   doorId?: string; // Optional door identifier (info name/shortcut)

@@ -23,6 +23,7 @@ export enum DoorType {
   MCI = 'MCI',       // MCI command
   AEM = 'AEM',       // AmiExpress Module
   SUP = 'SUP',       // Support module
+  FIM = 'FIM',       // FAME Internal Module (FAME BBS door compat)
   TS = 'TS',         // TypeScript door (AmiExpress-Web extension)
   PYTHON = 'PYTHON', // Python door (AmiExpress-Web extension)
   PY = 'PY',         // Python door shorthand (AmiExpress-Web extension)
@@ -468,6 +469,8 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
               type = DoorType.IIM;
             } else if (typeStr === 'MC' || typeStr === 'MCI') {
               type = DoorType.MCI;
+            } else if (typeStr === 'FM' || typeStr === 'FI' || typeStr === 'FIM') {
+              type = DoorType.FIM;
             }
 
             // Extract access level

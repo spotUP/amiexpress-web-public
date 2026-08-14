@@ -400,6 +400,15 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
   (session as any).acpLastAction = { ...acp, timestamp: Date.now() };
 }
 
+// Amiga 68K binary door type codes (native LoadSeg executables run under
+// the 68K emulator). FIM is FAME BBS's door-type marker, routed through
+// FAMEDoorPort/FIMProtocol (AmigaDoorSession.ts) instead of AEDoor.library.
+export const AMIGA_68K_DOOR_TYPES = ['XIM', 'AIM', 'SIM', 'TIM', 'IIM', 'FIM'];
+
+export function isAmiga68kDoorType(t: string): boolean {
+  return AMIGA_68K_DOOR_TYPES.includes((t || '').toUpperCase());
+}
+
 export interface Door {
   id: string;
   name: string;
@@ -1069,9 +1078,8 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
 console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${availableAmigaDoors.length} Amiga doors`);
 
   // Convert Amiga doors to the format expected by this function
-  // Only mark as Amiga door if it's actually an Amiga binary type (XIM, AIM, SIM, TIM, IIM)
+  // Only mark as Amiga door if it's actually an Amiga binary type (XIM, AIM, SIM, TIM, IIM, FIM)
   // TypeScript doors (TS) and others should NOT be marked as Amiga doors
-  const amigaDoorTypes = ['XIM', 'AIM', 'SIM', 'TIM', 'IIM'];
   const amigaDoorsList = availableAmigaDoors.map((door: any) => ({
     id: door.command,
     name: door.name || door.command,
@@ -1079,7 +1087,7 @@ console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${a
     accessLevel: door.access || 0,
     enabled: true,
     conferenceId: null,
-    isAmigaDoor: amigaDoorTypes.includes((door.type || '').toUpperCase()),
+    isAmigaDoor: isAmiga68kDoorType(door.type),
     command: door.command,
     doorInfo: door,  // Keep original door info for execution
     doorType: door.type || 'AMI',  // Use door.type (XIM, AIM, etc.), not doorType
@@ -1570,6 +1578,9 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
         } else {
           await executeAmigaDoor(socket, session, door, doorSession);
         }
+        break;
+      case 'FIM': // FAME Internal Module (FAME BBS door compat) - FAMEDoorPort/FIMProtocol
+        await executeAmigaDoor(socket, session, door, doorSession);
         break;
       default:
         emitText(socket, `Unknown door type: ${door.type}\r\n`);
@@ -2781,7 +2792,8 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
                          doorType === 'AIM' ? DoorType.AIM :
                          doorType === 'TIM' ? DoorType.TIM :
                          doorType === 'IIM' ? DoorType.IIM :
-                         doorType === 'MCI' ? DoorType.MCI : DoorType.XIM;
+                         doorType === 'MCI' ? DoorType.MCI :
+                         doorType === 'FIM' ? DoorType.FIM : DoorType.XIM;
     // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID")
     logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
 
@@ -3911,10 +3923,10 @@ export async function initializeDoors() {
       toolTypes: cmdDef.toolTypes,
       // Prefer explicit CATEGORY tooltype; otherwise bucket 68K binaries under
       // "Amiga 68K" so they aren't hidden in "Misc" next to unclassified TS doors.
-      // Without this fallback, ~60 XIM/AIM/SIM/TIM doors all collapse into Misc
+      // Without this fallback, ~60 XIM/AIM/SIM/TIM/FIM doors all collapse into Misc
       // and look absent from category-based menus like doors-menu.
       category: cmdDef.toolTypes?.['CATEGORY'] ||
-        (['XIM','AIM','SIM','TIM','IIM'].includes((cmdDef.type || '').toUpperCase())
+        (isAmiga68kDoorType(cmdDef.type)
           ? 'Amiga 68K'
           : undefined)
     };

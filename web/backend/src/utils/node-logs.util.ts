@@ -20,6 +20,7 @@ export enum DoorType {
   MCI = 5,  // MCI text processing
   AEM = 6,  // AEM/REXX doors
   SUP = 7,  // SUP doors
+  FIM = 8,  // FIM (FAME BBS doors)
 }
 
 /**
