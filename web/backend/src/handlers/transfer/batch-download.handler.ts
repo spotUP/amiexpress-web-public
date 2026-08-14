@@ -14,6 +14,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
 import { ConferenceRepository } from '../../database/conference-repository';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { resolveFileDescription, isRestrictedComment } from '../../utils/file-restriction.util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
@@ -85,8 +86,12 @@ export class BatchDownloadHandler {
       // flag a Restricted file then download it via batch. The
       // restricted-attempt is logged to callersLog per express.e for
       // sysop visibility.
-      const fileComment = (fileInfo.comment || fileInfo.description || '');
-      if (typeof fileComment === 'string' && fileComment.toLowerCase().startsWith('restricted')) {
+      // findFileInConference does not populate comments — resolve the DIR
+      // description (single source of truth in file-restriction.util) so the
+      // Restricted gate actually fires (it never did with the empty comment).
+      const fileComment = fileInfo.comment || fileInfo.description ||
+        await resolveFileDescription(flagItem.confNum, config.get('dataDir'), flagItem.fileName);
+      if (isRestrictedComment(fileComment)) {
         socket.emit('ansi-output', `\x1b[31m[X] ${flagItem.fileName}: restricted file\x1b[0m\r\n`);
         try {
           const { callersLog } = require('../../server/database-helpers');

@@ -141,12 +141,13 @@ export function checkConfAccess(user: any, conferenceId: number): boolean {
     return false;
   }
 
-  // express.e:8511-8512 - Area-based access (e.g., "Conf.1", "Conf.2")
-  // Check if TOOLTYPE_AREA contains this conference name
-  const confName = `Conf.${conferenceId}`;
-  // For now, we don't support area-based access in the web version
-  // This would require implementing checkToolTypeExists() for TOOLTYPE_AREA
-  // Default to no access for area-based format
+  // express.e:8511-8512 - Area-based access (confAccess holds an area name
+  // instead of per-conf X/_ flags; access = TOOLTYPE_AREA on the conference
+  // .info lists this user's area). Not yet implemented in the web version —
+  // fail CLOSED (deny) is the safe default, but log loudly so a sysop using
+  // the area-name access model can see why access is denied instead of it
+  // failing silently. Tracked for real implementation.
+console.warn(`[checkConfAccess] Area-name access model not implemented — denying conference ${conferenceId} for user "${user.username ?? '<unknown>'}" (confAccess="${user.confAccess}"). Set per-conf X/_ flags to use this conference.`);
   return false;
 }
 

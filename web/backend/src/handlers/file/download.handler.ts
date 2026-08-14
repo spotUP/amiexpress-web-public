@@ -28,6 +28,7 @@ import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { resolveFileDescription, isRestrictedComment } from '../../utils/file-restriction.util';
 import { userFileManager } from '../../services/UserFileManager';
 import { doorDropFileManager } from '../../services/DoorDropFileManager';
 import { emitDownload } from '../../services/bbs-event-emitter';
@@ -337,8 +338,13 @@ export class DownloadHandler {
     // Without this gate, sysop-marked restricted files are downloadable.
     if (!session.tempData) session.tempData = { downloadFileList: [], downloadNumFiles: 0 };
     for (const file of found) {
-      const commentText = (file.comment || file.description || '');
-      if (typeof commentText === 'string' && commentText.toLowerCase().startsWith('restricted')) {
+      // findFilesInConference does not populate comments, so resolve the
+      // file's DIR description here (single source of truth in
+      // file-restriction.util). Without this, `file.comment` was always
+      // undefined and the Restricted gate never fired.
+      const commentText = file.comment || file.description ||
+        await resolveFileDescription(session.currentConf || 1, config.get('dataDir'), file.name);
+      if (isRestrictedComment(commentText)) {
         socket.emit('ansi-output', `\r\n\x1b[31m${file.name}: restricted file\x1b[0m\r\n`);
         try {
           const { callersLog } = require('../../server/database-helpers');

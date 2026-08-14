@@ -22,6 +22,7 @@ import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { db } from '../database';
+import { checkConfAccess } from '../handlers/message/message-scan.handler';
 import { getSystemTime } from '../utils/date-time.util';
 import {
   enableGameMode as enableGameModeForSession,
@@ -676,9 +677,14 @@ console.warn(`[BBSApi] Conference ${confNum} not found`);
         return false;
       }
 
-      // Check if user has access to this conference
-      // In express.e, this is done via checkConfAccess() which checks confaccess string
-      // For now, allow access (doors typically have their own access checks)
+      // Enforce conference access — express.e checkConfAccess(). A door must
+      // not be able to move the user into a conference their confaccess string
+      // denies. Same 1-based conference number the main join flow uses
+      // (conference.handler.ts:115).
+      if (!checkConfAccess(this.session.user, confNum)) {
+console.warn(`[BBSApi] Access denied to conference ${confNum} for user ${this.session.user?.username ?? '<none>'}`);
+        return false;
+      }
 
       // Update session
       this.session.currentConf = confNum;

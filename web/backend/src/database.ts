@@ -2461,6 +2461,17 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return this.sessionRepo!.markIdleSessionsDisconnected(...args);
   }
 
+  /**
+   * Highest user account slot number currently assigned (0 if none).
+   * The next free slot is getMaxUserSlot() + 1. Synchronous (better-sqlite3).
+   */
+  getMaxUserSlot(): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(MAX(slotnumber), 0) AS maxSlot FROM users')
+      .get() as { maxSlot: number };
+    return row?.maxSlot || 0;
+  }
+
   async deleteOldNodeSessions(...args: Parameters<SessionRepository['deleteOldNodeSessions']>) {
     return this.sessionRepo!.deleteOldNodeSessions(...args);
   }
@@ -2998,9 +3009,15 @@ console.error('✗ Database initialization failed:', error);
     }
   }
 
-  // Stub methods for compatibility - implement as needed
+  // DB-backed ARexx *trigger-script registry* — an unbuilt subsystem, distinct
+  // from the file-based ARexx doors that run through the real interpreter
+  // (services/arexx.service.ts). No DB table exists, so the registry is empty.
   async getAREXXScripts(): Promise<AREXXScript[]> { return []; }
-  async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> { return { success: true }; }
+  // Must NOT claim success — nothing executes. Honest failure so a caller
+  // never believes a trigger script ran.
+  async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> {
+    return { success: false, error: 'DB-backed ARexx trigger scripts are not implemented' };
+  }
   /**
    * QWK/REP Offline Mail Methods
    */

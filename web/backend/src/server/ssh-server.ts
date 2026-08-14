@@ -49,17 +49,21 @@ export class SSHConnection extends EventEmitter {
   }
 
   /**
-   * Handle SSH authentication
-   * Validates username/password against BBS user database
+   * Handle SSH authentication.
+   *
+   * SSH here is a pure TRANSPORT, exactly like telnet (which has no
+   * transport auth at all). The SSH layer intentionally accepts the
+   * connection WITHOUT validating credentials — `ctx.username` is only
+   * logged, never trusted. Real authentication happens afterwards in the
+   * shared BBS login flow (`runPreLoginConnect` -> username/password
+   * screens), and `createSession()` below is created UNAUTHENTICATED and
+   * never receives `ctx.username`. Do NOT add a credential check here
+   * expecting it to gate BBS access — it wouldn't, and it would break
+   * clients that connect SSH-as-transport with an arbitrary username.
    */
   private handleAuthentication(ctx: any): void {
-    if (ctx.method === 'password') {
-      // For now, accept any authentication - BBS will handle login
-      // In production, you might want to validate against user database here
-console.log(`[SSH] Authentication attempt: ${ctx.username}`);
-      ctx.accept();
-    } else if (ctx.method === 'none') {
-      // Allow "none" authentication - BBS will prompt for login
+    if (ctx.method === 'password' || ctx.method === 'none') {
+console.log(`[SSH] Transport auth accepted (method=${ctx.method}, username=${ctx.username}); BBS login gates access`);
       ctx.accept();
     } else {
       ctx.reject();

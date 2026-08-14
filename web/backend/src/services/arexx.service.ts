@@ -1293,24 +1293,14 @@ console.error('BBSSHOWMENU error:', error);
   }
 
   async BBSLAUNCHDOOR(doorName: string, params: string[] = []): Promise<number> {
-    try {
-      // Log door launch
-      await this.BBSLOG('info', `Launching door: ${doorName} with params: ${params.join(' ')}`);
-
-      // In a real implementation, this would:
-      // 1. Check if door exists in doors registry
-      // 2. Create door drop file (DOOR.SYS, DORINFO1.DEF, etc.)
-      // 3. Launch door process or load TypeScript module
-      // 4. Capture door output and send to user
-      // 5. Return door exit code
-
-      // For now, return success indicator
-      await this.BBSWRITE(`Door '${doorName}' would launch here with params: ${params.join(', ')}`);
-      return 0; // Success
-    } catch (error) {
-console.error('BBSLAUNCHDOOR error:', error);
-      return 1; // Error
-    }
+    // Launching a door from within an ARexx script is not implemented yet
+    // (it needs the full door dispatch: registry lookup, drop-file creation,
+    // blocking execution, and output interleaving with the script). Return a
+    // NON-ZERO error and tell the user, rather than faking success — a script
+    // that assumed the door ran on a 0 return would silently misbehave.
+    await this.BBSLOG('warn', `BBSLAUNCHDOOR('${doorName}') not implemented — refusing (params: ${params.join(' ')})`);
+    await this.BBSWRITE(`\r\nBBSLAUNCHDOOR: launching doors from ARexx is not supported yet ('${doorName}').\r\n`);
+    return 10; // non-zero: door did NOT launch
   }
 
   /**

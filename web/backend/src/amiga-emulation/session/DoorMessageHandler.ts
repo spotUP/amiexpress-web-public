@@ -59,6 +59,9 @@ export class DoorMessageHandler {
   // Message processing state
   private messageConfig: MessageProcessingConfig;
   private messageCount: number = 0;
+  // Monotonic within a session; combined with the DB max slot so repeated
+  // APPEND_ACCOUNT calls never collide (see the APPEND_ACCOUNT case).
+  private appendAccountSeq: number = 0;
   private activeInput: ActiveInputState | null = null;
 
   // Door display state (express.e:3876,3877)
@@ -2439,8 +2442,20 @@ debugLog(`[DoorMessageHandler]   CHOOSE_NAME: User not found`);
           const keysPtr = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET);
           const miscPtr = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET);
 
-          // Find next available slot (use simple counter for now)
-          const slot = Date.now() % 10000; // Simple slot assignment
+          // Next free account slot = highest existing slot + 1, plus a
+          // per-handler counter so repeated appends in one session don't
+          // collide before they are persisted. Replaces `Date.now() % 10000`,
+          // which collided within 10s and wrote a bogus slot into the door's
+          // user/keys/misc buffers.
+          // (Note: the SEARCH_ACCOUNT/SAVE_ACCOUNT side of the account-editor
+          // door family is still stubbed — this only removes the slot
+          // collision/corruption vector.)
+          let baseSlot = 0;
+          try {
+            const { db } = require('../../database');
+            baseSlot = db.getMaxUserSlot();
+          } catch (_err) { /* db unavailable in harness — counter still unique */ }
+          const slot = baseSlot + (++this.appendAccountSeq);
 
 debugLog(`[DoorMessageHandler]   APPEND_ACCOUNT: Creating account slot ${slot}`);
 

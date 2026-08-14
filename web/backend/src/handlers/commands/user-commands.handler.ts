@@ -21,6 +21,7 @@ import type { BBSSession } from '../../index';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
 import { flaggedFilesManager } from '../../services/FlaggedFilesManager';
+import { isFileRestricted } from '../../utils/file-restriction.util';
 import * as path from 'path';
 import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
 import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
@@ -934,7 +935,7 @@ console.log('[ENV] Uploading');
  * Handle D command - Download files
  * 1:1 port from express.e:24853-24857 internalCommandD()
  */
-export function handleDownloadCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleDownloadCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // express.e:24854 - Check ACS_DOWNLOAD permission
   if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
     ErrorHandler.permissionDenied(socket, 'download files', {
@@ -946,18 +947,35 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
   // express.e:24855 - setEnvStat(ENV_DOWNLOADING)
 console.log('[ENV] Downloading');
 
-  // If user has flagged files, send them via ZMODEM; otherwise fall back to download interface.
-  // TODO (D16 — express.e checkFIBForFileSize): this path bypasses the
-  // "Restricted" comment-prefix gate that download.handler.ts:340 and
-  // batch-download.handler.ts:81 enforce. FlaggedFile here only carries
-  // {fileName, filePath, fileSize, areaId} — no comment/description —
-  // so gating requires a per-file metadata lookup (DIR entry parse) we
-  // haven't wired here. Less-common path (telnet/SSH direct D with
-  // pre-flagged files) but still a real bypass.
+  // If user has flagged files, send them via ZMODEM; otherwise fall back to
+  // download interface. D16 (express.e checkFIBForFileSize): filter out any
+  // flagged file whose DIR description begins "Restricted" before sending —
+  // same gate as the single-file and batch paths (file-restriction.util).
   const userId = session.user?.id;
   const flagged = userId ? flaggedFilesManager.getFiles(userId) : [];
   if (flagged && flagged.length > 0) {
-    startZmodemDownload(socket, session, flagged.map((f) => f.filePath));
+    const { config } = require('../../config');
+    const dataDir = config.get('dataDir');
+    const allowed: string[] = [];
+    for (const f of flagged) {
+      const confNum = f.areaId ?? session.currentConf ?? 1;
+      if (await isFileRestricted(confNum, dataDir, f.fileName)) {
+        socket.emit('ansi-output', `\r\n\x1b[31m${f.fileName}: restricted file\x1b[0m\r\n`);
+        try {
+          const { callersLog } = require('../../server/database-helpers');
+          await callersLog(session.user?.id || null, session.user?.username || 'unknown',
+            `\t\tAttempt to download RESTRICTED file [${f.filePath || f.fileName}]`);
+        } catch (_err) { /* non-critical */ }
+        continue;
+      }
+      allowed.push(f.filePath);
+    }
+    if (allowed.length > 0) {
+      startZmodemDownload(socket, session, allowed);
+    } else {
+      socket.emit('ansi-output', `\r\n\x1b[33mNo files available for download.\x1b[0m\r\n`);
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
     return;
   }
 
