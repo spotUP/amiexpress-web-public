@@ -1,0 +1,79 @@
+/**
+ * FAME BBS "FIM" door protocol constants.
+ * Source of truth: amiexpress_doors/Sources/_C/FA_DE103/Includes/FAME/
+ * FAMEPublicStructs.h (struct FAMEDoorMsg) and FAMEDoorCommands.h.
+ */
+export const FAMEDOORMSG_SIZE = 282;
+
+/** Byte offsets inside struct FAMEDoorMsg (exec Message header = 20 bytes). */
+export const FDOM = {
+  MSG: 0,
+  MN_REPLYPORT: 14,
+  MN_LENGTH: 18,
+  IOSTRING: 20,
+  IOSTRING_LEN: 202,
+  STRINGPTR: 222,
+  COMMAND: 226,
+  DATA1: 230,
+  DATA2: 234,
+  DATA3: 238,
+  RETURNCODE: 242,
+  NODE: 246,
+  INTERNALBITS: 250,
+  STRUCTDUMMY1: 254,
+  STRUCTDUMMY2: 258,
+  STRUCTDUMMY3: 262,
+  STRINGPTR2: 266,
+  DATA4: 270,
+  BITFLAGS: 274,
+  EXTERNALPORT: 278,
+} as const;
+
+export const FIM_RC = {
+  OK: 0,
+  FAIL: 1,
+  NOSUCHCMD: 2,
+  DENIED: 3,
+  NOTIMPLEMENTED: 4,
+  ABORTED: 5,
+  USERERROR: 10,
+  DOORABORT: -1,
+} as const;
+
+export const FIM_CMD = {
+  MC_DoorStart: 1,
+  MC_ShutDown: 2,
+  MC_ShutDownLastWords: 3,
+  NR_SendStr: 10,
+  NR_SendStrCRLF: 11,
+  NR_SendStrCon: 12,
+  NR_SendStrSer: 13,
+  NR_PromptChars: 14,
+  NR_HotKey: 15,
+  NR_BBSName: 16,
+  NR_SysOp: 17,
+  NR_MainLine: 23,
+  NR_Name: 31,
+  NR_Password: 32,
+  NR_Location: 33,
+  NR_AccessLevel: 37,
+  NR_TimeRemain: 48,
+  NR_Uploads: 51,
+  NR_Downloads: 52,
+  NR_BytesUpload: 53,
+  NR_BytesDownload: 54,
+  CF_ShowText: 400,
+  CF_ReturnCommand: 408,
+  CF_CallersLog: 411,
+  SR_ConfName: 600,
+  SR_ConfNum: 602,
+  SR_FAMEVersion: 608,
+  SR_NodeNumber: 614,
+  AR_GetKey: 800,
+  AR_SendStr: 851,
+  AR_HotKey: 861,
+} as const;
+
+export function fimPortName(node: number): string {
+  return `FAMEDoorPort${node}`;
+}
