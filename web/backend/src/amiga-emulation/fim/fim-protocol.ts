@@ -20,6 +20,24 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { FDOM, FIM_CMD, FIM_RC } from "./fim-constants";
 import { debugLog } from "../../utils/debug-log";
+import { getSystemTime, formatLongDateTime } from "../../utils/date-time.util";
+
+/**
+ * Amiga epoch (January 1, 1978 00:00:00) — same reference point
+ * date-time.util.ts's dateStampToDateTime/dateTimeToDateStamp use for
+ * AmigaDOS DateStamp conversions. FAMEDoorCommands.h's NR_CurrTime comment
+ * is truncated mid-sentence in the shipped header ("Retrieve the current
+ * time in seconds since January" — no year given, and identical across all
+ * three shipped copies of the header checked: FA_DE103, FA_DE100,
+ * FAMECFPR). Rather than guess a Unix-epoch interpretation, this reuses the
+ * codebase's own established Amiga-epoch convention for every "seconds"
+ * time field in this command family (NR_CurrTime, NR_TimeLastOn).
+ */
+const AMIGA_EPOCH_MS = new Date(1978, 0, 1).getTime();
+
+function secondsSinceAmigaEpoch(date: Date): number {
+  return Math.floor((date.getTime() - AMIGA_EPOCH_MS) / 1000) >>> 0;
+}
 
 const NT_REPLYMSG = 6;
 const LN_TYPE_OFFSET = 8;
@@ -282,6 +300,59 @@ export class FIMProtocol {
         break;
       }
 
+      case FIM_CMD.NR_StampTime: {
+        // FAMEDoorCommands.h: "Retrieve the current time string / IOString
+        // -> Contains the current timestring." No format is specified;
+        // reuse formatLongDateTime (the codebase's one existing
+        // "DDD DD-MMM-YYYY HH:MM:SS" timestring formatter, already used for
+        // the ~LC MCI code) for consistency with NR_StampLastOn (49) below,
+        // which needs the identical format for a different timestamp.
+        const stampTime = formatLongDateTime(getSystemTime());
+        this.writeCString(msgAddr + FDOM.IOSTRING, stampTime, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_CurrTime: {
+        // FAMEDoorCommands.h: "Retrieve the current time in seconds since
+        // January / Data2 -> Contains the current timevalue." (comment is
+        // truncated in the shipped header — see AMIGA_EPOCH_MS above for
+        // why Amiga epoch was chosen over guessing Unix epoch.)
+        const currTime = secondsSinceAmigaEpoch(getSystemTime());
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, currTime);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_ThisConfAccess: {
+        // FAMEDoorCommands.h: "Retrieve the users conference access of
+        // selected Conf / Data1 <- The Confnumber you are checking the
+        // access of the online user. / Data2 -> 1 if the user has access
+        // to the conference, else 0. / Note: If Data1 is lower than 1 or
+        // higher than the last conference available, Data1 will be set to
+        // the current conference number!"
+        //
+        // amiexpress-web has no per-conference ACL data available at this
+        // protocol layer (bbsSession carries only the CURRENT conference
+        // id, not a full conference list/ACL table to validate Data1's
+        // upper bound against) — a logged-in session already implies
+        // access to whatever conference it's in, so this returns the
+        // permissive default (Data2=1, always granted) rather than
+        // fabricating a deny. Documented gap: the upper-bound half of the
+        // header's Data1 range check ("or higher than the last conference
+        // available") is NOT implemented — only the lower-bound case
+        // (Data1 <= 0) is corrected, using bbsSession.conferenceId as
+        // "the current conference number" per the header's own wording.
+        const data1 = this.emulator.readMemory32(msgAddr + FDOM.DATA1);
+        if (data1 <= 0) {
+          const currentConf = Number(this.bbsSession.conferenceId ?? 0);
+          this.emulator.writeMemory32(msgAddr + FDOM.DATA1, currentConf >>> 0);
+        }
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 1);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
       case FIM_CMD.NR_Name: {
         const user = this.getUser();
         const username = String(user.username ?? "");
@@ -305,10 +376,178 @@ export class FIMProtocol {
         break;
       }
 
+      case FIM_CMD.NR_From: {
+        // FAMEDoorCommands.h: "Retrieve users from / IOString -> Contains
+        // the User's origin." No dedicated "origin" field exists separate
+        // from location in this codebase's User type (see
+        // database/types.ts) — door.handler.ts:524 already collapses
+        // connectionHostname/remoteAddress into the SAME `location` field
+        // fed to NR_Location/XIM's DT_LOCATION, so there is no distinct
+        // "origin" concept to draw from either. Mirrors user.location.
+        const user = this.getUser();
+        const from = String(user.location ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, from, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_PhoneNumber: {
+        // FAMEDoorCommands.h: "Retrieve users phone number / IOString ->
+        // Contains the User's phonenumber." — documents a normal return
+        // value with no privacy caveat, same as NR_Password's header text.
+        // NR_Password (above) already applies a deliberate DENY-and-blank
+        // policy regardless of the header for that reason: PII should
+        // never be handed to an emulated door. Phone numbers are the same
+        // class of PII — apply the identical privacy default here.
+        this.writeCString(msgAddr + FDOM.IOSTRING, "", FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.DENIED);
+        break;
+      }
+
+      case FIM_CMD.NR_SlotNumber: {
+        // FAMEDoorCommands.h: "Retrieve users slotnumber / Data2 -> Contains
+        // the User's slotnumber." Same field + same precedence XIM's
+        // DT_SLOTNUMBER uses (xim/data-query.ts:236-243): prefer
+        // bbsSession.userSlotNumber (door.handler.ts's live/authoritative
+        // slot for the current session) over user.slotNumber (persisted on
+        // the User record), falling back to 0 if neither is a positive
+        // number.
+        const sessionSlot = Number((this.bbsSession as Record<string, unknown>).userSlotNumber);
+        const user = this.getUser();
+        const userSlot = Number(user.slotNumber);
+        const slotNumber =
+          Number.isFinite(sessionSlot) && sessionSlot > 0
+            ? sessionSlot
+            : Number.isFinite(userSlot) && userSlot > 0
+              ? userSlot
+              : 0;
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, slotNumber >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
       case FIM_CMD.NR_AccessLevel: {
         const user = this.getUser();
         const secLevel = Number(user.secLevel ?? 0);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, secLevel >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_RatioType: {
+        // FAMEDoorCommands.h: "Retrieve users ratiotype / Data2 -> Contains
+        // the User's ratiotype." Direct field match: User.ratioType.
+        const user = this.getUser();
+        const ratioType = Number(user.ratioType ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, ratioType >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_Ratio: {
+        // FAMEDoorCommands.h: "Retrieve users ratio / Data2 -> Contains the
+        // User's ratio." Direct field match: User.ratio.
+        const user = this.getUser();
+        const ratio = Number(user.ratio ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, ratio >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_CompType: {
+        // FAMEDoorCommands.h: "Retrieve users computertype code / Data2 ->
+        // Contains the User's computertype code. / IOString -> Contains
+        // the User's computer." Two distinct outputs: a FAME-internal
+        // numeric computer-type code (enum unknown/unmapped — this
+        // codebase has no FAME computer-type table, so Data2 is always 0,
+        // documented gap) and the free-text computer name, which DOES map
+        // directly to User.computer.
+        const user = this.getUser();
+        const computer = String(user.computer ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, computer, FDOM.IOSTRING_LEN);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_ModemType: {
+        // FAMEDoorCommands.h: "Retrieve users modemtype code / Data2 ->
+        // Contains the User's modemtype code. / IOString -> Contains the
+        // User's modem." amiexpress-web is a web BBS — no modem/baud
+        // negotiation concept exists on the User record — so both outputs
+        // are the documented "absent field" default (0 / "").
+        this.writeCString(msgAddr + FDOM.IOSTRING, "", FDOM.IOSTRING_LEN);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_MessagePosted: {
+        // FAMEDoorCommands.h: "Retrieve users messagesposted / Data3 ->
+        // Contains the User's message posted." Direct field match:
+        // User.messagesPosted.
+        const user = this.getUser();
+        const messagesPosted = Number(user.messagesPosted ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, messagesPosted >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_MessageRead: {
+        // FAMEDoorCommands.h: "Retrieve the number of readen Msg's / Data3
+        // -> Contains the User's message read." No "messages read" counter
+        // exists on User (database/types.ts) — always 0, documented gap
+        // (never crash, per the absent-field convention every other arm in
+        // this file uses).
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_NoCalls: {
+        // FAMEDoorCommands.h: "Retrieve number of usercalls / Data3 ->
+        // Contains the User's calls." Direct field match: User.calls.
+        const user = this.getUser();
+        const calls = Number(user.calls ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA3, calls >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_TimeLastOn: {
+        // FAMEDoorCommands.h: "Retrieve time user last called / Data2 ->
+        // Contains the User's last time called." No unit stated, but this
+        // sits in the same NUMERIC-timestamp family as NR_CurrTime (29) —
+        // and is paired with NR_StampLastOn (49) below exactly the way
+        // NR_StampTime (28)/NR_CurrTime (29) are paired (string vs numeric
+        // form of the same timestamp) — so it uses the same
+        // seconds-since-Amiga-epoch convention. User.lastLogin absent ->
+        // 0, never crash.
+        const user = this.getUser();
+        const lastLogin = user.lastLogin;
+        const timeLastOn = lastLogin instanceof Date ? secondsSinceAmigaEpoch(lastLogin) : 0;
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, timeLastOn >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_TimeUsed: {
+        // FAMEDoorCommands.h: "Retrieve timeused today / Data2 -> Contains
+        // the User's time used." Direct field match: User.timeUsed.
+        const user = this.getUser();
+        const timeUsed = Number(user.timeUsed ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, timeUsed >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_TimeLimit: {
+        // FAMEDoorCommands.h: "Retrieve timeallowed for a user / Data2 ->
+        // Contains the User's time limit." Direct field match:
+        // User.timeLimit.
+        const user = this.getUser();
+        const timeLimit = Number(user.timeLimit ?? 0);
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, timeLimit >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }
@@ -324,6 +563,32 @@ export class FIMProtocol {
         // it through unconverted rather than guessing a conversion factor.
         const timeRemaining = Number(this.bbsSession.timeRemaining ?? 0);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, timeRemaining >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_StampLastOn: {
+        // FAMEDoorCommands.h: "Retrieve the date string containing the
+        // date when the user last logged on / IOString -> Contains the
+        // User's last time called as an timestring." String twin of
+        // NR_TimeLastOn (45) above — same formatLongDateTime formatter
+        // NR_StampTime (28) uses, applied to user.lastLogin instead of
+        // "now". Absent lastLogin -> "" (never crash).
+        const user = this.getUser();
+        const lastLogin = user.lastLogin;
+        const stampLastOn = lastLogin instanceof Date ? formatLongDateTime(lastLogin) : "";
+        this.writeCString(msgAddr + FDOM.IOSTRING, stampLastOn, FDOM.IOSTRING_LEN);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.NR_ConfAccess: {
+        // FAMEDoorCommands.h: "Retrieve the users conference access /
+        // IOString -> Contains the User's conference access alias."
+        // Direct field match: User.confAccess (database/types.ts:58).
+        const user = this.getUser();
+        const confAccess = String(user.confAccess ?? "");
+        this.writeCString(msgAddr + FDOM.IOSTRING, confAccess, FDOM.IOSTRING_LEN);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }

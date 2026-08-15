@@ -4,10 +4,20 @@ jest.mock("../../src/utils/debug-log", () => ({
   isDebugEnabled: () => false,
 }));
 
+// Fix "now" for NR_StampTime/NR_CurrTime — keep the real formatting/epoch
+// helpers (requireActual) so the protocol's own formatLongDateTime/epoch-math
+// calls are exercised for real; only getSystemTime is pinned.
+const MOCK_NOW = new Date(2026, 0, 7, 14, 32, 0); // local-time ctor, matches date-time.util.test.ts convention
+jest.mock("../../src/utils/date-time.util", () => {
+  const actual = jest.requireActual("../../src/utils/date-time.util");
+  return { ...actual, getSystemTime: jest.fn(() => MOCK_NOW) };
+});
+
 import { FIMProtocol } from "../../src/amiga-emulation/fim/fim-protocol";
 import { FDOM, FIM_CMD, FIM_RC } from "../../src/amiga-emulation/fim/fim-constants";
 // reuse MemStub from fame-library.test.ts (extract to tests/amiga-emulation/helpers/mem-stub.ts in this task)
 import { MemStub } from "./helpers/mem-stub";
+import { formatLongDateTime } from "../../src/utils/date-time.util";
 import * as debugLogModule from "../../src/utils/debug-log";
 
 function buildMsg(emu: MemStub, addr: number, cmd: number) {
@@ -597,11 +607,206 @@ describe("FIMProtocol", () => {
       FIM_CMD.NR_Location, FIM_CMD.NR_AccessLevel, FIM_CMD.NR_TimeRemain,
       FIM_CMD.NR_Uploads, FIM_CMD.NR_Downloads, FIM_CMD.NR_BytesUpload,
       FIM_CMD.NR_BytesDownload, FIM_CMD.SR_ConfName, FIM_CMD.SR_ConfNum,
+      // Block 28-50 (this task): user-info + time-info commands.
+      FIM_CMD.NR_StampTime, FIM_CMD.NR_CurrTime, FIM_CMD.NR_ThisConfAccess,
+      FIM_CMD.NR_From, FIM_CMD.NR_SlotNumber, FIM_CMD.NR_RatioType,
+      FIM_CMD.NR_Ratio, FIM_CMD.NR_CompType, FIM_CMD.NR_ModemType,
+      FIM_CMD.NR_MessagePosted, FIM_CMD.NR_MessageRead, FIM_CMD.NR_NoCalls,
+      FIM_CMD.NR_TimeLastOn, FIM_CMD.NR_TimeUsed, FIM_CMD.NR_TimeLimit,
+      FIM_CMD.NR_StampLastOn, FIM_CMD.NR_ConfAccess,
     ]) {
       const msg = buildMsg(emu, 0x8000, cmd);
       expect(() => proto.handleMessage(msg)).not.toThrow();
       expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
     }
+    // NR_PhoneNumber is DENIED-by-design (privacy default, like NR_Password)
+    // — verified separately since it never returns OK.
+    const phoneMsg = buildMsg(emu, 0x8100, FIM_CMD.NR_PhoneNumber);
+    expect(() => proto.handleMessage(phoneMsg)).not.toThrow();
+    expect(emu.readMemory32(phoneMsg + FDOM.RETURNCODE)).toBe(FIM_RC.DENIED);
+  });
+
+  it("NR_StampTime returns the current time formatted as a DDD DD-MMM-YYYY HH:MM:SS string in IOString", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_StampTime);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe(formatLongDateTime(MOCK_NOW));
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("NR_CurrTime returns seconds since the Amiga epoch (Jan 1 1978) in Data2", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_CurrTime);
+    proto.handleMessage(msg);
+    const amigaEpoch = new Date(1978, 0, 1).getTime();
+    const expected = Math.floor((MOCK_NOW.getTime() - amigaEpoch) / 1000) >>> 0;
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(expected);
+    expect(expected).toBeGreaterThan(0);
+  });
+
+  it("NR_ThisConfAccess grants access by default (Data2=1) — no per-conference ACL modeled at this layer", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { conferenceId: 3 });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_ThisConfAccess);
+    emu.writeMemory32(msg + FDOM.DATA1, 3);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(1);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("NR_ThisConfAccess with Data1 <= 0 rewrites Data1 to the current conference number", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { conferenceId: 5 });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_ThisConfAccess);
+    emu.writeMemory32(msg + FDOM.DATA1, 0);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA1)).toBe(5);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(1);
+  });
+
+  it("NR_From mirrors user.location in IOString (no distinct origin field tracked)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { location: "Mars Base" } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_From);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("Mars Base");
+  });
+
+  it("NR_PhoneNumber is DENIED and blank, even when a phone number is on file (privacy default like NR_Password)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { phoneNumber: "555-1234" } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_PhoneNumber);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.DENIED);
+    expect(emu.readMemory(msg + FDOM.IOSTRING)).toBe(0);
+  });
+
+  it("NR_SlotNumber prefers bbsSession.userSlotNumber over user.slotNumber (matches XIM DT_SLOTNUMBER precedence)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { userSlotNumber: 7, user: { slotNumber: 99 } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_SlotNumber);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(7);
+  });
+
+  it("NR_SlotNumber falls back to user.slotNumber, then 0, when bbsSession.userSlotNumber is absent", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { slotNumber: 12 } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_SlotNumber);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(12);
+
+    const emu2 = new MemStub();
+    const { proto: proto2 } = makeWith(emu2, {});
+    const msg2 = buildMsg(emu2, 0x8000, FIM_CMD.NR_SlotNumber);
+    proto2.handleMessage(msg2);
+    expect(emu2.readMemory32(msg2 + FDOM.DATA2)).toBe(0);
+  });
+
+  it("NR_RatioType / NR_Ratio return user.ratioType / user.ratio in Data2, default 0", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { ratioType: 2, ratio: 5 } });
+    const msgType = buildMsg(emu, 0x8000, FIM_CMD.NR_RatioType);
+    proto.handleMessage(msgType);
+    expect(emu.readMemory32(msgType + FDOM.DATA2)).toBe(2);
+    const msgRatio = buildMsg(emu, 0x8100, FIM_CMD.NR_Ratio);
+    proto.handleMessage(msgRatio);
+    expect(emu.readMemory32(msgRatio + FDOM.DATA2)).toBe(5);
+  });
+
+  it("NR_CompType returns user.computer in IOString; Data2 code is 0 (no FAME computer-type table in this codebase)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { computer: "Amiga" } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_CompType);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("Amiga");
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+  });
+
+  it("NR_ModemType defaults to Data2=0, IOString='' (no modem tracked — web BBS has no modem concept)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_ModemType);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("");
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+  });
+
+  it("NR_MessagePosted returns user.messagesPosted in Data3, default 0", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { messagesPosted: 42 } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_MessagePosted);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(42);
+  });
+
+  it("NR_MessageRead defaults to 0 (not tracked as a separate counter in this codebase)", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, {});
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_MessageRead);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(0);
+  });
+
+  it("NR_NoCalls returns user.calls in Data3, default 0", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { calls: 17 } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_NoCalls);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(17);
+  });
+
+  it("NR_TimeLastOn returns user.lastLogin as seconds-since-Amiga-epoch in Data2, default 0", () => {
+    const emu = new MemStub();
+    const lastLogin = new Date(2026, 0, 1, 0, 0, 0);
+    const { proto } = makeWith(emu, { user: { lastLogin } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_TimeLastOn);
+    proto.handleMessage(msg);
+    const amigaEpoch = new Date(1978, 0, 1).getTime();
+    const expected = Math.floor((lastLogin.getTime() - amigaEpoch) / 1000) >>> 0;
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(expected);
+
+    const emu2 = new MemStub();
+    const { proto: proto2 } = makeWith(emu2, {});
+    const msg2 = buildMsg(emu2, 0x8000, FIM_CMD.NR_TimeLastOn);
+    proto2.handleMessage(msg2);
+    expect(emu2.readMemory32(msg2 + FDOM.DATA2)).toBe(0);
+  });
+
+  it("NR_TimeUsed / NR_TimeLimit return user.timeUsed / user.timeLimit in Data2, default 0", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { timeUsed: 30, timeLimit: 60 } });
+    const msgUsed = buildMsg(emu, 0x8000, FIM_CMD.NR_TimeUsed);
+    proto.handleMessage(msgUsed);
+    expect(emu.readMemory32(msgUsed + FDOM.DATA2)).toBe(30);
+    const msgLimit = buildMsg(emu, 0x8100, FIM_CMD.NR_TimeLimit);
+    proto.handleMessage(msgLimit);
+    expect(emu.readMemory32(msgLimit + FDOM.DATA2)).toBe(60);
+  });
+
+  it("NR_StampLastOn returns user.lastLogin formatted as a timestring in IOString, '' when absent", () => {
+    const emu = new MemStub();
+    const lastLogin = new Date(2025, 11, 25, 9, 0, 0);
+    const { proto } = makeWith(emu, { user: { lastLogin } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_StampLastOn);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe(formatLongDateTime(lastLogin));
+
+    const emu2 = new MemStub();
+    const { proto: proto2 } = makeWith(emu2, {});
+    const msg2 = buildMsg(emu2, 0x8000, FIM_CMD.NR_StampLastOn);
+    proto2.handleMessage(msg2);
+    expect(readIOStr(emu2, msg2)).toBe("");
+  });
+
+  it("NR_ConfAccess returns user.confAccess in IOString, default ''", () => {
+    const emu = new MemStub();
+    const { proto } = makeWith(emu, { user: { confAccess: "XYZ" } });
+    const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_ConfAccess);
+    proto.handleMessage(msg);
+    expect(readIOStr(emu, msg)).toBe("XYZ");
   });
 
   it("NR_HotKey consumes first char only and requeues the remainder for the next input command", () => {
