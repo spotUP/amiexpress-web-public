@@ -769,8 +769,14 @@ console.log(`[launchAmigaDoor] bbsSession.currentConference=${(session as any).c
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
-console.log(`[doorInputHandler] Received input: "${data}" hasXIM=${!!shared.ximProtocol}`);
+console.log(`[doorInputHandler] Received input: "${data}" hasXIM=${!!shared.ximProtocol} hasFIM=${!!shared.fimProtocol}`);
         logDoorDebug(`KEY door=${doorInfo.command || doorInfo.id || 'UNK'} data=${JSON.stringify(data)}`);
+        // FIM doors: the protocol handler owns ALL input (per-keystroke line
+        // editor / key polls). Never also feed DOS stdin — double delivery.
+        if (shared.fimProtocol) {
+          shared.fimProtocol.queueInput(data);
+          return;
+        }
         // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
         // This prevents double-delivery when XIM completes a hotkey/line input
         const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;

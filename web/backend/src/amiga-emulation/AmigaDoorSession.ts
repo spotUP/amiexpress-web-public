@@ -86,6 +86,7 @@ export class AmigaDoorSession {
     iconLibrary: null as any,
     libraryTraps: null as any,
     ximProtocol: null as XIMProtocol | null,
+    fimProtocol: null as FIMProtocol | null,
 
     // ROM
     kickstartRom: null as KickstartRom | null,
@@ -729,6 +730,11 @@ debugLog(`[AmigaDoorSession] FIM onShutdown(rc=${rc}, lastWords=${lastWords ?? "
       this.sharedState.execLibrary?.setFimMessageCallback((msgAddr: number) =>
         this.fimProtocol!.handleMessage(msgAddr)
       );
+      // Expose on sharedState like ximProtocol: the live BBS routes
+      // keystrokes through door.handler's session.doorInputHandler, which
+      // reads protocol handlers off sharedState (the harness's door:input
+      // socket path is a different route — both must reach queueInput).
+      this.sharedState.fimProtocol = this.fimProtocol;
     } else {
 debugLog(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM, AIM, or FIM`);
     }
