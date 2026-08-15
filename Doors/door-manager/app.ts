@@ -54,13 +54,21 @@ function formatSize(bytes: number): string {
 }
 
 function typeBadge(type: string): string {
-  return ({ TS:'TS', typescript:'TS', SDK:'TS', XIM:'68', SIM:'SI', TIM:'TI',
+  return ({ TS:'TS', typescript:'TS', SDK:'TS', XIM:'68', SIM:'SI', TIM:'TI', FIM:'FI',
             AMI:'68', amiga:'68', RX:'RX', AREXX:'RX', ARexx:'RX', RXD:'RX' } as any)[type] ?? '??';
 }
 
 function getCatalogSvc(): any {
   for (const k of Object.keys(require.cache))
     if (k.includes('door-catalog.service')) return require.cache[k]?.exports ?? null;
+  return null;
+}
+
+function getExtractorFactory(): any {
+  // Same require.cache discovery as getCatalogSvc — the backend's shared
+  // archive-extractor (WASM unlzx included) when loaded in this process.
+  for (const k of Object.keys(require.cache))
+    if (k.includes('archive-extractor')) return require.cache[k]?.exports ?? null;
   return null;
 }
 
@@ -415,10 +423,20 @@ class RepoView extends BaseView {
     this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}{/center}`);
   }
 
+  private repoUnavailable = false;
+
   private loadEntries(): void {
     const svc = getCatalogSvc();
-    if (!svc) { this.entries = []; return; }
-    try { this.entries = svc.searchCatalog(this.filter); } catch { this.entries = []; }
+    if (!svc) { this.entries = []; this.repoUnavailable = true; return; }
+    try {
+      this.entries = svc.searchCatalog(this.filter);
+      this.repoUnavailable = false;
+    } catch {
+      // e.g. live volume DB has no door_catalog table — repo browsing/install
+      // is a dev-checkout feature (catalog + archive files live there).
+      this.entries = [];
+      this.repoUnavailable = true;
+    }
   }
 
   private refresh(selectIdx = 0): void {
@@ -442,7 +460,15 @@ class RepoView extends BaseView {
 
   private updateInfo(): void {
     const e = this.entry();
-    if (!e) { this.layout.setInfo('No entry selected.'); return; }
+    if (!e) {
+      this.layout.setInfo(this.repoUnavailable
+        ? '{yellow-fg}Repo catalog unavailable on this system.{/yellow-fg}\n\n' +
+          'Repo browsing/install runs from a dev checkout, where the door\n' +
+          'catalog database and the archive files live. Installed doors on\n' +
+          'this system are unaffected.'
+        : 'No entry selected.');
+      return;
+    }
 
     // Try to get per-file listing from door_catalog_files
     const svc = getCatalogSvc();
