@@ -128,13 +128,47 @@ export class FIMProtocol {
    * deferred path.
    */
   queueInput(data: string): void {
-    this.inputBuffer += data;
+    this.inputBuffer += this.stripEscapeSequences(data);
     if (this.pendingKind === "line") {
       this.feedLineChars();
     } else if (this.pendingKind === "key") {
       this.feedKeyChar();
     }
     // else: nothing pending — data stays in inputBuffer as type-ahead.
+  }
+
+  /** Carry-over parser state: inside an ESC/CSI sequence that spans
+   * queueInput calls (web terminals deliver input per keystroke, so a
+   * mouse report like ESC[<35;68;25M arrives one char at a time). */
+  private inEscapeSeq = false;
+
+  /**
+   * Drop terminal escape sequences from door input — most importantly
+   * xterm SGR mouse-tracking reports (ESC[<btn;x;yM), which otherwise
+   * get echoed and typed into FIM line input as "[<35;68;25M" garbage
+   * whenever the user's mouse crosses the terminal (XIM has mouse
+   * throttling; FIM's per-keystroke line editor saw the raw bytes).
+   * Stateful: a sequence may span multiple queueInput calls.
+   */
+  private stripEscapeSequences(data: string): string {
+    let out = "";
+    for (const ch of data) {
+      const code = ch.charCodeAt(0);
+      if (this.inEscapeSeq) {
+        // CSI parameter/intermediate bytes are 0x20-0x3F ('<', digits, ';',
+        // etc.); the final byte is 0x40-0x7E ('M', 'm', letters, '~').
+        // '[' immediately after ESC opens the CSI and is not a final byte.
+        if (ch === "[") continue;
+        if (code >= 0x40 && code <= 0x7e) this.inEscapeSeq = false;
+        continue;
+      }
+      if (code === 0x1b) {
+        this.inEscapeSeq = true;
+        continue;
+      }
+      out += ch;
+    }
+    return out;
   }
 
   /**

@@ -446,16 +446,27 @@ class InstalledView extends ViewManager_1.BaseView {
             try {
                 const r = await this.bbs.deleteDoor(id, isTS);
                 if (r.success) {
-                    this.setStatus(`${d.name} deleted`, 'green');
+                    // Belt and braces: deleteDoor refreshes backend caches itself,
+                    // but a stale registry here left deleted doors visible with no
+                    // feedback (2026-08-15). Refresh again from our side, re-fetch,
+                    // and confirm persistently in the info panel.
+                    await (0, ViewManager_1.refreshDoorRegistry)();
                     this.doors = await fetchDoors(this.bbs);
                     this.refresh(Math.max(0, idx - 1));
+                    this.setStatus(`${d.name} deleted`, 'green', 8000);
+                    this.layout.setInfo(`{green-fg}Deleted{/green-fg}\n\n${(0, ViewManager_1.sanitizeForTags)(d.name)} removed.`);
+                    this.layout.render();
                 }
                 else {
-                    this.setStatus(`Failed: ${r.message}`, 'red');
+                    this.setStatus(`Failed: ${r.message}`, 'red', 8000);
+                    this.layout.setInfo(`{red-fg}Delete failed{/red-fg}\n\n${(0, ViewManager_1.sanitizeForTags)(String(r.message ?? 'unknown error'))}`);
+                    console.log(`[DOORMAN] delete failed: ${d.name}: ${r.message}`);
+                    this.layout.render();
                 }
             }
             catch (e) {
-                this.setStatus(`Error: ${e.message}`, 'red');
+                this.setStatus(`Error: ${e.message}`, 'red', 8000);
+                console.log(`[DOORMAN] delete error: ${d.name}: ${e?.message ?? e}`);
             }
         }));
     }

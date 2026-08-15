@@ -1069,3 +1069,47 @@ it("AR_SendStr passes strings longer than IOSTRING_LEN through untruncated", () 
   expect(out).toEqual([long]);
   expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
 });
+
+// Mouse-tracking reports (ESC[<btn;x;yM) arriving as door input were echoed
+// and typed into FIM line fields as "[<35;68;25M" garbage. queueInput strips
+// escape sequences — statefully, since web terminals deliver one char per
+// queueInput call.
+describe("escape-sequence input filtering", () => {
+  function lineProto(emu: MemStub, out: string[]) {
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const proto = new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+    });
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.NR_PromptChars);
+    emu.writeMemory32(msg + FDOM.DATA1, 50);
+    proto.handleMessage(msg);
+    return { proto, msg };
+  }
+
+  it("drops a whole mouse report delivered per keystroke", () => {
+    const emu = new MemStub(); const out: string[] = [];
+    const { proto, msg } = lineProto(emu, out);
+    out.length = 0;
+    for (const c of "\x1b[<35;68;25M") proto.queueInput(c);
+    expect(out).toEqual([]); // nothing echoed
+    for (const c of "hi\r") proto.queueInput(c);
+    let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("hi");
+    expect(emu.readMemory(msg + FDOM.IOSTRING + 2)).toBe(0);
+  });
+
+  it("drops a mouse report split across batched calls, keeps surrounding text", () => {
+    const emu = new MemStub(); const out: string[] = [];
+    const { proto, msg } = lineProto(emu, out);
+    proto.queueInput("a\x1b[<0;1");
+    proto.queueInput(";2Mb\r");
+    let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
+    expect(s).toBe("ab");
+  });
+});
