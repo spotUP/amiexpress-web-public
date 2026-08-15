@@ -21,6 +21,34 @@ interface DiskObject {
   toolTypes: string[];    // Array of tooltype strings
 }
 
+/**
+ * Candidate filesystem paths for a GetDiskObject name, in resolution order.
+ * Per AmigaOS semantics bare filenames resolve against the process CurrentDir
+ * (BBS root for doors), then the door's own directory, then the BBS command
+ * icon directory: FAME-style doors call GetDiskObject("<COMMAND>") to read
+ * their command icon's tooltypes, and those .info files live in
+ * Commands/BBSCmd/ here (regression: 5D_Page printed "cAN'T oPEN iCON"
+ * because Commands/BBSCmd was never searched).
+ * Exported for testing.
+ */
+export function buildIconCandidates(
+  name: string, hasDevicePrefix: boolean, bbsRoot: string, doorDirectory: string | null | undefined
+): string[] {
+  const candidates: string[] = [];
+  if (path.isAbsolute(name)) {
+    candidates.push(name);
+  } else if (hasDevicePrefix) {
+    candidates.push(path.join(bbsRoot, name));
+  } else {
+    candidates.push(path.join(bbsRoot, name));
+    if (doorDirectory) {
+      candidates.push(path.join(doorDirectory, name));
+    }
+    candidates.push(path.join(bbsRoot, 'Commands', 'BBSCmd', name));
+  }
+  return candidates;
+}
+
 export class IconLibrary {
   private emulator: MoiraEmulator;
   private diskObjects: Map<number, DiskObject> = new Map();
@@ -121,21 +149,7 @@ console.log(`[icon.library]   Translated SYS: -> ${name}`);
       hasDevicePrefix = true;
     }
 
-    // Build candidate paths to try.
-    // Per AmigaOS semantics, bare filenames resolve against the process's CurrentDir.
-    // For BBS doors launched from BBS root, CurrentDir is BBS root — try that first.
-    // Fall back to door directory for doors that pass bare filenames for their own data.
-    const candidates: string[] = [];
-    if (path.isAbsolute(name)) {
-      candidates.push(name);
-    } else if (hasDevicePrefix) {
-      candidates.push(path.join(this.bbsRoot, name));
-    } else {
-      candidates.push(path.join(this.bbsRoot, name));
-      if (this.doorDirectory) {
-        candidates.push(path.join(this.doorDirectory, name));
-      }
-    }
+    const candidates = buildIconCandidates(name, hasDevicePrefix, this.bbsRoot, this.doorDirectory);
 
     // Add .info extension if not present
     const candidatesWithExt = candidates.map(c =>
