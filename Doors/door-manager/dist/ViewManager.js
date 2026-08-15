@@ -13,6 +13,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ViewManager = exports.BaseView = exports.KeyBinder = void 0;
 exports.sanitizeForTags = sanitizeForTags;
+exports.refreshDoorRegistry = refreshDoorRegistry;
 /**
  * Sanitize raw archive text (FILE_ID.DIZ art, descriptions) for a blessed
  * box with tags:true: escape {}-runs so blessed doesn't parse art as tags,
@@ -23,6 +24,44 @@ function sanitizeForTags(text) {
         .split('\n')
         .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`))
         .join('\n');
+}
+/**
+ * Refresh the backend's in-memory door registry after install/uninstall.
+ * getDoors()/getDoorList() serve a boot-time cache — without this, a freshly
+ * installed door is invisible in the doors list until the BBS restarts.
+ * Discovers backend modules via require.cache (same pattern as app.ts's
+ * getCatalogSvc); cache injectable for tests.
+ */
+async function refreshDoorRegistry(cache = require.cache) {
+    let refreshed = false;
+    try {
+        for (const k of Object.keys(cache)) {
+            if (k.includes('door.handler')) {
+                const mod = cache[k]?.exports;
+                if (mod?.reloadDoors) {
+                    await mod.reloadDoors();
+                    refreshed = true;
+                    break;
+                }
+            }
+        }
+    }
+    catch (err) {
+        console.log(`[DOORMAN] door registry refresh failed: ${err?.message ?? err}`);
+    }
+    try {
+        for (const k of Object.keys(cache)) {
+            if (k.includes('amigaDoorManager')) {
+                const mgr = cache[k]?.exports?.getAmigaDoorManager?.();
+                if (mgr?.refreshCache) {
+                    await mgr.refreshCache();
+                    break;
+                }
+            }
+        }
+    }
+    catch { /* secondary cache, best effort */ }
+    return refreshed;
 }
 // ─── KeyBinder ────────────────────────────────────────────────────────────────
 class KeyBinder {

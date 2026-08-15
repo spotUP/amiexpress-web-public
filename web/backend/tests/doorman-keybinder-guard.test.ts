@@ -69,3 +69,22 @@ describe('DOORMAN sanitizeForTags', () => {
     expect(sanitizeForTags('A\xb1B\x1b[31mC\nD')).toBe('AB[31mC\nD');
   });
 });
+
+// Regression: installed doors were invisible in the doors list until BBS
+// restart — the backend door registry is a boot-time cache and DOORMAN never
+// called reloadDoors(). refreshDoorRegistry discovers it via require.cache.
+import { refreshDoorRegistry } from '../../../Doors/door-manager/ViewManager';
+
+describe('DOORMAN refreshDoorRegistry', () => {
+  it('calls reloadDoors on the discovered door.handler module', async () => {
+    let reloaded = 0;
+    const fakeCache = {
+      '/x/handlers/door.handler.js': { exports: { reloadDoors: async () => { reloaded++; } } },
+    };
+    await expect(refreshDoorRegistry(fakeCache)).resolves.toBe(true);
+    expect(reloaded).toBe(1);
+  });
+  it('returns false when no registry module is loaded', async () => {
+    await expect(refreshDoorRegistry({})).resolves.toBe(false);
+  });
+});

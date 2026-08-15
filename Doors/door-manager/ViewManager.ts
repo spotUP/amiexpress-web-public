@@ -22,6 +22,36 @@ export function sanitizeForTags(text: string): string {
     .join('\n');
 }
 
+/**
+ * Refresh the backend's in-memory door registry after install/uninstall.
+ * getDoors()/getDoorList() serve a boot-time cache — without this, a freshly
+ * installed door is invisible in the doors list until the BBS restarts.
+ * Discovers backend modules via require.cache (same pattern as app.ts's
+ * getCatalogSvc); cache injectable for tests.
+ */
+export async function refreshDoorRegistry(cache: Record<string, any> = require.cache as any): Promise<boolean> {
+  let refreshed = false;
+  try {
+    for (const k of Object.keys(cache)) {
+      if (k.includes('door.handler')) {
+        const mod = cache[k]?.exports;
+        if (mod?.reloadDoors) { await mod.reloadDoors(); refreshed = true; break; }
+      }
+    }
+  } catch (err: any) {
+    console.log(`[DOORMAN] door registry refresh failed: ${err?.message ?? err}`);
+  }
+  try {
+    for (const k of Object.keys(cache)) {
+      if (k.includes('amigaDoorManager')) {
+        const mgr = cache[k]?.exports?.getAmigaDoorManager?.();
+        if (mgr?.refreshCache) { await mgr.refreshCache(); break; }
+      }
+    }
+  } catch { /* secondary cache, best effort */ }
+  return refreshed;
+}
+
 // ─── KeyBinder ────────────────────────────────────────────────────────────────
 
 export class KeyBinder {

@@ -756,6 +756,7 @@ class RepoView extends ViewManager_1.BaseView {
                         fs.rmSync(abs, { recursive: true, force: true });
                 }
                 svc?.markUninstalled(e.id);
+                void (0, ViewManager_1.refreshDoorRegistry)(); // doors list is boot-cached; drop the entry now
                 this.setStatus(`Uninstalled ${e.installed_as}`, 'green', 4000);
                 this.refresh(this.layout.listSelected);
             }));
@@ -811,6 +812,11 @@ class RepoView extends ViewManager_1.BaseView {
                             // don't roll back a working install over a bookkeeping error.
                             console.log(`[DOORMAN] install failed: mark-installed: ${err?.message ?? err}`);
                         }
+                        // The BBS door registry is a boot-time cache — refresh it or
+                        // the new door is invisible in the doors list until restart.
+                        const refreshed = await (0, ViewManager_1.refreshDoorRegistry)();
+                        if (!refreshed)
+                            console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
                         this.setStatus(`Installed as ${finalCmd} (${result.fileCount} files, ${doorType})`, 'green', 4000);
                         this.layout.setInfo(`{green-fg}Installed{/green-fg}\n\n` +
                             `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
