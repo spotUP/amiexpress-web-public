@@ -9,10 +9,26 @@
  * KeyBinder tracks all screen.key registrations made during a view's
  * lifetime and automatically removes them when the view exits.
  */
+/**
+ * Sanitize raw archive text (FILE_ID.DIZ art, descriptions) for a blessed
+ * box with tags:true: escape {}-runs so blessed doesn't parse art as tags,
+ * and drop non-printable/high-bit bytes that render as garbage glyphs.
+ */
+export declare function sanitizeForTags(text: string): string;
 export declare class KeyBinder {
     private screen;
     private bound;
+    private guard;
     constructor(screen: any);
+    /**
+     * Modal-input guard: while `guard()` returns false, every hotkey bound
+     * through this binder is suppressed. Views with a text-input mode (e.g.
+     * RepoView's filter box) set this so typing "a" filters instead of firing
+     * the [A]rchive hotkey — guarding per-handler proved error-prone (only the
+     * 'f' binding was guarded; every other hotkey threw the user out of the
+     * filter input).
+     */
+    setGuard(guard: (() => boolean) | null): void;
     key(keys: string[], handler: (...a: any[]) => void): void;
     release(): void;
 }

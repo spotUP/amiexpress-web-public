@@ -41,7 +41,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = createApp;
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
-const child_process_1 = require("child_process");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
@@ -49,10 +48,11 @@ const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
 const AmigaGuideViewer_1 = require("./AmigaGuideViewer");
 const ViewManager_1 = require("./ViewManager");
 // ─── Constants ────────────────────────────────────────────────────────────────
-const LHA_BIN = [
-    '/usr/bin/lha', '/usr/local/bin/lha', '/opt/homebrew/bin/lha',
-    '/app/data/bbs/tools/bin/lha',
-].find(p => fs.existsSync(p)) ?? 'lha';
+// Install/re-extract now goes through the portable extractor factory
+// (extractArchiveTo, below) instead of the native `lha` CLI — see
+// getExtractorFactory(). That extractor handles both LHA and LZX and works
+// identically on macOS dev machines and the Linux container on the live
+// server, so no LHA_BIN path probing is needed here anymore.
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatSize(bytes) {
@@ -112,6 +112,105 @@ function discoverDoorDir(archiveName) {
     catch {
         return null;
     }
+}
+function resolveArchivePath(archivePath) {
+    if (!archivePath)
+        return null;
+    const svc = getCatalogSvc();
+    try {
+        return svc?.resolveArchivePath ? svc.resolveArchivePath(archivePath) : archivePath;
+    }
+    catch {
+        return archivePath;
+    }
+}
+/**
+ * Extract every file in an archive into destDir, preserving the archive's
+ * internal directory structure. Portable — uses the backend's shared
+ * extractor factory (pure-JS LHA, WASM LZX, etc.) instead of the native
+ * `lha` CLI, so it works the same on macOS dev machines and the Linux
+ * container on the live server.
+ */
+async function extractArchiveTo(archivePath, destDir) {
+    const factory = getExtractorFactory();
+    if (!factory?.getExtractorForFile) {
+        return { ok: false, fileCount: 0, error: 'Extractor unavailable in this process' };
+    }
+    let extractor;
+    try {
+        extractor = await factory.getExtractorForFile(archivePath);
+    }
+    catch (err) {
+        return { ok: false, fileCount: 0, error: `Extractor init failed: ${err.message}` };
+    }
+    if (!extractor)
+        return { ok: false, fileCount: 0, error: 'Unsupported archive format' };
+    let entries;
+    try {
+        entries = await extractor.getEntries(archivePath);
+    }
+    catch (err) {
+        return { ok: false, fileCount: 0, error: `Could not read archive: ${err.message}` };
+    }
+    if (!entries.length)
+        return { ok: false, fileCount: 0, error: 'Archive is empty or unreadable' };
+    const destRoot = path.normalize(destDir + path.sep);
+    let written = 0;
+    for (const entry of entries) {
+        if (!entry.name || entry.name.endsWith('/'))
+            continue; // directory marker, nothing to write
+        let data = null;
+        try {
+            data = await extractor.extractFile(archivePath, entry.name);
+        }
+        catch { /* skip unreadable member, keep going */ }
+        if (!data)
+            continue;
+        const outPath = path.normalize(path.join(destDir, entry.name));
+        if (!outPath.startsWith(destRoot))
+            continue; // zip-slip guard
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, data);
+        written++;
+    }
+    return written > 0
+        ? { ok: true, fileCount: written }
+        : { ok: false, fileCount: 0, error: 'No files could be extracted' };
+}
+/**
+ * Archives (especially FAME door packs) often nest the actual door binary
+ * several directories deep (e.g. "add_2_fame/doors/5d/5d!sysop/5d!sysop").
+ * The catalog only stores the binary's basename, so after extraction we
+ * search the extracted tree for a case-insensitive match rather than
+ * assuming it landed at the archive root. Returns a path relative to
+ * destDir (posix-style, for use in an AmigaDOS LOCATION= line).
+ */
+function findExtractedBinary(destDir, binaryName) {
+    if (!binaryName)
+        return null;
+    const target = binaryName.toLowerCase();
+    const stack = [destDir];
+    while (stack.length) {
+        const dir = stack.pop();
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        }
+        catch {
+            continue;
+        }
+        for (const e of entries) {
+            const full = path.join(dir, e.name);
+            if (e.isDirectory()) {
+                stack.push(full);
+                continue;
+            }
+            if (e.name.toLowerCase() === target) {
+                return path.relative(destDir, full).split(path.sep).join('/');
+            }
+        }
+    }
+    return null;
 }
 // ─── Shared Layout ───────────────────────────────────────────────────────────
 // A single set of panels that all views update in-place.
@@ -394,7 +493,9 @@ class InstalledView extends ViewManager_1.BaseView {
             }
             const liveDir = d.resolvedPath ? path.dirname(d.resolvedPath) :
                 (d.location ? path.join(PROJECT_ROOT, d.location) : undefined);
-            this.vm.push(new StripView(this.layout, entry, liveDir, (stripped) => { if (stripped)
+            const resolvedArchive = resolveArchivePath(entry.archive_path);
+            const archivePathForStrip = resolvedArchive && fs.existsSync(resolvedArchive) ? resolvedArchive : null;
+            this.vm.push(new StripView(this.layout, entry, archivePathForStrip, liveDir, (stripped) => { if (stripped)
                 this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000); }));
         }
         catch {
@@ -409,6 +510,7 @@ class RepoView extends ViewManager_1.BaseView {
         this.entries = [];
         this.filter = '';
         this.statusTimer = null;
+        this.installing = false; // guards against double-fire on the async install handler
         this.repoUnavailable = false;
         this.layout = layout;
         this.bbs = bbs;
@@ -641,7 +743,8 @@ class RepoView extends ViewManager_1.BaseView {
             }));
         }
         else {
-            if (!e.archive_path || !fs.existsSync(e.archive_path)) {
+            const resolvedArchive = resolveArchivePath(e.archive_path);
+            if (!resolvedArchive || !fs.existsSync(resolvedArchive)) {
                 this.setStatus(`Archive not on server`, 'yellow');
                 return;
             }
@@ -650,20 +753,36 @@ class RepoView extends ViewManager_1.BaseView {
             this.vm.push(new InputView(this.layout, `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested, (cmd) => {
                 if (!cmd)
                     return;
+                if (this.installing)
+                    return; // an install is already in flight
+                this.installing = true;
                 const finalCmd = cmd.trim().toUpperCase() || suggested;
                 const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
                 fs.mkdirSync(installDir, { recursive: true });
-                const res = (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDir}`, e.archive_path], { timeout: 30000 });
-                if (res.status !== 0 && res.status !== 1) {
-                    this.setStatus(`Extract failed`, 'red');
-                    return;
-                }
-                const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
-                const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
-                fs.writeFileSync(infoPath, `TYPE=XIM\nLOCATION=Doors:${finalCmd}/${e.binary_name ?? finalCmd}\nSTACK=65536\nACCESS=0\n`, 'latin1');
-                getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`);
-                this.setStatus(`Installed as ${finalCmd}`, 'green', 4000);
-                this.refresh(this.layout.listSelected);
+                this.setStatus('Installing…', 'yellow', 30000);
+                void (async () => {
+                    try {
+                        const result = await extractArchiveTo(resolvedArchive, installDir);
+                        if (!result.ok) {
+                            this.setStatus(`Extract failed: ${result.error ?? 'unknown error'}`, 'red');
+                            return;
+                        }
+                        const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
+                        const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
+                        const doorType = e.door_type || 'XIM';
+                        const binaryRel = findExtractedBinary(installDir, e.binary_name) ?? (e.binary_name ?? finalCmd);
+                        fs.writeFileSync(infoPath, `TYPE=${doorType}\nLOCATION=Doors:${finalCmd}/${binaryRel}\nSTACK=65536\nACCESS=0\n`, 'latin1');
+                        getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`);
+                        this.setStatus(`Installed as ${finalCmd} (${result.fileCount} files, ${doorType})`, 'green', 4000);
+                        this.refresh(this.layout.listSelected);
+                    }
+                    catch (err) {
+                        this.setStatus(`Install failed: ${err?.message ?? err}`, 'red');
+                    }
+                    finally {
+                        this.installing = false;
+                    }
+                })();
             }));
         }
     }
@@ -671,7 +790,8 @@ class RepoView extends ViewManager_1.BaseView {
         const e = this.entry();
         if (!e)
             return;
-        const hasArchive = !!(e.archive_path && fs.existsSync(e.archive_path));
+        const resolvedArchive = resolveArchivePath(e.archive_path);
+        const hasArchive = !!(resolvedArchive && fs.existsSync(resolvedArchive));
         const candidates = [
             e.install_dir ? path.join(PROJECT_ROOT, e.install_dir) : null,
             e.installed_as ? path.join(PROJECT_ROOT, 'Doors', e.installed_as) : null,
@@ -682,7 +802,7 @@ class RepoView extends ViewManager_1.BaseView {
             this.setStatus(e.installed ? 'Install dir not found on server' : 'Install first to strip', 'yellow');
             return;
         }
-        this.vm.push(new StripView(this.layout, e, installDir ?? undefined, (stripped) => { if (stripped) {
+        this.vm.push(new StripView(this.layout, e, hasArchive ? resolvedArchive : null, installDir ?? undefined, (stripped) => { if (stripped) {
             this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000);
             this.refresh(this.layout.listSelected);
         } }));
@@ -816,7 +936,7 @@ class DocView extends ViewManager_1.BaseView {
 }
 // ── Strip Selector ────────────────────────────────────────────────────────────
 class StripView extends ViewManager_1.BaseView {
-    constructor(layout, entry, overrideDir, onDone) {
+    constructor(layout, entry, archivePath, overrideDir, onDone) {
         super();
         this.checked = [];
         this.files = [];
@@ -824,6 +944,7 @@ class StripView extends ViewManager_1.BaseView {
         this.origLabel = '';
         this.layout = layout;
         this.entry = entry;
+        this.archivePath = archivePath;
         this.overrideDir = overrideDir;
         this.onDone = onDone;
     }
@@ -834,11 +955,11 @@ class StripView extends ViewManager_1.BaseView {
             this.vm.pop();
             return;
         }
-        const hasArchive = !!(this.entry.archive_path && fs.existsSync(this.entry.archive_path));
+        const hasArchive = !!this.archivePath;
         const installDir = this.overrideDir;
         this.layout.setFooter('{center}{cyan-fg}Analyzing...{/cyan-fg}{/center}');
         this.layout.render();
-        (hasArchive ? lib.analyzeArchive(this.entry.archive_path) : lib.analyzeDirectory(installDir))
+        (hasArchive ? lib.analyzeArchive(this.archivePath) : lib.analyzeDirectory(installDir))
             .then((result) => {
             if (result.stripped.length === 0) {
                 this.layout.setInfo('{green-fg}No ad files found — archive is clean.{/green-fg}');
@@ -898,18 +1019,22 @@ class StripView extends ViewManager_1.BaseView {
         this.layout.render();
         (async () => {
             try {
-                if (hasArchive) {
-                    const tmpOut = this.entry.archive_path + '.strip_tmp';
-                    await lib.stripArchive(this.entry.archive_path, tmpOut, preservePaths);
+                if (hasArchive && this.archivePath) {
+                    const tmpOut = this.archivePath + '.strip_tmp';
+                    await lib.stripArchive(this.archivePath, tmpOut, preservePaths);
                     if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
-                        fs.renameSync(tmpOut, this.entry.archive_path);
+                        fs.renameSync(tmpOut, this.archivePath);
                     }
                     else if (fs.existsSync(tmpOut)) {
                         fs.rmSync(tmpOut, { recursive: true, force: true });
                     }
                     if (installDir) {
                         fs.mkdirSync(installDir, { recursive: true });
-                        (0, child_process_1.spawnSync)(LHA_BIN, [`xw=${installDir}`, this.entry.archive_path], { timeout: 30000 });
+                        const res = await extractArchiveTo(this.archivePath, installDir);
+                        if (!res.ok) {
+                            this.layout.setInfo(`{yellow-fg}Stripped, but re-extract to install dir failed: ${res.error ?? 'unknown error'}{/yellow-fg}`);
+                            this.layout.render();
+                        }
                     }
                 }
                 else if (installDir) {
