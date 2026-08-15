@@ -50,6 +50,60 @@ function openDb(): Database.Database {
   return db;
 }
 
+// ─── Archive path resolution ───────────────────────────────────────────────
+//
+// door_catalog.archive_path is stored RELATIVE to an "archives root"
+// (e.g. "FAME/5D!STC01.LHA"). The archives root differs per machine — local
+// dev checkouts keep the 174MB archive corpus outside the repo, and the
+// live server keeps it on the persistent data volume — so it is resolved
+// at read time, never baked into the DB. Older rows (pre-migration) may
+// still carry a full machine-specific absolute path; resolveArchivePath
+// handles both forms so it is safe to call unconditionally.
+//
+// This is the single source of truth: every consumer (DOORMAN's install/
+// strip/browse flows, the catalog builder, any future backend route) must
+// go through this function rather than reading archive_path directly.
+
+const DEV_ARCHIVES_ROOT_DEFAULT = '~/Code/amiexpress_doors/Archives';
+
+export function resolveArchiveRoot(): string {
+  const envRoot = process.env.DOOR_ARCHIVES_ROOT;
+  if (envRoot) return envRoot;
+  const bbsDataDir = process.env.BBS_DATA_DIR || '/app/data/bbs';
+  const serverRoot = path.join(bbsDataDir, 'Archives');
+  if (fs.existsSync(serverRoot)) return serverRoot;
+  return DEV_ARCHIVES_ROOT_DEFAULT;
+}
+
+/**
+ * Strip a machine-specific absolute prefix down to the portion after the
+ * last "/Archives/" path segment (e.g.
+ * "/Users/x/amiexpress_doors/Archives/FAME/foo.lha" -> "FAME/foo.lha").
+ * Already-relative paths are returned unchanged.
+ */
+function toRelativeArchivePath(archivePath: string): string {
+  if (!path.isAbsolute(archivePath)) return archivePath;
+  const marker = `${path.sep}Archives${path.sep}`;
+  const idx = archivePath.lastIndexOf(marker);
+  if (idx === -1) return archivePath;
+  return archivePath.slice(idx + marker.length);
+}
+
+/**
+ * Resolve a door_catalog.archive_path value to an absolute path on THIS
+ * machine. Order: (1) if it's already an absolute path that exists here,
+ * use it as-is (covers un-migrated rows on the machine they were indexed
+ * on); (2) otherwise relativize it and join against the resolved archives
+ * root (env override, else the server volume path if present, else the
+ * dev default).
+ */
+export function resolveArchivePath(archivePath: string): string {
+  if (!archivePath) return archivePath;
+  if (path.isAbsolute(archivePath) && fs.existsSync(archivePath)) return archivePath;
+  const root = resolveArchiveRoot();
+  return path.join(root, toRelativeArchivePath(archivePath));
+}
+
 export function searchCatalog(query: string, installedOnly?: boolean): CatalogEntry[] {
   const db = openDb();
   try {

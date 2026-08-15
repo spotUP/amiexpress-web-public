@@ -28,6 +28,7 @@ import { execSync, spawnSync } from 'child_process';
 import Database from 'better-sqlite3';
 import { detectDoorType, AMIGA_68K_BINARY_EXT_RE } from '../../../web/backend/src/doors/door-installer';
 import { getExtractorForFile } from '../../../web/backend/src/utils/archive-extractor';
+import { resolveArchivePath } from '../../../web/backend/src/doors/door-catalog.service';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 // Reference corpus used to compile scene-stripper patterns + MD5 fingerprints
@@ -736,8 +737,16 @@ async function indexArchives(
   // see "no existing row" and silently clobber each other via ON CONFLICT.
   const seenThisRun = new Map<string, string>(); // id -> archive_name
 
+  // door_catalog.archive_path is stored RELATIVE to the archives root
+  // (e.g. "FAME/foo.lha") so the DB is portable across machines — see
+  // door-catalog.service.ts's resolveArchivePath(), the single reader of
+  // this column. INDEX_ARCHIVES_DIR is a specific subdir (AmiExpress/FAME/
+  // etc); its basename is the root-relative prefix we store.
+  const archivesSubdir = path.basename(INDEX_ARCHIVES_DIR);
+
   for (const archiveName of toProcess) {
     const archivePath = path.join(INDEX_ARCHIVES_DIR, archiveName);
+    const archiveRelPath = `${archivesSubdir}/${archiveName}`;
     const archiveSize = fs.statSync(archivePath).size;
     const isLzx = /\.lzx$/i.test(archiveName);
 
@@ -862,7 +871,7 @@ async function indexArchives(
     batch.push({
       id: baseId,
       archive_name: archiveName,
-      archive_path: archivePath,
+      archive_path: archiveRelPath,
       binary_name: binaryName,
       door_type: resolveDoorType(detectedDoorType, corpusEntry?.doorType),
       name,
@@ -920,13 +929,14 @@ function reextractInstalledDoors(
   log(`  Found ${rows.length} installed doors to re-extract`);
 
   for (const row of rows) {
-    if (!row.install_dir || !fs.existsSync(row.archive_path)) continue;
+    const archivePath = resolveArchivePath(row.archive_path);
+    if (!row.install_dir || !fs.existsSync(archivePath)) continue;
     const outDir = path.join(REPO_ROOT, row.install_dir);
 
     log(`  Extracting ${row.archive_name} -> ${row.install_dir}/`);
 
     // Get list of files in archive
-    const listLines = lhaList(row.archive_path);
+    const listLines = lhaList(archivePath);
 
     // Find the internal dir prefix (usually matches binary name or dir name)
     for (const line of listLines) {
@@ -934,7 +944,7 @@ function reextractInstalledDoors(
       const fname = parts[parts.length - 1];
       if (!fname || fname.endsWith('/')) continue;
 
-      const buf = lhaExtractFile(row.archive_path, fname);
+      const buf = lhaExtractFile(archivePath, fname);
       if (!buf) continue;
 
       const { junk } = isJunkFile(fname, buf, filenamePatterns, fingerprints);
