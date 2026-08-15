@@ -1,3 +1,8 @@
+jest.mock("../../src/utils/download-logging.util", () => ({
+  writeToCallersLog: jest.fn(async () => undefined),
+  writeToUDLog: jest.fn(async () => undefined),
+}));
+
 jest.mock("../../src/utils/debug-log", () => ({
   debugLog: jest.fn(),
   debugWarn: jest.fn(),
@@ -964,5 +969,79 @@ describe("FIMProtocol", () => {
       proto.handleMessage(msg);
       expect(readIOStr(emu, msg)).toBe("force");
     });
+  });
+});
+
+// SR_ChatSet (609): pagers check the sysop chat flag before paging.
+// Header: "Data2 -> Contains the Chat flag."
+describe("SR_ChatSet", () => {
+  function chatProto(emu: MemStub, getChatFlag?: () => number) {
+    return new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: () => true },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+      ...(getChatFlag ? { getChatFlag } : {}),
+    });
+  }
+  it("returns injected chat flag in Data2", () => {
+    const emu = new MemStub();
+    const proto = chatProto(emu, () => 0);
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.SR_ChatSet);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+  it("defaults to available (1) without an injected getter", () => {
+    const emu = new MemStub();
+    const proto = chatProto(emu);
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.SR_ChatSet);
+    proto.handleMessage(msg);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(1);
+  });
+});
+
+
+// CF_CallersLog (411) / CF_UDLog (412): "add a line of text to the
+// callers.log / ud.log — IOString <- the string added." 5D_Page logs
+// "PAGED SYSOP AT ..." via 411 as its final act.
+import { writeToCallersLog, writeToUDLog } from "../../src/utils/download-logging.util";
+
+describe("CF_CallersLog / CF_UDLog", () => {
+  function logProto(emu: MemStub) {
+    return new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: () => true },
+      bbsSession: { user: { username: "SPOT" } }, nodeId: 3, onShutdown: () => undefined,
+    });
+  }
+  function sendLine(emu: MemStub, proto: FIMProtocol, cmd: number, line: string) {
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, cmd);
+    for (let i = 0; i < line.length; i++) emu.writeMemory(msg + FDOM.IOSTRING + i, line.charCodeAt(i));
+    emu.writeMemory(msg + FDOM.IOSTRING + line.length, 0);
+    proto.handleMessage(msg);
+    return msg;
+  }
+  beforeEach(() => { (writeToCallersLog as jest.Mock).mockClear(); (writeToUDLog as jest.Mock).mockClear(); });
+
+  it("411 appends the IOString line to CallersLog with username and node", () => {
+    const emu = new MemStub();
+    const msg = sendLine(emu, logProto(emu), FIM_CMD.CF_CallersLog, "PAGED SYSOP AT: 01:56\r\n");
+    expect(writeToCallersLog).toHaveBeenCalledWith("SPOT", "PAGED SYSOP AT: 01:56", 3);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+
+  it("412 appends to UDLog", () => {
+    const emu = new MemStub();
+    const msg = sendLine(emu, logProto(emu), FIM_CMD.CF_UDLog, "UL: file.lha");
+    expect(writeToUDLog).toHaveBeenCalledWith("UL: file.lha", 3);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
 });

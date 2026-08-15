@@ -21,6 +21,7 @@ import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { FDOM, FIM_CMD, FIM_RC } from "./fim-constants";
 import { debugLog } from "../../utils/debug-log";
 import { getSystemTime, formatLongDateTime } from "../../utils/date-time.util";
+import { writeToCallersLog, writeToUDLog } from "../../utils/download-logging.util";
 
 /**
  * Amiga epoch (January 1, 1978 00:00:00) — same reference point
@@ -61,6 +62,10 @@ export interface FIMDeps {
   bbsSession: Record<string, unknown>;
   nodeId: number;
   onShutdown(rc: number, lastWords?: string): void;
+  /** Sysop chat availability (AmiExpress sysopAvail / F7 toggle) as 0/1.
+   * Injected so the emulation layer stays decoupled from server state;
+   * absent → 1 (available), matching the server's boot default. */
+  getChatFlag?(): number;
 }
 
 export class FIMProtocol {
@@ -103,7 +108,10 @@ export class FIMProtocol {
     this.bbsSession = deps.bbsSession;
     this.nodeId = deps.nodeId;
     this.onShutdown = deps.onShutdown;
+    this.getChatFlag = deps.getChatFlag;
   }
+
+  private getChatFlag?: () => number;
 
   /**
    * Deliver terminal input to the door. If NR_PromptChars is pending, feeds
@@ -132,6 +140,11 @@ export class FIMProtocol {
    */
   handleMessage(msgAddr: number): void {
     const command = this.emulator.readMemory32(msgAddr + FDOM.COMMAND);
+    if (process.env.DEBUG_68K === '1' || process.env.DEBUG_68K === 'true') {
+      const d1 = this.emulator.readMemory32(msgAddr + FDOM.DATA1);
+      const io = this.readCString(msgAddr + FDOM.IOSTRING, 60).replace(/[\r\n]/g, s => s === '\r' ? '\\r' : '\\n');
+      debugLog(`[FIM] cmd=${command} Data1=${d1} IOString="${io}"`);
+    }
 
     // Per-command return-field convention (FAMEDoorCommands.h): each
     // command documents its OWN mapping of which of Data2/Data3/IOString
@@ -656,6 +669,16 @@ export class FIMProtocol {
         break;
       }
 
+      case FIM_CMD.SR_ChatSet: {
+        // FAMEDoorCommands.h: "Retrieve the chat status / Data2 ->
+        // Contains the Chat flag." Pagers (5D_Page) check this before
+        // paging. Sourced from the server's sysopAvailable toggle via the
+        // injected getter; default 1 (available) matches the boot default.
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, (this.getChatFlag?.() ?? 1) >>> 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
       case FIM_CMD.SR_FAMEVersion: {
         // FAMEDoorCommands.h: "Data2 -> Contains the versionnumber of
         // FAME. / Data3 -> Contains the revsionnumber of FAME." These are
@@ -668,6 +691,29 @@ export class FIMProtocol {
         );
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, 6);
         this.emulator.writeMemory32(msgAddr + FDOM.DATA3, 0);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.CF_CallersLog: {
+        // FAMEDoorCommands.h: "add a line of text to the callers.log /
+        // IOString <- The string added to the callers.log." Routed through
+        // the same express.e-port util the BBS itself uses (fire-and-forget;
+        // the log line is not worth blocking the door's reply on).
+        const line = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN).replace(/[\r\n]+$/, "");
+        const username = String(
+          (this.bbsSession.user as Record<string, unknown> | undefined)?.username ?? "Door"
+        );
+        void writeToCallersLog(username, line, this.nodeId);
+        this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.CF_UDLog: {
+        // FAMEDoorCommands.h: "add a line of text to the ud.log" — same
+        // shape as CF_CallersLog, different target log.
+        const line = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN).replace(/[\r\n]+$/, "");
+        void writeToUDLog(line, this.nodeId);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }

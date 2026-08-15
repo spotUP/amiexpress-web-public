@@ -714,6 +714,17 @@ debugLog(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)}`
 debugLog(`[AmigaDoorSession] FIM onShutdown(rc=${rc}, lastWords=${lastWords ?? ""})`);
           this.terminate();
         },
+        getChatFlag: () => {
+          // Lazy require: harness runs (SKIP_NETWORK_LISTENERS) may not have
+          // server state loaded; boot default is sysopAvailable=true.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const init = require('../server/initialization');
+            return init?.chatState?.sysopAvailable ? 1 : 0;
+          } catch {
+            return 1;
+          }
+        },
       });
       this.sharedState.execLibrary?.setFimMessageCallback((msgAddr: number) =>
         this.fimProtocol!.handleMessage(msgAddr)
