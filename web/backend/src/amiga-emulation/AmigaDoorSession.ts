@@ -716,14 +716,32 @@ debugLog(`[AmigaDoorSession] FIM onShutdown(rc=${rc}, lastWords=${lastWords ?? "
           this.terminate();
         },
         getChatFlag: () => {
-          // Lazy require: harness runs (SKIP_NETWORK_LISTENERS) may not have
-          // server state loaded; boot default is sysopAvailable=true.
+          // Test/diagnostic override (harness A/B runs of FAME chat semantics).
+          if (process.env.FIM_CHAT_FLAG !== undefined) return Number(process.env.FIM_CHAT_FLAG) || 0;
+          // FAME chat-flag semantics (A/B-verified vs 5D_Page): 1 = NOT
+          // pageable, 0 = pageable. Map from sysopAvailable accordingly.
+          // Lazy require: harness runs may not have server state loaded;
+          // boot default sysopAvailable=true => 0.
           try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const init = require('../server/initialization');
-            return init?.chatState?.sysopAvailable ? 1 : 0;
+            return init?.chatState?.sysopAvailable === false ? 1 : 0;
           } catch {
-            return 1;
+            return 0;
+          }
+        },
+        runInternalCommand: (cmd: string) => {
+          // CF_InternalCmd: only "C" (sysop chat/page) is supported — the
+          // notify-only page (chat session + webhook, no UI) so replacement
+          // pager doors like 5D_Page keep rendering their own paging screen.
+          if (cmd.toUpperCase() !== 'C') return false;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const chat = require('../handlers/chat/chat.handler');
+            return chat?.notifySysopPage?.(this.config.bbsSession) === true;
+          } catch (err) {
+            debugLog(`[AmigaDoorSession] FIM internal cmd "C" failed: ${(err as Error)?.message ?? err}`);
+            return false;
           }
         },
       });

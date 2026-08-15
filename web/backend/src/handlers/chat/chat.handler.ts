@@ -49,6 +49,21 @@ console.log('[ChatHandler] Initialized with DI');
   }
 
   /**
+   * Notify-only sysop page: chat session + callers-log semantics + webhook,
+   * with NO terminal output and NO pager-door launch. Used by replacement
+   * pager doors (FAME 5D_Page executes internal command "C" mid-door via
+   * CF_InternalCmd) — the door renders its own paging UI, so launching
+   * PowerPager or drawing the internal pager here would fight it.
+   */
+  notifySysopPage(session: BBSSession): boolean {
+    if (!session.user) return false;
+console.log('Sysop page (notify-only) for user:', session.user.username);
+    this.chatSessionUseCase.createChatSession(session.user.id, session.user.username);
+    this.sendPagerWebhook(session);
+    return true;
+  }
+
+  /**
    * Start sysop page - Initiates sysop paging (like ccom() in AmiExpress)
    */
   startSysopPage(socket: any, session: BBSSession): void {
@@ -268,6 +283,11 @@ console.error('[ChatHandler] DI Resolution Error:', error);
 export function startSysopPage(socket: any, session: BBSSession): void {
   const handler = resolveChatHandler();
   handler.startSysopPage(socket, session);
+}
+
+export function notifySysopPage(session: BBSSession): boolean {
+  const handler = resolveChatHandler();
+  return handler.notifySysopPage(session);
 }
 
 export function displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession): void {

@@ -65,10 +65,17 @@ export interface FIMDeps {
   bbsSession: Record<string, unknown>;
   nodeId: number;
   onShutdown(rc: number, lastWords?: string): void;
-  /** Sysop chat availability (AmiExpress sysopAvail / F7 toggle) as 0/1.
-   * Injected so the emulation layer stays decoupled from server state;
-   * absent → 1 (available), matching the server's boot default. */
+  /** FAME "Chat flag" (SR_ChatSet Data2) as 0/1. Semantics verified by A/B
+   * against 5D_Page: 1 = flag SET = sysop NOT pageable ("Sysop is not
+   * arround"); 0 = clear = door proceeds to page. Maps from AmiExpress
+   * sysopAvail as `available ? 0 : 1`. Injected so the emulation layer
+   * stays decoupled from server state; absent → 0 (pageable), matching the
+   * server's sysopAvailable=true boot default. */
   getChatFlag?(): number;
+  /** Execute a BBS internal menu command on the door's behalf
+   * (CF_InternalCmd 404 — 5D_Page runs "C" to trigger the sysop page).
+   * Return true when handled; false → the door gets rc=NOTIMPLEMENTED. */
+  runInternalCommand?(cmd: string): boolean;
 }
 
 export class FIMProtocol {
@@ -112,9 +119,11 @@ export class FIMProtocol {
     this.nodeId = deps.nodeId;
     this.onShutdown = deps.onShutdown;
     this.getChatFlag = deps.getChatFlag;
+    this.runInternalCommand = deps.runInternalCommand;
   }
 
   private getChatFlag?: () => number;
+  private runInternalCommand?: (cmd: string) => boolean;
 
   /**
    * Deliver terminal input to the door. If NR_PromptChars is pending, feeds
@@ -716,11 +725,26 @@ export class FIMProtocol {
 
       case FIM_CMD.SR_ChatSet: {
         // FAMEDoorCommands.h: "Retrieve the chat status / Data2 ->
-        // Contains the Chat flag." Pagers (5D_Page) check this before
-        // paging. Sourced from the server's sysopAvailable toggle via the
-        // injected getter; default 1 (available) matches the boot default.
-        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, (this.getChatFlag?.() ?? 1) >>> 0);
+        // Contains the Chat flag." A/B-verified against 5D_Page: flag SET
+        // (1) => "Sysop is not arround"; clear (0) => door pages. Default
+        // 0 = pageable, matching sysopAvailable=true at boot.
+        this.emulator.writeMemory32(msgAddr + FDOM.DATA2, (this.getChatFlag?.() ?? 0) >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
+        break;
+      }
+
+      case FIM_CMD.CF_InternalCmd: {
+        // FAMEDoorCommands.h: "Execute an internal menu command /
+        // IOString <- The internal menu command to be executed." 5D_Page
+        // sends "C" (sysop chat/page) when the chat flag is clear.
+        const internalCmd = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN).trim();
+        const handled = this.runInternalCommand?.(internalCmd) ?? false;
+        if (handled) {
+          this.reply(msgAddr, FIM_RC.OK);
+        } else {
+          debugLog(`[FIM] CF_InternalCmd not handled: "${internalCmd}"`);
+          this.reply(msgAddr, FIM_RC.NOTIMPLEMENTED);
+        }
         break;
       }
 
@@ -1014,6 +1038,11 @@ export class FIMProtocol {
     this.pendingKind = null;
     this.lineBuffer = "";
     this.pendingMode = 0; // reset — stale value would otherwise leak if read before the next handlePromptChars() sets it
+    // Echo the line terminator, matching real FAME console behavior: the
+    // door's post-input cursor math assumes Enter advanced one row (5D_Page
+    // emits 4xCRLF after input and printed "Sysop is not arround" over its
+    // own Registered box when this echo was missing).
+    this.socket?.emit("ansi-output", "\r\n");
     this.writeCString(msgAddr + FDOM.IOSTRING, line, FDOM.IOSTRING_LEN);
     this.reply(msgAddr, FIM_RC.OK);
     this.emulator.resume();

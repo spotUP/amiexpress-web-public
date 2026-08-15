@@ -87,6 +87,7 @@ export const FIM_CMD = {
   NR_GetArgument3: 90,
   NR_GetArgument4: 91,
   CF_ShowText: 400,
+  CF_InternalCmd: 404,
   CF_ReturnCommand: 408,
   CF_CallersLog: 411,
   CF_UDLog: 412,

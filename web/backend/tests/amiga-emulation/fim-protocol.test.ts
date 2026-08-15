@@ -379,7 +379,7 @@ describe("FIMProtocol", () => {
     proto.handleMessage(msg);
     proto.queueInput("hi\r");
     // out[0] is the prompt; the two typed chars each echo '*', not 'h'/'i'.
-    expect(out).toEqual(["Pass:", "*", "*"]);
+    expect(out).toEqual(["Pass:", "*", "*", "\r\n"]);
     let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
     expect(s).toBe("hi");
   });
@@ -401,9 +401,11 @@ describe("FIMProtocol", () => {
     "Pass:".split("").forEach((c, i) => emu.writeMemory(msg + FDOM.IOSTRING + i, c.charCodeAt(0)));
     proto.handleMessage(msg);
     proto.queueInput("hi\x08x\r"); // 'h','i',backspace,'x',CR
-    // Only the prompt is emitted — no per-char echo, no stars, no
-    // backspace erase sequence — but the line still accumulates correctly.
-    expect(out).toEqual(["Pass:"]);
+    // Only the prompt plus the Enter newline are emitted — no per-char
+    // echo, no stars, no backspace erase sequence — but the line still
+    // accumulates correctly. (The completion CRLF is cursor feedback, not
+    // content echo — doors' post-input cursor math depends on it.)
+    expect(out).toEqual(["Pass:", "\r\n"]);
     let s = ""; for (let i = 0; i < 2; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
     expect(s).toBe("hx");
     expect(emu.readMemory(msg + FDOM.IOSTRING + 2)).toBe(0);
@@ -427,7 +429,7 @@ describe("FIMProtocol", () => {
     proto.queueInput("1a2b3\r");
     let s = ""; for (let i = 0; i < 3; i++) s += String.fromCharCode(emu.readMemory(msg + FDOM.IOSTRING + i));
     expect(s).toBe("123");
-    expect(out).toEqual(["1", "2", "3"]); // letters never echoed — rejected before echo
+    expect(out).toEqual(["1", "2", "3", "\r\n"]); // letters never echoed — rejected before echo
   });
 
   function makeWith(emu: MemStub, bbsSession: Record<string, unknown>, nodeId = 3) {
@@ -994,14 +996,49 @@ describe("SR_ChatSet", () => {
     expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
-  it("defaults to available (1) without an injected getter", () => {
+  it("defaults to pageable (0) without an injected getter", () => {
     const emu = new MemStub();
     const proto = chatProto(emu);
     const msg = 0x8000;
     emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
     emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.SR_ChatSet);
     proto.handleMessage(msg);
-    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(1);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(0);
+  });
+});
+
+// CF_InternalCmd (404): "Execute an internal menu command" — 5D_Page sends
+// "C" to trigger the sysop page when the chat flag is clear.
+describe("CF_InternalCmd", () => {
+  function cmdProto(emu: MemStub, run?: (c: string) => boolean) {
+    return new FIMProtocol({
+      emulator: emu as never,
+      execLibrary: { putMsg: () => undefined },
+      socket: { emit: () => true },
+      bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+      ...(run ? { runInternalCommand: run } : {}),
+    });
+  }
+  function send(emu: MemStub, proto: FIMProtocol, cmd: string) {
+    const msg = 0x8000;
+    emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+    emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.CF_InternalCmd);
+    for (let i = 0; i < cmd.length; i++) emu.writeMemory(msg + FDOM.IOSTRING + i, cmd.charCodeAt(i));
+    emu.writeMemory(msg + FDOM.IOSTRING + cmd.length, 0);
+    proto.handleMessage(msg);
+    return msg;
+  }
+  it("routes the command to the injected executor and replies OK when handled", () => {
+    const emu = new MemStub();
+    const seen: string[] = [];
+    const msg = send(emu, cmdProto(emu, (c) => { seen.push(c); return true; }), "C");
+    expect(seen).toEqual(["C"]);
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+  });
+  it("replies NOTIMPLEMENTED when unhandled or no executor", () => {
+    const emu = new MemStub();
+    const msg = send(emu, cmdProto(emu), "C");
+    expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.NOTIMPLEMENTED);
   });
 });
 
