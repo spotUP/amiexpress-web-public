@@ -101,12 +101,19 @@ function discoverDoorDir(archiveName: string): string | null {
   } catch { return null; }
 }
 
-function resolveArchivePath(archivePath: string | null | undefined): string | null {
+export function resolveArchivePath(archivePath: string | null | undefined): string | null {
   if (!archivePath) return null;
   const svc = getCatalogSvc();
   try {
     return svc?.resolveArchivePath ? svc.resolveArchivePath(archivePath) : archivePath;
   } catch { return archivePath; }
+}
+
+/** Content of the .info-style command config written on install. Pure and
+ * exported for testing: door_type must flow through as TYPE= (a FIM door
+ * force-typed XIM at install time simply won't run under the FIM engine). */
+export function buildDoorInfoContent(doorType: string, cmd: string, binaryRel: string): string {
+  return `TYPE=${doorType}\nLOCATION=Doors:${cmd}/${binaryRel}\nSTACK=65536\nACCESS=0\n`;
 }
 
 /**
@@ -116,7 +123,7 @@ function resolveArchivePath(archivePath: string | null | undefined): string | nu
  * `lha` CLI, so it works the same on macOS dev machines and the Linux
  * container on the live server.
  */
-async function extractArchiveTo(
+export async function extractArchiveTo(
   archivePath: string, destDir: string
 ): Promise<{ ok: boolean; fileCount: number; error?: string }> {
   const factory = getExtractorFactory();
@@ -142,13 +149,20 @@ async function extractArchiveTo(
   const destRoot = path.normalize(destDir + path.sep);
   let written = 0;
   for (const entry of entries) {
-    if (!entry.name || entry.name.endsWith('/')) continue; // directory marker, nothing to write
+    if (!entry.name) continue;
+    // The pure-JS LHA reader emits Amiga-style directory-separated names
+    // with '\' (its "directory" extended header joins path segments with
+    // 0xFF, which the parser renders as a literal backslash) — normalize
+    // to '/' so path.join/dirname treat it as real subdirectories on every
+    // OS instead of writing one file with a literal backslash in its name.
+    const entryPath = entry.name.replace(/\\/g, '/');
+    if (entryPath.endsWith('/')) continue; // directory marker, nothing to write
     let data: Buffer | null = null;
     try {
       data = await extractor.extractFile(archivePath, entry.name);
     } catch { /* skip unreadable member, keep going */ }
     if (!data) continue;
-    const outPath = path.normalize(path.join(destDir, entry.name));
+    const outPath = path.normalize(path.join(destDir, entryPath));
     if (!outPath.startsWith(destRoot)) continue; // zip-slip guard
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, data);
@@ -167,7 +181,7 @@ async function extractArchiveTo(
  * assuming it landed at the archive root. Returns a path relative to
  * destDir (posix-style, for use in an AmigaDOS LOCATION= line).
  */
-function findExtractedBinary(destDir: string, binaryName: string | null | undefined): string | null {
+export function findExtractedBinary(destDir: string, binaryName: string | null | undefined): string | null {
   if (!binaryName) return null;
   const target = binaryName.toLowerCase();
   const stack: string[] = [destDir];
@@ -719,7 +733,16 @@ class RepoView extends BaseView {
     } else {
       const resolvedArchive = resolveArchivePath(e.archive_path);
       if (!resolvedArchive || !fs.existsSync(resolvedArchive)) {
-        this.setStatus(`Archive not on server`, 'yellow'); return;
+        const detail = `archive_path=${e.archive_path ?? '(none)'} resolved=${resolvedArchive ?? '(none)'}`;
+        console.log(`[DOORMAN] install failed: resolve-archive: ${detail}`);
+        this.setStatus(`Archive not on server`, 'yellow', 8000);
+        this.layout.setInfo(
+          `{yellow-fg}Archive not on server{/yellow-fg}\n\n` +
+          `{yellow-fg}Catalog path:{/yellow-fg} ${sanitizeForTags(e.archive_path ?? '(none)')}\n` +
+          `{yellow-fg}Resolved to:{/yellow-fg} ${sanitizeForTags(resolvedArchive ?? '(unresolvable)')}\n`
+        );
+        this.layout.render();
+        return;
       }
       const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
         .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
@@ -737,20 +760,38 @@ class RepoView extends BaseView {
             try {
               const result = await extractArchiveTo(resolvedArchive, installDir);
               if (!result.ok) {
-                this.setStatus(`Extract failed: ${result.error ?? 'unknown error'}`, 'red');
+                this.reportInstallFailure('extract', result.error ?? 'unknown error', resolvedArchive, e.archive_name);
                 return;
               }
               const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
               const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
               const doorType = e.door_type || 'XIM';
               const binaryRel = findExtractedBinary(installDir, e.binary_name) ?? (e.binary_name ?? finalCmd);
-              fs.writeFileSync(infoPath,
-                `TYPE=${doorType}\nLOCATION=Doors:${finalCmd}/${binaryRel}\nSTACK=65536\nACCESS=0\n`, 'latin1');
-              getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`);
+              try {
+                fs.writeFileSync(infoPath, buildDoorInfoContent(doorType, finalCmd, binaryRel), 'latin1');
+              } catch (err: any) {
+                this.reportInstallFailure('write-info', `${infoPath}: ${err?.message ?? err}`, resolvedArchive, e.archive_name);
+                return;
+              }
+              try {
+                getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`);
+              } catch (err: any) {
+                // The door is on disk and the .info is written — it will run.
+                // The catalog just won't show it as installed. Surface it but
+                // don't roll back a working install over a bookkeeping error.
+                console.log(`[DOORMAN] install failed: mark-installed: ${err?.message ?? err}`);
+              }
               this.setStatus(`Installed as ${finalCmd} (${result.fileCount} files, ${doorType})`, 'green', 4000);
+              this.layout.setInfo(
+                `{green-fg}Installed{/green-fg}\n\n` +
+                `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
+                `{yellow-fg}Type:{/yellow-fg} ${doorType}\n` +
+                `{yellow-fg}Files:{/yellow-fg} ${result.fileCount}\n` +
+                `{yellow-fg}Binary:{/yellow-fg} ${sanitizeForTags(binaryRel)}\n`
+              );
               this.refresh(this.layout.listSelected);
             } catch (err: any) {
-              this.setStatus(`Install failed: ${err?.message ?? err}`, 'red');
+              this.reportInstallFailure('install', err?.message ?? String(err), resolvedArchive, e.archive_name);
             } finally {
               this.installing = false;
             }
@@ -758,6 +799,27 @@ class RepoView extends BaseView {
         }
       ));
     }
+  }
+
+  /**
+   * Install failures used to be a status-bar flash that cleared itself in a
+   * few seconds — a failed install could leave nothing behind on disk AND
+   * nothing in the backend log, so a sysop had no way to tell it happened.
+   * Every failure path now: logs to the process console (so it shows up in
+   * `docker logs`/journald), holds a red status for long enough to actually
+   * read it, and writes the full detail into the persistent info panel.
+   */
+  private reportInstallFailure(step: string, detail: string, archivePath: string, archiveName: string): void {
+    console.log(`[DOORMAN] install failed: ${step}: ${detail} (archive=${archiveName}, path=${archivePath})`);
+    this.setStatus(`Install failed: ${step}`, 'red', 9000);
+    this.layout.setInfo(
+      `{red-fg}Install failed{/red-fg}\n\n` +
+      `{yellow-fg}Step:{/yellow-fg} ${sanitizeForTags(step)}\n` +
+      `{yellow-fg}Detail:{/yellow-fg} ${sanitizeForTags(detail)}\n` +
+      `{yellow-fg}Archive:{/yellow-fg} ${sanitizeForTags(archiveName)}\n` +
+      `{yellow-fg}Path:{/yellow-fg} ${sanitizeForTags(archivePath)}\n`
+    );
+    this.layout.render();
   }
 
   private doStrip(): void {
