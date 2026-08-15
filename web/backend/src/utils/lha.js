@@ -75,7 +75,16 @@ LHA.read = function (data) {
                                u8(offset),          // level 1
                 headerSize   = (level === 3) ? 4 : 2,
                 readLength   = (level === 3) ? u32 : u16,
-                headerLength, directory;
+                // `var` is function-scoped, not block-scoped: without the
+                // explicit `= undefined` this declaration is a no-op on every
+                // iteration but the first, so an entry with no directory
+                // extended header (type 2) silently inherited the PREVIOUS
+                // entry's directory and got its name prefixed with it. Every
+                // archive with files at more than one directory depth (any
+                // FAME door pack with a top-level FILE_ID.DIZ alongside a
+                // nested door binary, for instance) extracted with mangled
+                // paths as a result.
+                headerLength, directory = undefined;
             while ((headerLength = readLength(offset + headerOffset)) > 0) {
                 var dataOffset = offset + headerOffset + headerSize + 1,
                     dataLength = headerLength - headerSize - 1;
