@@ -477,6 +477,49 @@ export function setDoors(doorList: Door[]) {
   doors = doorList;
 }
 
+/**
+ * Route a live keystroke to the running 68K door's protocol stack.
+ * SINGLE SOURCE OF TRUTH — both doorInputHandler closures (launchAmigaDoor
+ * and executeAmigaDoor) must call this. They used to carry duplicated
+ * copies; a FIM routing fix landed in only one of them and live input
+ * silently died (2026-08-15).
+ *
+ * FIM doors: the protocol's per-keystroke line editor owns ALL input —
+ * never also feed DOS stdin (double delivery corrupts the line buffer).
+ */
+export function routeAmigaDoorInput(shared: {
+  fimProtocol?: { queueInput(data: string): void } | null;
+  ximProtocol?: {
+    queueInput(data: string): void;
+    isWaitingForLineInput?(): boolean;
+    shouldInjectNativeInput?(): boolean;
+    injectInputToNativeDoor(char: string): void;
+  } | null;
+  dosLibrary?: { queueInput(data: string): void } | null;
+} | null | undefined, data: string): void {
+  if (!shared) return;
+  if (shared.fimProtocol) {
+    shared.fimProtocol.queueInput(data);
+    return;
+  }
+  // Check if XIM is waiting for input BEFORE queueing — prevents
+  // double-delivery when XIM completes a hotkey/line input.
+  const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
+  if (shared.ximProtocol) {
+    shared.ximProtocol.queueInput(data);
+    // Native 68K doors that poll GetMsg(AEDoorPort) need input injected
+    // via PutMsg — they never send JH_HK XIM commands themselves.
+    if (shared.ximProtocol.shouldInjectNativeInput?.()) {
+      for (const char of data) {
+        shared.ximProtocol.injectInputToNativeDoor(char);
+      }
+    }
+  }
+  if (shared.dosLibrary && !ximWaitingForInput) {
+    shared.dosLibrary.queueInput(data);
+  }
+}
+
 export function getDoors(): Door[] {
   return doors;
 }
@@ -771,31 +814,7 @@ console.log(`[launchAmigaDoor] bbsSession.currentConference=${(session as any).c
         const shared: any = (amigaSession as any).sharedState || {};
 console.log(`[doorInputHandler] Received input: "${data}" hasXIM=${!!shared.ximProtocol} hasFIM=${!!shared.fimProtocol}`);
         logDoorDebug(`KEY door=${doorInfo.command || doorInfo.id || 'UNK'} data=${JSON.stringify(data)}`);
-        // FIM doors: the protocol handler owns ALL input (per-keystroke line
-        // editor / key polls). Never also feed DOS stdin — double delivery.
-        if (shared.fimProtocol) {
-          shared.fimProtocol.queueInput(data);
-          return;
-        }
-        // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
-        // This prevents double-delivery when XIM completes a hotkey/line input
-        const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
-        if (shared.ximProtocol) {
-          shared.ximProtocol.queueInput(data);
-
-          // CRITICAL: For native 68K doors that poll GetMsg(AEDoorPort), we need to
-          // inject JH_HK messages via PutMsg. These doors don't send JH_HK XIM commands -
-          // they expect BBS to proactively send input messages to AEDoorPort.
-          if (shared.ximProtocol.shouldInjectNativeInput?.()) {
-console.log(`[launchAmigaDoor] Native door detected - injecting input via PutMsg`);
-            for (const char of data) {
-              shared.ximProtocol.injectInputToNativeDoor(char);
-            }
-          }
-        }
-        if (shared.dosLibrary && !ximWaitingForInput) {
-          shared.dosLibrary.queueInput(data);
-        }
+        routeAmigaDoorInput(shared, data);
       } catch (err) {
 console.error('[launchAmigaDoor] Error routing door input:', err);
         SysopDebugUtil.debugDoorError(
@@ -2747,32 +2766,13 @@ console.log(`[executeAmigaDoor] Set session.inDoorManager=true, door-active: tru
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
-console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data.length}) hasXIM=${!!shared.ximProtocol}`);
-console.log('[executeAmigaDoor] Call stack:', new Error().stack?.split('\n').slice(1, 5).join('\n'));
+console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data.length}) hasXIM=${!!shared.ximProtocol} hasFIM=${!!shared.fimProtocol}`);
         logDoorDebug(
           `KEY door=${door.command || door.id || 'UNK'} data=${JSON.stringify(
             data
           )}`
         );
-        // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
-        // This prevents double-delivery when XIM completes a hotkey/line input
-        const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
-        if (shared.ximProtocol) {
-          shared.ximProtocol.queueInput(data);
-
-          // CRITICAL: For native 68K doors that poll GetMsg(AEDoorPort), we need to
-          // inject JH_HK messages via PutMsg. These doors don't send JH_HK XIM commands -
-          // they expect BBS to proactively send input messages to AEDoorPort.
-          if (shared.ximProtocol.shouldInjectNativeInput?.()) {
-console.log(`[executeAmigaDoor] Native door detected - injecting input via PutMsg`);
-            for (const char of data) {
-              shared.ximProtocol.injectInputToNativeDoor(char);
-            }
-          }
-        }
-        if (shared.dosLibrary && !ximWaitingForInput) {
-          shared.dosLibrary.queueInput(data);
-        }
+        routeAmigaDoorInput(shared, data);
       } catch (err) {
 console.error('[executeAmigaDoor] Error routing door input:', err);
       }
