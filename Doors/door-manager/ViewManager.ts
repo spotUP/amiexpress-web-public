@@ -10,6 +10,9 @@
  * lifetime and automatically removes them when the view exits.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 /**
  * Sanitize raw archive text (FILE_ID.DIZ art, descriptions) for a blessed
  * box with tags:true: escape {}-runs so blessed doesn't parse art as tags,
@@ -20,6 +23,35 @@ export function sanitizeForTags(text: string): string {
     .split('\n')
     .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`))
     .join('\n');
+}
+
+/**
+ * Resolve the BBS root directory for DOORMAN's file operations.
+ * `__dirname/../../..` was correct only when running the built
+ * dist/index.js (Doors/door-manager/dist -> repo root); dev runs the
+ * SOURCE index.ts and landed one level above the repo, so installs wrote
+ * Commands/BBSCmd into the wrong tree (regression: 2026-08-15 local
+ * install ENOENT at ~/Code/Commands/...). Order: explicit env
+ * (live container sets BBS_DATA_DIR), then walk up from startDir to the
+ * first directory that actually contains Commands/BBSCmd.
+ */
+export function resolveBbsRoot(
+  startDir: string,
+  env: Record<string, string | undefined> = process.env,
+  exists: (p: string) => boolean = (p) => fs.existsSync(p)
+): string {
+  if (env.BBS_DATA_DIR && exists(path.join(env.BBS_DATA_DIR, 'Commands', 'BBSCmd'))) {
+    return env.BBS_DATA_DIR;
+  }
+  let dir = startDir;
+  for (let i = 0; i < 8; i++) {
+    if (exists(path.join(dir, 'Commands', 'BBSCmd'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // Last resort: historical dist-relative guess.
+  return path.resolve(startDir, '..', '..', '..');
 }
 
 /**

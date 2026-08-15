@@ -10,10 +10,46 @@
  * KeyBinder tracks all screen.key registrations made during a view's
  * lifetime and automatically removes them when the view exits.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ViewManager = exports.BaseView = exports.KeyBinder = void 0;
 exports.sanitizeForTags = sanitizeForTags;
+exports.resolveBbsRoot = resolveBbsRoot;
 exports.refreshDoorRegistry = refreshDoorRegistry;
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 /**
  * Sanitize raw archive text (FILE_ID.DIZ art, descriptions) for a blessed
  * box with tags:true: escape {}-runs so blessed doesn't parse art as tags,
@@ -24,6 +60,32 @@ function sanitizeForTags(text) {
         .split('\n')
         .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`))
         .join('\n');
+}
+/**
+ * Resolve the BBS root directory for DOORMAN's file operations.
+ * `__dirname/../../..` was correct only when running the built
+ * dist/index.js (Doors/door-manager/dist -> repo root); dev runs the
+ * SOURCE index.ts and landed one level above the repo, so installs wrote
+ * Commands/BBSCmd into the wrong tree (regression: 2026-08-15 local
+ * install ENOENT at ~/Code/Commands/...). Order: explicit env
+ * (live container sets BBS_DATA_DIR), then walk up from startDir to the
+ * first directory that actually contains Commands/BBSCmd.
+ */
+function resolveBbsRoot(startDir, env = process.env, exists = (p) => fs.existsSync(p)) {
+    if (env.BBS_DATA_DIR && exists(path.join(env.BBS_DATA_DIR, 'Commands', 'BBSCmd'))) {
+        return env.BBS_DATA_DIR;
+    }
+    let dir = startDir;
+    for (let i = 0; i < 8; i++) {
+        if (exists(path.join(dir, 'Commands', 'BBSCmd')))
+            return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir)
+            break;
+        dir = parent;
+    }
+    // Last resort: historical dist-relative guess.
+    return path.resolve(startDir, '..', '..', '..');
 }
 /**
  * Refresh the backend's in-memory door registry after install/uninstall.

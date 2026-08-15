@@ -13,7 +13,7 @@ import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers
 import { FileExplorerOverlay } from './FileExplorerOverlay';
 import { InfoEditorOverlay } from './InfoEditorOverlay';
 import { showAmigaGuideViewer } from './AmigaGuideViewer';
-import { ViewManager, BaseView, sanitizeForTags, refreshDoorRegistry } from './ViewManager';
+import { ViewManager, BaseView, sanitizeForTags, refreshDoorRegistry, resolveBbsRoot } from './ViewManager';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Install/re-extract now goes through the portable extractor factory
@@ -22,7 +22,7 @@ import { ViewManager, BaseView, sanitizeForTags, refreshDoorRegistry } from './V
 // identically on macOS dev machines and the Linux container on the live
 // server, so no LHA_BIN path probing is needed here anymore.
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+const PROJECT_ROOT = resolveBbsRoot(__dirname);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

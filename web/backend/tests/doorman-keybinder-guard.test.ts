@@ -88,3 +88,25 @@ describe('DOORMAN refreshDoorRegistry', () => {
     await expect(refreshDoorRegistry({})).resolves.toBe(false);
   });
 });
+
+// Regression: PROJECT_ROOT = __dirname/../../.. broke when dev runs the
+// SOURCE app.ts (one level short of repo root) — installs wrote
+// Commands/BBSCmd into the wrong tree. resolveBbsRoot prefers env, then
+// walks up to the dir containing Commands/BBSCmd.
+import { resolveBbsRoot } from '../../../Doors/door-manager/ViewManager';
+
+describe('DOORMAN resolveBbsRoot', () => {
+  const hasCmd = (root: string) => (p: string) => p === `${root}/Commands/BBSCmd`;
+  it('prefers BBS_DATA_DIR when it holds Commands/BBSCmd', () => {
+    expect(resolveBbsRoot('/x/Doors/door-manager', { BBS_DATA_DIR: '/bbs' }, hasCmd('/bbs'))).toBe('/bbs');
+  });
+  it('walks up from a source run (Doors/door-manager) to the repo root', () => {
+    expect(resolveBbsRoot('/repo/Doors/door-manager', {}, hasCmd('/repo'))).toBe('/repo');
+  });
+  it('walks up from a dist run (Doors/door-manager/dist) to the repo root', () => {
+    expect(resolveBbsRoot('/repo/Doors/door-manager/dist', {}, hasCmd('/repo'))).toBe('/repo');
+  });
+  it('falls back to the historical dist-relative guess when nothing matches', () => {
+    expect(resolveBbsRoot('/a/b/c/d', {}, () => false)).toBe('/a');
+  });
+});

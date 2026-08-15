@@ -57,7 +57,7 @@ const ViewManager_1 = require("./ViewManager");
 // getExtractorFactory(). That extractor handles both LHA and LZX and works
 // identically on macOS dev machines and the Linux container on the live
 // server, so no LHA_BIN path probing is needed here anymore.
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+const PROJECT_ROOT = (0, ViewManager_1.resolveBbsRoot)(__dirname);
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatSize(bytes) {
     if (bytes === 0)
