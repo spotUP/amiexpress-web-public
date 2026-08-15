@@ -1045,3 +1045,27 @@ describe("CF_CallersLog / CF_UDLog", () => {
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
 });
+
+// AR_SendStr StringPtr strings are arbitrary-length C strings; the 202-byte
+// IOString cap truncated 5D_Page's 250+ byte banner chunk mid-line, dropping
+// a \r\n and breaking its ESC[5A overlay math.
+it("AR_SendStr passes strings longer than IOSTRING_LEN through untruncated", () => {
+  const emu = new MemStub();
+  const out: string[] = [];
+  const proto = new FIMProtocol({
+    emulator: emu as never,
+    execLibrary: { putMsg: () => undefined },
+    socket: { emit: (_e, d) => { out.push(String(d)); return true; } },
+    bbsSession: {}, nodeId: 1, onShutdown: () => undefined,
+  });
+  const msg = 0x8000, str = 0x4000;
+  const long = ("x".repeat(100) + "\r\n").repeat(3); // 306 chars > 202
+  emu.writeMemory32(msg + FDOM.MN_REPLYPORT, 0x9000);
+  emu.writeMemory32(msg + FDOM.COMMAND, FIM_CMD.AR_SendStr);
+  emu.writeMemory32(msg + FDOM.STRINGPTR, str);
+  for (let i = 0; i < long.length; i++) emu.writeMemory(str + i, long.charCodeAt(i));
+  emu.writeMemory(str + long.length, 0);
+  proto.handleMessage(msg);
+  expect(out).toEqual([long]);
+  expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
+});

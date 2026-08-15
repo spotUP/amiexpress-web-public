@@ -41,6 +41,9 @@ function secondsSinceAmigaEpoch(date: Date): number {
 }
 
 const NT_REPLYMSG = 6;
+/** Runaway guard for AR_SendStr StringPtr reads (arbitrary-length C strings;
+ * only bounds a missing NUL terminator, not legitimate output). */
+const AR_SENDSTR_MAX = 65536;
 const LN_TYPE_OFFSET = 8;
 
 export interface FIMExecLibrary {
@@ -194,7 +197,15 @@ export class FIMProtocol {
           break;
         }
         const data1 = this.emulator.readMemory32(msgAddr + FDOM.DATA1);
-        let text = this.readCString(stringPtr, FDOM.IOSTRING_LEN);
+        // StringPtr sends are arbitrary-length C strings — that is the whole
+        // point of the pointer variant vs the 202-byte inline IOString.
+        // Capping at IOSTRING_LEN truncated 5D_Page's banner mid-line
+        // (dropping a \r\n and wrecking its cursor-overlay math). The large
+        // cap is only a runaway guard against a missing NUL terminator.
+        let text = this.readCString(stringPtr, AR_SENDSTR_MAX);
+        if (process.env.DEBUG_68K === '1') {
+          debugLog(`[FIM] AR_SendStr ptr=0x${stringPtr.toString(16)} len=${text.length} bytes=${JSON.stringify(text.slice(0, 400))}`);
+        }
         // FAMEDoorCommands.h AR_SendStr: "Data1 <- if not 0 a \"\\r\\n\"
         // combination will be send" — any nonzero value, not just 1.
         // readMemory32 returns unsigned (>>> 0), so a door writing -1
