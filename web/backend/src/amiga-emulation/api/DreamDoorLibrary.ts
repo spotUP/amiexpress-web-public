@@ -240,13 +240,44 @@ export class DreamDoorLibrary {
       `[DreamDoor] Prompt: handle=0x${handle.toString(16)}, buffer=0x${bufferAddr.toString(16)}, maxLen=${maxLen}, mode=${mode}`
     );
 
-    // Guard: address 0 (or otherwise clearly invalid) → skip the read/emit
-    // entirely rather than risk emitting garbage bytes read from a
-    // meaningless address. Real Xim.s clients don't always set A1
-    // purposefully before this call (see dreamdoor-vectors.ts's Prompt
-    // handler comment) — this is the same tolerance InquirePointers and
-    // friends already lean on.
-    const promptStr = promptTextAddr > 0 ? this.emulator.readString(promptTextAddr, 200) : '';
+    // Important 3 (DD final-review wave, 2026-08-16): the confirmed binding
+    // spec (thoughts/shared/research/2026-08-14_fame-dd-door-compat.md,
+    // DayDream RE section, LVO -48 row) has Prompt taking only TWO
+    // arguments — +2(L)=A0 buffer ptr (prompt text copied in by the door,
+    // then the answer copied back in place by the BBS) and +6(L)=packed
+    // D1/D2 — there is no A1 argument at all. An earlier implementation
+    // plan wrongly prescribed a separate A1 prompt-text pointer, which
+    // dreamdoor-vectors.ts's Prompt handler still reads and passes here as
+    // promptTextAddr; that register is NOT part of the real protocol and
+    // can hold garbage/residual state from a prior call, which the OLD
+    // code here would echo verbatim (up to 200 bytes of arbitrary emulator
+    // memory sent to the terminal).
+    //
+    // CONFIRMED against primary source, not just RE inference: the real
+    // Xim.s client (Sources/_Assembly/DD-XIM/Xim.s in the sibling
+    // amiexpress_doors checkout, extracted from the official DayDream BBS
+    // distribution) never sets A1 before either of its two _LVOPrompt
+    // call sites. At JH_LI (Xim.s:346-360) A1 is left pointing PAST the
+    // end of a just-copied string (pure side effect of an unrelated copy
+    // loop at :350-352); at JH_PM (Xim.s:393-403) A1 is never touched at
+    // all in that code path and simply carries over whatever an earlier,
+    // unrelated call left in it. Both sites instead load A0 with the SAME
+    // struct pointer that already holds the prompt text (`Move.L A2,A0`
+    // at Xim.s:356/399, where A2 is the original incoming A0). This is
+    // direct proof A1 was never a real Prompt argument in the shipping
+    // protocol — it's accidental register residue, exactly the "up to 200
+    // bytes of arbitrary emulator memory echoed" risk this fix closes.
+    //
+    // Fix: read the prompt text from the A0 buffer FIRST — it is intact at
+    // call entry (the answer only overwrites it later, in
+    // completePrompt()) — and only fall back to the legacy/unreliable A1
+    // register if that read comes back empty, so a genuinely
+    // spec-conformant door (prompt text in A0, A1 untouched/garbage) still
+    // gets its prompt echoed instead of silently dropped.
+    let promptStr = bufferAddr > 0 ? this.emulator.readString(bufferAddr, 200) : '';
+    if (!promptStr && promptTextAddr > 0) {
+      promptStr = this.emulator.readString(promptTextAddr, 200);
+    }
     if (promptStr) {
       this.socket?.emit('ansi-output', promptStr);
     }

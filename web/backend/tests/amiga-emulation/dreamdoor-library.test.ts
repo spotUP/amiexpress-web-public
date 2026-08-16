@@ -324,6 +324,151 @@ describe("DreamDoorLibrary deferred Prompt/GetKey (Task 4)", () => {
     lib.queueInput("y");
     expect(resumeD0).toBe(121); // 'y'
   });
+
+  // Important 3 (DD final-review wave, 2026-08-16): the CONFIRMED binding
+  // spec (thoughts/shared/research/2026-08-14_fame-dd-door-compat.md, LVO
+  // -48 row) has Prompt's message text living in the A0 BUFFER (prompt
+  // text copied in by the door, answer copied back in place by the BBS) —
+  // there is no separate A1 prompt-text pointer in the real protocol. An
+  // earlier implementation-plan revision wrongly prescribed A1; this
+  // describe block pins the corrected priority: A0 first, A1 only as a
+  // legacy fallback when A0 reads back empty.
+  it("reads prompt text from the A0 buffer when populated, even if A1 also holds text (A0 wins)", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const out: string[] = [];
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: (_e: string, d?: string) => { if (d) out.push(d); return true; } });
+    const handle = lib.initDoor(0x1000);
+
+    const buf = 0x510000, legacyA1 = 0x500000;
+    "Real prompt (A0)>".split("").forEach((c, i) => emu.writeMemory(buf + i, c.charCodeAt(0)));
+    "Stale residual A1 text".split("").forEach((c, i) => emu.writeMemory(legacyA1 + i, c.charCodeAt(0)));
+
+    lib.prompt(handle, buf, legacyA1, 40, 0);
+
+    expect(out[0]).toBe("Real prompt (A0)>");
+    expect(out).not.toContain("Stale residual A1 text");
+  });
+
+  it("falls back to A1 only when the A0 buffer reads back empty (spec-nonconformant / legacy door)", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const out: string[] = [];
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: (_e: string, d?: string) => { if (d) out.push(d); return true; } });
+    const handle = lib.initDoor(0x1000);
+
+    const buf = 0x510000, legacyA1 = 0x500000; // buf left unwritten (all-zero -> empty string)
+    "Legacy A1 prompt>".split("").forEach((c, i) => emu.writeMemory(legacyA1 + i, c.charCodeAt(0)));
+
+    lib.prompt(handle, buf, legacyA1, 40, 0);
+
+    expect(out[0]).toBe("Legacy A1 prompt>");
+  });
+
+  it("emits nothing when both A0 and A1 read back empty (no garbage-memory echo)", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const out: string[] = [];
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: (_e: string, d?: string) => { if (d) out.push(d); return true; } });
+    const handle = lib.initDoor(0x1000);
+
+    lib.prompt(handle, 0x510000, 0x500000, 40, 0); // both addresses never written -> empty
+
+    expect(out).toEqual([]);
+  });
+});
+
+describe("DreamDoorLibrary isActive() (Important 2, DD final-review wave)", () => {
+  function makeInactiveLib() {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    return new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+  }
+
+  it("is false before InitDoor and true once InitDoor has run", () => {
+    const lib = makeInactiveLib();
+    expect(lib.isActive()).toBe(false);
+
+    lib.setSession({}, { emit: () => true });
+    lib.initDoor(0x1000);
+    expect(lib.isActive()).toBe(true);
+  });
+
+  it("is true even when NOT currently waiting on a deferred Prompt/GetKey — this is the type-ahead fix: routing must not gate on isWaitingForInput()", () => {
+    const lib = makeInactiveLib();
+    lib.setSession({}, { emit: () => true });
+    lib.initDoor(0x1000);
+
+    // No Prompt/GetKey call is pending right now.
+    expect(lib.isWaitingForInput()).toBe(false);
+    // ...but the door is still active, so a live keystroke must still be
+    // routed to this library (queueInput's own type-ahead buffering),
+    // not fall through to DOS stdin.
+    expect(lib.isActive()).toBe(true);
+  });
+
+  it("goes back to false after CloseDoor", () => {
+    const lib = makeInactiveLib();
+    lib.setSession({}, { emit: () => true });
+    const handle = lib.initDoor(0x1000);
+    expect(lib.isActive()).toBe(true);
+
+    lib.closeDoor(handle);
+    expect(lib.isActive()).toBe(false);
+  });
+
+  it("end-to-end type-ahead: a keystroke queued while NOT waiting lands in the buffer, and the next prompt() completes synchronously from it (no pause)", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    let paused = false;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: () => true });
+    const handle = lib.initDoor(0x1000);
+
+    // Door is active but nothing is deferred yet (no Prompt/GetKey call has
+    // run) — this is exactly the window the OLD isWaitingForInput()-gated
+    // router dropped to DOS stdin instead of here.
+    expect(lib.isActive()).toBe(true);
+    expect(lib.isWaitingForInput()).toBe(false);
+
+    lib.queueInput("spot\r"); // type-ahead, buffered — nothing pending to complete yet
+
+    const buf = 0x520000;
+    const result = lib.prompt(handle, buf, 0, 40, 0);
+
+    // A CR was already in the type-ahead backlog, so the request completes
+    // synchronously (prompt()'s doc comment) — the emulator is never
+    // paused and the real status is returned directly.
+    expect(paused).toBe(false);
+    expect(result).toBe(1);
+    expect(emu.readString(buf, 40)).toBe("spot");
+  });
 });
 
 describe("DreamDoorLibrary pending-input teardown (Task 4 review fix)", () => {

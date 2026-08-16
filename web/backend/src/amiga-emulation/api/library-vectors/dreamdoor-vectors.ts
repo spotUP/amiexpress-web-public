@@ -50,21 +50,28 @@ export const DREAMDOOR_VECTORS: LibraryVector[] = [
     },
   },
   {
-    offset: DD_LVO.Prompt, // Prompt(handle,Buffer,PromptText,MaxLen,Mode)(d0/a0/a1/d1/d2) -> D0=status
+    offset: DD_LVO.Prompt, // Prompt(handle,Buffer,MaxLen,Mode)(d0/a0/d1/d2) -> D0=status
     name: 'Prompt',
-    // A1 (promptTextAddr) is confirmed by the LVO table, but per the
-    // research doc the real Xim.s client doesn't always set A1 purposefully
-    // before this call — it can be left pointing at leftover/residual
-    // state from a previous call (a client-side quirk, not a protocol
-    // requirement). DreamDoorLibrary.prompt() tolerates that: it reads
-    // whatever's at promptTextAddr and a leading null byte (address 0, or a
-    // genuinely empty residual buffer) reads back as "no prompt text"
-    // rather than throwing. Never assume A1 is valid without that
-    // tolerance.
+    // Important 3 fix (DD final-review wave, 2026-08-16): the CONFIRMED
+    // binding spec (thoughts/shared/research/2026-08-14_fame-dd-door-compat.md,
+    // DayDream RE section, LVO -48 row) is +2(L)=A0 buffer ptr (prompt
+    // text copied in by the door, answer copied back in place by the BBS)
+    // and +6(L)=packed D1/D2 — there is NO A1 argument in the real
+    // protocol. Verified against the real Xim.s client source (see
+    // DreamDoorLibrary.prompt()'s doc comment for the exact line numbers):
+    // neither of its two _LVOPrompt call sites deliberately sets A1 — one
+    // leaves it pointing past a just-copied string as pure side effect,
+    // the other never touches it at all. A1 below is read only as a
+    // legacy/unreliable fallback for an earlier (wrong) implementation-plan
+    // revision that prescribed a separate A1 prompt-text pointer;
+    // DreamDoorLibrary.prompt() reads A0 first and only consults this A1
+    // value if the A0 read comes back empty. Never treat A1 as
+    // authoritative — it can hold garbage/residual state from a prior trap
+    // call.
     handler: (emu, lib: DreamDoorLibrary) => {
       const handle = emu.getRegister(0); // D0
-      const bufferAddr = emu.getRegister(8); // A0
-      const promptTextAddr = emu.getRegister(9); // A1 - may be garbage/zero, see note above
+      const bufferAddr = emu.getRegister(8); // A0 — confirmed: prompt text in, answer out
+      const promptTextAddr = emu.getRegister(9); // A1 — legacy fallback only, see note above
       const maxLen = emu.getRegister(1); // D1
       const mode = emu.getRegister(2); // D2
       return lib.prompt(handle, bufferAddr, promptTextAddr, maxLen, mode);
