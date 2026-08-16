@@ -467,6 +467,59 @@ describe("DreamDoorLibrary deferred Prompt/GetKey (Task 4)", () => {
   });
 });
 
+// Root-cause bug: SGR mouse-tracking reports from the terminal (e.g.
+// "\x1b[<35;17;15M") reach queueInput() while a DD door has a pending
+// Prompt. drainPromptInput used to treat every printable-ASCII byte as a
+// keystroke, so "[<35;17;15M" (everything but the leading ESC) got typed
+// into the user's prompt buffer just from the mouse moving over the
+// terminal. Fixed by routing queueInput's input through the same stateful
+// EscapeSequenceStripper FIMProtocol.queueInput uses (escape-sequence-
+// stripper.ts) — one instance per DreamDoorLibrary, stripped BEFORE
+// buffering so drainPromptInput never sees the CSI bytes at all.
+describe("DreamDoorLibrary queueInput CSI/mouse-report stripping", () => {
+  function pendingPromptLib() {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const out: string[] = [];
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: (_e: string, d?: string) => { if (d) out.push(d); return true; } });
+    const handle = lib.initDoor(0x1000);
+    const buf = 0x510000;
+    lib.prompt(handle, buf, 0, 40, 0); // no CR yet -> stays pending
+    return { emu, lib, out, buf };
+  }
+
+  it("drops a complete SGR mouse report delivered in one chunk — prompt buffer stays empty", () => {
+    const { emu, lib, out, buf } = pendingPromptLib();
+    out.length = 0;
+    lib.queueInput("\x1b[<35;17;15M");
+    expect(out).toEqual([]); // nothing echoed — the report never reached the line editor
+    lib.queueInput("\r"); // complete with an otherwise-empty line
+    expect(emu.readString(buf, 40)).toBe("");
+  });
+
+  it("drops a mouse report split across two deliveries", () => {
+    const { emu, lib, out, buf } = pendingPromptLib();
+    out.length = 0;
+    lib.queueInput("\x1b[<35;17");
+    lib.queueInput(";15M");
+    expect(out).toEqual([]);
+    lib.queueInput("\r");
+    expect(emu.readString(buf, 40)).toBe("");
+  });
+
+  it("keeps real text with a mouse report embedded mid-stream", () => {
+    const { emu, lib, buf } = pendingPromptLib();
+    lib.queueInput("ab\x1b[<35;17;15Mcd\r");
+    expect(emu.readString(buf, 40)).toBe("abcd");
+  });
+});
+
 describe("DreamDoorLibrary isActive() (Important 2, DD final-review wave)", () => {
   function makeInactiveLib() {
     const emu = new MemStub();

@@ -20,6 +20,7 @@
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DP_OFFSET, DP_SIZEOF, USER_OFFSET, CONF_OFFSET, CFG_OFFSET } from '../dd/dd-constants';
 import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
+import { EscapeSequenceStripper } from '../utils/escape-sequence-stripper';
 
 const MEMF_CLEAR = 1 << 16;
 
@@ -131,6 +132,20 @@ export class DreamDoorLibrary {
   /** GetKey has no buffer to fill, only D0 — no address needs capturing,
    * just whether a GetKey call is waiting on the next queued char. */
   private pendingKeyPending = false;
+
+  /**
+   * Strips xterm SGR mouse-tracking reports (ESC[<btn;x;yM) and other CSI
+   * sequences out of raw terminal input before it reaches drainPromptInput
+   * / the type-ahead buffer — otherwise a mouse move over the terminal
+   * gets typed into a pending Prompt as "[<35;17;15M" garbage (same class
+   * of bug FIMProtocol.queueInput fixed for FAME doors; see that class's
+   * escapeStripper field). Shared implementation, NOT a shared instance —
+   * this field is scoped to this DreamDoorLibrary, which is itself one
+   * instance per door session (see LibraryManager, which constructs a
+   * fresh DreamDoorLibrary per session), so the stateful ESC/CSI parser
+   * can never bleed across concurrent sessions.
+   */
+  private readonly escapeStripper = new EscapeSequenceStripper();
 
   constructor(emulator: MoiraEmulator, alloc: DreamDoorMemAllocator) {
     this.emulator = emulator;
@@ -366,13 +381,15 @@ export class DreamDoorLibrary {
 
   /**
    * Deliver terminal input to the door (mirrors FIMProtocol.queueInput).
-   * Buffers into inputBuffer, then drains into whichever of
+   * Strips CSI/mouse-report sequences (escapeStripper) BEFORE buffering, so
+   * a mouse move never lands in inputBuffer/promptLineBuffer as literal
+   * bytes. Buffers the rest into inputBuffer, then drains into whichever of
    * prompt-line-accumulation / key-wait is pending — including neither,
    * in which case the data just sits as type-ahead for the next Prompt/
    * GetKey call.
    */
   queueInput(data: string): void {
-    this.inputBuffer += data;
+    this.inputBuffer += this.escapeStripper.strip(data);
 
     if (this.pendingKeyPending) {
       if (this.inputBuffer.length === 0) {

@@ -22,6 +22,7 @@ import { FDOM, FIM_CMD, FIM_RC } from "./fim-constants";
 import { debugLog } from "../../utils/debug-log";
 import { getSystemTime, formatLongDateTime } from "../../utils/date-time.util";
 import { writeToCallersLog, writeToUDLog } from "../../utils/download-logging.util";
+import { EscapeSequenceStripper } from "../utils/escape-sequence-stripper";
 
 /**
  * Amiga epoch (January 1, 1978 00:00:00) — same reference point
@@ -137,7 +138,7 @@ export class FIMProtocol {
    * deferred path.
    */
   queueInput(data: string): void {
-    this.inputBuffer += this.stripEscapeSequences(data);
+    this.inputBuffer += this.escapeStripper.strip(data);
     if (this.pendingKind === "line") {
       this.feedLineChars();
     } else if (this.pendingKind === "key") {
@@ -146,39 +147,17 @@ export class FIMProtocol {
     // else: nothing pending — data stays in inputBuffer as type-ahead.
   }
 
-  /** Carry-over parser state: inside an ESC/CSI sequence that spans
-   * queueInput calls (web terminals deliver input per keystroke, so a
-   * mouse report like ESC[<35;68;25M arrives one char at a time). */
-  private inEscapeSeq = false;
-
   /**
-   * Drop terminal escape sequences from door input — most importantly
-   * xterm SGR mouse-tracking reports (ESC[<btn;x;yM), which otherwise
-   * get echoed and typed into FIM line input as "[<35;68;25M" garbage
-   * whenever the user's mouse crosses the terminal (XIM has mouse
-   * throttling; FIM's per-keystroke line editor saw the raw bytes).
-   * Stateful: a sequence may span multiple queueInput calls.
+   * Drops terminal escape sequences from door input — most importantly
+   * xterm SGR mouse-tracking reports (ESC[<btn;x;yM), which otherwise get
+   * echoed and typed into FIM line input as "[<35;68;25M" garbage whenever
+   * the user's mouse crosses the terminal (XIM has mouse throttling; FIM's
+   * per-keystroke line editor saw the raw bytes). Stateful across
+   * queueInput calls (see EscapeSequenceStripper's own doc comment) — one
+   * instance per FIMProtocol, matching this protocol's one-per-door-session
+   * lifetime.
    */
-  private stripEscapeSequences(data: string): string {
-    let out = "";
-    for (const ch of data) {
-      const code = ch.charCodeAt(0);
-      if (this.inEscapeSeq) {
-        // CSI parameter/intermediate bytes are 0x20-0x3F ('<', digits, ';',
-        // etc.); the final byte is 0x40-0x7E ('M', 'm', letters, '~').
-        // '[' immediately after ESC opens the CSI and is not a final byte.
-        if (ch === "[") continue;
-        if (code >= 0x40 && code <= 0x7e) this.inEscapeSeq = false;
-        continue;
-      }
-      if (code === 0x1b) {
-        this.inEscapeSeq = true;
-        continue;
-      }
-      out += ch;
-    }
-    return out;
-  }
+  private readonly escapeStripper = new EscapeSequenceStripper();
 
   /**
    * Handle a FAMEDoorMsg PutMsg()'d to FAMEDoorPort<node>. Always replies
