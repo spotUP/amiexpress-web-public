@@ -15,6 +15,11 @@ class MemStub {
     this.writeMemory(a + 2, v >>> 8); this.writeMemory(a + 3, v);
   }
   writeMemory16(a: number, v: number) { this.writeMemory(a, v >>> 8); this.writeMemory(a + 1, v); }
+  // No-op default so callers that don't care about D0 (e.g. the deferred
+  // Prompt test, which only asserts on the caller buffer + resume flag)
+  // don't need to stub it themselves. Tests that DO care (e.g. the
+  // deferred GetKey test) override this per-instance.
+  setRegister(_r: number, _v: number) {}
   readString(a: number, max: number) {
     let s = ""; for (let i = 0; i < max; i++) { const c = this.readMemory(a + i); if (c === 0) break; s += String.fromCharCode(c); }
     return s;
@@ -102,8 +107,11 @@ describe("dreamdoor-vectors offset table", () => {
 describe("dreamdoor-vectors register wiring", () => {
   class RegisterStub extends MemStub {
     regs = new Map<number, number>();
+    paused = false;
     getRegister(n: number) { return this.regs.get(n) ?? 0; }
     setRegister(n: number, v: number) { this.regs.set(n, v); }
+    pause() { this.paused = true; }
+    resume() { this.paused = false; }
   }
 
   function findVector(name: string) {
@@ -153,8 +161,13 @@ describe("dreamdoor-vectors register wiring", () => {
     const emitted: string[] = [];
     lib.setSession({ user: { name: "SPOT" }, conferenceId: 1 }, { emit: (_e: string, s: string) => emitted.push(s) });
 
+    // No type-ahead is buffered, so Prompt defers (Task 4): the handler
+    // returns a placeholder D0 and pauses the emulator, completing later
+    // via queueInput(). See the dedicated deferred-Prompt test below for
+    // the full pause -> queueInput -> resume round trip.
     const result = findVector("Prompt").handler(emu as never, lib as never);
-    expect(result).toBe(1);
+    expect(result).toBe(0);
+    expect(emu.paused).toBe(true);
     expect(emitted).toContain(promptText);
   });
 
@@ -218,5 +231,48 @@ describe("dreamdoor-vectors register wiring", () => {
     emu.setRegister(8, 0x5000); // A0 = file-list ptr
     emu.setRegister(9, 0x6000); // A1 = device override ptr
     expect(() => findVector("XprSend").handler(emu as never, lib as never)).not.toThrow();
+  });
+});
+
+describe("DreamDoorLibrary deferred Prompt/GetKey (Task 4)", () => {
+  it("Prompt defers until queueInput, echoes prompt text first, writes answer into the caller buffer", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const out: string[] = [];
+    let paused = false, resumed = false;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => { resumed = true; };
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: (_e: string, d?: string) => { if (d) out.push(d); return true; } });
+    const handle = lib.initDoor(0x1000);
+    const promptText = 0x500000, buf = 0x510000;
+    "Name>".split("").forEach((c, i) => emu.writeMemory(promptText + i, c.charCodeAt(0)));
+    lib.prompt(handle, buf, promptText, 20, 0);
+    expect(out[0]).toBe("Name>");
+    expect(paused).toBe(true);
+    lib.queueInput("spot\r");
+    expect(resumed).toBe(true);
+    expect(emu.readString(buf, 20)).toBe("spot");
+  });
+
+  it("GetKey defers until queueInput and resolves the key code", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    let resumeD0 = -1;
+    (emu as unknown as { pause(): void; resume(): void; setRegister(r: number, v: number): void }).pause = () => undefined;
+    (emu as unknown as { resume(): void }).resume = () => undefined;
+    (emu as unknown as { setRegister(r: number, v: number): void }).setRegister = (r: number, v: number) => { if (r === 0) resumeD0 = v; };
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: () => true });
+    const handle = lib.initDoor(0x1000);
+    lib.getKey(handle, 0);
+    lib.queueInput("y");
+    expect(resumeD0).toBe(121); // 'y'
   });
 });

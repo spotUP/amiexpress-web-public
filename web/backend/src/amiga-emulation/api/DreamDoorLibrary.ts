@@ -104,6 +104,30 @@ export class DreamDoorLibrary {
   private doorHandle = 0;
   private initialized = false;
 
+  /**
+   * Deferred Prompt/GetKey input state (Task 4). Mirrors FIMProtocol's
+   * pendingKind/pause()/resume() state machine (fim-protocol.ts:64-110,
+   * 567-664 in that file's own numbering) but at the trap-call level
+   * instead of the message level, since DreamDoor calls are direct
+   * synchronous library JSRs, not PutMsg/GetMsg round trips.
+   */
+
+  /** Raw terminal input not yet consumed — type-ahead backlog, same role
+   * as FIMProtocol.inputBuffer. */
+  private inputBuffer = "";
+  /** Caller's A0 buffer address, captured when prompt() defers. Non-null
+   * while a Prompt call is pending completion via queueInput(). */
+  private pendingPromptBuffer: number | null = null;
+  private pendingPromptMaxLen = 0;
+  private pendingPromptMode = 0;
+  /** Chars accumulated so far for the pending Prompt request (mirrors
+   * FIMProtocol.lineBuffer). Not part of the brief's explicit field list
+   * but required to accumulate a line across multiple queueInput() calls. */
+  private promptLineBuffer = "";
+  /** GetKey has no buffer to fill, only D0 — no address needs capturing,
+   * just whether a GetKey call is waiting on the next queued char. */
+  private pendingKeyPending = false;
+
   constructor(emulator: MoiraEmulator, alloc: DreamDoorMemAllocator) {
     this.emulator = emulator;
     this.alloc = alloc;
@@ -181,24 +205,54 @@ export class DreamDoorLibrary {
    * Prompt (DD_LVO.Prompt)
    * Display prompt and get user input.
    * Real calling convention: prompt(handle, bufferAddr, promptTextAddr, maxLen, mode).
-   * bufferAddr/maxLen (where typed input lands) are wired but unused until
-   * Task 4 makes this a real deferred/blocking call; for now the body only
-   * emits the prompt text synchronously and returns success.
+   *
+   * Deferred/blocking (Task 4): emits the prompt text, then drains any
+   * type-ahead already sitting in inputBuffer through the same
+   * per-keystroke accumulator queueInput() uses. If a CR was already
+   * buffered, the request completes synchronously and the real status is
+   * returned directly (no pause). Otherwise the emulator is paused and a
+   * placeholder D0 is returned; queueInput() completes the request later
+   * (see completePrompt()), overwriting D0 with the real status before
+   * resume() lets the paused CPU continue — see LibraryTraps.handleTrap's
+   * `this.emulator.setRegister(0, result)` (api/LibraryTraps.ts:1701),
+   * which writes the handler's synchronous return value to D0
+   * immediately after invoking the handler but before any pause takes
+   * effect on the batch-execution loop (MoiraEmulator.pause()/resume()
+   * just flip a `paused` boolean the loop checks — MoiraEmulator.ts:266-283
+   * — so the placeholder write is harmless and gets clobbered by the real
+   * value once queueInput() calls setRegister(0, ...) + resume()).
    */
   prompt(handle: number, bufferAddr: number, promptTextAddr: number, maxLen: number, mode: number): number {
     console.log(
       `[DreamDoor] Prompt: handle=0x${handle.toString(16)}, buffer=0x${bufferAddr.toString(16)}, maxLen=${maxLen}, mode=${mode}`
     );
 
-    const promptStr = this.emulator.readString(promptTextAddr, 200);
-
-    if (mode !== 0 && promptStr) {
+    // Guard: address 0 (or otherwise clearly invalid) → skip the read/emit
+    // entirely rather than risk emitting garbage bytes read from a
+    // meaningless address. Real Xim.s clients don't always set A1
+    // purposefully before this call (see dreamdoor-vectors.ts's Prompt
+    // handler comment) — this is the same tolerance InquirePointers and
+    // friends already lean on.
+    const promptStr = promptTextAddr > 0 ? this.emulator.readString(promptTextAddr, 200) : '';
+    if (promptStr) {
       this.socket?.emit('ansi-output', promptStr);
     }
 
-    // TODO(Task 4): block on real user input into bufferAddr (capped at
-    // maxLen) instead of returning success immediately.
-    return 1;
+    this.pendingPromptBuffer = bufferAddr;
+    this.pendingPromptMaxLen = Math.min(maxLen > 0 ? maxLen : 200, 200);
+    this.pendingPromptMode = mode;
+    this.promptLineBuffer = "";
+
+    // Drain any input already buffered (type-ahead). May complete the
+    // request synchronously (a CR was already in the backlog), in which
+    // case pendingPromptBuffer is cleared and we must not pause.
+    this.drainPromptInput();
+    if (this.pendingPromptBuffer === null) {
+      return 1;
+    }
+
+    this.emulator.pause();
+    return 0; // placeholder — see doc comment above
   }
 
   /**
@@ -222,13 +276,128 @@ export class DreamDoorLibrary {
    * GetKey (DD_LVO.GetKey)
    * Get single key press.
    * Real calling convention: getKey(handle, flags).
-   * Still a synchronous stub — Task 4 makes this a real deferred/blocking
-   * call coordinated with the input handler.
+   *
+   * If a char is already buffered (type-ahead), consumes and returns it
+   * immediately — a byte, matching v1.0's `move.b (A1),D0`. Otherwise
+   * pauses the emulator and defers to queueInput() (see completePrompt's
+   * doc comment on prompt() for the D0-after-resume mechanism this and
+   * that share).
    */
   getKey(handle: number, flags: number): number {
     console.log(`[DreamDoor] GetKey: handle=0x${handle.toString(16)}, flags=${flags}`);
-    // TODO(Task 4): block for real key input instead of returning 0.
-    return 0;
+
+    if (flags & 8) {
+      // v6.0 documents a word-extended return via this flag bit; not
+      // implemented — falls back to the v1.0 byte behavior below.
+      console.log('[DreamDoor] GetKey: v6 extended-key flag set but not implemented');
+    }
+
+    if (this.inputBuffer.length > 0) {
+      const ch = this.inputBuffer[0];
+      this.inputBuffer = this.inputBuffer.slice(1);
+      return ch.charCodeAt(0) & 0xff;
+    }
+
+    this.emulator.pause();
+    this.pendingKeyPending = true;
+    return 0; // placeholder — overwritten via setRegister(0, ...) in queueInput()
+  }
+
+  /**
+   * Deliver terminal input to the door (mirrors FIMProtocol.queueInput).
+   * Buffers into inputBuffer, then drains into whichever of
+   * prompt-line-accumulation / key-wait is pending — including neither,
+   * in which case the data just sits as type-ahead for the next Prompt/
+   * GetKey call.
+   */
+  queueInput(data: string): void {
+    this.inputBuffer += data;
+
+    if (this.pendingKeyPending) {
+      if (this.inputBuffer.length === 0) {
+        return;
+      }
+      const ch = this.inputBuffer[0];
+      this.inputBuffer = this.inputBuffer.slice(1);
+      this.pendingKeyPending = false;
+      this.emulator.setRegister(0, ch.charCodeAt(0) & 0xff);
+      this.emulator.resume();
+      return;
+    }
+
+    if (this.pendingPromptBuffer !== null) {
+      this.drainPromptInput();
+    }
+    // else: nothing pending — data stays in inputBuffer as type-ahead.
+  }
+
+  /**
+   * Feed buffered chars into the pending Prompt request one at a time:
+   * backspace (0x08/0x7F) drops the last buffered char and echoes
+   * "\b \b"; printable chars (0x20-0x7E) are appended and echoed up to
+   * pendingPromptMaxLen, then silently ignored past cap — echo is '*' for
+   * mode 4 (password), the literal char otherwise; CR completes the
+   * request (a following LF is swallowed as part of the same CRLF pair).
+   * Other control chars are dropped. Copies FIMProtocol.feedLineChars'
+   * per-keystroke shape (fim-protocol.ts:990-1028).
+   */
+  private drainPromptInput(): void {
+    while (this.pendingPromptBuffer !== null && this.inputBuffer.length > 0) {
+      const ch = this.inputBuffer[0];
+      this.inputBuffer = this.inputBuffer.slice(1);
+
+      if (ch === '\r') {
+        if (this.inputBuffer[0] === '\n') {
+          this.inputBuffer = this.inputBuffer.slice(1); // LF following CR ignored
+        }
+        this.completePrompt();
+        return;
+      }
+
+      const code = ch.charCodeAt(0);
+      if (code === 0x08 || code === 0x7f) {
+        if (this.promptLineBuffer.length > 0) {
+          this.promptLineBuffer = this.promptLineBuffer.slice(0, -1);
+          this.socket?.emit('ansi-output', '\b \b');
+        }
+        continue;
+      }
+
+      if (code >= 0x20 && code <= 0x7e && this.promptLineBuffer.length < this.pendingPromptMaxLen) {
+        this.promptLineBuffer += ch;
+        if (this.pendingPromptMode === 4) {
+          this.socket?.emit('ansi-output', '*');
+        } else {
+          this.socket?.emit('ansi-output', ch);
+        }
+      }
+      // Non-printable, or already at cap: drop silently (backspace/CR still work).
+    }
+  }
+
+  /**
+   * Complete the pending Prompt: write the accumulated line into the
+   * caller's buffer, set D0=1 (success — matches the real library's
+   * `Cmp.L #0,D0 / Beq .clost`; 0 only means carrier lost, which this
+   * emulation never synthesizes on its own), and resume the emulator.
+   * Safe to call from prompt() itself for the synchronous-complete path
+   * (CR already buffered before pause()) — resume() on an
+   * already-not-paused emulator is a harmless no-op (MoiraEmulator.ts:275-283),
+   * same as FIMProtocol.completeLineNow() relies on.
+   */
+  private completePrompt(): void {
+    const bufferAddr = this.pendingPromptBuffer!;
+    const maxLen = this.pendingPromptMaxLen;
+    const line = this.promptLineBuffer;
+
+    this.pendingPromptBuffer = null;
+    this.pendingPromptMaxLen = 0;
+    this.pendingPromptMode = 0;
+    this.promptLineBuffer = "";
+
+    this.writeString(bufferAddr, line, maxLen);
+    this.emulator.setRegister(0, 1);
+    this.emulator.resume();
   }
 
   /**
