@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
+import { routeAmigaDoorInput } from '../amiga-emulation/door-input-router';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
@@ -481,46 +482,17 @@ export function setDoors(doorList: Door[]) {
 
 /**
  * Route a live keystroke to the running 68K door's protocol stack.
- * SINGLE SOURCE OF TRUTH — both doorInputHandler closures (launchAmigaDoor
- * and executeAmigaDoor) must call this. They used to carry duplicated
- * copies; a FIM routing fix landed in only one of them and live input
- * silently died (2026-08-15).
  *
- * FIM doors: the protocol's per-keystroke line editor owns ALL input —
- * never also feed DOS stdin (double delivery corrupts the line buffer).
+ * Re-exported from amiga-emulation/door-input-router.ts, which is now the
+ * SINGLE SOURCE OF TRUTH both doorInputHandler closures below AND
+ * AmigaDoorSession's own 'door:input' socket listener delegate to (see
+ * that module's header comment for why the split existed and the two
+ * incidents it caused — most recently DD doors hanging live, Critical 1
+ * of the DD final-review wave, 2026-08-16). Re-exported here (rather than
+ * changing every import site) so existing imports of
+ * `routeAmigaDoorInput` from './door.handler' keep working unchanged.
  */
-export function routeAmigaDoorInput(shared: {
-  fimProtocol?: { queueInput(data: string): void } | null;
-  ximProtocol?: {
-    queueInput(data: string): void;
-    isWaitingForLineInput?(): boolean;
-    shouldInjectNativeInput?(): boolean;
-    injectInputToNativeDoor(char: string): void;
-  } | null;
-  dosLibrary?: { queueInput(data: string): void } | null;
-} | null | undefined, data: string): void {
-  if (!shared) return;
-  if (shared.fimProtocol) {
-    shared.fimProtocol.queueInput(data);
-    return;
-  }
-  // Check if XIM is waiting for input BEFORE queueing — prevents
-  // double-delivery when XIM completes a hotkey/line input.
-  const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
-  if (shared.ximProtocol) {
-    shared.ximProtocol.queueInput(data);
-    // Native 68K doors that poll GetMsg(AEDoorPort) need input injected
-    // via PutMsg — they never send JH_HK XIM commands themselves.
-    if (shared.ximProtocol.shouldInjectNativeInput?.()) {
-      for (const char of data) {
-        shared.ximProtocol.injectInputToNativeDoor(char);
-      }
-    }
-  }
-  if (shared.dosLibrary && !ximWaitingForInput) {
-    shared.dosLibrary.queueInput(data);
-  }
-}
+export { routeAmigaDoorInput };
 
 export function getDoors(): Door[] {
   return doors;

@@ -9,6 +9,7 @@ import { HunkLoader } from "./loader/HunkLoader.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { FIMProtocol } from "./fim/fim-protocol.js";
 import { fimPortName } from "./fim/fim-constants.js";
+import { routeAmigaDoorInput } from "./door-input-router.js";
 import { KickstartRom } from "./KickstartRom.js";
 import * as path from "path";
 import { appendFileSync } from "fs";
@@ -88,6 +89,11 @@ export class AmigaDoorSession {
     ximProtocol: null as XIMProtocol | null,
     fimProtocol: null as FIMProtocol | null,
     dreamDoorLibrary: null as any,
+    // Mirrors this.timHandler — kept in sync (see initializeLibraries())
+    // so door-input-router.ts's single routing function can reach TIM the
+    // same way it already reaches FIM/DreamDoor/XIM/DOS, all via this one
+    // sharedState object (Critical 1, DD final-review wave, 2026-08-16).
+    timHandler: null as TIMDoorMessageHandler | null,
 
     // ROM
     kickstartRom: null as KickstartRom | null,
@@ -165,95 +171,30 @@ debugLog(
       "[AmigaDoorSession] Setting up socket handlers for door:input and keys:state"
     );
 
-    // Handle user input (keystrokes)
+    // Handle user input (keystrokes).
+    //
+    // Delegates entirely to routeAmigaDoorInput (door-input-router.ts) —
+    // the SAME function door.handler.ts's live doorInputHandler closures
+    // call. This listener only fires from test/corpus harnesses in
+    // production (the frontend never emits 'door:input'; see that
+    // module's header comment), but it must still behave identically to
+    // the live path, not carry its own second copy of the per-protocol
+    // branch list (Critical 1, DD final-review wave, 2026-08-16 — two
+    // divergent copies is exactly how DD's live-hang bug and 2026-08-15's
+    // FIM live-input bug both happened).
     this.onDoorInput = (data: string) => {
 debugLog(
-        `[AmigaDoorSession] 🎹 door:input event received: "${data}" isRunning=${this.isRunning}`
+        `[AmigaDoorSession] door:input event received: "${data}" isRunning=${this.isRunning}`
       );
 
       if (!this.isRunning || !this.sharedState.dosLibrary) {
 debugLog(
-          "[AmigaDoorSession] ❌ Input ignored: door not running or DOS library not available"
+          "[AmigaDoorSession] Input ignored: door not running or DOS library not available"
         );
         return;
       }
 
-      // Route to FIM protocol if active. FAME BBS doors (doorType FIM) use a
-      // completely separate deferred-reply protocol (NR_PromptChars /
-      // AR_GetKey / NR_HotKey / AR_HotKey) — not XIM/TIM/DOS stdin — so
-      // forward and stop here to avoid double-delivering the same input.
-      if (this.fimProtocol) {
-debugLog(
-          `[AmigaDoorSession] Forwarding input to FIM protocol: "${data}"`
-        );
-        this.fimProtocol.queueInput(data);
-        return;
-      }
-
-      // Route to DreamDoor if a Prompt/GetKey call is deferred. Unlike FIM,
-      // dreamdoor.library calls are direct trap-vector calls, not a message
-      // port — DreamDoorLibrary tracks its own pending-input state (see Task 4).
-      if (this.sharedState.dreamDoorLibrary?.isWaitingForInput?.()) {
-debugLog(`[AmigaDoorSession] Forwarding input to DreamDoor: "${data}"`);
-        this.sharedState.dreamDoorLibrary.queueInput(data);
-        return;
-      }
-
-      // Check if XIM is waiting for input BEFORE queueing
-      // IMPORTANT: We must check this BEFORE calling queueInput because
-      // queueInput may complete a hotkey/line input which clears the waiting flag
-      const ximWaitingForInput =
-        this.sharedState.ximProtocol?.isWaitingForLineInput() ?? false;
-
-      // Check if TIM handler is waiting for input
-      const timWaitingForInput = this.timHandler?.isWaitingForInput() ?? false;
-
-      // Route to XIM protocol if active
-      if (this.sharedState.ximProtocol) {
-debugLog(
-          `[AmigaDoorSession] Forwarding input to XIM queue: "${data}" (ximWaiting=${ximWaitingForInput})`
-        );
-        this.sharedState.ximProtocol.queueInput(data);
-
-        // CRITICAL: For native 68K doors that poll GetMsg(AEDoorPort), we need to
-        // inject JH_HK messages via PutMsg. These doors don't send JH_HK XIM commands -
-        // they expect BBS to proactively send input messages to AEDoorPort.
-        //
-        // This is different from TypeScript doors that request input via XIM commands.
-        // shouldInjectNativeInput() returns true when:
-        //   - Door is registered (handshake complete)
-        //   - NOT waiting for line input/hotkey (not using XIM input commands)
-        if (this.sharedState.ximProtocol.shouldInjectNativeInput()) {
-debugLog(
-            `[AmigaDoorSession] Native door detected - injecting input via PutMsg`
-          );
-          // Inject each character separately for native door
-          for (const char of data) {
-            this.sharedState.ximProtocol.injectInputToNativeDoor(char);
-          }
-        }
-      }
-
-      // Route to TIM handler if active and waiting
-      if (this.timHandler && timWaitingForInput) {
-debugLog(
-          `[AmigaDoorSession] Forwarding input to TIM handler: "${data}"`
-        );
-        this.timHandler.queueInput(data);
-      }
-
-      // Route to DOS stdin ONLY when no protocol handler consumed the input
-      // This prevents double-delivery: once via XIM/TIM and once via DOS
-      if ((!this.sharedState.ximProtocol || !ximWaitingForInput) && !timWaitingForInput) {
-debugLog(
-          `[AmigaDoorSession] Queueing input for DOS stdin: "${data}"`
-        );
-        this.sharedState.dosLibrary.queueInput(data);
-      } else {
-debugLog(
-          `[AmigaDoorSession] Skipping DOS queue - input was consumed by protocol handler`
-        );
-      }
+      routeAmigaDoorInput(this.sharedState, data);
     };
     this.socket.on("door:input", this.onDoorInput);
 
@@ -591,6 +532,7 @@ console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger n
           this.socket,
           this.config
         );
+        this.sharedState.timHandler = this.timHandler;
         this.lifecycleManager.setTIMHandler(this.timHandler);
 debugLog(`[AmigaDoorSession] DoorControl handler initialized for ${effectiveDoorType} door`);
       }
