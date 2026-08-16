@@ -15,6 +15,7 @@ class MemStub {
     this.writeMemory(a + 2, v >>> 8); this.writeMemory(a + 3, v);
   }
   writeMemory16(a: number, v: number) { this.writeMemory(a, v >>> 8); this.writeMemory(a + 1, v); }
+  readMemory16(a: number) { return ((this.readMemory(a) << 8) | this.readMemory(a + 1)) & 0xffff; }
   // No-op default so callers that don't care about D0 (e.g. the deferred
   // Prompt test, which only asserts on the caller buffer + resume flag)
   // don't need to stub it themselves. Tests that DO care (e.g. the
@@ -34,7 +35,7 @@ describe("DreamDoorLibrary", () => {
       allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
       freeMem: () => undefined,
     });
-    lib.setSession({ user: { name: "SPOT", location: "Earth" }, bbsName: "AmiExpress Web", sysopName: "Sysop", conferenceName: "Main", conferenceId: 1 }, { emit: () => true });
+    lib.setSession({ user: { username: "SPOT", location: "Earth" }, bbsName: "AmiExpress Web", sysopName: "Sysop", conferenceName: "Main", conferenceId: 1 }, { emit: () => true });
     const nodeAddr = 0x1000;
     "1\0".split("").forEach((c, i) => emu.writeMemory(nodeAddr + i, c.charCodeAt(0)));
     const handle = lib.initDoor(nodeAddr);
@@ -55,7 +56,7 @@ describe("DreamDoorLibrary", () => {
       allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
       freeMem: () => undefined,
     });
-    lib.setSession({ user: { name: "SPOT" }, bbsName: "AmiExpress Web", sysopName: "Sysop", conferenceName: "Main", conferenceId: 3 }, { emit: () => true });
+    lib.setSession({ user: { username: "SPOT" }, bbsName: "AmiExpress Web", sysopName: "Sysop", conferenceName: "Main", conferenceId: 3 }, { emit: () => true });
     const nodeAddr = 0x1000;
     emu.writeMemory(nodeAddr, "1".charCodeAt(0));
     const handle = lib.initDoor(nodeAddr);
@@ -69,6 +70,54 @@ describe("DreamDoorLibrary", () => {
     expect(emu.readMemory(curConfPtr)).toBe(3); // CONF_NUMBER
   });
 
+  it("InquirePointers reads the REAL BBSSession/User field names, not invented ones (regression: DreamDoorSessionUser used to declare name/securityLevel/bytesUploaded/bytesDownloaded/screenLength/user-level timeRemaining, none of which the live session ever populates -- every DreamDoor door silently saw 'Guest' + all-default numeric fields for every caller)", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    // Field names exactly as the real BBSSession/User shape provides them
+    // (types.ts User interface + AmigaDoorSession/LibraryManager's own
+    // `bbsSession?.user?.username` convention) -- NOT the DreamDoorSessionUser
+    // interface's old invented names.
+    lib.setSession(
+      {
+        user: {
+          username: "RIVERBED",
+          location: "Earth",
+          phone: "555-1234",
+          secLevel: 200,
+          uploads: 4,
+          downloads: 7,
+          bytesUpload: 10240,
+          bytesDownload: 20480,
+          messagesPosted: 3,
+          timesCalled: 12,
+          ratio: 2,
+          dailyTimeLimit: 90,
+          linesPerScreen: 22,
+        },
+        conferenceId: 1,
+        timeRemaining: 42, // session-level, not a user field
+      },
+      { emit: () => true },
+    );
+    const nodeAddr = 0x1000;
+    emu.writeMemory(nodeAddr, "1".charCodeAt(0));
+    const handle = lib.initDoor(nodeAddr);
+    const outBuf = 0x400000;
+    lib.inquirePointers(outBuf, handle);
+    const curUserPtr = emu.readMemory32(outBuf + DP_OFFSET.dp_CurrUser);
+
+    expect(emu.readString(curUserPtr + USER_OFFSET.USER_HANDLE, 32)).toBe("RIVERBED");
+    expect(emu.readMemory(curUserPtr + USER_OFFSET.USER_SECURITYLEVEL)).toBe(200);
+    expect(emu.readMemory32(curUserPtr + USER_OFFSET.USER_ULBYTES)).toBe(10240);
+    expect(emu.readMemory32(curUserPtr + USER_OFFSET.USER_DLBYTES)).toBe(20480);
+    expect(emu.readMemory(curUserPtr + USER_OFFSET.USER_SCREENLENGTH)).toBe(22);
+    expect(emu.readMemory16(curUserPtr + USER_OFFSET.USER_TIMEREMAINING)).toBe(42);
+  });
+
   it("allocates structures sized DP_SIZEOF/USER_SIZEOF via the injected allocator (no static base address)", () => {
     const emu = new MemStub();
     const sizes: number[] = [];
@@ -77,7 +126,7 @@ describe("DreamDoorLibrary", () => {
       allocMem: (size: number) => { sizes.push(size); const a = nextAlloc; nextAlloc += size; return a; },
       freeMem: () => undefined,
     });
-    lib.setSession({ user: { name: "SPOT" }, conferenceId: 1 }, { emit: () => true });
+    lib.setSession({ user: { username: "SPOT" }, conferenceId: 1 }, { emit: () => true });
     lib.initDoor(0x1000);
     expect(sizes[0]).toBe(DP_SIZEOF);
     expect(sizes.length).toBeGreaterThanOrEqual(5); // DP, USER, CONF, CFG, node-info
@@ -126,7 +175,7 @@ describe("dreamdoor-vectors register wiring", () => {
       allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
       freeMem: () => undefined,
     });
-    lib.setSession({ user: { name: "SPOT" }, conferenceId: 1 }, { emit: () => true });
+    lib.setSession({ user: { username: "SPOT" }, conferenceId: 1 }, { emit: () => true });
     return lib;
   }
 
@@ -159,7 +208,7 @@ describe("dreamdoor-vectors register wiring", () => {
     emu.setRegister(2, 1); // D2 = mode
 
     const emitted: string[] = [];
-    lib.setSession({ user: { name: "SPOT" }, conferenceId: 1 }, { emit: (_e: string, s: string) => emitted.push(s) });
+    lib.setSession({ user: { username: "SPOT" }, conferenceId: 1 }, { emit: (_e: string, s: string) => emitted.push(s) });
 
     // No type-ahead is buffered, so Prompt defers (Task 4): the handler
     // returns a placeholder D0 and pauses the emulator, completing later
@@ -196,7 +245,7 @@ describe("dreamdoor-vectors register wiring", () => {
     emu.writeMemory(strAddr + text.length, 0);
 
     const emitted: string[] = [];
-    lib.setSession({ user: { name: "SPOT" }, conferenceId: 1 }, { emit: (_e: string, s: string) => emitted.push(s) });
+    lib.setSession({ user: { username: "SPOT" }, conferenceId: 1 }, { emit: (_e: string, s: string) => emitted.push(s) });
 
     emu.setRegister(0, handle); // D0
     emu.setRegister(8, strAddr); // A0

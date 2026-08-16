@@ -64,20 +64,19 @@ export interface DreamDoorSocketLike {
 }
 
 export interface DreamDoorSessionUser {
-  name?: string;
+  username?: string;
   location?: string;
   phone?: string;
-  securityLevel?: number;
+  secLevel?: number;
   ratio?: number;
   messagesPosted?: number;
   uploads?: number;
   downloads?: number;
   timesCalled?: number;
   dailyTimeLimit?: number;
-  timeRemaining?: number;
-  bytesUploaded?: number;
-  bytesDownloaded?: number;
-  screenLength?: number;
+  bytesUpload?: number;
+  bytesDownload?: number;
+  linesPerScreen?: number;
 }
 
 export interface DreamDoorSession {
@@ -86,6 +85,10 @@ export interface DreamDoorSession {
   sysopName?: string;
   conferenceName?: string;
   conferenceId?: number;
+  /** Minutes remaining in the caller's session — a BBSSession-level field
+   *  (not per-user), matching the real session shape run-amiga-door.ts /
+   *  corpus-integration-runner.ts / the live BBS all construct. */
+  timeRemaining?: number;
 }
 
 export class DreamDoorLibrary {
@@ -592,27 +595,27 @@ export class DreamDoorLibrary {
     // Confirmed/inferred string fields (USER_OFFSET, dd-constants.ts).
     // maxLen values are capped to the gap before the NEXT confirmed field
     // so a long value can never clobber a field at a higher offset.
-    this.writeString(addr + USER_OFFSET.USER_HANDLE, user.name || 'Guest', 25); // gap to USER_ORGANIZATION@0x34
+    this.writeString(addr + USER_OFFSET.USER_HANDLE, user.username || 'Guest', 25); // gap to USER_ORGANIZATION@0x34
     this.writeString(addr + USER_OFFSET.USER_ORGANIZATION, user.location || 'Unknown', 46); // gap to USER_VOICEPHONE@0x63
     this.writeString(addr + USER_OFFSET.USER_VOICEPHONE, user.phone || '', 15); // gap to USER_PASSWORD@0x78 is 21 bytes — stay well under that, don't "safely" bump toward 0xbc
     // USER_PASSWORD@0x78 is intentionally left zeroed — doors get session
     // state, not the plaintext password.
 
     // Confirmed/inferred numeric fields.
-    this.emulator.writeMemory(addr + USER_OFFSET.USER_SCREENLENGTH, user.screenLength || 24);
-    this.emulator.writeMemory32(addr + USER_OFFSET.USER_ULBYTES, user.bytesUploaded || 0);
-    this.emulator.writeMemory32(addr + USER_OFFSET.USER_DLBYTES, user.bytesDownloaded || 0);
+    this.emulator.writeMemory(addr + USER_OFFSET.USER_SCREENLENGTH, user.linesPerScreen || 24);
+    this.emulator.writeMemory32(addr + USER_OFFSET.USER_ULBYTES, user.bytesUpload || 0);
+    this.emulator.writeMemory32(addr + USER_OFFSET.USER_DLBYTES, user.bytesDownload || 0);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_ULFILES, user.uploads || 0);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_DLFILES, user.downloads || 0);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_PUBMESSAGES, user.messagesPosted || 0);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_CONNECTIONS, user.timesCalled || 1);
     this.emulator.writeMemory(addr + USER_OFFSET.USER_BYTERATIO, user.ratio || 0);
-    this.emulator.writeMemory(addr + USER_OFFSET.USER_SECURITYLEVEL, user.securityLevel || 10);
+    this.emulator.writeMemory(addr + USER_OFFSET.USER_SECURITYLEVEL, user.secLevel || 10);
     // USER_LASTCALL: intentionally unmodeled — no bbsSession field carries a
     // last-call timestamp yet, so this is left zeroed rather than forgotten.
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_LASTCALL, 0);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_DAILYTIMELIMIT, user.dailyTimeLimit || 60);
-    this.emulator.writeMemory16(addr + USER_OFFSET.USER_TIMEREMAINING, user.timeRemaining || 60);
+    this.emulator.writeMemory16(addr + USER_OFFSET.USER_TIMEREMAINING, this.bbsSession.timeRemaining || 60);
   }
 
   private populateConfStruct(): void {

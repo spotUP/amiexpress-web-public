@@ -108976,6 +108976,66 @@
      ]
     }
    }
+  },
+  {
+   "id": "dreamtagwall_1",
+   "name": "DreamTagWall",
+   "category": "DD-Reference",
+   "binary": "Doors/DreamTagWall/DreamTagWall",
+   "doorType": "DD",
+   "command": "DTAGWALL",
+   "timeoutMs": 30000,
+   "notes": "DreamTagWall by MadDoX, 1995. DayDream tagline-wall door (DOOR_COMMAND WALL, DOOR_SECURITY 1 per its .DOC; corpus entry uses command 'DTAGWALL' instead -- the real 'WALL' command is already claimed by the unrelated dRE!WAll door registered at Commands/BBSCmd/wall.info, and corpus-integration-runner's findDoor() resolves by live command-registry lookup first, so keeping 'WALL' here silently ran the wrong door -- caught by inspecting the first --capture golden, which was dRE!WAll's banner, not DreamTagWall's). Exercises dreamdoor.library SendString/Prompt/JoinConference and the write-path of CloseDoor's data-file handling. Captured live 2026-08-16 via run-amiga-door.ts + corpus-integration-runner --capture. First Prompt (maxLen=65, mode=2, 'Do you want to bomb the wall? (yes/No):') doubles as the free-text tag-line buffer -- whatever is typed there becomes the wall entry text (the y/n wording is cosmetic); the door then shows a second Prompt (maxLen=1) for a color 1-7/0. No separate handle prompt exists -- the DOC's 'line is ended with his Tag (handle)' is populated from the user's own handle via InquirePointers(dp_CurrUser), not further input. The door opens 'Daydream:Configs/TagWall.DAT' MODE_NEWFILE to store the entry; on a fresh checkout with no Daydream: assign configured, PathManager's generic volume fallback resolves this to configs/tagwall.dat, whose parent directory did not exist -- MODE_NEWFILE correctly IoErr=205's on a missing PARENT DIRECTORY per real AmigaDOS Open() semantics (Open() creates files, never directories); the door's own unhandled-error branch then prints 'Big Time FuckUp' and spins until the harness's execution timeout instead of exiting cleanly. This is a genuine data-file-provisioning gap, not an emulator bug -- fixed by adding the configs/ directory + an empty configs/tagwall.dat fixture (this task), the same way a real sysop's install would create the DayDream: volume structure before use. With the fixture present the door completes normally: writes 512+1568 bytes to TagWall.DAT, calls CloseDoor, EXIT 0. Integration timing note: corpus-integration-runner's full executeDoor() pipeline (drop files, MulticomManager, DoorLifecycleManager probes, etc.) reaches this door's first Prompt() far later than the isolated run-amiga-door.ts harness does (~1-2s there vs. 25-30s+ observed here under loaded-machine conditions) -- the scripted inputs/timeoutMs above are deliberately generous (25000ms/35000ms delays, 60000ms cap) to survive that, confirmed by a live --capture run reaching CloseDoor + DISPLAY_MENU cleanly. Tighter delays observed intermittent timeouts where input fired before dreamdoor.library was even OpenLibrary()'d and got silently swallowed by the DOS-stdin fallback queue instead of DreamDoor's own pending-Prompt state.",
+   "integration": {
+    "timeoutMs": 60000,
+    "assertions": {
+     "mustContain": [
+      "Do you want to bomb the wall?",
+      "What color do you want on your line?"
+     ],
+     "mustNotContain": [
+      "TRAP",
+      "PANIC",
+      "Guru",
+      "Software failure",
+      "Big Time FuckUp"
+     ]
+    },
+    "inputs": [
+     {
+      "delayMs": 25000,
+      "data": "yes\r"
+     },
+     {
+      "delayMs": 35000,
+      "data": "2\r"
+     }
+    ]
+   }
+  },
+  {
+   "id": "avhbaudcheck_1",
+   "name": "AVH-BaudCheck v0.1",
+   "category": "DD-Reference",
+   "binary": "Doors/AVHBaudCheck/AVH-BaudCheck",
+   "doorType": "DD",
+   "command": "AVHBC",
+   "timeoutMs": 15000,
+   "notes": "AVH-BaudCheck v0.1 by pSy!, from the AVH-BC01.LHA warez-scene release (no DOOR_COMMAND documented in the archive -- 'AVHBC' chosen for corpus dispatch only). Tiny DayDream 'front-end' baud-rate gate door: its shipped .cfg (extracted alongside the binary, not installed here) sets a minimum baud of 9600, intended to read dp_BpsRate via InquirePointers and reject connections below that. Captured live 2026-08-16: with no 'DayDream:Configs/AVH-BaudCheck.cfg' present (same generic PathManager volume-fallback as DreamTagWall, no fixture installed for this door), the door's own config-load path takes MODE_OLDFILE on the missing file (correctly IoErr=205, guarded in FileManager), prints 'WARNING: no BaudCheck.cfg found!!!', calls CloseDoor, and exits before ever reaching InquirePointers/dp_BpsRate -- a minimal-surface smoke oracle (no Guru/TRAP/crash, clean CloseDoor+EXIT 0) rather than a dp_BpsRate behavioral proof. Installing the real .cfg would additionally exercise the dp_BpsRate check; left out here as it's outside Task 8's exact file list.",
+   "integration": {
+    "timeoutMs": 10000,
+    "assertions": {
+     "mustContain": [
+      "WARNING: no BaudCheck.cfg found"
+     ],
+     "mustNotContain": [
+      "TRAP",
+      "PANIC",
+      "Guru",
+      "Software failure"
+     ]
+    }
+   }
   }
  ],
  "_generated": "2026-05-26b"
