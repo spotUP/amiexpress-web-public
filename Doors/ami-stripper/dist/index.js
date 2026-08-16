@@ -42,6 +42,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const strip_repack_1 = require("./strip-repack");
 const door = new bbs_door_sdk_1.CoreDoor({
     name: 'AmiStripper',
     version: '1.0.0',
@@ -148,38 +149,16 @@ door.onStart(async (ctx) => {
         // with ZIP bytes under its original name would silently mislead the
         // sysop about what's on disk, so the clean archive is written as a
         // sibling <name>.zip instead and the original is left untouched.
-        const tmpOut = archivePath + '.strip_tmp';
         await output.write(`\r\n\x1b[36mStripping and repacking...\x1b[0m\r\n`);
-        try {
-            const res = await stripperLib.stripArchive(archivePath, tmpOut);
-            const producedPath = res?.outputPath ?? tmpOut;
-            if (fs.existsSync(producedPath) && !fs.statSync(producedPath).isDirectory()) {
-                const origSize = fs.statSync(archivePath).size;
-                const finalPath = archivePath.replace(/\.(lha|lzx|lzh)$/i, '') + '.zip';
-                if (producedPath !== finalPath) {
-                    if (fs.existsSync(finalPath))
-                        fs.rmSync(finalPath, { force: true });
-                    fs.renameSync(producedPath, finalPath);
-                }
-                const newSize = fs.statSync(finalPath).size;
-                const saved = origSize - newSize;
-                await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(origSize)} -> ${formatSize(newSize)} (saved ${formatSize(saved)})\r\n`);
-                await output.write(`\x1b[32mStripped archive written to ${path.basename(finalPath)}\x1b[0m (portable ZIP format).\r\n`);
-                await output.write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
-            }
-            else {
-                if (fs.existsSync(producedPath))
-                    fs.rmSync(producedPath, { recursive: true, force: true });
-                await output.write(`\x1b[31mRepack produced unexpected output.\x1b[0m\r\n\r\n`);
-            }
+        const outcome = await (0, strip_repack_1.runStripRepack)(stripperLib.stripArchive, archivePath);
+        if (outcome.ok) {
+            const saved = outcome.origSize - outcome.newSize;
+            await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(outcome.origSize)} -> ${formatSize(outcome.newSize)} (saved ${formatSize(saved)})\r\n`);
+            await output.write(`\x1b[32mStripped archive written to ${path.basename(outcome.finalPath)}\x1b[0m (portable ZIP format).\r\n`);
+            await output.write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
         }
-        catch (err) {
-            if (fs.existsSync(tmpOut))
-                try {
-                    fs.unlinkSync(tmpOut);
-                }
-                catch { }
-            await output.write(`\x1b[31mRepack failed: ${err.message}\x1b[0m\r\n\r\n`);
+        else {
+            await output.write(`\x1b[31m${outcome.error}\x1b[0m\r\n\r\n`);
         }
         await output.write('\x1b[90mPress ENTER to continue...\x1b[0m');
         await input.waitForKey();

@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
+import { runStripRepack } from './strip-repack';
 
 const door = new Door({
   name: 'AmiStripper',
@@ -127,31 +128,16 @@ door.onStart(async (ctx: DoorContext) => {
     // with ZIP bytes under its original name would silently mislead the
     // sysop about what's on disk, so the clean archive is written as a
     // sibling <name>.zip instead and the original is left untouched.
-    const tmpOut = archivePath + '.strip_tmp';
     await output.write(`\r\n\x1b[36mStripping and repacking...\x1b[0m\r\n`);
 
-    try {
-      const res = await stripperLib.stripArchive(archivePath, tmpOut);
-      const producedPath: string = res?.outputPath ?? tmpOut;
-      if (fs.existsSync(producedPath) && !fs.statSync(producedPath).isDirectory()) {
-        const origSize = fs.statSync(archivePath).size;
-        const finalPath = archivePath.replace(/\.(lha|lzx|lzh)$/i, '') + '.zip';
-        if (producedPath !== finalPath) {
-          if (fs.existsSync(finalPath)) fs.rmSync(finalPath, { force: true });
-          fs.renameSync(producedPath, finalPath);
-        }
-        const newSize = fs.statSync(finalPath).size;
-        const saved = origSize - newSize;
-        await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(origSize)} -> ${formatSize(newSize)} (saved ${formatSize(saved)})\r\n`);
-        await output.write(`\x1b[32mStripped archive written to ${path.basename(finalPath)}\x1b[0m (portable ZIP format).\r\n`);
-        await output.write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
-      } else {
-        if (fs.existsSync(producedPath)) fs.rmSync(producedPath, { recursive: true, force: true });
-        await output.write(`\x1b[31mRepack produced unexpected output.\x1b[0m\r\n\r\n`);
-      }
-    } catch (err) {
-      if (fs.existsSync(tmpOut)) try { fs.unlinkSync(tmpOut); } catch {}
-      await output.write(`\x1b[31mRepack failed: ${(err as Error).message}\x1b[0m\r\n\r\n`);
+    const outcome = await runStripRepack(stripperLib.stripArchive, archivePath);
+    if (outcome.ok) {
+      const saved = outcome.origSize - outcome.newSize;
+      await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(outcome.origSize)} -> ${formatSize(outcome.newSize)} (saved ${formatSize(saved)})\r\n`);
+      await output.write(`\x1b[32mStripped archive written to ${path.basename(outcome.finalPath)}\x1b[0m (portable ZIP format).\r\n`);
+      await output.write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
+    } else {
+      await output.write(`\x1b[31m${outcome.error}\x1b[0m\r\n\r\n`);
     }
 
     await output.write('\x1b[90mPress ENTER to continue...\x1b[0m');
