@@ -349,9 +349,35 @@ export class DreamDoorLibrary {
    * input via queueInput(). Lets AmigaDoorSession's input router (Task 5)
    * decide whether to forward a keystroke here instead of XIM/TIM/DOS
    * stdin, the same way it checks FIMProtocol before those.
+   *
+   * NOT used by the live input router (see isActive() below) — gating
+   * routing on this alone made type-ahead (keys typed between Prompt/GetKey
+   * calls) unreachable in production, since input typed while nothing is
+   * pending would fall through to DOS stdin instead of this library's own
+   * inputBuffer (Important 2, DD final-review wave, 2026-08-16). Kept for
+   * callers that specifically need to know "is a call deferred right now"
+   * rather than "is a DD door active".
    */
   isWaitingForInput(): boolean {
     return this.pendingPromptBuffer !== null || this.pendingKeyPending;
+  }
+
+  /**
+   * True from InitDoor() through CloseDoor() — the whole lifetime of a
+   * running DreamDoor (DD) door, not just while a Prompt/GetKey call is
+   * deferred. Backed by the existing `initialized` flag (set in
+   * initDoor(), cleared in closeDoor()) rather than a new field.
+   *
+   * This is what the live input router (door-input-router.ts) routes on
+   * (Important 2, DD final-review wave): mirrors FIMProtocol's own
+   * pattern of routing unconditionally on protocol presence and letting
+   * the library's own state machine (queueInput()'s type-ahead buffering
+   * vs. pending-completion branches) decide what to do with each byte,
+   * instead of gating routing on isWaitingForInput() and losing every
+   * keystroke typed between deferred calls to the DOS stdin fallback.
+   */
+  isActive(): boolean {
+    return this.initialized;
   }
 
   /**
