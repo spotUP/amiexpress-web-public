@@ -804,6 +804,12 @@ debugLog("[LibraryManager] fame.library opened, installing vectors...");
         // itself (see LibraryTraps.ts) so new traps are pushed to MOIRA
         // immediately after install.
       }
+      if (name.toLowerCase() === "dreamdoor.library") {
+debugLog("[LibraryManager] dreamdoor.library opened, installing vectors...");
+        this.libraryTraps!.installDreamDoorVectors();
+        // syncTrapAddressesToMoira() is called inside installDreamDoorVectors()
+        // itself after this task's LibraryTraps.ts fix, mirroring fame.library.
+      }
       if (name.toLowerCase() === "graphics.library") {
 debugLog(
           `[LibraryManager] ${name} opened, installing stub vectors from LVOs.i...`

@@ -87,6 +87,7 @@ export class AmigaDoorSession {
     libraryTraps: null as any,
     ximProtocol: null as XIMProtocol | null,
     fimProtocol: null as FIMProtocol | null,
+    dreamDoorLibrary: null as any,
 
     // ROM
     kickstartRom: null as KickstartRom | null,
@@ -186,6 +187,15 @@ debugLog(
           `[AmigaDoorSession] Forwarding input to FIM protocol: "${data}"`
         );
         this.fimProtocol.queueInput(data);
+        return;
+      }
+
+      // Route to DreamDoor if a Prompt/GetKey call is deferred. Unlike FIM,
+      // dreamdoor.library calls are direct trap-vector calls, not a message
+      // port — DreamDoorLibrary tracks its own pending-input state (see Task 4).
+      if (this.sharedState.dreamDoorLibrary?.isWaitingForInput?.()) {
+debugLog(`[AmigaDoorSession] Forwarding input to DreamDoor: "${data}"`);
+        this.sharedState.dreamDoorLibrary.queueInput(data);
         return;
       }
 
@@ -644,6 +654,7 @@ debugLog(
     this.sharedState.iconLibrary = this.libraryManager.iconLibrary;
     this.sharedState.libraryTraps = this.libraryManager.libraryTraps;
     this.sharedState.ximProtocol = this.libraryManager.ximProtocol;
+    this.sharedState.dreamDoorLibrary = this.libraryManager.dreamDoorLibrary;
     this.sharedState.doorPortAddress = this.libraryManager.getDoorPortAddress();
     this.sharedState.aePortAddress = this.libraryManager.getDoorPortAddress(); // Same as door port for RTW
     this.sharedState.doorReplyPortAddr =

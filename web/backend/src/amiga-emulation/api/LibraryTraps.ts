@@ -1211,6 +1211,13 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
     }
 
     console.log(`[LibraryTraps] Installed ${DREAMDOOR_VECTORS.length} dreamdoor.library vectors`);
+
+    // CRITICAL: Sync new trap addresses to MOIRA for batch execution.
+    // Mirrors installFameVectors below — installDreamDoorVectors is now
+    // invoked from LibraryManager's OpenLibrary callback (Task 5), so
+    // newly installed traps must be pushed into MOIRA's trap set
+    // immediately or the WASM batch loop will run straight through them.
+    this.syncTrapAddressesToMoira();
   }
 
   installFameVectors(): void {
@@ -1246,11 +1253,10 @@ console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathie
     console.log(`[LibraryTraps] Installed ${fameVectors.length} fame.library vectors`);
 
     // CRITICAL: Sync new trap addresses to MOIRA for batch execution.
-    // Unlike installDreamDoorVectors (never wired to an open callback),
-    // installFameVectors is invoked from LibraryManager's OpenLibrary
-    // callback, so newly installed traps must be pushed into MOIRA's
-    // trap set immediately or the WASM batch loop will run straight
-    // through them.
+    // installFameVectors (and, as of Task 5, installDreamDoorVectors above)
+    // is invoked from LibraryManager's OpenLibrary callback, so newly
+    // installed traps must be pushed into MOIRA's trap set immediately or
+    // the WASM batch loop will run straight through them.
     this.syncTrapAddressesToMoira();
   }
 

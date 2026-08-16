@@ -1184,12 +1184,15 @@ debugLog(
           revision: 0,
           stubJumpTableEntries: 500,
         };
+      // LVO range spans -6 through -144 = 24 slots at 6-byte spacing
+      // (confirmed, dd-constants.ts). 20 truncated before DDCommand@-132
+      // and the unnamed -138/-144 slots.
       case "dreamdoor.library":
         return {
           address: this.DREAMDOOR_LIB_ADDR,
           version: 1,
           revision: 0,
-          stubJumpTableEntries: 20,
+          stubJumpTableEntries: 24,
         };
       case "rexxsupport.library":
         return {

@@ -342,6 +342,16 @@ export class DreamDoorLibrary {
   }
 
   /**
+   * True while a Prompt or GetKey call is deferred, waiting on terminal
+   * input via queueInput(). Lets AmigaDoorSession's input router (Task 5)
+   * decide whether to forward a keystroke here instead of XIM/TIM/DOS
+   * stdin, the same way it checks FIMProtocol before those.
+   */
+  isWaitingForInput(): boolean {
+    return this.pendingPromptBuffer !== null || this.pendingKeyPending;
+  }
+
+  /**
    * Feed buffered chars into the pending Prompt request one at a time:
    * backspace (0x08/0x7F) drops the last buffered char and echoes
    * "\b \b"; printable chars (0x20-0x7E) are appended and echoed up to
