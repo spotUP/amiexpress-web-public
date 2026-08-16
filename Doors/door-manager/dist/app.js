@@ -724,13 +724,31 @@ class RepoView extends ViewManager_1.BaseView {
         // "a" must filter, not open [A]rchive browse (filterKeypress above is a
         // raw keypress listener and is unaffected by this guard).
         this.keys.setGuard(() => !filterActive);
-        // F/Tab from the LIST → enter filter mode
+        // F/Tab from the LIST → enter filter mode.
+        //
+        // BUG FIX (leak): blessed's Screen._handleKey dispatches ONE physical
+        // keystroke in three synchronous phases against the SAME event — (1)
+        // screen.key()-registered handlers (this KeyBinder), then (2) an emit
+        // to whichever element is `_focused` *at that moment*, then (3) a final
+        // broadcast emit('keypress', ...) to plain screen.on('keypress', ...)
+        // listeners (filterKeypress below). Calling focusFilter() synchronously
+        // from phase (1) changes `_focused` to filterBox mid-dispatch, so phase
+        // (2) re-delivers the SAME 'f' to the Textbox (which inserts it into
+        // its own buffer) and phase (3) sees filterActive already true and
+        // appends 'f' to `this.filter` too — the same physical keystroke that
+        // activates the mode also becomes its first character. Deferring the
+        // mode flip + focus() past the current dispatch (process.nextTick, same
+        // pattern as InfoEditorOverlay's skipFirst/blockNextSelect) means phases
+        // (2) and (3) of THIS keystroke still see the pre-activation state, so
+        // nothing gets re-delivered to the newly-focused input.
         this.keys.key(['f', 'F', '/', 'tab'], () => {
             if (filterActive)
                 return; // already in filter
-            filterActive = true;
-            this.layout.focusFilter();
-            this.layout.render();
+            process.nextTick(() => {
+                filterActive = true;
+                this.layout.focusFilter();
+                this.layout.render();
+            });
         });
         this.keys.key(['r', 'R'], () => this.doInstallUninstall());
         this.keys.key(['s', 'S'], () => this.doStrip());
