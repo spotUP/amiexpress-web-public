@@ -671,6 +671,40 @@ console.log('🎯 F1 pressed during chat - exiting chat');
       return;
     }
 
+    // Review fix (task 18): route raw keystrokes while inChat into a
+    // line buffer, flushing to sendChatMessage on Enter — mirrors every
+    // other line-input state in this handler (session.inputBuffer), same
+    // field operator-chat.handler.ts's OPERATOR_CHAT_ACTIVE flow uses.
+    // Previously the ONLY inChat-aware branch here was the F1-exit check
+    // above; every other keystroke (from either party — this gate isn't
+    // sysop-specific) fell through to normal BBS command processing, so
+    // "chat" never actually reached sendChatMessage for anyone.
+    if ((session as any).inChat) {
+      if (data === '\r' || data === '\n') {
+        const message = session.inputBuffer || '';
+        session.inputBuffer = '';
+        socket.emit('ansi-output', '\r\n');
+        if (message.length > 0) {
+          sendChatMessage(socket, session, message);
+        }
+        return;
+      }
+      if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer.length > 0) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          socket.emit('ansi-output', '\b \b');
+        }
+        return;
+      }
+      // Printable characters only — ignore other escape sequences/control
+      // bytes (e.g. arrow keys) rather than buffering them into the message.
+      if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer += data;
+        socket.emit('ansi-output', data);
+      }
+      return;
+    }
+
     // Out-of-band Ctrl+C abort for long-running script engines (AREXX).
     // The script may be in a tight loop with no doorInputHandler installed —
     // the regular GETCHAR/Prompt path can't see Ctrl+C in that window.

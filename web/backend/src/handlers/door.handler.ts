@@ -2821,6 +2821,25 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     // cursor one row below where it should land.
     flushOutput(socket);
 
+    // Task 18 review fix (round 2): consume session.sysopPagePending
+    // IMMEDIATELY after the door exits/flushes — before ANY of the
+    // logDoorExit/CHAIN/RETURNCOMMAND/exitState-merge work below that can
+    // throw. Previously the flag was only consumed right before running
+    // the wait, much later; an exception anywhere in that risky region hit
+    // the outer catch with sysopPagePending still true, and the STALE flag
+    // then wrongly fired the page-wait on the NEXT, unrelated door's exit.
+    // Consuming here means the flag is already false regardless of what
+    // happens next — only the ACTUAL wait is deferred (to after the
+    // CHAIN/RETURNCOMMAND block, matching "runs after door exit, before
+    // returning to menu"), using the chat session captured below.
+    let pendingSysopPageChatSession: unknown;
+    try {
+      const { consumePendingSysopPage } = require('./chat/chat.handler');
+      pendingSysopPageChatSession = consumePendingSysopPage(session);
+    } catch (err) {
+console.warn('[executeAmigaDoor] consumePendingSysopPage failed:', err);
+    }
+
     // Log door exit to Node{N}/DoorLog
     logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
 
@@ -2961,20 +2980,20 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
     // CF_InternalCmd "C") page the sysop mid-door through notifySysopPage(),
     // which only sets session.sysopPagePending — no UI runs while the door
     // still owns the screen. NOW that the door has fully exited and its
-    // output was flushed above, run the classic page-wait UX (dots
-    // animation / sysop-answer / timeout) via the SAME ported
-    // displayInternalPager()/completePaging(), reusing the chat session
-    // notifySysopPage already created. This deliberately calls
-    // runPendingSysopPageWait, NOT startSysopPage — startSysopPage would
+    // output was flushed above (and the flag already consumed into
+    // pendingSysopPageChatSession, see the flushOutput block), run the
+    // classic page-wait UX (dots animation / sysop-answer / timeout) via
+    // the SAME ported displayInternalPager()/completePaging(), reusing the
+    // chat session notifySysopPage already created. This deliberately
+    // calls runSysopPageWait, NOT startSysopPage — startSysopPage would
     // try executePagerDoor first, which launches the PowerPager door;
     // 5D_Page already rendered its own paging screen, so recursively
     // launching PowerPager here would fight it.
-    if (session.sysopPagePending) {
+    if (pendingSysopPageChatSession) {
       await new Promise<void>((resolve) => {
         try {
-          const { runPendingSysopPageWait } = require('./chat/chat.handler');
-          const started = runPendingSysopPageWait(socket, session, () => resolve());
-          if (!started) resolve();
+          const { runSysopPageWait } = require('./chat/chat.handler');
+          runSysopPageWait(socket, session, pendingSysopPageChatSession, () => resolve());
         } catch (err) {
 console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
           resolve();
@@ -3019,6 +3038,13 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
+    // Belt-and-braces (task 18 review fix, round 2): a crash BEFORE
+    // flushOutput() (e.g. inside amigaSession.start() itself) means the
+    // consume-first block never ran, so a "C" fired earlier in this same
+    // crashed door run could still leave sysopPagePending stuck true.
+    // Clear it here too so it can never survive into the next door's exit.
+    session.sysopPagePending = false;
+    delete session.sysopPageChatSessionId;
     try {
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
