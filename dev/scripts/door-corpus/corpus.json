@@ -109021,18 +109021,21 @@
    "doorType": "DD",
    "command": "AVHBC",
    "timeoutMs": 15000,
-   "notes": "AVH-BaudCheck v0.1 by pSy!, from the AVH-BC01.LHA warez-scene release (no DOOR_COMMAND documented in the archive -- 'AVHBC' chosen for corpus dispatch only). Tiny DayDream 'front-end' baud-rate gate door: its shipped .cfg (extracted alongside the binary, not installed here) sets a minimum baud of 9600, intended to read dp_BpsRate via InquirePointers and reject connections below that. Captured live 2026-08-16: with no 'DayDream:Configs/AVH-BaudCheck.cfg' present (same generic PathManager volume-fallback as DreamTagWall, no fixture installed for this door), the door's own config-load path takes MODE_OLDFILE on the missing file (correctly IoErr=205, guarded in FileManager), prints 'WARNING: no BaudCheck.cfg found!!!', calls CloseDoor, and exits before ever reaching InquirePointers/dp_BpsRate -- a minimal-surface smoke oracle (no Guru/TRAP/crash, clean CloseDoor+EXIT 0) rather than a dp_BpsRate behavioral proof. Installing the real .cfg would additionally exercise the dp_BpsRate check; left out here as it's outside Task 8's exact file list.",
+   "notes": "AVH-BaudCheck v0.1 by pSy!, from the AVH-BC01.LHA warez-scene release (no DOOR_COMMAND documented in the archive -- 'AVHBC' chosen for corpus dispatch only). Tiny DayDream 'front-end' baud-rate gate door: its shipped .cfg (re-extracted read-only from Archives/DayDream/AVH-BC01.LHA to /private/tmp, never modifying Archives/) sets a minimum baud of 9600 on line 1 (a scene-group tag on line 2, decorative banner after) and is now installed at configs/avh-baudcheck.cfg -- PathManager's generic unknown-volume fallback resolves 'DayDream:Configs/AVH-BaudCheck.cfg' there, same mechanism as DreamTagWall's TagWall.DAT. Fix round 2026-08-16 (code review on the first cut): the original corpus entry shipped WITHOUT the .cfg, so the door short-circuited on its own missing-config warning before ever reaching InquirePointers/dp_BpsRate -- the exact behavior this door was chosen as an oracle for (task-8-brief.md). With the real .cfg present the door now reads dp_BpsRate (this emulator's session baud is 115200, i.e. the harness's simulated 'BAUD'/'SERIALRATE' ENV vars), compares against the configured 9600 minimum, and prints 'Van Helsing's BaudChecker v0.1' / 'Checking speed........' / 'Fast Enough!' before CloseDoor + clean EXIT 0 -- confirmed live via corpus-integration-runner --capture 2026-08-16 (wallMs ~8.4s, up from ~0.9s pre-fix; integration.timeoutMs raised 10000->20000 for margin under loaded-machine conditions, per DreamTagWall's own generous-timeout precedent). No 'too slow' branch exercised (would need a sub-9600 simulated baud, out of scope here).",
    "integration": {
-    "timeoutMs": 10000,
+    "timeoutMs": 20000,
     "assertions": {
      "mustContain": [
-      "WARNING: no BaudCheck.cfg found"
+      "Van Helsing's BaudChecker v0.1",
+      "Checking speed",
+      "Fast Enough!"
      ],
      "mustNotContain": [
       "TRAP",
       "PANIC",
       "Guru",
-      "Software failure"
+      "Software failure",
+      "WARNING: no BaudCheck.cfg found"
      ]
     }
    }
