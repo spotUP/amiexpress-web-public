@@ -283,6 +283,77 @@ describe("dreamdoor-vectors register wiring", () => {
   });
 });
 
+describe("DreamDoorLibrary terminal-text conversion (layout-bug fix, found live-testing DreamTagWall/AVH-BaudCheck, 2026-08-16)", () => {
+  // SendString/Prompt read RAW text straight out of the door's own 68K
+  // memory. Real Amiga doors rely on console.device's leniency: bare CSI
+  // (0x9B) / bare "[32m" ANSI codes without an ESC prefix, and bare LF
+  // line endings (no CR). A modern xterm.js terminal does neither —
+  // bare "[" codes print as literal garbage text and bare LF produces
+  // the classic staircase effect. xim/system-commands.ts's equivalent
+  // raw-Amiga-text-read call sites already wrap every emit in
+  // convertAmigaTextForTerminal(); DreamDoorLibrary's SendString/Prompt
+  // didn't, until this fix.
+  function makeDirectLib() {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    return { emu, lib };
+  }
+
+  it("SendString converts a bare Amiga CSI byte (0x9B) into a proper ESC[ sequence", () => {
+    const { emu, lib } = makeDirectLib();
+    const emitted: string[] = [];
+    lib.setSession({}, { emit: (_e: string, s?: string) => { if (s) emitted.push(s); return true; } });
+    const handle = lib.initDoor(0x1000);
+
+    const strAddr = 0x4000;
+    // "\x9b32mRED\x9b0m" — Amiga bare-CSI color codes, no ESC prefix.
+    const raw = "\x9b32mRED\x9b0m";
+    raw.split("").forEach((c, i) => emu.writeMemory(strAddr + i, c.charCodeAt(0)));
+
+    lib.sendString(handle, strAddr);
+
+    expect(emitted).toContain("\x1b[32mRED\x1b[0m");
+    // The bare, un-prefixed form must NOT reach the terminal as literal text.
+    expect(emitted.some(s => s.includes("\x9b"))).toBe(false);
+  });
+
+  it("SendString converts bare LF line endings to CRLF (no staircase effect)", () => {
+    const { emu, lib } = makeDirectLib();
+    const emitted: string[] = [];
+    lib.setSession({}, { emit: (_e: string, s?: string) => { if (s) emitted.push(s); return true; } });
+    const handle = lib.initDoor(0x1000);
+
+    const strAddr = 0x4000;
+    const raw = "line one\nline two\n";
+    raw.split("").forEach((c, i) => emu.writeMemory(strAddr + i, c.charCodeAt(0)));
+
+    lib.sendString(handle, strAddr);
+
+    expect(emitted).toContain("line one\r\nline two\r\n");
+  });
+
+  it("Prompt's prompt-text echo (read from A0) also converts bare ANSI/LF, not just SendString", () => {
+    const { emu, lib } = makeDirectLib();
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const emitted: string[] = [];
+    lib.setSession({}, { emit: (_e: string, s?: string) => { if (s) emitted.push(s); return true; } });
+    const handle = lib.initDoor(0x1000);
+
+    const bufferAddr = 0x2000;
+    const raw = "\x9b4m\x9b32mBanner line\nDo you want to continue?";
+    raw.split("").forEach((c, i) => emu.writeMemory(bufferAddr + i, c.charCodeAt(0)));
+
+    lib.prompt(handle, bufferAddr, 0, 30, 1);
+
+    expect(emitted).toContain("\x1b[4m\x1b[32mBanner line\r\nDo you want to continue?");
+  });
+});
+
 describe("DreamDoorLibrary deferred Prompt/GetKey (Task 4)", () => {
   it("Prompt defers until queueInput, echoes prompt text first, writes answer into the caller buffer", () => {
     const emu = new MemStub();

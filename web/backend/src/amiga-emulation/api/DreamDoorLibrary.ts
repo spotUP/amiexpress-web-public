@@ -19,6 +19,7 @@
 
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DP_OFFSET, DP_SIZEOF, USER_OFFSET, CONF_OFFSET, CFG_OFFSET } from '../dd/dd-constants';
+import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
 
 const MEMF_CLEAR = 1 << 16;
 
@@ -279,7 +280,18 @@ export class DreamDoorLibrary {
       promptStr = this.emulator.readString(promptTextAddr, 200);
     }
     if (promptStr) {
-      this.socket?.emit('ansi-output', promptStr);
+      // Layout-bug fix (found live-testing DreamTagWall/AVH-BaudCheck,
+      // 2026-08-16): this reads RAW text straight out of the door's own
+      // 68K memory, exactly like xim/system-commands.ts's equivalent
+      // Amiga-text-read call sites (which already wrap every emit in
+      // convertAmigaTextForTerminal()) — but this one didn't. Real Amiga
+      // doors rely on console.device's leniency: bare CSI (0x9B) / bare
+      // "[32m" without an ESC prefix, and bare LF line endings (no CR).
+      // A modern xterm.js terminal doesn't do either of those — bare "["
+      // codes print as literal garbage characters and bare LF produces
+      // the classic staircase effect, both of which read as "layout
+      // issues" (misaligned banners, stray bracket/number noise).
+      this.socket?.emit('ansi-output', convertAmigaTextForTerminal(promptStr));
     }
 
     this.pendingPromptBuffer = bufferAddr;
@@ -310,7 +322,12 @@ export class DreamDoorLibrary {
     console.log(`[DreamDoor] SendString: "${str.substring(0, 50)}..."`);
 
     if (str) {
-      this.socket?.emit('ansi-output', str);
+      // Same layout-bug fix as prompt() above — SendString is DreamDoor's
+      // primary banner/text-output call and reads raw door-authored text
+      // straight out of 68K memory, so it needs the same
+      // convertAmigaTextForTerminal() every other raw-Amiga-text read
+      // path in this codebase already applies (xim/system-commands.ts).
+      this.socket?.emit('ansi-output', convertAmigaTextForTerminal(str));
     }
 
     return handle;
