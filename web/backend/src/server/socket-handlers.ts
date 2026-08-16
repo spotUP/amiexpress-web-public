@@ -38,7 +38,8 @@ import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
 import { handleCommand } from '../handlers/command.handler';
-import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
+import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
+import { handleChatModeInput } from '../utils/chat-mode-input.util';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
 import { BBSPaths } from '../utils/bbs-paths.util';
@@ -664,44 +665,13 @@ console.log('🎯 Is POST_MESSAGE_SUBJECT?', session.subState === LoggedOnSubSta
 console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
     }
 
-    // Handle special chat keys (like F1 in AmiExpress)
-    if ((session as any).inChat && data === '\x1b[OP') { // F1 key
-console.log('🎯 F1 pressed during chat - exiting chat');
-      exitChat(socket, session);
-      return;
-    }
-
-    // Review fix (task 18): route raw keystrokes while inChat into a
-    // line buffer, flushing to sendChatMessage on Enter — mirrors every
-    // other line-input state in this handler (session.inputBuffer), same
-    // field operator-chat.handler.ts's OPERATOR_CHAT_ACTIVE flow uses.
-    // Previously the ONLY inChat-aware branch here was the F1-exit check
-    // above; every other keystroke (from either party — this gate isn't
-    // sysop-specific) fell through to normal BBS command processing, so
-    // "chat" never actually reached sendChatMessage for anyone.
-    if ((session as any).inChat) {
-      if (data === '\r' || data === '\n') {
-        const message = session.inputBuffer || '';
-        session.inputBuffer = '';
-        socket.emit('ansi-output', '\r\n');
-        if (message.length > 0) {
-          sendChatMessage(socket, session, message);
-        }
-        return;
-      }
-      if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer.length > 0) {
-          session.inputBuffer = session.inputBuffer.slice(0, -1);
-          socket.emit('ansi-output', '\b \b');
-        }
-        return;
-      }
-      // Printable characters only — ignore other escape sequences/control
-      // bytes (e.g. arrow keys) rather than buffering them into the message.
-      if (data.length === 1 && data >= ' ' && data <= '~') {
-        session.inputBuffer += data;
-        socket.emit('ansi-output', data);
-      }
+    // Handle chat-mode keystrokes (F1 to exit, otherwise buffer/echo and
+    // flush to sendChatMessage on Enter) — extracted to
+    // chat-mode-input.util.ts (task 18, review round 3) so the F1-exit
+    // path and the buffering path are ONE routing function instead of two
+    // separate branches; see that file for why the split used to leak
+    // session.inputBuffer across chat entry/exit.
+    if (handleChatModeInput(socket, session, data)) {
       return;
     }
 

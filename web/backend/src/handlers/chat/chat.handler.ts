@@ -347,6 +347,15 @@ console.warn(`[ChatHandler] acceptChat: paged user ${accepted.userId} has no liv
   enterChatMode(socket: any, session: BBSSession, chatSession: ChatSession): void {
     session.inChat = true;
     session.chatSession = chatSession;
+    // Review fix (round 3, task 18): this is the ONE place inChat gets
+    // set — clearing here (not per call-site) covers every entry path
+    // (sysop accepting, paged user wired in by acceptChat). Without this,
+    // whatever the party had half-typed at the menu prompt before chat
+    // started (READ_COMMAND only does a falsy-guard, not clear-on-entry —
+    // command.handler.ts:3661-3663) silently prepends onto their first
+    // chat line once socket-handlers.ts starts routing keystrokes into
+    // this same session.inputBuffer for chat instead.
+    session.inputBuffer = '';
 
     socket.emit('ansi-output', '\x1b[36m[Chat Mode Active]\x1b[0m\r\n');
     socket.emit('ansi-output', 'You are now in chat with the user.\r\n');
@@ -376,6 +385,10 @@ console.warn(`[ChatHandler] acceptChat: paged user ${accepted.userId} has no liv
         counterpart.socket.emit('ansi-output', '\r\n\x1b[32mChat session ended.\r\n');
         delete counterpart.session.inChat;
         delete counterpart.session.chatSession;
+        // Review fix (round 3): same leak as below, for the party who
+        // DIDN'T call exitChat — their own partially-typed chat line must
+        // not resurface as a stray prefix on their next menu command.
+        counterpart.session.inputBuffer = '';
         counterpart.session.menuPause = true;
         counterpart.session.subState = LoggedOnSubState.DISPLAY_MENU;
         counterpart.socket.leave?.(this.chatRoom(chatSession.id));
@@ -387,6 +400,14 @@ console.warn(`[ChatHandler] acceptChat: paged user ${accepted.userId} has no liv
     // Clear chat state
     delete session.inChat;
     delete session.chatSession;
+    // Review fix (round 3, task 18): this is the ONE place inChat gets
+    // cleared for the calling party (F1 in socket-handlers.ts returns
+    // immediately after calling exitChat, before ever reaching the
+    // inChat-buffering branch that would otherwise flush/clear it on
+    // Enter) — a mid-line F1 press left the partial chat text sitting in
+    // session.inputBuffer, which then silently prefixed whatever command
+    // the user typed next at the menu.
+    session.inputBuffer = '';
 
     // Display exit message
     socket.emit('ansi-output', '\r\n\x1b[32mChat session ended.\r\n');
