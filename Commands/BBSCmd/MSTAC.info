@@ -1,0 +1,9 @@
+BBSCMD=MSTAC
+NAME=MST-AC
+TYPE=DD
+LOCATION=Doors:MST-AC/MST-AC
+DESCRIPTION=MasterSuite access-check door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

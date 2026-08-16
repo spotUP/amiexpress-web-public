@@ -1,0 +1,9 @@
+BBSCMD=HACKCHECK
+NAME=HackCheck
+TYPE=DD
+LOCATION=Doors:HackCheck/HackCheck
+DESCRIPTION=HackCheck door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

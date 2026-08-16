@@ -1,0 +1,9 @@
+BBSCMD=SIDBEE
+NAME=SidBee
+TYPE=DD
+LOCATION=Doors:SidBee/SidBee
+DESCRIPTION=5th Dimension SID module door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

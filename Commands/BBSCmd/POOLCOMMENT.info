@@ -1,0 +1,9 @@
+BBSCMD=POOLCOMMENT
+NAME=PoolComment
+TYPE=DD
+LOCATION=Doors:PoolComment/PoolComment
+DESCRIPTION=Absolute Pool comment door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

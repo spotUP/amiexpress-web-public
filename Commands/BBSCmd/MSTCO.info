@@ -1,0 +1,9 @@
+BBSCMD=MSTCO
+NAME=MST-CO
+TYPE=DD
+LOCATION=Doors:MST-CO/MST-CO
+DESCRIPTION=MasterSuite comment door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

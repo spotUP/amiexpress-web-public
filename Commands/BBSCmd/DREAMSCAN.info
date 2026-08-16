@@ -1,0 +1,9 @@
+BBSCMD=DREAMSCAN
+NAME=DreamScan
+TYPE=DD
+LOCATION=Doors:DreamScan/DreamScan
+DESCRIPTION=DreamScan file-scan door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

@@ -1,0 +1,9 @@
+BBSCMD=DREAMINDEX
+NAME=DreamIndex
+TYPE=DD
+LOCATION=Doors:DreamIndex/DreamIndex
+DESCRIPTION=DreamIndex file-index door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

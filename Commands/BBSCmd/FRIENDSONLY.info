@@ -1,0 +1,9 @@
+BBSCMD=FRIENDSONLY
+NAME=FriendsOnly
+TYPE=DD
+LOCATION=Doors:FriendsOnly/FriendsOnly
+DESCRIPTION=FriendsOnly door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

@@ -1,0 +1,9 @@
+BBSCMD=ADDBBS
+NAME=AddBBS
+TYPE=DD
+LOCATION=Doors:AddBBS/AddBBS
+DESCRIPTION=AddBBS door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

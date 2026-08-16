@@ -1,0 +1,9 @@
+BBSCMD=MSTPL
+NAME=MST-PL
+TYPE=DD
+LOCATION=Doors:MST-PL/MST-PL
+DESCRIPTION=MasterSuite door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

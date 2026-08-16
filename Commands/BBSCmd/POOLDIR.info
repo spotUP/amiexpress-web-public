@@ -1,0 +1,9 @@
+BBSCMD=POOLDIR
+NAME=PoolDir
+TYPE=DD
+LOCATION=Doors:PoolDir/PoolDir
+DESCRIPTION=Absolute Pool file-listing door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192
