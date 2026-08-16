@@ -649,7 +649,10 @@ debugLog("[LibraryManager] Creating network libraries (bsdsocket, amissl)...");
     this.amisslLibrary.setBsdSocketLibrary(this.bsdSocketLibrary);
 
 debugLog("[LibraryManager] Creating dreamdoor.library (DayDream BBS compatibility)...");
-    this.dreamDoorLibrary = new DreamDoorLibrary(this.emulator);
+    this.dreamDoorLibrary = new DreamDoorLibrary(this.emulator, {
+      allocMem: (size: number, flags?: number) => this.execLibrary!.allocMem(size, flags ?? 0),
+      freeMem: (addr: number, size: number) => this.execLibrary!.freeMem(addr, size),
+    });
     // Set session data for DreamDoor operations
     this.dreamDoorLibrary.setSession(this.config.bbsSession, this.socket);
 

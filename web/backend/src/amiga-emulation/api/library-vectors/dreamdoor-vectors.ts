@@ -41,12 +41,19 @@ export const DREAMDOOR_VECTORS: LibraryVector[] = [
   {
     offset: -18, // Prompt
     name: 'Prompt',
+    // NOTE: this whole table predates Task 1's RE (confirmed LVO is -48, not
+    // -18) and per thoughts/shared/research/2026-08-14_fame-dd-door-compat.md
+    // Prompt is actually routed through the DreamDoorMsg message-port wire
+    // format, not a plain register-passing LVO call — this file isn't wired
+    // into the trap handler today (installDreamDoorVectors() is never
+    // called). Left as a compile-only arity fix for Task 2; Task 3 owns the
+    // real rewrite against DD_LVO + the DreamDoorMsg wire format.
     handler: (emu, lib: DreamDoorLibrary) => {
       const handle = emu.getRegister(0); // D0
       const msgBufferAddr = emu.getRegister(8); // A0
       const displayMode = emu.getRegister(2); // D2
       const inputMode = emu.getRegister(3); // D3
-      return lib.prompt(handle, msgBufferAddr, displayMode, inputMode);
+      return lib.prompt(handle, msgBufferAddr, msgBufferAddr, inputMode, displayMode);
     },
   },
   {
