@@ -51,6 +51,7 @@ const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
 const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
 const AmigaGuideViewer_1 = require("./AmigaGuideViewer");
 const ViewManager_1 = require("./ViewManager");
+const systemFilter_1 = require("./systemFilter");
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Install/re-extract now goes through the portable extractor factory
 // (extractArchiveTo, below) instead of the native `lha` CLI — see
@@ -537,6 +538,8 @@ class RepoView extends ViewManager_1.BaseView {
     constructor(layout, bbs) {
         super();
         this.entries = [];
+        this.visibleEntries = [];
+        this.systemFilter = systemFilter_1.ALL_TYPES;
         this.filter = '';
         this.statusTimer = null;
         this.installing = false; // guards against double-fire on the async install handler
@@ -544,7 +547,8 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout = layout;
         this.bbs = bbs;
     }
-    entry() { return this.entries[this.layout.listSelected] ?? null; }
+    static typeOf(e) { return e.door_type || 'XIM'; }
+    entry() { return this.visibleEntries[this.layout.listSelected] ?? null; }
     setStatus(msg, col = 'yellow', ms = 3000) {
         clearTimeout(this.statusTimer);
         this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {${col}-fg}${msg}{/${col}-fg}{/center}`);
@@ -560,7 +564,14 @@ class RepoView extends ViewManager_1.BaseView {
                 stats = `${s.total} in repo, ${s.installed} installed`;
         }
         catch { }
-        this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}{/center}`);
+        const sysTag = this.systemFilter !== systemFilter_1.ALL_TYPES
+            ? `  {cyan-fg}System: ${this.systemFilter} (${this.visibleEntries.length}){/cyan-fg}` : '';
+        this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}${sysTag}{/center}`);
+    }
+    cycleFilter() {
+        const availableTypes = (0, systemFilter_1.distinctTypes)(this.entries, RepoView.typeOf);
+        this.systemFilter = (0, systemFilter_1.cycleSystemFilter)(this.systemFilter, availableTypes);
+        this.refresh(0);
     }
     loadEntries() {
         const svc = getCatalogSvc();
@@ -582,8 +593,9 @@ class RepoView extends ViewManager_1.BaseView {
     }
     refresh(selectIdx = 0) {
         this.loadEntries();
+        this.visibleEntries = (0, systemFilter_1.filterByDoorType)(this.entries, this.systemFilter, RepoView.typeOf);
         const w = this.layout.width;
-        const items = this.entries.map(e => {
+        const items = this.visibleEntries.map(e => {
             const inst = e.installed ? '*' : ' ';
             const sz = e.archive_size ? `${Math.round(e.archive_size / 1024)}k` : '?';
             const nameW = Math.max(4, w - sz.length - 2);
@@ -591,7 +603,7 @@ class RepoView extends ViewManager_1.BaseView {
                 ? (inst + e.archive_name).slice(0, nameW) : (inst + e.archive_name).padEnd(nameW);
             return `${name} ${sz}`;
         });
-        this.layout.setListLabel(` REPO (${this.entries.length}) `);
+        this.layout.setListLabel(` REPO (${this.visibleEntries.length}) `);
         this.layout.setListItems(items);
         this.layout.setListSelect(selectIdx);
         this.updateInfo();
@@ -665,6 +677,7 @@ class RepoView extends ViewManager_1.BaseView {
             hasDoc ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
             `{yellow-fg}A{/yellow-fg}rchive`,
             `{yellow-fg}F{/yellow-fg}=Filter`,
+            `{yellow-fg}C{/yellow-fg}=System`,
             `{yellow-fg}ESC{/yellow-fg}=Back`,
             `{yellow-fg}Q{/yellow-fg}uit`,
         ].filter(Boolean).join('  ');
@@ -754,6 +767,7 @@ class RepoView extends ViewManager_1.BaseView {
         this.keys.key(['s', 'S'], () => this.doStrip());
         this.keys.key(['v', 'V'], () => this.doViewDoc());
         this.keys.key(['a', 'A'], () => this.doBrowseArchive());
+        this.keys.key(['c', 'C'], () => this.cycleFilter());
         this.keys.key(['q', 'Q'], () => {
             clearTimeout(this.statusTimer);
             this.vm.destroy();
