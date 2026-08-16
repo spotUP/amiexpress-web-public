@@ -44,6 +44,16 @@
  *                           golden instead of asserting
  *   --keep-ansi             keep raw ANSI in goldens (default: strip)
  *   --reset                 delete saved progress and start from scratch
+ *   --command-channel-only  restrict input delivery to the 'command'
+ *                           socket channel only (the one production
+ *                           keystrokes actually take, wired here to
+ *                           session.doorInputHandler the same way
+ *                           server/socket-handlers.ts does) and skip
+ *                           'door:input' entirely. Same as setting
+ *                           CORPUS_COMMAND_CHANNEL_ONLY=1. Added for the
+ *                           DD final-review wave (2026-08-16, Critical 1)
+ *                           to certify DD corpus entries against the path
+ *                           that actually hangs live doors otherwise.
  *
  * Progress / resume:
  *   Results are saved to dev/scripts/door-corpus/corpus-progress.json
@@ -308,20 +318,47 @@ async function runOne(
   const session = makeSession(options.nodeId);
   const started = Date.now();
 
-  // Schedule scripted inputs. Fire on BOTH channels:
-  //  - 'command' — post-door-exit BBS command channel
-  //    (DoorManager listens here)
-  //  - 'door:input' — in-door keystroke channel for XIM/TIM
-  //    doors (AmigaDoorSession listens here; emits via
-  //    queueInput → JH_HK / JH_LI / JH_PM reply machinery)
-  // Most timeout-bucket doors are XIM and only `door:input`
-  // reaches them — `command` alone is silently dropped.
+  // Schedule scripted inputs.
+  //
+  // Default mode fires on BOTH channels:
+  //  - 'command' — the BBS's real per-keystroke socket event in
+  //    production (server/socket-handlers.ts's `socket.on('command', ...)`
+  //    calls `session.doorInputHandler(data)`, which routes through
+  //    routeAmigaDoorInput — the SAME live path every real keystroke
+  //    takes). This harness did NOT wire that up until the DD
+  //    final-review wave (2026-08-16) — 'command' was emitted but nothing
+  //    ever consumed it here, so it was silently dropped (see the
+  //    CORPUS_COMMAND_CHANNEL_ONLY branch below, which is what actually
+  //    wires it).
+  //  - 'door:input' — AmigaDoorSession's OWN socket listener, reachable
+  //    only from test/corpus harnesses in production (the frontend never
+  //    emits it — see door-input-router.ts's header comment). Delegates
+  //    to the SAME routeAmigaDoorInput as of the DD final-review wave, so
+  //    firing both channels in default mode is (post-fix) merely
+  //    redundant, not divergent.
+  //
+  // CORPUS_COMMAND_CHANNEL_ONLY=1 (or --command-channel-only) restricts
+  // this run to ONLY the 'command' channel — the one production actually
+  // uses — by (a) wiring 'command' to session.doorInputHandler here,
+  // mirroring socket-handlers.ts's real listener, since this harness
+  // never had that wiring, and (b) skipping the 'door:input' emission
+  // entirely. This is what certifies a corpus entry against the path a
+  // live caller's keystrokes actually take, instead of the harness's
+  // AmigaDoorSession-internal shortcut.
+  const commandChannelOnly = process.env.CORPUS_COMMAND_CHANNEL_ONLY === "1";
+  if (commandChannelOnly) {
+    socket.on("command", (data: string) => {
+      (session as any).doorInputHandler?.(data);
+    });
+  }
   const inputTimers: NodeJS.Timeout[] = [];
   for (const input of integration.inputs ?? []) {
     inputTimers.push(
       setTimeout(() => {
         socket.emit("command", input.data);
-        socket.emit("door:input", input.data);
+        if (!commandChannelOnly) {
+          socket.emit("door:input", input.data);
+        }
       }, input.delayMs),
     );
   }
@@ -445,6 +482,7 @@ async function main() {
       captureAll = true;
     } else if (a === "--keep-ansi") keepAnsi = true;
     else if (a === "--reset") reset = true;
+    else if (a === "--command-channel-only") process.env.CORPUS_COMMAND_CHANNEL_ONLY = "1";
   }
 
   if (reset && fs.existsSync(PROGRESS_FILE)) {
