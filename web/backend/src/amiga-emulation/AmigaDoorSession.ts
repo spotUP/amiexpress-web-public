@@ -738,7 +738,16 @@ debugLog(`[AmigaDoorSession] FIM onShutdown(rc=${rc}, lastWords=${lastWords ?? "
           try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const chat = require('../handlers/chat/chat.handler');
-            return chat?.notifySysopPage?.(this.config.bbsSession) === true;
+            const ok = chat?.notifySysopPage?.(this.config.bbsSession) === true;
+            if (ok) {
+              // Real FAME's internal C runs a blocking page-wait UX before
+              // returning; our notify-only version returns instantly, so
+              // without this line the door exits with zero visible feedback
+              // and the page looks like a silent crash.
+              this.socket?.emit('ansi-output',
+                '\r\n\x1b[36mSysop has been paged. You will be notified if they respond.\x1b[m\r\n');
+            }
+            return ok;
           } catch (err) {
             debugLog(`[AmigaDoorSession] FIM internal cmd "C" failed: ${(err as Error)?.message ?? err}`);
             return false;
