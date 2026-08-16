@@ -1,0 +1,9 @@
+BBSCMD=DTAGWALL
+NAME=DreamTagWall
+TYPE=DD
+LOCATION=Doors:DreamTagWall/DreamTagWall
+DESCRIPTION=Dream Tag Wall by MadDoX (1995) - DayDream tagline-wall door
+ACCESS=1
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192
