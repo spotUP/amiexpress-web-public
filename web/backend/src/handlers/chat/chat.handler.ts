@@ -64,7 +64,14 @@ console.log('Sysop page (notify-only) for user:', session.user.username);
     // Failure-proof: the paging DOOR must never die because our chat
     // bookkeeping or webhook threw — the page attempt is what counts.
     try {
-      this.chatSessionUseCase.createChatSession(session.user.id, session.user.username);
+      const chatSession = this.chatSessionUseCase.createChatSession(session.user.id, session.user.username);
+      // Task 18: record the page as "pending" on the session so
+      // door.handler.ts can run the classic page-wait UX (dots animation /
+      // sysop-answer / timeout) AFTER the door exits, without interrupting
+      // it mid-run. Reuses this SAME chat session (via the id) instead of
+      // creating a second one when the wait actually starts.
+      session.sysopPagePending = true;
+      session.sysopPageChatSessionId = chatSession.id;
     } catch (err) {
 console.error('[ChatHandler] notifySysopPage: createChatSession failed:', (err as Error)?.message ?? err);
     }
@@ -73,6 +80,41 @@ console.error('[ChatHandler] notifySysopPage: createChatSession failed:', (err a
     } catch (err) {
 console.error('[ChatHandler] notifySysopPage: webhook failed:', (err as Error)?.message ?? err);
     }
+    return true;
+  }
+
+  /**
+   * Run the page-wait flow for a page requested during a door run (task 18).
+   *
+   * Consumes session.sysopPagePending (set by notifySysopPage, called from
+   * CF_InternalCmd "C" while a FAME/FIM door like 5D_Page is executing) and
+   * drives the SAME ported displayInternalPager()/completePaging() dots
+   * animation used by the mid-door XIM chat-flag trigger — WITHOUT going
+   * through startSysopPage()'s executePagerDoor branch, so this never
+   * recursively launches the PowerPager door.
+   *
+   * Must be called by the caller only AFTER the door has fully exited and
+   * its output has been flushed (door.handler.ts's executeAmigaDoor).
+   *
+   * Returns false (no-op) when no page is pending, so callers can
+   * unconditionally invoke this after every door exit.
+   */
+  runPendingSysopPageWait(socket: any, session: BBSSession, onComplete?: () => void): boolean {
+    if (!session.sysopPagePending) return false;
+    // Consume immediately so a stray second call (or re-entrant exit path)
+    // can't double-fire the wait.
+    session.sysopPagePending = false;
+    const chatSessionId = session.sysopPageChatSessionId;
+    delete session.sysopPageChatSessionId;
+
+    const chatSession = chatSessionId ? this.chatSessionUseCase.getChatSession(chatSessionId) : null;
+    if (!chatSession) {
+console.warn('[ChatHandler] runPendingSysopPageWait: pending page had no matching chat session (already ended?) — skipping wait');
+      onComplete?.();
+      return true;
+    }
+
+    this.displayInternalPager(socket, session, chatSession, onComplete);
     return true;
   }
 
@@ -108,8 +150,19 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
 
   /**
    * Display internal pager - Internal pager display (like the dots in ccom())
+   *
+   * express.e:20336-20372 (ccom()) drives an outer 20x/inner 50x tick loop
+   * that on EVERY tick checks whether the sysop has answered (chatF) and
+   * returns immediately if so; otherwise it prints a dot once per second
+   * for a fixed window, then reports the page as unanswered. Mirrored here
+   * as a 1-per-second interval that re-checks the chat session's status on
+   * every tick before printing the next dot.
+   *
+   * onComplete (task 18) fires once the wait ends, by timeout OR by the
+   * sysop answering — lets door.handler.ts resume its own post-door-exit
+   * menu flow only once the wait is actually finished.
    */
-  displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession): void {
+  displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession, onComplete?: () => void): void {
     const displayTime = getSystemTime().toLocaleTimeString();
     const sysopName = 'Sysop';
 
@@ -120,12 +173,22 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
     const maxDots = 30;
 
     const dotInterval = setInterval(() => {
+      // express.e:20353-20360 — chatF check happens before anything else
+      // on every tick, so an answer mid-wait ends it immediately instead
+      // of waiting out the rest of the animation.
+      const current = this.chatSessionUseCase.getChatSession(chatSession.id);
+      if (current?.status === 'active') {
+        clearInterval(dotInterval);
+        this.completePaging(socket, session, chatSession, onComplete);
+        return;
+      }
+
       socket.emit('ansi-output', ' .');
 
       dotCount++;
       if (dotCount >= maxDots) {
         clearInterval(dotInterval);
-        this.completePaging(socket, session, chatSession);
+        this.completePaging(socket, session, chatSession, onComplete);
       }
     }, 1000);
 
@@ -136,20 +199,30 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
   /**
    * Complete paging - Complete the paging process
    */
-  completePaging(socket: any, session: BBSSession, chatSession: ChatSession): void {
+  completePaging(socket: any, session: BBSSession, chatSession: ChatSession, onComplete?: () => void): void {
     // Clear any paging interval
     if (session.pagingInterval) {
       clearInterval(session.pagingInterval);
       delete session.pagingInterval;
     }
 
-    socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
-    socket.emit('ansi-output', 'You may continue using the system\r\n');
-    socket.emit('ansi-output', 'until the sysop answers your request.\r\n\r\n');
+    // express.e:20357-20358 — IF(chatF=1) just prints a blank line and
+    // returns; the "has been paged... until answers" message is only for
+    // the unanswered (timeout/abort) case.
+    const current = this.chatSessionUseCase.getChatSession(chatSession.id);
+    if (current?.status === 'active') {
+      socket.emit('ansi-output', '\r\n\r\n');
+    } else {
+      socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
+      socket.emit('ansi-output', 'You may continue using the system\r\n');
+      socket.emit('ansi-output', 'until the sysop answers your request.\r\n\r\n');
+    }
 
     // Return to menu
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+    onComplete?.();
   }
 
   /**
@@ -301,6 +374,11 @@ export function startSysopPage(socket: any, session: BBSSession): void {
 export function notifySysopPage(session: BBSSession): boolean {
   const handler = resolveChatHandler();
   return handler.notifySysopPage(session);
+}
+
+export function runPendingSysopPageWait(socket: any, session: BBSSession, onComplete?: () => void): boolean {
+  const handler = resolveChatHandler();
+  return handler.runPendingSysopPageWait(socket, session, onComplete);
 }
 
 export function displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession): void {

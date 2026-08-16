@@ -463,6 +463,15 @@ export interface BBSSession {
   pagingInterval?: NodeJS.Timeout; // Interval for paging notifications
   inChat?: boolean; // Whether user is currently in chat
   chatSession?: any; // Active chat session object
+
+  // FAME/FIM sysop page-wait (task 18): CF_InternalCmd "C" (5D_Page etc.)
+  // pages the sysop mid-door via notifySysopPage() but the classic
+  // AmiExpress page-wait UX (dots animation / sysop-answer / timeout) must
+  // run AFTER the door exits, never interrupting it. sysopPagePending is
+  // set by notifySysopPage() and consumed by door.handler.ts's post-exit
+  // path via chat.handler.ts's runPendingSysopPageWait().
+  sysopPagePending?: boolean;
+  sysopPageChatSessionId?: string; // Chat session created by notifySysopPage, reused (not duplicated) by the post-door wait
   lastTypingTime?: number; // Last time user was typing (for typing indicator)
   partnerTypingBuffer?: string; // Buffer for partner's typing indicator
   typingBlinkTimer?: NodeJS.Timeout; // Timer for typing indicator blinking

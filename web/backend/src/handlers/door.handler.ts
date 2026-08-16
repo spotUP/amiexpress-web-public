@@ -2957,6 +2957,31 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
       }
     }
 
+    // Task 18: interactive sysop page-wait. FAME/FIM doors (5D_Page via
+    // CF_InternalCmd "C") page the sysop mid-door through notifySysopPage(),
+    // which only sets session.sysopPagePending — no UI runs while the door
+    // still owns the screen. NOW that the door has fully exited and its
+    // output was flushed above, run the classic page-wait UX (dots
+    // animation / sysop-answer / timeout) via the SAME ported
+    // displayInternalPager()/completePaging(), reusing the chat session
+    // notifySysopPage already created. This deliberately calls
+    // runPendingSysopPageWait, NOT startSysopPage — startSysopPage would
+    // try executePagerDoor first, which launches the PowerPager door;
+    // 5D_Page already rendered its own paging screen, so recursively
+    // launching PowerPager here would fight it.
+    if (session.sysopPagePending) {
+      await new Promise<void>((resolve) => {
+        try {
+          const { runPendingSysopPageWait } = require('./chat/chat.handler');
+          const started = runPendingSysopPageWait(socket, session, () => resolve());
+          if (!started) resolve();
+        } catch (err) {
+console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
+          resolve();
+        }
+      });
+    }
+
     // Return to menu (only if user is logged in and no pause is active)
     // CRITICAL: If processCommand set up a pause (via advanceDisplayFlow -> doPause),
     // do NOT call displayMainMenu here - it would clear paginatedScreen and break the pause.
