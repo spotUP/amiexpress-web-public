@@ -121,20 +121,32 @@ door.onStart(async (ctx: DoorContext) => {
       continue;
     }
 
+    // stripArchive always writes a portable ZIP — there is no cross-platform
+    // LHA/LZX writer available (pure-JS lha.js only reads; the Linux `lha`
+    // CLI/lhasa can't create archives either). Rewriting a .lha/.lzx file
+    // with ZIP bytes under its original name would silently mislead the
+    // sysop about what's on disk, so the clean archive is written as a
+    // sibling <name>.zip instead and the original is left untouched.
     const tmpOut = archivePath + '.strip_tmp';
     await output.write(`\r\n\x1b[36mStripping and repacking...\x1b[0m\r\n`);
 
     try {
-      await stripperLib.stripArchive(archivePath, tmpOut);
-      if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
+      const res = await stripperLib.stripArchive(archivePath, tmpOut);
+      const producedPath: string = res?.outputPath ?? tmpOut;
+      if (fs.existsSync(producedPath) && !fs.statSync(producedPath).isDirectory()) {
         const origSize = fs.statSync(archivePath).size;
-        fs.renameSync(tmpOut, archivePath);
-        const newSize = fs.statSync(archivePath).size;
+        const finalPath = archivePath.replace(/\.(lha|lzx|lzh)$/i, '') + '.zip';
+        if (producedPath !== finalPath) {
+          if (fs.existsSync(finalPath)) fs.rmSync(finalPath, { force: true });
+          fs.renameSync(producedPath, finalPath);
+        }
+        const newSize = fs.statSync(finalPath).size;
         const saved = origSize - newSize;
         await output.write(`\x1b[32mDone.\x1b[0m ${formatSize(origSize)} -> ${formatSize(newSize)} (saved ${formatSize(saved)})\r\n`);
-        await output.write(`\x1b[32mArchive updated in-place.\x1b[0m\r\n\r\n`);
+        await output.write(`\x1b[32mStripped archive written to ${path.basename(finalPath)}\x1b[0m (portable ZIP format).\r\n`);
+        await output.write(`\x1b[90mOriginal ${path.basename(archivePath)} left untouched.\x1b[0m\r\n\r\n`);
       } else {
-        if (fs.existsSync(tmpOut)) fs.rmSync(tmpOut, { recursive: true, force: true });
+        if (fs.existsSync(producedPath)) fs.rmSync(producedPath, { recursive: true, force: true });
         await output.write(`\x1b[31mRepack produced unexpected output.\x1b[0m\r\n\r\n`);
       }
     } catch (err) {

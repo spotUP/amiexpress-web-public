@@ -1020,24 +1020,49 @@ class StripView extends ViewManager_1.BaseView {
         this.files = [];
         this.reasons = {};
         this.origLabel = '';
+        // True only when an installed directory backs this entry. DOORMAN strips
+        // junk from an INSTALLED door's files (analyzeDirectory/
+        // stripFilesFromDirectory — plain fs, no archive format concerns). It does
+        // NOT rewrite archive files in place: there is no portable LHA writer
+        // (lha.js only reads, lhasa on Linux has no `a` create command either),
+        // and silently rewriting a .lha as ZIP bytes under the same filename would
+        // mislead the sysop about what's actually on disk. See stripArchive's doc
+        // comment in ami-stripper.lib.ts. When a door isn't installed yet, this
+        // view still analyzes the archive (read-only, via the portable extractor
+        // factory) so the sysop can preview what would be stripped, but [S] just
+        // explains that installing comes first.
+        this.canStrip = false;
         this.layout = layout;
         this.entry = entry;
         this.archivePath = archivePath;
         this.overrideDir = overrideDir;
         this.onDone = onDone;
     }
+    /** Loud-error convention (see reportInstallFailure in RepoView): log to
+     * the process console for docker logs / journald visibility, and hold a
+     * persistent message in the info panel instead of a message that quietly
+     * self-clears. */
+    reportFailure(step, detail) {
+        console.log(`[DOORMAN] strip failed: ${step}: ${detail} (archive=${this.entry.archive_name})`);
+        this.layout.setInfo(`{red-fg}Strip failed{/red-fg}\n\n` +
+            `{yellow-fg}Step:{/yellow-fg} ${(0, ViewManager_1.sanitizeForTags)(step)}\n` +
+            `{yellow-fg}Detail:{/yellow-fg} ${(0, ViewManager_1.sanitizeForTags)(detail)}\n` +
+            `{yellow-fg}Archive:{/yellow-fg} ${(0, ViewManager_1.sanitizeForTags)(this.entry.archive_name)}\n`);
+        this.layout.render();
+    }
     enter() {
         const lib = getStripLib();
         if (!lib) {
+            console.log(`[DOORMAN] strip failed: lib-unavailable (archive=${this.entry.archive_name})`);
             this.layout.setFooter('{center}{red-fg}Stripper library not available{/red-fg}{/center}');
             this.vm.pop();
             return;
         }
-        const hasArchive = !!this.archivePath;
         const installDir = this.overrideDir;
+        this.canStrip = !!installDir;
         this.layout.setFooter('{center}{cyan-fg}Analyzing...{/cyan-fg}{/center}');
         this.layout.render();
-        (hasArchive ? lib.analyzeArchive(this.archivePath) : lib.analyzeDirectory(installDir))
+        (installDir ? lib.analyzeDirectory(installDir) : lib.analyzeArchive(this.archivePath))
             .then((result) => {
             if (result.stripped.length === 0) {
                 this.layout.setInfo('{green-fg}No ad files found — archive is clean.{/green-fg}');
@@ -1063,10 +1088,24 @@ class StripView extends ViewManager_1.BaseView {
             });
             this.keys.key(['a', 'A'], () => { this.checked.fill(true); this.renderFiles(); });
             this.keys.key(['n', 'N'], () => { this.checked.fill(false); this.renderFiles(); });
-            this.keys.key(['s', 'S'], () => this.doStrip(lib, hasArchive, installDir));
+            this.keys.key(['s', 'S'], () => {
+                if (!this.canStrip) {
+                    this.layout.setInfo(`{yellow-fg}This door is not installed.{/yellow-fg}\n\n` +
+                        `DOORMAN strips junk from an INSTALLED door's files, not from\n` +
+                        `the archive itself — there is no portable way to rewrite a\n` +
+                        `.lha/.lzx archive in its original format on this platform.\n\n` +
+                        `Install {yellow-fg}${(0, ViewManager_1.sanitizeForTags)(this.entry.archive_name)}{/yellow-fg} first, then Strip.`);
+                    this.layout.render();
+                    return;
+                }
+                this.doStrip(lib, installDir);
+            });
             this.keys.key(['q', 'Q'], () => { this.vm.pop(); this.onDone(null); });
         })
-            .catch((e) => { this.layout.setInfo(`{red-fg}Analysis failed: ${e.message}{/red-fg}`); this.layout.render(); setTimeout(() => this.vm.pop(), 1500); });
+            .catch((e) => {
+            this.reportFailure('analyze', e?.message ?? String(e));
+            setTimeout(() => this.vm.pop(), 2500);
+        });
     }
     renderFiles() {
         const items = this.files.map((f, i) => {
@@ -1076,48 +1115,33 @@ class StripView extends ViewManager_1.BaseView {
             return `${box} ${name}`;
         });
         const selCount = this.checked.filter(Boolean).length;
-        this.layout.listPanel.setLabel(` ${this.entry.archive_name} — Strip Ads `);
+        const modeTag = this.canStrip ? '' : ' (preview)';
+        this.layout.listPanel.setLabel(` ${this.entry.archive_name} — Strip Ads${modeTag} `);
         this.layout.setListItems(items);
         const sel = this.files[this.layout.listSelected];
+        const hint = this.canStrip
+            ? '\n{grey-fg}[Space] Toggle  [A] All  [N] None  [S] Strip  [ESC/Q] Cancel{/grey-fg}'
+            : '\n{grey-fg}[Space] Toggle  [A] All  [N] None  Not installed — [S] shows how  [ESC/Q] Cancel{/grey-fg}';
         this.layout.setInfo(`{yellow-fg}${selCount}/${this.files.length} selected{/yellow-fg}\n\n` +
             (sel ? `{cyan-fg}${sel.path}{/cyan-fg}\nReason: ${this.reasons[sel.path] ?? '?'}\n` : '') +
-            '\n{grey-fg}[Space] Toggle  [A] All  [N] None  [S] Strip  [ESC/Q] Cancel{/grey-fg}');
-        this.layout.setFooter('{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {yellow-fg}S{/yellow-fg}=Strip  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}');
+            hint);
+        this.layout.setFooter(this.canStrip
+            ? '{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {yellow-fg}S{/yellow-fg}=Strip  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}'
+            : '{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {grey-fg}Preview only{/grey-fg}  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}');
         this.layout.render();
     }
-    doStrip(lib, hasArchive, installDir) {
+    doStrip(lib, installDir) {
         const toStrip = this.files.filter((_, i) => this.checked[i]);
         if (toStrip.length === 0) {
             this.vm.pop();
             this.onDone(null);
             return;
         }
-        const preservePaths = new Set(this.files.filter((_, i) => !this.checked[i]).map((f) => f.path));
         this.layout.setFooter('{center}{cyan-fg}Stripping...{/cyan-fg}{/center}');
         this.layout.render();
         (async () => {
             try {
-                if (hasArchive && this.archivePath) {
-                    const tmpOut = this.archivePath + '.strip_tmp';
-                    await lib.stripArchive(this.archivePath, tmpOut, preservePaths);
-                    if (fs.existsSync(tmpOut) && !fs.statSync(tmpOut).isDirectory()) {
-                        fs.renameSync(tmpOut, this.archivePath);
-                    }
-                    else if (fs.existsSync(tmpOut)) {
-                        fs.rmSync(tmpOut, { recursive: true, force: true });
-                    }
-                    if (installDir) {
-                        fs.mkdirSync(installDir, { recursive: true });
-                        const res = await extractArchiveTo(this.archivePath, installDir);
-                        if (!res.ok) {
-                            this.layout.setInfo(`{yellow-fg}Stripped, but re-extract to install dir failed: ${res.error ?? 'unknown error'}{/yellow-fg}`);
-                            this.layout.render();
-                        }
-                    }
-                }
-                else if (installDir) {
-                    lib.stripFilesFromDirectory(installDir, toStrip.map((f) => f.path));
-                }
+                lib.stripFilesFromDirectory(installDir, toStrip.map((f) => f.path));
                 const svc = getCatalogSvc();
                 if (svc) {
                     try {
@@ -1133,9 +1157,8 @@ class StripView extends ViewManager_1.BaseView {
                 this.onDone(toStrip.length);
             }
             catch (e) {
-                this.layout.setInfo(`{red-fg}Strip failed: ${e.message}{/red-fg}`);
-                this.layout.render();
-                setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2000);
+                this.reportFailure('strip', e?.message ?? String(e));
+                setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
             }
         })();
     }

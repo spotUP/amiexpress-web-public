@@ -15,6 +15,25 @@
  * and drop non-printable/high-bit bytes that render as garbage glyphs.
  */
 export declare function sanitizeForTags(text: string): string;
+/**
+ * Resolve the BBS root directory for DOORMAN's file operations.
+ * `__dirname/../../..` was correct only when running the built
+ * dist/index.js (Doors/door-manager/dist -> repo root); dev runs the
+ * SOURCE index.ts and landed one level above the repo, so installs wrote
+ * Commands/BBSCmd into the wrong tree (regression: 2026-08-15 local
+ * install ENOENT at ~/Code/Commands/...). Order: explicit env
+ * (live container sets BBS_DATA_DIR), then walk up from startDir to the
+ * first directory that actually contains Commands/BBSCmd.
+ */
+export declare function resolveBbsRoot(startDir: string, env?: Record<string, string | undefined>, exists?: (p: string) => boolean): string;
+/**
+ * Refresh the backend's in-memory door registry after install/uninstall.
+ * getDoors()/getDoorList() serve a boot-time cache — without this, a freshly
+ * installed door is invisible in the doors list until the BBS restarts.
+ * Discovers backend modules via require.cache (same pattern as app.ts's
+ * getCatalogSvc); cache injectable for tests.
+ */
+export declare function refreshDoorRegistry(cache?: Record<string, any>): Promise<boolean>;
 export declare class KeyBinder {
     private screen;
     private bound;

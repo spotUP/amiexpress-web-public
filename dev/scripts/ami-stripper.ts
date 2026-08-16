@@ -65,11 +65,14 @@ async function main() {
     return;
   }
 
-  const dest = outPath ?? archivePath!.replace(/(\.(lha|lzx|lzh))$/i, '-clean$1');
-  await stripArchive(archivePath!, dest);
-  console.log(`\nWritten clean archive: ${dest}`);
+  // stripArchive always writes a portable ZIP (there is no cross-platform
+  // LHA/LZX writer — see ami-stripper.lib.ts's doc comment) so the actual
+  // output filename may differ from `dest` (extension forced to .zip).
+  const requestedDest = outPath ?? archivePath!.replace(/\.(lha|lzx|lzh)$/i, '-clean');
+  const { outputPath } = await stripArchive(archivePath!, requestedDest);
+  console.log(`\nWritten clean archive: ${outputPath}`);
   const origSize = fs.statSync(archivePath!).size;
-  const newSize = fs.statSync(dest).size;
+  const newSize = fs.statSync(outputPath).size;
   const saved = origSize - newSize;
   console.log(`Size: ${(origSize / 1024).toFixed(1)}k -> ${(newSize / 1024).toFixed(1)}k (saved ${(saved / 1024).toFixed(1)}k)`);
 }
