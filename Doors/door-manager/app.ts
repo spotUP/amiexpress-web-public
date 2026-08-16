@@ -210,6 +210,7 @@ class DoormanLayout {
   listPanel: any; doorList: any;
   infoPanel: any; infoBox: any;
   filterPanel: any; filterBox: any;
+  private suppressNextFilterKeypress = false;
   readonly width: number;
 
   constructor(screen: any, nodeId: string | number) {
@@ -228,6 +229,27 @@ class DoormanLayout {
       height: 1, mouse: true,
       style: { fg:'white', focus:{ fg:'yellow' } } } as any);
     (this.filterPanel as any).hide();
+
+    // Guard filterBox's own key handling against the activating keystroke's
+    // echo — same class of leak as doorList's type-ahead disable below.
+    // Screen._handleKey's phase-2 emit re-delivers a keystroke to whichever
+    // element JUST became focused during phase 1 of the SAME dispatch, so
+    // when focusFilter() synchronously focuses this box mid-keystroke, that
+    // same keystroke would otherwise also land in Textbox's own
+    // _onKeypress/insertChar. focusFilter() arms suppressNextFilterKeypress
+    // immediately before calling focus(), so exactly that one re-delivered
+    // event is swallowed here; normal typing afterward is untouched.
+    const _filterNav = (this.filterBox as any)._onKeypress?.bind(this.filterBox);
+    (this.filterBox as any).removeAllListeners('keypress');
+    if (_filterNav) {
+      (this.filterBox as any).on('keypress', (ch: string, key: any) => {
+        if (this.suppressNextFilterKeypress) {
+          this.suppressNextFilterKeypress = false;
+          return;
+        }
+        return _filterNav(ch, key);
+      });
+    }
 
     this.listPanel = new Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6',
       tags: true, style: { border:{ fg:'cyan' } }, focusable: false } as any);
@@ -267,7 +289,12 @@ class DoormanLayout {
   get listSelected(): number { return (this.doorList as any).selected ?? 0; }
   setInfo(content: string): void { (this.infoBox as any).setContent(content); }
   focusList(): void { (this.doorList as any).focus(); }
-  focusFilter(): void { (this.filterBox as any).focus(); }
+  /** Focuses filterBox and arms the one-shot guard above so the keystroke
+   * that triggered this call doesn't get re-delivered into the widget. */
+  focusFilter(): void {
+    this.suppressNextFilterKeypress = true;
+    (this.filterBox as any).focus();
+  }
 
   showRepoLayout(): void {
     (this.filterPanel as any).show();
@@ -680,8 +707,17 @@ class RepoView extends BaseView {
     // Manual filter input — screen.on('keypress') gives us full control
     // regardless of which widget has focus, so Tab always works.
     let filterActive = false;
+    // One-shot: consumed by filterKeypress below the very first time it
+    // fires after activation, so the SAME keystroke that turned filter mode
+    // on doesn't also get appended as its first character. Twin of
+    // DoormanLayout's suppressNextFilterKeypress (armed by focusFilter()),
+    // which closes the other half of the same leak on filterBox's own
+    // internal typing. See the activation handler below for why both are
+    // needed and why they're synchronous, not deferred.
+    let suppressNextFilterChar = false;
 
     const filterKeypress = (ch: string, key: any) => {
+      if (suppressNextFilterChar) { suppressNextFilterChar = false; return; }
       if (!filterActive) return;
       const kn = key?.name ?? '';
       if (kn === 'tab' || kn === 'down' || kn === 'enter' || kn === 'return') {
@@ -711,27 +747,47 @@ class RepoView extends BaseView {
 
     // F/Tab from the LIST → enter filter mode.
     //
-    // BUG FIX (leak): blessed's Screen._handleKey dispatches ONE physical
-    // keystroke in three synchronous phases against the SAME event — (1)
-    // screen.key()-registered handlers (this KeyBinder), then (2) an emit
-    // to whichever element is `_focused` *at that moment*, then (3) a final
-    // broadcast emit('keypress', ...) to plain screen.on('keypress', ...)
-    // listeners (filterKeypress below). Calling focusFilter() synchronously
-    // from phase (1) changes `_focused` to filterBox mid-dispatch, so phase
-    // (2) re-delivers the SAME 'f' to the Textbox (which inserts it into
-    // its own buffer) and phase (3) sees filterActive already true and
-    // appends 'f' to `this.filter` too — the same physical keystroke that
-    // activates the mode also becomes its first character. Deferring the
-    // mode flip + focus() past the current dispatch (process.nextTick, same
-    // pattern as InfoEditorOverlay's skipFirst/blockNextSelect) means phases
-    // (2) and (3) of THIS keystroke still see the pre-activation state, so
-    // nothing gets re-delivered to the newly-focused input.
+    // BUG FIX (leak, round 2 — supersedes the process.nextTick version):
+    // blessed's Screen._handleKey dispatches ONE physical keystroke in
+    // three synchronous phases against the SAME event — (1) screen.key()-
+    // registered handlers (this KeyBinder), (2) an emit to whichever
+    // element is `_focused` *at that moment*, (3) a final broadcast
+    // emit('keypress', ...) to plain screen.on('keypress', ...) listeners
+    // (filterKeypress above). The FIRST fix deferred the mode flip + focus()
+    // with process.nextTick to dodge this — but Program._handleData
+    // (sdk core/program.ts) parses and dispatches EVERY key in one input
+    // payload inside a single synchronous while loop, calling _handleKey
+    // per key with no tick boundary in between. A deferred nextTick doesn't
+    // run until the WHOLE payload is drained, so on coalesced/pasted input
+    // (multiple keys arriving in one payload) it does not close the race
+    // for the keys immediately following the activator, and per Screen's
+    // own emit() semantics KeyBinder's wrapped handler never returns true,
+    // so phase (3)'s broadcast still runs for every key regardless.
+    //
+    // Fixed synchronously instead, same-tick, no deferral at all — the only
+    // approach that's correct no matter how keys are chunked into payloads.
+    // Two one-shot flags, each swallowing exactly the activating keystroke
+    // on its own delivery path, both armed here and both self-clearing
+    // before this call returns to Screen._handleKey:
+    //   1. focusFilter() (DoormanLayout) arms suppressNextFilterKeypress
+    //      immediately before calling filterBox.focus() — the wrapped
+    //      listener installed on filterBox in DoormanLayout's constructor
+    //      swallows the one keystroke phase (2) re-delivers to the
+    //      newly-focused widget, so Textbox's own _onKeypress/insertChar
+    //      never sees it.
+    //   2. suppressNextFilterChar (this closure) is consumed by
+    //      filterKeypress at the top of phase (3), so the same keystroke
+    //      never gets appended to `this.filter` either.
+    // Because both flags are set AND consumed within this single
+    // synchronous `_handleKey` call for the activating keystroke, the very
+    // next key — even if it arrived in the same payload — sees fully
+    // settled state (filterActive=true, filterBox genuinely focused).
     this.keys.key(['f', 'F', '/', 'tab'], () => {
       if (filterActive) return; // already in filter
-      process.nextTick(() => {
-        filterActive = true;
-        this.layout.focusFilter(); this.layout.render();
-      });
+      filterActive = true;
+      suppressNextFilterChar = true;
+      this.layout.focusFilter();
+      this.layout.render();
     });
     this.keys.key(['r', 'R'], () => this.doInstallUninstall());
     this.keys.key(['s', 'S'], () => this.doStrip());
