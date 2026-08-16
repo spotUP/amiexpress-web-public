@@ -812,6 +812,30 @@ class RepoView extends ViewManager_1.BaseView {
         // synchronous `_handleKey` call for the activating keystroke, the very
         // next key — even if it arrived in the same payload — sees fully
         // settled state (filterActive=true, filterBox genuinely focused).
+        //
+        // BUG FIX (round 3, Tab specifically): 'tab' is one of the activator
+        // keys above, but Screen._handleKey has a DEFAULT fallback branch for
+        // an *unhandled* Tab — `if (!handled && focusKeys) { if (name==='tab')
+        // { focusNext(); render(); return; } }` — that fires its OWN
+        // `focusNext()` and returns BEFORE phase (3) ever runs. Since this
+        // handler never returned `true`, every Tab press hit that branch:
+        // (a) blessed's `focusNext()` immediately re-stole focus away from
+        //     filterBox right after `focusFilter()` just set it, and
+        // (b) phase (3) never ran, so `suppressNextFilterChar` (armed above)
+        //     was never consumed — it stayed stuck `true` and silently
+        //     swallowed the sysop's next real keystroke, whenever it arrived
+        //     in a later payload.
+        // Root cause: `KeyBinder.key()`'s wrapped handler (ViewManager.ts)
+        // never returned its inner handler's result, so there was no way to
+        // signal `handled` back to Screen._handleKey — fixed there (now
+        // propagates), so returning `true` here is enough to make
+        // `_handleKey` skip its own Tab-fallback entirely for this keystroke.
+        // Phase (3) still runs unconditionally either way (screen.ts's final
+        // `this.emit('keypress', ...)` isn't gated on `handled`), so
+        // `suppressNextFilterChar` is still consumed there exactly as before —
+        // 'f'/'F'/'/' were never affected by this branch (only Tab has a
+        // default fallback) and are unchanged by returning `true` here (it
+        // just also skips their already-harmless phase 2).
         this.keys.key(['f', 'F', '/', 'tab'], () => {
             if (filterActive)
                 return; // already in filter
@@ -819,6 +843,7 @@ class RepoView extends ViewManager_1.BaseView {
             suppressNextFilterChar = true;
             this.layout.focusFilter();
             this.layout.render();
+            return true;
         });
         this.keys.key(['r', 'R'], () => this.doInstallUninstall());
         this.keys.key(['s', 'S'], () => this.doStrip());

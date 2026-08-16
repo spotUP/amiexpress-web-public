@@ -141,11 +141,25 @@ class KeyBinder {
      * filter input).
      */
     setGuard(guard) { this.guard = guard; }
+    /**
+     * Propagates `handler`'s return value through to Screen.key()/
+     * _handleKey — returning `true` marks the keystroke `handled`, which
+     * skips Screen._handleKey's phase-2 emit-to-focused-element AND its
+     * default Tab/Shift-Tab focus-navigation fallback (screen.ts's
+     * `_handleKey`: both are gated on `!handled`). Every existing hotkey in
+     * this codebase returns `undefined` (falls through `wrapped` unchanged),
+     * so this is purely additive — only a caller that now explicitly
+     * `return`s `true` opts in. See RepoView's filter-activation handler
+     * (app.ts) for why this was needed: an unhandled Tab keystroke hits
+     * Screen's own `focusNext()` fallback and returns before ever reaching
+     * the phase-3 broadcast, silently undoing a synchronous focus change and
+     * leaking a stuck one-shot guard flag with nothing left to consume it.
+     */
     key(keys, handler) {
         const wrapped = (...a) => {
             if (this.guard && !this.guard())
                 return;
-            handler(...a);
+            return handler(...a);
         };
         this.bound.push({ keys, handler: wrapped });
         this.screen.key(keys, wrapped);

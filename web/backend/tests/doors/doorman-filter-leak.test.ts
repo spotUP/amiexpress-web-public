@@ -45,12 +45,34 @@
  * process.nextTick fix, and round 2's fix side by side — direct evidence
  * that only the synchronous guard is airtight, not just an assertion on
  * the current state.
+ *
+ * Round 3: 'tab' is one of the activator keys ('f'/'F'/'/'/'tab'), and
+ * `Screen._handleKey` (screen.ts:2163-2174) has a DEFAULT fallback for an
+ * *unhandled* Tab that fires its own `focusNext()` and returns BEFORE the
+ * phase-3 broadcast ever runs. Round 2's activation handler never returned
+ * `true`, so it never marked the keystroke `handled` — meaning every Tab
+ * press hit that fallback: blessed's `focusNext()` immediately re-stole
+ * focus away from `filterBox` right after `focusFilter()` had just set it,
+ * AND `suppressNextFilterChar` (armed but never reached by phase 3) stayed
+ * stuck `true`, silently swallowing the sysop's next real keystroke
+ * whenever it arrived in a later payload. Root cause: `KeyBinder.key()`'s
+ * wrapped handler (ViewManager.ts) discarded the inner handler's return
+ * value instead of propagating it, so there was no way for a hotkey to
+ * signal `handled` back to `Screen._handleKey` at all. Fixed at that root
+ * — `wrapped` now `return`s the inner handler's result — and the
+ * activation handler returns `true`, so Tab's own dispatch skips the
+ * default fallback exactly like every other activator key already did.
  */
 import { Screen, List, Textbox } from '../../../../sdk/engines/ui/blessed';
 import { KeyBinder } from '../../../../Doors/door-manager/ViewManager';
 import { ALL_TYPES, distinctTypes, cycleSystemFilter } from '../../../../Doors/door-manager/systemFilter';
 
-type Variant = 'buggy-sync' | 'buggy-nexttick' | 'fixed';
+// 'fixed-round2' reproduces round 2's committed state exactly: both
+// synchronous suppress flags, but the activation handler does not `return
+// true`, so it never signals `handled` — isolates the round-3 Tab bug
+// (focus stolen back + stuck suppressNextFilterChar) from round 2's fix,
+// which already resolved the leak for every other activator key.
+type Variant = 'buggy-sync' | 'buggy-nexttick' | 'fixed-round2' | 'fixed';
 
 interface Harness {
   screen: any;
@@ -69,6 +91,7 @@ interface Harness {
    * `_emitKey` creates by also emitting 'data'; calling `_handleData`
    * directly bypasses that guard and double/triple-dispatches. */
   send: (raw: string) => void;
+  isFilterFocused: () => boolean;
   destroy: () => void;
 }
 
@@ -89,6 +112,11 @@ function buildHarness(variant: Variant): Harness {
 
   const filterBox = new Textbox({ parent: screen, top: 11, left: 0, width: 30, height: 1 });
 
+  // 'fixed' and 'fixed-round2' both have the two synchronous suppress
+  // flags — they differ only in whether the activation handler signals
+  // `handled` (round 3's fix). The buggy variants never had either flag.
+  const hasSyncGuards = variant === 'fixed' || variant === 'fixed-round2';
+
   // Copied from DoormanLayout constructor (app.ts): disable doorList's
   // built-in type-ahead so letter keys reach hotkeys instead of jumping
   // list selection.
@@ -102,10 +130,10 @@ function buildHarness(variant: Variant): Harness {
     });
   }
 
-  // Copied from DoormanLayout constructor + focusFilter() (app.ts), fixed
-  // variant only — the buggy variants never had this guard.
+  // Copied from DoormanLayout constructor + focusFilter() (app.ts) — 'fixed'
+  // and 'fixed-round2' only, the buggy variants never had this guard.
   let suppressNextFilterKeypress = false;
-  if (variant === 'fixed') {
+  if (hasSyncGuards) {
     const _filterNav = (filterBox as any)._onKeypress?.bind(filterBox);
     (filterBox as any).removeAllListeners('keypress');
     if (_filterNav) {
@@ -116,7 +144,7 @@ function buildHarness(variant: Variant): Harness {
     }
   }
   function focusFilter(): void {
-    if (variant === 'fixed') suppressNextFilterKeypress = true;
+    if (hasSyncGuards) suppressNextFilterKeypress = true;
     (filterBox as any).focus();
   }
   function focusList(): void { (doorList as any).focus(); }
@@ -129,7 +157,7 @@ function buildHarness(variant: Variant): Harness {
   let cycles = 0;
 
   const filterKeypress = (ch: string, key: any) => {
-    if (variant === 'fixed' && suppressNextFilterChar) { suppressNextFilterChar = false; return; }
+    if (hasSyncGuards && suppressNextFilterChar) { suppressNextFilterChar = false; return; }
     if (!filterActive) return;
     const kn = key?.name ?? '';
     if (kn === 'tab' || kn === 'down' || kn === 'enter' || kn === 'return') {
@@ -159,10 +187,19 @@ function buildHarness(variant: Variant): Harness {
         filterActive = true;
         focusFilter();
       });
+    } else if (variant === 'fixed-round2') {
+      // Round 2's actual committed state: synchronous guards, but the
+      // handler never returns true — never signals `handled`, so an
+      // unhandled Tab still hits Screen._handleKey's own focusNext()
+      // fallback and returns before phase 3 ever runs.
+      filterActive = true;
+      suppressNextFilterChar = true;
+      focusFilter();
     } else {
       filterActive = true;
       suppressNextFilterChar = true;
       focusFilter();
+      return true; // round 3: see app.ts's activation handler for why
     }
   });
   keys.key(['c', 'C'], () => {
@@ -180,6 +217,7 @@ function buildHarness(variant: Variant): Harness {
     getSystemFilter: () => systemFilter,
     cycleCount: () => cycles,
     send: (raw: string) => { (screen as any).program.emit('data', raw); },
+    isFilterFocused: () => (screen as any)._focused === filterBox,
     destroy: () => { if (!screen.destroyed) screen.destroy(); },
   };
 }
@@ -283,5 +321,73 @@ describe('DOORMAN RepoView filter: activation leak — same-payload/chunked deli
     h.send('fx');
     expect(h.getFilterText()).toBe('x');
     expect(h.getFilterActive()).toBe(true);
+  });
+});
+
+describe('DOORMAN RepoView filter: Tab activation (round 3)', () => {
+  let h: Harness;
+  afterEach(() => h?.destroy());
+
+  it('fixed: tab activates the filter and keeps real screen focus on filterBox', () => {
+    h = buildHarness('fixed');
+    h.send('\t');
+    expect(h.getFilterActive()).toBe(true);
+    expect(h.isFilterFocused()).toBe(true); // not stolen back by Screen's own focusNext()
+    expect(h.getFilterText()).toBe('');
+    expect(h.filterBox.getValue()).toBe('');
+  });
+
+  it('fixed: a char in a LATER payload after tab activation lands in the field — nothing swallowed', () => {
+    h = buildHarness('fixed');
+    h.send('\t');
+    h.send('z');
+    expect(h.getFilterActive()).toBe(true);
+    expect(h.getFilterText()).toBe('z');
+    expect(h.filterBox.getValue()).toBe('z');
+  });
+
+  it('fixed: tab + char in the SAME payload also lands correctly', () => {
+    h = buildHarness('fixed');
+    h.send('\tz');
+    expect(h.getFilterActive()).toBe(true);
+    expect(h.getFilterText()).toBe('z');
+    expect(h.filterBox.getValue()).toBe('z');
+  });
+
+  it('fixed: other activators (f, /) still work and mark handled (focus not stolen back)', () => {
+    h = buildHarness('fixed');
+    h.send('f');
+    expect(h.isFilterFocused()).toBe(true);
+    h.destroy();
+
+    h = buildHarness('fixed');
+    h.send('/');
+    expect(h.isFilterFocused()).toBe(true);
+  });
+
+  it('RED evidence — fixed-round2: tab press lets Screen.focusNext() steal focus back', () => {
+    h = buildHarness('fixed-round2');
+    h.send('\t');
+    expect(h.getFilterActive()).toBe(true); // our own flag still flipped
+    expect(h.isFilterFocused()).toBe(false); // but real screen focus moved elsewhere
+  });
+
+  it('RED evidence — fixed-round2: a later-payload char after tab activation is silently swallowed', () => {
+    h = buildHarness('fixed-round2');
+    h.send('\t');
+    h.send('z');
+    // suppressNextFilterChar was armed but phase 3 never ran for the tab
+    // keystroke (Screen's default fallback returned first), so it's still
+    // true here and eats the very next keystroke instead of typing it.
+    expect(h.getFilterText()).toBe('');
+    expect(h.filterBox.getValue()).toBe('');
+  });
+
+  it('GREEN — fixed does not reproduce either fixed-round2 failure mode', () => {
+    h = buildHarness('fixed');
+    h.send('\t');
+    expect(h.isFilterFocused()).toBe(true);
+    h.send('z');
+    expect(h.getFilterText()).toBe('z');
   });
 });

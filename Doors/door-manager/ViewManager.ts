@@ -88,7 +88,7 @@ export async function refreshDoorRegistry(cache: Record<string, any> = require.c
 
 export class KeyBinder {
   private screen: any;
-  private bound: Array<{ keys: string[]; handler: (...a: any[]) => void }> = [];
+  private bound: Array<{ keys: string[]; handler: (...a: any[]) => boolean | void }> = [];
   private guard: (() => boolean) | null = null;
 
   constructor(screen: any) { this.screen = screen; }
@@ -103,10 +103,24 @@ export class KeyBinder {
    */
   setGuard(guard: (() => boolean) | null): void { this.guard = guard; }
 
-  key(keys: string[], handler: (...a: any[]) => void): void {
-    const wrapped = (...a: any[]) => {
+  /**
+   * Propagates `handler`'s return value through to Screen.key()/
+   * _handleKey — returning `true` marks the keystroke `handled`, which
+   * skips Screen._handleKey's phase-2 emit-to-focused-element AND its
+   * default Tab/Shift-Tab focus-navigation fallback (screen.ts's
+   * `_handleKey`: both are gated on `!handled`). Every existing hotkey in
+   * this codebase returns `undefined` (falls through `wrapped` unchanged),
+   * so this is purely additive — only a caller that now explicitly
+   * `return`s `true` opts in. See RepoView's filter-activation handler
+   * (app.ts) for why this was needed: an unhandled Tab keystroke hits
+   * Screen's own `focusNext()` fallback and returns before ever reaching
+   * the phase-3 broadcast, silently undoing a synchronous focus change and
+   * leaking a stuck one-shot guard flag with nothing left to consume it.
+   */
+  key(keys: string[], handler: (...a: any[]) => boolean | void): void {
+    const wrapped = (...a: any[]): boolean | void => {
       if (this.guard && !this.guard()) return;
-      handler(...a);
+      return handler(...a);
     };
     this.bound.push({ keys, handler: wrapped });
     (this.screen as any).key(keys, wrapped);
