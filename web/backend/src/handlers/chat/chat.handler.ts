@@ -56,10 +56,23 @@ console.log('[ChatHandler] Initialized with DI');
    * PowerPager or drawing the internal pager here would fight it.
    */
   notifySysopPage(session: BBSSession): boolean {
-    if (!session.user) return false;
+    if (!session?.user) {
+console.log('[ChatHandler] notifySysopPage: no user on session — cannot page');
+      return false;
+    }
 console.log('Sysop page (notify-only) for user:', session.user.username);
-    this.chatSessionUseCase.createChatSession(session.user.id, session.user.username);
-    this.sendPagerWebhook(session);
+    // Failure-proof: the paging DOOR must never die because our chat
+    // bookkeeping or webhook threw — the page attempt is what counts.
+    try {
+      this.chatSessionUseCase.createChatSession(session.user.id, session.user.username);
+    } catch (err) {
+console.error('[ChatHandler] notifySysopPage: createChatSession failed:', (err as Error)?.message ?? err);
+    }
+    try {
+      this.sendPagerWebhook(session);
+    } catch (err) {
+console.error('[ChatHandler] notifySysopPage: webhook failed:', (err as Error)?.message ?? err);
+    }
     return true;
   }
 
