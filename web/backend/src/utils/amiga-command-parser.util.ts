@@ -24,6 +24,7 @@ export enum DoorType {
   AEM = 'AEM',       // AmiExpress Module
   SUP = 'SUP',       // Support module
   FIM = 'FIM',       // FAME Interface Module (FAME BBS door compat)
+  DD = 'DD',         // DayDream Interface Module (DayDream BBS door compat)
   TS = 'TS',         // TypeScript door (AmiExpress-Web extension)
   PYTHON = 'PYTHON', // Python door (AmiExpress-Web extension)
   PY = 'PY',         // Python door shorthand (AmiExpress-Web extension)
@@ -471,6 +472,13 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
               type = DoorType.MCI;
             } else if (typeStr === 'FM' || typeStr === 'FI' || typeStr === 'FIM') {
               type = DoorType.FIM;
+            } else if (typeStr === 'DM' || typeStr === 'DD') {
+              // DayDream doors don't have an established 2-3-char TYPE=
+              // convention the way FAME's FM/FI/FIM do (DayDream's own
+              // .info/config format never needed one); accept 'DD' as the
+              // primary/only alias since that's the string
+              // analyze-all-doors.sh and door-installer.ts already emit.
+              type = DoorType.DD;
             }
 
             // Extract access level

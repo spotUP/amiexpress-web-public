@@ -21,6 +21,7 @@ export enum DoorType {
   AEM = 6,  // AEM/REXX doors
   SUP = 7,  // SUP doors
   FIM = 8,  // FIM (FAME BBS doors)
+  DD = 9,   // DD (DayDream BBS doors)
 }
 
 /**

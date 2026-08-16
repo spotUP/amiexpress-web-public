@@ -403,7 +403,9 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
 // Amiga 68K binary door type codes (native LoadSeg executables run under
 // the 68K emulator). FIM is FAME BBS's door-type marker, routed through
 // FAMEDoorPort/FIMProtocol (AmigaDoorSession.ts) instead of AEDoor.library.
-export const AMIGA_68K_DOOR_TYPES = ['XIM', 'AIM', 'SIM', 'TIM', 'IIM', 'FIM'];
+// DD is DayDream BBS's door-type marker, routed through dreamdoor.library
+// (DreamDoorLibrary/dreamdoor-vectors) the same way.
+export const AMIGA_68K_DOOR_TYPES = ['XIM', 'AIM', 'SIM', 'TIM', 'IIM', 'FIM', 'DD'];
 
 export function isAmiga68kDoorType(t: string): boolean {
   return AMIGA_68K_DOOR_TYPES.includes((t || '').toUpperCase());
@@ -1607,6 +1609,9 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
       case 'FIM': // FAME Interface Module (FAME BBS door compat) - FAMEDoorPort/FIMProtocol
         await executeAmigaDoor(socket, session, door, doorSession);
         break;
+      case 'DD': // DayDream Interface Module (DayDream BBS door compat) - dreamdoor.library
+        await executeAmigaDoor(socket, session, door, doorSession);
+        break;
       default:
         emitText(socket, `Unknown door type: ${door.type}\r\n`);
 console.error(`Unknown door type: ${door.type}`);
@@ -2799,7 +2804,8 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
                          doorType === 'TIM' ? DoorType.TIM :
                          doorType === 'IIM' ? DoorType.IIM :
                          doorType === 'MCI' ? DoorType.MCI :
-                         doorType === 'FIM' ? DoorType.FIM : DoorType.XIM;
+                         doorType === 'FIM' ? DoorType.FIM :
+                         doorType === 'DD' ? DoorType.DD : DoorType.XIM;
     // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID")
     logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
 

@@ -488,7 +488,7 @@ debugLog(`[LibraryManager] AEDoorRP.000-009 AREXX ports created`);
     const doorDir = path.dirname(this.config.executablePath);
     this.pathManager.setProgDir(doorDir);
 
-    const useXimProtocol = doorType !== "SIM" && doorType !== "SUP" && doorType !== "FIM";
+    const useXimProtocol = doorType !== "SIM" && doorType !== "SUP" && doorType !== "FIM" && doorType !== "DD";
     this.useXimProtocol = useXimProtocol;
 
     // Create icon.library BEFORE XIMProtocol so it can pre-load command .info files
