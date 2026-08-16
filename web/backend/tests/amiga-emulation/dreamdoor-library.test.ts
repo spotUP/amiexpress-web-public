@@ -276,3 +276,98 @@ describe("DreamDoorLibrary deferred Prompt/GetKey (Task 4)", () => {
     expect(resumeD0).toBe(121); // 'y'
   });
 });
+
+describe("DreamDoorLibrary pending-input teardown (Task 4 review fix)", () => {
+  type PendingInputInternals = {
+    inputBuffer: string;
+    pendingPromptBuffer: number | null;
+    pendingPromptMaxLen: number;
+    pendingPromptMode: number;
+    promptLineBuffer: string;
+    pendingKeyPending: boolean;
+  };
+
+  it("closeDoor clears a pending Prompt, resumes a paused emulator, and a subsequent InitDoor/Prompt starts clean", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    let paused = false, resumeCalls = 0;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => { paused = true; };
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => { resumeCalls++; paused = false; };
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: () => true });
+    const handle = lib.initDoor(0x1000);
+    const promptText = 0x500000, buf = 0x510000;
+    "Name>".split("").forEach((c, i) => emu.writeMemory(promptText + i, c.charCodeAt(0)));
+
+    lib.prompt(handle, buf, promptText, 20, 0);
+    expect(paused).toBe(true);
+    lib.queueInput("ab"); // partial line, no CR yet — leaves dirty pending state
+
+    lib.closeDoor(handle);
+
+    // Regression: closeDoor must resume a still-paused emulator — without
+    // this, nothing is left pending to ever call resume() again and the
+    // CPU stays hung forever.
+    expect(resumeCalls).toBeGreaterThan(0);
+    expect(paused).toBe(false);
+
+    const internals = lib as unknown as PendingInputInternals;
+    expect(internals.pendingPromptBuffer).toBeNull();
+    expect(internals.pendingPromptMaxLen).toBe(0);
+    expect(internals.pendingPromptMode).toBe(0);
+    expect(internals.promptLineBuffer).toBe("");
+    expect(internals.inputBuffer).toBe("");
+    expect(internals.pendingKeyPending).toBe(false);
+
+    // A fresh InitDoor + Prompt on the same library instance must start
+    // clean — no leaked "ab" from the previous door's aborted prompt line.
+    const handle2 = lib.initDoor(0x1000);
+    const buf2 = 0x520000;
+    lib.prompt(handle2, buf2, promptText, 20, 0);
+    lib.queueInput("spot\r");
+    expect(emu.readString(buf2, 20)).toBe("spot");
+  });
+
+  it("closeDoor clears a pending GetKey and resumes the emulator", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    let resumeCalls = 0;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => { resumeCalls++; };
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: () => true });
+    const handle = lib.initDoor(0x1000);
+
+    lib.getKey(handle, 0); // no type-ahead — pauses, pendingKeyPending = true
+    lib.closeDoor(handle);
+
+    expect(resumeCalls).toBeGreaterThan(0);
+    expect((lib as unknown as PendingInputInternals).pendingKeyPending).toBe(false);
+  });
+
+  it("initDoor defensively resets pending input even without a prior closeDoor", () => {
+    const emu = new MemStub();
+    let nextAlloc = 0x300000;
+    (emu as unknown as { pause(): void; resume(): void }).pause = () => undefined;
+    (emu as unknown as { pause(): void; resume(): void }).resume = () => undefined;
+    const lib = new DreamDoorLibrary(emu as never, {
+      allocMem: (size: number) => { const a = nextAlloc; nextAlloc += size; return a; },
+      freeMem: () => undefined,
+    });
+    lib.setSession({}, { emit: () => true });
+    lib.initDoor(0x1000);
+    lib.getKey(lib.initDoor(0x1000), 0); // pauses, pendingKeyPending = true — never closed
+
+    // Re-init without going through closeDoor() first (e.g. an external
+    // teardown/reinit path that skips it).
+    lib.initDoor(0x1000);
+
+    expect((lib as unknown as PendingInputInternals).pendingKeyPending).toBe(false);
+  });
+});

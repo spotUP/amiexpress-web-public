@@ -151,6 +151,16 @@ export class DreamDoorLibrary {
     const nodeId = this.emulator.readString(nodeIdAddr, 16);
     console.log(`[DreamDoor] InitDoor: nodeId="${nodeId}"`);
 
+    // Defensive (Task 4 review fix): a paused door can never be the one
+    // calling InitDoor again (the CPU is stopped while a Prompt/GetKey is
+    // pending), so this is always safe — but callers outside the 68K CPU
+    // (Task 5's disconnect/timeout teardown paths) can reinit this
+    // instance without going through a matching closeDoor() first. Clear
+    // any leftover deferred-input state so a stale buffer address or a
+    // permanently-paused emulator can never leak from a prior door
+    // session into this one. See resetPendingInput()'s doc comment.
+    this.resetPendingInput();
+
     if (this.initialized) {
       console.log(`[DreamDoor] Already initialized, returning existing handle`);
       return this.doorHandle;
@@ -401,6 +411,30 @@ export class DreamDoorLibrary {
   }
 
   /**
+   * Clear all deferred Prompt/GetKey input state (Task 4 review fix).
+   * Called from closeDoor() and defensively from initDoor(). If a
+   * Prompt/GetKey was genuinely still pending (the emulator paused) when
+   * this runs, resume() it as part of the reset — otherwise nothing would
+   * ever call resume() again (queueInput()'s completion branches only
+   * fire when pendingPromptBuffer !== null or pendingKeyPending is true,
+   * both of which this just cleared), leaving the CPU permanently paused.
+   */
+  private resetPendingInput(): void {
+    const hadPending = this.pendingPromptBuffer !== null || this.pendingKeyPending;
+
+    this.inputBuffer = "";
+    this.pendingPromptBuffer = null;
+    this.pendingPromptMaxLen = 0;
+    this.pendingPromptMode = 0;
+    this.promptLineBuffer = "";
+    this.pendingKeyPending = false;
+
+    if (hadPending) {
+      this.emulator.resume();
+    }
+  }
+
+  /**
    * DisplayFile (DD_LVO.DisplayFile)
    * Display file with optional pause
    * Input: D0 = handle, A0 = filename, D1 = pause flag
@@ -455,6 +489,15 @@ export class DreamDoorLibrary {
     this.nodeInfoAddr = 0;
     this.initialized = false;
     this.doorHandle = 0;
+
+    // Task 4 review fix: a pending Prompt/GetKey (paused emulator, stale
+    // buffer address, partial line) must never survive CloseDoor. Left
+    // alone, Task 5's external disconnect/timeout teardown could tear the
+    // door down while genuinely mid-Prompt/GetKey, leaving the emulator
+    // permanently paused (nothing left pending to ever call resume()
+    // again) or leaking a freed buffer address into a subsequent door's
+    // session on this same library instance.
+    this.resetPendingInput();
 
     return handle;
   }
