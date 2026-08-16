@@ -268,10 +268,19 @@ function detectArchiveType(
  * port name, so checking AEDoorPort first would misclassify a FAME binary
  * as XIM. DoorControl (SIM) is checked last since it names a generic
  * message port shared by SIM/TIM/IIM/SUP doors.
+ *
+ * DD (DreamDoor) is checked last of all, after DoorControl: dreamdoor.library
+ * is a generic-enough string that a door using both AEDoorPort scaffolding
+ * and a DD compatibility shim (if one exists) should still classify as XIM
+ * first — same precedence reasoning as FAMEDoorPort-before-AEDoorPort above.
  */
 export function detectDoorType(buf: Buffer): string {
   if (buf.includes(Buffer.from('FAMEDoorPort', 'latin1'))) return 'FIM';
   if (buf.includes(Buffer.from('AEDoorPort', 'latin1'))) return 'XIM';
   if (buf.includes(Buffer.from('DoorControl', 'latin1'))) return 'SIM';
+  if (
+    buf.includes(Buffer.from('dreamdoor.library', 'latin1')) ||
+    buf.includes(Buffer.from('DD_DoorPort', 'latin1'))
+  ) return 'DD';
   return 'XIM';
 }
