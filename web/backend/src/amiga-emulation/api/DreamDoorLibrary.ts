@@ -372,7 +372,7 @@ export class DreamDoorLibrary {
     // so a long value can never clobber a field at a higher offset.
     this.writeString(addr + USER_OFFSET.USER_HANDLE, user.name || 'Guest', 25); // gap to USER_ORGANIZATION@0x34
     this.writeString(addr + USER_OFFSET.USER_ORGANIZATION, user.location || 'Unknown', 46); // gap to USER_VOICEPHONE@0x63
-    this.writeString(addr + USER_OFFSET.USER_VOICEPHONE, user.phone || '', 15); // well within gap to USER_ULBYTES@0xbc
+    this.writeString(addr + USER_OFFSET.USER_VOICEPHONE, user.phone || '', 15); // gap to USER_PASSWORD@0x78 is 21 bytes — stay well under that, don't "safely" bump toward 0xbc
     // USER_PASSWORD@0x78 is intentionally left zeroed — doors get session
     // state, not the plaintext password.
 
@@ -386,6 +386,8 @@ export class DreamDoorLibrary {
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_CONNECTIONS, user.timesCalled || 1);
     this.emulator.writeMemory(addr + USER_OFFSET.USER_BYTERATIO, user.ratio || 0);
     this.emulator.writeMemory(addr + USER_OFFSET.USER_SECURITYLEVEL, user.securityLevel || 10);
+    // USER_LASTCALL: intentionally unmodeled — no bbsSession field carries a
+    // last-call timestamp yet, so this is left zeroed rather than forgotten.
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_LASTCALL, 0);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_DAILYTIMELIMIT, user.dailyTimeLimit || 60);
     this.emulator.writeMemory16(addr + USER_OFFSET.USER_TIMEREMAINING, user.timeRemaining || 60);
