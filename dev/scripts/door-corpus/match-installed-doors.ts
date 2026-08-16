@@ -269,10 +269,27 @@ const namedMd5Cache = new Map<string, string | null>();
 // — many older LHA/LZH archives were packed on DOS/Amiga tooling and use
 // "\" throughout (e.g. "BBS\DOORS\EmP_Tools\Bulls"). path.basename() only
 // splits on "/" on POSIX, so it must not be relied on here — normalize
-// both separators first (same normalization buildBasenameIndex uses).
-function entryBasename(entryName: string): string {
+// both separators first. Regression-tested: reverting this to
+// path.basename() silently dropped the MD5 match count from 20 to 2.
+export function entryBasename(entryName: string): string {
   const normalized = entryName.replace(/\\/g, '/');
   return normalized.split('/').pop() ?? normalized;
+}
+
+/**
+ * Select the archive entries whose *basename* equals the installed
+ * command's own target filename — the live entry scan that replaced the
+ * buggy v1 approach of trusting door_catalog.binary_name (the archive's
+ * stored "first HUNK found" guess). Pure and exported for regression
+ * tests: multi-door bundles (MST-CF23.LHA ships Conftop020.x AND
+ * Usereditor; binary_name says "Usereditor") and extension-blind matching
+ * (".x" fails AMIGA_68K_BINARY_EXT_RE) are both covered here. Directory
+ * entries are excluded; comparison is case-insensitive (Amiga
+ * filesystems are).
+ */
+export function matchEntriesByBasename<T extends { name: string }>(entries: T[], targetBasename: string): T[] {
+  const target = targetBasename.toLowerCase();
+  return entries.filter(e => !e.name.endsWith('/') && !e.name.endsWith('\\') && entryBasename(e.name).toLowerCase() === target);
 }
 
 async function md5OfNamedEntry(archivePath: string, targetBasename: string): Promise<string | null> {
@@ -283,8 +300,7 @@ async function md5OfNamedEntry(archivePath: string, targetBasename: string): Pro
   let result: string | null = null;
 
   if (entries) {
-    const target = targetBasename.toLowerCase();
-    const matches = entries.filter(e => !e.name.endsWith('/') && !e.name.endsWith('\\') && entryBasename(e.name).toLowerCase() === target);
+    const matches = matchEntriesByBasename(entries, targetBasename);
     if (matches.length > 0) {
       try {
         const extractor = await getExtractorForFile(archivePath);
@@ -318,7 +334,7 @@ async function md5OfNamedEntry(archivePath: string, targetBasename: string): Pro
 export function buildBasenameIndex(files: Array<{ catalog_id: string; path: string }>): Map<string, Set<string>> {
   const index = new Map<string, Set<string>>();
   for (const f of files) {
-    const base = f.path.replace(/\\/g, '/').split('/').pop();
+    const base = entryBasename(f.path);
     if (!base) continue;
     const key = base.toLowerCase();
     if (!index.has(key)) index.set(key, new Set());
@@ -648,6 +664,13 @@ async function main() {
   log(`Skipped (.info):  ${skipped.length}`);
 
   // ─── Apply ────────────────────────────────────────────────────────────────
+  // Name-match provenance note: the one name-match applied in the 2026-08-16
+  // backfill (KICKBOX -> 187_kb1) was verified out-of-band before applying —
+  // the pure-JS LZH parser throws on 187-KB1.LZH's header so md5OfNamedEntry
+  // couldn't verify it, but native `lha p -q 187-KB1.LZH Doors/KickBox.Rexx`
+  // is byte-identical (MD5) to the installed Doors/KickBox/KickBox.Rexx.
+  // See commit e20793c4f for the full record. Any future --apply-name-matches
+  // run should do the same manual content check for each name-only row.
   if (APPLY) {
     const toApply = updates.filter(u => u.matchedBy === 'md5' || APPLY_NAME_MATCHES);
     log(`\nApplying ${toApply.length} update(s) (${updates.filter(u => u.matchedBy === 'md5').length} md5${APPLY_NAME_MATCHES ? `, ${updates.filter(u => u.matchedBy === 'name').length} name` : ''})...`);

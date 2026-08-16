@@ -20,12 +20,17 @@
  *    content MD5 before anything is written), so it's tested for recall
  *    (does it find the right row) and for the length gate that keeps it
  *    from exploding on short tokens, not for zero false positives.
- *  - buildBasenameIndex: exact-basename lookup over door_catalog_files,
- *    including the backslash-path normalization regression (older
- *    LHA/LZH archives were packed with "\" separators; path.basename()
- *    doesn't split on those on POSIX, which is exactly the bug that
- *    made the first version of this script's MD5 matching fall from 20
- *    hits to 2 — see git history / the report for the full story).
+ *  - entryBasename + matchEntriesByBasename: the LIVE archive-scan path
+ *    used by md5OfNamedEntry — the code that actually carried the two
+ *    shipped bug fixes. entryBasename covers the backslash-separator
+ *    regression (older LHA/LZH archives were packed with "\" separators;
+ *    path.basename() doesn't split on those on POSIX — the bug that made
+ *    the MD5 matching fall from 20 hits to 2). matchEntriesByBasename
+ *    covers the multi-door-bundle wrong-binary regression (MST-CF23.LHA:
+ *    match the command's own target basename, never the archive's stored
+ *    binary_name / first-HUNK guess).
+ *  - buildBasenameIndex: exact-basename lookup over door_catalog_files
+ *    (built on the same entryBasename helper).
  */
 // better-sqlite3 lives in the repo-root node_modules (the script runs
 // under tsx from dev/scripts) — it is NOT resolvable from web/backend, so
@@ -41,6 +46,8 @@ import {
   buildBasenameIndex,
   normalizeDir,
   alnumToken,
+  entryBasename,
+  matchEntriesByBasename,
 } from '../../../../dev/scripts/door-corpus/match-installed-doors';
 
 describe('match-installed-doors: parseInfoLocation', () => {
@@ -181,6 +188,84 @@ describe('match-installed-doors: candidateRowsForCommand', () => {
   it('returns no candidates when nothing matches at all', () => {
     const found = candidateRowsForCommand(rows, { dir: 'TotallyUnrelatedThing', binaryBasename: 'nope.exe' });
     expect(found).toEqual([]);
+  });
+});
+
+describe('match-installed-doors: entryBasename (live archive-scan path)', () => {
+  // Regression for the v2 bug: entryBasename originally used
+  // path.basename(), which on POSIX does not split on "\" — so a
+  // DOS/Amiga-packed entry name like "BBS\Doors\EmP_Tools\Bulls" returned
+  // the WHOLE string and md5OfNamedEntry never found "Bulls" by name.
+  // That single line silently dropped the backfill's MD5 match count from
+  // 20 to 2. This test fails if entryBasename reverts to path.basename().
+  it('splits backslash-separated archive entry names (regression: path.basename() keeps them whole on POSIX)', () => {
+    expect(entryBasename('BBS\\Doors\\EmP_Tools\\Bulls')).toBe('Bulls');
+    expect(entryBasename('BBS\\Doors\\EmP_Tools\\Bulls')).not.toBe('BBS\\Doors\\EmP_Tools\\Bulls');
+  });
+
+  it('splits forward-slash entry names and mixed separators', () => {
+    expect(entryBasename('Doors/Conftop/Conftop020.x')).toBe('Conftop020.x');
+    expect(entryBasename('BBS\\Doors/EmP_Tools\\Bulls')).toBe('Bulls');
+  });
+
+  it('returns a bare filename unchanged', () => {
+    expect(entryBasename('KickBox.Rexx')).toBe('KickBox.Rexx');
+  });
+});
+
+describe('match-installed-doors: matchEntriesByBasename (live archive-scan path)', () => {
+  // Regression for the v1 bug: matching originally trusted
+  // door_catalog.binary_name — build-door-catalog.ts's stored "first HUNK
+  // binary found" guess — instead of the installed command's own target
+  // filename. Verified real case: MST-CF23.LHA is a multi-door bundle
+  // shipping BOTH Doors/Conftop/Conftop020.x (the door the CONFTOP
+  // command installs) and an unrelated Doors/Conftop/Usereditor;
+  // build-door-catalog stamped binary_name = "Usereditor" because
+  // isCandidateBinaryEntry rejects ".x"-suffixed names
+  // (AMIGA_68K_BINARY_EXT_RE doesn't cover that classic-AmigaDOS
+  // extension). The fix scans the live entry list for the target's OWN
+  // basename. This test fails against the pre-fix semantics (which would
+  // select Usereditor / whatever the extension gate picked).
+  const mstCf23Entries = [
+    { name: 'Doors/Conftop/Conftop020.x' },
+    { name: 'Doors/Conftop/Usereditor' },
+    { name: 'Doors/Conftop/Conftop.doc' },
+    { name: 'Doors/Conftop/' },
+  ];
+
+  it('selects the target basename from a multi-door bundle, not the archive\'s "first binary" (MST-CF23 wrong-binary regression)', () => {
+    const matches = matchEntriesByBasename(mstCf23Entries, 'Conftop020.x');
+    expect(matches.map(m => m.name)).toEqual(['Doors/Conftop/Conftop020.x']);
+    // The pre-fix behavior effectively matched Usereditor (the stored
+    // binary_name); assert it is NOT selected for this target.
+    expect(matches.map(m => m.name)).not.toContain('Doors/Conftop/Usereditor');
+  });
+
+  it('matches regardless of extension conventions (".x" is fine — no AMIGA_68K_BINARY_EXT_RE gate)', () => {
+    expect(matchEntriesByBasename(mstCf23Entries, 'conftop020.X')).toHaveLength(1);
+  });
+
+  it('finds backslash-packed entries by basename (v2 regression through the real call path)', () => {
+    const entries = [
+      { name: 'BBS\\Doors\\EmP_Tools\\Bulls' },
+      { name: 'BBS\\Doors\\EmP_Tools\\Bulls.doc' },
+    ];
+    const matches = matchEntriesByBasename(entries, 'Bulls');
+    expect(matches.map(m => m.name)).toEqual(['BBS\\Doors\\EmP_Tools\\Bulls']);
+  });
+
+  it('excludes directory entries (trailing "/" or "\\")', () => {
+    const entries = [
+      { name: 'Doors/Conftop/' },
+      { name: 'BBS\\Doors\\EmP_Tools\\' },
+    ];
+    expect(matchEntriesByBasename(entries, 'Conftop')).toEqual([]);
+    expect(matchEntriesByBasename(entries, 'EmP_Tools')).toEqual([]);
+  });
+
+  it('is case-insensitive (Amiga filesystems are)', () => {
+    const entries = [{ name: 'Doors/KickBox.Rexx' }];
+    expect(matchEntriesByBasename(entries, 'kickbox.rexx')).toHaveLength(1);
   });
 });
 
