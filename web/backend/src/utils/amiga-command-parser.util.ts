@@ -472,7 +472,7 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
               type = DoorType.MCI;
             } else if (typeStr === 'FM' || typeStr === 'FI' || typeStr === 'FIM') {
               type = DoorType.FIM;
-            } else if (typeStr === 'DM' || typeStr === 'DD') {
+            } else if (typeStr === 'DD') {
               // DayDream doors don't have an established 2-3-char TYPE=
               // convention the way FAME's FM/FI/FIM do (DayDream's own
               // .info/config format never needed one); accept 'DD' as the
