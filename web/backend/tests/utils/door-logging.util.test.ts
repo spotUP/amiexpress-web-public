@@ -4,6 +4,27 @@
  * Tests 68K door message logging functionality
  */
 
+// jest.mock('fs') below auto-mocks the WHOLE 'fs' module for this test
+// file's module registry, including the copy 'bindings'/'better-sqlite3'
+// use internally to locate their native binary. tests/setup.ts's global
+// beforeAll unconditionally opens a REAL sqlite database unless
+// SKIP_DB_INIT=1 is set — with 'fs' mocked out from under it, that open
+// fails with "Could not locate the bindings file" (unrelated to this
+// file's own tests, none of which touch the database). Skip real DB init
+// here; this suite is pure fs-mocked unit tests with no DB dependency.
+//
+// Saved/restored (not just set) because Jest workers run multiple test
+// FILES in the same process — process.env is NOT reset between files, so
+// an unconditional `process.env.SKIP_DB_INIT = '1'` would leak into
+// whichever test file happens to run next in this worker and silently
+// skip ITS real-DB init too.
+const __savedSkipDbInit = process.env.SKIP_DB_INIT;
+process.env.SKIP_DB_INIT = '1';
+afterAll(() => {
+  if (__savedSkipDbInit === undefined) delete process.env.SKIP_DB_INIT;
+  else process.env.SKIP_DB_INIT = __savedSkipDbInit;
+});
+
 // Mock dependencies BEFORE imports
 jest.mock('fs');
 jest.mock('../../src/utils/date-time.util', () => ({
