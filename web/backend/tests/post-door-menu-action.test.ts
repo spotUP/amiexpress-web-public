@@ -71,4 +71,25 @@ describe("postDoorMenuAction", () => {
   it("plain door completion returns to the menu", () => {
     expect(postDoorMenuAction(session())).toBe("menu");
   });
+
+  // Important 4 (DD final-review wave, 2026-08-16): when the sysop accepts
+  // a page during the post-door page-wait, chat.handler.ts's
+  // enterChatMode() sets session.inChat = true and the chat UI now owns
+  // the screen. postDoorMenuAction must report 'chat' so the caller skips
+  // the menu repaint — see apply-post-door-menu-action.test.ts for the
+  // behavioral assertion that no repaint actually happens.
+  it("inChat takes priority over the default 'menu' return", () => {
+    const s = session({ inChat: true });
+    expect(postDoorMenuAction(s)).toBe("chat");
+  });
+
+  it("inChat wins even when segments/pause/interactive flags are also set (defensive — chat UI must never be clobbered by a stale flag)", () => {
+    const s = session({
+      inChat: true,
+      screenSegments: { segments: ["tail"] },
+      paginatedScreen: {},
+      subState: LoggedOnSubState.FILES_UPLOAD,
+    });
+    expect(postDoorMenuAction(s)).toBe("chat");
+  });
 });

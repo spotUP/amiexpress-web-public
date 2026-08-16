@@ -92,10 +92,15 @@ describe('executeAmigaDoor sysop page-wait sequencing (task 18, round 2)', () =>
     expect(block).not.toMatch(/[^A-Za-z](startSysopPage\(|\{\s*startSysopPage\s*[,}])/);
   });
 
-  test('awaits the page-wait trigger before falling through to postDoorMenuAction', () => {
+  test('awaits the page-wait trigger before falling through to applyPostDoorMenuAction', () => {
+    // Important 4 (DD final-review wave, 2026-08-16): the inline
+    // postDoorMenuAction(session) decision block was extracted into
+    // applyPostDoorMenuAction(socket, session) so the inChat-skip branch
+    // is behaviorally testable (see post-door-menu-action.test.ts and
+    // apply-post-door-menu-action.test.ts) — this pin follows that rename.
     const body = executeAmigaDoorBody();
     const triggerIdx = body.indexOf('if (pendingSysopPageChatSession)');
-    const postActionIdx = body.indexOf('postDoorMenuAction(session)');
+    const postActionIdx = body.indexOf('applyPostDoorMenuAction(socket, session)');
     expect(triggerIdx).toBeGreaterThan(-1);
     expect(postActionIdx).toBeGreaterThan(triggerIdx);
     const block = body.slice(triggerIdx, postActionIdx);

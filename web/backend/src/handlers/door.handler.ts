@@ -12,6 +12,8 @@ import * as amigafs from '../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { routeAmigaDoorInput } from '../amiga-emulation/door-input-router';
+import { consumePendingSysopPage, runSysopPageWait } from './chat/chat.handler';
+import type { ChatSession } from '../services/use-cases/chat-session.use-case';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
@@ -453,15 +455,11 @@ interface DoorSession {
   output?: string[]; // Array of output strings from door execution
 }
 
-interface ChatSession {
-  id: string;
-  userId: string;
-  startTime: Date;
-  status: string;
-  messages: any[];
-  pageCount: number;
-  lastActivity: Date;
-}
+// ChatSession is imported from the use-case module (single source of
+// truth) — this file used to carry its own narrower duplicate interface
+// (no sysopId/endTime, messages: any[] instead of ChatMessage[]), which
+// conflicted with the typed consumePendingSysopPage/runSysopPageWait
+// imports added for the DD final-review wave (2026-08-16).
 
 interface Database {
   query: (sql: string, params?: any[]) => Promise<{ rows: any[] }>;
@@ -1433,6 +1431,15 @@ function padString(str: string, length: number): string {
 /**
  * Decide what the post-door exit path may do with the menu.
  *
+ * - 'chat': the sysop accepted a page DURING the post-door page-wait — the
+ *   chat UI (chat.handler.ts's enterChatMode) already owns the screen and
+ *   input routing (chat-mode-input.util.ts checks session.inChat first).
+ *   Checked FIRST, ahead of every other guard: once chat mode has taken
+ *   over the terminal, no stale segments/pause/subState flag should ever
+ *   cause a menu repaint (Important 4, DD final-review wave, 2026-08-16 —
+ *   previously the fall-through 'menu' branch reset menuPause and called
+ *   displayMainMenu, painting the main menu over the just-started chat
+ *   session while input kept routing to chat).
  * - 'segments': door ran inline via a ~CC_ screen sentinel and more screen
  *   segments follow (express.e:5455-5461) — never render the menu, the
  *   display flow continues (conference join, bulletins, ...).
@@ -1441,9 +1448,12 @@ function padString(str: string, length: number): string {
  *   interactive prompt state that owns the next input.
  * - 'menu': normal completion — return to menu.
  */
-export type PostDoorAction = 'segments' | 'pause' | 'interactive' | 'menu';
+export type PostDoorAction = 'chat' | 'segments' | 'pause' | 'interactive' | 'menu';
 
 export function postDoorMenuAction(session: BBSSession): PostDoorAction {
+  if (session.inChat) {
+    return 'chat';
+  }
   // Presence check, NOT segments.length: a ~CC_ door in the LAST segment
   // runs after that segment was already shift()ed (length === 0), but
   // processNextScreenSegment only clears session.screenSegments once the
@@ -1469,6 +1479,63 @@ export function postDoorMenuAction(session: BBSSession): PostDoorAction {
     return 'interactive';
   }
   return 'menu';
+}
+
+/**
+ * Apply the decision from postDoorMenuAction() — the ONLY place that
+ * decides whether to repaint the main menu after a door exits.
+ *
+ * Extracted out of executeAmigaDoor's inline post-exit block (Important 4,
+ * DD final-review wave, 2026-08-16) specifically so the 'chat' branch is
+ * behaviorally testable: executeAmigaDoor itself can't run under jest (it
+ * drags in the full BBS subsystem + 68K emulator — see
+ * door-page-wait-sequencing.test.ts's header comment on why that test is
+ * source-level instead), but this function can be called directly with a
+ * mock socket and a stub displayMainMenuFn to assert no menu emit / no
+ * DISPLAY_MENU clobber happens when session.inChat is true — the gap a
+ * source-grep test would have missed (and did, until this fix).
+ *
+ * displayMainMenuFn defaults to the real displayMainMenu import; tests
+ * override it with a spy instead of needing to boot the real menu system.
+ */
+export async function applyPostDoorMenuAction(
+  socket: any,
+  session: BBSSession,
+  displayMainMenuFn: (socket: any, session: BBSSession) => Promise<void> | void = displayMainMenu
+): Promise<void> {
+  const postAction = postDoorMenuAction(session);
+  if (postAction === 'chat') {
+    // Important 4: the sysop accepted the page DURING the post-door
+    // page-wait — session.inChat is now true and chat.handler.ts's
+    // enterChatMode already owns the screen (and chat-mode-input.util.ts
+    // already routes input there ahead of the normal command path).
+    // Repainting the menu here would overwrite the chat UI the caller is
+    // now looking at. Leave session.subState/menuPause exactly as
+    // completePaging() set them — chat's own exitChat() is what restores
+    // the menu once the chat session actually ends.
+    console.log('[executeAmigaDoor] inChat active post-page-wait - skipping displayMainMenu');
+  } else if (postAction === 'segments') {
+    // ~CC_ inline door ran inside screen-segment processing
+    // (express.e:5455-5461) — more segments follow (e.g. the conference
+    // join flow's "Joining Conference:" line). executeDoor restores the
+    // display-flow subState; rendering the menu here emits a premature
+    // menu prompt mid-screen (double-prompt bug, 2026-08-14).
+    console.log('[executeAmigaDoor] door completed during segment processing - skipping displayMainMenu');
+  } else if (postAction === 'pause') {
+    console.log('[executeAmigaDoor] Pause is active, skipping displayMainMenu (will resume via display flow)');
+    fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor: SKIPPING displayMainMenu (pause active)\n`);
+  } else if (postAction === 'interactive') {
+    // RETURNCOMMAND parked us in an interactive prompt state — do NOT
+    // overwrite subState or render the menu. The prompt's own state
+    // machine transitions back to DISPLAY_MENU when the user resolves it.
+    console.log(`[executeAmigaDoor] interactive prompt active (${session.subState}), skipping displayMainMenu`);
+  } else {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
+    if (session.state === BBSState.LOGGEDON && session.user) {
+      await displayMainMenuFn(socket, session);
+    }
+  }
 }
 
 /**
@@ -2804,9 +2871,8 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     // happens next — only the ACTUAL wait is deferred (to after the
     // CHAIN/RETURNCOMMAND block, matching "runs after door exit, before
     // returning to menu"), using the chat session captured below.
-    let pendingSysopPageChatSession: unknown;
+    let pendingSysopPageChatSession: ChatSession | null | undefined;
     try {
-      const { consumePendingSysopPage } = require('./chat/chat.handler');
       pendingSysopPageChatSession = consumePendingSysopPage(session);
     } catch (err) {
 console.warn('[executeAmigaDoor] consumePendingSysopPage failed:', err);
@@ -2962,10 +3028,10 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
     // 5D_Page already rendered its own paging screen, so recursively
     // launching PowerPager here would fight it.
     if (pendingSysopPageChatSession) {
+      const chatSession: ChatSession = pendingSysopPageChatSession;
       await new Promise<void>((resolve) => {
         try {
-          const { runSysopPageWait } = require('./chat/chat.handler');
-          runSysopPageWait(socket, session, pendingSysopPageChatSession, () => resolve());
+          runSysopPageWait(socket, session, chatSession, () => resolve());
         } catch (err) {
 console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
           resolve();
@@ -2979,29 +3045,7 @@ console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
     // The display flow will handle showing the menu after the user dismisses the pause.
     const doorName = door?.name || door?.command || 'Unknown';
     fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor EXIT: door="${doorName}", paginatedScreen=${!!session.paginatedScreen}, returnCommand=${(session as any).returnCommand || 'NONE'}\n`);
-    const postAction = postDoorMenuAction(session);
-    if (postAction === 'segments') {
-      // ~CC_ inline door ran inside screen-segment processing
-      // (express.e:5455-5461) — more segments follow (e.g. the conference
-      // join flow's "Joining Conference:" line). executeDoor restores the
-      // display-flow subState; rendering the menu here emits a premature
-      // menu prompt mid-screen (double-prompt bug, 2026-08-14).
-      console.log('[executeAmigaDoor] door completed during segment processing - skipping displayMainMenu');
-    } else if (postAction === 'pause') {
-      console.log('[executeAmigaDoor] Pause is active, skipping displayMainMenu (will resume via display flow)');
-      fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor: SKIPPING displayMainMenu (pause active)\n`);
-    } else if (postAction === 'interactive') {
-      // RETURNCOMMAND parked us in an interactive prompt state — do NOT
-      // overwrite subState or render the menu. The prompt's own state
-      // machine transitions back to DISPLAY_MENU when the user resolves it.
-      console.log(`[executeAmigaDoor] interactive prompt active (${session.subState}), skipping displayMainMenu`);
-    } else {
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = false;
-      if (session.state === BBSState.LOGGEDON && session.user) {
-        await displayMainMenu(socket, session);
-      }
-    }
+    await applyPostDoorMenuAction(socket, session);
 
   } catch (error) {
 console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
