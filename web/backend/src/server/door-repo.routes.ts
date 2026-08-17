@@ -23,6 +23,13 @@
  * path-joined onto a directory, so an encoded traversal payload
  * (`..%2F..%2Fetc%2Fpasswd`) just fails the catalog lookup and 404s like
  * any other unknown name — it can't reach the filesystem.
+ *
+ * Mount gating: this router only makes sense for a door-repo OWNER — a
+ * consumer BBS's own local catalog is not meant to be served to the world
+ * (it may hold thin `source='door-repo'` cache rows with `archive_path=''`,
+ * and there's no reason to expose an unauthenticated read of every
+ * consumer's local archive corpus). app.ts must only `app.use()` this
+ * router when isDoorRepoOwner() is true.
  */
 import express, { Request, Response } from 'express';
 import * as fs from 'fs';
@@ -30,6 +37,22 @@ import { pipeline } from 'stream';
 import { buildManifest, renderListTxt, getRepoRevision, getDoorCount } from '../doors/door-repo-manifest';
 import { getArchiveChecksums } from '../doors/door-repo-checksums';
 import { getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
+
+// ─── Mount gating (owner mode only) ─────────────────────────────────────
+//
+// Mode selection for the door-CLIENT (Doors/door-manager/repoDataSource.ts's
+// resolveDoorRepoMode) is the one place that reads DOOR_REPO_ROLE/
+// DOOR_REPO_URL for the full owner/disabled/consumer decision — but that
+// module lives under Doors/** (a door package) and this backend must not
+// import it. This is the ONE backend-side place that reads DOOR_REPO_ROLE,
+// and it deliberately answers only the single question app.ts needs
+// ("should this API be served at all"), not the door-client's fuller
+// owner/disabled/consumer/url resolution — replicating that would be the
+// duplication this repo has already ruled against. Semantics must match the
+// door's: owner only when the value is EXACTLY the string 'owner'.
+export function isDoorRepoOwner(env: Record<string, string | undefined> = process.env): boolean {
+  return env.DOOR_REPO_ROLE === 'owner';
+}
 
 export const doorRepoRouter = express.Router();
 

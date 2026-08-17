@@ -6,7 +6,7 @@ import path from 'path';
 import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
-import { doorRepoRouter } from './door-repo.routes';
+import { doorRepoRouter, isDoorRepoOwner } from './door-repo.routes';
 import { getSystemTime } from '../utils/date-time.util';
 import { getRepoRevision } from './repo-revision';
 
@@ -202,8 +202,17 @@ app.use('/api', doorApiRouter);
 // Deployment API routes
 app.use('/api', deploymentRouter);
 
-// Door Repo API routes — read-only manifest/list.txt/archive/health
-app.use('/api/door-repo', doorRepoRouter);
+// Door Repo API routes — read-only manifest/list.txt/archive/health.
+// Owner-only: a consumer BBS's own local catalog is not meant to be served
+// to the world (unauthenticated read of its local archive corpus). When not
+// owner, simply don't mount the router — the paths must 404 via Express's
+// default "no route matched", not a custom response, so a disabled feature
+// isn't advertised. See door-repo.routes.ts's isDoorRepoOwner() doc comment
+// for why the role check lives there instead of importing the door
+// package's resolveDoorRepoMode.
+if (isDoorRepoOwner()) {
+  app.use('/api/door-repo', doorRepoRouter);
+}
 
 // Debug-MCP routes — dev-only, read-only introspection for the MCP sidecar.
 // See mcp-server-debug/ and web/backend/src/debug/debug-mcp.routes.ts.
