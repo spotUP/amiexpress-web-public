@@ -9,8 +9,13 @@
  *
  * Mapping to the real protocol (see aedoor.h and aedoor_amiga.c for the
  * wire-level citations):
- *   ae_put()      -> stdout, chunked at AE_MAX_LINE like the real backend.
- *   ae_get()      -> one line via fgets(), truncated safely at maxlen.
+ *   ae_put()      -> stdout, chunked at AE_MAX_LINE like the real backend,
+ *                     with the same "bbs:" reroute guard (see
+ *                     would_reroute_to_file_display() below) so a caller
+ *                     sees byte-identical output on either backend.
+ *   ae_get()      -> one line via fgets(), truncated safely at maxlen, and
+ *                     draining any unread remainder of an over-long line so
+ *                     the next call starts at the following line.
  *   ae_key()      -> one character via getchar(); EOF reports as -1,
  *                     mirroring the real backend's carrier-loss code.
  *   ae_check()    -> always 0: there is no BBS connection to lose.
@@ -27,8 +32,44 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "aedoor.h"
+
+/* AmiExpress doors sometimes deliberately send "bbs:" device/volume paths
+ * via JH_SM to trigger file display instead of a printed line: our emulator
+ * matches this by trimming the message text and testing a case-insensitive
+ * prefix (io.ts:657-666 -- "const trimmed = text.trim(); ... if
+ * (trimmed.toLowerCase().startsWith('bbs:')) { ...handleShowFile(...);
+ * return; }"). This door only ever wants JH_SM/ae_put to print. A sysop can
+ * legitimately configure a download directory as "bbs:doors/", so a wholly
+ * ordinary status line like "bbs:doors/FOO.LHA saved" would otherwise be
+ * silently rerouted on the Amiga backend -- guarded identically here so the
+ * native twin's output matches byte-for-byte and the behaviour is testable
+ * without a live emulator.
+ *
+ * A leading SPACE does NOT defeat the real check: the BBS trims leading/
+ * trailing whitespace BEFORE testing the prefix (text.trim(), io.ts:659),
+ * and messages.ts:200 builds that JS string via String.fromCharCode() on
+ * the raw bytes, so both an ASCII space (0x20) and a Latin-1 NBSP (0xA0)
+ * are still classified as whitespace and stripped by .trim() -- verified
+ * against the actual check: " bbs:x".trim().startsWith("bbs:") is true.
+ * The guard byte must be printable and non-whitespace to survive trim();
+ * a single leading period reliably breaks the match and renders as an
+ * ordinary visible character on every terminal. */
+static int would_reroute_to_file_display(const char *text)
+{
+    const char *p;
+
+    p = text;
+    while (*p != '\0' && isspace((unsigned char)*p)) {
+        p++;
+    }
+    return (p[0] == 'b' || p[0] == 'B')
+        && (p[1] == 'b' || p[1] == 'B')
+        && (p[2] == 's' || p[2] == 'S')
+        && p[3] == ':';
+}
 
 int ae_start(int node)
 {
@@ -44,6 +85,12 @@ void ae_put(const char *text, int newline)
 
     if (text == NULL) {
         text = "";
+    }
+
+    /* Only the start of the message as a whole can be mistaken for a
+     * "bbs:" line -- guard once, up front, rather than per chunk. */
+    if (would_reroute_to_file_display(text)) {
+        fputc('.', stdout); /* guard byte: breaks the trimmed "bbs:" prefix match, see would_reroute_to_file_display() above */
     }
 
     len = (unsigned long)strlen(text);
@@ -69,6 +116,7 @@ void ae_put(const char *text, int newline)
 void ae_get(char *buf, int maxlen)
 {
     char *newline;
+    int c;
 
     if (buf == NULL || maxlen <= 0) {
         return;
@@ -76,9 +124,7 @@ void ae_get(char *buf, int maxlen)
 
     /* fgets() never writes more than maxlen bytes (including the NUL), so
      * this cannot overflow buf regardless of how long the actual input
-     * line is; any remainder beyond maxlen-1 chars simply stays queued on
-     * stdin, which is the safe-truncation behaviour this function
-     * promises. */
+     * line is. */
     if (fgets(buf, maxlen, stdin) == NULL) {
         buf[0] = '\0';
         return;
@@ -87,7 +133,18 @@ void ae_get(char *buf, int maxlen)
     newline = strchr(buf, '\n');
     if (newline != NULL) {
         *newline = '\0';
+        return;
     }
+
+    /* No newline landed in buf: the input line was longer than maxlen-1
+     * chars and its remainder is still queued on stdin. Drain it here so
+     * the NEXT ae_get() call starts cleanly at the following line instead
+     * of reading leftovers from this one -- otherwise a single over-long
+     * answer desynchronises every prompt that follows it. Stops at EOF too,
+     * so this can never spin if the stream simply ends mid-line. */
+    do {
+        c = getchar();
+    } while (c != '\n' && c != EOF);
 }
 
 int ae_key(void)

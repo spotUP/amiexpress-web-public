@@ -50,10 +50,15 @@ int ae_start(int node);
  * the break. Never both."). Text longer than AE_MAX_LINE is split across
  * multiple sends -- never truncated.
  *
- * Caller trap (not guarded here -- this is a generic I/O primitive, the
- * caller owns its own text): a line whose FIRST chunk starts with "bbs:" is
- * silently rerouted to file display instead of being printed (research doc
- * divergence #4; io.ts:661-667). A door that prints paths must avoid this. */
+ * Protocol-avoidance, not cosmetics: text whose first non-whitespace chars
+ * are "bbs:" (case-insensitive) is silently rerouted by the BBS to file
+ * display instead of being printed (research doc divergence #4; io.ts:
+ * 661-667 checks trimmed.toLowerCase().startsWith('bbs:')). A sysop can
+ * legitimately configure a download directory as "bbs:doors/", making this
+ * a live trap for ordinary status lines, not a hypothetical one. Both
+ * implementations guard it automatically -- a leading '.' is inserted so
+ * the check's prefix test fails and the line still prints -- so callers
+ * never need to remember this for any message they add. */
 void ae_put(const char *text, int newline);
 
 /* GetString equivalent (AEDoor.c GetString(), lines 267-273). Reads a line

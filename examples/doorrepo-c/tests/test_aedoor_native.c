@@ -210,6 +210,40 @@ TEST(put_null_text_is_a_safe_no_op)
     ASSERT_STR_EQ(out, "", "NULL text must not crash and must emit nothing");
 }
 
+TEST(put_bbs_prefix_is_escaped_to_avoid_file_display_reroute)
+{
+    /* A sysop can legitimately set DownloadDir=bbs:doors/, so this is a
+     * real status line, not a contrived one. Without the guard the BBS
+     * (io.ts:657-666) would trim, lowercase, and reroute this to file
+     * display instead of printing it. */
+    char *out;
+    capture_stdout_begin();
+    ae_put("bbs:doors/FOO.LHA saved", 1);
+    out = capture_stdout_end();
+    ASSERT_STR_EQ(out, ".bbs:doors/FOO.LHA saved\n",
+        "leading 'bbs:' gets a guard byte so the line still prints, visibly");
+}
+
+TEST(put_bbs_prefix_case_insensitive_is_escaped)
+{
+    char *out;
+    capture_stdout_begin();
+    ae_put("BBS:doors/FOO.LHA", 0);
+    out = capture_stdout_end();
+    ASSERT_STR_EQ(out, ".BBS:doors/FOO.LHA",
+        "uppercase BBS: matches the emulator's case-insensitive check too");
+}
+
+TEST(put_bbs_substring_mid_line_is_untouched)
+{
+    char *out;
+    capture_stdout_begin();
+    ae_put("saved to bbs:doors/FOO.LHA", 1);
+    out = capture_stdout_end();
+    ASSERT_STR_EQ(out, "saved to bbs:doors/FOO.LHA\n",
+        "'bbs:' NOT at the start of the line needs no guard");
+}
+
 TEST(get_truncates_safely_at_maxlen)
 {
     char buf[12];
@@ -226,6 +260,24 @@ TEST(get_truncates_safely_at_maxlen)
     ASSERT_TRUE(strlen(buf) <= 9, "result fits within maxlen-1 chars");
     ASSERT_EQ((unsigned char)buf[10], 0x7F, "byte past the buffer untouched");
     ASSERT_EQ((unsigned char)buf[11], 0x7F, "byte past the buffer untouched");
+}
+
+TEST(get_drains_overlong_line_so_next_get_starts_clean)
+{
+    /* Without draining the unread remainder of a truncated line, the NEXT
+     * ae_get() would read that leftover instead of the following prompt's
+     * real answer -- desynchronising every prompt after the first
+     * over-long input. */
+    char first[8];
+    char second[64];
+
+    feed_stdin("this line is way too long for an eight byte buffer\nnext line\n");
+    ae_get(first, sizeof(first));
+    ae_get(second, sizeof(second));
+    restore_stdin();
+
+    ASSERT_TRUE(strlen(first) <= 7, "first read truncated safely");
+    ASSERT_STR_EQ(second, "next line", "second read gets the NEXT line, not leftovers from the first");
 }
 
 TEST(get_returns_full_short_line_without_newline)
@@ -315,7 +367,11 @@ int main(void)
     RUN_TEST(put_exactly_max_line_is_not_truncated);
     RUN_TEST(put_long_string_over_boundary_emitted_in_full);
     RUN_TEST(put_null_text_is_a_safe_no_op);
+    RUN_TEST(put_bbs_prefix_is_escaped_to_avoid_file_display_reroute);
+    RUN_TEST(put_bbs_prefix_case_insensitive_is_escaped);
+    RUN_TEST(put_bbs_substring_mid_line_is_untouched);
     RUN_TEST(get_truncates_safely_at_maxlen);
+    RUN_TEST(get_drains_overlong_line_so_next_get_starts_clean);
     RUN_TEST(get_returns_full_short_line_without_newline);
     RUN_TEST(get_on_eof_yields_empty_string);
     RUN_TEST(key_reads_single_char);

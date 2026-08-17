@@ -31,16 +31,30 @@
 #include <exec/nodes.h>
 #include <exec/ports.h>
 #include <exec/memory.h>
-#include <dos/dos.h>
-#include <dos/dosextens.h>
 #include <proto/exec.h>
-#include <proto/dos.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "aedoor.h"
+
+/* struct Process is only ever held here as an opaque pointer (JHMessage's
+ * "task" field, BB_GETTASK result) -- never dereferenced -- so a forward
+ * declaration is enough. This file makes no dos.library calls at all (every
+ * function used -- AllocMem/FreeMem/CreateMsgPort/DeleteMsgPort/PutMsg/
+ * WaitPort/GetMsg/FindPort/Forbid/Permit -- is exec.library), so <dos/dos.h>
+ * and <proto/dos.h> are omitted entirely rather than just <dos/dosextens.h>.
+ * This also sidesteps two "struct/union member needs identifier" warnings
+ * from <devices/timer.h> (it declares anonymous unions, a C11-ism vbcc's
+ * C99 mode does not parse) that would otherwise be dragged in transitively
+ * -- confirmed by compiling both ways: with <proto/dos.h> included, vbcc's
+ * own error trace shows the chain proto/dos.h -> (NDK) clib/dos_protos.h ->
+ * dos/dosextens.h -> devices/timer.h, i.e. the warnings originate entirely
+ * inside vendored NDK/vbcc headers, not this file's own code or include
+ * order -- and without it, the warnings are gone. */
+struct Process;
 
 /* ---- struct JHMessage --------------------------------------------------
  *
@@ -97,6 +111,43 @@ typedef char jh_size_check[(sizeof(struct JHMessage) == 264) ? 1 : -1];
 #define JH_SM       4   /* the normal output call: writes String; Data != 0 appends the BBS's line break and runs its pause check; research doc, express.e:3406-3411 */
 #define JH_PM       5   /* prompt (String) + line input; unused here -- ae_get()'s prompt is already emitted via ae_put() */
 #define JH_HK       6   /* prompt (String) then blocking single-key read; reply key lands in String[0]; research doc */
+
+/* AmiExpress doors sometimes deliberately send "bbs:" device/volume paths
+ * via JH_SM to trigger file display instead of a printed line: our emulator
+ * matches this by trimming the message text and testing a case-insensitive
+ * prefix (io.ts:657-666 -- "const trimmed = text.trim(); ... if
+ * (trimmed.toLowerCase().startsWith('bbs:')) { ...handleShowFile(...);
+ * return; }"). This door only ever wants JH_SM to print. A sysop can
+ * legitimately configure a download directory as "bbs:doors/", so a wholly
+ * ordinary status line like "bbs:doors/FOO.LHA saved" would otherwise be
+ * silently rerouted to file display instead of printed -- guarded here,
+ * once, so no future caller has to remember the trap for every message it
+ * ever adds.
+ *
+ * A leading SPACE does NOT defeat this: the BBS's check trims leading/
+ * trailing whitespace BEFORE testing the prefix (text.trim(), io.ts:659),
+ * and messages.ts:200 builds that JS string via String.fromCharCode() on
+ * the raw bytes, so both an ASCII space (0x20) and a Latin-1 NBSP (0xA0)
+ * are still classified as whitespace and stripped by .trim() -- verified
+ * against the actual check: " bbs:x".trim().startsWith("bbs:") is true.
+ * The guard byte must be printable and non-whitespace to survive trim();
+ * a single leading period reliably breaks the match and renders as an
+ * ordinary visible character on every terminal. isspace() here mirrors
+ * only ASCII whitespace, which is what a topaz/Latin-1 door string will
+ * ever realistically start with. */
+static int would_reroute_to_file_display(const char *text)
+{
+    const char *p;
+
+    p = text;
+    while (*p != '\0' && isspace((unsigned char)*p)) {
+        p++;
+    }
+    return (p[0] == 'b' || p[0] == 'B')
+        && (p[1] == 'b' || p[1] == 'B')
+        && (p[2] == 's' || p[2] == 'S')
+        && p[3] == ':';
+}
 
 /* ---- module state: one outstanding message at a time, exactly as the
  * reference doors do (AEDoor.c keeps one statically allocated XIM_Msg and
@@ -181,6 +232,8 @@ void ae_put(const char *text, int newline)
     unsigned long len;
     unsigned long offset;
     unsigned long chunk;
+    unsigned long budget;
+    int guard;
 
     if (msg == NULL || bbs_port == NULL) {
         return;
@@ -188,6 +241,13 @@ void ae_put(const char *text, int newline)
     if (text == NULL) {
         text = "";
     }
+
+    /* Only the FIRST JH_SM message of this call can literally begin with
+     * "bbs:" once the BBS trims it -- the reroute check runs per message,
+     * not on the accumulated text, so later chunks (continuations of the
+     * middle/end of the string) are never mistaken for a fresh line start
+     * and need no guard. */
+    guard = would_reroute_to_file_display(text) ? 1 : 0;
 
     len = (unsigned long)strlen(text);
     offset = 0;
@@ -207,13 +267,24 @@ void ae_put(const char *text, int newline)
      * JH_SM sends; only the FINAL chunk carries Data=1 (newline) so the
      * BBS appends exactly one line break, never mid-string. */
     while (offset < len) {
+        int prefixed;
+
+        prefixed = (offset == 0 && guard) ? 1 : 0;
+        budget = (unsigned long)AE_MAX_LINE - (unsigned long)prefixed;
+
         chunk = len - offset;
-        if (chunk > AE_MAX_LINE) {
-            chunk = AE_MAX_LINE;
+        if (chunk > budget) {
+            chunk = budget;
         }
 
-        memcpy(msg->String, text + offset, (size_t)chunk);
-        msg->String[chunk] = '\0';
+        if (prefixed) {
+            msg->String[0] = '.'; /* guard byte: breaks the trimmed "bbs:" prefix match, see would_reroute_to_file_display() above */
+            memcpy(msg->String + 1, text + offset, (size_t)chunk);
+            msg->String[chunk + 1] = '\0';
+        } else {
+            memcpy(msg->String, text + offset, (size_t)chunk);
+            msg->String[chunk] = '\0';
+        }
 
         msg->Command = JH_SM;
         msg->Data = ((offset + chunk) >= len && newline) ? 1 : 0;
