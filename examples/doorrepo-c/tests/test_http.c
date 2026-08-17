@@ -296,6 +296,73 @@ TEST(content_length_larger_than_actual_bytes_is_an_error)
     stub_server_reap(pid);
 }
 
+TEST(content_length_negative_one_is_not_trusted)
+{
+    /* strtoul() alone accepts a leading '-' and computes the value as if
+     * unsigned, so "Content-Length: -1" would otherwise parse as
+     * ULONG_MAX - a real, demonstrated bug (the one soft signal that
+     * something was wrong disappears entirely). Must be treated as if
+     * the header were simply absent: have_content_length stays 0, and
+     * the body still arrives in full via Connection: close's EOF-
+     * terminated framing. */
+    static const char body[] = "hello world";
+    char resp_buf[512];
+    int resp_len;
+    int port;
+    int pid;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: -1\r\n"
+        "Connection: close\r\n\r\n%s",
+        body);
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_get(&cfg, "/api/door-repo/archive/NEG.LHA", &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "a malformed Content-Length must not fail the whole request");
+    ASSERT_EQ(resp.have_content_length, 0, "'-1' is never trusted as a real Content-Length");
+    ASSERT_EQ(ctx.data_len, (unsigned long) strlen(body), "the full body still arrives via EOF framing");
+    ASSERT_TRUE(memcmp(ctx.data, body, strlen(body)) == 0, "body content is byte-exact, not corrupted");
+
+    stub_server_reap(pid);
+}
+
+TEST(content_length_non_numeric_is_not_trusted)
+{
+    static const char body[] = "hi";
+    char resp_buf[512];
+    int resp_len;
+    int port;
+    int pid;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: abc\r\n"
+        "Connection: close\r\n\r\n%s",
+        body);
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_get(&cfg, "/api/door-repo/archive/NAN.LHA", &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "a non-numeric Content-Length must not fail the whole request");
+    ASSERT_EQ(resp.have_content_length, 0, "a non-numeric value is never trusted as a real Content-Length");
+
+    stub_server_reap(pid);
+}
+
 TEST(sink_abort_stops_the_transfer)
 {
     static char body[4000];
@@ -425,6 +492,8 @@ int main(void)
     RUN_TEST(chunked_transfer_encoding_is_rejected);
     RUN_TEST(header_names_are_matched_case_insensitively);
     RUN_TEST(content_length_larger_than_actual_bytes_is_an_error);
+    RUN_TEST(content_length_negative_one_is_not_trusted);
+    RUN_TEST(content_length_non_numeric_is_not_trusted);
     RUN_TEST(sink_abort_stops_the_transfer);
     RUN_TEST(connect_to_closed_port_is_a_clean_error);
     RUN_TEST(header_line_longer_than_buffer_does_not_overflow);

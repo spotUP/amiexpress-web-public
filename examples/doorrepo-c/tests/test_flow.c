@@ -630,6 +630,94 @@ TEST(declared_count_exceeds_cap_false)
     ASSERT_TRUE(!flow_declared_count_exceeds_cap(3301, 4096), "3301 <= 4096");
 }
 
+/* ---------------------------------------------------------------------
+ * flow_archive_byte_ceiling() - the download byte ceiling. Regression
+ * coverage for a real, demonstrated vulnerability: an archive row
+ * declaring archiveSize=100 streamed 10 MiB to disk, logged DOWNLOAD OK.
+ * ------------------------------------------------------------------- */
+
+#define TEST_ABS_MAX (16UL * 1024UL * 1024UL)
+#define TEST_SLACK_FLOOR (64UL * 1024UL)
+#define TEST_SLACK_PERCENT 20UL
+
+TEST(archive_ceiling_exact_reported_attack_bounded_far_below_10mb)
+{
+    /* declared archiveSize=100, attacker sent 10 MiB - the allowed
+     * ceiling must land nowhere near that. */
+    unsigned long ceiling = flow_archive_byte_ceiling(100, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
+    ASSERT_TRUE(ceiling < (1UL * 1024UL * 1024UL), "a declared 100-byte archive is never allowed anywhere near 1 MiB, let alone 10 MiB");
+    ASSERT_EQ(ceiling, 100UL + TEST_SLACK_FLOOR, "small declared size uses the flat 64 KiB slack floor, not the 20% formula (20 bytes < 64 KiB)");
+}
+
+TEST(archive_ceiling_uses_percent_slack_when_larger_than_floor)
+{
+    /* declared 1,000,000 bytes: 20% = 200,000, which is larger than the
+     * 64 KiB (65,536) floor - the percentage should win. */
+    unsigned long ceiling = flow_archive_byte_ceiling(1000000UL, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
+    ASSERT_EQ(ceiling, 1000000UL + 200000UL, "20% slack used when it exceeds the flat floor");
+}
+
+TEST(archive_ceiling_zero_declared_size_uses_absolute_max)
+{
+    unsigned long ceiling = flow_archive_byte_ceiling(0, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
+    ASSERT_EQ(ceiling, TEST_ABS_MAX, "declared size 0 ('unknown' per the format doc) falls back to the absolute ceiling");
+}
+
+TEST(archive_ceiling_implausibly_large_declared_size_uses_absolute_max)
+{
+    /* A declared size bigger than the absolute ceiling itself must NOT
+     * be trusted as a license for an even bigger download. */
+    unsigned long ceiling = flow_archive_byte_ceiling(TEST_ABS_MAX * 4UL, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
+    ASSERT_EQ(ceiling, TEST_ABS_MAX, "an implausible declared size falls back to the absolute ceiling, not declared+slack");
+}
+
+TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_plausible)
+{
+    unsigned long ceiling = flow_archive_byte_ceiling(TEST_ABS_MAX, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
+    ASSERT_TRUE(ceiling > TEST_ABS_MAX, "a declared size exactly at the absolute max is still plausible and gets slack added on top");
+}
+
+TEST(archive_ceiling_real_catalog_max_size_is_reasonable)
+{
+    /* The real catalog's largest current archive (measured 2026-08-17)
+     * is 1,867,128 bytes - the resulting ceiling must comfortably allow
+     * it, with headroom, but stay far below the 16 MiB absolute max. */
+    unsigned long ceiling = flow_archive_byte_ceiling(1867128UL, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
+    ASSERT_TRUE(ceiling > 1867128UL, "the real largest archive fits under its own ceiling");
+    ASSERT_TRUE(ceiling < TEST_ABS_MAX, "the real largest archive's ceiling stays well under the absolute max");
+}
+
+/* ---------------------------------------------------------------------
+ * flow_is_plain_alnum() - the type-filter validator.
+ * ------------------------------------------------------------------- */
+
+TEST(plain_alnum_accepts_real_door_types)
+{
+    ASSERT_TRUE(flow_is_plain_alnum("XIM"), "XIM is accepted");
+    ASSERT_TRUE(flow_is_plain_alnum("DD"), "DD is accepted");
+    ASSERT_TRUE(flow_is_plain_alnum("REXX"), "REXX is accepted");
+    ASSERT_TRUE(flow_is_plain_alnum("abc123"), "mixed-case alphanumeric is accepted");
+}
+
+TEST(plain_alnum_rejects_query_injection_attempt)
+{
+    ASSERT_TRUE(!flow_is_plain_alnum("XIM&admin=1"), "'&' is rejected - would inject an extra query parameter");
+    ASSERT_TRUE(!flow_is_plain_alnum("XIM=foo"), "'=' is rejected");
+}
+
+TEST(plain_alnum_rejects_empty_and_null)
+{
+    ASSERT_TRUE(!flow_is_plain_alnum(""), "empty string is rejected");
+    ASSERT_TRUE(!flow_is_plain_alnum((const char *) 0), "NULL is rejected, not a crash");
+}
+
+TEST(plain_alnum_rejects_whitespace_and_punctuation)
+{
+    ASSERT_TRUE(!flow_is_plain_alnum("XI M"), "embedded space is rejected");
+    ASSERT_TRUE(!flow_is_plain_alnum("XIM-1"), "hyphen is rejected");
+    ASSERT_TRUE(!flow_is_plain_alnum("XIM."), "period is rejected");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -727,6 +815,18 @@ int main(void)
     RUN_TEST(effective_row_count_over_cap);
     RUN_TEST(declared_count_exceeds_cap_true);
     RUN_TEST(declared_count_exceeds_cap_false);
+
+    RUN_TEST(archive_ceiling_exact_reported_attack_bounded_far_below_10mb);
+    RUN_TEST(archive_ceiling_uses_percent_slack_when_larger_than_floor);
+    RUN_TEST(archive_ceiling_zero_declared_size_uses_absolute_max);
+    RUN_TEST(archive_ceiling_implausibly_large_declared_size_uses_absolute_max);
+    RUN_TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_plausible);
+    RUN_TEST(archive_ceiling_real_catalog_max_size_is_reasonable);
+
+    RUN_TEST(plain_alnum_accepts_real_door_types);
+    RUN_TEST(plain_alnum_rejects_query_injection_attempt);
+    RUN_TEST(plain_alnum_rejects_empty_and_null);
+    RUN_TEST(plain_alnum_rejects_whitespace_and_punctuation);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

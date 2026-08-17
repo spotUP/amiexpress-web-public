@@ -263,4 +263,55 @@ unsigned long flow_effective_row_count(unsigned long declared_count, unsigned lo
  * that only the first `cap` rows are usable this run. */
 int flow_declared_count_exceeds_cap(unsigned long declared_count, unsigned long cap);
 
+/* ---- Archive download byte ceiling ----
+ *
+ * Real, demonstrated vulnerability this exists to close: nothing bounded
+ * the TOTAL bytes a download_sink()/catalog_sink() callback would write
+ * to disk - the catalog's own row cap (MAX_CATALOG_ROWS) and the
+ * archive's own declared archiveSize were both descriptive metadata,
+ * never enforced against what the server actually sent. A list.txt
+ * response declaring "<count>=1" followed by megabytes of junk wrote
+ * every byte to the cache file before the row cap ever mattered
+ * (confirmed live: 20,971,596 bytes for exactly that shape); an archive
+ * row declaring archiveSize=100 streamed 10 MiB to disk and logged
+ * DOWNLOAD OK. Severity is higher on the real target than these numbers
+ * suggest: the default DownloadDir is "T:", conventionally a RAM disk on
+ * AmigaDOS - on a 68020 with a few megabytes of RAM this is memory
+ * exhaustion, not merely a full disk, and this door speaks plain HTTP by
+ * design, so an on-path attacker chooses the byte count. */
+
+/* Computes the total-byte ceiling to enforce for one archive download,
+ * given the catalog's declared archiveSize (`declared_size`; 0 means
+ * "unknown" per docs/DOOR-REPO-API.md section 3's archiveSize field).
+ * When `declared_size` is present AND plausible (nonzero, and no larger
+ * than `absolute_max` itself - a genuine catalog entry has never
+ * declared a size anywhere near that large), returns
+ * `declared_size + slack`, where `slack` is `slack_percent`% of
+ * `declared_size` or `slack_floor` bytes, whichever is larger (the
+ * floor matters for small archives, where a percentage alone would be
+ * too tight to tolerate the archive having been legitimately re-indexed
+ * or slightly changed since list.txt was last generated). When
+ * `declared_size` is 0 or itself implausible (bigger than
+ * `absolute_max` - treating an absurd declared size as a license for an
+ * unbounded download would defeat the whole point), returns
+ * `absolute_max` unchanged. Every argument is caller-supplied (not a
+ * compile-time constant here) so this function stays pure and testable
+ * without doorrepo.c's MAX_CATALOG_BYTES/ARCHIVE_ABSOLUTE_MAX_BYTES/
+ * ARCHIVE_SLACK_FLOOR_BYTES/ARCHIVE_SLACK_PERCENT definitions. */
+unsigned long flow_archive_byte_ceiling(unsigned long declared_size,
+                                         unsigned long absolute_max,
+                                         unsigned long slack_floor,
+                                         unsigned long slack_percent);
+
+/* Returns 1 if `value` is non-empty and every byte is an ASCII letter or
+ * digit (A-Z, a-z, 0-9) - nothing else. Used to validate the user-typed
+ * `T`(ype) filter before it is embedded, UNENCODED, into the `?type=`
+ * query string by flow_build_list_query() - real `doorType` values
+ * (XIM/DD/REXX/...) are always plain alphanumeric tokens per
+ * docs/DOOR-REPO-API.md section 8, and that function deliberately does
+ * not URL-encode this parameter (matching the API doc's assumption). A
+ * user-typed value containing '&', '=', or similar would otherwise
+ * inject extra, unintended query parameters into the request line. */
+int flow_is_plain_alnum(const char *value);
+
 #endif /* DOORREPO_FLOW_H */

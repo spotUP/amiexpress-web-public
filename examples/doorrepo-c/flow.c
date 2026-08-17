@@ -341,3 +341,39 @@ int flow_declared_count_exceeds_cap(unsigned long declared_count, unsigned long 
 {
     return declared_count > cap;
 }
+
+unsigned long flow_archive_byte_ceiling(unsigned long declared_size,
+                                         unsigned long absolute_max,
+                                         unsigned long slack_floor,
+                                         unsigned long slack_percent)
+{
+    unsigned long percent_slack;
+    unsigned long slack;
+
+    if (declared_size == 0 || declared_size > absolute_max) {
+        return absolute_max;
+    }
+
+    percent_slack = (declared_size / 100UL) * slack_percent;
+    slack = (percent_slack > slack_floor) ? percent_slack : slack_floor;
+
+    /* declared_size <= absolute_max here (checked above), so this sum
+     * stays small and safe from overflow for any sane absolute_max. */
+    return declared_size + slack;
+}
+
+int flow_is_plain_alnum(const char *value)
+{
+    const char *p;
+
+    if (value == (const char *) 0 || value[0] == '\0') {
+        return 0;
+    }
+    for (p = value; *p != '\0'; p++) {
+        unsigned char c = (unsigned char) *p;
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
+            return 0;
+        }
+    }
+    return 1;
+}

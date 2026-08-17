@@ -158,6 +158,31 @@ static void bounded_copy(char *dest, unsigned long destsize, const char *src)
     dest[len] = '\0';
 }
 
+/* Returns 1 if `s` is a non-empty string of ONLY decimal digits '0'-'9' -
+ * no leading '-' (or '+'), no leading/trailing whitespace, nothing else.
+ * strtoul() alone is not a sufficient guard for a Content-Length header:
+ * per the C standard, strtoul() accepts an optional leading '-' and
+ * computes the value as if unsigned with the sign then applied, so
+ * "Content-Length: -1" parses "successfully" as ULONG_MAX rather than
+ * failing - a real, demonstrated bug (a caller that then treats
+ * ULONG_MAX bytes as a legitimate declared length loses the one soft
+ * signal it had that something was wrong). Called before strtoul(), not
+ * instead of it - this only decides whether the header value is worth
+ * trusting at all. */
+static int is_plain_nonneg_decimal(const char *s)
+{
+    if (*s == '\0') {
+        return 0;
+    }
+    while (*s != '\0') {
+        if (*s < '0' || *s > '9') {
+            return 0;
+        }
+        s++;
+    }
+    return 1;
+}
+
 /* Parses one already-line-buffered header ("Name: value", no CRLF) into
  * `resp`. Modifies `line` in place (splits it at the colon) - safe, since
  * the caller owns a private stack buffer for it. Returns 1 if this header
@@ -188,8 +213,18 @@ static int parse_header_line(char *line, http_response *resp)
     }
 
     if (ieq(name, "Content-Length")) {
-        resp->content_length = strtoul(value, (char **) 0, 10);
-        resp->have_content_length = 1;
+        /* Only trust a plain non-negative decimal string - see
+         * is_plain_nonneg_decimal()'s comment for the "-1" wraparound
+         * bug this guards against. A malformed value is treated exactly
+         * like an ABSENT Content-Length header (have_content_length
+         * stays 0, from http_get()'s initial memset(resp, 0, ...)) -
+         * the body then falls back to the documented Connection: close
+         * EOF-terminated framing, rather than trusting a garbaged
+         * length. */
+        if (is_plain_nonneg_decimal(value)) {
+            resp->content_length = strtoul(value, (char **) 0, 10);
+            resp->have_content_length = 1;
+        }
     } else if (ieq(name, "Transfer-Encoding")) {
         /* Substring match, not exact equality: deliberately fine against
          * THIS API - docs/DOOR-REPO-API.md states this endpoint never

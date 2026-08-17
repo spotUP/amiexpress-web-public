@@ -49,6 +49,60 @@
 /* Progress is reported every 8 KB of a download, per the brief. */
 #define PROGRESS_INTERVAL 8192UL
 
+/* Hard ceiling on the TOTAL bytes read from a list.txt response, enforced
+ * in catalog_sink() before a single byte is mirrored to the cache file or
+ * handed to the line parser - MAX_CATALOG_ROWS bounds memory, but nothing
+ * previously bounded the response body itself, so a listing declaring
+ * "<count>=1" followed by megabytes of junk still wrote every byte to
+ * disk before the row cap ever got a chance to matter (confirmed live:
+ * 20,971,596 bytes written for exactly that shape of attack). Chosen
+ * against the REAL catalog, measured directly: `curl .../list.txt |
+ * wc -c` on the live 3301-row catalog returns exactly 441,852 bytes
+ * (2026-08-17). At MAX_CATALOG_ROWS's cap (4096 rows) and today's
+ * average row size (441,852 / 3301 =~ 134 bytes/row), a maximally-sized
+ * LEGITIMATE catalog would top out around 4096 * 134 =~ 549,000 bytes -
+ * so 2 MiB is not an arbitrary round number, it is ~4.7x today's real
+ * size and ~3.8x the largest well-formed catalog this door could ever
+ * actually use, giving the real catalog room to grow past 15,000 rows
+ * before this ceiling becomes a practical constraint, while still
+ * capping a runaway/hostile response at a small, bounded multiple of
+ * reality rather than an unbounded stream. */
+#define MAX_CATALOG_BYTES (2UL * 1024UL * 1024UL) /* 2 MiB */
+
+/* Archive downloads are bounded two ways (attempt_download() picks one
+ * per download, in archive_byte_ceiling() below):
+ *   - When the catalog's declared archiveSize (dr_entry.size) is present
+ *     and plausible (nonzero, and itself no larger than the absolute
+ *     ceiling below), the allowed total is that declared size PLUS
+ *     slack: 20% of the declared size, or 64 KiB, whichever the slack
+ *     formula below computes to (see archive_byte_ceiling()) - generous
+ *     enough to tolerate the archive having been legitimately re-indexed
+ *     or slightly changed since list.txt was last generated (see
+ *     docs/DOOR-REPO-API.md section 4's "Digest freshness" note, the
+ *     same staleness this door already tolerates for MD5 mismatches),
+ *     while still catching the reported attack outright: a row
+ *     declaring archiveSize=100 allows at most 100 + 20 + 65536 =~ 64
+ *     KiB, nowhere near the 10 MiB the attack actually sent.
+ *   - When declared size is 0 ("unknown" per the format doc) or itself
+ *     implausible (bigger than this absolute ceiling, which a genuine
+ *     catalog entry has never been - see below), the ABSOLUTE ceiling
+ *     applies instead. The real catalog's largest current archive,
+ *     measured directly (2026-08-17), is 1,867,128 bytes (~1.78 MiB);
+ *     16 MiB is ~8.9x that real maximum, generous headroom for future,
+ *     larger legitimate archives while still bounding an
+ *     unknown-declared-size download to a fixed, sane number instead of
+ *     an unbounded stream. */
+#define ARCHIVE_ABSOLUTE_MAX_BYTES (16UL * 1024UL * 1024UL) /* 16 MiB */
+#define ARCHIVE_SLACK_FLOOR_BYTES (64UL * 1024UL) /* 64 KiB */
+#define ARCHIVE_SLACK_PERCENT 20UL
+
+/* fetch_catalog()-local failure sentinel, distinct from every http.h
+ * HTTP_ERR_* code (all in -1..-10) so load_full_catalog() can tell
+ * "the response exceeded MAX_CATALOG_BYTES" apart from an ordinary
+ * transport failure and report it accurately. Scoped to this file only -
+ * never crosses a header boundary. */
+#define FETCH_ERR_CATALOG_TOO_LARGE (-101)
+
 /* Read chunk used while re-parsing list.txt out of the local cache file
  * (the fresh-fetch path already streams via http.c's own chunking). */
 #define CACHE_READ_CHUNK 512
@@ -95,6 +149,8 @@ typedef struct {
     int alloc_failed;
     unsigned long rows_skipped; /* malformed data rows, not fatal to the catalog */
     FILE *mirror;               /* non-NULL: also write raw bytes here (cache write) */
+    unsigned long total_bytes;  /* bytes seen so far this fetch, checked against MAX_CATALOG_BYTES */
+    int size_exceeded;          /* set by catalog_sink() if total_bytes would exceed MAX_CATALOG_BYTES */
 } listtxt_parse_state;
 
 static void parse_state_init(listtxt_parse_state *st, dr_catalog *cat, FILE *mirror)
@@ -106,6 +162,8 @@ static void parse_state_init(listtxt_parse_state *st, dr_catalog *cat, FILE *mir
     st->alloc_failed = 0;
     st->rows_skipped = 0;
     st->mirror = mirror;
+    st->total_bytes = 0;
+    st->size_exceeded = 0;
 }
 
 /* Grows cat->rows to hold at least `needed` entries, if it does not
@@ -241,6 +299,21 @@ static void feed_flush(listtxt_parse_state *st)
 static int catalog_sink(void *ctx, const unsigned char *buf, unsigned long len)
 {
     listtxt_parse_state *st = (listtxt_parse_state *) ctx;
+
+    /* Enforced BEFORE a single byte of this chunk is mirrored to the
+     * cache file or handed to the line parser - MAX_CATALOG_ROWS only
+     * ever bounded memory (dr_entry rows kept), never the response body
+     * itself, so a listing declaring "<count>=1" followed by megabytes
+     * of junk previously wrote every byte to disk before the row cap got
+     * a chance to matter (confirmed live: 20,971,596 bytes for exactly
+     * that shape of attack). See MAX_CATALOG_BYTES's definition for the
+     * real-catalog measurement behind the chosen number. */
+    if (st->total_bytes + len > MAX_CATALOG_BYTES) {
+        st->size_exceeded = 1;
+        return 1; /* abort - this chunk is never written or parsed */
+    }
+    st->total_bytes += len;
+
     if (st->mirror != (FILE *) 0) {
         fwrite(buf, 1, (size_t) len, st->mirror);
     }
@@ -271,6 +344,13 @@ static int fetch_catalog(const dr_config *cfg, dr_catalog *cat,
     }
 
     rc = http_get(cfg, path, &resp, catalog_sink, &st);
+    if (st.size_exceeded) {
+        /* Checked BEFORE the generic rc != HTTP_OK branch below: the
+         * sink's abort makes http_get() return HTTP_ERR_SINK_ABORT,
+         * which is also `!= HTTP_OK`, but the caller needs to report
+         * THIS specific reason, not a generic "network error". */
+        return FETCH_ERR_CATALOG_TOO_LARGE;
+    }
     if (rc != HTTP_OK) {
         return rc;
     }
@@ -556,7 +636,13 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
         }
 
         if (rc != HTTP_OK) {
-            if (rc == 1) {
+            if (rc == FETCH_ERR_CATALOG_TOO_LARGE) {
+                char msg[200];
+                sprintf(msg, "The repository server sent a catalog response larger than %lu bytes - refusing it as a probable error or attack. Please try again later or contact the repo owner.",
+                        MAX_CATALOG_BYTES);
+                ae_put(msg, 1);
+                log_line(cfg, "CATALOG: response exceeded MAX_CATALOG_BYTES, aborted");
+            } else if (rc == 1) {
                 ae_put("The repository server sent a catalog this door does not understand (malformed header). Cannot continue.", 1);
             } else {
                 ae_put("Could not reach the door repository server. Please try again later.", 1);
@@ -586,7 +672,11 @@ static void print_row(unsigned long global_index, const dr_entry *e)
     char line[256];
     unsigned long kb;
 
-    kb = (e->size + 1023UL) / 1024UL; /* round up so any nonzero size shows at least 1 KB */
+    /* Round up so any nonzero size shows at least 1 KB, computed without
+     * an addition that could overflow for an absurd e->size close to
+     * ULONG_MAX (division and modulo cannot overflow the way
+     * "size + 1023" could). */
+    kb = e->size / 1024UL + ((e->size % 1024UL != 0UL) ? 1UL : 0UL);
     sprintf(line, "%4lu  %-20.20s %-4.4s %6lu KB  %-.40s",
             global_index, e->archive, e->type, kb, e->name[0] != '\0' ? e->name : e->desc);
     ae_put(line, 1);
@@ -751,7 +841,9 @@ typedef struct {
     md5_ctx md5;
     unsigned long received;
     unsigned long last_progress_report;
+    unsigned long max_bytes;      /* ceiling from flow_archive_byte_ceiling(), enforced below */
     int aborted_for_carrier_loss;
+    int aborted_for_oversized;
 } download_ctx;
 
 static int download_sink(void *ctx, const unsigned char *buf, unsigned long len)
@@ -761,6 +853,18 @@ static int download_sink(void *ctx, const unsigned char *buf, unsigned long len)
     if (carrier_lost()) {
         dc->aborted_for_carrier_loss = 1;
         return 1; /* abort http_get's transfer immediately */
+    }
+
+    /* Enforced BEFORE this chunk is written to disk - the catalog's own
+     * declared archiveSize was previously never checked against what the
+     * server actually sent, so a row declaring archiveSize=100 streamed
+     * an unbounded amount of data to disk and logged DOWNLOAD OK once
+     * the (irrelevant) MD5/Content-Length checks ran afterward. See
+     * flow_archive_byte_ceiling()'s doc comment for how max_bytes is
+     * computed. */
+    if (dc->received + len > dc->max_bytes) {
+        dc->aborted_for_oversized = 1;
+        return 1;
     }
 
     fwrite(buf, 1, (size_t) len, dc->file);
@@ -809,7 +913,10 @@ static int attempt_download(const dr_config *cfg, const dr_entry *entry,
     md5_init(&dc.md5);
     dc.received = 0;
     dc.last_progress_report = 0;
+    dc.max_bytes = flow_archive_byte_ceiling(entry->size, ARCHIVE_ABSOLUTE_MAX_BYTES,
+                                              ARCHIVE_SLACK_FLOOR_BYTES, ARCHIVE_SLACK_PERCENT);
     dc.aborted_for_carrier_loss = 0;
+    dc.aborted_for_oversized = 0;
 
     {
         char msg[128];
@@ -824,6 +931,21 @@ static int attempt_download(const dr_config *cfg, const dr_entry *entry,
         remove(local_path);
         stop_for_carrier_loss();
         return 0; /* unreachable on Amiga; keeps the native build's control flow sane */
+    }
+
+    if (dc.aborted_for_oversized) {
+        char msg[192];
+        sprintf(msg, "Download aborted: the server sent more than %lu bytes (declared size %lu, allowed up to %lu). Discarding.",
+                dc.max_bytes, entry->size, dc.max_bytes);
+        ae_put(msg, 1);
+        remove(local_path);
+        {
+            char logmsg[192];
+            sprintf(logmsg, "DOWNLOAD ABORTED (oversized) archive=%s declared_size=%lu max_bytes=%lu",
+                    entry->archive, entry->size, dc.max_bytes);
+            log_line(cfg, logmsg);
+        }
+        return 0;
     }
 
     if (rc != HTTP_OK) {
@@ -1200,6 +1322,17 @@ int main(int argc, char **argv)
             get_trimmed_line(filter_type, sizeof(filter_type));
             if (carrier_lost()) {
                 stop_for_carrier_loss();
+            }
+            /* Real doorType values (XIM/DD/REXX/...) are always plain
+             * alphanumeric tokens (docs/DOOR-REPO-API.md section 8), and
+             * flow_build_list_query() deliberately does NOT URL-encode
+             * this parameter to match that. A user-typed value
+             * containing '&'/'='/etc would otherwise be embedded
+             * unencoded into the query string and inject extra,
+             * unintended query parameters into the request. */
+            if (filter_type[0] != '\0' && !flow_is_plain_alnum(filter_type)) {
+                ae_put("Type filter must be letters/digits only (e.g. XIM, DD, REXX) - ignoring.", 1);
+                filter_type[0] = '\0';
             }
         } else {
             filter_type[0] = '\0';
