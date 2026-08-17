@@ -369,6 +369,216 @@ TEST(invalid_boolean_defaults_to_zero)
     unlink("/tmp/test_config_invalid_bool.cfg");
 }
 
+TEST(port_non_numeric)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_port_non_numeric.cfg", "w");
+    fprintf(f, "RepoPort=abc\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_port_non_numeric.cfg", &skipped);
+    ASSERT_EQ(cfg.port, 80, "port keeps default on non-numeric");
+    ASSERT_EQ(skipped, 1, "non-numeric port counted as skipped");
+    unlink("/tmp/test_port_non_numeric.cfg");
+}
+
+TEST(port_empty_value)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_port_empty.cfg", "w");
+    fprintf(f, "RepoPort=\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_port_empty.cfg", &skipped);
+    ASSERT_EQ(cfg.port, 80, "port keeps default on empty value");
+    ASSERT_EQ(skipped, 1, "empty port counted as skipped");
+    unlink("/tmp/test_port_empty.cfg");
+}
+
+TEST(port_zero)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_port_zero.cfg", "w");
+    fprintf(f, "RepoPort=0\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_port_zero.cfg", &skipped);
+    ASSERT_EQ(cfg.port, 80, "port keeps default on zero");
+    ASSERT_EQ(skipped, 1, "zero port counted as skipped");
+    unlink("/tmp/test_port_zero.cfg");
+}
+
+TEST(port_negative)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_port_negative.cfg", "w");
+    fprintf(f, "RepoPort=-1\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_port_negative.cfg", &skipped);
+    ASSERT_EQ(cfg.port, 80, "port keeps default on negative");
+    ASSERT_EQ(skipped, 1, "negative port counted as skipped");
+    unlink("/tmp/test_port_negative.cfg");
+}
+
+TEST(port_out_of_range)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_port_out_of_range.cfg", "w");
+    fprintf(f, "RepoPort=70000\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_port_out_of_range.cfg", &skipped);
+    ASSERT_EQ(cfg.port, 80, "port keeps default on out of range");
+    ASSERT_EQ(skipped, 1, "out of range port counted as skipped");
+    unlink("/tmp/test_port_out_of_range.cfg");
+}
+
+TEST(page_size_non_numeric)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_page_size_non_numeric.cfg", "w");
+    fprintf(f, "PageSize=abc\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_page_size_non_numeric.cfg", &skipped);
+    ASSERT_EQ(cfg.page_size, 20, "page_size keeps default on non-numeric");
+    ASSERT_EQ(skipped, 1, "non-numeric page_size counted as skipped");
+    unlink("/tmp/test_page_size_non_numeric.cfg");
+}
+
+TEST(page_size_empty_value)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_page_size_empty.cfg", "w");
+    fprintf(f, "PageSize=\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_page_size_empty.cfg", &skipped);
+    ASSERT_EQ(cfg.page_size, 20, "page_size keeps default on empty value");
+    ASSERT_EQ(skipped, 1, "empty page_size counted as skipped");
+    unlink("/tmp/test_page_size_empty.cfg");
+}
+
+TEST(page_size_zero)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_page_size_zero.cfg", "w");
+    fprintf(f, "PageSize=0\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_page_size_zero.cfg", &skipped);
+    ASSERT_EQ(cfg.page_size, 20, "page_size keeps default on zero");
+    ASSERT_EQ(skipped, 1, "zero page_size counted as skipped");
+    unlink("/tmp/test_page_size_zero.cfg");
+}
+
+TEST(page_size_negative)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_page_size_negative.cfg", "w");
+    fprintf(f, "PageSize=-5\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_page_size_negative.cfg", &skipped);
+    ASSERT_EQ(cfg.page_size, 20, "page_size keeps default on negative");
+    ASSERT_EQ(skipped, 1, "negative page_size counted as skipped");
+    unlink("/tmp/test_page_size_negative.cfg");
+}
+
+TEST(page_size_out_of_range)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_page_size_out_of_range.cfg", "w");
+    fprintf(f, "PageSize=10000\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_page_size_out_of_range.cfg", &skipped);
+    ASSERT_EQ(cfg.page_size, 20, "page_size keeps default on out of range");
+    ASSERT_EQ(skipped, 1, "out of range page_size counted as skipped");
+    unlink("/tmp/test_page_size_out_of_range.cfg");
+}
+
+TEST(timeout_non_numeric)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_timeout_non_numeric.cfg", "w");
+    fprintf(f, "TimeoutSecs=abc\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_timeout_non_numeric.cfg", &skipped);
+    ASSERT_EQ(cfg.timeout_secs, 30, "timeout_secs keeps default on non-numeric");
+    ASSERT_EQ(skipped, 1, "non-numeric timeout_secs counted as skipped");
+    unlink("/tmp/test_timeout_non_numeric.cfg");
+}
+
+TEST(timeout_empty_value)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_timeout_empty.cfg", "w");
+    fprintf(f, "TimeoutSecs=\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_timeout_empty.cfg", &skipped);
+    ASSERT_EQ(cfg.timeout_secs, 30, "timeout_secs keeps default on empty value");
+    ASSERT_EQ(skipped, 1, "empty timeout_secs counted as skipped");
+    unlink("/tmp/test_timeout_empty.cfg");
+}
+
+TEST(timeout_zero)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_timeout_zero.cfg", "w");
+    fprintf(f, "TimeoutSecs=0\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_timeout_zero.cfg", &skipped);
+    ASSERT_EQ(cfg.timeout_secs, 30, "timeout_secs keeps default on zero");
+    ASSERT_EQ(skipped, 1, "zero timeout_secs counted as skipped");
+    unlink("/tmp/test_timeout_zero.cfg");
+}
+
+TEST(timeout_negative)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_timeout_negative.cfg", "w");
+    fprintf(f, "TimeoutSecs=-10\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_timeout_negative.cfg", &skipped);
+    ASSERT_EQ(cfg.timeout_secs, 30, "timeout_secs keeps default on negative");
+    ASSERT_EQ(skipped, 1, "negative timeout_secs counted as skipped");
+    unlink("/tmp/test_timeout_negative.cfg");
+}
+
+TEST(timeout_out_of_range)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_timeout_out_of_range.cfg", "w");
+    fprintf(f, "TimeoutSecs=10000\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_timeout_out_of_range.cfg", &skipped);
+    ASSERT_EQ(cfg.timeout_secs, 30, "timeout_secs keeps default on out of range");
+    ASSERT_EQ(skipped, 1, "out of range timeout_secs counted as skipped");
+    unlink("/tmp/test_timeout_out_of_range.cfg");
+}
+
 int main(void)
 {
     printf("\n====== Config Module Tests ======\n\n");
@@ -397,6 +607,21 @@ int main(void)
     RUN_TEST(case_insensitive_keys);
     RUN_TEST(all_keys_in_file);
     RUN_TEST(invalid_boolean_defaults_to_zero);
+    RUN_TEST(port_non_numeric);
+    RUN_TEST(port_empty_value);
+    RUN_TEST(port_zero);
+    RUN_TEST(port_negative);
+    RUN_TEST(port_out_of_range);
+    RUN_TEST(page_size_non_numeric);
+    RUN_TEST(page_size_empty_value);
+    RUN_TEST(page_size_zero);
+    RUN_TEST(page_size_negative);
+    RUN_TEST(page_size_out_of_range);
+    RUN_TEST(timeout_non_numeric);
+    RUN_TEST(timeout_empty_value);
+    RUN_TEST(timeout_zero);
+    RUN_TEST(timeout_negative);
+    RUN_TEST(timeout_out_of_range);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

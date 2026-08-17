@@ -65,6 +65,56 @@ static int parse_boolean(const char *value)
     return 0;
 }
 
+static int is_valid_integer(const char *str, int *result)
+{
+    char *endptr;
+    long val;
+
+    if (!str || *str == '\0')
+        return 0;
+
+    val = strtol(str, &endptr, 10);
+
+    if (*endptr != '\0')
+        return 0;
+
+    if (val < -2147483647 || val > 2147483647)
+        return 0;
+
+    *result = (int)val;
+    return 1;
+}
+
+static int validate_port(const char *value)
+{
+    int port;
+    if (!is_valid_integer(value, &port))
+        return 0;
+    if (port < 1 || port > 65535)
+        return 0;
+    return port;
+}
+
+static int validate_page_size(const char *value)
+{
+    int size;
+    if (!is_valid_integer(value, &size))
+        return 0;
+    if (size < 1 || size > 9999)
+        return 0;
+    return size;
+}
+
+static int validate_timeout(const char *value)
+{
+    int timeout;
+    if (!is_valid_integer(value, &timeout))
+        return 0;
+    if (timeout < 1 || timeout > 3600)
+        return 0;
+    return timeout;
+}
+
 int config_load(dr_config *cfg, const char *path, int *skipped_lines)
 {
     FILE *f;
@@ -73,6 +123,7 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
     char *key;
     char *value;
     int local_skipped = 0;
+    int parsed_value;
 
     f = fopen(path, "r");
     if (!f)
@@ -108,7 +159,12 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
             strncpy(cfg->host, value, sizeof(cfg->host) - 1);
             cfg->host[sizeof(cfg->host) - 1] = '\0';
         } else if (str_icmp(key, "RepoPort") == 0) {
-            cfg->port = atoi(value);
+            parsed_value = validate_port(value);
+            if (parsed_value > 0) {
+                cfg->port = parsed_value;
+            } else {
+                local_skipped++;
+            }
         } else if (str_icmp(key, "RepoPath") == 0) {
             strncpy(cfg->path, value, sizeof(cfg->path) - 1);
             cfg->path[sizeof(cfg->path) - 1] = '\0';
@@ -116,9 +172,19 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
             strncpy(cfg->download_dir, value, sizeof(cfg->download_dir) - 1);
             cfg->download_dir[sizeof(cfg->download_dir) - 1] = '\0';
         } else if (str_icmp(key, "PageSize") == 0) {
-            cfg->page_size = atoi(value);
+            parsed_value = validate_page_size(value);
+            if (parsed_value > 0) {
+                cfg->page_size = parsed_value;
+            } else {
+                local_skipped++;
+            }
         } else if (str_icmp(key, "TimeoutSecs") == 0) {
-            cfg->timeout_secs = atoi(value);
+            parsed_value = validate_timeout(value);
+            if (parsed_value > 0) {
+                cfg->timeout_secs = parsed_value;
+            } else {
+                local_skipped++;
+            }
         } else if (str_icmp(key, "LhaCommand") == 0) {
             strncpy(cfg->lha_command, value, sizeof(cfg->lha_command) - 1);
             cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';

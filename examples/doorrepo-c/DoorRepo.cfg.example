@@ -1,56 +1,75 @@
-[DOORREPO CONFIGURATION FILE]
+The hostname or IP address of the door repository server.
+# RepoHost=bbs.uprough.net
 
-This file configures the DoorRepo door client. Copy this file to your door configuration
-directory and customize the settings for your BBS. All settings are optional; if a setting
-is omitted, a safe default is used.
+The TCP port number for the repository server connection. Valid range: 1-65535.
+If an invalid value is specified, the default is used.
+# RepoPort=80
 
-RepoHost=bbs.uprough.net
-The hostname or IP address of the door repository server. Default: bbs.uprough.net
+The HTTP path prefix for the repository API endpoints.
+# RepoPath=/api/door-repo
 
-RepoPort=80
-The TCP port number for the repository server connection. Default: 80
+The AmigaDOS directory where downloaded door archives are saved. Must exist
+before use. This door will not create the directory automatically.
+# DownloadDir=T:
 
-RepoPath=/api/door-repo
-The HTTP path prefix for the repository API endpoints. Default: /api/door-repo
+The number of doors to display per page when browsing the repository.
+Valid range: 1-9999. If an invalid value is specified, the default is used.
+# PageSize=20
 
-DownloadDir=T:
-The AmigaDOS directory where downloaded door archives are saved. Must exist before
-use. Default: T: (temporary directory)
-
-PageSize=20
-The number of doors to display per page when browsing the repository. Default: 20
-
-TimeoutSecs=30
 The maximum number of seconds to wait for a response from the repository server.
-Default: 30
+Valid range: 1-3600 (1 second to 1 hour). If an invalid value is specified,
+the default is used.
+# TimeoutSecs=30
 
-LhaCommand=lha
-The name or full path of the LHA archive extraction utility, used if ExtractAfterDownload
-is enabled. Default: lha
+The name or full path of the LHA archive extraction utility, used if
+ExtractAfterDownload is enabled.
+# LhaCommand=lha
 
-ExtractAfterDownload=no
-Whether to automatically extract downloaded archives. Set to yes, no, 1, or 0.
-Default: no
+Whether to automatically extract downloaded archives after downloading them.
+Accepts: yes, no, 1, or 0. Any other value defaults to no (0).
+# ExtractAfterDownload=no
 
-LogFile=T:DoorRepo.log
-The AmigaDOS path where the door logs its activity and errors. Default: T:DoorRepo.log
+The AmigaDOS path where the door logs its activity and errors.
+# LogFile=T:DoorRepo.log
 
-[EXAMPLES]
+CONFIGURATION NOTES
+---
 
-All defaults (line everything out to use them):
-[commented out: all keys]
+This file is optional. If it does not exist or is empty, all settings default
+to the values shown above.
 
-Faster network, local extraction:
-RepoHost=10.0.0.50
-RepoPort=8080
+Key names are case-insensitive: RepoHost, repohost, and REPOHOST all work.
+
+Leading and trailing whitespace around key names and values is automatically
+trimmed. For example, these are all equivalent:
+  RepoHost=example.com
+  RepoHost = example.com
+  RepoHost   =   example.com
+
+Comments start with the number sign (#) and extend to the end of the line.
+Blank lines are ignored.
+
+If a value is invalid (non-numeric, out of range, or unrecognized), the line
+is silently skipped and that setting retains its default value. Invalid values
+do not stop the door from starting; they are logged (if LogFile is writable)
+and the door continues with the default configuration.
+
+EXAMPLE CONFIGURATIONS
+---
+
+Conservative settings for slow networks:
+RepoHost=bbs.example.net
+RepoPort=80
 TimeoutSecs=60
+PageSize=10
+
+Aggressive settings for fast networks:
+RepoHost=bbs.example.net
+RepoPort=8080
+TimeoutSecs=10
+PageSize=50
+
+Extract downloads automatically to RAM for faster access:
 ExtractAfterDownload=yes
 DownloadDir=RAM:
-
-[NOTES]
-
-- Case does not matter for key names (RepoHost, repohost, REPOHOST all work)
-- Leading and trailing whitespace around keys and values is ignored
-- Lines starting with # are comments and are ignored
-- Empty lines are ignored
-- Unknown keys are silently skipped
+LhaCommand=7z
