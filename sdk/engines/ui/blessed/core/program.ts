@@ -1525,18 +1525,61 @@ export class Program extends EventEmitter {
           // never reached the focused widget.
           (_sbCode >= 32 && _sbCode !== 127 && !(_sbCode >= 128 && _sbCode <= 159))) {
 
-        // Handle ESC as potential start of sequence (if not followed by anything, it's Esc)
-        if (singleByte === ESC && this._inputBuffer.length === 1) {
+        // Handle ESC as potential start of sequence (if not followed by
+        // anything conclusive yet, wait rather than assuming standalone Esc).
+        //
+        // BUG (found round 5, DOORMAN systemFilter investigation): this used
+        // to gate the "wait" on `this._inputBuffer.length === 1` — true only
+        // for a BARE lone ESC byte. A CSI/SS3 sequence that arrives split
+        // across two 'data' events (e.g. network/websocket chunking delivers
+        // `ESC[` in one packet and the final letter, e.g. `A` for Up, in the
+        // next — routine under rapid arrow-key repeat) landed here with
+        // `_inputBuffer = 'ESC['` (length 2, not 1), so the "wait" branch was
+        // skipped: the ESC byte was immediately emitted as a STANDALONE
+        // Escape keypress, and the leftover `[` was reprocessed as an
+        // unrelated literal-character keypress on the next loop iteration —
+        // silently corrupting every split arrow/Home/End/PageUp/PageDown/F-
+        // key press into a spurious Escape. In a blessed door with a global
+        // `screen.key(['escape'], ...)` popping the active view (DOORMAN's
+        // ViewManager), that spurious Escape silently pops the current view
+        // — reported as "browsing with arrow keys resets/loses the active
+        // filter": RepoView gets popped back to InstalledView, and the next
+        // Tab back into Repo creates a brand-new RepoView with its filter
+        // back at the default, discarding the one the sysop had set.
+        //
+        // Fixed by ALSO waiting when the buffer is a still-incomplete prefix
+        // of a recognized multi-byte sequence — `ESC[` optionally followed by
+        // CSI parameter digits/semicolons but no final letter yet, or a bare
+        // `ESC O` (SS3 lead-in) — not just a bare lone ESC. If more data
+        // completes the sequence before the timeout, the whole (now longer)
+        // buffer is reprocessed by the normal path above and matches
+        // correctly. If nothing more arrives before the timeout, degrade
+        // exactly as before: emit the ESC alone, then let the normal path
+        // reprocess whatever bytes are left (if any) as ordinary keys.
+        const isIncompleteCsiPrefix = /^\x1b\[[0-9;]*$/.test(this._inputBuffer);
+        const isIncompleteSs3Prefix = this._inputBuffer === ESC + 'O';
+        if (singleByte === ESC &&
+            (this._inputBuffer.length === 1 || isIncompleteCsiPrefix || isIncompleteSs3Prefix)) {
           // Wait to see if more comes
           // But after a short timeout we should treat it as Esc
           this._escTimer = setTimeout(() => {
             this._escTimer = null;
-            if (this._inputBuffer === ESC) {
+            if (this._inputBuffer.length > 0 && this._inputBuffer[0] === ESC) {
               const key = this.parseKey(ESC);
               if (key) {
                 this._emitKey(ESC, key);
               }
+              const rest = this._inputBuffer.slice(1);
               this._inputBuffer = '';
+              if (rest.length > 0) {
+                // Route back through the guarded entry point (same reason
+                // the round-3 DOORMAN test harness fix used emit('data', ...)
+                // instead of calling _handleData directly: _handlingData
+                // guards against _emitKey's own emit('data', ...) feedback
+                // loop). Safe here since this timer fires outside of any
+                // in-progress _handleData call.
+                this.emit('data', rest);
+              }
             }
           }, 100);
           break;
