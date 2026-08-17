@@ -26,8 +26,19 @@ typedef struct {
  * `line` must be NUL-terminated and is never modified.
  * `revision` receives the revision field, bounded to `revlen` bytes
  * (including the terminating NUL); pass revlen==0 to skip it entirely.
- * Returns 0 on success, non-zero if the "DOORREPO" literal is missing or
- * a required field/delimiter is absent. */
+ *
+ * `formatVersion` is the field the format contract designates as "the
+ * authority for what fields to expect" (DOOR-REPO-API.md section 3) - so
+ * unlike `archiveSize` in listtxt_parse_row (a genuinely optional data
+ * field where 0 doubles as "unknown"), this parser refuses to guess it:
+ * a non-numeric or empty `formatVersion` OR `count` field makes the
+ * whole header malformed. A door that cannot establish the true format
+ * version must refuse the catalog, not proceed having silently
+ * substituted 0 for a value it never actually received.
+ *
+ * Returns 0 on success, non-zero if the "DOORREPO" literal is missing, a
+ * required field/delimiter is absent, or `formatVersion`/`count` is
+ * empty or not purely numeric. */
 int listtxt_parse_header(const char *line, int *format_version,
                           char *revision, unsigned long revlen,
                           unsigned long *count);
@@ -51,8 +62,15 @@ int listtxt_parse_header(const char *line, int *format_version,
  * even when the source field is longer than the destination array - the
  * value is truncated, never overrun. `size` (archiveSize) is parsed as
  * an unsigned long; a missing/non-numeric size field yields 0, not a
- * parse failure. An empty md5 field is valid (see the format doc's
- * "Digest freshness" note) and yields `out->md5[0] == '\0'`.
+ * parse failure - deliberately, since the format doc already uses 0 to
+ * mean "unknown" for this field (unlike listtxt_parse_header's
+ * `formatVersion`/`count`, which are refused outright when malformed).
+ * A CONSEQUENCE OF THIS: `out->size == 0` is ambiguous between "the
+ * server recorded size 0 / doesn't know the size" and "the size field
+ * was garbled in transit" - a caller must not infer "the server said
+ * unknown" from 0 alone if it needs to tell those two apart. An empty
+ * md5 field is valid (see the format doc's "Digest freshness" note) and
+ * yields `out->md5[0] == '\0'`.
  *
  * Returns 0 on success. Returns non-zero if fewer than six pipe-delimited
  * fields are present (the row is malformed) - in that case `out` may have

@@ -80,6 +80,51 @@ static void test_header_real(void)
     CHECK("header real: count == 3301", count == 3301UL);
 }
 
+/* Synthetic: format_version and count are the header's own "authority
+ * for what fields to expect" (DOOR-REPO-API.md section 3) and its row
+ * count, not optional/best-effort data like archiveSize - a garbled
+ * value here must fail the whole header, never silently become 0. Each
+ * sub-case uses a syntactically-plausible but non-numeric or empty
+ * field in the position under test, keeping the other three fields
+ * valid so a failure can only be attributed to the field under test. */
+static void test_header_malformed(void)
+{
+    int format_version;
+    char revision[64];
+    unsigned long count;
+    int rc;
+
+    format_version = -1;
+    count = 0;
+    rc = listtxt_parse_header("DOORREPO|abc|somerev|3301", &format_version,
+                               revision, sizeof(revision), &count);
+    CHECK("header malformed: non-numeric format_version returns non-zero", rc != 0);
+
+    format_version = -1;
+    count = 0;
+    rc = listtxt_parse_header("DOORREPO||somerev|3301", &format_version,
+                               revision, sizeof(revision), &count);
+    CHECK("header malformed: empty format_version returns non-zero", rc != 0);
+
+    format_version = -1;
+    count = 0;
+    rc = listtxt_parse_header("DOORREPO|1|somerev|notanumber", &format_version,
+                               revision, sizeof(revision), &count);
+    CHECK("header malformed: non-numeric count returns non-zero", rc != 0);
+
+    format_version = -1;
+    count = 0;
+    rc = listtxt_parse_header("DOORREPO|1|somerev|", &format_version,
+                               revision, sizeof(revision), &count);
+    CHECK("header malformed: empty count returns non-zero", rc != 0);
+
+    format_version = -1;
+    count = 0;
+    rc = listtxt_parse_header("DOORREPO|1x|somerev|3301", &format_version,
+                               revision, sizeof(revision), &count);
+    CHECK("header malformed: format_version with trailing garbage ('1x') returns non-zero", rc != 0);
+}
+
 /* Real data row, captured as described in the file header comment.
  * Exercises: every field decodes correctly (including size as a
  * number), AND the description's '!' bytes (server-escaped pipes) stay
@@ -166,6 +211,29 @@ static void test_row_seven_fields(void)
           strstr(e.desc, "EXTRA-FUTURE-FIELD") == (char *) 0);
     CHECK("row seven fields: desc length unchanged by the extra field",
           strlen(e.desc) == 120UL);
+}
+
+/* Synthetic: non-numeric archiveSize. Unlike the header's
+ * formatVersion/count (see test_header_malformed), archiveSize is a
+ * genuinely optional data field where the format doc already uses 0 to
+ * mean "unknown" - so this parser deliberately keeps the silent-0
+ * fallback here rather than failing the row (see listtxt.h). This test
+ * exists to pin that behavior down explicitly, not to demonstrate a new
+ * failure mode. */
+static void test_row_size_non_numeric(void)
+{
+    const char *line = "SMALL.LHA|XIM|notanumber|abc123|Small Door|A tiny door";
+    dr_entry e;
+    int rc;
+
+    memset(&e, 0xAA, sizeof(e));
+    rc = listtxt_parse_row(line, &e);
+
+    CHECK("row size non-numeric: returns 0 (not a parse failure)", rc == 0);
+    CHECK("row size non-numeric: size == 0 (silent fallback, not an error)", e.size == 0UL);
+    CHECK("row size non-numeric: archive still correct", strcmp(e.archive, "SMALL.LHA") == 0);
+    CHECK("row size non-numeric: fields after size still parse",
+          strcmp(e.desc, "A tiny door") == 0);
 }
 
 /* Synthetic: malformed row with only two of the six required fields. */
@@ -263,9 +331,11 @@ static void test_row_trailing_cr(void)
 int main(void)
 {
     test_header_real();
+    test_header_malformed();
     test_row_real();
     test_row_empty_md5();
     test_row_seven_fields();
+    test_row_size_non_numeric();
     test_row_malformed();
     test_row_oversized_fields();
     test_row_trailing_cr();

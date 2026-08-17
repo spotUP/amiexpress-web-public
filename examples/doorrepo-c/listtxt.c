@@ -95,11 +95,40 @@ int listtxt_parse_header(const char *line, int *format_version,
         return 1;
     }
 
-    if (format_version != (int *) 0) {
-        *format_version = (int) strtol(verbuf, (char **) 0, 10);
-    }
-    if (count != (unsigned long *) 0) {
-        *count = strtoul(countbuf, (char **) 0, 10);
+    /* format_version is the field the contract designates as "the
+     * authority for what fields to expect" - a door that reads a
+     * silently-defaulted 0 here and proceeds is trusting a version it
+     * never actually received. So unlike archiveSize (a genuinely
+     * optional data field, where 0 doubles as "unknown" per the format
+     * doc), a non-numeric or empty format_version - or count, which
+     * gates how many data rows the caller should expect to read - makes
+     * the whole header malformed: return non-zero rather than guessing.
+     * strtol/strtoul's endptr tells us whether the field was consumed
+     * in full; a stray trailing byte (or, for an all-non-numeric field,
+     * an endptr that never advanced past the start) means the field
+     * was not purely numeric. */
+    {
+        char *version_end;
+        char *count_end;
+        long fv;
+        unsigned long cnt;
+
+        fv = strtol(verbuf, &version_end, 10);
+        if (*version_end != '\0') {
+            return 1;
+        }
+
+        cnt = strtoul(countbuf, &count_end, 10);
+        if (*count_end != '\0') {
+            return 1;
+        }
+
+        if (format_version != (int *) 0) {
+            *format_version = (int) fv;
+        }
+        if (count != (unsigned long *) 0) {
+            *count = cnt;
+        }
     }
 
     return 0;
