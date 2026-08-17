@@ -26,8 +26,17 @@ export const SOCK_DGRAM = 2;
 
 // Error codes
 export const ENOENT = 2;
+export const EMFILE = 24;
 export const ECONNREFUSED = 111;
 export const ETIMEDOUT = 110;
+
+// Descriptor table size. Classic AmiTCP/bsdsocket hands out small fds
+// starting at 0, and the universal AmigaOS idiom for building an fd_set is
+// `1L << s` against a single 32-bit long. A descriptor >= 32 makes that
+// shift undefined behaviour on 68K (shift count >= word size), so the bit
+// never lands where WaitSelect looks and the door hangs forever. Keep every
+// live descriptor strictly below this bound.
+export const BSD_FD_SETSIZE = 32;
 
 // hostent structure offsets
 const HOSTENT_SIZE = 20;
@@ -62,7 +71,13 @@ interface SocketState {
 export class BsdSocketLibrary {
   private emulator: MoiraEmulator;
   private sockets: Map<number, SocketState> = new Map();
-  private nextFd: number = 100; // Start at 100 to avoid conflicts with file handles
+  // bsdsocket descriptors are a namespace separate from AmigaDOS file
+  // handles, so there is no need (and no basis in real AmiTCP) to offset
+  // them away from 0. Descriptors are allocated low and reused after
+  // CloseSocket() so a long-running door cycling sockets never climbs past
+  // BSD_FD_SETSIZE. See BSD_FD_SETSIZE for why staying below 32 matters.
+  private nextFd: number = 0;
+  private freeFds: number[] = [];
   private hostentBuffer: number = 0; // Allocated memory for hostent
   private addrBuffer: number = 0; // Allocated memory for IP addresses
   private errno: number = 0;
@@ -79,6 +94,23 @@ export class BsdSocketLibrary {
    */
   getErrno(): number {
     return this.errno;
+  }
+
+  /**
+   * Allocate the next free socket descriptor, reusing a closed slot when
+   * available. Returns null when the descriptor table is exhausted (mirrors
+   * real bsdsocket returning -1/EMFILE rather than handing out a descriptor
+   * that can't be represented in a 32-bit fd_set mask).
+   */
+  private allocateFd(): number | null {
+    const reused = this.freeFds.pop();
+    if (reused !== undefined) {
+      return reused;
+    }
+    if (this.nextFd >= BSD_FD_SETSIZE) {
+      return null;
+    }
+    return this.nextFd++;
   }
 
   /**
@@ -121,7 +153,13 @@ export class BsdSocketLibrary {
       return -1;
     }
 
-    const fd = this.nextFd++;
+    const fd = this.allocateFd();
+    if (fd === null) {
+      console.log(`[BsdSocketLibrary] socket: descriptor table exhausted (limit ${BSD_FD_SETSIZE})`);
+      this.errno = EMFILE;
+      return -1;
+    }
+
     const state: SocketState = {
       fd,
       socket: null,
@@ -392,6 +430,7 @@ export class BsdSocketLibrary {
     }
 
     this.sockets.delete(fd);
+    this.freeFds.push(fd);
     return 0;
   }
 
