@@ -6,6 +6,7 @@ import path from 'path';
 import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
+import { doorRepoRouter } from './door-repo.routes';
 import { getSystemTime } from '../utils/date-time.util';
 import { getRepoRevision } from './repo-revision';
 
@@ -200,6 +201,9 @@ app.use('/api', doorApiRouter);
 
 // Deployment API routes
 app.use('/api', deploymentRouter);
+
+// Door Repo API routes — read-only manifest/list.txt/archive/health
+app.use('/api/door-repo', doorRepoRouter);
 
 // Debug-MCP routes — dev-only, read-only introspection for the MCP sidecar.
 // See mcp-server-debug/ and web/backend/src/debug/debug-mcp.routes.ts.
