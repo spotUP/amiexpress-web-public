@@ -160,12 +160,12 @@ test-listtxt: listtxt.c tests/test_listtxt.c listtxt.h
 	$(CC) $(TEST_CFLAGS) listtxt.c tests/test_listtxt.c -o build-test-listtxt
 	./build-test-listtxt
 
-test-config: config.c tests/test_config.c config.h
-	$(CC) $(TEST_CFLAGS) config.c tests/test_config.c -o build-test-config
+test-config: config.c flow.c tests/test_config.c config.h flow.h
+	$(CC) $(TEST_CFLAGS) config.c flow.c tests/test_config.c -o build-test-config
 	./build-test-config
 
-test-http: http.c netio.c config.c tests/test_http.c tests/stub_server.c http.h netio.h config.h tests/stub_server.h
-	$(CC) $(TEST_CFLAGS) http.c netio.c config.c tests/stub_server.c tests/test_http.c -o build-test-http
+test-http: http.c netio.c config.c flow.c tests/test_http.c tests/stub_server.c http.h netio.h config.h flow.h tests/stub_server.h
+	$(CC) $(TEST_CFLAGS) http.c netio.c config.c flow.c tests/stub_server.c tests/test_http.c -o build-test-http
 	./build-test-http
 
 test-aedoor-native: aedoor_native.c tests/test_aedoor_native.c aedoor.h

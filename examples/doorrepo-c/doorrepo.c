@@ -640,6 +640,14 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
 
         if (input[0] == '\0') {
             if (note_empty_input_and_check_giveup(&consecutive_empty)) {
+                /* Confirmed live: without this line, five blank Enters on
+                 * a real (non-EOF) connection disconnect with no message
+                 * at all - indistinguishable from a crash during native
+                 * testing. Printed before stop_for_carrier_loss() so a
+                 * genuinely patient human sees why the session ended;
+                 * harmless best-effort on a real EOF/dead connection,
+                 * where the write either lands nowhere or is simply lost. */
+                ae_put("No input received - disconnecting.", 1);
                 stop_for_carrier_loss();
             }
             continue;
@@ -885,19 +893,61 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
     }
 
     if (cfg->extract_after_download) {
-        char cmd[600];
-        int rc;
-        sprintf(cmd, "%s x \"%s\" \"%s\"", cfg->lha_command, local_path, cfg->download_dir);
-        ae_put("Extracting archive...", 1);
-        rc = system(cmd);
-        if (rc == 0) {
-            ae_put("Extraction complete.", 1);
-            log_line(cfg, "EXTRACT OK");
-        } else {
-            char msg[64];
-            sprintf(msg, "Extraction failed (exit code %d).", rc);
-            ae_put(msg, 1);
-            log_line(cfg, "EXTRACT FAILED");
+        /* Re-validate immediately before building the system() command
+         * line, even though config.c already rejected an unsafe
+         * cfg->lha_command/cfg->download_dir when DoorRepo.cfg was
+         * parsed. Two independent reasons this check happens AGAIN here,
+         * not just once at parse time:
+         *   1. Defense in depth against config.c's check ever being
+         *      bypassed by a future code path that sets cfg fields
+         *      without going through config_load() (a hardcoded
+         *      fallback, a future admin-API, a bug) - the boundary that
+         *      actually matters is "immediately before the dangerous
+         *      operation", not "somewhere upstream, hopefully".
+         *   2. entry->archive is SERVER-supplied, not sysop config -
+         *      config.c's check never sees it at all. It flows into this
+         *      same system() string via local_path (built from
+         *      DownloadDir + archive name) and docs/DOOR-REPO-API.md
+         *      section 5 documents real, CURRENT catalog rows containing
+         *      "$" (and "!"/"&"/"^"/"~") - "curation happens in git"
+         *      bounds who can add a name, not what characters a name may
+         *      contain, so this is a second live injection path into the
+         *      exact same system() call the config-value check protects,
+         *      and it needed catching independently. */
+        if (flow_contains_forbidden_shell_char(cfg->lha_command)
+            || flow_contains_forbidden_shell_char(cfg->download_dir)
+            || flow_contains_forbidden_shell_char(entry->archive)) {
+            ae_put("Extraction refused: LhaCommand, DownloadDir, or the archive name contains a character that must never reach a shell command. The archive was downloaded and verified but NOT extracted.", 1);
+            log_line(cfg, "EXTRACT REFUSED: forbidden character in LhaCommand, DownloadDir, or archive name");
+            return;
+        }
+
+        {
+            char cmd[600];
+            int rc;
+            /* system() is a dev-convenience choice, not the Amiga-native
+             * idiom: AmigaDOS's real equivalent is SystemTags()/Execute()
+             * (dos.library), which this reference client does not use
+             * because no AmigaDOS-specific process-execution module was
+             * built in Tasks 1-5 and system() is standard, portable C89
+             * that works identically on both backends for a dev/test
+             * build. The validation above is required on EITHER idiom -
+             * SystemTags() parses the same AmigaDOS shell command-line
+             * syntax and is subject to the same class of injection via
+             * an unescaped argument, so switching mechanisms would not
+             * remove the need for this check. */
+            sprintf(cmd, "%s x \"%s\" \"%s\"", cfg->lha_command, local_path, cfg->download_dir);
+            ae_put("Extracting archive...", 1);
+            rc = system(cmd);
+            if (rc == 0) {
+                ae_put("Extraction complete.", 1);
+                log_line(cfg, "EXTRACT OK");
+            } else {
+                char msg[64];
+                sprintf(msg, "Extraction failed (exit code %d).", rc);
+                ae_put(msg, 1);
+                log_line(cfg, "EXTRACT FAILED");
+            }
         }
     }
 }
@@ -976,12 +1026,34 @@ int main(int argc, char **argv)
     print_banner();
 
     if (skipped > 0) {
-        char msg[128];
-        char logmsg[128];
-        sprintf(msg, "Note: %d configuration line(s) in " DOOR_CONFIG_PATH " were invalid and used defaults instead.", skipped);
-        ae_put(msg, 1);
-        sprintf(logmsg, "CONFIG: %d invalid line(s) in " DOOR_CONFIG_PATH ", defaults used", skipped);
-        log_line(&cfg, logmsg);
+        /* An unsafe-character rejection is a materially different event
+         * from an out-of-range number or a typo'd key - it means
+         * DoorRepo.cfg contained a value shaped like a shell-injection
+         * attempt (see flow.h's flow_contains_forbidden_shell_char()),
+         * which is worth a sysop's attention even if the rest of the
+         * file is fine. Reported separately from ordinary invalid lines
+         * rather than folded into one generic count. */
+        int unsafe = config_last_unsafe_value_count();
+        int ordinary = skipped - unsafe;
+
+        if (unsafe > 0) {
+            char msg[320];
+            char logmsg[192];
+            sprintf(msg, "WARNING: %d line(s) in " DOOR_CONFIG_PATH
+                         " were rejected for containing forbidden characters (quotes, backticks, $, ;, \\, |, &, <, >, or a raw CR/LF) and used defaults instead. This may indicate a misconfigured or tampered config file.",
+                    unsafe);
+            ae_put(msg, 1);
+            sprintf(logmsg, "CONFIG: %d line(s) in " DOOR_CONFIG_PATH " rejected for forbidden characters, defaults used", unsafe);
+            log_line(&cfg, logmsg);
+        }
+        if (ordinary > 0) {
+            char msg[128];
+            char logmsg[128];
+            sprintf(msg, "Note: %d configuration line(s) in " DOOR_CONFIG_PATH " were invalid (out of range or unrecognized) and used defaults instead.", ordinary);
+            ae_put(msg, 1);
+            sprintf(logmsg, "CONFIG: %d invalid line(s) in " DOOR_CONFIG_PATH ", defaults used", ordinary);
+            log_line(&cfg, logmsg);
+        }
     }
 
     cat.rows = (dr_entry *) 0;

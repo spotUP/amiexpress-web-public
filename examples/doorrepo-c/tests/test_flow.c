@@ -259,6 +259,89 @@ TEST(build_archive_path_too_small_buffer_returns_error)
 }
 
 /* ---------------------------------------------------------------------
+ * Shell-metacharacter rejection (the config.c / doorrepo.c shared
+ * validator - see flow.h for the full vulnerability writeup)
+ * ------------------------------------------------------------------- */
+
+TEST(shell_char_ordinary_amiga_path_is_safe)
+{
+    ASSERT_TRUE(!flow_contains_forbidden_shell_char("Work:Doors/Downloads/"), "ordinary AmigaDOS path is safe");
+    ASSERT_TRUE(!flow_contains_forbidden_shell_char("AETRIV10.LHA"), "ordinary archive name is safe");
+    ASSERT_TRUE(!flow_contains_forbidden_shell_char("lha"), "ordinary command name is safe");
+}
+
+TEST(shell_char_exact_reported_injection_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("INJECTDIR\" ; touch /tmp/PWNED_BY_DOORREPO ; echo \""),
+                "the exact reported injection string is rejected");
+}
+
+TEST(shell_char_double_quote_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo\"bar"), "double quote rejected");
+}
+
+TEST(shell_char_single_quote_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo'bar"), "single quote rejected");
+}
+
+TEST(shell_char_backtick_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo`bar"), "backtick rejected");
+}
+
+TEST(shell_char_dollar_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo$bar"), "dollar sign rejected (real catalog archive names contain '$')");
+}
+
+TEST(shell_char_semicolon_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo;bar"), "semicolon rejected");
+}
+
+TEST(shell_char_backslash_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo\\bar"), "backslash rejected");
+}
+
+TEST(shell_char_pipe_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo|bar"), "pipe rejected");
+}
+
+TEST(shell_char_ampersand_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo&bar"), "ampersand rejected (real catalog archive names contain '&')");
+}
+
+TEST(shell_char_less_than_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo<bar"), "less-than rejected");
+}
+
+TEST(shell_char_greater_than_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo>bar"), "greater-than rejected");
+}
+
+TEST(shell_char_carriage_return_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo\rbar"), "embedded carriage return rejected");
+}
+
+TEST(shell_char_newline_is_unsafe)
+{
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo\nbar"), "embedded newline rejected");
+}
+
+TEST(shell_char_empty_string_is_safe)
+{
+    ASSERT_TRUE(!flow_contains_forbidden_shell_char(""), "empty string has nothing to reject");
+}
+
+/* ---------------------------------------------------------------------
  * Local download path construction
  * ------------------------------------------------------------------- */
 
@@ -371,6 +454,22 @@ int main(void)
     RUN_TEST(build_archive_path_ampersand_left_unencoded);
     RUN_TEST(build_archive_path_caret_left_unencoded);
     RUN_TEST(build_archive_path_too_small_buffer_returns_error);
+
+    RUN_TEST(shell_char_ordinary_amiga_path_is_safe);
+    RUN_TEST(shell_char_exact_reported_injection_is_unsafe);
+    RUN_TEST(shell_char_double_quote_is_unsafe);
+    RUN_TEST(shell_char_single_quote_is_unsafe);
+    RUN_TEST(shell_char_backtick_is_unsafe);
+    RUN_TEST(shell_char_dollar_is_unsafe);
+    RUN_TEST(shell_char_semicolon_is_unsafe);
+    RUN_TEST(shell_char_backslash_is_unsafe);
+    RUN_TEST(shell_char_pipe_is_unsafe);
+    RUN_TEST(shell_char_ampersand_is_unsafe);
+    RUN_TEST(shell_char_less_than_is_unsafe);
+    RUN_TEST(shell_char_greater_than_is_unsafe);
+    RUN_TEST(shell_char_carriage_return_is_unsafe);
+    RUN_TEST(shell_char_newline_is_unsafe);
+    RUN_TEST(shell_char_empty_string_is_safe);
 
     RUN_TEST(local_path_device_needs_no_separator);
     RUN_TEST(local_path_directory_with_trailing_slash_needs_no_separator);

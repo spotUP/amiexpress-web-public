@@ -579,6 +579,263 @@ TEST(timeout_out_of_range)
     unlink("/tmp/test_timeout_out_of_range.cfg");
 }
 
+/* ---------------------------------------------------------------------
+ * Shell-metacharacter rejection for DownloadDir/LhaCommand/LogFile/
+ * RepoPath. Regression coverage for a real, demonstrated vulnerability:
+ * a DownloadDir of INJECTDIR" ; touch /tmp/PWNED_BY_DOORREPO ; echo "
+ * survived config_load() unfiltered and, once interpolated into
+ * doorrepo.c's system() extraction command, executed an arbitrary shell
+ * command. Every test below drives the REAL config_load() entry point
+ * against a real temp file - not an isolated call to the internal
+ * validator - so these are true reachability tests of the actual parse
+ * boundary an attacker-controlled DoorRepo.cfg goes through.
+ * ------------------------------------------------------------------- */
+
+TEST(reject_downloaddir_exact_reported_injection)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_inject_exact.cfg", "w");
+    fprintf(f, "DownloadDir=INJECTDIR\" ; touch /tmp/PWNED_BY_DOORREPO ; echo \"\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_exact.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "DownloadDir keeps default on the exact reported injection string");
+    ASSERT_EQ(skipped, 1, "the injection line is counted as skipped");
+    ASSERT_EQ(config_last_unsafe_value_count(), 1, "counted specifically as an unsafe-character rejection");
+    unlink("/tmp/test_inject_exact.cfg");
+}
+
+TEST(reject_downloaddir_double_quote)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_dq.cfg", "w");
+    fprintf(f, "DownloadDir=foo\"bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_dq.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "double quote rejected");
+    unlink("/tmp/test_inject_dq.cfg");
+}
+
+TEST(reject_downloaddir_single_quote)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_sq.cfg", "w");
+    fprintf(f, "DownloadDir=foo'bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_sq.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "single quote rejected");
+    unlink("/tmp/test_inject_sq.cfg");
+}
+
+TEST(reject_downloaddir_backtick)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_bt.cfg", "w");
+    fprintf(f, "DownloadDir=foo`bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_bt.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "backtick rejected");
+    unlink("/tmp/test_inject_bt.cfg");
+}
+
+TEST(reject_downloaddir_dollar)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_dollar.cfg", "w");
+    fprintf(f, "DownloadDir=foo$bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_dollar.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "dollar sign rejected");
+    unlink("/tmp/test_inject_dollar.cfg");
+}
+
+TEST(reject_downloaddir_semicolon)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_semi.cfg", "w");
+    fprintf(f, "DownloadDir=foo;bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_semi.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "semicolon rejected");
+    unlink("/tmp/test_inject_semi.cfg");
+}
+
+TEST(reject_downloaddir_backslash)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_bs.cfg", "w");
+    fprintf(f, "DownloadDir=foo\\bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_bs.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "backslash rejected");
+    unlink("/tmp/test_inject_bs.cfg");
+}
+
+TEST(reject_downloaddir_pipe)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_pipe.cfg", "w");
+    fprintf(f, "DownloadDir=foo|bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_pipe.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "pipe rejected");
+    unlink("/tmp/test_inject_pipe.cfg");
+}
+
+TEST(reject_downloaddir_ampersand)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_amp.cfg", "w");
+    fprintf(f, "DownloadDir=foo&bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_amp.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "ampersand rejected");
+    unlink("/tmp/test_inject_amp.cfg");
+}
+
+TEST(reject_downloaddir_less_than)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_lt.cfg", "w");
+    fprintf(f, "DownloadDir=foo<bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_lt.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "less-than rejected");
+    unlink("/tmp/test_inject_lt.cfg");
+}
+
+TEST(reject_downloaddir_greater_than)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_gt.cfg", "w");
+    fprintf(f, "DownloadDir=foo>bar\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_gt.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "greater-than rejected");
+    unlink("/tmp/test_inject_gt.cfg");
+}
+
+TEST(reject_downloaddir_embedded_carriage_return)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_cr.cfg", "w");
+    /* A CR embedded MID-value (not at the line's own end, which
+     * config_load() already strips as line-ending noise) - written raw
+     * via fputc so libc's text-mode newline translation cannot interfere,
+     * proving the check catches an embedded CR the line-ending strip
+     * does not remove. */
+    fputs("DownloadDir=foo", f);
+    fputc('\r', f);
+    fputs("bar\n", f);
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_cr.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "embedded carriage return rejected");
+    unlink("/tmp/test_inject_cr.cfg");
+}
+
+TEST(reject_lhacommand_semicolon)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_lha.cfg", "w");
+    fprintf(f, "LhaCommand=lha; rm -rf /\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_lha.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "LhaCommand keeps default when it contains a semicolon");
+    unlink("/tmp/test_inject_lha.cfg");
+}
+
+TEST(reject_logfile_backtick)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_log.cfg", "w");
+    fprintf(f, "LogFile=T:`whoami`.log\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_log.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.log_file, "T:DoorRepo.log", "LogFile keeps default when it contains a backtick");
+    unlink("/tmp/test_inject_log.cfg");
+}
+
+TEST(reject_repopath_semicolon)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_inject_path.cfg", "w");
+    fprintf(f, "RepoPath=/api/door-repo;rm\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_path.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.path, "/api/door-repo", "RepoPath keeps default when it contains a semicolon");
+    unlink("/tmp/test_inject_path.cfg");
+}
+
+TEST(unsafe_value_count_excludes_ordinary_invalid_values)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_inject_mixed.cfg", "w");
+    fprintf(f, "DownloadDir=foo;bar\nPageSize=99999\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_mixed.cfg", &skipped);
+    ASSERT_EQ(skipped, 2, "both an unsafe value and an out-of-range number are skipped");
+    ASSERT_EQ(config_last_unsafe_value_count(), 1, "only the unsafe-character line is counted as unsafe");
+    unlink("/tmp/test_inject_mixed.cfg");
+}
+
+TEST(unsafe_value_count_resets_each_call)
+{
+    dr_config cfg;
+    FILE *f1 = fopen("/tmp/test_inject_reset1.cfg", "w");
+    fprintf(f1, "DownloadDir=foo;bar\n");
+    fclose(f1);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_inject_reset1.cfg", (int *) 0);
+    ASSERT_EQ(config_last_unsafe_value_count(), 1, "first call recorded one unsafe value");
+
+    {
+        FILE *f2 = fopen("/tmp/test_inject_reset2.cfg", "w");
+        fprintf(f2, "DownloadDir=RAM:\n");
+        fclose(f2);
+        config_defaults(&cfg);
+        config_load(&cfg, "/tmp/test_inject_reset2.cfg", (int *) 0);
+        ASSERT_EQ(config_last_unsafe_value_count(), 0, "a later clean call resets the count to zero");
+    }
+
+    unlink("/tmp/test_inject_reset1.cfg");
+    unlink("/tmp/test_inject_reset2.cfg");
+}
+
+TEST(legitimate_amiga_paths_are_not_rejected)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_legit_paths.cfg", "w");
+    fprintf(f, "DownloadDir=Work:Doors/Downloads/\nLhaCommand=lha\nLogFile=RAM:DoorRepo.log\nRepoPath=/api/door-repo\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_legit_paths.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.download_dir, "Work:Doors/Downloads/", "ordinary AmigaDOS directory path accepted");
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "ordinary command name accepted");
+    ASSERT_STR_EQ(cfg.log_file, "RAM:DoorRepo.log", "ordinary AmigaDOS device path accepted");
+    ASSERT_STR_EQ(cfg.path, "/api/door-repo", "ordinary URL path accepted");
+    ASSERT_EQ(skipped, 0, "no legitimate line is skipped");
+    ASSERT_EQ(config_last_unsafe_value_count(), 0, "no legitimate line is flagged as unsafe");
+    unlink("/tmp/test_legit_paths.cfg");
+}
+
 int main(void)
 {
     printf("\n====== Config Module Tests ======\n\n");
@@ -622,6 +879,25 @@ int main(void)
     RUN_TEST(timeout_zero);
     RUN_TEST(timeout_negative);
     RUN_TEST(timeout_out_of_range);
+
+    RUN_TEST(reject_downloaddir_exact_reported_injection);
+    RUN_TEST(reject_downloaddir_double_quote);
+    RUN_TEST(reject_downloaddir_single_quote);
+    RUN_TEST(reject_downloaddir_backtick);
+    RUN_TEST(reject_downloaddir_dollar);
+    RUN_TEST(reject_downloaddir_semicolon);
+    RUN_TEST(reject_downloaddir_backslash);
+    RUN_TEST(reject_downloaddir_pipe);
+    RUN_TEST(reject_downloaddir_ampersand);
+    RUN_TEST(reject_downloaddir_less_than);
+    RUN_TEST(reject_downloaddir_greater_than);
+    RUN_TEST(reject_downloaddir_embedded_carriage_return);
+    RUN_TEST(reject_lhacommand_semicolon);
+    RUN_TEST(reject_logfile_backtick);
+    RUN_TEST(reject_repopath_semicolon);
+    RUN_TEST(unsafe_value_count_excludes_ordinary_invalid_values);
+    RUN_TEST(unsafe_value_count_resets_each_call);
+    RUN_TEST(legitimate_amiga_paths_are_not_rejected);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

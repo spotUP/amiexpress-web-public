@@ -100,6 +100,45 @@ int flow_build_archive_path(char *out, unsigned long outsize,
 int flow_build_local_path(char *out, unsigned long outsize,
                            const char *download_dir, const char *archive_name);
 
+/* ---- Shell-metacharacter rejection ----
+ *
+ * Real, demonstrated vulnerability this exists to close: doorrepo.c
+ * builds an lha-extraction system() command line by sprintf()-ing
+ * cfg->lha_command, a local file path (built from cfg->download_dir),
+ * and a server-supplied archive name into a double-quoted string. A
+ * DownloadDir of INJECTDIR" ; touch /tmp/PWNED_BY_DOORREPO ; echo "
+ * broke out of the surrounding quotes and ran an arbitrary shell command
+ * - reproduced end to end, not theorised. The single canonical check
+ * below is used at THREE points against two different trust boundaries,
+ * not reimplemented at each:
+ *   1. config.c validates DownloadDir/LhaCommand/LogFile/RepoPath as
+ *      each line is parsed (rejects, keeps the default, counts it).
+ *   2. doorrepo.c re-validates cfg->lha_command and cfg->download_dir
+ *      again, immediately before building the system() command line -
+ *      defense in depth against any future code path that could set
+ *      those fields without going through config_load().
+ *   3. doorrepo.c ALSO validates the server-supplied archive name at the
+ *      same point - config.c never sees it, and docs/DOOR-REPO-API.md
+ *      section 5 documents real, CURRENT catalog rows containing "$"
+ *      (and "!"/"&"/"^"/"~", not all shell-safe once double-quoted) -
+ *      "curation happens in git" bounds who can introduce a name, not
+ *      what characters a name may contain, so this is a second live path
+ *      into the same system() call, not merely a config-file concern. */
+
+/* Returns non-zero if `value` contains a byte that must never be
+ * interpolated unescaped into a shell command line or a raw HTTP request
+ * line: quote/escape characters that could break out of a double-quoted
+ * shell argument ("'`\), shell metacharacters that chain, redirect, or
+ * substitute commands (;|&<>), and CR/LF (which could inject an extra
+ * line into a raw HTTP request or a config-derived shell command). The
+ * set is deliberately conservative - reject the byte outright rather
+ * than attempt to quote/escape it correctly for every shell a sysop
+ * might have configured, since a subtly wrong escaping scheme looks safe
+ * without being safe. None of these bytes are legal in a real AmigaDOS
+ * path, URL path segment, or command name, so nothing legitimate is
+ * ever rejected by this. */
+int flow_contains_forbidden_shell_char(const char *value);
+
 /* ---- Catalog cache-reuse decision ---- */
 
 /* Returns 1 if a previously cached catalog (whose list.txt header carried

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "config.h"
+#include "flow.h"
 
 void config_defaults(dr_config *cfg)
 {
@@ -115,6 +116,37 @@ static int validate_timeout(const char *value)
     return timeout;
 }
 
+/* Reset to 0 at the top of every config_load() call; incremented once per
+ * line rejected by flow_contains_forbidden_shell_char() below. See
+ * config.h's config_last_unsafe_value_count() for why this is a query
+ * function rather than a config_load() out-parameter. */
+static int g_last_unsafe_value_count = 0;
+
+int config_last_unsafe_value_count(void)
+{
+    return g_last_unsafe_value_count;
+}
+
+/* Real, demonstrated vulnerability this guards: DownloadDir and
+ * LhaCommand are interpolated, unescaped, into a system() command line
+ * by doorrepo.c's optional lha-extraction step. A DownloadDir of
+ * INJECTDIR" ; touch /tmp/PWNED_BY_DOORREPO ; echo " (a real value an
+ * attacker-controlled or carelessly-copied DoorRepo.cfg could contain)
+ * broke out of the surrounding double quotes and ran an arbitrary shell
+ * command - confirmed by reproducing it end to end, not theorised.
+ * RepoPath is also checked: it is concatenated raw into an HTTP request
+ * line by http.c, so a CR/LF there could inject request-line/header
+ * content. LogFile is checked for the same defense-in-depth reason even
+ * though it is only ever passed to fopen(), never a shell.
+ *
+ * The actual character set and rejection logic live in flow.c
+ * (flow_contains_forbidden_shell_char()) rather than a private copy
+ * here, so there is exactly one definition of "unsafe" shared with
+ * doorrepo.c's second, independent check immediately before the
+ * system() call this whole guard exists to protect - defense in depth
+ * is the same single-source-of-truth check applied at two points, not
+ * two implementations that could quietly drift apart. */
+
 int config_load(dr_config *cfg, const char *path, int *skipped_lines)
 {
     FILE *f;
@@ -124,6 +156,8 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
     char *value;
     int local_skipped = 0;
     int parsed_value;
+
+    g_last_unsafe_value_count = 0;
 
     f = fopen(path, "r");
     if (!f)
@@ -166,11 +200,21 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
                 local_skipped++;
             }
         } else if (str_icmp(key, "RepoPath") == 0) {
-            strncpy(cfg->path, value, sizeof(cfg->path) - 1);
-            cfg->path[sizeof(cfg->path) - 1] = '\0';
+            if (flow_contains_forbidden_shell_char(value)) {
+                local_skipped++;
+                g_last_unsafe_value_count++;
+            } else {
+                strncpy(cfg->path, value, sizeof(cfg->path) - 1);
+                cfg->path[sizeof(cfg->path) - 1] = '\0';
+            }
         } else if (str_icmp(key, "DownloadDir") == 0) {
-            strncpy(cfg->download_dir, value, sizeof(cfg->download_dir) - 1);
-            cfg->download_dir[sizeof(cfg->download_dir) - 1] = '\0';
+            if (flow_contains_forbidden_shell_char(value)) {
+                local_skipped++;
+                g_last_unsafe_value_count++;
+            } else {
+                strncpy(cfg->download_dir, value, sizeof(cfg->download_dir) - 1);
+                cfg->download_dir[sizeof(cfg->download_dir) - 1] = '\0';
+            }
         } else if (str_icmp(key, "PageSize") == 0) {
             parsed_value = validate_page_size(value);
             if (parsed_value > 0) {
@@ -186,13 +230,23 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
                 local_skipped++;
             }
         } else if (str_icmp(key, "LhaCommand") == 0) {
-            strncpy(cfg->lha_command, value, sizeof(cfg->lha_command) - 1);
-            cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';
+            if (flow_contains_forbidden_shell_char(value)) {
+                local_skipped++;
+                g_last_unsafe_value_count++;
+            } else {
+                strncpy(cfg->lha_command, value, sizeof(cfg->lha_command) - 1);
+                cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';
+            }
         } else if (str_icmp(key, "ExtractAfterDownload") == 0) {
             cfg->extract_after_download = parse_boolean(value);
         } else if (str_icmp(key, "LogFile") == 0) {
-            strncpy(cfg->log_file, value, sizeof(cfg->log_file) - 1);
-            cfg->log_file[sizeof(cfg->log_file) - 1] = '\0';
+            if (flow_contains_forbidden_shell_char(value)) {
+                local_skipped++;
+                g_last_unsafe_value_count++;
+            } else {
+                strncpy(cfg->log_file, value, sizeof(cfg->log_file) - 1);
+                cfg->log_file[sizeof(cfg->log_file) - 1] = '\0';
+            }
         } else {
             local_skipped++;
         }

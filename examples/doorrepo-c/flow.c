@@ -198,6 +198,23 @@ int flow_build_archive_path(char *out, unsigned long outsize,
     return (int) need;
 }
 
+int flow_contains_forbidden_shell_char(const char *value)
+{
+    static const char forbidden[] = "\"'`$;\\|&<>\r\n";
+    const char *p;
+
+    if (value == (const char *) 0) {
+        return 0;
+    }
+
+    for (p = value; *p != '\0'; p++) {
+        if (strchr(forbidden, (int) *p) != (char *) 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int flow_build_local_path(char *out, unsigned long outsize,
                            const char *download_dir, const char *archive_name)
 {
