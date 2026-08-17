@@ -229,5 +229,86 @@ describe('door-repo routes', () => {
       expect(res.body.doors).toBe(2);
       expect(res.headers['x-door-repo-revision']).toBe(res.body.revision);
     });
+
+    it('does not compute archive checksums — uses the lightweight door count, not buildManifest', async () => {
+      // swc compiles named exports as non-configurable getters, so
+      // jest.spyOn(mod, 'getArchiveChecksums') throws "Cannot redefine
+      // property". jest.doMock replaces the whole module at require() time
+      // instead of trying to patch a frozen export, which works reliably
+      // here. Needs its own resetModules + fresh require (the outer `app`
+      // from beforeEach already bound to the real, unmocked checksums
+      // module) and its own express app.
+      const checksumSpy = jest.fn();
+      jest.resetModules();
+      jest.doMock('../../src/doors/door-repo-checksums', () => ({
+        getArchiveChecksums: checksumSpy,
+        _clearChecksumCacheForTests: jest.fn(),
+      }));
+
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { doorRepoRouter: freshRouter } = require('../../src/server/door-repo.routes') as {
+        doorRepoRouter: Router;
+      };
+      const freshApp = express();
+      freshApp.use('/api/door-repo', freshRouter);
+
+      const res = await request(freshApp).get('/api/door-repo/health');
+
+      expect(res.status).toBe(200);
+      expect(res.body.doors).toBe(2);
+      expect(checksumSpy).not.toHaveBeenCalled();
+
+      jest.dontMock('../../src/doors/door-repo-checksums');
+    });
+  });
+
+  // The mid-stream fs error branch (fs.createReadStream(...).on('error', ...))
+  // is extracted into a standalone, exported function specifically so it can
+  // be unit-tested directly against fake Response objects — reproducing a
+  // real mid-stream failure (e.g. via a mocked Readable + real HTTP request)
+  // is racy: the moment any bytes are written, Node has already committed to
+  // the original Content-Length, so a truncated response reads to an HTTP
+  // client as a protocol violation (aborted/parse-error) rather than a clean
+  // "response finished" — not a reliable assertion. Testing the branching
+  // logic directly is the clean alternative.
+  describe('handleArchiveStreamError (mid-stream error branch)', () => {
+    function fakeRes(headersSent: boolean) {
+      return {
+        headersSent,
+        status: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+        end: jest.fn(),
+      };
+    }
+
+    it('falls back to a 404 NOT FOUND when headers have not been sent yet', () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { handleArchiveStreamError } = require('../../src/server/door-repo.routes') as {
+        handleArchiveStreamError: (res: unknown, archiveName: string) => void;
+      };
+      const res = fakeRes(false);
+
+      handleArchiveStreamError(res, 'SOME_DOOR.LHA');
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.set).toHaveBeenCalledWith('Content-Type', 'text/plain');
+      expect(res.send).toHaveBeenCalledWith('NOT FOUND: SOME_DOOR.LHA\r\n');
+      expect(res.end).not.toHaveBeenCalled();
+    });
+
+    it('terminates the response instead of re-sending headers when headers were already sent', () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { handleArchiveStreamError } = require('../../src/server/door-repo.routes') as {
+        handleArchiveStreamError: (res: unknown, archiveName: string) => void;
+      };
+      const res = fakeRes(true);
+
+      handleArchiveStreamError(res, 'SOME_DOOR.LHA');
+
+      expect(res.end).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
+    });
   });
 });

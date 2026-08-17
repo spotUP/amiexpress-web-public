@@ -197,6 +197,12 @@ describe('door-repo-manifest', () => {
     expect(rev.length).toBeGreaterThan(0);
   });
 
+  it('getDoorCount returns a plain row count without touching checksums', () => {
+    // 3 rows seeded in beforeEach: FOO_XIM.LHA, MISSING_DDD.LHA, REXX_SCRIPT.LHA.
+    const count = mod().getDoorCount();
+    expect(count).toBe(3);
+  });
+
   describe('renderListTxt', () => {
     it('produces the exact byte format: header, 6-field pipe rows, CRLF endings, escaping + truncation', () => {
       const { buildManifest, renderListTxt } = mod();

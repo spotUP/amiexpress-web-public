@@ -5,7 +5,10 @@
  *   GET /manifest              JSON DoorRepoManifest; ETag + If-None-Match.
  *   GET /list.txt              byte-exact ISO-8859-1/CRLF plain-text index.
  *   GET /archive/:archiveName  streams the archive file + its checksums.
- *   GET /health                { status, revision, doors }.
+ *   GET /health                { status, revision, doors } — lightweight;
+ *                              uses getDoorCount(), never buildManifest(),
+ *                              so a liveness poll never re-hashes the
+ *                              whole archive corpus.
  *
  * All four thin-wrap Task 1/2 building blocks (door-repo-manifest.ts,
  * door-repo-checksums.ts) and door-catalog.service.ts — no new DB access
@@ -21,7 +24,7 @@
  */
 import express, { Request, Response } from 'express';
 import * as fs from 'fs';
-import { buildManifest, renderListTxt, getRepoRevision } from '../doors/door-repo-manifest';
+import { buildManifest, renderListTxt, getRepoRevision, getDoorCount } from '../doors/door-repo-manifest';
 import { getArchiveChecksums } from '../doors/door-repo-checksums';
 import { getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
 
@@ -38,6 +41,24 @@ function sendNotFound(res: Response, archiveName: string): void {
     .status(404)
     .set('Content-Type', 'text/plain')
     .send(`NOT FOUND: ${archiveName}\r\n`);
+}
+
+/**
+ * Handles a mid-stream fs.createReadStream error so it never hangs the
+ * request. Extracted as a standalone, exported function (rather than an
+ * inline arrow in the 'error' listener) specifically so it can be
+ * unit-tested directly against fake Response objects — reproducing a real
+ * mid-stream failure end-to-end over HTTP is racy (the moment any bytes
+ * are written, the client has already committed to the declared
+ * Content-Length, so a truncated response reads as a protocol violation,
+ * not a clean "request finished").
+ */
+export function handleArchiveStreamError(res: Response, archiveName: string): void {
+  if (res.headersSent) {
+    res.end();
+  } else {
+    sendNotFound(res, archiveName);
+  }
 }
 
 // GET /manifest — JSON manifest with ETag / If-None-Match support.
@@ -101,23 +122,18 @@ doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
   res.set('X-Archive-SHA256', checksums.sha256);
 
   const stream = fs.createReadStream(absPath);
-  stream.on('error', () => {
-    // A mid-stream failure (e.g. the file vanished after statSync) must
-    // never hang the request. If headers are already flushed we can only
-    // terminate the response; otherwise fall back to a 404 like any other
-    // unreadable archive.
-    if (res.headersSent) {
-      res.end();
-    } else {
-      sendNotFound(res, archiveName);
-    }
-  });
+  stream.on('error', () => handleArchiveStreamError(res, archiveName));
   stream.pipe(res);
 });
 
-// GET /health — { status, revision, doors }.
+// GET /health — { status, revision, doors }. Uses getDoorCount(), NOT
+// buildManifest(): buildManifest computes md5+sha256 for every catalog row
+// (~3300 archives), which is far too expensive to pay on every liveness
+// poll — a monitor hitting this endpoint would re-hash the whole repo on
+// the first request after any archive touch.
 doorRepoRouter.get('/health', (req: Request, res: Response) => {
-  const manifest = buildManifest();
-  res.set('X-Door-Repo-Revision', manifest.revision);
-  res.json({ status: 'ok', revision: manifest.revision, doors: manifest.doors.length });
+  const revision = getRepoRevision();
+  const doors = getDoorCount();
+  res.set('X-Door-Repo-Revision', revision);
+  res.json({ status: 'ok', revision, doors });
 });

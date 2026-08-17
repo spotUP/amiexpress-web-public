@@ -80,6 +80,23 @@ interface DoorCatalogRow {
 
 export { getRepoRevision } from '../server/repo-revision';
 
+// ─── Lightweight door count ─────────────────────────────────────────────
+//
+// A plain `SELECT COUNT(*)` with no row mapping and no checksum work — for
+// callers (the /health endpoint) that only need "how many doors" and must
+// not pay buildManifest()'s per-archive md5/sha256 cost (~3300 files) on
+// every call.
+
+export function getDoorCount(): number {
+  const db = openDb();
+  try {
+    const row = db.prepare('SELECT COUNT(*) as n FROM door_catalog').get() as { n: number };
+    return row.n;
+  } finally {
+    db.close();
+  }
+}
+
 // ─── Manifest builder ───────────────────────────────────────────────────
 
 export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoManifest {
