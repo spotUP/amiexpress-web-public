@@ -189,37 +189,28 @@ describe('doorman repo-client E2E against a real local server', () => {
     expect(cached.manifest).toEqual(result.manifest);
   });
 
-  // DISCOVERED DEFECT (reported, not fixed -- this is a test-only task and
-  // neither door-repo.routes.ts nor Doors/door-manager/repo-client.ts was
-  // touched). The task brief for this test expected: real fetchManifest()
-  // call #1 -> fromCache:false + persists {etag}; call #2, driven through
-  // the SAME unmodified fetchManifest(), sends If-None-Match from that
-  // cache and gets a real 304 -> fromCache:true. That does NOT happen.
+  // FIXED (was: DISCOVERED DEFECT). Task 10 originally found that a real
+  // fetchManifest() refetch never reached the server's 304 path: Node's
+  // fetch() (undici) sends `Cache-Control: no-cache` on every outgoing
+  // request by default, and door-repo.routes.ts correctly (RFC 9111
+  // s5.2.1.4) treats an incoming `no-cache` as "must revalidate end to
+  // end", so it could never return 304 to an unmodified fetch() call --
+  // silently defeating the whole point of If-None-Match. Every "conditional"
+  // fetch paid the full buildManifest() cost (md5+sha256 for every catalog
+  // row, ~3300 archives in production) server-side on every call. See
+  // task-5-report.md's fix-round-2 section for the full root-cause analysis
+  // and the options considered.
   //
-  // Root cause, isolated below: repo-client.ts's fetchManifest() calls
-  // `fetch(manifestUrl, { headers })` with no `cache` option and no
-  // Cache-Control override. Node's built-in fetch (undici) then adds
-  // `Cache-Control: no-cache` + `Pragma: no-cache` to EVERY outgoing
-  // request by default (verified directly against a raw http.Server echo
-  // -- confirmed independent of this test's Express app, this repo, or
-  // jest: also reproduced with `cache: 'default'` and `cache: 'no-store'`
-  // explicitly set, and by omitting `cache` entirely; only `cache:
-  // 'force-cache'` or the caller supplying its own non-"no-cache"
-  // Cache-Control header value suppresses it). door-repo.routes.ts's
-  // GET /manifest deliberately honors RFC 9111 s5.2.1.4 ("Cache-Control:
-  // no-cache forces end-to-end revalidation even when If-None-Match would
-  // otherwise match exactly" -- see its own doc comment and the matching
-  // unit test in door-repo-routes.test.ts) by routing every request
-  // through Express's `req.fresh`, which respects that directive. The two
-  // behaviors are each correct/intentional in isolation and independently
-  // unit-tested, but together they mean: a real Node fetch()-based
-  // door-repo consumer can NEVER receive a 304 from this endpoint as the
-  // client is currently written -- every "conditional" fetch pays the full
-  // buildManifest() cost (md5+sha256 for every catalog row, ~3300 archives
-  // in production) server-side, defeating the entire point of the ETag
-  // cache. This can only surface with a real client + real server + real
-  // fetch() wired together, which is exactly what this task built.
-  it('fetchManifest: DEFECT -- a refetch through the real (unmodified) client never reaches the server 304 path, because Node fetch always sends Cache-Control: no-cache and the server (correctly, per RFC 9111) honors it', async () => {
+  // Fixed in repo-client.ts's fetchManifest(): it now sends an explicit
+  // `Cache-Control: max-age=0` request header (chosen over `cache:
+  // 'force-cache'` -- see repo-client.ts's own inline comment for why),
+  // which undici respects instead of overwriting with `no-cache`, so the
+  // server's real conditional-GET/304 logic now actually runs for a real
+  // Node client. This test (this exact assertion, run against the
+  // then-unmodified client) was RED before that fix landed and is GREEN
+  // after -- see task-5-report.md's fix-round-2 section for the RED/GREEN
+  // command transcript.
+  it('fetchManifest: a refetch through the real client sends Cache-Control: max-age=0, reaches the server 304 path, and returns fromCache:true', async () => {
     const cfg = freshClientConfig('cache-304.json');
 
     const first = await fetchManifest(cfg);
@@ -227,23 +218,21 @@ describe('doorman repo-client E2E against a real local server', () => {
     const persistedEtag = (JSON.parse(fs.readFileSync(cfg.cacheFile, 'utf8')) as { etag: string }).etag;
     expect(persistedEtag).toBeTruthy();
 
-    // What the brief expected: a second call through the SAME unmodified
-    // fetchManifest() should come back fromCache:true. It does not --
-    // pinned here as the actual, current, reproducible behavior so this
-    // test fails loudly (not silently) if that ever accidentally starts
-    // working without a deliberate fix landing (which would mean this
-    // comment block and task-10-report.md need updating, not that the
-    // assertion below is wrong).
+    // A second call through the SAME unmodified fetchManifest() now comes
+    // back fromCache:true -- the real, intended end-to-end behavior.
     const second = await fetchManifest(cfg);
-    expect(second.fromCache).toBe(false);
+    expect(second.fromCache).toBe(true);
+    expect(second.cachedAt).toBe(first.cachedAt);
+    expect(second.manifest).toEqual(first.manifest);
 
-    // Isolates the fault to the CLIENT's default fetch headers, not the
-    // server's conditional-GET logic (already unit-tested in
-    // door-repo-routes.test.ts, and re-verified here end-to-end): a raw
-    // fetch of the exact same URL with the exact same If-None-Match value,
-    // using `cache: 'force-cache'` to suppress undici's default
-    // Cache-Control injection (the one override confirmed above to work),
-    // DOES get a real 304 from the real server over the real socket.
+    // Independent confirmation the server's conditional-GET logic itself
+    // still works correctly (already unit-tested in
+    // door-repo-routes.test.ts, re-verified here end-to-end): a raw fetch
+    // of the exact same URL with the exact same If-None-Match value, using
+    // `cache: 'force-cache'` to suppress undici's default Cache-Control
+    // injection (the other option confirmed to work, not the one chosen
+    // for repo-client.ts itself -- see its inline comment), DOES get a
+    // real 304 from the real server over the real socket.
     const manifestUrl = `${baseUrl}/api/door-repo/manifest`;
     const rawConditional = await fetch(manifestUrl, {
       headers: { 'If-None-Match': persistedEtag },

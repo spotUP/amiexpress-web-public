@@ -21,6 +21,13 @@
  *                               (fromCache:true); otherwise throw loudly.
  *                               A door-repo client must never silently
  *                               hand DOORMAN an empty catalog.
+ *                      Sends `Cache-Control: max-age=0` on every request --
+ *                      Node's fetch() otherwise adds `Cache-Control: no-cache`
+ *                      by default, which the server correctly treats as
+ *                      "never 304", permanently defeating the ETag mechanism
+ *                      (see fetchManifest's own inline comment for the full
+ *                      analysis and why max-age=0 was chosen over
+ *                      `cache: 'force-cache'`).
  *
  *   downloadArchive()  GET /api/door-repo/archive/:archiveName, streaming
  *                      the response body straight to destPath while
@@ -120,7 +127,39 @@ export async function fetchManifest(cfg: RepoClientConfig): Promise<FetchManifes
   const cached = readCache(cfg.cacheFile);
   const manifestUrl = `${cfg.url}/api/door-repo/manifest`;
 
-  const headers: Record<string, string> = {};
+  // 'Cache-Control': 'max-age=0' forces revalidation on every request --
+  // required because Node's global fetch() (undici) sends
+  // `Cache-Control: no-cache` + `Pragma: no-cache` on EVERY outgoing
+  // request by default, with no way to opt out short of overriding
+  // Cache-Control ourselves. door-repo.routes.ts correctly (RFC 9111
+  // s5.2.1.4) treats an incoming `no-cache` as "must revalidate end to
+  // end", so it can NEVER return 304 to an unmodified fetch() call --
+  // silently defeating the whole point of sending If-None-Match (found by
+  // Task 10's real-client/real-server E2E test; see task-5-report.md's
+  // fix-round-2 section for the full root-cause analysis and the options
+  // considered).
+  //
+  // `max-age=0` says "revalidate before using anything older than 0
+  // seconds" -- combined with If-None-Match below, that IS a standard
+  // conditional-revalidation request, so door-repo.routes.ts's 304 branch
+  // runs normally. Chosen over `cache: 'force-cache'` (the other option
+  // confirmed to suppress the no-cache header): force-cache's Fetch-spec
+  // semantics are "serve from a local cache without asking the server if
+  // something fresh is cached" -- undici doesn't implement a real cache
+  // store today, so in PRACTICE it always hits the network (verified with
+  // a standalone probe: a server declaring `Cache-Control: max-age=3600`
+  // still saw every repeated fetch() reach it), but relying on that is
+  // relying on an implementation gap, not a guarantee -- a future undici
+  // version implementing real caching for force-cache would then silently
+  // serve a stale manifest with no revalidation, the exact failure mode
+  // this module must never allow. `max-age=0` has no such risk: its
+  // documented meaning IS "must revalidate", independent of whether the
+  // client ever grows a real cache. Undici still tacks on
+  // `Pragma: no-cache` alongside our Cache-Control override, but the
+  // `fresh` npm module backing Express's `req.fresh` (what
+  // door-repo.routes.ts uses) only inspects `cache-control`, never
+  // `pragma` (confirmed by reading its source) -- harmless.
+  const headers: Record<string, string> = { 'Cache-Control': 'max-age=0' };
   if (cached?.etag) {
     headers['If-None-Match'] = cached.etag;
   }
@@ -187,6 +226,16 @@ export async function fetchManifest(cfg: RepoClientConfig): Promise<FetchManifes
 // mode race where a 'data' listener switches the stream to flowing before
 // a separate consumer attaches, silently dropping the chunks emitted in
 // between.
+//
+// NOT affected by fetchManifest's Cache-Control/no-cache defect: this
+// function sends no If-None-Match, no conditional headers of any kind, and
+// GET /api/door-repo/archive/:archiveName (door-repo.routes.ts) has no
+// ETag/conditional-GET logic at all -- it always streams the current file
+// with a fresh Content-Length/checksums on every request, unconditionally.
+// Node's default `Cache-Control: no-cache` on the outgoing request is
+// simply never inspected by that handler, so there is nothing here for the
+// undici-default-header issue to interact with, correctly or incorrectly.
+// Checked explicitly (not assumed) when fixing fetchManifest above.
 
 function safeUnlink(destPath: string): void {
   try {

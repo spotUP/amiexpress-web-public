@@ -164,6 +164,27 @@ describe('doorman repo-client', () => {
       expect(headers['If-None-Match']).toBeUndefined();
     });
 
+    // Regression guard for the fix-round-2 defect (see repo-client.ts's
+    // fetchManifest doc comment + task-5-report.md): Node's global fetch()
+    // sends `Cache-Control: no-cache` on every outgoing request by default,
+    // which the server correctly treats as "must revalidate", so it can
+    // NEVER return 304 unless this header overrides that default. This is
+    // a plain mocked-fetch unit test (fast suite) specifically so a future
+    // regression -- e.g. someone "cleaning up" this header away -- is
+    // caught here immediately, not only by the slower real-server E2E
+    // suite (doorman-repo-e2e.test.ts) that originally found the bug.
+    it('sends Cache-Control: max-age=0 on every manifest request (forces server-side revalidation instead of relying on Node fetch default no-cache)', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({ ok: true, status: 200, etag: '"rev-1"', jsonBody: sampleManifest('rev-1') })
+      );
+
+      await fetchManifest(cfg);
+
+      const [, init] = fetchSpy.mock.calls[0]!;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['Cache-Control']).toBe('max-age=0');
+    });
+
     it('sends If-None-Match from the cached etag on a subsequent call', async () => {
       const cached = sampleManifest('rev-old');
       seedCache({ etag: '"rev-old"', cachedAt: '2020-01-01T00:00:00.000Z', manifest: cached });
