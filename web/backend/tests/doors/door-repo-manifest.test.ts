@@ -270,5 +270,109 @@ describe('door-repo-manifest', () => {
       const desc = dataLine.split('|')[5];
       expect(desc).toBe('line one line two tabbed');
     });
+
+    // Task 2b: against the real 3301-row catalog, 4 rows contain metadata
+    // bytes outside ISO-8859-1 (e.g. a door name that renders as
+    // "Cp_n\u00e4h\u00e4_Du!!" -- but it is not the latin1-safe precomposed
+    // 'a-umlaut' (U+00E4); it is NFD "a" + a combining diaeresis (U+0308),
+    // which IS outside the latin1 range). `Buffer.from(str, 'latin1')` does
+    // NOT throw or drop such characters: it silently truncates each UTF-16
+    // code unit to its low byte, so e.g. U+0416 (Cyrillic Zhe) would become
+    // byte 0x16 (a control character) -- not an error, and not a '?'. Since
+    // the bytes are parsed by a real Amiga client, silent corruption is
+    // worse than an explicit, visible '?' substitution.
+    //
+    // Non-latin1 characters below are built entirely from \u escapes rather
+    // than typed as literal glyphs, so the expected values are unambiguous
+    // no matter how this source file itself is saved/read:
+    //   COMBINING_DIAERESIS = U+0308 (the real-world "a-umlaut" case above)
+    //   CYRILLIC_ZHE        = U+0416 (an ordinary out-of-range letter)
+    //   GAME_EMOJI          = U+1F3AE, an astral char = one surrogate PAIR
+    //                         (2 UTF-16 code units) -- must still collapse
+    //                         to a SINGLE '?', not two.
+    const COMBINING_DIAERESIS = '\u0308';
+    const CYRILLIC_ZHE = '\u0416';
+    const GAME_EMOJI = '\uD83C\uDFAE';
+
+    it('replaces characters outside ISO-8859-1 with a single "?" per character (no silent byte corruption)', () => {
+      const { renderListTxt } = mod();
+      const archiveName = `W${CYRILLIC_ZHE}IRD.LHA`;
+      const name = `Cp_na${COMBINING_DIAERESIS}h${CYRILLIC_ZHE}_Du!!`;
+      const description = `emoji test ${GAME_EMOJI} end`;
+      const manifest = {
+        formatVersion: 1 as const,
+        revision: 'deadbeef',
+        generatedAt: new Date().toISOString(),
+        doors: [
+          {
+            archiveName,
+            doorType: 'XIM',
+            name,
+            author: null,
+            releaseGroup: null,
+            category: null,
+            description,
+            fileIdDiz: null,
+            archiveSize: 1,
+            md5: null,
+            sha256: null,
+          },
+        ],
+      };
+      const buf = renderListTxt(manifest);
+      const decoded = buf.toString('latin1');
+      const dataLine = decoded.split('\r\n')[1];
+      const fields = dataLine.split('|');
+
+      expect(fields[0]).toBe('W?IRD.LHA');
+      expect(fields[4]).toBe('Cp_na?h?_Du!!');
+      // The astral emoji (a surrogate PAIR, 2 UTF-16 code units) collapses
+      // to exactly one '?' -- "single ? per character", not one per code unit.
+      expect(fields[5]).toBe('emoji test ? end');
+
+      // Round-trip: every byte in the buffer is a valid latin1 code point
+      // by construction, so decoding and re-encoding is a stable fixed
+      // point (no further loss on a second pass).
+      expect(Buffer.from(decoded, 'latin1').equals(buf)).toBe(true);
+    });
+
+    it('applies the "?" substitution BEFORE the 120-char truncation, so the boundary counts output characters', () => {
+      const { renderListTxt } = mod();
+      // 119 latin1-safe 'A's, then one astral (2-code-unit) emoji, then more
+      // filler. Truncating at code-unit index 120 BEFORE substitution would
+      // slice through the middle of the emoji's surrogate pair, leaving an
+      // unpaired surrogate that Buffer.from(..., 'latin1') mangles into an
+      // arbitrary byte -- not a clean, visible '?'. Substituting first
+      // collapses the emoji to a single '?' (1 code unit), so the correct
+      // 120-char boundary lands exactly on "119 A's + '?'" with nothing
+      // from the filler beyond it.
+      const description = 'A'.repeat(119) + GAME_EMOJI + 'B'.repeat(10);
+      const manifest = {
+        formatVersion: 1 as const,
+        revision: 'deadbeef',
+        generatedAt: new Date().toISOString(),
+        doors: [
+          {
+            archiveName: 'TRUNC.LHA',
+            doorType: 'XIM',
+            name: 'Trunc',
+            author: null,
+            releaseGroup: null,
+            category: null,
+            description,
+            fileIdDiz: null,
+            archiveSize: 1,
+            md5: null,
+            sha256: null,
+          },
+        ],
+      };
+      const decoded = renderListTxt(manifest).toString('latin1');
+      const dataLine = decoded.split('\r\n')[1];
+      const desc = dataLine.split('|')[5];
+
+      expect(desc).toBe('A'.repeat(119) + '?');
+      expect(desc.length).toBe(120);
+    });
   });
 });

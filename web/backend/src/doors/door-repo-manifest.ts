@@ -185,17 +185,45 @@ function oneLine(s: string): string {
   return s.replace(/[\r\n\t]+/g, ' ');
 }
 
+// `Buffer.from(str, 'latin1')` never throws on a character outside the
+// ISO-8859-1 range: it silently truncates each UTF-16 code unit to its
+// low byte (e.g. Cyrillic U+0416 becomes byte 0x16, an unrelated control
+// character), producing a valid-looking but WRONG byte, not an error and
+// not a visible marker. Against the real catalog this affects a handful of
+// rows with non-ASCII metadata (accented names not in precomposed form,
+// stray Unicode punctuation, etc.). Since these bytes are parsed by a real
+// Amiga client with no Unicode awareness, an explicit '?' substitution is
+// preferable to that silent corruption.
+//
+// Iterates by Unicode code point (not UTF-16 code unit), so an astral
+// character encoded as a surrogate pair collapses to exactly one '?'
+// ("a single '?' per character"), not two.
+function toLatin1Safe(s: string): string {
+  let out = '';
+  for (const ch of s) {
+    const cp = ch.codePointAt(0) ?? 0;
+    out += cp <= 0xff ? ch : '?';
+  }
+  return out;
+}
+
 export function renderListTxt(m: DoorRepoManifest): Buffer {
   const lines: string[] = [];
   lines.push(`DOORREPO|1|${m.revision}|${m.doors.length}`);
 
   for (const d of m.doors) {
-    const archiveName = esc(d.archiveName);
+    const archiveName = toLatin1Safe(esc(d.archiveName));
     const doorType = d.doorType;
     const archiveSize = d.archiveSize ?? 0;
     const md5 = d.md5 ?? '';
-    const name = esc(d.name ?? '');
-    const description = esc(oneLine(d.description ?? '')).slice(0, 120);
+    const name = toLatin1Safe(esc(d.name ?? ''));
+    // '?' substitution happens BEFORE the 120-char slice: every character
+    // remaining after toLatin1Safe occupies exactly one UTF-16 code unit
+    // (latin1-range chars are single-unit; substituted chars are the
+    // single-unit '?'), so the truncation boundary counts real output
+    // characters instead of risking a cut through the middle of a
+    // surrogate pair.
+    const description = toLatin1Safe(esc(oneLine(d.description ?? ''))).slice(0, 120);
     lines.push(`${archiveName}|${doorType}|${archiveSize}|${md5}|${name}|${description}`);
   }
 
