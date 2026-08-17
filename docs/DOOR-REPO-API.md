@@ -31,8 +31,8 @@ amiexpress-web backend.
   Only `/api/door-repo/*` is exempted. Do not assume plain HTTP works
   against any other endpoint on `bbs.uprough.net` -- it does not, and is not
   expected to.
-- **The API is deployed and live.** Measured directly against the live host
-  on 2026-08-17:
+- **The API is live on `bbs.uprough.net`.** Measured directly against the
+  live host on 2026-08-17:
 
   ```
   curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/api/door-repo/health
@@ -47,11 +47,64 @@ amiexpress-web backend.
   -> 200
   ```
 
-  If a well-formed request to `/api/door-repo/*` ever returns `404` with a
-  generic `Cannot GET ...` HTML body (Express's own default 404 page, not
-  this API's own `NOT FOUND: <name>` plain-text body -- see section 5), that
-  indicates a deployment regression, not expected behavior -- file it as a
-  bug rather than treating it as "not deployed yet."
+- **This API is only served by a door-repo OWNER deployment; a consumer
+  deployment does not serve it at all.** amiexpress-web is deployed by many
+  independent sysops, and every one of those deployments runs the same
+  backend code -- but the door-repo API is mounted only when that specific
+  box has `DOOR_REPO_ROLE=owner` set (see `deploy/README.md`, "Door repo:
+  owner vs. consumer"). On any other (consumer) deployment the `/api/door-repo/*`
+  paths simply do not exist: there is no custom "disabled" response, no
+  distinguishing header, nothing that advertises the feature is off. A `404`
+  from an arbitrary amiexpress-web install is therefore normal and expected
+  most of the time -- most deployments are consumers, not owners -- and does
+  not by itself indicate a bug.
+
+  A `404` on `/api/door-repo/*` can happen for two different reasons that
+  produce the *same* generic response, and this API gives a client no way to
+  tell them apart from the response alone:
+
+  1. **This deployment is not a door-repo owner** (the common case: most
+     amiexpress-web installs are consumers). The router is never mounted, so
+     every path under the prefix 404s via Express's own default "no route
+     matched" handler.
+  2. **This deployment is supposed to be the owner but something is broken**
+     (a genuine deployment regression on a box you already know is meant to
+     serve this API, e.g. `bbs.uprough.net` itself).
+
+  Both cases produce the identical body shown below -- there is no way to
+  distinguish "not an owner" from "owner, but broken" over HTTP. If you are
+  specifically checking `bbs.uprough.net` (the canonical owner host
+  documented here) and see this response, that is a regression worth
+  reporting; against any other, unknown amiexpress-web install, treat it as
+  "this box doesn't serve the repo," not as evidence of anything broken.
+  Real captured example (an unrecognized path under the prefix, captured
+  2026-08-17 against `bbs.uprough.net` -- the router IS mounted here, so this
+  specifically shows Express's own fallback for a path the router itself
+  does not define; a not-mounted-at-all consumer deployment produces the
+  same shape of response for every path under the prefix, health included):
+
+  ```
+  curl -s http://bbs.uprough.net/api/door-repo/totally-bogus-endpoint-xyz
+  -> <!DOCTYPE html>
+     <html lang="en">
+     <head>
+     <meta charset="utf-8">
+     <title>Error</title>
+     </head>
+     <body>
+     <pre>Cannot GET /api/door-repo/totally-bogus-endpoint-xyz</pre>
+     </body>
+     </html>
+  status: 404
+  Content-Type: text/html; charset=utf-8
+  ```
+
+  The one reliable tell that distinguishes this generic 404 from this API's
+  own `NOT FOUND: <name>` plain-text 404 (section 5, unknown archive name)
+  is the `X-Door-Repo-Revision` header: this API's own responses always
+  carry it (including its own 404s), while Express's generic fallback 404
+  never does, confirmed by direct comparison of the two response headers
+  above and in section 5.
 - **Read-only.** There are no write endpoints and no authentication. Every
   request in this document is a `GET`.
 - **Curation happens in git, not over the API.** The catalog contents
@@ -148,17 +201,30 @@ I/O or a plain text-file line reader.
 | `name`        | string, possibly empty   | Door name from the catalog metadata.                                   |
 | `description` | string, possibly empty   | See truncation/collapsing rules below.                                 |
 
-Field-level rules, applied to `name` and `description` (and to
-`archiveName`, defensively):
+Field-level rules, applied identically to all three text fields
+(`archiveName`, `name`, `description`) unless noted otherwise:
 
 - **Pipe escaping:** any literal `|` character inside a text field is
   replaced with `!` before the row is assembled, so the six pipe-delimited
   fields never get corrupted by a pipe that was part of the original text.
-- **Line collapsing (description only):** CR, LF, and TAB runs inside the
-  description are collapsed to a single space, so a multi-line source
-  description always renders as one physical line in `list.txt`.
-- **120-character truncation (description only):** after escaping and
-  collapsing, the description is truncated to at most 120 characters.
+- **Line collapsing (all three text fields):** CR, LF, and TAB runs inside
+  `archiveName`, `name`, and `description` are each collapsed to a single
+  space, so a raw newline anywhere in the source metadata can never split
+  one data row into two physical lines -- which would desync the header's
+  `<count>` from the real number of data lines and break a naive
+  line-by-line parser. Verified against the live catalog on 2026-08-17: none
+  of the 3301 current `name` or `archiveName` values contain an embedded
+  CR/LF/TAB, so this rule is currently latent (it protects against future
+  catalog content, not a problem seen in the corpus today).
+- **120-character truncation (description only).** `archiveName` and `name`
+  have no length cap -- the real catalog's longest `name` value observed is
+  44 characters (verified directly against the live manifest on
+  2026-08-17), well short of anything that would threaten line-based
+  parsing once the line-collapsing rule above has already removed the only
+  thing that could split a row into two lines. `description` alone is
+  truncated to at most 120 characters after escaping and collapsing, since
+  it is free-text (drawn from `FILE_ID.DIZ` content) with no realistic upper
+  bound otherwise.
 - **Bytes outside ISO-8859-1 are replaced with '?'.** Source metadata is
   stored as Unicode text and can contain characters with no ISO-8859-1
   representation (accented letters in decomposed form, stray symbols,
