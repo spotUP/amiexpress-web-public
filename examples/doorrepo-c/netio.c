@@ -265,6 +265,28 @@ int net_open(const char *host, int port, int timeout_secs)
         set_error("netio: connect() timed out"); CloseSocket(s); return -1;
     }
 
+    /* Becoming writable does NOT mean the connection succeeded: a
+     * non-blocking connect that is later refused or times out at the stack
+     * also wakes WaitSelect(), and the real outcome is in SO_ERROR. Without
+     * this check a failed connect looks like a good socket, and the failure
+     * only surfaces later as an inexplicable send()/recv() error. The POSIX
+     * branch below has always done this; the Amiga branch did not.
+     * Prototype per the NDK's own bsdsocket_lib.sfd:29 -
+     * LONG getsockopt(LONG, LONG, LONG, APTR, socklen_t *). */
+    {
+        long soerr;
+        socklen_t soerrlen;
+
+        soerr = 0;
+        soerrlen = (socklen_t) sizeof(soerr);
+        if (getsockopt(s, SOL_SOCKET, SO_ERROR, (APTR) &soerr, &soerrlen) == 0
+            && soerr != 0) {
+            set_error(connect_error_text((int) soerr));
+            CloseSocket(s);
+            return -1;
+        }
+    }
+
     on = 0;
     IoctlSocket(s, FIONBIO, (char *) &on); /* back to blocking for the send/recv calls below */
     return s;
