@@ -447,6 +447,109 @@ TEST(command_token_quote_chars_are_invalid)
 }
 
 /* ---------------------------------------------------------------------
+ * flow_is_safe_archive_filename() - path-traversal defense (CWE-22) for
+ * server-supplied archive names. Regression coverage for a real,
+ * demonstrated vulnerability: a catalog row named
+ * "../../../../../../../tmp/doorrepo_traversal_out/PWNED_TRAVERSAL.lha"
+ * wrote a file OUTSIDE DownloadDir, logged as DOWNLOAD OK.
+ * ------------------------------------------------------------------- */
+
+TEST(archive_filename_exact_reported_traversal_payload_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename(
+        "../../../../../../../tmp/doorrepo_traversal_out/PWNED_TRAVERSAL.lha"),
+        "the exact reported traversal payload is rejected");
+}
+
+TEST(archive_filename_amiga_bare_slash_traversal_is_unsafe)
+{
+    /* On real AmigaDOS a bare '/' is itself a parent-directory marker -
+     * this payload contains no ".." substring at all, so a naive
+     * "reject dotdot only" check would miss it; rejecting every '/'
+     * unconditionally is what actually closes it. */
+    ASSERT_TRUE(!flow_is_safe_archive_filename("//S/Startup-Sequence"),
+                "AmigaDOS-style bare-slash traversal ('//S/Startup-Sequence') is rejected");
+}
+
+TEST(archive_filename_dotdot_segment_mid_string_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename("FOO..BAR.LHA"),
+                "a '..' substring anywhere is rejected, even with no separator around it");
+}
+
+TEST(archive_filename_backslash_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename("foo\\bar.lha"), "backslash is rejected");
+}
+
+TEST(archive_filename_colon_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename("DF0:foo.lha"), "colon (AmigaDOS device separator) is rejected");
+}
+
+TEST(archive_filename_leading_dot_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename(".hidden.lha"), "a leading dot is rejected");
+}
+
+TEST(archive_filename_empty_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename(""), "an empty name is rejected");
+}
+
+TEST(archive_filename_null_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename((const char *) 0), "NULL is rejected, not a crash");
+}
+
+TEST(archive_filename_control_byte_is_unsafe)
+{
+    ASSERT_TRUE(!flow_is_safe_archive_filename("foo\x01" "bar.lha"), "an embedded control byte is rejected");
+}
+
+TEST(archive_filename_ordinary_name_is_safe)
+{
+    ASSERT_TRUE(flow_is_safe_archive_filename("AETRIV10.LHA"), "an ordinary catalog archive name is accepted");
+}
+
+TEST(archive_filename_real_catalog_punctuation_is_safe)
+{
+    /* Real, CURRENT catalog rows (docs/DOOR-REPO-API.md section 5) -
+     * must NOT be rejected by the path-structure check, which is a
+     * different concern from shell-safety. */
+    ASSERT_TRUE(flow_is_safe_archive_filename("BR&IB20.LHA"), "'&' in a real archive name is accepted");
+    ASSERT_TRUE(flow_is_safe_archive_filename("5D^AMU20.LHA"), "'^' in a real archive name is accepted");
+    ASSERT_TRUE(flow_is_safe_archive_filename("$CP-BU01.LZX"), "'$' in a real archive name is accepted (not a leading dot, not a separator)");
+    ASSERT_TRUE(flow_is_safe_archive_filename("!ALSTER.LHA"), "'!' in a real archive name is accepted");
+}
+
+/* ---------------------------------------------------------------------
+ * flow_contains_dotdot_segment() - the narrower ".." check applied to
+ * DownloadDir/LogFile/RepoPath, which legitimately need '/' and ':'.
+ * ------------------------------------------------------------------- */
+
+TEST(dotdot_segment_detected_with_slash)
+{
+    ASSERT_TRUE(flow_contains_dotdot_segment("../../../../tmp/x/"), "'..' with slashes is detected");
+}
+
+TEST(dotdot_segment_detected_amiga_style)
+{
+    ASSERT_TRUE(flow_contains_dotdot_segment("T:../../S/"), "'..' in an AmigaDOS-shaped path is detected");
+}
+
+TEST(dotdot_segment_ordinary_path_is_clean)
+{
+    ASSERT_TRUE(!flow_contains_dotdot_segment("Work:Doors/Downloads/"), "an ordinary path with no '..' is clean");
+    ASSERT_TRUE(!flow_contains_dotdot_segment("T:"), "a bare device name is clean");
+}
+
+TEST(dotdot_segment_null_is_clean)
+{
+    ASSERT_TRUE(!flow_contains_dotdot_segment((const char *) 0), "NULL is clean, not a crash");
+}
+
+/* ---------------------------------------------------------------------
  * Local download path construction
  * ------------------------------------------------------------------- */
 
@@ -592,6 +695,23 @@ int main(void)
     RUN_TEST(command_token_parens_are_invalid);
     RUN_TEST(command_token_hash_is_invalid);
     RUN_TEST(command_token_quote_chars_are_invalid);
+
+    RUN_TEST(archive_filename_exact_reported_traversal_payload_is_unsafe);
+    RUN_TEST(archive_filename_amiga_bare_slash_traversal_is_unsafe);
+    RUN_TEST(archive_filename_dotdot_segment_mid_string_is_unsafe);
+    RUN_TEST(archive_filename_backslash_is_unsafe);
+    RUN_TEST(archive_filename_colon_is_unsafe);
+    RUN_TEST(archive_filename_leading_dot_is_unsafe);
+    RUN_TEST(archive_filename_empty_is_unsafe);
+    RUN_TEST(archive_filename_null_is_unsafe);
+    RUN_TEST(archive_filename_control_byte_is_unsafe);
+    RUN_TEST(archive_filename_ordinary_name_is_safe);
+    RUN_TEST(archive_filename_real_catalog_punctuation_is_safe);
+
+    RUN_TEST(dotdot_segment_detected_with_slash);
+    RUN_TEST(dotdot_segment_detected_amiga_style);
+    RUN_TEST(dotdot_segment_ordinary_path_is_clean);
+    RUN_TEST(dotdot_segment_null_is_clean);
 
     RUN_TEST(local_path_device_needs_no_separator);
     RUN_TEST(local_path_directory_with_trailing_slash_needs_no_separator);

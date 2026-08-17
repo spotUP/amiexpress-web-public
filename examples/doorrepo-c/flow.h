@@ -174,6 +174,66 @@ int flow_contains_forbidden_shell_char(const char *value);
  * considered and deliberately not built without being asked first. */
 int flow_is_valid_command_token(const char *value, unsigned long maxlen);
 
+/* ---- Path-traversal defense (CWE-22): archive filenames and DownloadDir ----
+ *
+ * Real, demonstrated vulnerability this pair exists to close, distinct
+ * from the shell-injection defense above: `entry->archive` (parsed
+ * straight out of a server-controlled `list.txt` row) reached
+ * flow_build_local_path() and then fopen(local_path, "wb") guarded ONLY
+ * by flow_contains_forbidden_shell_char(), whose denylist contains no
+ * '/', '\\', or ':' at all - a catalog row named
+ * "../../../../../../../tmp/doorrepo_traversal_out/PWNED_TRAVERSAL.lha"
+ * wrote a file OUTSIDE DownloadDir, logged as DOWNLOAD OK. This matters
+ * more than an ordinary supply-chain concern because THIS DOOR SPEAKS
+ * PLAIN HTTP BY DESIGN (docs/DOOR-REPO-API.md section 1 - deliberate,
+ * for classic Amiga TCP stacks with no practical TLS story): an attacker
+ * does not need to compromise the repo's git history, only the network
+ * path between the door and bbs.uprough.net, to rewrite list.txt and
+ * choose where this client writes a file. On the real AmigaDOS target a
+ * BARE '/' is itself a parent-directory marker (unlike Unix, where only
+ * ".." is), so "//S/Startup-Sequence" is a plausible traversal primitive
+ * there with no ".." substring anywhere in it.
+ *
+ * Shell-safety and filename-safety are DELIBERATELY SEPARATE predicates,
+ * not merged into one denylist: a value can be perfectly filename-safe
+ * yet shell-unsafe (a real archive name containing "$"), or perfectly
+ * shell-safe yet filename-unsafe (a name containing "/", none of which
+ * appears in flow_contains_forbidden_shell_char()'s denylist at all) -
+ * conflating the two concerns into one function is exactly how this gap
+ * survived two earlier fix rounds that only ever checked shell-safety. */
+
+/* Returns 1 if `name` is safe to use as a single, bare filename component
+ * - never a path - when building a local download path
+ * (flow_build_local_path()) on ANY platform this client might run on.
+ * Rejects: empty; a leading '.' (never a real catalog archiveName, and
+ * refusing it outright costs nothing); any '/' (Unix separator AND, when
+ * leading, an AmigaDOS parent-directory marker); any '\\' (Windows-shaped,
+ * defense in depth); any ':' (AmigaDOS device/assign separator - a name
+ * containing one could target an arbitrary volume); any ".." substring
+ * anywhere (a traversal primitive regardless of what surrounds it); and
+ * any control byte (0x00-0x1F or 0x7F). Permits every other byte,
+ * INCLUDING high-bit Latin-1 (0x80-0xFF) and ordinary catalog punctuation
+ * ('!', '$', '&', '^', '~', ...) - docs/DOOR-REPO-API.md section 5
+ * documents real, current rows using all of those (BR&IB20.LHA,
+ * 5D^AMU20.LHA), and this predicate must not reject them: it defends
+ * against PATH structure, not against characters that are merely
+ * shell-unsafe (that is flow_contains_forbidden_shell_char()'s job, a
+ * separate concern applied separately). */
+int flow_is_safe_archive_filename(const char *name);
+
+/* Returns non-zero if `value` contains a ".." substring anywhere - a
+ * directory-traversal primitive independent of which separator (if any)
+ * surrounds it. Applied to DownloadDir/LogFile/RepoPath ALONGSIDE, not
+ * instead of, flow_contains_forbidden_shell_char() (a value can be free
+ * of every shell metacharacter and still traverse, e.g. "T:../../S/"
+ * contains none of the denylisted shell bytes at all). Deliberately a
+ * narrower, substring-only check rather than the full allowlist used for
+ * archive filenames: DownloadDir/LogFile/RepoPath legitimately need '/'
+ * and ':' (AmigaDOS separators an archive filename must never contain),
+ * so they get this narrower rule instead of
+ * flow_is_safe_archive_filename()'s stricter one. */
+int flow_contains_dotdot_segment(const char *value);
+
 /* ---- Catalog cache-reuse decision ---- */
 
 /* Returns 1 if a previously cached catalog (whose list.txt header carried

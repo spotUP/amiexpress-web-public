@@ -855,6 +855,66 @@ TEST(accept_lhacommand_amiga_assign_path)
     unlink("/tmp/test_lha_amiga_path.cfg");
 }
 
+/* ---------------------------------------------------------------------
+ * DownloadDir/LogFile/RepoPath ".." rejection (fix-round-3, item 4):
+ * lower severity than the archive-name traversal fix (needs local
+ * config-file access), but the same root gap - see config.c's
+ * DownloadDir comment for the full reasoning on why it's rejected anyway.
+ * ------------------------------------------------------------------- */
+
+TEST(reject_downloaddir_exact_reported_dotdot_payload)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_dl_dotdot.cfg", "w");
+    fprintf(f, "DownloadDir=../../../../tmp/x/\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_dl_dotdot.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.download_dir, "T:", "DownloadDir keeps default on the exact reported '..' payload");
+    ASSERT_EQ(skipped, 1, "the payload line is counted as skipped");
+    ASSERT_EQ(config_last_unsafe_value_count(), 1, "counted as an unsafe-value rejection");
+    unlink("/tmp/test_dl_dotdot.cfg");
+}
+
+TEST(reject_logfile_dotdot)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_log_dotdot.cfg", "w");
+    fprintf(f, "LogFile=T:../../S/Startup-Sequence\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_log_dotdot.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.log_file, "T:DoorRepo.log", "LogFile keeps default when it contains '..'");
+    unlink("/tmp/test_log_dotdot.cfg");
+}
+
+TEST(reject_repopath_dotdot)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_path_dotdot.cfg", "w");
+    fprintf(f, "RepoPath=/api/../admin\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_path_dotdot.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.path, "/api/door-repo", "RepoPath keeps default when it contains '..'");
+    unlink("/tmp/test_path_dotdot.cfg");
+}
+
+TEST(accept_downloaddir_with_ordinary_slashes)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_dl_ordinary.cfg", "w");
+    fprintf(f, "DownloadDir=Work:Doors/Downloads/\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_dl_ordinary.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.download_dir, "Work:Doors/Downloads/", "an ordinary path with '/' and ':' but no '..' is accepted");
+    ASSERT_EQ(skipped, 0, "a legitimate path is never skipped");
+    unlink("/tmp/test_dl_ordinary.cfg");
+}
+
 TEST(reject_logfile_backtick)
 {
     dr_config cfg;
@@ -998,6 +1058,10 @@ int main(void)
     RUN_TEST(reject_lhacommand_caret);
     RUN_TEST(reject_lhacommand_parens);
     RUN_TEST(accept_lhacommand_amiga_assign_path);
+    RUN_TEST(reject_downloaddir_exact_reported_dotdot_payload);
+    RUN_TEST(reject_logfile_dotdot);
+    RUN_TEST(reject_repopath_dotdot);
+    RUN_TEST(accept_downloaddir_with_ordinary_slashes);
     RUN_TEST(reject_logfile_backtick);
     RUN_TEST(reject_repopath_semicolon);
     RUN_TEST(unsafe_value_count_excludes_ordinary_invalid_values);

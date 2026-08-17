@@ -202,7 +202,7 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
                 local_skipped++;
             }
         } else if (str_icmp(key, "RepoPath") == 0) {
-            if (flow_contains_forbidden_shell_char(value)) {
+            if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
                 local_skipped++;
                 g_last_unsafe_value_count++;
             } else {
@@ -210,7 +210,21 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
                 cfg->path[sizeof(cfg->path) - 1] = '\0';
             }
         } else if (str_icmp(key, "DownloadDir") == 0) {
-            if (flow_contains_forbidden_shell_char(value)) {
+            /* Rejects a ".." segment too (see flow_contains_dotdot_segment()
+             * in flow.h) - lower severity than the archive-name traversal
+             * fix in this same round, since setting DownloadDir already
+             * requires local config-file write access (equivalent trust to
+             * setting it to any absolute path directly - a sysop who can
+             * edit DoorRepo.cfg does not gain new capability from '..'
+             * specifically, they could type a sensitive absolute path
+             * instead). Rejected anyway: it defends against a config file
+             * copy-pasted from an untrusted source containing an
+             * accidental or malicious relative-traversal value, which is
+             * a more realistic incident than a sysop deliberately
+             * choosing a destructive absolute path themselves, and it
+             * keeps this door from treating DownloadDir/RepoPath/LogFile
+             * inconsistently with each other for no reason. */
+            if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
                 local_skipped++;
                 g_last_unsafe_value_count++;
             } else {
@@ -246,7 +260,7 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
         } else if (str_icmp(key, "ExtractAfterDownload") == 0) {
             cfg->extract_after_download = parse_boolean(value);
         } else if (str_icmp(key, "LogFile") == 0) {
-            if (flow_contains_forbidden_shell_char(value)) {
+            if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
                 local_skipped++;
                 g_last_unsafe_value_count++;
             } else {

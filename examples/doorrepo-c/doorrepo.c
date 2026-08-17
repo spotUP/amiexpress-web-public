@@ -71,6 +71,16 @@ typedef struct {
     unsigned long declared_count; /* header's <count> field, pre-cap */
     int format_version;
     char revision[48];
+    /* Rows refused THIS load because entry->archive failed
+     * flow_is_safe_archive_filename() (CWE-22 defense - see flow.h).
+     * Refusing the row, not the whole catalog, is deliberate: the other
+     * ~3300 legitimate entries must stay usable even if one row is
+     * hostile or corrupted. first_unsafe_archive_name is the first such
+     * refused name (bounded, truncated), kept so the sysop-facing
+     * message can name it for reporting upstream; empty when
+     * unsafe_archive_rows == 0. */
+    unsigned long unsafe_archive_rows;
+    char first_unsafe_archive_name[80];
 } dr_catalog;
 
 /* Streaming parse state shared by the fresh-HTTP-fetch path and the
@@ -137,6 +147,8 @@ static int handle_line(listtxt_parse_state *st, const char *line)
         }
         st->header_ok = 1;
         st->cat->count = 0;
+        st->cat->unsafe_archive_rows = 0;
+        st->cat->first_unsafe_archive_name[0] = '\0';
         {
             unsigned long want = flow_effective_row_count(st->cat->declared_count, MAX_CATALOG_ROWS);
             if (ensure_capacity(st->cat, want) != 0) {
@@ -153,7 +165,25 @@ static int handle_line(listtxt_parse_state *st, const char *line)
      * cap message printed by the caller already told the sysop why. */
     if (st->cat->count < st->cat->capacity) {
         if (listtxt_parse_row(line, &st->cat->rows[st->cat->count]) == 0) {
-            st->cat->count += 1;
+            /* CWE-22 defense: validate the archive name as a bare
+             * filename BEFORE it ever enters cat->rows[] as a selectable
+             * entry - this is what actually stops the traversal, since
+             * everything downstream (view_entry(), attempt_download(),
+             * the pre-system() re-check) can then only ever see rows
+             * that already passed this gate. A row refused here is
+             * dropped, not the whole catalog - the other legitimate rows
+             * must stay usable. */
+            if (flow_is_safe_archive_filename(st->cat->rows[st->cat->count].archive)) {
+                st->cat->count += 1;
+            } else {
+                st->cat->unsafe_archive_rows += 1;
+                if (st->cat->first_unsafe_archive_name[0] == '\0') {
+                    strncpy(st->cat->first_unsafe_archive_name,
+                            st->cat->rows[st->cat->count].archive,
+                            sizeof(st->cat->first_unsafe_archive_name) - 1);
+                    st->cat->first_unsafe_archive_name[sizeof(st->cat->first_unsafe_archive_name) - 1] = '\0';
+                }
+            }
         } else {
             st->rows_skipped += 1;
         }
@@ -448,6 +478,29 @@ static void print_banner(void)
  * either way. Returns 0 on success, non-zero on a fatal catalog-load
  * failure (network AND cache both unusable, or the header was malformed
  * both times). */
+/* Surfaces a sysop-facing warning when the just-loaded catalog contained
+ * one or more rows refused for an unsafe archive name (CWE-22 defense -
+ * see flow_is_safe_archive_filename() in flow.h). Called at every
+ * success exit of a catalog load, since a load can succeed (with rows
+ * dropped) via the cache path, the network-down fallback, or a fresh
+ * fetch. Deliberately does NOT abort the catalog load - the other
+ * legitimate rows stay usable - but a repo server sending even one
+ * traversal-shaped row is worth surfacing loudly, since this door speaks
+ * plain HTTP and any on-path attacker could have rewritten list.txt. */
+static void report_unsafe_archive_rows(const dr_config *cfg, const dr_catalog *cat)
+{
+    char msg[320];
+
+    if (cat->unsafe_archive_rows == 0) {
+        return;
+    }
+    sprintf(msg, "WARNING: %lu catalog row(s) were refused for an unsafe archive name (e.g. '%.60s'). "
+                 "This repo server may be compromised or misconfigured - consider reporting it to the repo owner.",
+            cat->unsafe_archive_rows, cat->first_unsafe_archive_name);
+    ae_put(msg, 1);
+    log_line(cfg, "CATALOG: unsafe archive name(s) refused, see WARNING shown to user");
+}
+
 static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_path, unsigned long cache_path_size)
 {
     char server_rev[48];
@@ -474,6 +527,7 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
         && flow_should_use_cache(cached_rev, server_rev)) {
         if (load_catalog_from_cache(cache_path, cat) == 0) {
             ae_put("Catalog unchanged since last run - using cached copy.", 1);
+            report_unsafe_archive_rows(cfg, cat);
             return 0;
         }
         /* Cache claimed to match but failed to re-parse (corrupted on
@@ -486,6 +540,7 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
          * outright. */
         if (load_catalog_from_cache(cache_path, cat) == 0) {
             ae_put("Could not reach the repository server - using the cached catalog from a previous run.", 1);
+            report_unsafe_archive_rows(cfg, cat);
             return 0;
         }
     }
@@ -516,6 +571,7 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
                     cat->declared_count, MAX_CATALOG_ROWS, MAX_CATALOG_ROWS);
             ae_put(msg, 1);
         }
+        report_unsafe_archive_rows(cfg, cat);
     }
 
     return 0;
@@ -821,6 +877,20 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
     int matched;
     flow_verify_outcome outcome;
 
+    /* CWE-22 defense, layer 2: entry->archive was already validated at
+     * catalog-parse time (handle_line() in this file never lets an
+     * unsafe name into cat->rows[], so `entry` should never point at one)
+     * - this is defense in depth against a future code path that could
+     * reach download_and_verify() with an entry that bypassed that gate
+     * (a bug, a future direct-download-by-name feature). Checked BEFORE
+     * flow_build_local_path() even runs, since that is the function whose
+     * output feeds straight into fopen(local_path, "wb") below. */
+    if (!flow_is_safe_archive_filename(entry->archive)) {
+        ae_put("Download refused: this catalog entry's archive name is not a safe filename.", 1);
+        log_line(cfg, "DOWNLOAD REFUSED: unsafe archive name");
+        return;
+    }
+
     /* DownloadDir[128] + a real catalog archiveName always fits
      * sizeof(local_path); initialize to empty first regardless, so an
      * unreachable-in-practice failure cannot leave a garbage local path. */
@@ -830,18 +900,31 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
         return;
     }
 
+    computed_md5[0] = '\0'; /* never read uninitialized if attempt_download() fails before computing a digest */
+
     attempt = 1;
     for (;;) {
         matched = attempt_download(cfg, entry, local_path, computed_md5);
 
         if (entry->md5[0] == '\0') {
             /* No listing digest to compare against - attempt_download()
-             * already reported this; nothing left for the retry machine
-             * to decide (see the comment in flow.h: this door only ever
-             * drives the machine when a real digest is available). */
-            log_line(cfg, entry->archive[0] != '\0'
-                          ? "DOWNLOAD OK (no catalog digest to verify)"
-                          : "DOWNLOAD OK (no catalog digest to verify)");
+             * already reported the specific reason on failure; nothing
+             * left for the retry machine to decide either way (see the
+             * comment in flow.h: this door only ever drives the machine
+             * when a real digest is available). Crucially, `matched`
+             * must still be checked here: attempt_download() returns 1
+             * in this branch ONLY when the transfer itself genuinely
+             * succeeded (see its own comment), so a FAILED download with
+             * no catalog digest must stop here too, not fall through to
+             * extraction below with nothing at local_path (previously it
+             * did - this is what let a failed download with an empty
+             * digest still attempt extraction of whatever sat at that
+             * path). */
+            if (!matched) {
+                log_line(cfg, "DOWNLOAD FAILED (no catalog digest to verify)");
+                return;
+            }
+            log_line(cfg, "DOWNLOAD OK (no catalog digest to verify)");
             break;
         }
 
@@ -922,10 +1005,17 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
          * flow.h's block comment for the full history, including the
          * "#"-comment bypass this exact re-check exists to catch a second
          * time). cfg->download_dir and entry->archive both sit INSIDE
-         * double quotes, where the denylist remains the right tool. */
+         * double quotes, where the denylist remains the right tool for
+         * SHELL safety - but entry->archive ALSO gets the separate
+         * CWE-22 filename check (flow_is_safe_archive_filename()), a
+         * different concern (path structure, not shell metacharacters)
+         * that download_and_verify() already checked once at the top of
+         * this function; re-checked here too for the same reason
+         * cfg->lha_command/cfg->download_dir are re-checked twice. */
         if (!flow_is_valid_command_token(cfg->lha_command, sizeof(cfg->lha_command))
             || flow_contains_forbidden_shell_char(cfg->download_dir)
-            || flow_contains_forbidden_shell_char(entry->archive)) {
+            || flow_contains_forbidden_shell_char(entry->archive)
+            || !flow_is_safe_archive_filename(entry->archive)) {
             ae_put("Extraction refused: LhaCommand, DownloadDir, or the archive name is not safe to pass to a shell command. The archive was downloaded and verified but NOT extracted.", 1);
             log_line(cfg, "EXTRACT REFUSED: LhaCommand/DownloadDir/archive name failed validation");
             return;
@@ -1079,6 +1169,8 @@ int main(int argc, char **argv)
     cat.rows = (dr_entry *) 0;
     cat.capacity = 0;
     cat.count = 0;
+    cat.unsafe_archive_rows = 0;
+    cat.first_unsafe_archive_name[0] = '\0';
 
     if (load_full_catalog(&cfg, &cat, cache_path, sizeof(cache_path)) != 0) {
         ae_fatal(1);
@@ -1142,6 +1234,7 @@ int main(int argc, char **argv)
                 ae_put("Could not fetch the filtered catalog from the server. Showing the previous results.", 1);
                 continue;
             }
+            report_unsafe_archive_rows(&cfg, &cat);
             sprintf(filter_desc, "Filter: type='%s' search='%s'", filter_type, filter_query);
         }
     }

@@ -248,6 +248,39 @@ int flow_is_valid_command_token(const char *value, unsigned long maxlen)
     return 1;
 }
 
+int flow_is_safe_archive_filename(const char *name)
+{
+    const char *p;
+
+    if (name == (const char *) 0 || name[0] == '\0') {
+        return 0;
+    }
+    if (name[0] == '.') {
+        return 0;
+    }
+    if (strstr(name, "..") != (char *) 0) {
+        return 0;
+    }
+    for (p = name; *p != '\0'; p++) {
+        unsigned char c = (unsigned char) *p;
+        if (c == '/' || c == '\\' || c == ':') {
+            return 0;
+        }
+        if (c < 0x20 || c == 0x7F) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int flow_contains_dotdot_segment(const char *value)
+{
+    if (value == (const char *) 0) {
+        return 0;
+    }
+    return strstr(value, "..") != (char *) 0;
+}
+
 int flow_build_local_path(char *out, unsigned long outsize,
                            const char *download_dir, const char *archive_name)
 {
