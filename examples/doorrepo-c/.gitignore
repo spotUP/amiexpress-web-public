@@ -1,0 +1,8 @@
+# Build artifacts. Sources, tests, Makefile, README and the example config are
+# the only things that belong in git here; everything a compiler emits does not.
+*.o
+*.dSYM/
+doorrepo
+doorrepo.amiga
+test_*
+!test_*.c
