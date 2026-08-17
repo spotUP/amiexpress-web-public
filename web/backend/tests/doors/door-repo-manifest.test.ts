@@ -354,6 +354,70 @@ describe('door-repo-manifest', () => {
       expect(desc).toBe('line one line two tabbed');
     });
 
+    // I6: a raw CR/LF/TAB in archiveName or name (not just description)
+    // would otherwise emit an extra physical line, desyncing the header's
+    // `count` field from the real number of data lines -- exactly the
+    // failure mode the byte-exact contract exists to prevent for any
+    // naive line-by-line C parser. Two separate rows (one embeds the
+    // newline in archiveName, the other in name) so each field is proven
+    // independently, plus a whole-manifest header/count consistency check.
+    it('collapses CR/LF/TAB in archiveName and name to single lines each, keeping the header count in sync', () => {
+      const { renderListTxt } = mod();
+      const manifest = {
+        formatVersion: 1 as const,
+        revision: 'deadbeef',
+        generatedAt: new Date().toISOString(),
+        doors: [
+          {
+            archiveName: 'WEIRD\r\nNAME.LHA',
+            doorType: 'XIM',
+            name: 'Normal Name',
+            author: null,
+            releaseGroup: null,
+            category: null,
+            description: null,
+            fileIdDiz: null,
+            archiveSize: 1,
+            md5: null,
+            sha256: null,
+          },
+          {
+            archiveName: 'NORMAL.LHA',
+            doorType: 'XIM',
+            name: 'Weird\tName\r\nWith Break',
+            author: null,
+            releaseGroup: null,
+            category: null,
+            description: null,
+            fileIdDiz: null,
+            archiveSize: 1,
+            md5: null,
+            sha256: null,
+          },
+        ],
+      };
+
+      const buf = renderListTxt(manifest);
+      const decoded = buf.toString('latin1');
+      const lines = decoded.split('\r\n');
+
+      // Header count still matches the actual number of data lines --
+      // this is exactly what an embedded newline would desync.
+      expect(lines[0]).toBe(`DOORREPO|1|deadbeef|2`);
+      const dataLines = lines.slice(1).filter((l: string) => l.length > 0);
+      expect(dataLines).toHaveLength(2);
+
+      const archiveNameLine = dataLines.find((l: string) => l.startsWith('WEIRD'));
+      expect(archiveNameLine).toBeDefined();
+      expect(archiveNameLine!.split('|')[0]).toBe('WEIRD NAME.LHA');
+
+      const nameLine = dataLines.find((l: string) => l.startsWith('NORMAL.LHA'));
+      expect(nameLine).toBeDefined();
+      expect(nameLine!.split('|')[4]).toBe('Weird Name With Break');
+
+      expect(decoded.endsWith('\r\n')).toBe(true);
+    });
+
     // Task 2b: against the real 3301-row catalog, 4 rows contain metadata
     // bytes outside ISO-8859-1 (e.g. a door name that renders as
     // "Cp_n\u00e4h\u00e4_Du!!" -- but it is not the latin1-safe precomposed

@@ -250,11 +250,28 @@ export function renderListTxt(m: DoorRepoManifest): Buffer {
   lines.push(`DOORREPO|1|${m.revision}|${m.doors.length}`);
 
   for (const d of m.doors) {
-    const archiveName = toLatin1Safe(esc(d.archiveName));
+    // oneLine() runs on every free-text field, not just description: a
+    // raw CR/LF/TAB in archiveName or name would otherwise emit an extra
+    // physical line, desyncing the header's `count` from the actual number
+    // of data lines and breaking any naive line-by-line C parser — the
+    // exact failure mode the byte-exact list.txt contract exists to
+    // prevent. archiveName/name have no real-world source of embedded
+    // newlines today (archiveName is a catalog-row column derived from an
+    // archive's own filename; name comes from FILE_ID.DIZ/corpus
+    // metadata), but the contract must hold for arbitrary catalog content,
+    // not just today's corpus.
+    const archiveName = toLatin1Safe(esc(oneLine(d.archiveName)));
     const doorType = d.doorType;
     const archiveSize = d.archiveSize ?? 0;
     const md5 = d.md5 ?? '';
-    const name = toLatin1Safe(esc(d.name ?? ''));
+    // No length cap on name: unlike description (capped at 120 to bound
+    // line length against genuinely free-text DIZ content), name is a
+    // short display label — real corpus max observed is 44 chars, nowhere
+    // near a length that would threaten line-based parsing once oneLine()
+    // has already removed the only thing that could break the one-row/
+    // one-line invariant (embedded newlines). Capping it would be
+    // speculative hardening against a problem that doesn't exist.
+    const name = toLatin1Safe(esc(oneLine(d.name ?? '')));
     // '?' substitution happens BEFORE the 120-char slice: every character
     // remaining after toLatin1Safe occupies exactly one UTF-16 code unit
     // (latin1-range chars are single-unit; substituted chars are the
