@@ -15,6 +15,13 @@
     "sourceMap": true,
     "moduleResolution": "node"
   },
-  "include": ["index.ts", "app.ts", "FileExplorerOverlay.ts", "InfoEditorOverlay.ts"],
+  "include": [
+    "index.ts",
+    "app.ts",
+    "FileExplorerOverlay.ts",
+    "InfoEditorOverlay.ts",
+    "repo-client.ts",
+    "repo-types.generated.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }
