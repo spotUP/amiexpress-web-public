@@ -1562,22 +1562,63 @@ export class Program extends EventEmitter {
             (this._inputBuffer.length === 1 || isIncompleteCsiPrefix || isIncompleteSs3Prefix)) {
           // Wait to see if more comes
           // But after a short timeout we should treat it as Esc
+          //
+          // BUG (found round 6, re-review of the round-5 fix above): this
+          // used to call `_emitKey(ESC, key)` BEFORE clearing `_inputBuffer`
+          // and WITHOUT holding `_handlingData`. `_emitKey` ends with
+          // `this.emit('data', data)` — on the SYNCHRONOUS path that's
+          // caught by the constructor's guarded 'data' listener
+          // (`_handlingData`), but this timer fires from an async callback
+          // where `_handlingData` is false, so that emit re-entered
+          // `_handleData` for real. Because `_inputBuffer` hadn't been
+          // cleared yet, the re-entrant call appended onto the STALE
+          // pre-timeout contents instead of starting clean (e.g. buffer
+          // 'ESC[' + the re-emitted 'ESC' byte = 'ESC[ESC', which matches
+          // no recognized sequence and falls through to the UNGUARDED
+          // single-byte fallback below) — producing a SECOND `_emitKey(ESC,
+          // ...)` call, i.e. two Escape keypresses for one physical
+          // ambiguous byte sequence. Traced for buffer 'ESC[' specifically:
+          // pop #1 from this timer's own `_emitKey`; the re-entrant call
+          // then emits ESC a second time (pop #2) and finally delivers the
+          // leftover '[' as an unrelated stray keypress — and the
+          // `rest`/`emit('data', rest)` forwarding a few lines below never
+          // ran meaningfully, since the reentrant path had already consumed
+          // the buffer first. In DOORMAN, `ViewManager.pop()` has no depth
+          // guard, so two Escapes from one ambiguous byte sequence can pop
+          // two views in a row.
+          //
+          // Fixed by matching the synchronous path's own protection
+          // exactly: capture/clear `_inputBuffer` BEFORE calling `_emitKey`
+          // (so if reentrancy still occurs for any reason, it starts from
+          // an empty buffer, not stale contents), AND hold `_handlingData`
+          // true for the duration of the `_emitKey` call (so its internal
+          // `emit('data', ...)` is blocked outright by the same guard the
+          // synchronous 'data' listener uses — no reentrant `_handleData`
+          // call happens at all). The captured `rest` is forwarded
+          // afterward through the guarded `emit('data', ...)` entry point
+          // exactly as before, but now it is the ONLY path that processes
+          // it, so it actually runs.
           this._escTimer = setTimeout(() => {
             this._escTimer = null;
             if (this._inputBuffer.length > 0 && this._inputBuffer[0] === ESC) {
-              const key = this.parseKey(ESC);
-              if (key) {
-                this._emitKey(ESC, key);
-              }
               const rest = this._inputBuffer.slice(1);
               this._inputBuffer = '';
+              const key = this.parseKey(ESC);
+              this._handlingData = true;
+              try {
+                if (key) {
+                  this._emitKey(ESC, key);
+                }
+              } finally {
+                this._handlingData = false;
+              }
               if (rest.length > 0) {
                 // Route back through the guarded entry point (same reason
                 // the round-3 DOORMAN test harness fix used emit('data', ...)
                 // instead of calling _handleData directly: _handlingData
                 // guards against _emitKey's own emit('data', ...) feedback
-                // loop). Safe here since this timer fires outside of any
-                // in-progress _handleData call.
+                // loop). Safe here since _handlingData was just reset to
+                // false and _inputBuffer is empty, so this starts clean.
                 this.emit('data', rest);
               }
             }
