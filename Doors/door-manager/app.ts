@@ -22,6 +22,9 @@ import {
 import type {
   DoorRepoMode, CatalogEntry as RepoCatalogEntry, LocalCatalogRow, LocalCatalogLookup,
 } from './repoDataSource';
+import { downloadArchive, fetchManifest } from './repo-client';
+import type { RepoClientConfig, FetchManifestResult } from './repo-client';
+import type { DoorRepoManifest } from './repo-types.generated';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Install/re-extract now goes through the portable extractor factory
@@ -227,6 +230,173 @@ export function findExtractedBinary(destDir: string, binaryName: string | null |
     }
   }
   return null;
+}
+
+/**
+ * Shared install core: extract an already-on-disk archive, write the .info
+ * command config, register the install locally, and refresh the boot-time
+ * door registry. Both owner mode (local archive already resolved via
+ * resolveArchivePath) and consumer mode (archive downloaded from the
+ * central repo into tmp-door-repo/, see installConsumerDoor below) funnel
+ * through this exact function once they have a real archivePath — this is
+ * the ONE place extractArchiveTo/findExtractedBinary/buildDoorInfoContent
+ * get called from, so both modes stay byte-identical past this point. Pure
+ * except for the injected deps (all real I/O), so it is directly testable
+ * without a blessed Screen.
+ */
+export interface InstallDeps {
+  extractArchiveTo: (archivePath: string, destDir: string) => Promise<{ ok: boolean; fileCount: number; error?: string }>;
+  findExtractedBinary: (destDir: string, binaryName: string | null | undefined) => string | null;
+  writeInfoFile: (infoPath: string, content: string) => void;
+  /** Caller-supplied: encapsulates whatever "persist the install locally"
+   * means for this mode (owner: always call markInstalled(e.id, ...);
+   * consumer: only when a real local catalog row exists -- see
+   * installConsumerDoor). Errors are caught and logged here, exactly like
+   * the pre-Task-7 inline behavior: a bookkeeping failure never rolls back
+   * a working on-disk install. */
+  markInstalled: () => void;
+  refreshDoorRegistry: () => Promise<boolean>;
+}
+
+export type InstallOutcome =
+  | { ok: true; doorType: string; fileCount: number; binaryRel: string }
+  | { ok: false; step: string; detail: string };
+
+export async function extractAndRegisterDoor(
+  archivePath: string,
+  installDir: string,
+  infoPath: string,
+  doorType: string,
+  binaryName: string | null,
+  finalCmd: string,
+  deps: InstallDeps
+): Promise<InstallOutcome> {
+  const result = await deps.extractArchiveTo(archivePath, installDir);
+  if (!result.ok) return { ok: false, step: 'extract', detail: result.error ?? 'unknown error' };
+
+  const resolvedDoorType = doorType || 'XIM';
+  const binaryRel = deps.findExtractedBinary(installDir, binaryName) ?? (binaryName ?? finalCmd);
+  try {
+    deps.writeInfoFile(infoPath, buildDoorInfoContent(resolvedDoorType, finalCmd, binaryRel));
+  } catch (err: any) {
+    return { ok: false, step: 'write-info', detail: `${infoPath}: ${err?.message ?? err}` };
+  }
+
+  try {
+    deps.markInstalled();
+  } catch (err: any) {
+    // The door is on disk and the .info is written — it will run. The
+    // catalog just won't show it as installed. Surface it but don't roll
+    // back a working install over a bookkeeping error.
+    console.log(`[DOORMAN] install failed: mark-installed: ${err?.message ?? err}`);
+  }
+
+  const refreshed = await deps.refreshDoorRegistry();
+  if (!refreshed) console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
+
+  return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel };
+}
+
+/**
+ * Consumer-mode install: download + verify the archive from the central
+ * door-repo API, then hand off to extractAndRegisterDoor for the identical
+ * extract/register flow owner mode already uses. destPath always lives
+ * under tmp-door-repo/ and is removed in the finally on every path,
+ * including every failure — downloadArchive (Task 5) already deletes it on
+ * a network/checksum failure, but a failure further down (extract,
+ * write-info) still leaves a successfully-downloaded archive sitting in
+ * tmp-door-repo/ unless this cleans it up too.
+ *
+ * Local registration: the central manifest's archiveName is not a local
+ * catalog primary key (repoDataSource.ts's mapManifestDoorToEntry falls
+ * back CatalogEntry.id to archiveName for rows never indexed locally). This
+ * function never invents a local door_catalog row to make markInstalled's
+ * `WHERE id = ?` match something. Instead: `lookupLocal` is re-run here
+ * (fresh, not trusting whatever id the browse-time CatalogEntry carried) —
+ * a real local row -> markInstalled runs and `installed` will read back 1
+ * next time this archive is resolved locally. No local row -> markInstalled
+ * is skipped entirely (an UPDATE...WHERE id=<archiveName> would silently
+ * match zero rows anyway) and the install proceeds as registry-only: the
+ * door is on disk, its .info is written, and refreshDoorRegistry() makes it
+ * runnable immediately — only the repo browse view's `installed` flag won't
+ * reflect it until a local catalog row for this archive exists by some
+ * other means (e.g. a future local scan/import).
+ */
+export interface ConsumerInstallDeps {
+  fetchManifest: (cfg: RepoClientConfig) => Promise<FetchManifestResult>;
+  downloadArchive: (cfg: RepoClientConfig, archiveName: string, destPath: string, expectedSha256: string) => Promise<void>;
+  extractArchiveTo: InstallDeps['extractArchiveTo'];
+  findExtractedBinary: InstallDeps['findExtractedBinary'];
+  writeInfoFile: InstallDeps['writeInfoFile'];
+  lookupLocal: LocalCatalogLookup;
+  markInstalled: (id: string, cmd: string, dir: string) => void;
+  refreshDoorRegistry: () => Promise<boolean>;
+  mkdir: (dir: string) => void;
+  unlink: (path: string) => void;
+}
+
+export type ConsumerInstallOutcome =
+  | { ok: true; doorType: string; fileCount: number; binaryRel: string; registeredLocally: boolean }
+  | { ok: false; step: string; detail: string };
+
+export async function installConsumerDoor(
+  cfg: RepoClientConfig,
+  archiveName: string,
+  doorType: string,
+  binaryName: string | null,
+  finalCmd: string,
+  installDir: string,
+  infoPath: string,
+  tmpDir: string,
+  deps: ConsumerInstallDeps
+): Promise<ConsumerInstallOutcome> {
+  const destPath = path.join(tmpDir, archiveName);
+  try {
+    deps.mkdir(tmpDir);
+
+    let manifest: DoorRepoManifest;
+    try {
+      ({ manifest } = await deps.fetchManifest(cfg));
+    } catch (err: any) {
+      return { ok: false, step: 'manifest-lookup', detail: err?.message ?? String(err) };
+    }
+    const manifestRow = manifest.doors.find(d => d.archiveName === archiveName);
+    if (!manifestRow || !manifestRow.sha256) {
+      return { ok: false, step: 'manifest-lookup', detail: `No sha256 for ${archiveName} in the central manifest` };
+    }
+
+    try {
+      await deps.downloadArchive(cfg, archiveName, destPath, manifestRow.sha256);
+    } catch (err: any) {
+      return { ok: false, step: 'download', detail: err?.message ?? String(err) };
+    }
+
+    let registeredLocally = false;
+    const localRow = deps.lookupLocal(archiveName);
+    const outcome = await extractAndRegisterDoor(destPath, installDir, infoPath, doorType, binaryName, finalCmd, {
+      extractArchiveTo: deps.extractArchiveTo,
+      findExtractedBinary: deps.findExtractedBinary,
+      writeInfoFile: deps.writeInfoFile,
+      refreshDoorRegistry: deps.refreshDoorRegistry,
+      markInstalled: () => {
+        if (localRow) {
+          deps.markInstalled(localRow.id, finalCmd, `Doors/${finalCmd}`);
+          registeredLocally = true;
+        } else {
+          console.log(
+            `[DOORMAN] consumer install: no local catalog row for ${archiveName} — registry-only ` +
+            `(door installed on disk and registered with the BBS; repo browse 'installed' flag needs ` +
+            `a local catalog row, which this install intentionally does not invent)`
+          );
+        }
+      },
+    });
+
+    if (!outcome.ok) return outcome;
+    return { ok: true, doorType: outcome.doorType, fileCount: outcome.fileCount, binaryRel: outcome.binaryRel, registeredLocally };
+  } finally {
+    deps.unlink(destPath);
+  }
 }
 
 // ─── Shared Layout ───────────────────────────────────────────────────────────
@@ -966,6 +1136,71 @@ class RepoView extends BaseView {
           this.refresh(this.layout.listSelected);
         }
       ));
+    } else if (this.repoMode.kind === 'consumer') {
+      // Consumer mode: no local archive to pre-check (it may never have
+      // touched this disk before) — the download itself is the existence
+      // check, and any failure surfaces from inside installConsumerDoor's
+      // async callback below via the same reportInstallFailure panel.
+      const repoUrl = this.repoMode.url;
+      const suggested = (e.installed_as ?? e.binary_name ?? e.name ?? 'DOOR')
+        .toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 12);
+      this.vm.push(new InputView(this.layout,
+        `{yellow-fg}Install as BBS command:{/yellow-fg}`, suggested,
+        (cmd) => {
+          if (!cmd) return;
+          if (this.installing) return; // an install is already in flight
+          this.installing = true;
+          const finalCmd = cmd.trim().toUpperCase() || suggested;
+          const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
+          fs.mkdirSync(installDir, { recursive: true });
+          this.setStatus('Downloading…', 'yellow', 30000);
+          const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
+          const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
+          const tmpDir = path.join(PROJECT_ROOT, 'tmp-door-repo');
+          const tmpArchivePath = path.join(tmpDir, e.archive_name);
+          const cfg: RepoClientConfig = { url: repoUrl, cacheFile: consumerCacheFilePath(PROJECT_ROOT) };
+          void (async () => {
+            try {
+              const outcome = await installConsumerDoor(
+                cfg, e.archive_name, e.door_type, e.binary_name, finalCmd, installDir, infoPath, tmpDir,
+                {
+                  fetchManifest,
+                  downloadArchive,
+                  extractArchiveTo,
+                  findExtractedBinary,
+                  writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
+                  lookupLocal: buildLocalCatalogLookup(),
+                  markInstalled: (id, cmd2, dir) => { getCatalogSvc()?.markInstalled(id, cmd2, dir); },
+                  refreshDoorRegistry,
+                  mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
+                  unlink: (p) => { try { fs.unlinkSync(p); } catch { /* never existed, or already removed */ } },
+                }
+              );
+              if (!outcome.ok) {
+                this.reportInstallFailure(outcome.step, outcome.detail, tmpArchivePath, e.archive_name);
+                return;
+              }
+              this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
+              this.layout.setInfo(
+                `{green-fg}Installed{/green-fg}\n\n` +
+                `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
+                `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
+                `{yellow-fg}Files:{/yellow-fg} ${outcome.fileCount}\n` +
+                `{yellow-fg}Binary:{/yellow-fg} ${sanitizeForTags(outcome.binaryRel)}\n` +
+                (outcome.registeredLocally
+                  ? ''
+                  : `\n{yellow-fg}Note:{/yellow-fg} registry-only — no local catalog row for this\n` +
+                    `archive yet, so it won't show as installed in this browse list.\n`)
+              );
+              this.refresh(this.layout.listSelected);
+            } catch (err: any) {
+              this.reportInstallFailure('install', err?.message ?? String(err), tmpArchivePath, e.archive_name);
+            } finally {
+              this.installing = false;
+            }
+          })();
+        }
+      ));
     } else {
       const resolvedArchive = resolveArchivePath(e.archive_path);
       if (!resolvedArchive || !fs.existsSync(resolvedArchive)) {
@@ -992,42 +1227,31 @@ class RepoView extends BaseView {
           const installDir = path.join(PROJECT_ROOT, 'Doors', finalCmd);
           fs.mkdirSync(installDir, { recursive: true });
           this.setStatus('Installing…', 'yellow', 30000);
+          const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
+          const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
           void (async () => {
             try {
-              const result = await extractArchiveTo(resolvedArchive, installDir);
-              if (!result.ok) {
-                this.reportInstallFailure('extract', result.error ?? 'unknown error', resolvedArchive, e.archive_name);
+              const outcome = await extractAndRegisterDoor(
+                resolvedArchive, installDir, infoPath, e.door_type, e.binary_name, finalCmd,
+                {
+                  extractArchiveTo,
+                  findExtractedBinary,
+                  writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
+                  markInstalled: () => { getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`); },
+                  refreshDoorRegistry,
+                }
+              );
+              if (!outcome.ok) {
+                this.reportInstallFailure(outcome.step, outcome.detail, resolvedArchive, e.archive_name);
                 return;
               }
-              const bbsCmdDir = path.join(PROJECT_ROOT, 'Commands', 'BBSCmd');
-              const infoPath = path.join(bbsCmdDir, `${finalCmd}.info`);
-              const doorType = e.door_type || 'XIM';
-              const binaryRel = findExtractedBinary(installDir, e.binary_name) ?? (e.binary_name ?? finalCmd);
-              try {
-                fs.writeFileSync(infoPath, buildDoorInfoContent(doorType, finalCmd, binaryRel), 'latin1');
-              } catch (err: any) {
-                this.reportInstallFailure('write-info', `${infoPath}: ${err?.message ?? err}`, resolvedArchive, e.archive_name);
-                return;
-              }
-              try {
-                getCatalogSvc()?.markInstalled(e.id, finalCmd, `Doors/${finalCmd}`);
-              } catch (err: any) {
-                // The door is on disk and the .info is written — it will run.
-                // The catalog just won't show it as installed. Surface it but
-                // don't roll back a working install over a bookkeeping error.
-                console.log(`[DOORMAN] install failed: mark-installed: ${err?.message ?? err}`);
-              }
-              // The BBS door registry is a boot-time cache — refresh it or
-              // the new door is invisible in the doors list until restart.
-              const refreshed = await refreshDoorRegistry();
-              if (!refreshed) console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
-              this.setStatus(`Installed as ${finalCmd} (${result.fileCount} files, ${doorType})`, 'green', 4000);
+              this.setStatus(`Installed as ${finalCmd} (${outcome.fileCount} files, ${outcome.doorType})`, 'green', 4000);
               this.layout.setInfo(
                 `{green-fg}Installed{/green-fg}\n\n` +
                 `{yellow-fg}Command:{/yellow-fg} ${finalCmd}\n` +
-                `{yellow-fg}Type:{/yellow-fg} ${doorType}\n` +
-                `{yellow-fg}Files:{/yellow-fg} ${result.fileCount}\n` +
-                `{yellow-fg}Binary:{/yellow-fg} ${sanitizeForTags(binaryRel)}\n`
+                `{yellow-fg}Type:{/yellow-fg} ${outcome.doorType}\n` +
+                `{yellow-fg}Files:{/yellow-fg} ${outcome.fileCount}\n` +
+                `{yellow-fg}Binary:{/yellow-fg} ${sanitizeForTags(outcome.binaryRel)}\n`
               );
               this.refresh(this.layout.listSelected);
             } catch (err: any) {
