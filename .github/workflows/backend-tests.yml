@@ -59,6 +59,21 @@ jobs:
           SKIP_SDK_PREPARE: '1'
         run: npm ci --no-audit --no-fund
 
+      # web/backend's test script points jest at a TypeScript config file, and
+      # jest needs ts-node to read one - but web/backend declares neither
+      # ts-node nor typescript. Both live in the REPO ROOT node_modules, and a
+      # developer's checkout works only because node resolution walks up into
+      # it. So the root install is not optional tooling here; without it
+      # `npm test` fails with "'ts-node' is required for the TypeScript
+      # configuration files".
+      #
+      # --ignore-scripts and SKIP_SDK_PREPARE mirror the documented root
+      # install and keep it from rebuilding the SDK built above.
+      - name: Install root deps (provides ts-node for the jest config)
+        env:
+          SKIP_SDK_PREPARE: '1'
+        run: npm install --ignore-scripts --no-audit --no-fund
+
       - name: Type-check
         working-directory: web/backend
         run: npx tsc --noEmit

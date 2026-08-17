@@ -30,7 +30,13 @@
 # 2026-08-17-doorrepo-c-client-design.md's pre-flight note on this).
 
 CC ?= cc
-NATIVE_CFLAGS = -std=c89 -Wall -Wextra -pedantic -O2
+# _DEFAULT_SOURCE is required, not cosmetic: netio.c's POSIX branch uses
+# select()/fd_set/struct timeval/getaddrinfo, and under -std=c89 glibc hides
+# every one of them behind a feature-test macro, so the native build failed to
+# compile on Linux with "unknown type name 'fd_set'". macOS's libc exposes them
+# regardless, which is why this went unnoticed until the suite ran on a Linux
+# CI runner. The macro is glibc's; other libcs ignore it harmlessly.
+NATIVE_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O2
 
 # vbcc cross-compiler for the real m68k/AmigaOS target. Both paths are the
 # ones verified working for this project (see progress.md); override on the
@@ -142,7 +148,10 @@ doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
 # test
 # ---------------------------------------------------------------------
 
-TEST_CFLAGS = -std=c89 -Wall -Wextra -pedantic -O0 -g
+# -D_DEFAULT_SOURCE for the same reason as NATIVE_CFLAGS above: test-http
+# links netio.c's POSIX branch and tests/stub_server.c, both of which need the
+# POSIX socket declarations that glibc hides under -std=c89.
+TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
 .PHONY: test-flow test-md5 test-listtxt test-config test-http test-aedoor-native
 
