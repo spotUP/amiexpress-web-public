@@ -1,0 +1,56 @@
+[DOORREPO CONFIGURATION FILE]
+
+This file configures the DoorRepo door client. Copy this file to your door configuration
+directory and customize the settings for your BBS. All settings are optional; if a setting
+is omitted, a safe default is used.
+
+RepoHost=bbs.uprough.net
+The hostname or IP address of the door repository server. Default: bbs.uprough.net
+
+RepoPort=80
+The TCP port number for the repository server connection. Default: 80
+
+RepoPath=/api/door-repo
+The HTTP path prefix for the repository API endpoints. Default: /api/door-repo
+
+DownloadDir=T:
+The AmigaDOS directory where downloaded door archives are saved. Must exist before
+use. Default: T: (temporary directory)
+
+PageSize=20
+The number of doors to display per page when browsing the repository. Default: 20
+
+TimeoutSecs=30
+The maximum number of seconds to wait for a response from the repository server.
+Default: 30
+
+LhaCommand=lha
+The name or full path of the LHA archive extraction utility, used if ExtractAfterDownload
+is enabled. Default: lha
+
+ExtractAfterDownload=no
+Whether to automatically extract downloaded archives. Set to yes, no, 1, or 0.
+Default: no
+
+LogFile=T:DoorRepo.log
+The AmigaDOS path where the door logs its activity and errors. Default: T:DoorRepo.log
+
+[EXAMPLES]
+
+All defaults (line everything out to use them):
+[commented out: all keys]
+
+Faster network, local extraction:
+RepoHost=10.0.0.50
+RepoPort=8080
+TimeoutSecs=60
+ExtractAfterDownload=yes
+DownloadDir=RAM:
+
+[NOTES]
+
+- Case does not matter for key names (RepoHost, repohost, REPOHOST all work)
+- Leading and trailing whitespace around keys and values is ignored
+- Lines starting with # are comments and are ignored
+- Empty lines are ignored
+- Unknown keys are silently skipped
