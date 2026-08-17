@@ -19,6 +19,12 @@ void config_defaults(dr_config *cfg)
     strncpy(cfg->lha_command, "lha", sizeof(cfg->lha_command) - 1);
     cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';
     cfg->extract_after_download = 0;
+    /* 80x24 is the universal BBS terminal geometry and what AmiExpress
+     * assumes throughout; the keys exist so a sysop on a taller window can
+     * use it rather than because the default is in doubt. */
+    cfg->ansi = 1;
+    cfg->screen_rows = 24;
+    cfg->screen_cols = 80;
     strncpy(cfg->log_file, "T:DoorRepo.log", sizeof(cfg->log_file) - 1);
     cfg->log_file[sizeof(cfg->log_file) - 1] = '\0';
 }
@@ -104,6 +110,29 @@ static int validate_page_size(const char *value)
     if (size < 1 || size > 9999)
         return 0;
     return size;
+}
+
+static int validate_screen_rows(const char *value)
+{
+    int rows;
+    if (!is_valid_integer(value, &rows))
+        return 0;
+    /* 10 rows is the least the header/list/footer layout can occupy without
+     * the list collapsing to nothing; 200 is far past any real terminal. */
+    if (rows < 10 || rows > 200)
+        return 0;
+    return rows;
+}
+
+static int validate_screen_cols(const char *value)
+{
+    int cols;
+    if (!is_valid_integer(value, &cols))
+        return 0;
+    /* Below 40 the two-pane layout cannot be drawn at all. */
+    if (cols < 40 || cols > 250)
+        return 0;
+    return cols;
 }
 
 static int validate_timeout(const char *value)
@@ -256,6 +285,22 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
             } else {
                 local_skipped++;
                 g_last_unsafe_value_count++;
+            }
+        } else if (str_icmp(key, "Ansi") == 0) {
+            cfg->ansi = parse_boolean(value);
+        } else if (str_icmp(key, "ScreenRows") == 0) {
+            parsed_value = validate_screen_rows(value);
+            if (parsed_value > 0) {
+                cfg->screen_rows = parsed_value;
+            } else {
+                local_skipped++;
+            }
+        } else if (str_icmp(key, "ScreenCols") == 0) {
+            parsed_value = validate_screen_cols(value);
+            if (parsed_value > 0) {
+                cfg->screen_cols = parsed_value;
+            } else {
+                local_skipped++;
             }
         } else if (str_icmp(key, "ExtractAfterDownload") == 0) {
             cfg->extract_after_download = parse_boolean(value);

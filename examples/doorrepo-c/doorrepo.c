@@ -30,6 +30,7 @@
 #include "aedoor.h"
 #include "flow.h"
 #include "netio.h"
+#include "ansi.h"
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
@@ -693,7 +694,14 @@ static void print_row(unsigned long global_index, const dr_entry *e)
      * ULONG_MAX (division and modulo cannot overflow the way
      * "size + 1023" could). */
     kb = e->size / 1024UL + ((e->size % 1024UL != 0UL) ? 1UL : 0UL);
-    sprintf(line, "%4lu  %-20.20s %-4.4s %6lu KB  %-.40s",
+    /* The whole row must fit an 80-column terminal, which is what a real BBS
+     * session gives you. The fixed part costs 43 columns:
+     *   %4lu(4) + 2 + %-20.20s(20) + 1 + %-4.4s(4) + 1 + %6lu(6) + " KB"(3) + 2
+     * leaving 37 for the name. It used to allow 40, so every catalog row with
+     * a long name emitted an 83-column line and wrapped mid-word onto the next
+     * line, breaking the column alignment for the whole page. Seen live with
+     * "2MWBICNS.LHA  MagicWB drawer icons for AmiExpress and". */
+    sprintf(line, "%4lu  %-20.20s %-4.4s %6lu KB  %-.37s",
             global_index, e->archive, e->type, kb, e->name[0] != '\0' ? e->name : e->desc);
     ae_put(line, 1);
 }
@@ -775,6 +783,1138 @@ typedef enum {
     BROWSE_FILTER_SEARCH,
     BROWSE_ALL
 } browse_exit;
+
+/* ---------------------------------------------------------------------
+ * Full-screen ANSI browser
+ *
+ * Mirrors the repo section of DOORMAN (this project's TypeScript door,
+ * Doors/door-manager/app.ts) panel for panel, so a sysop moving between the
+ * two sees the same thing: a white-on-blue header bar, a cyan-bordered list
+ * on the left labelled " REPO (n) " with the selected row highlighted
+ * white-on-blue, a blue-bordered detail pane on the right, and a
+ * white-on-blue footer of hotkeys with the trigger letters in yellow.
+ *
+ * DOORMAN's geometry, reproduced here: header and footer are 3 rows each,
+ * the list is 35% of the width, the detail pane takes the remaining 65%,
+ * and both sit between the bars (blessed's "100%-6").
+ *
+ * Deliberately NOT copied from DOORMAN: bare-ESC as "back". A lone ESC is
+ * indistinguishable from the start of an arrow sequence without a timer,
+ * and that exact ambiguity cost DOORMAN six debugging rounds (see
+ * handoff.md, 2026-08-17). Here ESC is only ever read as the lead byte of a
+ * CSI sequence, and Q is the single documented way out.
+ * ------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------
+ * FILE_ID.DIZ fetch (GET <path>/diz/<archive>)
+ *
+ * list.txt collapses every newline to a space by design - it is one row per
+ * line, so it has to - which means multi-line DIZ art cannot be
+ * reconstructed from a catalog row. It arrives as one flat line and renders
+ * as noise. The API therefore exposes the raw DIZ per archive, and this is
+ * the only place that reads it.
+ *
+ * Cached for exactly one archive: the browser refetches when the selection
+ * moves to a different entry, and never refetches while the user sits on
+ * one. A larger cache would buy little - moving the cursor is the only
+ * thing that invalidates it - and a real Amiga has better uses for the RAM.
+ * ------------------------------------------------------------------- */
+
+#define DIZ_MAX_BYTES 2048
+
+static char g_diz[DIZ_MAX_BYTES + 1];
+static unsigned long g_diz_len = 0;
+static char g_diz_archive[64] = "";
+static int g_diz_ok = 0;
+
+/* Sink context: the destination buffer and how much of it is used. Passing
+ * this through http_get()'s ctx parameter - rather than writing to the
+ * file-scope cache directly - keeps the sink honest for both toolchains
+ * (clang -Wextra warns on an unused parameter, vbcc warns on the
+ * "(void) ctx;" idiom used to silence it) and matches how the other sinks
+ * in this file are written. */
+typedef struct {
+    char *buf;
+    unsigned long len;
+    unsigned long cap;
+} diz_ctx;
+
+static int diz_sink(void *ctx, const unsigned char *buf, unsigned long len)
+{
+    diz_ctx *d = (diz_ctx *) ctx;
+    unsigned long i;
+
+    if (d == (diz_ctx *) 0 || buf == (const unsigned char *) 0) {
+        return 0;
+    }
+    for (i = 0; i < len; i++) {
+        if (d->len >= d->cap) {
+            /* Bounded like every other response body this door reads: a
+             * hostile or broken server cannot grow this past its buffer. */
+            break;
+        }
+        d->buf[d->len++] = (char) buf[i];
+    }
+    d->buf[d->len] = '\0';
+    return 0;
+}
+
+/* Loads the DIZ for `archive` into the cache. Silent on failure: a missing
+ * DIZ is a 404 and an entirely normal state (most catalog rows have none),
+ * so it must not interrupt browsing with an error. */
+static void diz_load(const dr_config *cfg, const char *archive)
+{
+    char path[256];
+    http_response resp;
+    diz_ctx dc;
+    int rc;
+
+    if (strcmp(g_diz_archive, archive) == 0) {
+        return; /* already cached */
+    }
+
+    strncpy(g_diz_archive, archive, sizeof(g_diz_archive) - 1);
+    g_diz_archive[sizeof(g_diz_archive) - 1] = '\0';
+    g_diz_len = 0;
+    g_diz[0] = '\0';
+    g_diz_ok = 0;
+
+    if (flow_build_diz_path(path, sizeof(path), cfg->path, archive) < 0) {
+        return;
+    }
+
+    dc.buf = g_diz;
+    dc.len = 0;
+    dc.cap = (unsigned long) DIZ_MAX_BYTES;
+
+    rc = http_get(cfg, path, &resp, diz_sink, &dc);
+    g_diz_len = dc.len;
+    if (rc == HTTP_OK && resp.status == 200 && g_diz_len > 0) {
+        g_diz_ok = 1;
+    } else {
+        g_diz_len = 0;
+        g_diz[0] = '\0';
+    }
+}
+
+/* ---------------------------------------------------------------------
+ * Live filtering, client side
+ *
+ * DOORMAN filters its repo list in place, over the rows it already holds,
+ * with no server round trip (Doors/door-manager/app.ts: filterByDoorType()
+ * + its filter box). This door holds the whole catalog in memory too, so it
+ * does the same: `view` is an index into cat->rows of the entries currently
+ * shown, rebuilt whenever the text or type filter changes.
+ *
+ * The older line-mode path still asks the server for a filtered catalog
+ * (BROWSE_FILTER_* exits); that remains for Ansi=no. Filtering in memory is
+ * both closer to DOORMAN and dramatically faster on a dial-up link, where a
+ * refetch of 3300 rows to narrow a list is not a reasonable thing to do.
+ * ------------------------------------------------------------------- */
+
+#define UI_FILTER_MAX 32
+
+typedef struct {
+    unsigned long *index;      /* into cat->rows */
+    unsigned long count;
+    char text[UI_FILTER_MAX + 1];
+    char type[16];             /* "" = every type */
+    unsigned long scroll_top;  /* first visible view row, for the scrollbar */
+} ui_view;
+
+/* Case-insensitive ASCII compare of one byte. */
+static int ui_lower(int c)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return c - 'A' + 'a';
+    }
+    return c;
+}
+
+/* Case-insensitive substring test. Returns non-zero when `needle` occurs in
+ * `hay`; an empty needle always matches. */
+static int ui_contains_ci(const char *hay, const char *needle)
+{
+    unsigned long i;
+    unsigned long j;
+
+    if (needle[0] == '\0') {
+        return 1;
+    }
+    for (i = 0; hay[i] != '\0'; i++) {
+        for (j = 0; needle[j] != '\0'; j++) {
+            if (ui_lower((unsigned char) hay[i + j]) != ui_lower((unsigned char) needle[j])) {
+                break;
+            }
+        }
+        if (needle[j] == '\0') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int ui_equals_ci(const char *a, const char *b)
+{
+    unsigned long i;
+
+    for (i = 0; a[i] != '\0' && b[i] != '\0'; i++) {
+        if (ui_lower((unsigned char) a[i]) != ui_lower((unsigned char) b[i])) {
+            return 0;
+        }
+    }
+    return a[i] == '\0' && b[i] == '\0';
+}
+
+/* Rebuilds `v->index` from the current filters. Text matches the archive
+ * name, the door name, or the description - the same three fields a user can
+ * actually see. */
+static void ui_view_rebuild(ui_view *v, const dr_catalog *cat)
+{
+    unsigned long i;
+
+    v->count = 0;
+    for (i = 0; i < cat->count; i++) {
+        const dr_entry *e = &cat->rows[i];
+
+        if (v->type[0] != '\0' && !ui_equals_ci(e->type, v->type)) {
+            continue;
+        }
+        if (v->text[0] != '\0'
+            && !ui_contains_ci(e->archive, v->text)
+            && !ui_contains_ci(e->name, v->text)
+            && !ui_contains_ci(e->desc, v->text)) {
+            continue;
+        }
+        v->index[v->count++] = i;
+    }
+}
+
+/* Advances `v->type` to the next distinct type present in the catalog,
+ * wrapping through "" (= all). Mirrors DOORMAN's cycleSystemFilter, which
+ * cycles the types actually present rather than a hardcoded list, so a
+ * catalog with no DD doors never offers a DD filter that yields nothing. */
+static void ui_view_cycle_type(ui_view *v, const dr_catalog *cat)
+{
+    char seen[16][16];
+    int nseen = 0;
+    unsigned long i;
+    int j;
+    int cur;
+
+    for (i = 0; i < cat->count && nseen < 16; i++) {
+        const char *t = cat->rows[i].type;
+        int dup = 0;
+        if (t[0] == '\0') {
+            continue;
+        }
+        for (j = 0; j < nseen; j++) {
+            if (ui_equals_ci(seen[j], t)) {
+                dup = 1;
+                break;
+            }
+        }
+        if (!dup) {
+            strncpy(seen[nseen], t, sizeof(seen[0]) - 1);
+            seen[nseen][sizeof(seen[0]) - 1] = '\0';
+            nseen++;
+        }
+    }
+
+    /* Position in the cycle: -1 is "all", then each distinct type in turn. */
+    cur = -1;
+    for (j = 0; j < nseen; j++) {
+        if (ui_equals_ci(seen[j], v->type)) {
+            cur = j;
+            break;
+        }
+    }
+    cur++;
+    if (cur >= nseen) {
+        v->type[0] = '\0';
+    } else {
+        strncpy(v->type, seen[cur], sizeof(v->type) - 1);
+        v->type[sizeof(v->type) - 1] = '\0';
+    }
+}
+
+/* ---------------------------------------------------------------------
+ * Archive contents (GET <path>/files/<archive>)
+ *
+ * DOORMAN's info pane lists what is inside an archive and how many of those
+ * files are ads ("N files / N ad files"). Same idea here, but fetched ONLY
+ * when the user asks for it with V: on a real Amiga link, pulling a contents
+ * listing on every cursor move would cost more than it is worth. Cached for
+ * one archive, exactly like the DIZ.
+ * ------------------------------------------------------------------- */
+
+#define FILES_MAX_BYTES 4096
+
+static char g_files[FILES_MAX_BYTES + 1];
+static char g_files_archive[64] = "";
+static int g_files_ok = 0;
+
+static int files_sink(void *ctx, const unsigned char *buf, unsigned long len)
+{
+    diz_ctx *d = (diz_ctx *) ctx;
+    unsigned long i;
+
+    if (d == (diz_ctx *) 0 || buf == (const unsigned char *) 0) {
+        return 0;
+    }
+    for (i = 0; i < len; i++) {
+        if (d->len >= d->cap) {
+            break;
+        }
+        d->buf[d->len++] = (char) buf[i];
+    }
+    d->buf[d->len] = '\0';
+    return 0;
+}
+
+static void files_load(const dr_config *cfg, const char *archive)
+{
+    char path[256];
+    http_response resp;
+    diz_ctx fc;
+    int rc;
+
+    if (strcmp(g_files_archive, archive) == 0) {
+        return;
+    }
+
+    strncpy(g_files_archive, archive, sizeof(g_files_archive) - 1);
+    g_files_archive[sizeof(g_files_archive) - 1] = '\0';
+    g_files[0] = '\0';
+    g_files_ok = 0;
+
+    if (flow_build_files_path(path, sizeof(path), cfg->path, archive) < 0) {
+        return;
+    }
+
+    fc.buf = g_files;
+    fc.len = 0;
+    fc.cap = (unsigned long) FILES_MAX_BYTES;
+
+    rc = http_get(cfg, path, &resp, files_sink, &fc);
+    if (rc == HTTP_OK && resp.status == 200 && fc.len > 0) {
+        g_files_ok = 1;
+    } else {
+        g_files[0] = '\0';
+    }
+}
+
+#define UI_HEADER_ROWS 3
+#define UI_FOOTER_ROWS 3
+
+/* One composed frame. 80x24 of text plus the escapes for colour changes and
+ * cursor moves fits well inside this; ansi.c truncates rather than
+ * overflowing if a much larger terminal is configured. */
+#define UI_FRAME_BYTES 16384
+
+typedef struct {
+    int rows;
+    int cols;
+    int list_left;
+    int list_width;
+    int info_left;
+    int info_width;
+    int pane_top;
+    int pane_height;
+    int visible_rows;
+} ui_geometry;
+
+static void ui_compute_geometry(const dr_config *cfg, ui_geometry *g)
+{
+    g->rows = cfg->screen_rows;
+    g->cols = cfg->screen_cols;
+    g->list_left = 1;
+    /* 35% of the width, matching DoormanLayout's listPanel. */
+    g->list_width = (g->cols * 35) / 100;
+    if (g->list_width < 18) {
+        g->list_width = 18;
+    }
+    g->info_left = g->list_left + g->list_width;
+    g->info_width = g->cols - g->list_width;
+    g->pane_top = UI_HEADER_ROWS + 1;
+    g->pane_height = g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS;
+    if (g->pane_height < 3) {
+        g->pane_height = 3;
+    }
+    /* Two rows of the panel are its own top and bottom border. */
+    g->visible_rows = g->pane_height - 2;
+    if (g->visible_rows < 1) {
+        g->visible_rows = 1;
+    }
+}
+
+/* Appends the decimal form of an unsigned long to a NUL-terminated buffer. */
+static void ui_append_ulong(char *out, unsigned long v)
+{
+    char tmp[24];
+    int i;
+    int p;
+
+    i = 0;
+    if (v == 0UL) {
+        tmp[i++] = '0';
+    }
+    while (v > 0UL) {
+        tmp[i++] = (char) ('0' + (int) (v % 10UL));
+        v /= 10UL;
+    }
+    p = (int) strlen(out);
+    while (i > 0) {
+        out[p++] = tmp[--i];
+    }
+    out[p] = '\0';
+}
+
+/* "<n>k", rounded the way DOORMAN rounds it (Math.round(bytes/1024)). */
+static void ui_format_kb(char *out, unsigned long bytes)
+{
+    unsigned long kb;
+
+    kb = bytes / 1024UL + ((bytes % 1024UL >= 512UL) ? 1UL : 0UL);
+    out[0] = '\0';
+    ui_append_ulong(out, kb);
+    strcat(out, "k");
+}
+
+static void ui_draw_bar(ansi_buf *b, int top, int cols, const char *text)
+{
+    int i;
+
+    for (i = 0; i < UI_HEADER_ROWS; i++) {
+        ansi_fill(b, top + i, 1, cols, ANSI_WHITE, ANSI_BLUE);
+    }
+    ansi_color(b, ANSI_WHITE, ANSI_BLUE, 1);
+    ansi_center(b, top + 1, 1, cols, text);
+}
+
+static void ui_draw_header(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
+                           const ui_view *v, const char *filter_desc)
+{
+    char title[160];
+
+    strcpy(title, "DoorRepo v");
+    strcat(title, DOOR_VERSION);
+    strcat(title, "   ");
+    ui_append_ulong(title, v->count);
+    strcat(title, " of ");
+    ui_append_ulong(title, cat->count);
+    strcat(title, " doors");
+
+    /* Show WHICH filters are active, not merely that some are - otherwise a
+     * user who forgot a type filter sees a short list with no explanation. */
+    if (v->type[0] != '\0') {
+        strcat(title, "   type=");
+        strncat(title, v->type, sizeof(title) - strlen(title) - 1);
+    }
+    if (v->text[0] != '\0') {
+        strcat(title, "   find=");
+        strncat(title, v->text, sizeof(title) - strlen(title) - 1);
+    }
+    if (filter_desc != (const char *) 0 && filter_desc[0] != '\0'
+        && v->type[0] == '\0' && v->text[0] == '\0') {
+        strcat(title, "   [server filter]");
+    }
+    ui_draw_bar(b, 1, g->cols, title);
+}
+
+static void ui_draw_footer(ansi_buf *b, const ui_geometry *g)
+{
+    /* Same shape as DOORMAN's repoViewFooterParts(), with this door's real
+     * actions substituted for the ones it does not have (it downloads and
+     * verifies rather than installing into the BBS). */
+    ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols,
+                "ENTER=Get  V=Files  F=Find  C=System  A=All  Q=Quit");
+}
+
+/* Draws list rows. `only_row_a`/`only_row_b` are visible-row indices to
+ * repaint, or -1 for "all of them".
+ *
+ * Repainting just the two rows whose highlight changed is what makes cursor
+ * movement feel immediate: ae_put() chunks at AE_MAX_LINE (198 bytes), so a
+ * full-frame redraw costs about 25 XIM round trips per keystroke, while two
+ * rows plus the detail pane costs about five. */
+/* Paints one cell of the scrollbar on the list panel's right border, the
+ * blessed list's { scrollbar: { bg:'blue' } } equivalent. The thumb spans
+ * the proportion of the list currently visible, so it doubles as a
+ * position indicator on a 3300-row catalog where the row numbers alone
+ * give no sense of place. */
+static void ui_draw_scroll_marker(ansi_buf *b, const ui_geometry *g,
+                                  const ui_view *v, int visible_row)
+{
+    int col = g->list_left + g->list_width - 1;
+    int row = g->pane_top + 1 + visible_row;
+    unsigned long first;
+    unsigned long last;
+    unsigned long total = v->count;
+    int thumb;
+
+    if (total <= (unsigned long) g->visible_rows) {
+        return; /* everything fits: no bar, same as blessed */
+    }
+
+    /* Which slice of the whole list this row of the bar represents. */
+    first = ((unsigned long) visible_row * total) / (unsigned long) g->visible_rows;
+    last  = ((unsigned long) (visible_row + 1) * total) / (unsigned long) g->visible_rows;
+    thumb = 0;
+    {
+        unsigned long topv = v->scroll_top;
+        unsigned long botv = topv + (unsigned long) g->visible_rows;
+        if (last > topv && first < botv) {
+            thumb = 1;
+        }
+    }
+
+    if (thumb) {
+        ansi_color(b, ANSI_WHITE, ANSI_BLUE, 0);
+        ansi_text_raw(b, row, col, " ", 1);
+    } else {
+        ansi_color(b, ANSI_CYAN, ANSI_BLACK, 0);
+        ansi_text_raw(b, row, col, "|", 1);
+    }
+}
+
+static void ui_draw_list(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
+                         const ui_view *v,
+                         unsigned long top_index, unsigned long selected,
+                         int only_row_a, int only_row_b)
+{
+    int i;
+    int inner;
+
+    inner = g->list_width - 2;
+
+    for (i = 0; i < g->visible_rows; i++) {
+        unsigned long idx;
+        int row;
+        char line[256];
+        char kb[24];
+        int namew;
+        int n;
+
+        if (only_row_a >= 0 && i != only_row_a && i != only_row_b) {
+            continue;
+        }
+        idx = top_index + (unsigned long) i;
+        row = g->pane_top + 1 + i;
+
+        if (idx >= v->count) {
+            /* Blank rows past the end, so a shorter filtered result cannot
+             * leave the previous listing visible underneath it. */
+            ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+            ansi_text(b, row, g->list_left + 1, "", inner);
+            ui_draw_scroll_marker(b, g, v, i);
+            continue;
+        }
+        idx = v->index[idx];
+
+        ui_format_kb(kb, cat->rows[idx].size);
+        namew = inner - (int) strlen(kb) - 1;
+        if (namew < 1) {
+            namew = 1;
+        }
+
+        n = 0;
+        while (n < namew && cat->rows[idx].archive[n] != '\0') {
+            line[n] = cat->rows[idx].archive[n];
+            n++;
+        }
+        while (n < namew) {
+            line[n++] = ' ';
+        }
+        line[n++] = ' ';
+        {
+            const char *k = kb;
+            while (*k != '\0' && n < inner) {
+                line[n++] = *k++;
+            }
+        }
+        line[n] = '\0';
+
+        /* The selected row is white-on-blue for its full inner width, the
+         * same as blessed's { selected: { bg:'blue', fg:'white' } }. Setting
+         * the colour BEFORE the padded write is what makes the highlight
+         * span the whole row rather than just the characters. */
+        if (top_index + (unsigned long) i == selected) {
+            ansi_color(b, ANSI_WHITE, ANSI_BLUE, 1);
+        } else {
+            ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+        }
+        ansi_text(b, row, g->list_left + 1, line, inner);
+        ui_draw_scroll_marker(b, g, v, i);
+    }
+    ansi_reset(b);
+}
+
+/* Writes `text` into the info pane starting at *row, wrapping at spaces
+ * rather than mid-word, and stops at `last_row`. Returns via *row the next
+ * free row. Word wrapping is what makes a FILE_ID.DIZ-style description
+ * readable - chopping every N bytes split words across lines and was the
+ * "renders broken" report. */
+static void ui_wrap_text(ansi_buf *b, const ui_geometry *g, const char *text,
+                         int *row, int last_row, int width)
+{
+    const char *p = text;
+
+    while (*p != '\0' && *row <= last_row) {
+        int take;
+        int brk;
+        int i;
+        char chunk[256];
+
+        /* How much fits. */
+        take = 0;
+        while (take < width && p[take] != '\0') {
+            take++;
+        }
+        /* Back up to the last space unless the whole remainder fits. */
+        brk = take;
+        if (p[take] != '\0') {
+            int sp = -1;
+            for (i = 0; i < take; i++) {
+                if (p[i] == ' ') {
+                    sp = i;
+                }
+            }
+            if (sp > 0) {
+                brk = sp;
+            }
+        }
+        if (brk > (int) sizeof(chunk) - 1) {
+            brk = (int) sizeof(chunk) - 1;
+        }
+        for (i = 0; i < brk; i++) {
+            chunk[i] = p[i];
+        }
+        chunk[brk] = '\0';
+
+        ansi_text(b, *row, g->info_left + 2, chunk, width);
+        (*row)++;
+
+        p += brk;
+        while (*p == ' ') {
+            p++;
+        }
+    }
+}
+
+/* The static chrome: header bar, footer bar and both panel frames. None of
+ * it changes while browsing, so it is painted once per full redraw instead
+ * of on every keystroke. */
+static void ui_draw_chrome(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
+                           const ui_view *v, const char *filter_desc)
+{
+    char label[48];
+
+    /* Label carries the FILTERED count, like DOORMAN's ` REPO (n) `. */
+    strcpy(label, "REPO (");
+    ui_append_ulong(label, v->count);
+    strcat(label, ")");
+
+    ui_draw_header(b, g, cat, v, filter_desc);
+    ansi_box(b, g->pane_top, g->list_left, g->pane_height, g->list_width, ANSI_CYAN, label);
+    ansi_box(b, g->pane_top, g->info_left, g->pane_height, g->info_width, ANSI_BLUE,
+             (const char *) 0);
+    ui_draw_footer(b, g);
+    ansi_reset(b);
+}
+
+/* Draws the detail pane and returns how many rows it used, so the next call
+ * can blank exactly the rows the previous entry occupied instead of
+ * repainting the whole pane. `used_last` is that count from the previous
+ * call (0 on a full redraw). Every row this writes is space-padded to the
+ * pane width, so it overwrites whatever was under it without a separate
+ * clearing pass - only the tail beyond the new content needs blanking. */
+/* Non-zero when this archive is already present in DownloadDir.
+ *
+ * DOORMAN tags an entry it has installed with a green "[installed_as]" in
+ * its info pane; the local equivalent for this door - which downloads rather
+ * than installs - is "already downloaded". Checked for the SELECTED entry
+ * only, one stat per selection change, rather than for every visible row on
+ * every redraw: on a real Amiga a directory probe per row per keystroke is a
+ * cost with no payoff. */
+static int ui_already_downloaded(const dr_config *cfg, const char *archive)
+{
+    char local[256];
+    FILE *f;
+
+    if (flow_build_local_path(local, sizeof(local), cfg->download_dir, archive) < 0) {
+        return 0;
+    }
+    f = fopen(local, "rb");
+    if (f == (FILE *) 0) {
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
+                        const dr_catalog *cat, const ui_view *v,
+                        unsigned long selected, int used_last, int show_files)
+{
+    int inner;
+    int row;
+    int last_row;
+    int i;
+    int first_row;
+    const dr_entry *e;
+    char line[256];
+    char kb[24];
+
+    inner = g->info_width - 2;
+    row = g->pane_top + 1;
+    first_row = row;
+    last_row = g->pane_top + g->pane_height - 2;
+
+    if (v->count == 0) {
+        ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 1);
+        ansi_text(b, row, g->info_left + 1, " No matching doors found.", inner);
+        ansi_reset(b);
+        return 1;
+    }
+
+    e = &cat->rows[v->index[selected]];
+
+    /* Same three fields, in the same order, as DOORMAN's updateInfo():
+     * archive name in yellow, then type and size. */
+    ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 1);
+    ansi_text(b, row, g->info_left + 2, e->archive, inner - 2);
+
+    ui_format_kb(kb, e->size);
+    strcpy(line, e->type[0] != '\0' ? e->type : "XIM");
+    strcat(line, "   ");
+    strcat(line, kb);
+    strcat(line, "   #");
+    ui_append_ulong(line, v->index[selected] + 1UL);
+    ansi_color(b, ANSI_CYAN, ANSI_BLACK, 0);
+    ansi_text(b, row + 1, g->info_left + 2, line, inner - 2);
+
+    if (ui_already_downloaded(cfg, e->archive)) {
+        int at = (int) strlen(line) + 3;
+        ansi_color(b, ANSI_GREEN, ANSI_BLACK, 1);
+        ansi_text_raw(b, row + 1, g->info_left + 2 + at, "[downloaded]", 12);
+    }
+
+    /* The spacer row must be PAINTED, not merely skipped. Every row counted
+     * as "used" is excluded from the blanking pass below, so a row that is
+     * counted but never written keeps whatever the previously selected
+     * entry left there - which showed up as a stray line of the previous
+     * door's ASCII art hanging under a short entry. */
+    ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+    ansi_text(b, row + 2, g->info_left + 1, "", inner);
+    row += 3;
+
+    if (show_files && g_files_ok && strcmp(g_files_archive, e->archive) == 0) {
+        /* "<size>|<junk>|<path>" lines, after a "FILES|<n>|<junk>" header.
+         * Junk entries are marked with a red '!' the way DOORMAN flags its
+         * "ad files", so a user can see at a glance whether an archive is
+         * mostly door or mostly advertising. */
+        const char *p = g_files;
+        int first_line = 1;
+
+        while (*p != '\0' && row <= last_row) {
+            char field[3][160];
+            int fi = 0;
+            int fp = 0;
+            char out[256];
+
+            field[0][0] = '\0';
+            field[1][0] = '\0';
+            field[2][0] = '\0';
+            while (*p != '\0' && *p != '\n' && *p != '\r') {
+                if (*p == '|' && fi < 2) {
+                    field[fi][fp] = '\0';
+                    fi++;
+                    fp = 0;
+                } else if (fp < (int) sizeof(field[0]) - 1) {
+                    field[fi][fp++] = *p;
+                }
+                p++;
+            }
+            field[fi][fp] = '\0';
+            while (*p == '\n' || *p == '\r') {
+                p++;
+            }
+
+            if (first_line) {
+                first_line = 0;
+                strcpy(out, "--- ");
+                strncat(out, field[1], 8);
+                strcat(out, " files, ");
+                strncat(out, field[2], 8);
+                strcat(out, " ads ---");
+                ansi_color(b, ANSI_CYAN, ANSI_BLACK, 0);
+                ansi_text(b, row, g->info_left + 2, out, inner - 2);
+                row++;
+                continue;
+            }
+
+            {
+                int isjunk = (field[1][0] == '1');
+                strcpy(out, isjunk ? "! " : "  ");
+                strncat(out, field[2], sizeof(out) - strlen(out) - 10);
+                ansi_color(b, isjunk ? ANSI_RED : ANSI_WHITE, ANSI_BLACK, 0);
+                ansi_text(b, row, g->info_left + 2, out, inner - 2);
+                row++;
+            }
+        }
+    } else if (g_diz_ok && strcmp(g_diz_archive, e->archive) == 0) {
+        /* Real FILE_ID.DIZ: render it line for line, exactly as authored.
+         * This is the whole reason the /diz endpoint exists - the art only
+         * means anything if its own line breaks are preserved, so it is
+         * emitted verbatim (clipped at the pane width) and never wrapped. */
+        const char *p = g_diz;
+        ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+        while (*p != '\0' && row <= last_row) {
+            char line2[256];
+            int n = 0;
+            while (p[n] != '\0' && p[n] != '\n' && p[n] != '\r'
+                   && n < inner - 2 && n < (int) sizeof(line2) - 1) {
+                line2[n] = p[n];
+                n++;
+            }
+            line2[n] = '\0';
+            ansi_text(b, row, g->info_left + 2, line2, inner - 2);
+            row++;
+            /* Advance past the rest of this source line and its terminator,
+             * so a line longer than the pane is clipped rather than wrapped
+             * into the next row and knocking the art out of alignment. */
+            while (p[n] != '\0' && p[n] != '\n') {
+                n++;
+            }
+            p += n;
+            while (*p == '\n' || *p == '\r') {
+                p++;
+            }
+        }
+    } else {
+        ansi_color(b, ANSI_WHITE, ANSI_BLACK, 1);
+        if (e->name[0] != '\0') {
+            ui_wrap_text(b, g, e->name, &row, last_row, inner - 2);
+            /* Same rule as the spacer above: paint it, do not just skip it. */
+            if (row <= last_row) {
+                ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+                ansi_text(b, row, g->info_left + 1, "", inner);
+                row++;
+            }
+        }
+        ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+        if (e->desc[0] != '\0') {
+            ui_wrap_text(b, g, e->desc, &row, last_row, inner - 2);
+        }
+    }
+
+    /* Blank only the rows the PREVIOUS entry used and this one does not. */
+    for (i = row - first_row; i < used_last && first_row + i <= last_row; i++) {
+        ansi_text(b, first_row + i, g->info_left + 1, "", inner);
+    }
+    ansi_reset(b);
+    return row - first_row;
+}
+
+/* AmiExpress converts arrow keys to single-byte internal codes before a
+ * door ever sees them (express.e:7514-7528, mirrored by this project's
+ * xim/io.ts processHotkeyToken): 2=LEFT, 3=RIGHT, 4=UP, 5=DOWN. A door
+ * built for /X must decode THOSE, not the raw CSI sequence - the escape
+ * form only arrives in rawArrow mode, or on a direct serial link with no
+ * BBS in between. Both are handled, because this door runs under either. */
+#define AE_ARROW_LEFT  2
+#define AE_ARROW_RIGHT 3
+#define AE_ARROW_UP    4
+#define AE_ARROW_DOWN  5
+
+#define UI_KEY_UP    1000
+#define UI_KEY_DOWN  1001
+#define UI_KEY_PGUP  1002
+#define UI_KEY_PGDN  1003
+#define UI_KEY_HOME  1004
+#define UI_KEY_END   1005
+#define UI_KEY_ENTER 1006
+
+static int ui_read_key(void)
+{
+    int c;
+
+    c = ae_key();
+    if (c == '\r' || c == '\n') {
+        return UI_KEY_ENTER;
+    }
+    if (c == AE_ARROW_UP)    return UI_KEY_UP;
+    if (c == AE_ARROW_DOWN)  return UI_KEY_DOWN;
+    if (c == AE_ARROW_LEFT)  return UI_KEY_PGUP;
+    if (c == AE_ARROW_RIGHT) return UI_KEY_PGDN;
+    if (c != 27) {
+        return c;
+    }
+
+    /* ESC is only ever read as the lead byte of a CSI sequence. Bare-ESC is
+     * deliberately not a binding: it is indistinguishable from the start of
+     * an arrow sequence without a timer, and that exact ambiguity cost
+     * DOORMAN six debugging rounds (handoff.md, 2026-08-17). Q is the one
+     * documented way out. */
+    c = ae_key();
+    if (c != '[' && c != 'O') {
+        return c;
+    }
+    c = ae_key();
+    switch (c) {
+    case 'A': return UI_KEY_UP;
+    case 'B': return UI_KEY_DOWN;
+    case 'C': return UI_KEY_PGDN;
+    case 'D': return UI_KEY_PGUP;
+    case 'H': return UI_KEY_HOME;
+    case 'F': return UI_KEY_END;
+    case '5': (void) ae_key(); return UI_KEY_PGUP;
+    case '6': (void) ae_key(); return UI_KEY_PGDN;
+    case '1': (void) ae_key(); return UI_KEY_HOME;
+    case '4': (void) ae_key(); return UI_KEY_END;
+    default:  return 0;
+    }
+}
+
+/* Reads a filter string with the box drawn in place, the way DOORMAN's
+ * filter panel works: the list stays on screen and refilters on every
+ * keystroke rather than the user being dropped to a line prompt.
+ *
+ * Returns 1 when the filter was accepted (ENTER) and 0 when abandoned. The
+ * caller redraws either way. Backspace edits; CTRL-U clears. As everywhere
+ * else in this browser, a bare ESC is not a binding - see ui_read_key(). */
+static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
+                            const ui_geometry *g, ui_view *v,
+                            const dr_catalog *cat)
+{
+    int len = (int) strlen(v->text);
+    int boxw = g->list_width;
+    int inner = boxw - 2;
+
+    for (;;) {
+        int key;
+
+        ansi_begin(b, frame, framecap);
+        ansi_box(b, g->pane_top, g->list_left, 3, boxw, ANSI_YELLOW, "FILTER");
+        ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 1);
+        ansi_text(b, g->pane_top + 1, g->list_left + 1, v->text, inner);
+        /* Park the cursor after the text so a terminal showing it looks right. */
+        ansi_goto(b, g->pane_top + 1, g->list_left + 1 + len);
+        ansi_cursor(b, 1);
+        ansi_flush(b);
+
+        key = ui_read_key();
+
+        if (key == UI_KEY_ENTER) {
+            ansi_begin(b, frame, framecap);
+            ansi_cursor(b, 0);
+            ansi_flush(b);
+            return 1;
+        }
+        if (key == 8 || key == 127) {          /* backspace / delete */
+            if (len > 0) {
+                v->text[--len] = '\0';
+            }
+        } else if (key == 21) {                 /* CTRL-U: clear */
+            len = 0;
+            v->text[0] = '\0';
+        } else if (key >= 32 && key < 127 && len < UI_FILTER_MAX) {
+            v->text[len++] = (char) key;
+            v->text[len] = '\0';
+        } else if (key >= 1000) {
+            continue;                           /* ignore cursor keys here */
+        }
+
+        /* Refilter live, so the count in the label tracks what was typed. */
+        ui_view_rebuild(v, cat);
+    }
+}
+
+static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
+{
+    ui_geometry g;
+    unsigned long selected = 0;
+    unsigned long top_index = 0;
+    static char frame[UI_FRAME_BYTES];
+    /* One index slot per catalog row. Static rather than automatic: this is
+     * MAX_CATALOG_ROWS pointers-worth of longs, far too much for a 68K
+     * door's stack. */
+    static unsigned long view_index[MAX_CATALOG_ROWS];
+    ui_view view;
+    ansi_buf buf;
+    int need_full_redraw = 1;
+    unsigned long prev_selected = 0;
+    unsigned long prev_top = 0;
+    int info_rows_used = 0;
+    int show_files = 0;
+
+    ui_compute_geometry(cfg, &g);
+
+    view.index = view_index;
+    view.count = 0;
+    view.text[0] = '\0';
+    view.type[0] = '\0';
+    view.scroll_top = 0;
+    ui_view_rebuild(&view, cat);
+
+    for (;;) {
+        int key;
+
+        if (carrier_lost()) {
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            stop_for_carrier_loss();
+        }
+
+        if (view.count > 0 && selected >= view.count) {
+            selected = view.count - 1;
+        }
+        if (view.count == 0) {
+            selected = 0;
+        }
+        if (selected < top_index) {
+            top_index = selected;
+        }
+        if (selected >= top_index + (unsigned long) g.visible_rows) {
+            top_index = selected - (unsigned long) g.visible_rows + 1;
+        }
+
+        /* ONE frame, ONE write, and as small a frame as the change allows.
+         * Composing into a buffer and flushing once removed the ~100 XIM
+         * round trips per keystroke the first version cost; repainting only
+         * the rows that actually changed removes most of what was left. */
+        view.scroll_top = top_index;
+
+        /* Fetch before composing the frame, so the pane is drawn once with
+         * its final contents rather than flashing placeholder text. */
+        if (view.count > 0) {
+            if (show_files) {
+                files_load(cfg, cat->rows[view.index[selected]].archive);
+            } else {
+                diz_load(cfg, cat->rows[view.index[selected]].archive);
+            }
+        }
+
+        ansi_begin(&buf, frame, (long) sizeof(frame));
+        if (need_full_redraw) {
+            ansi_clear(&buf);
+            ansi_cursor(&buf, 0);
+            ui_draw_chrome(&buf, &g, cat, &view, filter_desc);
+            ui_draw_list(&buf, &g, cat, &view, top_index, selected, -1, -1);
+            need_full_redraw = 0;
+        } else if (top_index != prev_top) {
+            /* The window scrolled: every row is different. */
+            ui_draw_list(&buf, &g, cat, &view, top_index, selected, -1, -1);
+        } else if (selected != prev_selected) {
+            /* Only the highlight moved: repaint the row that lost it and the
+             * row that gained it. */
+            ui_draw_list(&buf, &g, cat, &view, top_index, selected,
+                         (int) (prev_selected - top_index),
+                         (int) (selected - top_index));
+        }
+        info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
+                                      need_full_redraw ? 0 : info_rows_used,
+                                      show_files);
+        prev_selected = selected;
+        prev_top = top_index;
+        /* Park the cursor out of the way, bottom-right, so a terminal that
+         * ignores the hide request does not leave it blinking mid-listing. */
+        ansi_goto(&buf, g.rows, g.cols);
+        ansi_flush(&buf);
+
+        key = ui_read_key();
+
+        if (carrier_lost()) {
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_flush(&buf);
+            stop_for_carrier_loss();
+        }
+
+        switch (key) {
+        case UI_KEY_UP:
+            if (selected > 0) selected--;
+            break;
+        case UI_KEY_DOWN:
+            if (view.count > 0 && selected + 1 < view.count) selected++;
+            break;
+        case UI_KEY_PGUP:
+        case 'p': case 'P':
+            if (selected > (unsigned long) g.visible_rows) {
+                selected -= (unsigned long) g.visible_rows;
+            } else {
+                selected = 0;
+            }
+            break;
+        case UI_KEY_PGDN:
+        case 'n': case 'N':
+            if (view.count > 0) {
+                selected += (unsigned long) g.visible_rows;
+                if (selected >= view.count) selected = view.count - 1;
+            }
+            break;
+        case UI_KEY_HOME:
+            selected = 0;
+            break;
+        case UI_KEY_END:
+            if (view.count > 0) selected = view.count - 1;
+            break;
+        case UI_KEY_ENTER:
+            if (view.count > 0) {
+                /* view_entry() is line-oriented (it prompts, downloads and
+                 * reports progress), so hand the terminal back in a clean
+                 * state and repaint the browser from scratch afterwards. */
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 1);
+                ansi_reset(&buf);
+                ansi_clear(&buf);
+                ansi_flush(&buf);
+                view_entry(cfg, cat, view.index[selected] + 1);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'f': case 'F':
+            /* Filter in place over the rows already loaded - no refetch. */
+            ui_filter_prompt(&buf, frame, (long) sizeof(frame), &g, &view, cat);
+            selected = 0;
+            top_index = 0;
+            need_full_redraw = 1;
+            break;
+        case 'v': case 'V':
+            show_files = !show_files;
+            need_full_redraw = 1;
+            break;
+        case 'c': case 'C':
+            ui_view_cycle_type(&view, cat);
+            ui_view_rebuild(&view, cat);
+            selected = 0;
+            top_index = 0;
+            need_full_redraw = 1;
+            break;
+        case 'a': case 'A':
+            view.text[0] = '\0';
+            view.type[0] = '\0';
+            ui_view_rebuild(&view, cat);
+            selected = 0;
+            top_index = 0;
+            need_full_redraw = 1;
+            break;
+        case 'q': case 'Q':
+            ansi_begin(&buf, frame, (long) sizeof(frame));
+            ansi_cursor(&buf, 1);
+            ansi_reset(&buf);
+            ansi_clear(&buf);
+            ansi_flush(&buf);
+            return BROWSE_QUIT;
+        default:
+            break;
+        }
+    }
+}
 
 static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
@@ -1318,7 +2458,12 @@ int main(int argc, char **argv)
     filter_desc[0] = '\0';
 
     for (;;) {
-        exit_reason = browse_loop(&cfg, &cat, filter_desc);
+        /* Ansi=yes (the default) gets the full-screen browser that mirrors
+         * DOORMAN's repo view; Ansi=no keeps the original line-at-a-time
+         * listing for a terminal that cannot do CSI sequences. */
+        exit_reason = cfg.ansi
+            ? browse_loop_ansi(&cfg, &cat, filter_desc)
+            : browse_loop(&cfg, &cat, filter_desc);
 
         if (exit_reason == BROWSE_QUIT) {
             break;

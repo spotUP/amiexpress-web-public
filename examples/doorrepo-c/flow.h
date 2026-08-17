@@ -86,6 +86,18 @@ int flow_build_list_query(char *out, unsigned long outsize,
 int flow_build_archive_path(char *out, unsigned long outsize,
                              const char *base_path, const char *archive_name);
 
+/* Same, for "<base_path>/diz/<archive_name>" - the per-entry FILE_ID.DIZ
+ * endpoint. It exists because list.txt collapses newlines to spaces by
+ * design, so multi-line DIZ art cannot be recovered from a catalog row;
+ * see docs/DOOR-REPO-API.md. */
+int flow_build_diz_path(char *out, unsigned long outsize,
+                        const char *base_path, const char *archive_name);
+
+/* Same, for "<base_path>/files/<archive_name>" - the archive contents
+ * listing ("FILES|<count>|<junk>" then "<size>|<junk>|<path>" per line). */
+int flow_build_files_path(char *out, unsigned long outsize,
+                          const char *base_path, const char *archive_name);
+
 /* Builds a local filesystem path for a downloaded archive:
  * "<download_dir><archive_name>", inserting a "/" separator between them
  * only when `download_dir` does not already end in a path separator.

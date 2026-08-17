@@ -100,8 +100,8 @@ endif
 
 LIVE_HOST = http://bbs.uprough.net
 
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h aedoor.h netio.h
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c ansi.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h aedoor.h netio.h ansi.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c

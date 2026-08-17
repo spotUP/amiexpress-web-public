@@ -167,10 +167,13 @@ int flow_build_list_query(char *out, unsigned long outsize,
     return (int) pos;
 }
 
-int flow_build_archive_path(char *out, unsigned long outsize,
-                             const char *base_path, const char *archive_name)
+/* Shared by flow_build_archive_path() and flow_build_diz_path(): the two
+ * differ only in the middle path segment, so the bounds checking and
+ * concatenation live in one place rather than being copied. */
+static int build_entry_path(char *out, unsigned long outsize,
+                            const char *base_path, const char *mid,
+                            const char *archive_name)
 {
-    static const char mid[] = "/archive/";
     unsigned long blen;
     unsigned long mlen;
     unsigned long alen;
@@ -182,7 +185,7 @@ int flow_build_archive_path(char *out, unsigned long outsize,
     }
 
     blen = (unsigned long) strlen(base_path);
-    mlen = (unsigned long) (sizeof(mid) - 1);
+    mlen = (unsigned long) strlen(mid);
     alen = (unsigned long) strlen(archive_name);
     need = blen + mlen + alen;
 
@@ -196,6 +199,24 @@ int flow_build_archive_path(char *out, unsigned long outsize,
     out[need] = '\0';
 
     return (int) need;
+}
+
+int flow_build_archive_path(char *out, unsigned long outsize,
+                             const char *base_path, const char *archive_name)
+{
+    return build_entry_path(out, outsize, base_path, "/archive/", archive_name);
+}
+
+int flow_build_diz_path(char *out, unsigned long outsize,
+                        const char *base_path, const char *archive_name)
+{
+    return build_entry_path(out, outsize, base_path, "/diz/", archive_name);
+}
+
+int flow_build_files_path(char *out, unsigned long outsize,
+                          const char *base_path, const char *archive_name)
+{
+    return build_entry_path(out, outsize, base_path, "/files/", archive_name);
 }
 
 int flow_contains_forbidden_shell_char(const char *value)

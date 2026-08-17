@@ -11,6 +11,12 @@ typedef struct {
     char lha_command[128];
     int extract_after_download;
     char log_file[128];
+    /* Full-screen ANSI browser (default on). A sysop with a terminal that
+     * cannot do CSI sequences sets Ansi=no and gets the original
+     * line-at-a-time listing instead. */
+    int ansi;
+    int screen_rows;
+    int screen_cols;
 } dr_config;
 
 void config_defaults(dr_config *cfg);
