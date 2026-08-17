@@ -9,7 +9,7 @@
  */
 
 import { LibraryVector } from "./types";
-import { BsdSocketLibrary } from "../BsdSocketLibrary";
+import { BsdSocketLibrary, BSD_FD_SETSIZE } from "../BsdSocketLibrary";
 
 export const BSDSOCKET_VECTORS: LibraryVector[] = [
   // socket() - Create a socket
@@ -212,12 +212,17 @@ export const BSDSOCKET_VECTORS: LibraryVector[] = [
 
   // getdtablesize() - Get descriptor table size
   // LVO: -138
+  //
+  // Must report the descriptor ceiling this implementation actually honours.
+  // socket() allocates below BSD_FD_SETSIZE and returns -1/EMFILE past it, so
+  // reporting anything larger tells a door it may open more sockets than it
+  // can, and it hits an unexpected EMFILE at the ceiling.
   {
     offset: -138,
     name: "getdtablesize",
     handler: (emu, lib: BsdSocketLibrary) => {
-      console.log(`[BsdSocketLibrary] getdtablesize() - returning 256`);
-      return 256;
+      console.log(`[BsdSocketLibrary] getdtablesize() - returning ${BSD_FD_SETSIZE}`);
+      return BSD_FD_SETSIZE;
     },
   },
 

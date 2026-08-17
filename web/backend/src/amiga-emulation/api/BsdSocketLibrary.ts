@@ -24,11 +24,15 @@ export const AF_INET = 2;
 export const SOCK_STREAM = 1;
 export const SOCK_DGRAM = 2;
 
-// Error codes
+// Error codes. These are the classic BSD/AmigaOS values a 68K door actually
+// compares against, taken verbatim from the Roadshow NDK header vendored at
+// Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/netinclude/sys/errno.h
+// (lines 74, 99, 147, 148) - NOT the Linux errno numbering, which differs for
+// everything above 34 and would make a door branching on errno misbehave.
 export const ENOENT = 2;
 export const EMFILE = 24;
-export const ECONNREFUSED = 111;
-export const ETIMEDOUT = 110;
+export const ETIMEDOUT = 60;
+export const ECONNREFUSED = 61;
 
 // Descriptor table size. Classic AmiTCP/bsdsocket hands out small fds
 // starting at 0, and the universal AmigaOS idiom for building an fd_set is

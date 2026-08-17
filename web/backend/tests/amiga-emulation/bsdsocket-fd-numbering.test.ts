@@ -30,8 +30,13 @@ import {
   AF_INET,
   SOCK_STREAM,
   EMFILE,
+  ENOENT,
+  ETIMEDOUT,
+  ECONNREFUSED,
   BSD_FD_SETSIZE,
 } from '../../src/amiga-emulation/api/BsdSocketLibrary';
+import { BSDSOCKET_VECTORS } from '../../src/amiga-emulation/api/library-vectors/bsdsocket-vectors';
+import * as net from 'net';
 
 // Minimal byte-addressable fake emulator, following the pattern established
 // in tests/amiga-emulation/exec-allocate.test.ts.
@@ -223,5 +228,103 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
     // exact bit position the door's `1L << fd`-built mask expects to find.
     const resultWord = fake.readMemory32(readFdsPtr);
     expect(resultWord & (1 << fd)).not.toBe(0);
+  });
+});
+
+describe('bsdsocket.library getdtablesize (regression)', () => {
+  /**
+   * getdtablesize() used to answer a hardcoded 256 while socket() refuses to
+   * allocate at or above BSD_FD_SETSIZE (32). A door that sizes its own
+   * descriptor bookkeeping from getdtablesize() - the normal reason to call it
+   * - is told it may open 8x more sockets than it can, and hits an unexpected
+   * -1/EMFILE at the 33rd.
+   */
+  function callGetdtablesize(lib: BsdSocketLibrary, fake: FakeEmulator): number {
+    const vector = BSDSOCKET_VECTORS.find((v) => v.name === 'getdtablesize');
+    expect(vector).toBeDefined();
+    return vector!.handler(asEmu(fake), lib) as number;
+  }
+
+  test('reports the descriptor ceiling socket() actually honours, not 256', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    expect(callGetdtablesize(lib, fake)).toBe(BSD_FD_SETSIZE);
+    expect(callGetdtablesize(lib, fake)).not.toBe(256);
+  });
+
+  test('a door opening exactly getdtablesize() sockets never sees EMFILE', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    const limit = callGetdtablesize(lib, fake);
+
+    for (let i = 0; i < limit; i++) {
+      const fd = callSocket(lib, fake);
+      expect(fd).not.toBe(-1);
+      expect(fd).toBeLessThan(limit);
+    }
+    // Only the call PAST the advertised limit may fail.
+    expect(callSocket(lib, fake)).toBe(-1);
+    expect(lib.getErrno()).toBe(EMFILE);
+  });
+});
+
+describe('bsdsocket.library errno values (regression)', () => {
+  /**
+   * ECONNREFUSED/ETIMEDOUT carried the Linux errno numbers (111/110). A 68K
+   * door compares the value it gets back against the classic BSD/AmigaOS
+   * constants from its own headers, so `if (errno == ECONNREFUSED)` was never
+   * true and the door reported the wrong failure (or none at all).
+   *
+   * Ground truth: the vendored Roadshow NDK header
+   * Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/netinclude/sys/errno.h
+   *   line  74: #define ENOENT        2
+   *   line  99: #define EMFILE       24
+   *   line 147: #define ETIMEDOUT    60
+   *   line 148: #define ECONNREFUSED 61
+   */
+  test('match the classic BSD/AmigaOS numbering a 68K door compiles against', () => {
+    expect(ENOENT).toBe(2);
+    expect(EMFILE).toBe(24);
+    expect(ETIMEDOUT).toBe(60);
+    expect(ECONNREFUSED).toBe(61);
+  });
+
+  test('do not use the Linux errno numbering', () => {
+    expect(ETIMEDOUT).not.toBe(110);
+    expect(ECONNREFUSED).not.toBe(111);
+  });
+
+  test('connect() to a port nothing is listening on leaves errno at 61', async () => {
+    // Bind a port, learn its number, then release it - so the port is known
+    // closed and the connect below is deterministically refused.
+    const probe = net.createServer();
+    const closedPort: number = await new Promise((resolve) => {
+      probe.listen(0, '127.0.0.1', () => {
+        resolve((probe.address() as net.AddressInfo).port);
+      });
+    });
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    const fd = callSocket(lib, fake);
+    expect(fd).toBeGreaterThanOrEqual(0);
+
+    // Build sockaddr_in the way a door does: family, port, 127.0.0.1.
+    const addrPtr = 0x300000;
+    fake.writeMemory(addrPtr + 1, AF_INET); // sin_family (byte 1, BSD style)
+    fake.writeMemory(addrPtr + 2, (closedPort >> 8) & 0xff); // sin_port hi
+    fake.writeMemory(addrPtr + 3, closedPort & 0xff); // sin_port lo
+    fake.writeMemory32(addrPtr + 4, 0x7f000001); // sin_addr = 127.0.0.1
+
+    fake.setRegister(0, fd); // D0 = fd
+    fake.setRegister(8, addrPtr); // A0 = sockaddr
+    fake.setRegister(1, 16); // D1 = addrlen
+
+    expect(lib.connect()).toBe(-1);
+    expect(lib.getErrno()).toBe(61); // ECONNREFUSED, classic BSD - not 111
   });
 });
