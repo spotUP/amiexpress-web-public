@@ -83,30 +83,85 @@ void net_close(int s)
 
 /* ---- Branch 2: bsdsocket.library.
  *
- * UNVERIFIED ON THIS TOOLCHAIN. This has never been compiled or run: vbcc
- * 0.9hp3 here ships proto/socket.h and inline/bsdsocket_protos.h (the
- * function stubs/pragmas) but not the AmiTCP SDK headers that define the
- * actual types the API needs - sys/socket.h (struct sockaddr), netinet/in.h
- * (struct sockaddr_in, htons), netdb.h (struct hostent, gethostbyname).
- * The m68k-amiga-elf-gcc tree's copies of those headers assume a different
- * libc and fail to compile under vbcc. Hand-declaring the structs here
- * would risk an undetectable ABI mismatch against whatever AmiTCP/Roadshow
- * build a sysop actually runs, so that was ruled out (see task-4 report).
- * This code is written carefully against the documented bsdsocket.library
- * v4 API (function names, parameter order, and semantics taken from the
- * NDK's bsdsocket_protos.h and the classic AmiTCP SDK headers) and mirrors
- * the POSIX branch below step for step, but it is unverified until it is
- * built and run against a real AmiTCP/Roadshow stack.
+ * COMPILE-VERIFIED, NOT LINK/RUN-VERIFIED. Earlier drafts of this file
+ * called this branch entirely unverified because vbcc 0.9hp3's own SDK
+ * ships proto/bsdsocket.h + inline/bsdsocket_protos.h (the call
+ * stubs/pragmas) but no AmiTCP SDK - no sys/socket.h, netinet/in.h,
+ * netdb.h, devices/timer.h. That is still true of vbcc's OWN tree. But
+ * this repo separately vendors NDK3.2R4 at "Documentation/7-Reference
+ * Sources/NDK3.2R4/", and once that is added to the include path this
+ * branch compiles to m68k object code with ZERO warnings under
+ * `-std=c89`-equivalent vbcc strictness. Exact recipe (see the task-4
+ * report's fix-round section for the full verbatim transcript):
+ *   -I <vbcc's own targets/m68k-amigaos/include>
+ *   -I <a directory containing ONLY devices/timer.h, symlinked from
+ *       NDK3.2R4/Include_H/devices/timer.h - see the WaitSelect comment
+ *       below for why this one specific file needs to come from there
+ *       rather than the next include path>
+ *   -I NDK3.2R4/SANA+RoadshowTCP-IP/netinclude
+ *       (sys/socket.h: struct sockaddr/sa_family_t/socklen_t/AF_INET/
+ *       SOCK_STREAM/SOL_SOCKET/SO_ERROR; netinet/in.h: struct in_addr,
+ *       struct sockaddr_in [4.4BSD-style, with a sin_len byte - set
+ *       explicitly below], htons()/htonl() as identity macros, correct
+ *       on m68k which is already big-endian; netdb.h: struct hostent.
+ *       Both sys/socket.h and netinet/in.h have a
+ *       "#elif defined(__VBCC__) #pragma amiga-align" branch - this
+ *       vendored NDK was written with vbcc as a target, not just SAS/C.)
+ *   -I <m68k-amiga-elf-gcc's sys-include> (fallback only, for
+ *       exec/types.h and similar OS-generic headers neither of the above
+ *       provides; its OWN devices/timer.h is intentionally shadowed by
+ *       the earlier -I - see below)
+ * Hand-declaring sockaddr/hostent/etc. from scratch remains ruled out per
+ * the plan (ABI-mismatch risk) - this is not that: the vendored NDK is
+ * the authoritative source for this exact library version, not a guess.
+ * What is still NOT verified: linking against a real bsdsocket.library
+ * and running on real (or emulated) AmigaOS - no such environment is
+ * available here. Compiling clean is strong evidence the API usage is
+ * structurally correct, but LVO offsets, register conventions at the
+ * ABI level, and runtime behavior remain unexercised.
  */
 
 #include <exec/types.h>
 #include <proto/exec.h>
-#include <proto/socket.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <sys/ioctl.h>
+#include <errno.h>
 #include <stdlib.h>
+#include <proto/bsdsocket.h>
+
+/* bsdsocket.library's WaitSelect() timeout parameter - what it actually
+ * expects, determined by experiment rather than assumed:
+ *
+ * The master .sfd (Documentation/7-Reference Sources/NDK3.2R4/
+ * SANA+RoadshowTCP-IP/sfd/bsdsocket_lib.sfd:34) says "struct timeval
+ * *_timeout". The vendored NDK's own DOCUMENTATION copy of
+ * inline/bsdsocket_protos.h renames that to "struct __timeval *" in its
+ * generated prototype (evidently to sidestep AmigaOS's separate, unrelated
+ * "struct timeval" from <devices/timer.h>) and never defines
+ * "struct __timeval" anywhere - confirmed by grepping the whole vendored
+ * NDK tree. BUT the vbcc 0.9hp3 SDK actually INSTALLED on this machine
+ * (targets/m68k-amigaos/include/inline/bsdsocket_protos.h:56, checked
+ * directly, not assumed from the vendored doc copy above) declares
+ * WaitSelect's timeout parameter as plain "struct timeval *" - no
+ * "__timeval" involved at all for this toolchain version. So the fix is
+ * not an alias shim; it is supplying a real, complete "struct timeval".
+ *
+ * That struct is reachable from the vendored NDK: <sys/socket.h> (see
+ * Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/
+ * netinclude/sys/socket.h, bottom of file) includes <devices/timer.h> and
+ * then "#define tv_sec tv_secs" / "#define tv_usec tv_micro", giving
+ * POSIX-named field access on top of the AmigaOS-native struct - exactly
+ * what this file uses below (tv.tv_sec / tv.tv_usec). The one wrinkle:
+ * <devices/timer.h> as vendored in the m68k-amiga-elf-gcc sys-include tree
+ * wraps tv_sec/tv_secs (and tv_usec/tv_micro) in anonymous unions, a GNU
+ * extension vbcc does not accept (warning 53, "struct/union member needs
+ * identifier") - so the build points -I at the ORIGINAL NDK3.2R4 copy
+ * (Documentation/7-Reference Sources/NDK3.2R4/Include_H/devices/timer.h,
+ * a plain non-union struct) ahead of it. See the task-4 report's fix-round
+ * section for the exact include order and vbcc transcript (0 warnings). */
+#include <devices/timer.h>
 
 struct Library *SocketBase = (struct Library *) 0;
 static int g_timeout_secs = 30;
@@ -131,7 +186,7 @@ int net_open(const char *host, int port, int timeout_secs)
     long on;
     struct hostent *he;
     struct sockaddr_in addr;
-    struct __timeval tv;
+    struct timeval tv;
     long wmask;
 
     if (ensure_lib() != 0) return -1;
@@ -146,6 +201,7 @@ int net_open(const char *host, int port, int timeout_secs)
     IoctlSocket(s, FIONBIO, (char *) &on); /* non-blocking, so connect() below can be timed */
 
     memset(&addr, 0, sizeof(addr));
+    addr.sin_len = sizeof(addr); /* the vendored netinclude/netinet/in.h struct sockaddr_in carries a 4.4BSD-style length byte */
     addr.sin_family = AF_INET;
     addr.sin_port = htons((unsigned short) port);
     memcpy(&addr.sin_addr, he->h_addr, (size_t) he->h_length);
@@ -156,7 +212,7 @@ int net_open(const char *host, int port, int timeout_secs)
 
     wmask = 1L << s;
     tv.tv_sec = timeout_secs; tv.tv_usec = 0;
-    if (WaitSelect(s + 1, (long *) 0, &wmask, (long *) 0, &tv, (unsigned long *) 0) <= 0) {
+    if (WaitSelect(s + 1, (APTR) 0, (APTR) &wmask, (APTR) 0, &tv, (unsigned long *) 0) <= 0) {
         set_error("netio: connect() timed out"); CloseSocket(s); return -1;
     }
 
@@ -176,12 +232,12 @@ long net_write(int s, const void *buf, unsigned long len)
  * first, so a peer that stops sending mid-response cannot hang the door. */
 long net_read(int s, void *buf, unsigned long len)
 {
-    struct __timeval tv;
+    struct timeval tv;
     long rmask = 1L << s;
     long n;
 
     tv.tv_sec = g_timeout_secs; tv.tv_usec = 0;
-    n = WaitSelect(s + 1, &rmask, (long *) 0, (long *) 0, &tv, (unsigned long *) 0);
+    n = WaitSelect(s + 1, (APTR) &rmask, (APTR) 0, (APTR) 0, &tv, (unsigned long *) 0);
     if (n == 0) { set_error("netio: read timed out"); return -1; }
     if (n < 0) { set_error("netio: WaitSelect() failed"); return -1; }
 
@@ -250,6 +306,7 @@ int net_open(const char *host, int port, int timeout_secs)
     struct timeval tv;
     int err;
     socklen_t errlen;
+    const char *fail_reason;
 
     g_timeout_secs = timeout_secs;
 
@@ -262,10 +319,21 @@ int net_open(const char *host, int port, int timeout_secs)
         return -1;
     }
 
+    /* Mirrors the Amiga branch's net_open(): "connect() failed" (refused
+     * or otherwise rejected synchronously/asynchronously) and
+     * "connect() timed out" (no response within timeout_secs) are
+     * reported as distinct net_last_error() strings, not folded into one
+     * generic message - a caller (or a human reading a log) can tell a
+     * closed port from an unreachable/black-holed one. fail_reason
+     * carries the most recent attempt's specific reason forward; if every
+     * address in res fails, the last one's reason is what gets reported,
+     * same as which failing `s` "wins" is already decided by the loop. */
+    fail_reason = "netio: connect() failed";
     s = -1;
     for (rp = res; rp != (struct addrinfo *) 0; rp = rp->ai_next) {
         s = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (s < 0) {
+            fail_reason = "netio: socket() failed";
             continue;
         }
 
@@ -276,6 +344,7 @@ int net_open(const char *host, int port, int timeout_secs)
             break;
         }
         if (errno != EINPROGRESS) {
+            fail_reason = "netio: connect() failed";
             close(s);
             s = -1;
             continue;
@@ -286,6 +355,7 @@ int net_open(const char *host, int port, int timeout_secs)
         tv.tv_sec = timeout_secs;
         tv.tv_usec = 0;
         if (select(s + 1, (fd_set *) 0, &wfds, (fd_set *) 0, &tv) <= 0) {
+            fail_reason = "netio: connect() timed out";
             close(s);
             s = -1;
             continue;
@@ -295,6 +365,7 @@ int net_open(const char *host, int port, int timeout_secs)
         errlen = sizeof(err);
         getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &errlen);
         if (err != 0) {
+            fail_reason = "netio: connect() failed";
             close(s);
             s = -1;
             continue;
@@ -304,7 +375,7 @@ int net_open(const char *host, int port, int timeout_secs)
     freeaddrinfo(res);
 
     if (s < 0) {
-        set_error("netio: connect() failed");
+        set_error(fail_reason);
         return -1;
     }
 

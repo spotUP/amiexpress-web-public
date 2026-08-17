@@ -191,6 +191,19 @@ static int parse_header_line(char *line, http_response *resp)
         resp->content_length = strtoul(value, (char **) 0, 10);
         resp->have_content_length = 1;
     } else if (ieq(name, "Transfer-Encoding")) {
+        /* Substring match, not exact equality: deliberately fine against
+         * THIS API - docs/DOOR-REPO-API.md states this endpoint never
+         * chunks, so any Transfer-Encoding value present at all is
+         * unexpected and worth rejecting outright, and a real chunked
+         * response is always exactly "chunked" or a comma list ending in
+         * it (e.g. "gzip, chunked") per RFC 7230 6.1, which this still
+         * catches. Caveat if this parser is ever reused against a less
+         * disciplined server: a substring match would also reject a
+         * hypothetical encoding token that merely CONTAINS "chunked" as
+         * a substring without being the chunked encoding (none exist in
+         * the IANA registry today, but a private/nonstandard token
+         * could) - an exact per-comma-separated-token comparison would
+         * be the more correct general-purpose parse. */
         if (icontains(value, "chunked")) {
             return 1;
         }
