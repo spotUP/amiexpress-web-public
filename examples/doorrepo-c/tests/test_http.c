@@ -363,6 +363,88 @@ TEST(content_length_non_numeric_is_not_trusted)
     stub_server_reap(pid);
 }
 
+TEST(content_length_twenty_digit_overflow_is_not_trusted)
+{
+    /* Fix-round-5 regression: is_plain_nonneg_decimal() only checked
+     * SYNTAX (all digits), never MAGNITUDE - a 20-digit all-digit string
+     * passes that check but overflows strtoul()'s unsigned long, which
+     * silently saturates to ULONG_MAX with no errno/ERANGE inspection by
+     * the caller. Must be treated exactly like a malformed value (not
+     * trusted), not as "successfully parsed to some huge number". */
+    static const char body[] = "hi";
+    char resp_buf[512];
+    int resp_len;
+    int port;
+    int pid;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 99999999999999999999\r\n"
+        "Connection: close\r\n\r\n%s",
+        body);
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_get(&cfg, "/api/door-repo/archive/HUGE.LHA", &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_OK, "a 20-digit overflowing Content-Length must not fail the whole request");
+    ASSERT_EQ(resp.have_content_length, 0, "an overflowing value is never trusted, even though every character is a digit");
+    ASSERT_EQ(ctx.data_len, (unsigned long) strlen(body), "the actual (short) body still arrives via EOF framing");
+
+    stub_server_reap(pid);
+}
+
+TEST(content_length_large_but_non_overflowing_value_is_still_trusted)
+{
+    /* The companion case: a value that is merely LARGE, not an actual
+     * strtoul() overflow, must still be trusted as a real
+     * Content-Length - rejecting every big number would be a different,
+     * unrequested behavior change. This door's own archive byte-ceiling
+     * enforcement (flow_archive_byte_ceiling(), fix round 4) is the real
+     * backstop against an absurd-but-syntactically-valid declared
+     * length, not Content-Length parsing. */
+    static const char body[] = "hi";
+    char resp_buf[512];
+    int resp_len;
+    int port;
+    int pid;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    resp_len = sprintf(resp_buf,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 1000000000000\r\n"
+        "Connection: close\r\n\r\n%s",
+        body);
+
+    port = stub_server_start((const unsigned char *) resp_buf, (unsigned long) resp_len, &pid);
+    cfg_for_port(&cfg, port);
+    ctx_init(&ctx);
+    rc = http_get(&cfg, "/api/door-repo/archive/LARGE.LHA", &resp, test_sink, &ctx);
+
+    /* The stub only ever sends the short real body then closes - a
+     * genuinely large but non-overflowing Content-Length that the
+     * server did not actually deliver is correctly still an error
+     * (HTTP_ERR_LENGTH_MISMATCH), the same as the existing
+     * content_length_larger_than_actual_bytes_is_an_error test - what
+     * this test actually verifies is that the header value ITSELF was
+     * trusted/parsed (have_content_length == 1, content_length exactly
+     * matches), not silently discarded the way an overflowing value now
+     * correctly is. */
+    ASSERT_EQ(rc, HTTP_ERR_LENGTH_MISMATCH, "the stub's short body doesn't match the (valid, trusted) declared length");
+    ASSERT_EQ(resp.have_content_length, 1, "the large-but-valid header value WAS trusted and parsed, unlike the overflowing case above");
+    ASSERT_EQ(resp.content_length, 1000000000000UL, "the parsed value is byte-exact, not clamped or altered");
+
+    stub_server_reap(pid);
+}
+
 TEST(sink_abort_stops_the_transfer)
 {
     static char body[4000];
@@ -494,6 +576,8 @@ int main(void)
     RUN_TEST(content_length_larger_than_actual_bytes_is_an_error);
     RUN_TEST(content_length_negative_one_is_not_trusted);
     RUN_TEST(content_length_non_numeric_is_not_trusted);
+    RUN_TEST(content_length_twenty_digit_overflow_is_not_trusted);
+    RUN_TEST(content_length_large_but_non_overflowing_value_is_still_trusted);
     RUN_TEST(sink_abort_stops_the_transfer);
     RUN_TEST(connect_to_closed_port_is_a_clean_error);
     RUN_TEST(header_line_longer_than_buffer_does_not_overflow);

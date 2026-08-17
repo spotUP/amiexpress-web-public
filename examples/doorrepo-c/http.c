@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 #include "http.h"
 #include "netio.h"
 
@@ -160,15 +161,21 @@ static void bounded_copy(char *dest, unsigned long destsize, const char *src)
 
 /* Returns 1 if `s` is a non-empty string of ONLY decimal digits '0'-'9' -
  * no leading '-' (or '+'), no leading/trailing whitespace, nothing else.
- * strtoul() alone is not a sufficient guard for a Content-Length header:
- * per the C standard, strtoul() accepts an optional leading '-' and
- * computes the value as if unsigned with the sign then applied, so
- * "Content-Length: -1" parses "successfully" as ULONG_MAX rather than
- * failing - a real, demonstrated bug (a caller that then treats
- * ULONG_MAX bytes as a legitimate declared length loses the one soft
- * signal it had that something was wrong). Called before strtoul(), not
- * instead of it - this only decides whether the header value is worth
- * trusting at all. */
+ * This is a SYNTAX check only - it says nothing about MAGNITUDE, and a
+ * string of digits that overflows unsigned long (e.g. a 20-digit value)
+ * passes it just as a small one does. strtoul() alone is not a
+ * sufficient guard for a Content-Length header even with this syntax
+ * check in front of it: per the C standard, strtoul() accepts an
+ * optional leading '-' and computes the value as if unsigned with the
+ * sign then applied, so "Content-Length: -1" parses "successfully" as
+ * ULONG_MAX rather than failing - a real, demonstrated bug (a caller
+ * that then treats ULONG_MAX bytes as a legitimate declared length
+ * loses the one soft signal it had that something was wrong). Called
+ * before strtoul(), not instead of it, and the caller ALSO checks errno
+ * after strtoul() for the separate overflow case a syntax check cannot
+ * catch (see parse_header_line()'s Content-Length branch) - this
+ * function alone only decides whether the header value is worth
+ * attempting to parse at all. */
 static int is_plain_nonneg_decimal(const char *s)
 {
     if (*s == '\0') {
@@ -213,17 +220,29 @@ static int parse_header_line(char *line, http_response *resp)
     }
 
     if (ieq(name, "Content-Length")) {
-        /* Only trust a plain non-negative decimal string - see
-         * is_plain_nonneg_decimal()'s comment for the "-1" wraparound
-         * bug this guards against. A malformed value is treated exactly
-         * like an ABSENT Content-Length header (have_content_length
-         * stays 0, from http_get()'s initial memset(resp, 0, ...)) -
-         * the body then falls back to the documented Connection: close
-         * EOF-terminated framing, rather than trusting a garbaged
-         * length. */
+        /* Only trust a plain non-negative decimal string that ALSO does
+         * not overflow unsigned long - see is_plain_nonneg_decimal()'s
+         * comment for the "-1" wraparound bug the syntax check guards
+         * against, and the errno check just below for the separate
+         * magnitude case a syntax check cannot catch (a 20-digit
+         * all-digit string is syntactically fine but overflows
+         * strtoul(), which per the C standard saturates to ULONG_MAX and
+         * sets errno to ERANGE rather than failing outright - checked
+         * here explicitly since strtoul()'s return value alone cannot be
+         * told apart from a genuine, valid ULONG_MAX). Either failure is
+         * treated exactly like an ABSENT Content-Length header
+         * (have_content_length stays 0, from http_get()'s initial
+         * memset(resp, 0, ...)) - the body then falls back to the
+         * documented Connection: close EOF-terminated framing, rather
+         * than trusting a garbaged or overflowed length. */
         if (is_plain_nonneg_decimal(value)) {
-            resp->content_length = strtoul(value, (char **) 0, 10);
-            resp->have_content_length = 1;
+            unsigned long parsed;
+            errno = 0;
+            parsed = strtoul(value, (char **) 0, 10);
+            if (errno != ERANGE) {
+                resp->content_length = parsed;
+                resp->have_content_length = 1;
+            }
         }
     } else if (ieq(name, "Transfer-Encoding")) {
         /* Substring match, not exact equality: deliberately fine against

@@ -671,10 +671,32 @@ TEST(archive_ceiling_implausibly_large_declared_size_uses_absolute_max)
     ASSERT_EQ(ceiling, TEST_ABS_MAX, "an implausible declared size falls back to the absolute ceiling, not declared+slack");
 }
 
-TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_plausible)
+TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_clamped)
 {
+    /* Fix-round-5 regression: a declared size exactly at the absolute
+     * max is still "plausible" (passes declared_size <= absolute_max)
+     * and gets slack computed on top of it, but the FINAL returned
+     * ceiling must never exceed absolute_max - otherwise a hostile
+     * catalog raises its own ceiling past the documented absolute
+     * maximum just by declaring a size at the boundary. Reproduced live
+     * before this fix: declared_size == ARCHIVE_ABSOLUTE_MAX_BYTES
+     * (16,777,216 in the real doorrepo.c constants) yielded a real
+     * enforced ceiling of 20,132,656 bytes - ~3.35 MiB past the stated
+     * cap - and a body of exactly that size streamed in full. */
     unsigned long ceiling = flow_archive_byte_ceiling(TEST_ABS_MAX, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT);
-    ASSERT_TRUE(ceiling > TEST_ABS_MAX, "a declared size exactly at the absolute max is still plausible and gets slack added on top");
+    ASSERT_EQ(ceiling, TEST_ABS_MAX, "the enforced ceiling is clamped to exactly absolute_max, never past it");
+}
+
+TEST(archive_ceiling_never_exceeds_absolute_max_for_any_plausible_declared_size)
+{
+    /* Sweep several declared sizes at and near the boundary - none of
+     * them may ever push the returned ceiling past absolute_max. */
+    ASSERT_TRUE(flow_archive_byte_ceiling(TEST_ABS_MAX, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT) <= TEST_ABS_MAX,
+                "declared size == absolute_max stays clamped");
+    ASSERT_TRUE(flow_archive_byte_ceiling(TEST_ABS_MAX - 1UL, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT) <= TEST_ABS_MAX,
+                "declared size one byte under absolute_max stays clamped");
+    ASSERT_TRUE(flow_archive_byte_ceiling((TEST_ABS_MAX / 100UL) * 90UL, TEST_ABS_MAX, TEST_SLACK_FLOOR, TEST_SLACK_PERCENT) <= TEST_ABS_MAX,
+                "declared size at 90% of absolute_max (where 20% slack alone would overshoot) stays clamped");
 }
 
 TEST(archive_ceiling_real_catalog_max_size_is_reasonable)
@@ -820,7 +842,8 @@ int main(void)
     RUN_TEST(archive_ceiling_uses_percent_slack_when_larger_than_floor);
     RUN_TEST(archive_ceiling_zero_declared_size_uses_absolute_max);
     RUN_TEST(archive_ceiling_implausibly_large_declared_size_uses_absolute_max);
-    RUN_TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_plausible);
+    RUN_TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_clamped);
+    RUN_TEST(archive_ceiling_never_exceeds_absolute_max_for_any_plausible_declared_size);
     RUN_TEST(archive_ceiling_real_catalog_max_size_is_reasonable);
 
     RUN_TEST(plain_alnum_accepts_real_door_types);

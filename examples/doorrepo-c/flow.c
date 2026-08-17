@@ -358,7 +358,20 @@ unsigned long flow_archive_byte_ceiling(unsigned long declared_size,
     slack = (percent_slack > slack_floor) ? percent_slack : slack_floor;
 
     /* declared_size <= absolute_max here (checked above), so this sum
-     * stays small and safe from overflow for any sane absolute_max. */
+     * stays small and safe from overflow for any sane absolute_max.
+     *
+     * Clamp to absolute_max: a declared_size right at (or just under)
+     * absolute_max passes the plausibility check above and still gets
+     * slack added on top of it - without this clamp, the returned
+     * ceiling could exceed absolute_max by up to the slack amount,
+     * which a hostile catalog could exploit by simply declaring a size
+     * near the boundary. Reproduced live before this fix: declared_size
+     * == absolute_max (16,777,216 with this door's real constants)
+     * yielded an enforced ceiling of 20,132,656 - ~3.35 MiB past the
+     * stated cap - and a body of exactly that size streamed in full. */
+    if (declared_size + slack > absolute_max) {
+        return absolute_max;
+    }
     return declared_size + slack;
 }
 

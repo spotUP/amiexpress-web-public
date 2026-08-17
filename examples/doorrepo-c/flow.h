@@ -283,21 +283,32 @@ int flow_declared_count_exceeds_cap(unsigned long declared_count, unsigned long 
 /* Computes the total-byte ceiling to enforce for one archive download,
  * given the catalog's declared archiveSize (`declared_size`; 0 means
  * "unknown" per docs/DOOR-REPO-API.md section 3's archiveSize field).
- * When `declared_size` is present AND plausible (nonzero, and no larger
- * than `absolute_max` itself - a genuine catalog entry has never
- * declared a size anywhere near that large), returns
- * `declared_size + slack`, where `slack` is `slack_percent`% of
- * `declared_size` or `slack_floor` bytes, whichever is larger (the
- * floor matters for small archives, where a percentage alone would be
- * too tight to tolerate the archive having been legitimately re-indexed
- * or slightly changed since list.txt was last generated). When
- * `declared_size` is 0 or itself implausible (bigger than
- * `absolute_max` - treating an absurd declared size as a license for an
- * unbounded download would defeat the whole point), returns
- * `absolute_max` unchanged. Every argument is caller-supplied (not a
- * compile-time constant here) so this function stays pure and testable
- * without doorrepo.c's MAX_CATALOG_BYTES/ARCHIVE_ABSOLUTE_MAX_BYTES/
- * ARCHIVE_SLACK_FLOOR_BYTES/ARCHIVE_SLACK_PERCENT definitions. */
+ *
+ * Returns min(declared_size + slack, absolute_max) when `declared_size`
+ * is present AND plausible (nonzero, and no larger than `absolute_max`
+ * itself - a genuine catalog entry has never declared a size anywhere
+ * near that large), where `slack` is `slack_percent`% of `declared_size`
+ * or `slack_floor` bytes, whichever is larger (the floor matters for
+ * small archives, where a percentage alone would be too tight to
+ * tolerate the archive having been legitimately re-indexed or slightly
+ * changed since list.txt was last generated). The min(...) clamp is
+ * load-bearing, not defensive decoration: without it, a declared_size
+ * at or near `absolute_max` still passes the plausibility check and
+ * gets slack added ON TOP of it, so the returned value could exceed
+ * `absolute_max` by up to the slack amount - fixed in round 5 of this
+ * project's security review after exactly that was reproduced live
+ * (declared_size == 16,777,216 yielded an enforced ceiling of
+ * 20,132,656 with this door's real constants, ~3.35 MiB past the
+ * documented cap). The return value from this function is therefore
+ * NEVER greater than `absolute_max`, for any input.
+ *
+ * Returns `absolute_max` unchanged when `declared_size` is 0 or itself
+ * implausible (bigger than `absolute_max` - treating an absurd declared
+ * size as a license for an unbounded download would defeat the whole
+ * point). Every argument is caller-supplied (not a compile-time constant
+ * here) so this function stays pure and testable without doorrepo.c's
+ * MAX_CATALOG_BYTES/ARCHIVE_ABSOLUTE_MAX_BYTES/ARCHIVE_SLACK_FLOOR_BYTES/
+ * ARCHIVE_SLACK_PERCENT definitions. */
 unsigned long flow_archive_byte_ceiling(unsigned long declared_size,
                                          unsigned long absolute_max,
                                          unsigned long slack_floor,
