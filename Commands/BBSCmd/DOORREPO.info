@@ -1,0 +1,9 @@
+BBSCMD=DOORREPO
+NAME=DoorRepo v1.0
+TYPE=XIM
+LOCATION=Doors:DoorRepo/doorrepo.amiga
+DESCRIPTION=Browse and download doors from the DoorRepo catalog (examples/doorrepo-c)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192

@@ -118,21 +118,26 @@ is exactly where door authors get burned.
 | POSIX/native build | **Built and run-verified** | `make native` links and runs on this machine; this is the build every test suite and the live run above actually exercises. |
 | Every module except netio.c's real socket branch, cross-compiled for m68k | **Compile- and link-verified** | `make amiga-stub` produces a real `AmigaOS loadseg()ble executable/binary` (confirmed with `file`), zero warnings, with no AmiTCP SDK involved at all. |
 | netio.c's real `bsdsocket.library` branch, cross-compiled for m68k | **Compile- AND link-verified for m68k** | `make amiga` produces a complete, real `AmigaOS loadseg()ble executable/binary` (confirmed with `file`) linked against the vendored NDK3.2R4, zero warnings. This is stronger than "compiles": the object code genuinely links into a loadable AmigaOS program, and every symbol `netio.c`'s Amiga branch calls (`OpenLibrary`, `socket`, `connect`, `WaitSelect`, `send`, `recv`, `CloseSocket`, ...) resolved. It is **not** merely "compile-only" -- do not read it that way. |
-| The door-port (AEDoorPort/XIM) protocol itself | **Exercised against this repository's own AEDoorPort emulator implementation** | See "Emulator run" below. `PortStart` and `JH_REGISTER` succeeded; the door genuinely registered with and sent output to the BBS's message port, confirmed byte-for-byte against the per-door session log. |
-| Running against a **real** `bsdsocket.library` on real (or emulated) AmigaOS hardware | **NOT run-verified** | No AmigaOS environment -- real or emulated at the hardware level -- exists in this development environment. This is the one honest gap: `make amiga`'s output has never executed on an actual Amiga, or under an Amiga-accurate emulator such as vAmiga/WinUAE/FS-UAE. |
+| The door-port (AEDoorPort/XIM) protocol AND `bsdsocket.library` networking, together, under this repository's own 68K emulator | **Run-verified end to end under emulation** | See "Emulator run" below. The real `doorrepo.amiga` binary, unmodified, ran inside this repo's own AEDoorPort/XIM emulator and its `bsdsocket.library` bridge: `PortStart`/`JH_REGISTER` succeeded, it fetched the real 3301-row catalog from the live API over an emulated socket, browsed, paged, filtered by type, searched, downloaded a real archive, and verified its MD5 -- all inside the emulator, all against the live production host, all confirmed independently outside the door's own claims. |
+| Running against a **real** `bsdsocket.library` on real AmigaOS hardware (or an Amiga-accurate emulator such as vAmiga/WinUAE/FS-UAE) | **NOT run-verified** | No such environment exists in this development environment. This remains the one honest gap, and it is a materially different claim than "not run-verified at all": everything above proves the door's logic, protocol usage, and networking calls are correct and functional end to end against *an* AEDoorPort/`bsdsocket.library` implementation -- just not the real one. Running under this repository's emulator is evidence the door works; it is not the same claim as working on an Amiga. |
 
 ### What "not run-verified" means in practice
 
-The `bsdsocket.library` branch was checked as far as this environment allows
-without real AmigaOS hardware: the compiled object code links cleanly and
-every library call it makes resolves against the real AmigaOS API surface
-(confirmed via the vendored NDK3.2R4 headers). What could not be checked here
-is whether the actual bytes exchanged with a real `bsdsocket.library`
-implementation (AmiTCP, Miami, Roadshow) round-trip correctly at runtime --
-LVO offsets, calling-convention edge cases, and real network timing are all
-plausible-but-unconfirmed. If you have access to a real Amiga or an
-Amiga-accurate emulator, that is the missing verification step, and it would
-close this gap completely.
+The emulator run below is real, end-to-end evidence: unmodified `doorrepo.amiga`
+machine code executed on an emulated 68000 CPU, called `OpenLibrary()`,
+`socket()`, `connect()`, `WaitSelect()`, `send()`, and `recv()` against this
+repository's own `bsdsocket.library` implementation, and that implementation
+in turn made real DNS lookups and real TCP connections over the actual
+internet to the live production API. What it does **not** prove is that a
+*real* `bsdsocket.library` (AmiTCP, Miami, Roadshow) on real AmigaOS
+hardware behaves identically -- LVO offsets, calling-convention edge cases
+at the hardware level, and real network timing under a real AmigaOS TCP
+stack remain unconfirmed. This repository's emulator was built to match the
+real protocol closely (see the fd-numbering fix below, itself a case of the
+emulator being corrected to match real-hardware semantics), which is why
+this evidence is meaningfully stronger than a native/POSIX run -- but it is
+still emulation, not hardware. If you have access to a real Amiga or an
+Amiga-accurate emulator, that is the one remaining verification step.
 
 ## Emulator run: what actually happened
 
@@ -142,12 +147,31 @@ every other door in `Doors/`), using the standalone door-run harness
 (`web/backend/src/scripts/run-amiga-door.ts`) rather than a live BBS login,
 so the run needed no browser and no interactive session.
 
-**What worked, exactly as the door-port protocol requires:** `PortStart` and
-`JH_REGISTER` succeeded. The door registered with the BBS's message port and
-sent its startup banner over `JH_SM` -- confirmed by reading the per-door
-session log the emulator writes for every run
-(`logs/door-68k-<command>-<timestamp>.log`), which shows the real protocol
-traffic:
+**First pass found a real emulator bug, not a door bug.** The first attempt
+stalled: `PortStart`/`JH_REGISTER` succeeded and the door registered with
+the BBS's message port correctly, but the very next call the door makes,
+`WaitSelect()` (waiting for a newly opened socket to become writable before
+sending the HTTP request), never returned a usable result, and the door made
+zero further progress until the harness's own execution-timeout forcibly
+ended the session. This was root-caused (not merely observed) to this
+emulator's `BsdSocketLibrary.ts` allocating socket descriptors starting at
+100: `netio.c`'s `net_open()` builds `WaitSelect()`'s fd-mask the standard,
+correct AmigaOS way, `wmask = 1L << s`, which is safe only for descriptors
+below 32 -- an isolated vbcc compile of that exact expression confirmed the
+generated `lsl.l d2,d1` zeroes the whole register for a shift count that
+large, per real 68000 shift-count-modulo-64 semantics. That is not a bug in
+this door: `1L << s` for a small `s` is exactly how real AmigaOS C code
+builds this bitmask, and every real `bsdsocket.library` implementation hands
+out small descriptor numbers. **This has since been fixed in the emulator**
+(`BsdSocketLibrary.ts` now allocates descriptors from a low base below 32
+and reuses them after `CloseSocket()`, confirmed by that fix's own commit
+message and test suite) -- so this section now reports the **second**,
+post-fix run, which is the one that matters.
+
+**The re-run, with the fix in place, completed the entire flow end to end.**
+`PortStart`/`JH_REGISTER` succeeded exactly as before, confirmed via the
+per-door session log the emulator writes for every run
+(`logs/door-68k-<command>-<timestamp>.log`):
 
 ```
 [XIM] RX cmd=1 (JH_REGISTER) data=0 str=""
@@ -155,105 +179,67 @@ traffic:
 [XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str=""
 ```
 
-**What did NOT go as this door's design plan predicted going in.** The plan
-expected the network call to fail quickly and cleanly, because the emulator
-was believed to have no `bsdsocket.library` implementation at all. That
-belief was wrong: this emulator DOES implement a working `bsdsocket.library`
-bridge (`web/backend/src/amiga-emulation/api/BsdSocketLibrary.ts`), backed by
-real Node.js `net`/`dns` calls. Against the live `bbs.uprough.net` host, DNS
-resolution, `socket()`, and `connect()` all genuinely succeeded over the real
-internet. But the very next call the door makes, `WaitSelect()` (waiting for
-the new socket to become writable before sending the HTTP request), never
-returned a usable result, and the door made **zero further progress** --
-no more door-port traffic of any kind -- until the harness's own
-execution-timeout forcibly ended the session. The user-visible symptom: the
-version banner prints, and then nothing else ever appears; the session just
-sits there until it is cut off. This was reproduced twice (at two different
-timeout budgets, 50s and 100s), stopping at the identical protocol point
-both times, which rules out "still working, just slow" -- it is a genuine
-stall with no forward progress at all.
-
-**Root cause (isolated, not fixed -- see "Why this was not fixed here"
-below).** `netio.c`'s `net_open()` builds the write-fd bitmask for
-`WaitSelect()` the way real AmigaOS C code conventionally does, as a single
-32-bit `long`:
-
-```c
-wmask = 1L << s;   /* s is the socket descriptor returned by socket() */
-```
-
-This is correct and safe on real AmigaOS, where `bsdsocket.library`
-descriptors are small integers. This repository's emulator, however, starts
-its own socket descriptor numbering at **100**
-(`BsdSocketLibrary.ts`'s `nextFd: number = 100`, kept high "to avoid
-conflicts with file handles"). Compiling `1L << s` with `s == 100` under
-vbcc produces a variable-count `lsl.l d2,d1` instruction; per real 68000 ISA
-semantics, a register shift count is taken modulo 64, and any resulting
-shift of 32 or more zeroes the whole 32-bit register -- so `wmask` is `0`,
-not a bit for descriptor 100. The door then calls
-`WaitSelect(s + 1, ...)` with `s + 1 == 101`, telling the library to
-consider up to 101 descriptors -- 4 words (16 bytes) of fd-set bitmask --
-while only 4 bytes (one `long`) were actually allocated on the stack for
-`wmask`. The emulator's `WaitSelect()` implementation reads (and later
-zero-then-rewrites) the full 4 words it was told to expect, which reads
-past `wmask` into whatever else is on the stack nearby -- and, from the
-observed behavior, most likely mistakes an adjacent stack value (plausibly
-the `30` from `tv.tv_sec = timeout_secs`, whose low bits happen to include
-the exact bit `WaitSelect` needed to see) for a real readiness signal. This
-would explain both symptoms together: a bogus "ready" result despite the
-real bitmask being zero, and the total absence of any further forward
-progress once the corrupted stack values are used afterward.
-
-**Confirming this is not a bug in this door's own logic:** the same install,
-run with `doorrepo.amiga-stub` (the m68k build using `netio.c`'s
-`NETIO_STUB` branch, which never touches `bsdsocket.library` at all) instead
-of `doorrepo.amiga`, completed instantly and correctly:
+But this time the door did not stall. Within 4-6 seconds it had genuinely
+fetched the real, live, 3301-row catalog over the emulator's
+`bsdsocket.library` and rendered page 1 -- the row data below (including a
+later row whose name field carries a real high-bit Latin-1 byte, rendered
+correctly rather than corrupted) is byte-identical to the real live API's
+first catalog page, not synthetic test data:
 
 ```
-DoorRepo v1.0 - AmiExpress Door Repository Client
-
-Could not reach the door repository server. Please try again later.
-[68K] DOORREPO exited with code 1
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="Page 1 of 166 (3301 doors total)"
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="INDEX ARCHIVE              TYPE   SIZE  NAME"
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="   1  !ALSTER.LHA          XIM      39 KB  Children"
 ```
 
-That is this door's actual, designed error path (`doorrepo.c`'s
-`fetch_catalog()` failure message) working exactly as intended: a clean
-failure, a clear message to the sysop, a `JH_SHUTDOWN`, and a normal exit.
-The hang only happens on the real `bsdsocket.library` branch, and only
-because of the fd-numbering mismatch described above.
+Driven with a scripted input sequence (next page, previous page, filter by
+type `DD`, back to the full catalog, search `trivia`, open the one result,
+download, quit to browse, quit), it completed **every single step**
+correctly: paging, the `DD` filter returning exactly the 10 real `DD` rows,
+the search returning the one real `trivia` match (`AETRIV10.LHA`), a real
+archive download over the emulated socket, and a genuine MD5 verification:
 
-**Why this was not fixed here.** The bug is not in this door -- `1L << s`
-for a small `s` is standard, correct AmigaOS C, and rewriting it to defend
-against socket descriptors starting at 100 would mean writing code for a
-convention no real AmigaOS `bsdsocket.library` uses, purely to work around
-this one test environment. The actual defect is in this repository's shared
-68K emulator (`BsdSocketLibrary.ts`'s descriptor numbering), which is
-infrastructure shared by every door in `Doors/`, not something this
-example's `examples/doorrepo-c/` client owns or that this task's scope
-extended to fixing. It is reported here, in full, precisely so it is not
-lost: any real AmigaOS networking client using this same conventional
-`WaitSelect()` idiom would hit the same stall if run against this emulator's
-current `bsdsocket.library` implementation.
+```
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="Downloading AETRIV10.LHA ..."
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="  ... 8 KB received"
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="Checksum verified OK (MD5 52ee1086c055fc1c82407dc0961ab04d)."
+...
+[XIM] RX cmd=4 (JH_SM (Send Message)) data=1 str="Goodbye!"
+[XIM] RX cmd=2 (JH_SHUTDOWN) data=0 str="Goodbye!"
+```
 
-**Was the BBS left usable?** Yes, in the sense that matters: the door session
-terminated cleanly on its own once the configured execution timeout elapsed
-(no crash, no forced kill required, exit code 0), and the per-door log shows
-an orderly `JH_SHUTDOWN`-free termination via the harness's own lifecycle
-teardown. What could not be checked here is the effect on a **live,
-multi-user** BBS process: the emulator's socket calls are implemented with
-the synchronous `deasync` package, which blocks the entire single-threaded
-Node.js event loop for as long as a call is pending -- so on a live BBS,
-every other connected node would likely freeze for the same duration this
-one door's session was stalled. That is a plausible, not directly measured,
-consequence, and is flagged here for whoever next works on the emulator's
-`bsdsocket.library` implementation.
+The binary-level session log confirms a clean finish: `Door completed:
+doorrepo.amiga status=ok` (not the earlier run's forced-timeout teardown).
+Independently, outside the door's own printed claim, the downloaded file on
+disk was re-hashed directly: 16080 bytes, MD5 `52ee1086c055fc1c82407dc0961ab04d`
+-- an exact match to both the catalog's declared digest and the door's own
+printed result. The raw socket-library trace also confirms this was a real
+network exchange, not a cache hit: `send data: GET
+/api/door-repo/archive/AETRIV10.LHA HTTP/1.1` / `Host: bbs.uprough.net`,
+followed by a real `HTTP/1.1 200 OK` response from the live production
+server.
 
-The door install used for this test (`Commands/BBSCmd/DOORREPO.info` +
-`Doors/DoorRepo/doorrepo.amiga`) was **reverted** after the test, rather than
-committed, precisely because it demonstrably hangs a session against this
-emulator's current `bsdsocket.library` implementation -- leaving it
-registered on this repository's development BBS would risk a later,
-unrelated session hitting the same stall by accident.
+**What this proves, precisely.** A real, unmodified, vbcc-cross-compiled
+m68k AmigaOS executable ran inside this repository's own AEDoorPort/XIM
+emulator, spoke the real door-port protocol, opened `bsdsocket.library`,
+made real DNS/TCP calls over the real internet to the live production API,
+fetched and correctly parsed a real 3301-row catalog, paged and filtered it,
+downloaded a real archive, and verified its MD5 -- all inside emulation, all
+confirmed against independent evidence (the per-door protocol log, the raw
+socket trace, and a re-hash of the downloaded file), not merely the door's
+own printed output. See "What 'not run-verified' means in practice" above
+for the one thing this still does not prove: identical behavior on real
+AmigaOS hardware or an Amiga-accurate emulator.
+
+**Door registration: committed, not reverted, this time.** With the
+underlying stall fixed and this end-to-end run demonstrating clean,
+correct, repeatable completion (verified with fresh scripted-input runs,
+no hangs, no crashes, exit code 0, orderly `JH_SHUTDOWN` both times),
+`Commands/BBSCmd/DOORREPO.info` and `Doors/DoorRepo/doorrepo.amiga` are kept
+installed and committed to this repository -- a working XIM door that
+genuinely exercises AEDoorPort I/O plus `bsdsocket.library` networking end
+to end is useful to keep around for future testing of both this door and
+the emulator's networking layer.
 
 ## Security
 
