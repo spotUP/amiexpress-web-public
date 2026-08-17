@@ -86,6 +86,32 @@ Edit `/app/amiexpress/.env` to configure:
 | `AMIGA_FILE_CACHE_MB` | 4 | Amiga file cache (MB) |
 | `CORS_ORIGINS` | - | Allowed origins for CORS |
 | `DEBUG` | false | Enable debug logging |
+| `DOOR_REPO_ROLE` | `consumer` | `owner` enables the door-repo curation UI in DOORMAN (including the `S`=Strip action) and serves the Door Repo API from this box's own local catalog/archives. `consumer` (or unset) fetches the manifest from `DOOR_REPO_URL` instead. |
+| `DOOR_REPO_URL` | `https://bbs.uprough.net` | Base URL a consumer box fetches the door-repo manifest from. Empty string disables the door repo entirely (DOORMAN falls back to its local catalog only). Ignored in owner mode. |
+
+### Door repo: owner vs. consumer
+
+Exactly one BBS in the network should run as the **owner** -- the box whose
+door catalog is curated and republished for everyone else. That box MUST set
+`DOOR_REPO_ROLE=owner` in **its own** `.env.local` (never in the committed
+`docker-compose.yml`/`docker-compose.multi-node.yml`, which default to
+`consumer` so a copied compose file does not silently make every deployment
+believe it owns the catalog).
+
+`docker-compose.yml` and `docker-compose.multi-node.yml` both ship
+`DOOR_REPO_ROLE=${DOOR_REPO_ROLE:-consumer}` and
+`DOOR_REPO_URL=${DOOR_REPO_URL:-https://bbs.uprough.net}` in their
+`environment:` blocks. TS doors (including DOORMAN) run in-process in the
+backend and inherit this compose environment directly -- there is no separate
+per-door environment to configure.
+
+If the owner box forgets to set `DOOR_REPO_ROLE=owner`: on the next deploy it
+resolves to consumer mode, starts fetching its OWN manifest back over the
+network instead of reading its local catalog, and loses the `S`=Strip
+curation action in DOORMAN -- on the one machine whose entire purpose is
+curation. There is no automatic detection of this misconfiguration; verify
+after every deploy of the owner host that DOORMAN's repo view still shows the
+curation actions.
 
 ## SSL/HTTPS Setup (Optional)
 
@@ -116,8 +142,14 @@ Caddy's automatic HTTPS adds an implicit 308 redirect from `http://` to
 stacks that cannot do TLS, so `/api/door-repo/*` must be reachable over
 `http://` without a redirect while every other path keeps redirecting.
 Declaring an explicit `http://` site block for the host suppresses Caddy's
-automatic redirect for that host; the block below then re-adds the redirect
-for everything except the door-repo prefix:
+automatic redirect for that host. Inside that block, `handle` directives are
+mutually exclusive and evaluated in source order (unlike `redir`, which Caddy
+sorts ahead of `handle`/`route`/`reverse_proxy` by its default directive
+order regardless of where it appears in the file -- a bare `redir` next to a
+`reverse_proxy` for a path matcher would fire for every request, including
+the door-repo prefix, defeating the exemption). Use `handle` blocks so the
+door-repo prefix is matched first and everything else falls through to the
+redirect:
 
 ```bash
 cat > /etc/caddy/Caddyfile << 'EOF'
@@ -126,10 +158,13 @@ bbs.uprough.net {
 }
 
 http://bbs.uprough.net {
-    @doorrepo path /api/door-repo/*
-    reverse_proxy @doorrepo localhost:3001
-
-    redir https://bbs.uprough.net{uri} 308
+    handle /api/door-repo/* {
+        header Cross-Origin-Resource-Policy "cross-origin"
+        reverse_proxy localhost:3001
+    }
+    handle {
+        redir https://{host}{uri} permanent
+    }
 }
 EOF
 
@@ -141,7 +176,9 @@ systemctl reload caddy
 
 Verify: `curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/api/door-repo/health`
 must return `200`; `curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/health`
-must still return `308` (every other path keeps redirecting to HTTPS).
+must return `301` (`redir ... permanent` is a 301, not 308; every other path
+keeps redirecting to HTTPS). Measured against the live host on 2026-08-17:
+`/api/door-repo/health` -> `200`, `/health` -> `301`.
 
 Note: a browser that has already received the HSTS header from
 `https://bbs.uprough.net` will keep rewriting `http://` requests to `https://`

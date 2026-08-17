@@ -31,30 +31,27 @@ amiexpress-web backend.
   Only `/api/door-repo/*` is exempted. Do not assume plain HTTP works
   against any other endpoint on `bbs.uprough.net` -- it does not, and is not
   expected to.
-- **If a well-formed plain-HTTP request to `/api/door-repo/*` returns `404`
-  with a generic `Cannot GET ...` HTML body (Express's own default 404
-  page, not this API's own `NOT FOUND: <name>` plain-text body -- see
-  section 5), that means this API has not been deployed to the production
-  host yet, not that plain HTTP is unavailable.** Measured directly against
-  the live host while writing this document:
+- **The API is deployed and live.** Measured directly against the live host
+  on 2026-08-17:
 
   ```
   curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/api/door-repo/health
-  -> 404   (plain HTTP reaches Express -- Caddy did not redirect -- but this
-             route isn't deployed yet: the same path also 404s over HTTPS)
+  -> 200
+  curl -s http://bbs.uprough.net/api/door-repo/health
+  -> {"status":"ok","revision":"a2d8b215ec846fc13b80cb037b9df0c541b848fc","doors":3301}
   curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/health
   -> 301   (an unrelated, non-door-repo path -- still redirects, as expected)
   curl -s -o /dev/null -w '%{http_code}' https://bbs.uprough.net/health
   -> 200
+  curl -s -o /dev/null -w '%{http_code}' https://bbs.uprough.net/api/door-repo/health
+  -> 200
   ```
 
-  The `404` on the first line is diagnostic, not a contract violation: its
-  body is Express's generic `Cannot GET /api/door-repo/health` HTML page
-  (confirmed by inspecting the response directly), and the identical path
-  also returns `404` over `https://` -- proving the cause is "not deployed
-  yet," not "plain HTTP doesn't reach this API." Once deployed, a plain-HTTP
-  request to any `/api/door-repo/*` path behaves exactly as documented in
-  the rest of this document, with no redirect.
+  If a well-formed request to `/api/door-repo/*` ever returns `404` with a
+  generic `Cannot GET ...` HTML body (Express's own default 404 page, not
+  this API's own `NOT FOUND: <name>` plain-text body -- see section 5), that
+  indicates a deployment regression, not expected behavior -- file it as a
+  bug rather than treating it as "not deployed yet."
 - **Read-only.** There are no write endpoints and no authentication. Every
   request in this document is a `GET`.
 - **Curation happens in git, not over the API.** The catalog contents
@@ -217,9 +214,11 @@ by appending them. A client parsing `list.txt`:
   meaning, or type.
 - **MUST ignore any trailing fields it does not recognize.**
 - **MUST treat the header line's version number (`DOORREPO|1|...`) as the
-  authority for what fields to expect.** That number is bumped only when a
-  field is appended; it is never bumped for a field removal or a
-  meaning change of an existing field (see section 10).
+  authority for what fields to expect.** Appending a new trailing field never
+  bumps this number -- a conforming parser ignores fields it does not
+  recognize, per the previous two rules. The number is bumped only when a
+  field is removed or an existing field's position, meaning, or type changes
+  (see section 10).
 
 ## 4. JSON manifest
 

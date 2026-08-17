@@ -61,6 +61,17 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
 
+      # Door repo (see deploy/README.md "Door repo: owner vs. consumer"). The
+      # OWNER host must set DOOR_REPO_ROLE=owner in ITS OWN .env.local —
+      # never here, since consumers copy this compose file verbatim.
+      # DOOR_REPO_URL's default MUST be the real URL, not empty: the
+      # resolver (Doors/door-manager/repoDataSource.ts) treats an empty
+      # string as "disabled", not "use the default" -- an empty default
+      # here would silently disable the door repo on every fresh consumer
+      # install instead of preserving today's built-in default.
+      - DOOR_REPO_ROLE=${DOOR_REPO_ROLE:-consumer}
+      - DOOR_REPO_URL=${DOOR_REPO_URL:-https://bbs.uprough.net}
+
     env_file:
       - .env.local
 
