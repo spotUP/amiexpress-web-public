@@ -31,9 +31,13 @@ import {
   SOCK_STREAM,
   EMFILE,
   ENOENT,
+  EINPROGRESS,
   ETIMEDOUT,
   ECONNREFUSED,
   BSD_FD_SETSIZE,
+  FIONBIO,
+  SOL_SOCKET,
+  SO_ERROR,
 } from '../../src/amiga-emulation/api/BsdSocketLibrary';
 import { BSDSOCKET_VECTORS } from '../../src/amiga-emulation/api/library-vectors/bsdsocket-vectors';
 import * as net from 'net';
@@ -278,6 +282,201 @@ describe('bsdsocket.library getdtablesize (regression)', () => {
     expect(callSocket(lib, fake)).toBe(-1);
     expect(lib.getErrno()).toBe(EMFILE);
   });
+});
+
+describe('bsdsocket.library non-blocking connect (regression)', () => {
+  /**
+   * IoctlSocket(FIONBIO) was discarded, on the reasoning that node sockets
+   * are already non-blocking. But a door does not see node's sockets - it
+   * sees connect(), which blocked regardless, for up to 30 seconds. A door
+   * that sets FIONBIO precisely so it can impose its OWN connect timeout
+   * (which is what the standard AmigaOS idiom does: non-blocking connect,
+   * then WaitSelect with a timeval, then getsockopt(SO_ERROR)) had that
+   * timeout silently ignored, and the whole emulator stalled with it.
+   *
+   * getsockopt() was a stub that returned 0 and wrote nothing, so even a
+   * door that got as far as asking could not tell a connected socket from a
+   * failed one.
+   */
+  const SOCKADDR = 0x500000;
+
+  /**
+   * These tests do real loopback I/O while waitSelect() busy-waits through
+   * deasync, which starves the event loop under a loaded machine. In
+   * isolation each finishes in single-digit milliseconds; under a full
+   * parallel suite on a slow CI runner they need real headroom, so they get
+   * an explicit budget rather than jest's 10s default.
+   */
+  const IO_TEST_TIMEOUT_MS = 60000;
+
+  /**
+   * Every listening socket these tests need is bound ONCE, here, before any
+   * test body runs.
+   *
+   * Binding one inside a test body is what made this suite hang for 60s in a
+   * full parallel run while passing in isolation: by then an earlier test in
+   * this same file has already driven waitSelect(), which busy-waits via
+   * deasync (it runs the libuv loop by hand so 68K code can block). Once that
+   * has happened inside a jest worker, a later server.listen() callback in
+   * the same worker could stop being delivered, and the test hung on the
+   * listen promise - before reaching a single line of the code under test.
+   * Doing all the binding up front sidesteps it entirely and is faster too.
+   */
+  let openPort = 0;
+  let closedPort = 0;
+  let liveServer: net.Server | null = null;
+  /**
+   * Every connection the server accepts, so afterAll can destroy them.
+   * net.Server.close() only stops new connections and then waits for the
+   * live ones to end - and the successful-connect test deliberately leaves
+   * its socket open (a door under test does not close it), so without this
+   * the teardown never resolves and the whole run hangs.
+   */
+  const accepted: net.Socket[] = [];
+
+  beforeAll(async () => {
+    liveServer = net.createServer((sock) => { accepted.push(sock); });
+    openPort = await new Promise<number>((resolve) => {
+      liveServer!.listen(0, '127.0.0.1', () =>
+        resolve((liveServer!.address() as net.AddressInfo).port));
+    });
+
+    // Bind a second port, learn its number, then give it back - so it is
+    // known to be closed and a connect to it is deterministically refused.
+    const probe = net.createServer();
+    closedPort = await new Promise<number>((resolve) => {
+      probe.listen(0, '127.0.0.1', () =>
+        resolve((probe.address() as net.AddressInfo).port));
+    });
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+  }, IO_TEST_TIMEOUT_MS);
+
+  afterAll(async () => {
+    for (const sock of accepted) sock.destroy();
+    accepted.length = 0;
+    if (liveServer) {
+      await new Promise<void>((resolve) => liveServer!.close(() => resolve()));
+      liveServer = null;
+    }
+  }, IO_TEST_TIMEOUT_MS);
+
+  /** Set FIONBIO on a socket, the way a door does. */
+  function setNonBlocking(lib: BsdSocketLibrary, fake: FakeEmulator, fd: number, on: number): number {
+    const argPtr = 0x510000;
+    fake.writeMemory32(argPtr, on);
+    fake.setRegister(0, fd);
+    fake.setRegister(1, FIONBIO);
+    fake.setRegister(8, argPtr);
+    return lib.ioctlSocket();
+  }
+
+  /** Build sockaddr_in and call connect(). */
+  function callConnect(lib: BsdSocketLibrary, fake: FakeEmulator, fd: number, port: number): number {
+    fake.writeMemory(SOCKADDR + 1, AF_INET);
+    fake.writeMemory(SOCKADDR + 2, (port >> 8) & 0xff);
+    fake.writeMemory(SOCKADDR + 3, port & 0xff);
+    fake.writeMemory32(SOCKADDR + 4, 0x7f000001); // 127.0.0.1
+    fake.setRegister(0, fd);
+    fake.setRegister(8, SOCKADDR);
+    fake.setRegister(1, 16);
+    return lib.connect();
+  }
+
+  /** getsockopt(fd, SOL_SOCKET, SO_ERROR) -> the value written to optval. */
+  function readSoError(lib: BsdSocketLibrary, fake: FakeEmulator, fd: number): number {
+    const optPtr = 0x520000;
+    fake.writeMemory32(optPtr, 0xdeadbeef);
+    fake.setRegister(0, fd);
+    fake.setRegister(1, SOL_SOCKET);
+    fake.setRegister(2, SO_ERROR);
+    fake.setRegister(8, optPtr);
+    expect(lib.getsockopt()).toBe(0);
+    return fake.readMemory32(optPtr);
+  }
+
+  /** WaitSelect(fd+1, null, &writemask, null, timeout) -> ready count. */
+  function waitWritable(lib: BsdSocketLibrary, fake: FakeEmulator, fd: number, ms: number): number {
+    const writeFdsPtr = 0x530000;
+    const tvPtr = 0x540000;
+    fake.writeMemory32(writeFdsPtr, (1 << fd) >>> 0);
+    fake.writeMemory32(tvPtr, Math.floor(ms / 1000));
+    fake.writeMemory32(tvPtr + 4, (ms % 1000) * 1000);
+    fake.setRegister(0, fd + 1);
+    fake.setRegister(8, 0);
+    fake.setRegister(9, writeFdsPtr);
+    fake.setRegister(10, 0);
+    fake.setRegister(11, tvPtr);
+    return lib.waitSelect();
+  }
+
+  test('a socket set non-blocking returns -1/EINPROGRESS instead of blocking', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+
+    expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
+
+    const started = Date.now();
+    const rc = callConnect(lib, fake, fd, closedPort);
+    const elapsed = Date.now() - started;
+
+    expect(rc).toBe(-1);
+    expect(lib.getErrno()).toBe(EINPROGRESS);
+    // The point of the whole exercise: it returned promptly rather than
+    // stalling the emulator on a blocking connect, which takes until the
+    // peer answers or connectSync's 30s ceiling. A generous bound still
+    // separates those two outcomes unambiguously on a loaded machine.
+    expect(elapsed).toBeLessThan(5000);
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('a refused non-blocking connect wakes WaitSelect and reports SO_ERROR', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+    setNonBlocking(lib, fake, fd, 1);
+    callConnect(lib, fake, fd, closedPort);
+
+    // A failed connect must make the socket writable, not leave the door
+    // waiting out its whole timeout.
+    expect(waitWritable(lib, fake, fd, 5000)).toBe(1);
+    expect(readSoError(lib, fake, fd)).toBe(ECONNREFUSED);
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('a successful non-blocking connect wakes WaitSelect with SO_ERROR clear', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+    setNonBlocking(lib, fake, fd, 1);
+
+    expect(callConnect(lib, fake, fd, openPort)).toBe(-1); // EINPROGRESS
+    expect(waitWritable(lib, fake, fd, 5000)).toBe(1);
+    expect(readSoError(lib, fake, fd)).toBe(0);
+
+    callClose(lib, fake, fd); // leave no live socket behind for teardown
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('SO_ERROR is cleared once read, as BSD specifies', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+    setNonBlocking(lib, fake, fd, 1);
+    callConnect(lib, fake, fd, closedPort);
+    waitWritable(lib, fake, fd, 5000);
+
+    expect(readSoError(lib, fake, fd)).toBe(ECONNREFUSED);
+    expect(readSoError(lib, fake, fd)).toBe(0);
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('without FIONBIO, connect still blocks and reports errno directly', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+
+    // No IoctlSocket call at all - the pre-existing behaviour every other
+    // door depends on must be untouched.
+    expect(callConnect(lib, fake, fd, closedPort)).toBe(-1);
+    expect(lib.getErrno()).toBe(ECONNREFUSED);
+  }, IO_TEST_TIMEOUT_MS);
 });
 
 describe('bsdsocket.library gethostbyname (regression)', () => {

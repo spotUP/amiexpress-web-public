@@ -31,8 +31,38 @@ export const SOCK_DGRAM = 2;
 // everything above 34 and would make a door branching on errno misbehave.
 export const ENOENT = 2;
 export const EMFILE = 24;
+export const EINPROGRESS = 36;
+export const ENETUNREACH = 51;
+export const ECONNRESET = 54;
 export const ETIMEDOUT = 60;
 export const ECONNREFUSED = 61;
+export const EHOSTUNREACH = 65;
+
+/**
+ * Maps a Node socket error to the classic BSD/AmigaOS errno a 68K door
+ * compares against. Everything unrecognised becomes ECONNREFUSED, which is
+ * what this file reported for every failure before this mapping existed.
+ */
+function amigaErrnoForNodeError(err: NodeJS.ErrnoException | null): number {
+  switch (err?.code) {
+    case 'ETIMEDOUT': return ETIMEDOUT;
+    case 'ENETUNREACH': return ENETUNREACH;
+    case 'EHOSTUNREACH': return EHOSTUNREACH;
+    case 'ECONNRESET': return ECONNRESET;
+    default: return ECONNREFUSED;
+  }
+}
+
+// Socket option level/name, from the vendored Roadshow NDK header
+// SANA+RoadshowTCP-IP/netinclude/sys/socket.h lines 145 and 165.
+export const SOL_SOCKET = 0xffff;
+export const SO_ERROR = 0x1007;
+
+// FIONBIO, from SANA+RoadshowTCP-IP/netinclude/sys/filio.h:87 -
+// _IOW('f', 126, long), i.e. 0x80000000 | (4 << 16) | ('f' << 8) | 126.
+// Confirmed against a real door: the emulator logged this exact request
+// value when DoorRepo set its socket non-blocking.
+export const FIONBIO = 0x8004667e;
 
 // Descriptor table size. Classic AmiTCP/bsdsocket hands out small fds
 // starting at 0, and the universal AmigaOS idiom for building an fd_set is
@@ -61,6 +91,17 @@ interface SocketState {
   fd: number;
   socket: net.Socket | null;
   connected: boolean;
+  /** Set by IoctlSocket(FIONBIO). Governs whether connect() blocks. */
+  nonBlocking: boolean;
+  /**
+   * Pending SO_ERROR for this socket: the outcome of a non-blocking connect
+   * that has already finished. Read (and cleared) by getsockopt(SO_ERROR),
+   * which is how a door learns that a socket which became "writable" had in
+   * fact failed. 0 means no error.
+   */
+  soError: number;
+  /** True between a non-blocking connect() and its resolution. */
+  connectPending: boolean;
   host?: string;
   port?: number;
   error?: number;
@@ -168,6 +209,9 @@ export class BsdSocketLibrary {
       fd,
       socket: null,
       connected: false,
+      nonBlocking: false,
+      soError: 0,
+      connectPending: false,
       readBuffer: [],
     };
 
@@ -214,17 +258,163 @@ export class BsdSocketLibrary {
     state.host = ip;
     state.port = port;
 
+    if (state.nonBlocking) {
+      return this.connectNonBlocking(state, ip, port);
+    }
     // Create and connect the socket synchronously using blocking pattern
     return this.connectSync(state, ip, port);
+  }
+
+  /**
+   * IoctlSocket() - I/O control on a socket
+   * LVO: -114
+   *
+   * Parameters:
+   *   D0 = socket descriptor
+   *   D1 = request
+   *   A0 = argument pointer
+   *
+   * Only FIONBIO is honoured. It used to be discarded, on the reasoning that
+   * node sockets are already non-blocking - but the door does not see node's
+   * sockets, it sees connect(), and connect() blocked regardless. A door that
+   * asked for non-blocking I/O so it could impose its own connect timeout got
+   * a 30-second stall instead.
+   */
+  ioctlSocket(): number {
+    const fd = this.emulator.getRegister(0);      // D0
+    const request = this.emulator.getRegister(1) >>> 0; // D1
+    const argPtr = this.emulator.getRegister(8);  // A0
+
+    const state = this.sockets.get(fd);
+    if (!state) {
+      console.log(`[BsdSocketLibrary] IoctlSocket: invalid fd ${fd}`);
+      this.errno = ENOENT;
+      return -1;
+    }
+
+    if (request === FIONBIO) {
+      const value = argPtr !== 0 ? this.emulator.readMemory32(argPtr) : 0;
+      state.nonBlocking = value !== 0;
+      console.log(`[BsdSocketLibrary] IoctlSocket(fd=${fd}, FIONBIO, ${value}) -> nonBlocking=${state.nonBlocking}`);
+      return 0;
+    }
+
+    // Every other request stays a no-op returning success, as before.
+    console.log(`[BsdSocketLibrary] IoctlSocket(fd=${fd}, cmd=0x${request.toString(16)}) -> 0 (unhandled, treated as success)`);
+    return 0;
+  }
+
+  /**
+   * getsockopt() - Get a socket option
+   * LVO: -96
+   *
+   * Parameters:
+   *   D0 = socket descriptor
+   *   D1 = level
+   *   D2 = option name
+   *   A0 = option value buffer
+   *   A1 = pointer to the buffer length
+   *
+   * Only SOL_SOCKET/SO_ERROR is implemented, because that is the one a door
+   * cannot work without: after a non-blocking connect reports the socket
+   * writable, SO_ERROR is the only way to distinguish "connected" from
+   * "failed". Reading it clears it, matching BSD ("get error status and
+   * clear", socket.h:145).
+   */
+  getsockopt(): number {
+    const fd = this.emulator.getRegister(0);     // D0
+    const level = this.emulator.getRegister(1);  // D1
+    const optname = this.emulator.getRegister(2); // D2
+    const optvalPtr = this.emulator.getRegister(8); // A0
+
+    const state = this.sockets.get(fd);
+    if (!state) {
+      console.log(`[BsdSocketLibrary] getsockopt: invalid fd ${fd}`);
+      this.errno = ENOENT;
+      return -1;
+    }
+
+    if (level === SOL_SOCKET && optname === SO_ERROR) {
+      const pending = state.soError;
+      state.soError = 0; // "get error status and clear"
+      if (optvalPtr !== 0) {
+        this.emulator.writeMemory32(optvalPtr, pending);
+      }
+      console.log(`[BsdSocketLibrary] getsockopt(fd=${fd}, SO_ERROR) = ${pending}`);
+      return 0;
+    }
+
+    console.log(`[BsdSocketLibrary] getsockopt(fd=${fd}, level=${level}, opt=${optname}) - unhandled, returning 0`);
+    return 0;
   }
 
   /**
    * Synchronous connect using event loop blocking
    * This is necessary because 68K code expects synchronous behavior
    */
+  /**
+   * Installs the data/close handlers every connected socket needs, whichever
+   * connect path created it. Extracted so the blocking and non-blocking
+   * paths cannot drift apart.
+   */
+  private attachStreamHandlers(state: SocketState): void {
+    if (!state.socket) return;
+
+    state.socket.on('data', (data) => {
+      console.log(`[BsdSocketLibrary] Received ${data.length} bytes`);
+      console.log(`[BsdSocketLibrary] recv data (full): ${data.toString('utf8')}`);
+      state.readBuffer.push(data);
+      if (state.readResolve) {
+        const resolve = state.readResolve;
+        state.readResolve = undefined;
+        resolve(state.readBuffer.shift() || null);
+      }
+    });
+
+    state.socket.on('close', () => {
+      console.log(`[BsdSocketLibrary] Socket closed`);
+      state.connected = false;
+    });
+  }
+
+  /**
+   * Non-blocking connect, the AmigaOS way: return -1 with errno EINPROGRESS
+   * immediately and let the door wait for writability via WaitSelect(), then
+   * read the real outcome from getsockopt(SO_ERROR). This is what a door that
+   * called IoctlSocket(FIONBIO, 1) is written against - and the only way its
+   * own connect timeout can ever be honoured, since the blocking path below
+   * stalls the whole emulator for up to 30 seconds regardless of what
+   * timeout the door asked for.
+   */
+  private connectNonBlocking(state: SocketState, host: string, port: number): number {
+    state.socket = new net.Socket();
+    state.soError = 0;
+    state.connectPending = true;
+
+    state.socket.on('connect', () => {
+      console.log(`[BsdSocketLibrary] Connected to ${host}:${port} (non-blocking)`);
+      state.connected = true;
+      state.connectPending = false;
+    });
+
+    state.socket.on('error', (err) => {
+      console.log(`[BsdSocketLibrary] Connection error (non-blocking): ${err.message}`);
+      state.soError = amigaErrnoForNodeError(err);
+      state.connected = false;
+      state.connectPending = false;
+    });
+
+    this.attachStreamHandlers(state);
+    state.socket.connect(port, host);
+
+    console.log(`[BsdSocketLibrary] connect: non-blocking, returning -1/EINPROGRESS`);
+    this.errno = EINPROGRESS;
+    return -1;
+  }
+
   private connectSync(state: SocketState, host: string, port: number): number {
     let connected = false;
-    let error: Error | null = null;
+    let error: NodeJS.ErrnoException | null = null;
     let done = false;
 
     state.socket = new net.Socket();
@@ -242,21 +432,7 @@ export class BsdSocketLibrary {
       done = true;
     });
 
-    state.socket.on('data', (data) => {
-      console.log(`[BsdSocketLibrary] Received ${data.length} bytes`);
-      console.log(`[BsdSocketLibrary] recv data (full): ${data.toString('utf8')}`);
-      state.readBuffer.push(data);
-      if (state.readResolve) {
-        const resolve = state.readResolve;
-        state.readResolve = undefined;
-        resolve(state.readBuffer.shift() || null);
-      }
-    });
-
-    state.socket.on('close', () => {
-      console.log(`[BsdSocketLibrary] Socket closed`);
-      state.connected = false;
-    });
+    this.attachStreamHandlers(state);
 
     // Start connection
     state.socket.connect(port, host);
@@ -277,7 +453,10 @@ export class BsdSocketLibrary {
     }
 
     if (error || !connected) {
-      this.errno = ECONNREFUSED;
+      // Report the actual reason. This used to be a flat ECONNREFUSED, so a
+      // host-unreachable or reset connection was reported to the door as
+      // "connection refused" - a wrong diagnosis, not merely a vague one.
+      this.errno = amigaErrnoForNodeError(error);
       return -1;
     }
 
@@ -583,13 +762,23 @@ export class BsdSocketLibrary {
     deasync.loopWhile(() => {
       for (const fd of readFds) {
         const state = this.sockets.get(fd);
-        if (state && (state.readBuffer.length > 0 || !state.connected)) {
+        // A socket whose non-blocking connect is still in flight is neither
+        // readable nor at EOF - without this guard the `!state.connected`
+        // clause below would report it ready the instant it was created.
+        if (state && !state.connectPending &&
+            (state.readBuffer.length > 0 || !state.connected)) {
           if (!readyReadFds.includes(fd)) readyReadFds.push(fd);
         }
       }
       for (const fd of writeFds) {
         const state = this.sockets.get(fd);
-        if (state && state.connected && state.socket) {
+        if (!state) continue;
+        // A failed non-blocking connect also makes the socket writable - that
+        // is precisely how BSD reports it, and the door then reads the reason
+        // from getsockopt(SO_ERROR). Waking only on success would leave a
+        // door with a refused connection blocked until its own timeout.
+        const connectFailed = !state.connectPending && state.soError !== 0;
+        if ((state.connected && state.socket) || connectFailed) {
           if (!readyWriteFds.includes(fd)) readyWriteFds.push(fd);
         }
       }

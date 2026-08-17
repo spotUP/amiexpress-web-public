@@ -135,8 +135,7 @@ export const BSDSOCKET_VECTORS: LibraryVector[] = [
     offset: -96,
     name: "getsockopt",
     handler: (emu, lib: BsdSocketLibrary) => {
-      console.log(`[BsdSocketLibrary] getsockopt() - stub, returning 0`);
-      return 0;
+      return lib.getsockopt();
     },
   },
 
@@ -168,14 +167,11 @@ export const BSDSOCKET_VECTORS: LibraryVector[] = [
     offset: -114,
     name: "IoctlSocket",
     handler: (emu, lib: BsdSocketLibrary) => {
-      // Returns success (0). FIONBIO (set non-blocking) is effectively a
-      // no-op here because the socket layer is node net sockets, which are
-      // already async/non-blocking. No corpus door has been observed to break
-      // on this (2026-08-14 ledger sweep: called once by a door that passed).
-      // Revisit only if a real door is shown to depend on FIONREAD byte counts.
-      const cmd = emu.getRegister(1); // D1 = ioctl request
-      console.log(`[BsdSocketLibrary] IoctlSocket(cmd=0x${(cmd >>> 0).toString(16)}) -> 0 (node sockets are non-blocking)`);
-      return 0;
+      // FIONBIO is now honoured (it used to be discarded on the reasoning
+      // that node sockets are already non-blocking - but the door sees
+      // connect(), which blocked anyway, so its own connect timeout could
+      // never fire). FIONREAD and everything else remain no-op successes.
+      return lib.ioctlSocket();
     },
   },
 
