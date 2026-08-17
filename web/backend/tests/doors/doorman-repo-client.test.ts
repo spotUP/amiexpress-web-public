@@ -31,12 +31,15 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as http from 'http';
+import type { AddressInfo } from 'net';
 import type { DoorRepoManifest } from '../../src/doors/door-repo-manifest';
 import {
   fetchManifest,
   downloadArchive,
   type RepoClientConfig,
 } from '../../../../Doors/door-manager/repo-client';
+import { resolveDoorRepoMode } from '../../../../Doors/door-manager/repoDataSource';
 
 function sampleManifest(revision: string): DoorRepoManifest {
   return {
@@ -104,6 +107,29 @@ function fakeDownloadResponse(opts: { ok: boolean; status: number; body?: Buffer
     status: opts.status,
     body: opts.body ? bufferToWebStream(opts.body) : null,
   } as unknown as Response;
+}
+
+// Real (not mocked) http.Server that accepts the TCP connection and the
+// request but never writes a response -- the deterministic construction the
+// task brief calls for to exercise the actual AbortSignal.timeout() wiring
+// end to end, instead of only asserting on message text. manifestTimeoutMs/
+// archiveTimeoutMs (RepoClientConfig test-only overrides) keep these tests
+// fast: the suite never waits out the real 20s/120s production defaults.
+function startStallingServer(): Promise<{ server: http.Server; url: string }> {
+  return new Promise(resolve => {
+    const server = http.createServer(() => {
+      // Intentionally never calls res.write()/res.end() -- simulates a
+      // hung or hostile DOOR_REPO_URL.
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({ server, url: `http://127.0.0.1:${port}` });
+    });
+  });
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise(resolve => server.close(() => resolve()));
 }
 
 describe('doorman repo-client', () => {
@@ -330,5 +356,124 @@ describe('doorman repo-client', () => {
       const [calledUrl] = fetchSpy.mock.calls[0]!;
       expect(calledUrl).toBe('http://repo.example.test/api/door-repo/archive/URL_DOOR.LHA');
     });
+  });
+
+  // I4: no request timeout anywhere in the repo client. A hung/slow/hostile
+  // DOOR_REPO_URL used to have no real bound (undici's own ~300s
+  // header/body timeouts are reset by a slow-drip server on every chunk),
+  // and app.ts's install handler only clears `this.installing` once the
+  // downloadArchive() call settles -- so a hung download locked the install
+  // action for the rest of the DOORMAN session. These tests use a real,
+  // deliberately-stalling http.Server (never mocked fetch) with a short
+  // injected manifestTimeoutMs/archiveTimeoutMs so the actual
+  // AbortSignal.timeout() wiring is proven, not just the message text, and
+  // the suite still runs in well under a second.
+  describe('request timeouts (I4)', () => {
+    it('fetchManifest: a server that never responds rejects with a timeout-specific message, distinct from a generic network-error message, within the injected bound', async () => {
+      const { server, url } = await startStallingServer();
+      try {
+        const stallCfg: RepoClientConfig = { url, cacheFile, manifestTimeoutMs: 200 };
+        const started = Date.now();
+        await expect(fetchManifest(stallCfg)).rejects.toThrow(/timed out after 0\.2s/);
+        expect(Date.now() - started).toBeLessThan(5000);
+      } finally {
+        await closeServer(server);
+      }
+    });
+
+    it('fetchManifest: a server that never responds falls back to the cache when one exists, instead of throwing', async () => {
+      const cached = sampleManifest('rev-stall-cache');
+      seedCache({ etag: '"rev-stall-cache"', cachedAt: '2024-04-04T00:00:00.000Z', manifest: cached });
+      const { server, url } = await startStallingServer();
+      try {
+        const stallCfg: RepoClientConfig = { url, cacheFile, manifestTimeoutMs: 200 };
+        const result = await fetchManifest(stallCfg);
+        expect(result.fromCache).toBe(true);
+        expect(result.cachedAt).toBe('2024-04-04T00:00:00.000Z');
+        expect(result.manifest).toEqual(cached);
+      } finally {
+        await closeServer(server);
+      }
+    });
+
+    it('downloadArchive: a server that never responds aborts with a timeout-specific message and leaves NO partial file on disk', async () => {
+      const { server, url } = await startStallingServer();
+      const destPath = path.join(tmpDir, 'STALLED_DOOR.LHA');
+      try {
+        const stallCfg: RepoClientConfig = { url, cacheFile, archiveTimeoutMs: 200 };
+        const started = Date.now();
+        await expect(
+          downloadArchive(stallCfg, 'STALLED_DOOR.LHA', destPath, 'irrelevant')
+        ).rejects.toThrow(/timed out after 0\.2s/);
+        expect(Date.now() - started).toBeLessThan(5000);
+        expect(fs.existsSync(destPath)).toBe(false);
+      } finally {
+        await closeServer(server);
+      }
+    });
+  });
+});
+
+// ─── Minor finding: trailing-slash base URL + error text names the URL ────
+
+describe('resolveDoorRepoMode base URL normalization', () => {
+  it('strips a trailing slash from DOOR_REPO_URL', () => {
+    expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test/' })).toEqual({
+      kind: 'consumer',
+      url: 'http://repo.example.test',
+    });
+  });
+
+  it('strips multiple trailing slashes from DOOR_REPO_URL', () => {
+    expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test///' })).toEqual({
+      kind: 'consumer',
+      url: 'http://repo.example.test',
+    });
+  });
+
+  it('leaves a URL with no trailing slash unchanged', () => {
+    expect(resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test' })).toEqual({
+      kind: 'consumer',
+      url: 'http://repo.example.test',
+    });
+  });
+});
+
+describe('doorman repo-client: URL construction + error text', () => {
+  let tmpDir: string;
+  let cacheFile: string;
+  let fetchSpy: jest.SpiedFunction<typeof fetch>;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'doorman-repo-client-url-'));
+    cacheFile = path.join(tmpDir, 'door-repo-cache.json');
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a trailing-slash DOOR_REPO_URL, once normalized by resolveDoorRepoMode, produces a correctly-joined manifest request URL (no double slash)', async () => {
+    const mode = resolveDoorRepoMode({ DOOR_REPO_URL: 'http://repo.example.test/' });
+    if (mode.kind !== 'consumer') throw new Error('expected consumer mode');
+    const cfg: RepoClientConfig = { url: mode.url, cacheFile };
+
+    fetchSpy.mockResolvedValue(
+      fakeResponse({ ok: true, status: 200, etag: '"rev-1"', jsonBody: sampleManifest('rev-1') })
+    );
+
+    await fetchManifest(cfg);
+
+    const [calledUrl] = fetchSpy.mock.calls[0]!;
+    expect(calledUrl).toBe('http://repo.example.test/api/door-repo/manifest');
+  });
+
+  it('a non-2xx manifest response with no cache reports the attempted URL in the error text (not just the cache file path)', async () => {
+    const cfg: RepoClientConfig = { url: 'http://repo.example.test', cacheFile };
+    fetchSpy.mockResolvedValue(fakeResponse({ ok: false, status: 500 }));
+
+    await expect(fetchManifest(cfg)).rejects.toThrow('http://repo.example.test/api/door-repo/manifest');
   });
 });

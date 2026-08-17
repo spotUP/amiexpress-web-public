@@ -75,7 +75,13 @@ function resolveDoorRepoMode(env = process.env) {
         return { kind: 'owner' };
     if (env.DOOR_REPO_URL === '')
         return { kind: 'disabled' };
-    return { kind: 'consumer', url: env.DOOR_REPO_URL || exports.DEFAULT_DOOR_REPO_URL };
+    const rawUrl = env.DOOR_REPO_URL || exports.DEFAULT_DOOR_REPO_URL;
+    // Strip trailing slash(es): repo-client.ts joins this base with paths that
+    // already start with '/' (e.g. `${cfg.url}/api/door-repo/manifest`), so an
+    // operator-supplied DOOR_REPO_URL ending in '/' would otherwise produce a
+    // double slash (`https://host//api/door-repo/manifest`) that Express does
+    // not route, turning a config typo into a silent-looking 404.
+    return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
 }
 /**
  * Byte-identical to DOORMAN's original (pre-Task-6) loadEntries(): a missing

@@ -71,7 +71,13 @@ export function resolveDoorRepoMode(
 ): DoorRepoMode {
   if (env.DOOR_REPO_ROLE === 'owner') return { kind: 'owner' };
   if (env.DOOR_REPO_URL === '') return { kind: 'disabled' };
-  return { kind: 'consumer', url: env.DOOR_REPO_URL || DEFAULT_DOOR_REPO_URL };
+  const rawUrl = env.DOOR_REPO_URL || DEFAULT_DOOR_REPO_URL;
+  // Strip trailing slash(es): repo-client.ts joins this base with paths that
+  // already start with '/' (e.g. `${cfg.url}/api/door-repo/manifest`), so an
+  // operator-supplied DOOR_REPO_URL ending in '/' would otherwise produce a
+  // double slash (`https://host//api/door-repo/manifest`) that Express does
+  // not route, turning a config typo into a silent-looking 404.
+  return { kind: 'consumer', url: rawUrl.replace(/\/+$/, '') };
 }
 
 // ─── Local ("owner"/"disabled") data source ─────────────────────────────────

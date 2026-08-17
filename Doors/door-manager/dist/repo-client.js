@@ -101,6 +101,44 @@ exports.downloadArchive = downloadArchive;
 const fs = __importStar(require("fs"));
 const crypto = __importStar(require("crypto"));
 const stream_1 = require("stream");
+// ─── Request timeouts ───────────────────────────────────────────────────
+//
+// Neither call had any AbortSignal before this fix, so a slow/hung/hostile
+// DOOR_REPO_URL had no real bound: undici's own header/body timeouts sit
+// around ~300s each, AND a slow-drip server (a few bytes every few seconds)
+// resets the body timer on every chunk, so they never fire. Worse, app.ts's
+// install handler sets `this.installing = true` before calling
+// downloadArchive and only clears it in a `finally` once the call settles —
+// with no bound on that call, a hung archive download locks the install
+// action for the rest of the DOORMAN session with no visible cause.
+//
+// MANIFEST_TIMEOUT_MS (20s): the manifest is a single small JSON payload
+// (door-repo.routes.ts serves it straight from the repo's manifest.json,
+// no per-request archive I/O) -- a healthy server answers in well under a
+// second. 20s sits inside the brief's 15-30s band: long enough to absorb a
+// loaded/cold-starting server without a false timeout, short enough that
+// the browse view's "Loading central door-repo catalog..." never reads as
+// hung to the sysop.
+//
+// ARCHIVE_TIMEOUT_MS (120s): archives in this repo run to a few MB (see
+// repo-client.ts's own doc comment above). This client runs on the BBS
+// host, not over dial-up, so the constraint is "central repo is slow or
+// half-dead," not link speed. Even at a deliberately pessimistic 50 KB/s
+// (a saturated/throttled shared host), a 5 MB archive finishes in ~100s;
+// 120s leaves headroom above that while still giving a hung install a firm,
+// user-visible bound instead of undici's ~300s soft ceiling.
+const MANIFEST_TIMEOUT_MS = 20000;
+const ARCHIVE_TIMEOUT_MS = 120000;
+// Deliberately NOT `err instanceof Error`: AbortSignal.timeout() rejects
+// with a DOMException, and across a VM-sandboxed realm boundary (observed
+// under Jest's testEnvironment: 'node', which runs each test file in its
+// own vm context) `instanceof` can fail even though `.name` reads back
+// correctly -- the DOMException was constructed against a different
+// realm's Error/DOMException prototype chain than the one this check runs
+// against. Reading `.name` as a plain property sidesteps that entirely.
+function isTimeoutError(err) {
+    return typeof err === 'object' && err !== null && 'name' in err && err.name === 'TimeoutError';
+}
 // ─── Cache file I/O ─────────────────────────────────────────────────────
 //
 // Corrupted/unreadable cache -> treated as "no cache" everywhere (never a
@@ -140,6 +178,7 @@ function cachedResult(cached) {
 async function fetchManifest(cfg) {
     const cached = readCache(cfg.cacheFile);
     const manifestUrl = `${cfg.url}/api/door-repo/manifest`;
+    const timeoutMs = cfg.manifestTimeoutMs ?? MANIFEST_TIMEOUT_MS;
     // 'Cache-Control': 'max-age=0' forces revalidation on every request --
     // required because Node's global fetch() (undici) sends
     // `Cache-Control: no-cache` + `Pragma: no-cache` on EVERY outgoing
@@ -178,13 +217,21 @@ async function fetchManifest(cfg) {
     }
     let response;
     try {
-        response = await fetch(manifestUrl, { headers });
+        response = await fetch(manifestUrl, { headers, signal: AbortSignal.timeout(timeoutMs) });
     }
     catch (err) {
         if (cached) {
             return cachedResult(cached);
         }
-        throw new Error(`DOOR REPO: manifest fetch failed (${err.message}) and no cache exists at ${cfg.cacheFile}`);
+        if (isTimeoutError(err)) {
+            // Distinct, own-worded failure -- a sysop seeing this should read
+            // "the repo is slow/unreachable," not confuse it with a checksum
+            // mismatch or a 404, so this is never folded into the generic
+            // network-error message below.
+            throw new Error(`DOOR REPO: manifest fetch to ${manifestUrl} timed out after ${timeoutMs / 1000}s ` +
+                `and no cache exists at ${cfg.cacheFile}`);
+        }
+        throw new Error(`DOOR REPO: manifest fetch to ${manifestUrl} failed (${err.message}) and no cache exists at ${cfg.cacheFile}`);
     }
     if (response.status === 304) {
         if (cached) {
@@ -193,13 +240,13 @@ async function fetchManifest(cfg) {
         // Server thinks we hold a matching revision but we have no local
         // cache to serve — a stale/foreign cache file was deleted out from
         // under us. Loud failure, not a silently empty manifest.
-        throw new Error(`DOOR REPO: server returned 304 Not Modified but no local cache exists at ${cfg.cacheFile}`);
+        throw new Error(`DOOR REPO: server returned 304 Not Modified for ${manifestUrl} but no local cache exists at ${cfg.cacheFile}`);
     }
     if (!response.ok) {
         if (cached) {
             return cachedResult(cached);
         }
-        throw new Error(`DOOR REPO: manifest fetch returned HTTP ${response.status} and no cache exists at ${cfg.cacheFile}`);
+        throw new Error(`DOOR REPO: manifest fetch to ${manifestUrl} returned HTTP ${response.status} and no cache exists at ${cfg.cacheFile}`);
     }
     let manifest;
     try {
@@ -209,7 +256,7 @@ async function fetchManifest(cfg) {
         if (cached) {
             return cachedResult(cached);
         }
-        throw new Error(`DOOR REPO: manifest response was not valid JSON (${err.message}) and no cache exists at ${cfg.cacheFile}`);
+        throw new Error(`DOOR REPO: manifest response from ${manifestUrl} was not valid JSON (${err.message}) and no cache exists at ${cfg.cacheFile}`);
     }
     const etag = response.headers.get('etag');
     const cachedAt = new Date().toISOString();
@@ -246,15 +293,28 @@ function safeUnlink(destPath) {
 }
 async function downloadArchive(cfg, archiveName, destPath, expectedSha256) {
     const archiveUrl = `${cfg.url}/api/door-repo/archive/${encodeURIComponent(archiveName)}`;
+    const timeoutMs = cfg.archiveTimeoutMs ?? ARCHIVE_TIMEOUT_MS;
+    // AbortSignal.timeout(timeoutMs) bounds BOTH the initial request
+    // and body streaming: per the fetch spec (confirmed against Node's undici
+    // with a slow-drip probe server), a signal passed to fetch() stays
+    // attached to the returned Response and aborts an in-progress body read
+    // too, so a server that sends headers then stalls mid-stream is caught
+    // here just like one that never responds at all -- there is no separate
+    // "resets the timer on every chunk" gap the way undici's own body timeout
+    // has.
+    const archiveSignal = AbortSignal.timeout(timeoutMs);
     let response;
     try {
-        response = await fetch(archiveUrl);
+        response = await fetch(archiveUrl, { signal: archiveSignal });
     }
     catch (err) {
-        throw new Error(`DOOR REPO: archive download failed for ${archiveName}: ${err.message}`);
+        if (isTimeoutError(err)) {
+            throw new Error(`DOOR REPO: archive download for ${archiveName} timed out after ${timeoutMs / 1000}s (${archiveUrl})`);
+        }
+        throw new Error(`DOOR REPO: archive download failed for ${archiveName} (${archiveUrl}): ${err.message}`);
     }
     if (!response.ok || !response.body) {
-        throw new Error(`DOOR REPO: archive download failed for ${archiveName}: HTTP ${response.status}`);
+        throw new Error(`DOOR REPO: archive download failed for ${archiveName} (${archiveUrl}): HTTP ${response.status}`);
     }
     const hash = crypto.createHash('sha256');
     const nodeStream = stream_1.Readable.fromWeb(response.body);
@@ -300,7 +360,16 @@ async function downloadArchive(cfg, archiveName, destPath, expectedSha256) {
     }
     catch (err) {
         safeUnlink(destPath);
-        throw new Error(`DOOR REPO: archive download failed for ${archiveName}: ${err.message}`);
+        if (isTimeoutError(err)) {
+            // Mid-stream abort: the same AbortSignal that bounds the initial
+            // request also cuts off a stalled body read (see the comment above
+            // the fetch() call), so a slow-drip server that starts sending then
+            // stops gets the same clearly-worded timeout failure -- and the
+            // partial file it left behind is still removed, same as every other
+            // failure path here.
+            throw new Error(`DOOR REPO: archive download for ${archiveName} timed out after ${timeoutMs / 1000}s (${archiveUrl})`);
+        }
+        throw new Error(`DOOR REPO: archive download failed for ${archiveName} (${archiveUrl}): ${err.message}`);
     }
     const actualSha256 = hash.digest('hex');
     if (actualSha256 !== expectedSha256) {
