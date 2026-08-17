@@ -38,11 +38,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.CONSUMER_INSTALL_SOURCE = void 0;
 exports.resolveArchivePath = resolveArchivePath;
 exports.buildDoorInfoContent = buildDoorInfoContent;
 exports.extractArchiveTo = extractArchiveTo;
 exports.findExtractedBinary = findExtractedBinary;
 exports.extractAndRegisterDoor = extractAndRegisterDoor;
+exports.catalogIdForArchive = catalogIdForArchive;
 exports.installConsumerDoor = installConsumerDoor;
 exports.createApp = createApp;
 const path = __importStar(require("path"));
@@ -288,6 +290,30 @@ async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorTyp
         console.log('[DOORMAN] warning: door registry refresh unavailable — new door hidden until BBS restart');
     return { ok: true, doorType: resolvedDoorType, fileCount: result.fileCount, binaryRel };
 }
+/**
+ * Same stable-slug convention dev/scripts/door-corpus/build-door-catalog.ts
+ * uses to derive a door_catalog.id from an archive_name (that script's
+ * `baseId`, duplicated here rather than imported: it's a standalone tsx
+ * script outside both this package's and web/backend's TypeScript program,
+ * not an importable module). Reusing the exact formula matters, not just
+ * for readability parity with scanned rows (e.g. "!ALSTER.LHA" -> "_alster"
+ * in the seed data) -- it means a door that is BOTH consumer-installed here
+ * AND later indexed by a local scan resolves to the SAME id instead of two
+ * divergent rows colliding on door_catalog.archive_name's UNIQUE
+ * constraint. Deterministic in archiveName alone, so install -> uninstall
+ * -> reinstall of the same archive always targets the same row (idempotent
+ * upsert, never a duplicate).
+ */
+function catalogIdForArchive(archiveName) {
+    return archiveName.replace(/\.(lha|lzx|lzh)$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+}
+/** New door_catalog.source value for this install path. The column's only
+ * existing value anywhere in the codebase (schema DEFAULT, every seed row)
+ * is 'scan' -- the local archive-corpus scanner's provenance tag. 'door-repo'
+ * extends that same informal enum minimally: it marks a row as created by
+ * a consumer-mode install from the central door-repo API, never by a local
+ * filesystem scan. */
+exports.CONSUMER_INSTALL_SOURCE = 'door-repo';
 async function installConsumerDoor(cfg, archiveName, doorType, binaryName, finalCmd, installDir, infoPath, tmpDir, deps) {
     const destPath = path.join(tmpDir, archiveName);
     try {
@@ -297,7 +323,20 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
             ({ manifest } = await deps.fetchManifest(cfg));
         }
         catch (err) {
-            return { ok: false, step: 'manifest-lookup', detail: err?.message ?? String(err) };
+            // This is a SEPARATE fetch from whatever populated the browse list
+            // (loadConsumerManifest, on view enter) -- normally a cheap 304 off
+            // repo-client's ETag cache, but if the on-disk cache file is gone or
+            // the network is down at this exact moment, an install that would
+            // otherwise have succeeded (the sysop already saw this door in the
+            // browse list moments ago) fails here instead. Said plainly, not
+            // just via repo-client's raw error text.
+            return {
+                ok: false, step: 'manifest-lookup',
+                detail: `could not re-fetch the central manifest to verify this download ` +
+                    `(browsing and installing re-fetch independently -- this can fail even ` +
+                    `right after a successful browse if the network or manifest cache ` +
+                    `dropped out in between): ${err?.message ?? String(err)}`,
+            };
         }
         const manifestRow = manifest.doors.find(d => d.archiveName === archiveName);
         if (!manifestRow || !manifestRow.sha256) {
@@ -320,12 +359,43 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
                 if (localRow) {
                     deps.markInstalled(localRow.id, finalCmd, `Doors/${finalCmd}`);
                     registeredLocally = true;
+                    return;
                 }
-                else {
-                    console.log(`[DOORMAN] consumer install: no local catalog row for ${archiveName} — registry-only ` +
-                        `(door installed on disk and registered with the BBS; repo browse 'installed' flag needs ` +
-                        `a local catalog row, which this install intentionally does not invent)`);
+                const newId = catalogIdForArchive(archiveName);
+                const collision = deps.getCatalogEntry(newId);
+                if (collision && collision.archive_name !== archiveName) {
+                    console.log(`[DOORMAN] consumer install: id "${newId}" already belongs to a different ` +
+                        `archive (${collision.archive_name}) -- not clobbering it. ${archiveName} ` +
+                        `installs registry-only (on disk, registered with the BBS; repo browse ` +
+                        `'installed' flag needs its own local catalog row).`);
+                    return;
                 }
+                deps.upsertCatalogEntry({
+                    id: newId,
+                    archive_name: archiveName,
+                    archive_path: '', // lives on the central server, not this BBS -- never claim otherwise
+                    binary_name: null,
+                    door_type: doorType || 'XIM',
+                    name: manifestRow.name ?? archiveName,
+                    version: null,
+                    author: null,
+                    release_group: null,
+                    description: manifestRow.description ?? null,
+                    file_id_diz: null,
+                    doc_filename: null,
+                    doc_raw: null,
+                    suggested_tooltypes: null,
+                    category: null,
+                    archive_size: manifestRow.archiveSize ?? 0,
+                    junk_count: 0,
+                    installed: 0, // markInstalled (below) owns installed/installed_as/install_dir
+                    installed_as: null,
+                    install_dir: null,
+                    corpus_id: null,
+                    source: exports.CONSUMER_INSTALL_SOURCE,
+                });
+                deps.markInstalled(newId, finalCmd, `Doors/${finalCmd}`);
+                registeredLocally = true;
             },
         });
         if (!outcome.ok)
@@ -1102,6 +1172,8 @@ class RepoView extends ViewManager_1.BaseView {
                             findExtractedBinary,
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                             lookupLocal: buildLocalCatalogLookup(),
+                            getCatalogEntry: (id) => getCatalogSvc()?.getCatalogEntry(id) ?? null,
+                            upsertCatalogEntry: (entry) => { getCatalogSvc()?.upsertCatalogEntry(entry); },
                             markInstalled: (id, cmd2, dir) => { getCatalogSvc()?.markInstalled(id, cmd2, dir); },
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,
                             mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
@@ -1122,8 +1194,9 @@ class RepoView extends ViewManager_1.BaseView {
                             `{yellow-fg}Binary:{/yellow-fg} ${(0, ViewManager_1.sanitizeForTags)(outcome.binaryRel)}\n` +
                             (outcome.registeredLocally
                                 ? ''
-                                : `\n{yellow-fg}Note:{/yellow-fg} registry-only — no local catalog row for this\n` +
-                                    `archive yet, so it won't show as installed in this browse list.\n`));
+                                : `\n{yellow-fg}Note:{/yellow-fg} registry-only — a local catalog id collision\n` +
+                                    `blocked registration, so it won't show as installed in this browse list.\n` +
+                                    `See the server log for detail.\n`));
                         this.refresh(this.layout.listSelected);
                     }
                     catch (err) {

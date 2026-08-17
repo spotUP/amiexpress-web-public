@@ -39,13 +39,17 @@ jest.mock('../../../../Doors/door-manager/repo-client', () => ({
 import {
   extractAndRegisterDoor,
   installConsumerDoor,
+  catalogIdForArchive,
+  CONSUMER_INSTALL_SOURCE,
   type InstallDeps,
   type ConsumerInstallDeps,
+  type ConsumerCatalogUpsertRow,
 } from '../../../../Doors/door-manager/app';
 import { downloadArchive, fetchManifest } from '../../../../Doors/door-manager/repo-client';
 import type { DoorRepoManifest, ManifestDoor } from '../../../../Doors/door-manager/repo-types.generated';
 import type { RepoClientConfig, FetchManifestResult } from '../../../../Doors/door-manager/repo-client';
-import type { LocalCatalogRow } from '../../../../Doors/door-manager/repoDataSource';
+import { mapManifestDoorToEntry } from '../../../../Doors/door-manager/repoDataSource';
+import type { LocalCatalogRow, LocalCatalogLookup } from '../../../../Doors/door-manager/repoDataSource';
 
 const mockDownloadArchive = downloadArchive as jest.MockedFunction<typeof downloadArchive>;
 const mockFetchManifest = fetchManifest as jest.MockedFunction<typeof fetchManifest>;
@@ -159,12 +163,61 @@ describe('DOORMAN app.ts: installConsumerDoor (consumer download-install)', () =
       findExtractedBinary: jest.fn().mockReturnValue('FOO'),
       writeInfoFile: jest.fn(),
       lookupLocal: jest.fn().mockReturnValue(null),
+      getCatalogEntry: jest.fn().mockReturnValue(null),
+      upsertCatalogEntry: jest.fn(),
       markInstalled: jest.fn(),
       refreshDoorRegistry: jest.fn().mockResolvedValue(true),
       mkdir: (dir: string) => fs.mkdirSync(dir, { recursive: true }),
       unlink: (p: string) => { try { fs.unlinkSync(p); } catch { /* already gone */ } },
       ...overrides,
     };
+  }
+
+  // ── Fake local door_catalog, in-memory ───────────────────────────────
+  //
+  // Backs lookupLocal/getCatalogEntry/upsertCatalogEntry/markInstalled with
+  // ONE shared Map, so tests can drive installConsumerDoor and then check
+  // the resulting local state through the exact same read path RepoView's
+  // real browse view uses (repoDataSource.ts's mapManifestDoorToEntry) --
+  // not just assert "upsert was called".
+  interface FakeRow {
+    id: string; archive_name: string; archive_path: string; binary_name: string | null;
+    installed: number; installed_as: string | null; install_dir: string | null;
+  }
+
+  function makeFakeLocalCatalog() {
+    const rows = new Map<string, FakeRow>();
+    const lookupLocal: LocalCatalogLookup = (archiveName: string): LocalCatalogRow | null => {
+      for (const row of rows.values()) {
+        if (row.archive_name === archiveName) {
+          return {
+            id: row.id, installed: row.installed, installed_as: row.installed_as,
+            install_dir: row.install_dir, binary_name: row.binary_name, archive_path: row.archive_path,
+          };
+        }
+      }
+      return null;
+    };
+    const getCatalogEntry = jest.fn((id: string): { archive_name: string } | null => {
+      const row = rows.get(id);
+      return row ? { archive_name: row.archive_name } : null;
+    });
+    const upsertCatalogEntry = jest.fn((entry: ConsumerCatalogUpsertRow) => {
+      rows.set(entry.id, {
+        id: entry.id, archive_name: entry.archive_name, archive_path: entry.archive_path,
+        binary_name: entry.binary_name, installed: entry.installed, installed_as: entry.installed_as,
+        install_dir: entry.install_dir,
+      });
+    });
+    const markInstalled = jest.fn((id: string, cmd: string, dir: string) => {
+      const row = rows.get(id);
+      if (row) { row.installed = 1; row.installed_as = cmd; row.install_dir = dir; }
+    });
+    const markUninstalled = (id: string): void => {
+      const row = rows.get(id);
+      if (row) { row.installed = 0; row.installed_as = null; row.install_dir = null; }
+    };
+    return { rows, lookupLocal, getCatalogEntry, upsertCatalogEntry, markInstalled, markUninstalled };
   }
 
   it('downloads with the manifest row\'s sha256 (not a hardcoded/guessed value)', async () => {
@@ -280,14 +333,23 @@ describe('DOORMAN app.ts: installConsumerDoor (consumer download-install)', () =
     expect(mockDownloadArchive).not.toHaveBeenCalled();
   });
 
-  // ── Local registration decision ──────────────────────────────────────
+  // ── Local registration decision (fix round 1) ────────────────────────
   //
   // CatalogEntry.id falls back to archiveName for rows never indexed
   // locally (repoDataSource.ts's mapManifestDoorToEntry) -- it is not a
   // door_catalog primary key. installConsumerDoor re-resolves the local
   // row itself via lookupLocal rather than trusting a caller-supplied id.
+  //
+  // Ruling: on a consumer BBS, "no local row yet" is the NORMAL case for a
+  // fresh install (a consumer browses the manifest precisely because it
+  // has no catalog rows), so this now UPSERTs a minimal local row instead
+  // of leaving the door permanently un-installed-looking. door-catalog.
+  // service.ts's existing (previously unused) upsertCatalogEntry already
+  // has an ON CONFLICT(id) clause that never touches installed/
+  // installed_as/install_dir, so it's metadata-only by construction --
+  // markInstalled (below) is what actually flips those.
 
-  it('installed state visible afterward: a real local catalog row -> markInstalled runs, registeredLocally true', async () => {
+  it('installed state visible afterward (already-known door): a real local catalog row -> markInstalled runs, registeredLocally true, no upsert needed', async () => {
     mockFetchManifest.mockResolvedValue({
       manifest: makeManifest([makeManifestDoor({ archiveName: 'FOO.LHA' })]),
       fromCache: false,
@@ -309,9 +371,73 @@ describe('DOORMAN app.ts: installConsumerDoor (consumer download-install)', () =
 
     expect(outcome).toMatchObject({ ok: true, registeredLocally: true });
     expect(deps.markInstalled).toHaveBeenCalledWith('local-id-99', 'FOO', 'Doors/FOO');
+    expect(deps.upsertCatalogEntry).not.toHaveBeenCalled();
   });
 
-  it('no local catalog row: markInstalled is skipped (never invents a row), install still succeeds registry-only', async () => {
+  it('no local catalog row (first-ever consumer install): upserts a minimal row from ONLY known facts, then marks it installed', async () => {
+    mockFetchManifest.mockResolvedValue({
+      manifest: makeManifest([makeManifestDoor({
+        archiveName: 'FOO.LHA', doorType: 'FIM', name: 'Foo Door', description: 'A neat door.',
+        archiveSize: 9999, author: 'Someone', releaseGroup: 'GRP', category: 'trivia', fileIdDiz: 'diz text',
+      })]),
+      fromCache: false,
+      cachedAt: null,
+    } satisfies FetchManifestResult);
+    mockDownloadArchive.mockImplementation(async (_cfg, _name, destPath) => {
+      fs.writeFileSync(destPath, 'archive-bytes');
+    });
+    const upsertCatalogEntry = jest.fn();
+    const markInstalled = jest.fn();
+    const deps = baseDeps({
+      lookupLocal: jest.fn().mockReturnValue(null),
+      getCatalogEntry: jest.fn().mockReturnValue(null),
+      upsertCatalogEntry,
+      markInstalled,
+    });
+
+    const outcome = await installConsumerDoor(
+      CFG, 'FOO.LHA', 'FIM', null, 'FOODOOR', path.join(tmpDir, 'Doors', 'FOODOOR'),
+      path.join(tmpDir, 'FOODOOR.info'), path.join(tmpDir, 'tmp-door-repo'), deps
+    );
+
+    expect(outcome).toMatchObject({ ok: true, registeredLocally: true });
+    const expectedId = catalogIdForArchive('FOO.LHA');
+    expect(upsertCatalogEntry).toHaveBeenCalledWith({
+      id: expectedId,
+      archive_name: 'FOO.LHA',
+      archive_path: '', // lives on the central server, never claimed as local
+      binary_name: null,
+      door_type: 'FIM',
+      name: 'Foo Door',
+      version: null,
+      author: null,
+      release_group: null,
+      description: 'A neat door.',
+      file_id_diz: null,
+      doc_filename: null,
+      doc_raw: null,
+      suggested_tooltypes: null,
+      category: null,
+      archive_size: 9999,
+      junk_count: 0,
+      installed: 0, // markInstalled (not this upsert) owns install state
+      installed_as: null,
+      install_dir: null,
+      corpus_id: null,
+      source: CONSUMER_INSTALL_SOURCE,
+    } satisfies ConsumerCatalogUpsertRow);
+    expect(markInstalled).toHaveBeenCalledWith(expectedId, 'FOODOOR', 'Doors/FOODOOR');
+    // Metadata row must exist before markInstalled targets its id.
+    const upsertOrder = upsertCatalogEntry.mock.invocationCallOrder[0];
+    const markOrder = markInstalled.mock.invocationCallOrder[0];
+    expect(upsertOrder).toBeLessThan(markOrder);
+  });
+
+  it('id-slug collision with a DIFFERENT archive_name: never clobbers the existing row, falls back to registry-only', async () => {
+    const collidingId = catalogIdForArchive('FOO.LHA');
+    const getCatalogEntry = jest.fn().mockReturnValue({ archive_name: 'DIFFERENT-ARCHIVE.LHA' });
+    const upsertCatalogEntry = jest.fn();
+    const markInstalled = jest.fn();
     mockFetchManifest.mockResolvedValue({
       manifest: makeManifest([makeManifestDoor({ archiveName: 'FOO.LHA' })]),
       fromCache: false,
@@ -320,19 +446,106 @@ describe('DOORMAN app.ts: installConsumerDoor (consumer download-install)', () =
     mockDownloadArchive.mockImplementation(async (_cfg, _name, destPath) => {
       fs.writeFileSync(destPath, 'archive-bytes');
     });
-    const deps = baseDeps({ lookupLocal: jest.fn().mockReturnValue(null) });
+    const deps = baseDeps({
+      lookupLocal: jest.fn().mockReturnValue(null), getCatalogEntry, upsertCatalogEntry, markInstalled,
+    });
 
     const outcome = await installConsumerDoor(
-      CFG, 'FOO.LHA', 'XIM', 'FOO', 'FOO', path.join(tmpDir, 'Doors', 'FOO'),
-      path.join(tmpDir, 'FOO.info'), path.join(tmpDir, 'tmp-door-repo'), deps
+      CFG, 'FOO.LHA', 'XIM', null, 'FOODOOR', path.join(tmpDir, 'Doors', 'FOODOOR'),
+      path.join(tmpDir, 'FOODOOR.info'), path.join(tmpDir, 'tmp-door-repo'), deps
     );
 
     expect(outcome).toMatchObject({ ok: true, registeredLocally: false });
-    expect(deps.markInstalled).not.toHaveBeenCalled();
-    // The rest of the install (on-disk extract + .info + registry refresh)
-    // still ran -- registry-only tracking means the door works, only the
-    // repo browse view's `installed` flag won't reflect it.
-    expect(deps.writeInfoFile).toHaveBeenCalled();
-    expect(deps.refreshDoorRegistry).toHaveBeenCalled();
+    expect(getCatalogEntry).toHaveBeenCalledWith(collidingId);
+    expect(upsertCatalogEntry).not.toHaveBeenCalled();
+    expect(markInstalled).not.toHaveBeenCalled();
+  });
+
+  it('ACCEPTANCE: after a first-ever consumer install, the repo browse view resolves installed=1 via lookupLocal (Task 6)', async () => {
+    const store = makeFakeLocalCatalog();
+    const manifestDoor = makeManifestDoor({
+      archiveName: 'FOO.LHA', name: 'Foo Door', description: 'A neat door.', archiveSize: 4096,
+    });
+    mockFetchManifest.mockResolvedValue({
+      manifest: makeManifest([manifestDoor]), fromCache: false, cachedAt: null,
+    } satisfies FetchManifestResult);
+    mockDownloadArchive.mockImplementation(async (_cfg, _name, destPath) => {
+      fs.writeFileSync(destPath, 'archive-bytes');
+    });
+    const deps = baseDeps({
+      lookupLocal: store.lookupLocal, getCatalogEntry: store.getCatalogEntry,
+      upsertCatalogEntry: store.upsertCatalogEntry, markInstalled: store.markInstalled,
+    });
+
+    const outcome = await installConsumerDoor(
+      CFG, 'FOO.LHA', 'XIM', null, 'FOODOOR', path.join(tmpDir, 'Doors', 'FOODOOR'),
+      path.join(tmpDir, 'FOODOOR.info'), path.join(tmpDir, 'tmp-door-repo'), deps
+    );
+    expect(outcome).toMatchObject({ ok: true, registeredLocally: true });
+
+    // The actual acceptance bar for this round: Task 6's real
+    // mapManifestDoorToEntry, driven by the SAME local-state lookup the
+    // repo browse view uses, now resolves this door as installed --
+    // not just "upsertCatalogEntry was called".
+    const browseEntry = mapManifestDoorToEntry(manifestDoor, store.lookupLocal);
+    expect(browseEntry.installed).toBe(1);
+    expect(browseEntry.installed_as).toBe('FOODOOR');
+    expect(browseEntry.id).toBe(catalogIdForArchive('FOO.LHA'));
+  });
+
+  it('idempotent: install -> uninstall -> reinstall targets the same row, never creates a duplicate', async () => {
+    const store = makeFakeLocalCatalog();
+    mockFetchManifest.mockResolvedValue({
+      manifest: makeManifest([makeManifestDoor({ archiveName: 'FOO.LHA' })]), fromCache: false, cachedAt: null,
+    } satisfies FetchManifestResult);
+    mockDownloadArchive.mockImplementation(async (_cfg, _name, destPath) => {
+      fs.writeFileSync(destPath, 'archive-bytes');
+    });
+    const deps = baseDeps({
+      lookupLocal: store.lookupLocal, getCatalogEntry: store.getCatalogEntry,
+      upsertCatalogEntry: store.upsertCatalogEntry, markInstalled: store.markInstalled,
+    });
+    const install = () => installConsumerDoor(
+      CFG, 'FOO.LHA', 'XIM', null, 'FOODOOR', path.join(tmpDir, 'Doors', 'FOODOOR'),
+      path.join(tmpDir, 'FOODOOR.info'), path.join(tmpDir, 'tmp-door-repo'), deps
+    );
+
+    const first = await install();
+    expect(first).toMatchObject({ ok: true, registeredLocally: true });
+    expect(store.rows.size).toBe(1);
+    expect(store.upsertCatalogEntry).toHaveBeenCalledTimes(1);
+    const id = catalogIdForArchive('FOO.LHA');
+
+    // Uninstall: matches RepoView's real uninstall branch -- markUninstalled
+    // flips installed back to 0 but KEEPS the row (never deletes it).
+    store.markUninstalled(id);
+    expect(store.rows.get(id)?.installed).toBe(0);
+
+    const second = await install();
+    expect(second).toMatchObject({ ok: true, registeredLocally: true });
+
+    // Still exactly one row: reinstall found the existing row via
+    // lookupLocal and went straight to markInstalled, never upserting a
+    // second (duplicate) row for the same archive.
+    expect(store.rows.size).toBe(1);
+    expect(store.upsertCatalogEntry).toHaveBeenCalledTimes(1);
+    expect(store.markInstalled).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── catalogIdForArchive: deterministic slug, matches the corpus-builder ────
+// convention (dev/scripts/door-corpus/build-door-catalog.ts's `baseId`) ────
+
+describe('DOORMAN app.ts: catalogIdForArchive', () => {
+  it('matches known seed-data conversions (same formula as the corpus builder)', () => {
+    // Real rows from web/backend/seeds/door-catalog-seed.sql:
+    //   ('_alster', '!ALSTER.LHA', ...)   ('5d_add12', '5D-ADD12.LHA', ...)
+    expect(catalogIdForArchive('!ALSTER.LHA')).toBe('_alster');
+    expect(catalogIdForArchive('5D-ADD12.LHA')).toBe('5d_add12');
+  });
+
+  it('deterministic: the same archiveName always yields the same id (install/uninstall/reinstall idempotency depends on this)', () => {
+    expect(catalogIdForArchive('FOO.LHA')).toBe(catalogIdForArchive('FOO.LHA'));
+    expect(catalogIdForArchive('foo.lha')).toBe(catalogIdForArchive('FOO.LHA'));
   });
 });
