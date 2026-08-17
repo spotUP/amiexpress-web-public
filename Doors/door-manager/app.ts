@@ -14,7 +14,7 @@ import { FileExplorerOverlay } from './FileExplorerOverlay';
 import { InfoEditorOverlay } from './InfoEditorOverlay';
 import { showAmigaGuideViewer } from './AmigaGuideViewer';
 import { ViewManager, BaseView, sanitizeForTags, refreshDoorRegistry, resolveBbsRoot } from './ViewManager';
-import { ALL_TYPES, distinctTypes, cycleSystemFilter, filterByDoorType } from './systemFilter';
+import { ALL_TYPES, distinctTypes, cycleSystemFilter, filterByDoorType, formatSystemTag } from './systemFilter';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Install/re-extract now goes through the portable extractor factory
@@ -555,8 +555,12 @@ class RepoView extends BaseView {
     const svc = getCatalogSvc();
     let stats = '';
     try { const s = svc?.catalogStats(); if (s) stats = `${s.total} in repo, ${s.installed} installed`; } catch {}
-    const sysTag = this.systemFilter !== ALL_TYPES
-      ? `  {cyan-fg}System: ${this.systemFilter} (${this.visibleEntries.length}){/cyan-fg}` : '';
+    // Always shown (including the default ALL state) — a sysop with no
+    // idea the filter exists has no way to discover it otherwise. Count is
+    // visibleEntries: rows surviving BOTH the text search (this.filter,
+    // via searchCatalog) AND the system-type filter, so it always matches
+    // what's actually on screen.
+    const sysTag = `  {cyan-fg}${formatSystemTag(this.systemFilter, this.visibleEntries.length)}{/cyan-fg}`;
     this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}${sysTag}{/center}`);
   }
 

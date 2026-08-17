@@ -14,6 +14,7 @@ exports.ALL_TYPES = void 0;
 exports.distinctTypes = distinctTypes;
 exports.cycleSystemFilter = cycleSystemFilter;
 exports.filterByDoorType = filterByDoorType;
+exports.formatSystemTag = formatSystemTag;
 /** Sentinel meaning "no filter applied" — every row is shown. */
 exports.ALL_TYPES = 'ALL';
 /**
@@ -56,5 +57,17 @@ function filterByDoorType(rows, sys, typeOf) {
     if (sys === exports.ALL_TYPES)
         return rows;
     return rows.filter(row => typeOf(row) === sys);
+}
+/**
+ * Header indicator text — ALWAYS shown, including the default ALL state
+ * (`System: ALL (66)`), not just while filtered. A sysop with no way to
+ * see "nothing is filtered right now" has no way to discover the filter
+ * exists at all. `count` should be the rows visible under BOTH the text
+ * search and the system-type filter (RepoView's `visibleEntries`), so the
+ * number always matches what's actually on screen. Plain text — the
+ * caller wraps it in whatever blessed color tags its header uses.
+ */
+function formatSystemTag(sys, count) {
+    return `System: ${sys} (${count})`;
 }
 //# sourceMappingURL=systemFilter.js.map

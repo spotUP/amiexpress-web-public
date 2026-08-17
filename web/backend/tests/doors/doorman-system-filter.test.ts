@@ -11,6 +11,7 @@ import {
   distinctTypes,
   cycleSystemFilter,
   filterByDoorType,
+  formatSystemTag,
 } from '../../../../Doors/door-manager/systemFilter';
 
 interface Row { door_type: string; name: string }
@@ -73,5 +74,23 @@ describe('DOORMAN systemFilter: filterByDoorType', () => {
 
   it('returns an empty list when nothing matches', () => {
     expect(filterByDoorType(rows, 'DD', typeOf)).toEqual([]);
+  });
+});
+
+describe('DOORMAN systemFilter: formatSystemTag', () => {
+  // UX follow-up: a sysop reported "how do i select and see which system
+  // filter is active? it's not clear" — the header indicator used to be
+  // conditional (blank while ALL), so the filter's existence and default
+  // state were both undiscoverable. It must always render, ALL included.
+  it('renders the default ALL state, not blank/nothing', () => {
+    expect(formatSystemTag(ALL_TYPES, 231)).toBe('System: ALL (231)');
+  });
+
+  it('renders an active type filter the same way', () => {
+    expect(formatSystemTag('FIM', 66)).toBe('System: FIM (66)');
+  });
+
+  it('renders a zero count plainly (stale filter matching nothing)', () => {
+    expect(formatSystemTag('DD', 0)).toBe('System: DD (0)');
   });
 });

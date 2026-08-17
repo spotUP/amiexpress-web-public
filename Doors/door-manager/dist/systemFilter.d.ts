@@ -27,4 +27,14 @@ export declare function distinctTypes<T>(rows: T[], typeOf: (row: T) => string):
 export declare function cycleSystemFilter(current: string, availableTypes: string[]): string;
 /** Apply the current filter to `rows`. ALL_TYPES is a no-op pass-through. */
 export declare function filterByDoorType<T>(rows: T[], sys: string, typeOf: (row: T) => string): T[];
+/**
+ * Header indicator text — ALWAYS shown, including the default ALL state
+ * (`System: ALL (66)`), not just while filtered. A sysop with no way to
+ * see "nothing is filtered right now" has no way to discover the filter
+ * exists at all. `count` should be the rows visible under BOTH the text
+ * search and the system-type filter (RepoView's `visibleEntries`), so the
+ * number always matches what's actually on screen. Plain text — the
+ * caller wraps it in whatever blessed color tags its header uses.
+ */
+export declare function formatSystemTag(sys: string, count: number): string;
 //# sourceMappingURL=systemFilter.d.ts.map

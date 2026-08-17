@@ -578,8 +578,12 @@ class RepoView extends ViewManager_1.BaseView {
                 stats = `${s.total} in repo, ${s.installed} installed`;
         }
         catch { }
-        const sysTag = this.systemFilter !== systemFilter_1.ALL_TYPES
-            ? `  {cyan-fg}System: ${this.systemFilter} (${this.visibleEntries.length}){/cyan-fg}` : '';
+        // Always shown (including the default ALL state) — a sysop with no
+        // idea the filter exists has no way to discover it otherwise. Count is
+        // visibleEntries: rows surviving BOTH the text search (this.filter,
+        // via searchCatalog) AND the system-type filter, so it always matches
+        // what's actually on screen.
+        const sysTag = `  {cyan-fg}${(0, systemFilter_1.formatSystemTag)(this.systemFilter, this.visibleEntries.length)}{/cyan-fg}`;
         this.layout.setHeader(`{center}{cyan-fg}DOORMAN v2  REPO{/cyan-fg}  {white-fg}${stats}${this.filter ? ' (filtered)' : ''}{/white-fg}${sysTag}{/center}`);
     }
     cycleFilter() {
