@@ -61,18 +61,16 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
 
-      # Door repo (see deploy/README.md "Door repo: owner vs. consumer").
-      # Bare pass-through, deliberately: leaving either variable unset here
-      # means it is NOT set in the container, so Doors/door-manager/
-      # repoDataSource.ts applies its own built-in default (consumer mode,
-      # pointed at the one URL defined there) -- that keeps the URL defined
-      # in exactly one place instead of duplicating it into compose. Set
-      # DOOR_REPO_URL="" explicitly (e.g. in .env.local) to disable the
-      # door repo entirely. The OWNER host must set DOOR_REPO_ROLE=owner in
-      # ITS OWN .env.local -- never here, since consumers copy this compose
-      # file verbatim.
-      - DOOR_REPO_ROLE
-      - DOOR_REPO_URL
+      # Door repo role and URL are NOT listed here on purpose.
+      # A bare `- DOOR_REPO_ROLE` entry resolves to an EMPTY value when the
+      # variable is not set in the shell, and an `environment:` entry SHADOWS
+      # `env_file`, so listing them here silently overrode .env/.env.local and
+      # took the live API offline once (2026-08-17). Set them in `.env` or
+      # `.env.local` instead -- both are loaded via env_file below:
+      #   DOOR_REPO_ROLE=owner   (only on the host that SERVES the repo)
+      #   DOOR_REPO_URL=...      (override the built-in default; "" disables)
+      # The default URL lives in exactly one place in code:
+      # Doors/door-manager/repoDataSource.ts (DEFAULT_DOOR_REPO_URL).
 
     env_file:
       - .env.local

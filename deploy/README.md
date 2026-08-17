@@ -89,6 +89,26 @@ Edit `/app/amiexpress/.env` to configure:
 | `DOOR_REPO_ROLE` | unset (built-in default: consumer) | `owner` enables the door-repo curation UI in DOORMAN (including the `S`=Strip action) and serves the Door Repo API from this box's own local catalog/archives. Unset (or `consumer`) fetches the manifest from `DOOR_REPO_URL` instead. |
 | `DOOR_REPO_URL` | unset (built-in default: see `Doors/door-manager/repoDataSource.ts`) | Base URL a consumer box fetches the door-repo manifest from. An explicit empty string disables the door repo entirely (DOORMAN falls back to its local catalog only). Ignored in owner mode. |
 
+### Door repo variables must live in .env, not in compose
+
+`DOOR_REPO_ROLE` and `DOOR_REPO_URL` are deliberately NOT listed in the
+compose `environment:` block. A bare `- DOOR_REPO_ROLE` entry there resolves
+to an EMPTY value whenever the variable is not set in the deploying shell, and
+an `environment:` entry SHADOWS `env_file` -- which silently overrode
+`.env.local` and took the live door-repo API offline on 2026-08-17 (the
+router is gated on the role, so an empty value un-mounts it). Put them in
+`/app/amiexpress/.env` (or `.env.local`); both are loaded via `env_file`.
+
+After changing either variable, the container must be RECREATED, not just
+restarted, for the new environment to apply:
+
+```
+cd /app/amiexpress && docker compose up -d
+docker exec amiexpress-bbs sh -c 'echo $DOOR_REPO_ROLE'   # expect: owner
+curl -s -o /dev/null -w '%{http_code}\n' \
+  http://bbs.uprough.net/api/door-repo/health              # expect: 200
+```
+
 ### Door repo: owner vs. consumer
 
 Exactly one BBS in the network should run as the **owner** -- the box whose
