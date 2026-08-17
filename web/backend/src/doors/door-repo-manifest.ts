@@ -5,12 +5,25 @@
  * parser) can read directly over a socket, plus a JSON-friendly
  * DoorRepoManifest for modern (web) consumers.
  *
- * Checksums come from Task 1's getArchiveChecksums (door-repo-checksums.ts)
- * and are looked up lazily per archive; a missing/unreadable archive file
- * yields null md5/sha256 (never a thrown error out of buildManifest) — the
- * row still appears in the manifest, and a consumer that tries to install
- * it 404s at download time, which is the loud failure, not manifest
- * generation.
+ * Checksums are read straight off the door_catalog row (md5/sha256 columns,
+ * populated at index time by dev/scripts/door-corpus/build-door-catalog.ts —
+ * see door-repo-checksums.ts's getArchiveChecksums, the function it reuses
+ * for hashing). This is what keeps buildManifest() cheap: on a cold process
+ * cache, synchronously fs.readFileSync + hashing ~3300 archives (167 MB)
+ * blocks the Node event loop for ~22 SECONDS — during which the whole BBS
+ * (telnet/SSH, WebSocket heartbeats, every other route) stalls. Reading a
+ * precomputed column is a plain SELECT; no per-request hashing.
+ *
+ * A row with a still-NULL md5/sha256 (not yet (re)indexed) falls back to
+ * computing it live via getArchiveChecksums — but bounded to at most
+ * LAZY_CHECKSUM_FALLBACK_LIMIT rows per call. Past that bound, remaining
+ * NULL rows are left null with the same ASCII WARN as before (never a
+ * thrown error out of buildManifest) — the row still appears in the
+ * manifest, and a consumer that tries to install it either gets a null
+ * checksum (client-side skip) or 404s at download time if the archive is
+ * genuinely missing. The bound exists so a request landing on an
+ * un-backfilled/stale slice of the catalog degrades gracefully instead of
+ * reproducing the original cold-cache stall.
  */
 import Database from 'better-sqlite3';
 import * as path from 'path';
@@ -66,7 +79,17 @@ interface DoorCatalogRow {
   description: string | null;
   file_id_diz: string | null;
   archive_size: number | null;
+  md5: string | null;
+  sha256: string | null;
 }
+
+// Upper bound on how many rows buildManifest() will lazily hash (NULL
+// md5/sha256, i.e. not yet indexed with digests) in a single call. At the
+// measured ~5.9ms/file average (3669 files / 21760ms), 25 files is ~150ms
+// worst case — comfortably under "a fraction of a second," even stacked
+// with the rest of buildManifest's row-mapping work. Rows beyond the bound
+// keep their NULL checksum and log the existing WARN; nothing throws.
+export const LAZY_CHECKSUM_FALLBACK_LIMIT = 25;
 
 // ─── Revision source ────────────────────────────────────────────────────
 //
@@ -122,7 +145,7 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const sql = `
       SELECT archive_name, archive_path, door_type, name, author, release_group,
-             category, description, file_id_diz, archive_size
+             category, description, file_id_diz, archive_size, md5, sha256
       FROM door_catalog
       ${where}
       ORDER BY archive_name COLLATE NOCASE ASC
@@ -132,17 +155,32 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
     db.close();
   }
 
+  let lazyFallbacksUsed = 0;
+
   const doors: ManifestDoor[] = rows.map((row) => {
-    let md5: string | null = null;
-    let sha256: string | null = null;
-    try {
-      const absPath = resolveArchivePath(row.archive_path);
-      const sums = getArchiveChecksums(absPath);
-      md5 = sums.md5;
-      sha256 = sums.sha256;
-    } catch {
-      // eslint-disable-next-line no-console
-      console.log(`[door-repo] WARN checksum unavailable: ${row.archive_name}`);
+    let md5: string | null = row.md5;
+    let sha256: string | null = row.sha256;
+
+    if (md5 === null || sha256 === null) {
+      if (lazyFallbacksUsed < LAZY_CHECKSUM_FALLBACK_LIMIT) {
+        lazyFallbacksUsed++;
+        try {
+          const absPath = resolveArchivePath(row.archive_path);
+          const sums = getArchiveChecksums(absPath);
+          md5 = sums.md5;
+          sha256 = sums.sha256;
+        } catch {
+          md5 = null;
+          sha256 = null;
+          // eslint-disable-next-line no-console
+          console.log(`[door-repo] WARN checksum unavailable: ${row.archive_name}`);
+        }
+      } else {
+        md5 = null;
+        sha256 = null;
+        // eslint-disable-next-line no-console
+        console.log(`[door-repo] WARN checksum not indexed and lazy-fallback limit (${LAZY_CHECKSUM_FALLBACK_LIMIT}) reached: ${row.archive_name}`);
+      }
     }
 
     return {

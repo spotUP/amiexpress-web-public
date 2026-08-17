@@ -56,7 +56,9 @@ describe('door-repo-manifest', () => {
         install_dir         TEXT,
         corpus_id           TEXT,
         source              TEXT DEFAULT 'scan',
-        indexed_at          INTEGER DEFAULT (strftime('%s','now'))
+        indexed_at          INTEGER DEFAULT (strftime('%s','now')),
+        md5                 TEXT,
+        sha256               TEXT
       )
     `);
 
@@ -201,6 +203,87 @@ describe('door-repo-manifest', () => {
     // 3 rows seeded in beforeEach: FOO_XIM.LHA, MISSING_DDD.LHA, REXX_SCRIPT.LHA.
     const count = mod().getDoorCount();
     expect(count).toBe(3);
+  });
+
+  // Perf guard for the live defect this task fixes: on a cold cache,
+  // synchronously hashing every archive per buildManifest() call blocked
+  // the event loop for ~22 seconds against the real 3669-file catalog.
+  // Precomputed md5/sha256 columns (populated at index time by
+  // dev/scripts/door-corpus/build-door-catalog.ts) must make buildManifest()
+  // read the digest straight off the row instead. jest.doMock (not
+  // jest.spyOn) mirrors tests/api/door-repo-routes.test.ts's pattern for the
+  // same reason noted there: swc compiles named exports as non-configurable
+  // getters, so spyOn can't redefine getArchiveChecksums.
+  describe('stored-digest fast path (no per-request hashing)', () => {
+    afterEach(() => {
+      jest.dontMock('../../src/doors/door-repo-checksums');
+    });
+
+    it('uses the row\'s stored md5/sha256 and never calls getArchiveChecksums for that row when both are populated', () => {
+      // Other seeded rows (MISSING_DDD.LHA, REXX_SCRIPT.LHA) still have NULL
+      // md5/sha256 and legitimately hit the lazy-hash fallback below — the
+      // assertion is scoped to FOO_XIM.LHA's own archive path, proving THAT
+      // row's stored digest short-circuits hashing, not that nothing in the
+      // whole manifest call ever hashes anything.
+      const db2 = new Database(dbPath);
+      db2.prepare('UPDATE door_catalog SET md5 = ?, sha256 = ? WHERE id = ?').run(
+        '5d41402abc4b2a76b9719d911017c592', // md5("hello") — matches foo.lha's real content
+        '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+        'id-1'
+      );
+      db2.close();
+
+      const checksumSpy = jest.fn();
+      jest.doMock('../../src/doors/door-repo-checksums', () => ({
+        getArchiveChecksums: checksumSpy,
+        _clearChecksumCacheForTests: jest.fn(),
+      }));
+
+      const m = mod().buildManifest();
+      const foo = m.doors.find((d: { archiveName: string }) => d.archiveName === 'FOO_XIM.LHA');
+
+      expect(foo.md5).toBe('5d41402abc4b2a76b9719d911017c592');
+      expect(foo.sha256).toBe('2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
+      const fooPathCalls = checksumSpy.mock.calls.filter((call) => String(call[0]).includes('foo.lha'));
+      expect(fooPathCalls).toHaveLength(0);
+    });
+
+    it('still falls back to hashing (and still warns) for a row with NULL md5/sha256, bounded to LAZY_CHECKSUM_FALLBACK_LIMIT rows per call', () => {
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const db2 = new Database(dbPath);
+      const insert = db2.prepare(
+        `INSERT INTO door_catalog
+          (id, archive_name, archive_path, door_type, name, archive_size)
+         VALUES (?, ?, ?, 'XIM', ?, ?)`
+      );
+      const { LAZY_CHECKSUM_FALLBACK_LIMIT } = mod();
+      const bulkCount = LAZY_CHECKSUM_FALLBACK_LIMIT + 3;
+      for (let i = 0; i < bulkCount; i++) {
+        const n = String(i).padStart(3, '0');
+        const archiveName = `BULK_${n}.LHA`;
+        const rel = `bulk-${n}.lha`;
+        fs.writeFileSync(path.join(archiveDir, rel), Buffer.from(`bulk-${n}`));
+        insert.run(`bulk-${n}`, archiveName, rel, `Bulk ${n}`, 10);
+      }
+      db2.close();
+
+      const m = mod().buildManifest({ q: 'BULK_' });
+      expect(m.doors).toHaveLength(bulkCount);
+
+      const hashed = m.doors.filter((d: { md5: string | null }) => d.md5 !== null);
+      const notHashed = m.doors.filter((d: { md5: string | null }) => d.md5 === null);
+      expect(hashed).toHaveLength(LAZY_CHECKSUM_FALLBACK_LIMIT);
+      expect(notHashed).toHaveLength(bulkCount - LAZY_CHECKSUM_FALLBACK_LIMIT);
+      for (const d of notHashed) expect(d.sha256).toBeNull();
+
+      const warnedBoundReached = logSpy.mock.calls.some((call) =>
+        String(call[0]).includes('lazy-fallback limit') && String(call[0]).includes(String(LAZY_CHECKSUM_FALLBACK_LIMIT))
+      );
+      expect(warnedBoundReached).toBe(true);
+
+      logSpy.mockRestore();
+    });
   });
 
   describe('renderListTxt', () => {

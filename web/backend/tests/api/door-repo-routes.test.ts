@@ -66,7 +66,9 @@ describe('door-repo routes', () => {
         install_dir         TEXT,
         corpus_id           TEXT,
         source              TEXT DEFAULT 'scan',
-        indexed_at          INTEGER DEFAULT (strftime('%s','now'))
+        indexed_at          INTEGER DEFAULT (strftime('%s','now')),
+        md5                 TEXT,
+        sha256               TEXT
       )
     `);
 

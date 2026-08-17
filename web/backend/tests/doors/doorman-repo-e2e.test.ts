@@ -86,7 +86,9 @@ describe('doorman repo-client E2E against a real local server', () => {
         install_dir         TEXT,
         corpus_id           TEXT,
         source              TEXT DEFAULT 'scan',
-        indexed_at          INTEGER DEFAULT (strftime('%s','now'))
+        indexed_at          INTEGER DEFAULT (strftime('%s','now')),
+        md5                 TEXT,
+        sha256               TEXT
       )
     `);
 

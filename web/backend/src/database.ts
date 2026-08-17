@@ -783,6 +783,22 @@ console.log('Checking for missing columns in messages table...');
 console.log('[+] Added receivedat column to messages (express.e:8915-8926)');
       }
 
+      // door_catalog table migrations — precomputed archive digests so
+      // buildManifest() (door-repo-manifest.ts) can read md5/sha256 from the
+      // row instead of synchronously hashing the archive on every request.
+console.log('Checking for missing columns in door_catalog table...');
+      const doorCatalogInfo = this.db.prepare('PRAGMA table_info(door_catalog)').all() as any[];
+      const doorCatalogColumns = doorCatalogInfo.map(col => col.name);
+
+      if (!doorCatalogColumns.includes('md5')) {
+        this.db.exec('ALTER TABLE door_catalog ADD COLUMN md5 TEXT');
+console.log('[+] Added md5 column to door_catalog');
+      }
+      if (!doorCatalogColumns.includes('sha256')) {
+        this.db.exec('ALTER TABLE door_catalog ADD COLUMN sha256 TEXT');
+console.log('[+] Added sha256 column to door_catalog');
+      }
+
       // Reset all non-zero scan_flags to 0. File scanning is controlled exclusively by the
       // SHOW_NEW_FILES conference .info tooltype — DB scan_flags no longer gate AquaScan.
       {

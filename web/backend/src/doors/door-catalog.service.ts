@@ -42,6 +42,9 @@ export interface CatalogEntry {
   installed_as: string | null;
   install_dir: string | null;
   corpus_id: string | null;
+  source: string | null;
+  md5: string | null;
+  sha256: string | null;
 }
 
 function openDb(): Database.Database {
@@ -206,7 +209,15 @@ export function catalogStats(): { total: number; installed: number } {
   }
 }
 
-export function upsertCatalogEntry(entry: Omit<CatalogEntry, never>): void {
+// The SQL below binds every CatalogEntry field EXCEPT md5/sha256 — those
+// columns are populated exclusively by dev/scripts/door-corpus/
+// build-door-catalog.ts's own inline upsert (which does compute digests via
+// door-repo-checksums.ts's getArchiveChecksums at index time). Excluding
+// them here keeps the type honest about what this function actually writes
+// — passing `Omit<CatalogEntry, never>` (i.e. the full row shape, including
+// md5/sha256) would force every typed caller to supply digest values this
+// function silently discards.
+export function upsertCatalogEntry(entry: Omit<CatalogEntry, 'md5' | 'sha256'>): void {
   const db = openDb();
   try {
     db.prepare(`

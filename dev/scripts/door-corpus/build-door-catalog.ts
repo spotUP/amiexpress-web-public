@@ -29,6 +29,7 @@ import Database from 'better-sqlite3';
 import { detectDoorType, AMIGA_68K_BINARY_EXT_RE } from '../../../web/backend/src/doors/door-installer';
 import { getExtractorForFile } from '../../../web/backend/src/utils/archive-extractor';
 import { resolveArchivePath } from '../../../web/backend/src/doors/door-catalog.service';
+import { getArchiveChecksums } from '../../../web/backend/src/doors/door-repo-checksums';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 // Reference corpus used to compile scene-stripper patterns + MD5 fingerprints
@@ -46,6 +47,7 @@ const LHA_BIN = '/opt/homebrew/bin/lha';
 const args = process.argv.slice(2);
 const SKIP_REEXTRACT = args.includes('--skip-reextract');
 const VERBOSE = args.includes('--verbose');
+const BACKFILL_CHECKSUMS = args.includes('--backfill-checksums');
 
 // Directory actually indexed in step 3 (defaults to ARCHIVES_DIR, i.e. the
 // original AmiExpress-only behavior is unchanged when the flag is omitted).
@@ -697,12 +699,12 @@ async function indexArchives(
       id, archive_name, archive_path, binary_name, door_type, name, version,
       author, release_group, description, file_id_diz, doc_filename, doc_raw,
       suggested_tooltypes, category, archive_size, junk_count, installed,
-      installed_as, install_dir, corpus_id, source
+      installed_as, install_dir, corpus_id, source, md5, sha256
     ) VALUES (
       @id, @archive_name, @archive_path, @binary_name, @door_type, @name, @version,
       @author, @release_group, @description, @file_id_diz, @doc_filename, @doc_raw,
       @suggested_tooltypes, @category, @archive_size, @junk_count, @installed,
-      @installed_as, @install_dir, @corpus_id, @source
+      @installed_as, @install_dir, @corpus_id, @source, @md5, @sha256
     )
     ON CONFLICT(id) DO UPDATE SET
       archive_name = excluded.archive_name,
@@ -723,6 +725,8 @@ async function indexArchives(
       junk_count = excluded.junk_count,
       corpus_id = excluded.corpus_id,
       source = excluded.source,
+      md5 = excluded.md5,
+      sha256 = excluded.sha256,
       indexed_at = strftime('%s','now')
   `);
 
@@ -858,6 +862,22 @@ async function indexArchives(
     // Corpus lookup
     const corpusEntry = corpus.get(baseId) ?? corpus.get(binaryName?.toLowerCase() ?? '');
 
+    // Archive digests (md5/sha256) — computed here at index time so
+    // buildManifest() (web/backend/src/doors/door-repo-manifest.ts) can read
+    // them straight off the row instead of hashing the archive per request.
+    // Reuses door-repo-checksums.ts's getArchiveChecksums, the same function
+    // the manifest's NULL-fallback path calls, so the digest algorithm and
+    // cache key are identical everywhere they're computed.
+    let md5: string | null = null;
+    let sha256: string | null = null;
+    try {
+      const sums = getArchiveChecksums(archivePath);
+      md5 = sums.md5;
+      sha256 = sums.sha256;
+    } catch (err) {
+      log(`  WARN checksum failed for ${archiveName}: ${(err as Error).message}`);
+    }
+
     // Release group
     const releaseGroup = extractReleaseGroup(archiveName);
 
@@ -906,6 +926,8 @@ async function indexArchives(
       install_dir: installDir,
       corpus_id: corpusEntry?.id ?? null,
       source: 'scan',
+      md5,
+      sha256,
     });
 
     // Store file listing immediately (outside batch, each archive individually)
@@ -981,22 +1003,54 @@ function reextractInstalledDoors(
   }
 }
 
+// ─── One-off backfill: existing rows with NULL md5/sha256 ────────────────────
+//
+// A one-off pass over already-indexed rows, without a full re-index (no
+// archive extraction, no junk classification, no corpus lookup) — just
+// resolves each row's archive_path and computes/stores the digest via
+// getArchiveChecksums, the same function indexArchives() and the manifest's
+// NULL-fallback both call. Run once against the existing 3301-row catalog so
+// production stops paying the buildManifest() synchronous-hash cost even
+// before the next full re-index.
+function backfillChecksums(db: Database.Database): void {
+  log('=== Backfilling md5/sha256 for existing door_catalog rows ===');
+
+  const rows = db.prepare(
+    'SELECT id, archive_name, archive_path FROM door_catalog WHERE md5 IS NULL OR sha256 IS NULL'
+  ).all() as Array<{ id: string; archive_name: string; archive_path: string }>;
+
+  log(`Rows missing digests: ${rows.length}`);
+
+  const update = db.prepare('UPDATE door_catalog SET md5 = ?, sha256 = ? WHERE id = ?');
+
+  let updated = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const absPath = resolveArchivePath(row.archive_path);
+      const sums = getArchiveChecksums(absPath);
+      update.run(sums.md5, sums.sha256, row.id);
+      updated++;
+    } catch (err) {
+      failed++;
+      log(`  WARN checksum failed for ${row.archive_name}: ${(err as Error).message}`);
+    }
+    if ((updated + failed) % 200 === 0) {
+      process.stdout.write(`\r  Backfilled ${updated + failed}/${rows.length}...`);
+    }
+  }
+  process.stdout.write('\r' + ' '.repeat(60) + '\r');
+  log(`Backfill complete: ${updated} updated, ${failed} failed`);
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  log('=== AmiExpress Door Catalog Builder ===');
-  log(`Archives: ${INDEX_ARCHIVES_DIR}`);
-  log(`Database: ${DB_PATH}`);
-
-  if (!fs.existsSync(INDEX_ARCHIVES_DIR)) {
-    console.error(`ERROR: Archives directory not found: ${INDEX_ARCHIVES_DIR}`);
-    process.exit(1);
-  }
-
   const db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
 
-  // Ensure table exists
+  // Ensure table exists (idempotent — safe against both a fresh DB and the
+  // existing populated database.sqlite).
   db.exec(`
     CREATE TABLE IF NOT EXISTS door_catalog (
       id                  TEXT PRIMARY KEY,
@@ -1028,6 +1082,22 @@ async function main() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_category ON door_catalog(category)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_door_catalog_name ON door_catalog(name)');
 
+  // Additive migration for pre-existing databases (mirrors the guard in
+  // web/backend/src/database.ts's runMigrations): md5/sha256 columns for
+  // buildManifest()'s precomputed-digest fast path.
+  {
+    const doorCatalogInfo = db.prepare('PRAGMA table_info(door_catalog)').all() as Array<{ name: string }>;
+    const doorCatalogColumns = doorCatalogInfo.map((col) => col.name);
+    if (!doorCatalogColumns.includes('md5')) {
+      db.exec('ALTER TABLE door_catalog ADD COLUMN md5 TEXT');
+      log('[+] Added md5 column to door_catalog');
+    }
+    if (!doorCatalogColumns.includes('sha256')) {
+      db.exec('ALTER TABLE door_catalog ADD COLUMN sha256 TEXT');
+      log('[+] Added sha256 column to door_catalog');
+    }
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS door_catalog_files (
       catalog_id TEXT NOT NULL,
@@ -1040,6 +1110,30 @@ async function main() {
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_dcf_catalog_id ON door_catalog_files(catalog_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_dcf_is_junk ON door_catalog_files(is_junk)');
+
+  if (BACKFILL_CHECKSUMS) {
+    log('=== AmiExpress Door Catalog Builder (checksum backfill only) ===');
+    log(`Database: ${DB_PATH}`);
+    const before = db.prepare(
+      'SELECT COUNT(*) as n FROM door_catalog WHERE md5 IS NOT NULL AND sha256 IS NOT NULL'
+    ).get() as { n: number };
+    backfillChecksums(db);
+    const after = db.prepare(
+      'SELECT COUNT(*) as n FROM door_catalog WHERE md5 IS NOT NULL AND sha256 IS NOT NULL'
+    ).get() as { n: number };
+    log(`Rows with non-null md5/sha256: before=${before.n}, after=${after.n}`);
+    db.close();
+    return;
+  }
+
+  log('=== AmiExpress Door Catalog Builder ===');
+  log(`Archives: ${INDEX_ARCHIVES_DIR}`);
+  log(`Database: ${DB_PATH}`);
+
+  if (!fs.existsSync(INDEX_ARCHIVES_DIR)) {
+    console.error(`ERROR: Archives directory not found: ${INDEX_ARCHIVES_DIR}`);
+    process.exit(1);
+  }
 
   const corpus = loadCorpus();
   log(`Corpus entries loaded: ${corpus.size}`);
