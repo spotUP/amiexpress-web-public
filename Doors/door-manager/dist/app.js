@@ -235,7 +235,6 @@ function findExtractedBinary(destDir, binaryName) {
 // A single set of panels that all views update in-place.
 class DoormanLayout {
     constructor(screen, nodeId) {
-        this.suppressNextFilterKeypress = false;
         this.screen = screen;
         this.width = Math.floor(screen.width * 0.35) - 8;
         this.header = new blessed_1.Panel({ parent: screen, top: 0, left: 0, width: '100%', height: 3,
@@ -244,30 +243,24 @@ class DoormanLayout {
             tags: true, style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } }, focusable: false });
         this.filterPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: 3,
             tags: true, style: { border: { fg: 'grey' } }, focusable: false });
+        // keys:false + inputOnFocus:false make this a DISPLAY-ONLY widget — see
+        // sdk/engines/ui/blessed/widgets/textbox.ts:58-60 (keys:false skips
+        // `this.on('keypress', this._onKeypress)` entirely, so Textbox's own
+        // self-editing insertChar()/deleteChar() path is never wired up at
+        // all, no matter how the box gets focused — keyboard activation,
+        // focusNext()/Tab-cycling, or a mouse click all leave it inert) and
+        // :63-68 (inputOnFocus:false skips the readInput() emit on focus).
+        // RepoView's filterKeypress (below) is the ONLY thing that ever writes
+        // to this box, via setValue() — a single source of truth instead of
+        // two editors racing. Round 1-3 patched that race at the manual-path
+        // level (activation timing, Tab's handled signal); this is the actual
+        // root cause: Textbox is a self-editing widget by default, and nothing
+        // before this depended on catching every path that could focus it —
+        // keys:false removes the capability structurally instead.
         this.filterBox = new blessed_1.Textbox({ parent: this.filterPanel, top: 0, left: 1, width: '100%-2',
-            height: 1, mouse: true,
+            height: 1, mouse: true, keys: false, inputOnFocus: false,
             style: { fg: 'white', focus: { fg: 'yellow' } } });
         this.filterPanel.hide();
-        // Guard filterBox's own key handling against the activating keystroke's
-        // echo — same class of leak as doorList's type-ahead disable below.
-        // Screen._handleKey's phase-2 emit re-delivers a keystroke to whichever
-        // element JUST became focused during phase 1 of the SAME dispatch, so
-        // when focusFilter() synchronously focuses this box mid-keystroke, that
-        // same keystroke would otherwise also land in Textbox's own
-        // _onKeypress/insertChar. focusFilter() arms suppressNextFilterKeypress
-        // immediately before calling focus(), so exactly that one re-delivered
-        // event is swallowed here; normal typing afterward is untouched.
-        const _filterNav = this.filterBox._onKeypress?.bind(this.filterBox);
-        this.filterBox.removeAllListeners('keypress');
-        if (_filterNav) {
-            this.filterBox.on('keypress', (ch, key) => {
-                if (this.suppressNextFilterKeypress) {
-                    this.suppressNextFilterKeypress = false;
-                    return;
-                }
-                return _filterNav(ch, key);
-            });
-        }
         this.listPanel = new blessed_1.Panel({ parent: screen, top: 3, left: 0, width: '35%', height: '100%-6',
             tags: true, style: { border: { fg: 'cyan' } }, focusable: false });
         this.doorList = new blessed_1.List({ parent: this.listPanel, top: 1, left: 1, width: '100%-2',
@@ -302,12 +295,7 @@ class DoormanLayout {
     get listSelected() { return this.doorList.selected ?? 0; }
     setInfo(content) { this.infoBox.setContent(content); }
     focusList() { this.doorList.focus(); }
-    /** Focuses filterBox and arms the one-shot guard above so the keystroke
-     * that triggered this call doesn't get re-delivered into the widget. */
-    focusFilter() {
-        this.suppressNextFilterKeypress = true;
-        this.filterBox.focus();
-    }
+    focusFilter() { this.filterBox.focus(); }
     showRepoLayout() {
         this.filterPanel.show();
         this.listPanel.top = 6;
@@ -723,15 +711,18 @@ class RepoView extends ViewManager_1.BaseView {
             this.layout.filterBox.setValue(this.filter);
         });
         // Manual filter input — screen.on('keypress') gives us full control
-        // regardless of which widget has focus, so Tab always works.
+        // regardless of which widget has focus, so Tab always works. filterBox
+        // is display-only (keys:false, DoormanLayout constructor) — this is the
+        // ONLY thing that ever writes to it, via setValue().
         let filterActive = false;
         // One-shot: consumed by filterKeypress below the very first time it
-        // fires after activation, so the SAME keystroke that turned filter mode
-        // on doesn't also get appended as its first character. Twin of
-        // DoormanLayout's suppressNextFilterKeypress (armed by focusFilter()),
-        // which closes the other half of the same leak on filterBox's own
-        // internal typing. See the activation handler below for why both are
-        // needed and why they're synchronous, not deferred.
+        // fires after a KEYBOARD activation, so the SAME keystroke that turned
+        // filter mode on doesn't also get appended as its first character. Only
+        // armed by the keyboard activation handler below — a mouse click (see
+        // filterBox's 'click' handler further down) delivers no keypress event
+        // at all, so there is nothing for this flag to suppress there; arming
+        // it for a click would leave it permanently stuck with nothing left to
+        // consume it (the round-3 bug, recurring if misapplied here).
         let suppressNextFilterChar = false;
         const filterKeypress = (ch, key) => {
             if (suppressNextFilterChar) {
@@ -775,75 +766,63 @@ class RepoView extends ViewManager_1.BaseView {
         // "a" must filter, not open [A]rchive browse (filterKeypress above is a
         // raw keypress listener and is unaffected by this guard).
         this.keys.setGuard(() => !filterActive);
-        // F/Tab from the LIST → enter filter mode.
+        // Shared activation: keyboard (F/tab/'/') and a click on the filter box
+        // (below) both land here. filterBox is display-only (keys:false, see
+        // DoormanLayout), so there's no second editor to race against — this
+        // just flips our own state and moves real screen focus.
         //
-        // BUG FIX (leak, round 2 — supersedes the process.nextTick version):
-        // blessed's Screen._handleKey dispatches ONE physical keystroke in
-        // three synchronous phases against the SAME event — (1) screen.key()-
-        // registered handlers (this KeyBinder), (2) an emit to whichever
-        // element is `_focused` *at that moment*, (3) a final broadcast
-        // emit('keypress', ...) to plain screen.on('keypress', ...) listeners
-        // (filterKeypress above). The FIRST fix deferred the mode flip + focus()
-        // with process.nextTick to dodge this — but Program._handleData
-        // (sdk core/program.ts) parses and dispatches EVERY key in one input
-        // payload inside a single synchronous while loop, calling _handleKey
-        // per key with no tick boundary in between. A deferred nextTick doesn't
-        // run until the WHOLE payload is drained, so on coalesced/pasted input
-        // (multiple keys arriving in one payload) it does not close the race
-        // for the keys immediately following the activator, and per Screen's
-        // own emit() semantics KeyBinder's wrapped handler never returns true,
-        // so phase (3)'s broadcast still runs for every key regardless.
-        //
-        // Fixed synchronously instead, same-tick, no deferral at all — the only
-        // approach that's correct no matter how keys are chunked into payloads.
-        // Two one-shot flags, each swallowing exactly the activating keystroke
-        // on its own delivery path, both armed here and both self-clearing
-        // before this call returns to Screen._handleKey:
-        //   1. focusFilter() (DoormanLayout) arms suppressNextFilterKeypress
-        //      immediately before calling filterBox.focus() — the wrapped
-        //      listener installed on filterBox in DoormanLayout's constructor
-        //      swallows the one keystroke phase (2) re-delivers to the
-        //      newly-focused widget, so Textbox's own _onKeypress/insertChar
-        //      never sees it.
-        //   2. suppressNextFilterChar (this closure) is consumed by
-        //      filterKeypress at the top of phase (3), so the same keystroke
-        //      never gets appended to `this.filter` either.
-        // Because both flags are set AND consumed within this single
-        // synchronous `_handleKey` call for the activating keystroke, the very
-        // next key — even if it arrived in the same payload — sees fully
-        // settled state (filterActive=true, filterBox genuinely focused).
-        //
-        // BUG FIX (round 3, Tab specifically): 'tab' is one of the activator
-        // keys above, but Screen._handleKey has a DEFAULT fallback branch for
-        // an *unhandled* Tab — `if (!handled && focusKeys) { if (name==='tab')
-        // { focusNext(); render(); return; } }` — that fires its OWN
-        // `focusNext()` and returns BEFORE phase (3) ever runs. Since this
-        // handler never returned `true`, every Tab press hit that branch:
-        // (a) blessed's `focusNext()` immediately re-stole focus away from
-        //     filterBox right after `focusFilter()` just set it, and
-        // (b) phase (3) never ran, so `suppressNextFilterChar` (armed above)
-        //     was never consumed — it stayed stuck `true` and silently
-        //     swallowed the sysop's next real keystroke, whenever it arrived
-        //     in a later payload.
-        // Root cause: `KeyBinder.key()`'s wrapped handler (ViewManager.ts)
-        // never returned its inner handler's result, so there was no way to
-        // signal `handled` back to Screen._handleKey — fixed there (now
-        // propagates), so returning `true` here is enough to make
-        // `_handleKey` skip its own Tab-fallback entirely for this keystroke.
-        // Phase (3) still runs unconditionally either way (screen.ts's final
-        // `this.emit('keypress', ...)` isn't gated on `handled`), so
-        // `suppressNextFilterChar` is still consumed there exactly as before —
-        // 'f'/'F'/'/' were never affected by this branch (only Tab has a
-        // default fallback) and are unchanged by returning `true` here (it
-        // just also skips their already-harmless phase 2).
+        // History (kept because the actual defect took 4 rounds to find, and
+        // the first 3 fixes are still correct at their own layer — see the
+        // round-4 report in .superpowers/ for the full trace):
+        //   Round 1: deferred the flip with process.nextTick to dodge
+        //     Screen._handleKey's 3-phase same-keystroke dispatch — didn't
+        //     survive multi-key payloads (Program._handleData drains a whole
+        //     payload before any nextTick runs).
+        //   Round 2: made activation synchronous + one-shot suppress flags
+        //     (this file's suppressNextFilterChar, and one that used to live on
+        //     DoormanLayout wrapping filterBox's own keypress listener) so the
+        //     activating keystroke can't be re-delivered into either the manual
+        //     buffer or the widget. Correct, but round 3 found Tab specifically
+        //     never reached the suppress-consuming phase (Screen's own
+        //     focusNext() fallback returns first for an unhandled Tab), so the
+        //     flag could get stuck.
+        //   Round 3: KeyBinder.key() now propagates a handler's return value,
+        //     and this handler returns `true` — marks the keystroke `handled`,
+        //     so Tab skips Screen's default fallback exactly like 'f'/'F'/'/'
+        //     already implicitly did.
+        //   Round 4 (this one): all three prior rounds fixed the manual
+        //     dispatch-timing path correctly, but missed that Textbox is a
+        //     SELF-EDITING widget by default (sdk textbox.ts's own
+        //     `_onKeypress`/insertChar, wired up on ANY focus, including a
+        //     stray mouse click that never goes through this handler at all) —
+        //     a second editor running in parallel with this one, unguarded by
+        //     any of `filterActive`/the suppress flags/the KeyBinder guard.
+        //     `keys:false` removes that capability at its source instead of
+        //     chasing every path that can focus the box.
+        const activateFilter = () => {
+            filterActive = true;
+            this.layout.focusFilter();
+            this.layout.render();
+        };
         this.keys.key(['f', 'F', '/', 'tab'], () => {
             if (filterActive)
                 return; // already in filter
-            filterActive = true;
-            suppressNextFilterChar = true;
-            this.layout.focusFilter();
-            this.layout.render();
+            suppressNextFilterChar = true; // there IS a keystroke here to swallow
+            activateFilter();
             return true;
+        });
+        // A click on the filter box activates the same way — matches the
+        // sysop's intuition that clicking the box should let them type into
+        // it. filterBox's own built-in 'click' handler (textbox.ts) also fires
+        // and calls focus()/positions the cursor; harmless since keys:false
+        // means nothing there can insert a character regardless. Deliberately
+        // does NOT arm suppressNextFilterChar: a mouse click delivers no
+        // keypress event at all, so there is nothing for that flag to consume
+        // — arming it here would leave it permanently stuck (the round-3 bug).
+        this.layout.filterBox.on('click', this._onFilterClick = () => {
+            if (filterActive)
+                return;
+            activateFilter();
         });
         this.keys.key(['r', 'R'], () => this.doInstallUninstall());
         this.keys.key(['s', 'S'], () => this.doStrip());
@@ -860,6 +839,7 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout.doorList.off('select item', this._onSelectItem);
         this.layout.doorList.off('focus', this._onListFocus);
         this.layout.screen.off('keypress', this._onFilterKey);
+        this.layout.filterBox.off('click', this._onFilterClick);
         clearTimeout(this.statusTimer);
         this.keys.release();
     }

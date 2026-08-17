@@ -1,6 +1,6 @@
 /**
  * Bug fix: RepoView's filter-activation keypress leaking into the
- * newly-focused filter input — round 2.
+ * newly-focused filter input.
  *
  * Round 1 deferred the mode flip + focus() with `process.nextTick`, which
  * fixed the SINGLE-keystroke case but not the general one: `Program.
@@ -62,17 +62,58 @@
  * — `wrapped` now `return`s the inner handler's result — and the
  * activation handler returns `true`, so Tab's own dispatch skips the
  * default fallback exactly like every other activator key already did.
+ *
+ * Round 4 (the actual live repro, found by systematic debugging in the
+ * main session after rounds 1-3 all still reproduced): every round above
+ * fixed the MANUAL dispatch-timing path correctly, but missed that
+ * `Textbox` (sdk/engines/ui/blessed/widgets/textbox.ts) is a SELF-EDITING
+ * widget by default — :58-60 `if (options.keys !== false) this.on
+ * ('keypress', this._onKeypress)`, and `_onKeypress` (:139-162) is gated
+ * ONLY on `this.focused`, inserting every printable character
+ * unconditionally. DOORMAN's `filterBox` was created with neither
+ * `keys: false` nor `inputOnFocus: false`, so it ran its OWN ungated
+ * editor in parallel with `filterKeypress` the entire time — invisible to
+ * every fix above because ALL of them only ever gated the MANUAL path
+ * (`filterActive`, the two suppress flags, the `KeyBinder` guard). Once
+ * `filterBox` got focus through ANY channel those fixes didn't anticipate
+ * — decisively, a mouse click, since `Textbox`'s own `on('click', ...)`
+ * handler (:75-77) calls `this.focus()` directly and completely bypasses
+ * `RepoView`'s `activateFilter()` — every subsequent printable keystroke
+ * landed straight in the widget's own `value` via `insertChar()`, with
+ * `filterActive` never set, both suppress flags never armed, and the
+ * `KeyBinder` guard wide open. That's the exact user report: "c" appears
+ * in the box "focused or not" (by the sysop's own account, no deliberate
+ * activation), and why round 2/3's keyboard-only `Program`-driven tests
+ * could never reproduce it — the leak's actual trigger is a mouse event,
+ * a completely different Screen dispatch path from every phase these
+ * tests exercised.
+ *
+ * Fix: `keys: false` + `inputOnFocus: false` on `filterBox`'s
+ * construction (`DoormanLayout`, app.ts) — removes `Textbox`'s
+ * self-editing capability structurally, for every focus channel at once,
+ * instead of chasing each one individually. `filterKeypress` becomes the
+ * ONLY thing that ever writes to the box (via `setValue()`). A mouse click
+ * now activates filter mode through the same `activateFilter()` path as
+ * 'f'/'tab'/'/' (matches user intuition — round 2/3's widget-level
+ * `suppressNextFilterKeypress` guard is removed as dead weight, since
+ * `keys:false` already makes it structurally impossible for anything to
+ * reach the widget's own editor); click does NOT arm
+ * `suppressNextFilterChar`, since a click delivers no keypress event for
+ * that flag to ever consume (arming it would reproduce the round-3
+ * stuck-flag bug for every click).
  */
 import { Screen, List, Textbox } from '../../../../sdk/engines/ui/blessed';
 import { KeyBinder } from '../../../../Doors/door-manager/ViewManager';
 import { ALL_TYPES, distinctTypes, cycleSystemFilter } from '../../../../Doors/door-manager/systemFilter';
 
-// 'fixed-round2' reproduces round 2's committed state exactly: both
-// synchronous suppress flags, but the activation handler does not `return
-// true`, so it never signals `handled` — isolates the round-3 Tab bug
-// (focus stolen back + stuck suppressNextFilterChar) from round 2's fix,
-// which already resolved the leak for every other activator key.
-type Variant = 'buggy-sync' | 'buggy-nexttick' | 'fixed-round2' | 'fixed';
+// 'fixed-round2' = round 2's committed state (sync guards, no `handled`
+// signal). 'fixed-round3' = rounds 1-3 committed (sync guards + `handled`
+// signal for Tab + the widget-level suppressNextFilterKeypress wrap) —
+// this is the state that still reproduces the round-4 bug: filterBox has
+// its default `keys:true`, so a click bypasses the manual path entirely.
+// 'fixed' = current (round 4): filterBox is `keys:false` (display-only)
+// and a click activates through the same path as the keyboard.
+type Variant = 'buggy-sync' | 'buggy-nexttick' | 'fixed-round2' | 'fixed-round3' | 'fixed';
 
 interface Harness {
   screen: any;
@@ -92,6 +133,14 @@ interface Harness {
    * directly bypasses that guard and double/triple-dispatches. */
   send: (raw: string) => void;
   isFilterFocused: () => boolean;
+  /** Emits 'click' directly on filterBox — the same event Screen's mouse
+   * routing delivers to the target element after resolving coordinates.
+   * That coordinate-resolution layer is generic infrastructure outside
+   * DOORMAN and not what round 4's bug is about; emitting the event
+   * directly on the target element tests exactly the mechanism under
+   * test (what filterBox and RepoView's own click handler do once a
+   * click lands on the box) without re-testing Screen's mouse routing. */
+  click: () => void;
   destroy: () => void;
 }
 
@@ -110,12 +159,27 @@ function buildHarness(variant: Variant): Harness {
   });
   doorList.setItems(['one', 'two', 'three']);
 
-  const filterBox = new Textbox({ parent: screen, top: 11, left: 0, width: 30, height: 1 });
+  // 'fixed' (round 4) constructs filterBox with keys:false/inputOnFocus:
+  // false — exactly DoormanLayout's constructor. Every other variant gets
+  // Textbox's real defaults (keys:true), reproducing the self-editing
+  // widget the bug actually lives in.
+  const filterBoxSelfEditingDisabled = variant === 'fixed';
+  const filterBox = new Textbox({
+    parent: screen, top: 11, left: 0, width: 30, height: 1,
+    ...(filterBoxSelfEditingDisabled ? { keys: false, inputOnFocus: false } : {}),
+  });
 
-  // 'fixed' and 'fixed-round2' both have the two synchronous suppress
-  // flags — they differ only in whether the activation handler signals
-  // `handled` (round 3's fix). The buggy variants never had either flag.
-  const hasSyncGuards = variant === 'fixed' || variant === 'fixed-round2';
+  // 'fixed-round2'/'fixed-round3'/'fixed' all have the two MANUAL-path
+  // synchronous suppress flags (suppressNextFilterChar + the `handled`
+  // signal). Only 'fixed-round2'/'fixed-round3' additionally have round
+  // 2's WIDGET-level wrap (suppressNextFilterKeypress on filterBox's own
+  // keypress listener) — 'fixed' drops that entirely, since keys:false
+  // already makes it structurally unreachable. Only 'fixed-round3' and
+  // 'fixed' return `true` from the activation handler (round 3's fix).
+  const hasSyncGuards = variant === 'fixed' || variant === 'fixed-round2' || variant === 'fixed-round3';
+  const hasWidgetWrap = variant === 'fixed-round2' || variant === 'fixed-round3';
+  const hasReturnTrueForTab = variant === 'fixed-round3' || variant === 'fixed';
+  const hasClickActivation = variant === 'fixed';
 
   // Copied from DoormanLayout constructor (app.ts): disable doorList's
   // built-in type-ahead so letter keys reach hotkeys instead of jumping
@@ -130,10 +194,11 @@ function buildHarness(variant: Variant): Harness {
     });
   }
 
-  // Copied from DoormanLayout constructor + focusFilter() (app.ts) — 'fixed'
-  // and 'fixed-round2' only, the buggy variants never had this guard.
+  // Copied from DoormanLayout constructor (pre-round-4) + focusFilter() —
+  // 'fixed-round2'/'fixed-round3' only. 'fixed' relies on keys:false
+  // instead (see above); the buggy variants never had this guard either.
   let suppressNextFilterKeypress = false;
-  if (hasSyncGuards) {
+  if (hasWidgetWrap) {
     const _filterNav = (filterBox as any)._onKeypress?.bind(filterBox);
     (filterBox as any).removeAllListeners('keypress');
     if (_filterNav) {
@@ -144,7 +209,7 @@ function buildHarness(variant: Variant): Harness {
     }
   }
   function focusFilter(): void {
-    if (hasSyncGuards) suppressNextFilterKeypress = true;
+    if (hasWidgetWrap) suppressNextFilterKeypress = true;
     (filterBox as any).focus();
   }
   function focusList(): void { (doorList as any).focus(); }
@@ -175,6 +240,14 @@ function buildHarness(variant: Variant): Harness {
   };
   (screen as any).on('keypress', filterKeypress);
 
+  // Copied from RepoView.enter()'s activateFilter() (app.ts) — the shared
+  // core both the keyboard handler and (for 'fixed' only) the click
+  // handler call.
+  const activateFilter = (): void => {
+    filterActive = true;
+    focusFilter();
+  };
+
   const keys = new KeyBinder(screen);
   keys.setGuard(() => !filterActive);
   keys.key(['f', 'F', '/', 'tab'], () => {
@@ -187,19 +260,10 @@ function buildHarness(variant: Variant): Harness {
         filterActive = true;
         focusFilter();
       });
-    } else if (variant === 'fixed-round2') {
-      // Round 2's actual committed state: synchronous guards, but the
-      // handler never returns true — never signals `handled`, so an
-      // unhandled Tab still hits Screen._handleKey's own focusNext()
-      // fallback and returns before phase 3 ever runs.
-      filterActive = true;
-      suppressNextFilterChar = true;
-      focusFilter();
     } else {
-      filterActive = true;
-      suppressNextFilterChar = true;
-      focusFilter();
-      return true; // round 3: see app.ts's activation handler for why
+      suppressNextFilterChar = true; // there IS a keystroke here to swallow
+      activateFilter();
+      if (hasReturnTrueForTab) return true; // round 3: see app.ts for why
     }
   });
   keys.key(['c', 'C'], () => {
@@ -207,6 +271,19 @@ function buildHarness(variant: Variant): Harness {
     systemFilter = cycleSystemFilter(systemFilter, types);
     cycles++;
   });
+
+  // Round 4 only: a click activates through the SAME path as the
+  // keyboard, but deliberately does NOT arm suppressNextFilterChar — a
+  // click delivers no keypress event for that flag to ever consume.
+  // Every other variant has no such wiring at all: Textbox's own built-in
+  // 'click' handler (unconditional, all variants) still calls focus()
+  // directly, bypassing filterActive entirely — exactly the bug.
+  if (hasClickActivation) {
+    (filterBox as any).on('click', () => {
+      if (filterActive) return;
+      activateFilter();
+    });
+  }
 
   focusList();
 
@@ -218,6 +295,7 @@ function buildHarness(variant: Variant): Harness {
     cycleCount: () => cycles,
     send: (raw: string) => { (screen as any).program.emit('data', raw); },
     isFilterFocused: () => (screen as any)._focused === filterBox,
+    click: () => { (filterBox as any).emit('click', { x: 0, y: 0 }); },
     destroy: () => { if (!screen.destroyed) screen.destroy(); },
   };
 }
@@ -389,5 +467,78 @@ describe('DOORMAN RepoView filter: Tab activation (round 3)', () => {
     expect(h.isFilterFocused()).toBe(true);
     h.send('z');
     expect(h.getFilterText()).toBe('z');
+  });
+});
+
+describe('DOORMAN RepoView filter: self-editing widget / click activation (round 4)', () => {
+  let h: Harness;
+  afterEach(() => h?.destroy());
+
+  it('fixed: focusing filterBox by ANY means (not our activation path) still cannot self-edit — keys:false is structural', () => {
+    h = buildHarness('fixed');
+    // Focus the box directly — bypasses activateFilter()/filterActive
+    // entirely, standing in for whatever channel focused it (click,
+    // focusNext()/Tab-cycling, anything else). The guarantee under test is
+    // that filterBox itself cannot insert a character no matter how it
+    // became focused, not that every focus channel is individually gated.
+    (h.filterBox as any).focus();
+    expect(h.getFilterActive()).toBe(false); // our own state never touched
+    h.send('z'); // real Program dispatch — real Screen._handleKey phase 2
+    expect(h.filterBox.getValue()).toBe(''); // Textbox has no keypress listener at all (keys:false)
+    expect(h.getFilterText()).toBe('');
+  });
+
+  it('fixed: a click activates the filter through the same path as the keyboard', () => {
+    h = buildHarness('fixed');
+    h.click();
+    expect(h.getFilterActive()).toBe(true);
+    expect(h.isFilterFocused()).toBe(true);
+    expect(h.getFilterText()).toBe('');
+    expect(h.filterBox.getValue()).toBe('');
+  });
+
+  it('fixed: chars after a click flow through filterKeypress into the manual buffer — no stuck suppress flag', () => {
+    h = buildHarness('fixed');
+    h.click();
+    h.send('c'); // separate payload, like a real keystroke following a click
+    expect(h.getFilterActive()).toBe(true);
+    expect(h.cycleCount()).toBe(0); // guard suppressed the 'c' hotkey, same as keyboard activation
+    expect(h.getFilterText()).toBe('c'); // typed, not swallowed — proves suppressNextFilterChar wasn't wrongly armed
+    expect(h.filterBox.getValue()).toBe('c');
+  });
+
+  it('RED evidence — fixed-round3: a click silently focuses the box outside our activation path', () => {
+    h = buildHarness('fixed-round3');
+    h.click();
+    // Textbox's own built-in click handler calls focus() directly — our
+    // activateFilter() is never invoked because 'fixed-round3' never wired
+    // a click listener at all (that wiring is new in round 4).
+    expect(h.isFilterFocused()).toBe(true);
+    expect(h.getFilterActive()).toBe(false); // our bookkeeping has no idea
+  });
+
+  it('RED evidence — fixed-round3: once click-focused, printable keys leak directly into the widget, bypassing filterActive entirely', () => {
+    h = buildHarness('fixed-round3');
+    h.click();
+    h.send('c'); // the user's exact report: "c" appears in the box
+    // The widget's own _onKeypress/insertChar ran — filterBox has it,
+    // unguarded (suppressNextFilterKeypress was never armed; only
+    // focusFilter(), which this click never called, arms it).
+    expect(h.filterBox.getValue()).toBe('c');
+    // And our own state is COMPLETELY unaware — this is the "focused or
+    // not" mystery: by DOORMAN's own bookkeeping nothing is active.
+    expect(h.getFilterActive()).toBe(false);
+    expect(h.getFilterText()).toBe('');
+    expect(h.cycleCount()).toBe(1); // 'c' ALSO fired the cycle hotkey (phase 1 doesn't care who's focused)
+  });
+
+  it('GREEN — fixed reproduces neither fixed-round3 failure mode', () => {
+    h = buildHarness('fixed');
+    h.click();
+    h.send('c');
+    expect(h.getFilterActive()).toBe(true); // activated through our path
+    expect(h.cycleCount()).toBe(0); // guard correctly suppressed the hotkey
+    expect(h.getFilterText()).toBe('c'); // typed through the manual buffer
+    expect(h.filterBox.getValue()).toBe('c'); // set via setValue(), not insertChar()
   });
 });
