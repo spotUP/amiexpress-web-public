@@ -455,7 +455,17 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
     int have_server_rev;
     int have_cache;
 
-    flow_build_local_path(cache_path, cache_path_size, cfg->download_dir, DOOR_CACHE_NAME);
+    /* A DownloadDir long enough to make this fail is not reachable given
+     * dr_config's fixed field widths (download_dir[128] + the fixed cache
+     * filename comfortably fits cache_path_size), but flow_build_local_path()
+     * leaves `out` untouched on failure - initialize to empty first so an
+     * unreachable-in-practice failure still yields a clean, reportable
+     * error rather than reading uninitialized stack memory as a path. */
+    cache_path[0] = '\0';
+    if (flow_build_local_path(cache_path, cache_path_size, cfg->download_dir, DOOR_CACHE_NAME) < 0) {
+        ae_put("DownloadDir in " DOOR_CONFIG_PATH " is too long to build a cache file path.", 1);
+        return 1;
+    }
 
     have_server_rev = (fetch_server_revision(cfg, server_rev, sizeof(server_rev)) == 0);
     have_cache = (read_cache_revision(cache_path, cached_rev, sizeof(cached_rev)) == 0);
@@ -718,7 +728,14 @@ static int attempt_download(const dr_config *cfg, const dr_entry *entry,
     http_response resp;
     int rc;
 
-    flow_build_archive_path(path, sizeof(path), cfg->path, entry->archive);
+    /* RepoPath[128] + "/archive/" + a real catalog archiveName always fits
+     * sizeof(path); initialize to empty first regardless, so an
+     * unreachable-in-practice failure cannot leave a garbage request path. */
+    path[0] = '\0';
+    if (flow_build_archive_path(path, sizeof(path), cfg->path, entry->archive) < 0) {
+        ae_put("Could not build the download URL for this archive (path too long).", 1);
+        return 0;
+    }
 
     dc.file = fopen(local_path, "wb");
     if (dc.file == (FILE *) 0) {
@@ -796,7 +813,14 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
     int matched;
     flow_verify_outcome outcome;
 
-    flow_build_local_path(local_path, sizeof(local_path), cfg->download_dir, entry->archive);
+    /* DownloadDir[128] + a real catalog archiveName always fits
+     * sizeof(local_path); initialize to empty first regardless, so an
+     * unreachable-in-practice failure cannot leave a garbage local path. */
+    local_path[0] = '\0';
+    if (flow_build_local_path(local_path, sizeof(local_path), cfg->download_dir, entry->archive) < 0) {
+        ae_put("Could not build a local file path for this archive (DownloadDir + name too long).", 1);
+        return;
+    }
 
     attempt = 1;
     for (;;) {
@@ -1011,7 +1035,16 @@ int main(int argc, char **argv)
             char query[256];
             int rc;
 
-            flow_build_list_query(query, sizeof(query), filter_type, filter_query);
+            /* filter_type[16] URL-encoded (worst case 3x) plus
+             * filter_query[64] always fits sizeof(query); initialize to
+             * empty first regardless, so an unreachable-in-practice
+             * failure falls back to an unfiltered fetch rather than an
+             * uninitialized query string. */
+            query[0] = '\0';
+            if (flow_build_list_query(query, sizeof(query), filter_type, filter_query) < 0) {
+                ae_put("Filter text too long to build a search request. Try a shorter search.", 1);
+                continue;
+            }
             rc = fetch_catalog(&cfg, &cat, query, (FILE *) 0);
             if (rc != HTTP_OK) {
                 ae_put("Could not fetch the filtered catalog from the server. Showing the previous results.", 1);
