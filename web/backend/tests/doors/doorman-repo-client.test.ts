@@ -223,6 +223,41 @@ describe('doorman repo-client', () => {
       expect(result.fromCache).toBe(true);
       expect(result.manifest).toEqual(cached);
     });
+
+    // Defensive branch: the server only 304s in response to an
+    // If-None-Match we sent from a cache we hold, so this should be
+    // unreachable in practice -- but if the local cache file vanished
+    // between building the header and the response landing (deleted mid-
+    // flight, a genuine race), fetchManifest must still fail loudly
+    // instead of silently returning an empty/undefined manifest.
+    it('304 with NO local cache throws (server thinks we hold a matching revision but we do not)', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ ok: false, status: 304 }));
+
+      await expect(fetchManifest(cfg)).rejects.toThrow();
+    });
+
+    // Distinct branch from the network-error case: fetch() resolved fine,
+    // the server just responded with a non-2xx/non-304 status (e.g. a 500
+    // from an overloaded repo host). Same "throw when no cache exists"
+    // contract, but reached via response.ok === false rather than a
+    // rejected fetch() promise.
+    it('non-200/non-304 HTTP status (500) with NO cache throws', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ ok: false, status: 500 }));
+
+      await expect(fetchManifest(cfg)).rejects.toThrow();
+    });
+
+    it('non-200/non-304 HTTP status (500) with a cache present falls back to the cache', async () => {
+      const cached = sampleManifest('rev-500fallback');
+      seedCache({ etag: '"rev-500fallback"', cachedAt: '2023-03-03T00:00:00.000Z', manifest: cached });
+      fetchSpy.mockResolvedValue(fakeResponse({ ok: false, status: 500 }));
+
+      const result = await fetchManifest(cfg);
+
+      expect(result.fromCache).toBe(true);
+      expect(result.cachedAt).toBe('2023-03-03T00:00:00.000Z');
+      expect(result.manifest).toEqual(cached);
+    });
   });
 
   describe('downloadArchive', () => {

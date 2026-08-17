@@ -23,6 +23,17 @@
  * refresh repo-types.generated.ts, exactly like dist/ is rebuilt after a
  * source change.
  *
+ * `generateRepoTypesSource()` and `writeGeneratedTypes()` are exported (not
+ * just used internally by `main()`) specifically so
+ * web/backend/tests/doors/repo-types-generated-staleness.test.ts can call
+ * the SAME extraction logic the CLI uses, write it to a temp path, and diff
+ * it against the committed repo-types.generated.ts -- catching drift
+ * (upstream field added/renamed/removed without regenerating) at test time
+ * instead of it silently type-checking against a shape the server no
+ * longer sends. `main()` only runs when this file is invoked directly
+ * (`require.main === module`), never as a side effect of being imported by
+ * that test.
+ *
  * Usage: npx tsx scripts/gen-repo-types.ts
  */
 import * as fs from 'fs';
@@ -43,7 +54,14 @@ const SOURCE_PATH = path.join(
 const OUTPUT_PATH = path.join(__dirname, '..', 'repo-types.generated.ts');
 const INTERFACES_TO_EXTRACT = ['ManifestDoor', 'DoorRepoManifest'];
 
-function main(): void {
+/**
+ * Parses the real door-repo-manifest.ts and returns the generated
+ * repo-types.generated.ts file content as a string (pure -- no filesystem
+ * writes here). Always reads from the real, current SOURCE_PATH: this is
+ * intentional, since both the CLI and the staleness test need to compare
+ * against the CURRENT upstream shape, not a frozen/fixture copy.
+ */
+export function generateRepoTypesSource(): string {
   const sourceText = fs.readFileSync(SOURCE_PATH, 'utf8');
   const sourceFile = ts.createSourceFile(
     SOURCE_PATH,
@@ -72,7 +90,7 @@ function main(): void {
   const relSourcePath = path.relative(path.join(__dirname, '..'), SOURCE_PATH);
   const body = INTERFACES_TO_EXTRACT.map((name) => found.get(name) as string).join('\n\n');
 
-  const output =
+  return (
     `/**\n` +
     ` * GENERATED FILE -- DO NOT EDIT BY HAND.\n` +
     ` *\n` +
@@ -80,11 +98,21 @@ function main(): void {
     ` * Regenerate with: npx tsx scripts/gen-repo-types.ts\n` +
     ` * (run whenever door-repo-manifest.ts's manifest shape changes upstream)\n` +
     ` */\n\n` +
-    `${body}\n`;
+    `${body}\n`
+  );
+}
 
-  fs.writeFileSync(OUTPUT_PATH, output, 'utf8');
+/** Writes the generated source to `outputPath` (defaults to the real, committed location). */
+export function writeGeneratedTypes(outputPath: string = OUTPUT_PATH): void {
+  fs.writeFileSync(outputPath, generateRepoTypesSource(), 'utf8');
+}
+
+function main(): void {
+  writeGeneratedTypes(OUTPUT_PATH);
   // eslint-disable-next-line no-console
   console.log(`gen-repo-types: wrote ${path.relative(process.cwd(), OUTPUT_PATH)}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
