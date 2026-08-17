@@ -18,15 +18,43 @@ onto a real or emulated Amiga BBS. It is served over plain HTTP by the
 amiexpress-web backend.
 
 - **Base URL:** `https://bbs.uprough.net`
-- **Plain HTTP is supported.** Every endpoint under `/api/door-repo/` also
-  answers on `http://bbs.uprough.net` (no TLS required). This is deliberate:
-  classic AmigaDOS TCP/IP stacks (AmiTCP, Miami, Roadshow) and 68020+ door
-  clients frequently have no practical way to do TLS, so plain HTTP is a
-  first-class, permanently supported access path, not a legacy fallback.
-- **Deployment requirement.** The production host's reverse proxy (Caddy)
-  must explicitly exempt the `/api/door-repo/` path prefix from its automatic
-  HTTPS redirect (see `deploy/README.md`), or plain-HTTP requests 308-redirect
-  to `https://` and this guarantee does not hold.
+- **Plain HTTP is live and permanent for `/api/door-repo/*`.** Every endpoint
+  under this prefix also answers on `http://bbs.uprough.net` (no TLS
+  required). This is deliberate: classic AmigaDOS TCP/IP stacks (AmiTCP,
+  Miami, Roadshow) and 68020+ door clients frequently have no practical way
+  to do TLS, so plain HTTP is a first-class, permanently supported access
+  path for this API, not a legacy fallback. The production reverse proxy
+  (Caddy) carries an explicit exemption for the `/api/door-repo/` path
+  prefix from its site-wide automatic HTTPS redirect, confirmed live by
+  direct measurement (see the note below).
+- **Every other path on this host still redirects plain HTTP to HTTPS.**
+  Only `/api/door-repo/*` is exempted. Do not assume plain HTTP works
+  against any other endpoint on `bbs.uprough.net` -- it does not, and is not
+  expected to.
+- **If a well-formed plain-HTTP request to `/api/door-repo/*` returns `404`
+  with a generic `Cannot GET ...` HTML body (Express's own default 404
+  page, not this API's own `NOT FOUND: <name>` plain-text body -- see
+  section 5), that means this API has not been deployed to the production
+  host yet, not that plain HTTP is unavailable.** Measured directly against
+  the live host while writing this document:
+
+  ```
+  curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/api/door-repo/health
+  -> 404   (plain HTTP reaches Express -- Caddy did not redirect -- but this
+             route isn't deployed yet: the same path also 404s over HTTPS)
+  curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/health
+  -> 301   (an unrelated, non-door-repo path -- still redirects, as expected)
+  curl -s -o /dev/null -w '%{http_code}' https://bbs.uprough.net/health
+  -> 200
+  ```
+
+  The `404` on the first line is diagnostic, not a contract violation: its
+  body is Express's generic `Cannot GET /api/door-repo/health` HTML page
+  (confirmed by inspecting the response directly), and the identical path
+  also returns `404` over `https://` -- proving the cause is "not deployed
+  yet," not "plain HTTP doesn't reach this API." Once deployed, a plain-HTTP
+  request to any `/api/door-repo/*` path behaves exactly as documented in
+  the rest of this document, with no redirect.
 - **Read-only.** There are no write endpoints and no authentication. Every
   request in this document is a `GET`.
 - **Curation happens in git, not over the API.** The catalog contents
@@ -70,7 +98,7 @@ DOORREPO|1|unknown|3301
 ```
 
 (The revision field reads `unknown` here because this was captured from a
-local development build with no baked-in git SHA -- see section 6. A live
+local development build with no baked-in git SHA -- see section 7. A live
 deployment reports its actual git commit SHA in that field instead.)
 
 Then fetch one archive by name (using a real row from that same catalog,
@@ -87,7 +115,7 @@ for the full row).
 ## 3. `list.txt` format
 
 `GET /api/door-repo/list.txt` -- also accepts the `?type=` and `?q=` filters
-described in section 7.
+described in section 8.
 
 This is the format intended for AmigaDOS-side clients that have no JSON
 parser. It is byte-exact and deliberately simple to parse with `RANDOM` file
@@ -104,7 +132,7 @@ I/O or a plain text-file line reader.
   ```
 
   where `1` is the fixed literal format version number for this line shape,
-  `<revision>` is the repo revision string (see section 6), and `<count>` is
+  `<revision>` is the repo revision string (see section 7), and `<count>` is
   the number of data rows that follow.
 
 - **Data rows** (one per door, in `archive_name` ascending order,
@@ -117,7 +145,7 @@ I/O or a plain text-file line reader.
 | Field         | Type                     | Notes                                                                 |
 |---------------|--------------------------|------------------------------------------------------------------------|
 | `archiveName` | string                   | The archive's filename, e.g. `AETRIV10.LHA`. Also the download key for section 5. |
-| `doorType`    | string                   | e.g. `XIM`, `DD`, `REXX`. See section 7 for the `?type=` filter.       |
+| `doorType`    | string                   | e.g. `XIM`, `DD`, `REXX`. See section 8 for the `?type=` filter.       |
 | `archiveSize` | integer                  | Archive size in bytes. `0` if unknown.                                 |
 | `md5`         | string, or empty         | Lowercase hex MD5 of the archive file. Empty string if the archive file is currently unreadable on the server (a null-checksum row still appears; only the download in section 5 fails). |
 | `name`        | string, possibly empty   | Door name from the catalog metadata.                                   |
@@ -191,11 +219,11 @@ by appending them. A client parsing `list.txt`:
 - **MUST treat the header line's version number (`DOORREPO|1|...`) as the
   authority for what fields to expect.** That number is bumped only when a
   field is appended; it is never bumped for a field removal or a
-  meaning change of an existing field (see section 9).
+  meaning change of an existing field (see section 10).
 
 ## 4. JSON manifest
 
-`GET /api/door-repo/manifest` -- also accepts `?type=` and `?q=` (section 7).
+`GET /api/door-repo/manifest` -- also accepts `?type=` and `?q=` (section 8).
 
 Returns a `DoorRepoManifest` JSON object:
 
@@ -267,6 +295,18 @@ Every `/manifest` response carries a strong `ETag` header whose value is
 exactly the repo revision, quoted: `ETag: "<revision>"`. Conditional GET
 follows standard HTTP semantics (RFC 7232) in full:
 
+**This documented ETag contract applies to `/manifest` only.** Other
+endpoints (`/list.txt`, `/health`, the `404` error bodies, and any other
+response produced by a plain `res.send()`) may carry an incidental,
+auto-generated weak `ETag` header from the underlying web framework's
+default behavior -- a content hash of that specific response body, computed
+independently of the repo revision. It is not part of this API's documented
+contract, is not guaranteed to be present (the successful `/archive/:name`
+download in section 5, for example, currently carries none at all), and
+must not be relied on for change detection or conditional requests. Use the
+revision-comparison approach from section 7 for every endpoint other than
+`/manifest`.
+
 - Send `If-None-Match: "<revision>"` (or the value from a previous `ETag`
   header) on a repeat request. If the revision has not changed, the server
   responds `304 Not Modified` with an empty body.
@@ -304,7 +344,7 @@ headers:
 
 | Header               | Meaning                                                        |
 |-----------------------|------------------------------------------------------------------|
-| `Content-Length`      | Exact byte count of the archive, taken from the same file handle that streams the body (no size/body mismatch is possible). |
+| `Content-Length`      | Exact byte count of the archive, taken from the same file handle that streams the body (no size/body mismatch is possible). **Always present on every archive response** -- this endpoint never uses chunked transfer encoding, so a client can always allocate a fixed-size buffer up front from this header rather than growing a buffer as data arrives. |
 | `Content-Type`        | Always `application/octet-stream`.                               |
 | `X-Archive-MD5`       | Lowercase hex MD5 of the archive bytes.                          |
 | `X-Archive-SHA256`    | Lowercase hex SHA256 of the archive bytes.                       |
@@ -350,7 +390,93 @@ name is never used to build a filesystem path directly -- it is only ever
 used as a lookup key into the catalog, and the catalog's own stored path is
 what gets opened.
 
-## 6. Update detection
+### Archive-name characters, encoding, and quoting
+
+Real catalog `archiveName` values are drawn from decades of Amiga filenames
+and are not limited to letters, digits, and `.`/`-`/`_`. A scan of the real
+catalog (3301 rows) found these additional characters in real archive
+names: `!`, `$`, `&`, `^`, `~`. For example (all real, current rows):
+`BR&IB20.LHA`, `C&N-CS13.LHA`, `H&V-CL20.LHA` (13 rows contain `&`), and
+`5D^AMU20.LHA`, `5D^DC007.LZH` (105 rows contain `^`).
+
+- **No percent-encoding is required to put any of these characters in the
+  URL path segment.** Per RFC 3986, a path segment (`pchar`) may contain any
+  "unreserved" character (letters, digits, `-`, `.`, `_`, `~`) or "sub-delim"
+  character unencoded, and sub-delims include `!`, `$`, and `&`. `^` is
+  technically outside both of those sets in the strict grammar, but this
+  server accepts it unencoded in practice (verified below) -- if a client's
+  own HTTP library or URL builder insists on strict RFC 3986 conformance and
+  refuses to send `^` unencoded, percent-encode it as `%5E` (see below; the
+  server accepts both forms identically).
+- **Percent-encoding is always accepted too**, for any client whose HTTP
+  library encodes reserved-looking characters automatically or as a matter
+  of policy. `&` as `%26`, `^` as `%5E`, `!` as `%21`, `$` as `%24`, `~` as
+  `%7E` (though `~` never needs it) all resolve to the same catalog row as
+  the unencoded form.
+- **Lookup is case-insensitive** (already noted above): `br&ib20.lha`
+  matches the same row as `BR&IB20.LHA`.
+- **Shell quoting is a separate, more common trap than URL encoding.** In a
+  Unix-like shell (and in AmigaDOS scripts using certain command
+  interpreters), an unquoted `&` backgrounds the preceding command instead
+  of being passed through as a literal character in the URL -- this breaks
+  the naive `wget url -O file` form from section 2 for any archive name
+  containing `&`. Always quote the full URL in shell commands.
+
+Real verification, captured against the live local server for a real
+archive name containing `&` (`BR&IB20.LHA`, real md5
+`dd34a36330090277a50f0966bbc59ffc`) and one containing `^`
+(`5D^AMU20.LHA`, real md5 `bbb870130cb379b737c08209b99976ca`) -- all four
+requests below returned `200` with the expected `X-Archive-MD5`:
+
+```
+GET /api/door-repo/archive/BR&IB20.LHA              (unencoded)     -> 200, md5 dd34a36330090277a50f0966bbc59ffc
+GET /api/door-repo/archive/BR%26IB20.LHA             (percent-encoded) -> 200, md5 dd34a36330090277a50f0966bbc59ffc
+GET /api/door-repo/archive/br&ib20.lha               (lowercase)     -> 200, md5 dd34a36330090277a50f0966bbc59ffc
+GET /api/door-repo/archive/5D^AMU20.LHA              (unencoded)     -> 200, md5 bbb870130cb379b737c08209b99976ca
+GET /api/door-repo/archive/5D%5EAMU20.LHA            (percent-encoded) -> 200, md5 bbb870130cb379b737c08209b99976ca
+```
+
+A correctly quoted shell example for an `&`-bearing archive name (note the
+double quotes around the URL, required so the shell does not interpret `&`
+as a background-job operator):
+
+```
+wget "http://bbs.uprough.net/api/door-repo/archive/BR&IB20.LHA" -O T:BRandIB20.LHA
+```
+
+## 6. Health check
+
+`GET /api/door-repo/health`
+
+A lightweight liveness endpoint. Unlike `/manifest`, it does not compute or
+touch archive checksums -- it only counts catalog rows -- so it is safe to
+poll frequently (e.g. from a monitoring script) without triggering a
+re-hash of the whole archive corpus.
+
+Real captured response:
+
+```
+status: 200
+X-Door-Repo-Revision: unknown
+Content-Type: application/json; charset=utf-8
+
+{
+  "status": "ok",
+  "revision": "unknown",
+  "doors": 3301
+}
+```
+
+| Field      | Type    | Notes                                                         |
+|------------|---------|-----------------------------------------------------------------|
+| `status`   | string  | Always the literal `"ok"` when the endpoint responds at all.    |
+| `revision` | string  | Same value as `X-Door-Repo-Revision` and `/manifest`'s `revision` field. See section 7. |
+| `doors`    | integer | Total row count in the catalog, ignoring any filters (this endpoint takes no `?type=`/`?q=` parameters). |
+
+`revision` reads `"unknown"` here for the same local-development reason
+given throughout this document -- see section 7.
+
+## 7. Update detection
 
 Every `/api/door-repo/*` response carries an `X-Door-Repo-Revision` header,
 and `/health` and `/manifest` both surface the same value in their JSON
@@ -376,7 +502,7 @@ string `"unknown"` -- which is what every example in this document shows,
 since they were all captured from a local run. A live deployment always
 reports its real git commit SHA in this field instead.
 
-## 7. Filters
+## 8. Filters
 
 Both `GET /manifest` and `GET /list.txt` accept the same two optional query
 parameters, and they compose (both may be given together):
@@ -421,7 +547,7 @@ door, `AETRIV10.LHA` (the same door used throughout sections 2-5) -- `q`
 matched because the substring `trivia` appears in its `name` field
 (`*** /X Door Trivia ***`).
 
-## 8. Checksum verification walkthrough
+## 9. Checksum verification walkthrough
 
 Every archive is published with both an MD5 and a SHA256 checksum, computed
 over the exact bytes of the archive file. **MD5 is the minimum a client
@@ -439,6 +565,16 @@ Steps:
 4. Compare against the value from step 1. They must match exactly
    (lowercase hex, both sides).
 
+**On a mismatch: discard the downloaded file and retry the download once.**
+A single mismatch is most often a transient transfer error (a dropped or
+corrupted TCP segment on a lossy link), not a corrupted archive on the
+server -- re-fetching usually resolves it. **If the retry also mismatches,
+treat that as fatal: do not install or execute the archive.** A second
+consecutive mismatch against the same catalog-row checksum points at either
+a genuinely corrupted archive on the server or a systematic
+transfer/storage problem on the client side, and installing an unverified
+archive on a BBS is not a risk worth taking either way.
+
 As a cross-check, the archive download response also carries the same
 checksums as response headers (`X-Archive-MD5`, `X-Archive-SHA256`; section
 5), computed independently at download time from the same file. If a
@@ -454,7 +590,7 @@ archive download in section 5. Both were captured from the same live run of
 the real server, confirming they agree in practice, not just in
 specification.
 
-## 9. Stability promise
+## 10. Stability promise
 
 - **`formatVersion`** (in the JSON manifest) and the leading version number
   in the `list.txt` header line (`DOORREPO|1|...`) are bumped only when the
