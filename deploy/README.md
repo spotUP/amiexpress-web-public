@@ -86,24 +86,29 @@ Edit `/app/amiexpress/.env` to configure:
 | `AMIGA_FILE_CACHE_MB` | 4 | Amiga file cache (MB) |
 | `CORS_ORIGINS` | - | Allowed origins for CORS |
 | `DEBUG` | false | Enable debug logging |
-| `DOOR_REPO_ROLE` | `consumer` | `owner` enables the door-repo curation UI in DOORMAN (including the `S`=Strip action) and serves the Door Repo API from this box's own local catalog/archives. `consumer` (or unset) fetches the manifest from `DOOR_REPO_URL` instead. |
-| `DOOR_REPO_URL` | `https://bbs.uprough.net` | Base URL a consumer box fetches the door-repo manifest from. Empty string disables the door repo entirely (DOORMAN falls back to its local catalog only). Ignored in owner mode. |
+| `DOOR_REPO_ROLE` | unset (built-in default: consumer) | `owner` enables the door-repo curation UI in DOORMAN (including the `S`=Strip action) and serves the Door Repo API from this box's own local catalog/archives. Unset (or `consumer`) fetches the manifest from `DOOR_REPO_URL` instead. |
+| `DOOR_REPO_URL` | unset (built-in default: see `Doors/door-manager/repoDataSource.ts`) | Base URL a consumer box fetches the door-repo manifest from. An explicit empty string disables the door repo entirely (DOORMAN falls back to its local catalog only). Ignored in owner mode. |
 
 ### Door repo: owner vs. consumer
 
 Exactly one BBS in the network should run as the **owner** -- the box whose
 door catalog is curated and republished for everyone else. That box MUST set
 `DOOR_REPO_ROLE=owner` in **its own** `.env.local` (never in the committed
-`docker-compose.yml`/`docker-compose.multi-node.yml`, which default to
-`consumer` so a copied compose file does not silently make every deployment
-believe it owns the catalog).
+`docker-compose.yml`/`docker-compose.multi-node.yml`, which leave the
+variable unset so a copied compose file does not silently make every
+deployment believe it owns the catalog).
 
-`docker-compose.yml` and `docker-compose.multi-node.yml` both ship
-`DOOR_REPO_ROLE=${DOOR_REPO_ROLE:-consumer}` and
-`DOOR_REPO_URL=${DOOR_REPO_URL:-https://bbs.uprough.net}` in their
-`environment:` blocks. TS doors (including DOORMAN) run in-process in the
-backend and inherit this compose environment directly -- there is no separate
-per-door environment to configure.
+`docker-compose.yml` and `docker-compose.multi-node.yml` both pass
+`DOOR_REPO_ROLE` and `DOOR_REPO_URL` through to the container as bare
+entries in their `environment:` blocks (no `=value`). Bare entries forward
+the variable's value from the shell/`.env.local` when it is set, and are
+simply absent from the container when it is not -- so an unset variable
+falls through to the single built-in default defined in
+`Doors/door-manager/repoDataSource.ts` (`resolveDoorRepoMode`), rather than
+duplicating that URL into the compose files as a second source of truth. TS
+doors (including DOORMAN) run in-process in the backend and inherit this
+compose environment directly -- there is no separate per-door environment to
+configure.
 
 If the owner box forgets to set `DOOR_REPO_ROLE=owner`: on the next deploy it
 resolves to consumer mode, starts fetching its OWN manifest back over the
