@@ -4,5 +4,7 @@
 *.dSYM/
 doorrepo
 doorrepo.amiga
+doorrepo.amiga-stub
+build-test-*
 test_*
 !test_*.c
