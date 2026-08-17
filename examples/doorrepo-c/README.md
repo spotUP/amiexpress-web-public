@@ -260,6 +260,21 @@ made the identical run degrade to `(netio: connect() failed)`, which is what
 proves the specific message is driven by the errno comparison and not by
 something else in the path.
 
+**The non-blocking connect path works too, as of a fourth emulator fix.**
+`net_open()` sets `FIONBIO`, connects, waits for writability with a timeout,
+then checks `SO_ERROR` - the standard AmigaOS sequence. The emulator used to
+discard `FIONBIO` and block inside `connect()` for up to 30 seconds no matter
+what timeout the door asked for, and its `getsockopt()` was a stub that wrote
+nothing, so the `SO_ERROR` check could not have worked either. Both are
+implemented now, and the real binary drives the whole sequence:
+
+```
+IoctlSocket(fd=0, FIONBIO, 1) -> nonBlocking=true
+connect: non-blocking, returning -1/EINPROGRESS
+WaitSelect returning 1
+getsockopt(fd=0, SO_ERROR) = 0        (61 against a closed port)
+```
+
 Setting up that second run exposed the third emulator defect this door has
 found: `gethostbyname()` was implemented with `dns.resolve4()`, so it
 answered only what a DNS server would answer. A dotted-quad literal
