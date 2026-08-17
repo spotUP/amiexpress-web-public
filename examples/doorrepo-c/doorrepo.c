@@ -895,7 +895,7 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
     if (cfg->extract_after_download) {
         /* Re-validate immediately before building the system() command
          * line, even though config.c already rejected an unsafe
-         * cfg->lha_command/cfg->download_dir when DoorRepo.cfg was
+         * cfg->lha_command/cfg->download_dir/etc when DoorRepo.cfg was
          * parsed. Two independent reasons this check happens AGAIN here,
          * not just once at parse time:
          *   1. Defense in depth against config.c's check ever being
@@ -913,12 +913,21 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
          *      bounds who can add a name, not what characters a name may
          *      contain, so this is a second live injection path into the
          *      exact same system() call the config-value check protects,
-         *      and it needed catching independently. */
-        if (flow_contains_forbidden_shell_char(cfg->lha_command)
+         *      and it needed catching independently.
+         *
+         * cfg->lha_command uses the ALLOWLIST (flow_is_valid_command_token()),
+         * NOT the denylist used for the other two: it sits UNQUOTED at the
+         * front of the command line below, and a denylist was proven -
+         * twice, live - unable to defend an unquoted position (see
+         * flow.h's block comment for the full history, including the
+         * "#"-comment bypass this exact re-check exists to catch a second
+         * time). cfg->download_dir and entry->archive both sit INSIDE
+         * double quotes, where the denylist remains the right tool. */
+        if (!flow_is_valid_command_token(cfg->lha_command, sizeof(cfg->lha_command))
             || flow_contains_forbidden_shell_char(cfg->download_dir)
             || flow_contains_forbidden_shell_char(entry->archive)) {
-            ae_put("Extraction refused: LhaCommand, DownloadDir, or the archive name contains a character that must never reach a shell command. The archive was downloaded and verified but NOT extracted.", 1);
-            log_line(cfg, "EXTRACT REFUSED: forbidden character in LhaCommand, DownloadDir, or archive name");
+            ae_put("Extraction refused: LhaCommand, DownloadDir, or the archive name is not safe to pass to a shell command. The archive was downloaded and verified but NOT extracted.", 1);
+            log_line(cfg, "EXTRACT REFUSED: LhaCommand/DownloadDir/archive name failed validation");
             return;
         }
 
@@ -935,8 +944,17 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
              * SystemTags() parses the same AmigaDOS shell command-line
              * syntax and is subject to the same class of injection via
              * an unescaped argument, so switching mechanisms would not
-             * remove the need for this check. */
-            sprintf(cmd, "%s x \"%s\" \"%s\"", cfg->lha_command, local_path, cfg->download_dir);
+             * remove the need for this check.
+             *
+             * cfg->lha_command is ALSO quoted here (it was not before the
+             * "#"-comment bypass), belt and braces: the allowlist above
+             * already guarantees it can contain no quote character, space,
+             * or shell metacharacter at all, so quoting it changes nothing
+             * about what runs today - but it means a future, more
+             * permissive edit to the allowlist cannot immediately become
+             * an unquoted-argument execution bug the way LhaCommand's
+             * denylist just did. */
+            sprintf(cmd, "\"%s\" x \"%s\" \"%s\"", cfg->lha_command, local_path, cfg->download_dir);
             ae_put("Extracting archive...", 1);
             rc = system(cmd);
             if (rc == 0) {
@@ -1026,13 +1044,15 @@ int main(int argc, char **argv)
     print_banner();
 
     if (skipped > 0) {
-        /* An unsafe-character rejection is a materially different event
-         * from an out-of-range number or a typo'd key - it means
-         * DoorRepo.cfg contained a value shaped like a shell-injection
-         * attempt (see flow.h's flow_contains_forbidden_shell_char()),
-         * which is worth a sysop's attention even if the rest of the
-         * file is fine. Reported separately from ordinary invalid lines
-         * rather than folded into one generic count. */
+        /* An unsafe-value rejection is a materially different event from
+         * an out-of-range number or a typo'd key - it means DoorRepo.cfg
+         * contained a value shaped like a shell-injection attempt (see
+         * flow.h's flow_contains_forbidden_shell_char() for DownloadDir/
+         * LogFile/RepoPath, or flow_is_valid_command_token() for
+         * LhaCommand's stricter single-token allowlist), which is worth a
+         * sysop's attention even if the rest of the file is fine.
+         * Reported separately from ordinary invalid lines rather than
+         * folded into one generic count. */
         int unsafe = config_last_unsafe_value_count();
         int ordinary = skipped - unsafe;
 
@@ -1040,7 +1060,7 @@ int main(int argc, char **argv)
             char msg[320];
             char logmsg[192];
             sprintf(msg, "WARNING: %d line(s) in " DOOR_CONFIG_PATH
-                         " were rejected for containing forbidden characters (quotes, backticks, $, ;, \\, |, &, <, >, or a raw CR/LF) and used defaults instead. This may indicate a misconfigured or tampered config file.",
+                         " were rejected as unsafe (forbidden characters such as quotes/backticks/$/;/\\/|/&/</>/#/CR/LF in DownloadDir, LogFile or RepoPath; or LhaCommand not a single plain command name/path) and used defaults instead. This may indicate a misconfigured or tampered config file.",
                     unsafe);
             ae_put(msg, 1);
             sprintf(logmsg, "CONFIG: %d line(s) in " DOOR_CONFIG_PATH " rejected for forbidden characters, defaults used", unsafe);

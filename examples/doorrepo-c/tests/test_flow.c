@@ -341,6 +341,111 @@ TEST(shell_char_empty_string_is_safe)
     ASSERT_TRUE(!flow_contains_forbidden_shell_char(""), "empty string has nothing to reject");
 }
 
+TEST(shell_char_hash_is_unsafe)
+{
+    /* Added after the "#"-comment bypass (LhaCommand="touch ... #") -
+     * this test is for the DENYLIST's use on DownloadDir/LogFile/RepoPath/
+     * archive names, which sit inside double quotes; LhaCommand itself is
+     * now allowlisted, not denylisted - see the flow_is_valid_command_token
+     * tests below for that value's own "#" coverage. */
+    ASSERT_TRUE(flow_contains_forbidden_shell_char("foo#bar"), "hash/comment marker rejected");
+}
+
+/* ---------------------------------------------------------------------
+ * flow_is_valid_command_token() - the LhaCommand allowlist. Replaces the
+ * denylist for this one field after two rounds of live bypass (see
+ * flow.h's block comment for the full history): cfg->lha_command is
+ * interpolated UNQUOTED into the system() command line, so no denylist
+ * can defend it - only an allowlist that expresses zero shell semantics.
+ * ------------------------------------------------------------------- */
+
+#define LHA_MAXLEN 128UL
+
+TEST(command_token_plain_name_is_valid)
+{
+    ASSERT_TRUE(flow_is_valid_command_token("lha", LHA_MAXLEN), "the documented default is valid");
+}
+
+TEST(command_token_amiga_path_is_valid)
+{
+    ASSERT_TRUE(flow_is_valid_command_token("Work:c/lha", LHA_MAXLEN), "an AmigaDOS assign+directory path is valid");
+}
+
+TEST(command_token_dashes_dots_underscores_valid)
+{
+    ASSERT_TRUE(flow_is_valid_command_token("a-b_c.d", LHA_MAXLEN), "-, _, . are all allowed");
+}
+
+TEST(command_token_empty_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("", LHA_MAXLEN), "empty command is invalid");
+}
+
+TEST(command_token_null_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token((const char *) 0, LHA_MAXLEN), "NULL is invalid, not a crash");
+}
+
+TEST(command_token_too_long_is_invalid)
+{
+    char big[200];
+    unsigned long i;
+    for (i = 0; i < sizeof(big) - 1; i++) {
+        big[i] = 'a';
+    }
+    big[sizeof(big) - 1] = '\0';
+    ASSERT_TRUE(!flow_is_valid_command_token(big, LHA_MAXLEN), "a token longer than maxlen is invalid");
+}
+
+TEST(command_token_exact_reported_hash_comment_payload_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("touch /tmp/PWNED_HASH_COMMENT #", LHA_MAXLEN),
+                "the exact reported '#'-comment bypass payload is rejected (spaces and '#' both forbidden)");
+}
+
+TEST(command_token_whitespace_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("7z x", LHA_MAXLEN), "any whitespace makes a multi-token value invalid");
+    ASSERT_TRUE(!flow_is_valid_command_token("lha\t", LHA_MAXLEN), "a trailing tab is invalid");
+}
+
+TEST(command_token_semicolon_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("lha;rm", LHA_MAXLEN), "semicolon is invalid");
+}
+
+TEST(command_token_percent_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("lha%test", LHA_MAXLEN), "percent is invalid");
+}
+
+TEST(command_token_tilde_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("~/lha", LHA_MAXLEN), "tilde is invalid");
+}
+
+TEST(command_token_caret_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("lha^test", LHA_MAXLEN), "caret is invalid");
+}
+
+TEST(command_token_parens_are_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("lha()", LHA_MAXLEN), "parentheses are invalid");
+}
+
+TEST(command_token_hash_is_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("lha#comment", LHA_MAXLEN), "hash/comment marker is invalid");
+}
+
+TEST(command_token_quote_chars_are_invalid)
+{
+    ASSERT_TRUE(!flow_is_valid_command_token("lha\"", LHA_MAXLEN), "double quote is invalid");
+    ASSERT_TRUE(!flow_is_valid_command_token("lha'", LHA_MAXLEN), "single quote is invalid");
+    ASSERT_TRUE(!flow_is_valid_command_token("lha`", LHA_MAXLEN), "backtick is invalid");
+}
+
 /* ---------------------------------------------------------------------
  * Local download path construction
  * ------------------------------------------------------------------- */
@@ -470,6 +575,23 @@ int main(void)
     RUN_TEST(shell_char_carriage_return_is_unsafe);
     RUN_TEST(shell_char_newline_is_unsafe);
     RUN_TEST(shell_char_empty_string_is_safe);
+    RUN_TEST(shell_char_hash_is_unsafe);
+
+    RUN_TEST(command_token_plain_name_is_valid);
+    RUN_TEST(command_token_amiga_path_is_valid);
+    RUN_TEST(command_token_dashes_dots_underscores_valid);
+    RUN_TEST(command_token_empty_is_invalid);
+    RUN_TEST(command_token_null_is_invalid);
+    RUN_TEST(command_token_too_long_is_invalid);
+    RUN_TEST(command_token_exact_reported_hash_comment_payload_is_invalid);
+    RUN_TEST(command_token_whitespace_is_invalid);
+    RUN_TEST(command_token_semicolon_is_invalid);
+    RUN_TEST(command_token_percent_is_invalid);
+    RUN_TEST(command_token_tilde_is_invalid);
+    RUN_TEST(command_token_caret_is_invalid);
+    RUN_TEST(command_token_parens_are_invalid);
+    RUN_TEST(command_token_hash_is_invalid);
+    RUN_TEST(command_token_quote_chars_are_invalid);
 
     RUN_TEST(local_path_device_needs_no_separator);
     RUN_TEST(local_path_directory_with_trailing_slash_needs_no_separator);

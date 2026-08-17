@@ -757,6 +757,104 @@ TEST(reject_lhacommand_semicolon)
     unlink("/tmp/test_inject_lha.cfg");
 }
 
+/* ---------------------------------------------------------------------
+ * LhaCommand's ALLOWLIST (flow_is_valid_command_token()), replacing the
+ * denylist after a live bypass: LhaCommand="touch /tmp/PWNED_HASH_COMMENT #"
+ * ran arbitrary code because "#" was not yet denylisted AND cfg->lha_command
+ * is interpolated UNQUOTED into the system() command line, so a trailing
+ * "#" comments out the rest regardless of what any denylist rejects. Every
+ * test below drives the real config_load() entry point.
+ * ------------------------------------------------------------------- */
+
+TEST(reject_lhacommand_exact_reported_hash_comment_payload)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_lha_hash.cfg", "w");
+    fprintf(f, "LhaCommand=touch /tmp/PWNED_HASH_COMMENT #\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_hash.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "LhaCommand keeps default on the exact reported '#'-comment payload");
+    ASSERT_EQ(skipped, 1, "the payload line is counted as skipped");
+    ASSERT_EQ(config_last_unsafe_value_count(), 1, "counted as an unsafe-value rejection");
+    unlink("/tmp/test_lha_hash.cfg");
+}
+
+TEST(reject_lhacommand_whitespace)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_lha_ws.cfg", "w");
+    fprintf(f, "LhaCommand=7z x\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_ws.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "a multi-token LhaCommand (whitespace) is rejected, not silently truncated");
+    unlink("/tmp/test_lha_ws.cfg");
+}
+
+TEST(reject_lhacommand_percent)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_lha_percent.cfg", "w");
+    fprintf(f, "LhaCommand=lha%%test\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_percent.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "'%' is outside the allowlist and rejected");
+    unlink("/tmp/test_lha_percent.cfg");
+}
+
+TEST(reject_lhacommand_tilde)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_lha_tilde.cfg", "w");
+    fprintf(f, "LhaCommand=~/lha\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_tilde.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "'~' is outside the allowlist and rejected");
+    unlink("/tmp/test_lha_tilde.cfg");
+}
+
+TEST(reject_lhacommand_caret)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_lha_caret.cfg", "w");
+    fprintf(f, "LhaCommand=lha^test\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_caret.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "'^' is outside the allowlist and rejected");
+    unlink("/tmp/test_lha_caret.cfg");
+}
+
+TEST(reject_lhacommand_parens)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_lha_parens.cfg", "w");
+    fprintf(f, "LhaCommand=lha()\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_parens.cfg", (int *) 0);
+    ASSERT_STR_EQ(cfg.lha_command, "lha", "'(' and ')' are outside the allowlist and rejected");
+    unlink("/tmp/test_lha_parens.cfg");
+}
+
+TEST(accept_lhacommand_amiga_assign_path)
+{
+    dr_config cfg;
+    int skipped = -1;
+    FILE *f = fopen("/tmp/test_lha_amiga_path.cfg", "w");
+    fprintf(f, "LhaCommand=Work:c/lha\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_lha_amiga_path.cfg", &skipped);
+    ASSERT_STR_EQ(cfg.lha_command, "Work:c/lha", "a real AmigaDOS assign+directory path is accepted");
+    ASSERT_EQ(skipped, 0, "a legitimate path is never skipped");
+    unlink("/tmp/test_lha_amiga_path.cfg");
+}
+
 TEST(reject_logfile_backtick)
 {
     dr_config cfg;
@@ -893,6 +991,13 @@ int main(void)
     RUN_TEST(reject_downloaddir_greater_than);
     RUN_TEST(reject_downloaddir_embedded_carriage_return);
     RUN_TEST(reject_lhacommand_semicolon);
+    RUN_TEST(reject_lhacommand_exact_reported_hash_comment_payload);
+    RUN_TEST(reject_lhacommand_whitespace);
+    RUN_TEST(reject_lhacommand_percent);
+    RUN_TEST(reject_lhacommand_tilde);
+    RUN_TEST(reject_lhacommand_caret);
+    RUN_TEST(reject_lhacommand_parens);
+    RUN_TEST(accept_lhacommand_amiga_assign_path);
     RUN_TEST(reject_logfile_backtick);
     RUN_TEST(reject_repopath_semicolon);
     RUN_TEST(unsafe_value_count_excludes_ordinary_invalid_values);

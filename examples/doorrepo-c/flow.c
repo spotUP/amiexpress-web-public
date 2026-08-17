@@ -200,7 +200,12 @@ int flow_build_archive_path(char *out, unsigned long outsize,
 
 int flow_contains_forbidden_shell_char(const char *value)
 {
-    static const char forbidden[] = "\"'`$;\\|&<>\r\n";
+    /* "#" added after the Round 2 bypass (LhaCommand's trailing-comment
+     * exploit) - it belongs here too even though LhaCommand itself moved
+     * to an allowlist, since a "#" inside a double-quoted DownloadDir/
+     * LogFile/RepoPath/archive-name value is still worth refusing on
+     * general principle (it has no legitimate meaning in any of those). */
+    static const char forbidden[] = "\"'`$;\\|&<>#\r\n";
     const char *p;
 
     if (value == (const char *) 0) {
@@ -213,6 +218,34 @@ int flow_contains_forbidden_shell_char(const char *value)
         }
     }
     return 0;
+}
+
+static int is_command_token_char(unsigned char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+        || c == '_' || c == '.' || c == ':' || c == '/' || c == '-';
+}
+
+int flow_is_valid_command_token(const char *value, unsigned long maxlen)
+{
+    unsigned long len;
+    const char *p;
+
+    if (value == (const char *) 0 || value[0] == '\0') {
+        return 0;
+    }
+
+    len = (unsigned long) strlen(value);
+    if (len + 1 > maxlen) {
+        return 0;
+    }
+
+    for (p = value; *p != '\0'; p++) {
+        if (!is_command_token_char((unsigned char) *p)) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int flow_build_local_path(char *out, unsigned long outsize,

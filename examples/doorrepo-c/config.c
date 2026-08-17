@@ -128,24 +128,26 @@ int config_last_unsafe_value_count(void)
 }
 
 /* Real, demonstrated vulnerability this guards: DownloadDir and
- * LhaCommand are interpolated, unescaped, into a system() command line
- * by doorrepo.c's optional lha-extraction step. A DownloadDir of
- * INJECTDIR" ; touch /tmp/PWNED_BY_DOORREPO ; echo " (a real value an
- * attacker-controlled or carelessly-copied DoorRepo.cfg could contain)
- * broke out of the surrounding double quotes and ran an arbitrary shell
- * command - confirmed by reproducing it end to end, not theorised.
- * RepoPath is also checked: it is concatenated raw into an HTTP request
- * line by http.c, so a CR/LF there could inject request-line/header
- * content. LogFile is checked for the same defense-in-depth reason even
- * though it is only ever passed to fopen(), never a shell.
+ * LhaCommand are interpolated into a system() command line by
+ * doorrepo.c's optional lha-extraction step. Two live rounds of
+ * exploitation (a DownloadDir quote-breakout, then an LhaCommand
+ * "#"-comment bypass after round 1 shipped) proved a denylist cannot
+ * defend cfg->lha_command, which sits UNQUOTED in that command line -
+ * see flow.h's block comment for the full history and the two-primitive
+ * fix: DownloadDir/RepoPath/LogFile (all inside double quotes) keep the
+ * denylist (flow_contains_forbidden_shell_char()); LhaCommand (unquoted)
+ * is now allowlisted (flow_is_valid_command_token()) instead. RepoPath is
+ * checked because it is concatenated raw into an HTTP request line by
+ * http.c, so a CR/LF there could inject request-line/header content.
+ * LogFile is checked for the same defense-in-depth reason even though it
+ * is only ever passed to fopen(), never a shell.
  *
- * The actual character set and rejection logic live in flow.c
- * (flow_contains_forbidden_shell_char()) rather than a private copy
- * here, so there is exactly one definition of "unsafe" shared with
- * doorrepo.c's second, independent check immediately before the
- * system() call this whole guard exists to protect - defense in depth
- * is the same single-source-of-truth check applied at two points, not
- * two implementations that could quietly drift apart. */
+ * Both check functions live in flow.c rather than private copies here,
+ * so there is exactly one definition of each shared with doorrepo.c's
+ * second, independent check immediately before the system() call this
+ * whole guard exists to protect - defense in depth is the same
+ * single-source-of-truth checks applied at two points, not
+ * implementations that could quietly drift apart. */
 
 int config_load(dr_config *cfg, const char *path, int *skipped_lines)
 {
@@ -230,12 +232,16 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
                 local_skipped++;
             }
         } else if (str_icmp(key, "LhaCommand") == 0) {
-            if (flow_contains_forbidden_shell_char(value)) {
-                local_skipped++;
-                g_last_unsafe_value_count++;
-            } else {
+            /* Allowlisted, not denylisted - see flow.h's block comment
+             * for why: cfg->lha_command sits UNQUOTED in the system()
+             * command line doorrepo.c builds, and a denylist was proven
+             * (twice) unable to defend an unquoted position. */
+            if (flow_is_valid_command_token(value, sizeof(cfg->lha_command))) {
                 strncpy(cfg->lha_command, value, sizeof(cfg->lha_command) - 1);
                 cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';
+            } else {
+                local_skipped++;
+                g_last_unsafe_value_count++;
             }
         } else if (str_icmp(key, "ExtractAfterDownload") == 0) {
             cfg->extract_after_download = parse_boolean(value);
