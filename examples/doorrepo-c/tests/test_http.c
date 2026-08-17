@@ -502,6 +502,35 @@ TEST(connect_to_closed_port_is_a_clean_error)
     ASSERT_TRUE(strlen(net_last_error()) > 0, "net_last_error() should be non-empty");
 }
 
+/* A closed port and a black-holed one both used to report the identical
+ * "connect() failed", so a sysop could not tell "nothing is listening on
+ * that port" (fix: check the port) from "the packets went nowhere" (fix:
+ * check routing/firewall). netio.c now maps the errno to a specific
+ * message, which is only correct if it compares against this platform's
+ * real errno values - the same mistake on the Amiga branch (Linux numbers
+ * where classic BSD numbers were required) made every such comparison
+ * false, so the mapping silently degraded to the generic message. */
+TEST(connect_to_closed_port_says_refused_not_just_failed)
+{
+    int port;
+    dr_config cfg;
+    http_response resp;
+    test_ctx ctx;
+    int rc;
+
+    port = stub_closed_port();
+    ASSERT_TRUE(port >= 0, "should be able to claim a closed ephemeral port");
+
+    cfg_for_port(&cfg, port);
+    cfg.timeout_secs = 2;
+    ctx_init(&ctx);
+    rc = http_get(&cfg, "/api/door-repo/list.txt", &resp, test_sink, &ctx);
+
+    ASSERT_EQ(rc, HTTP_ERR_CONNECT, "connect to a closed port should fail cleanly");
+    ASSERT_TRUE(strstr(net_last_error(), "refused") != (const char *) 0,
+                "a closed port must be reported as refused, not as a generic failure");
+}
+
 TEST(header_line_longer_than_buffer_does_not_overflow)
 {
     static char huge_value[2000];
@@ -580,6 +609,7 @@ int main(void)
     RUN_TEST(content_length_large_but_non_overflowing_value_is_still_trusted);
     RUN_TEST(sink_abort_stops_the_transfer);
     RUN_TEST(connect_to_closed_port_is_a_clean_error);
+    RUN_TEST(connect_to_closed_port_says_refused_not_just_failed);
     RUN_TEST(header_line_longer_than_buffer_does_not_overflow);
     RUN_TEST(request_larger_than_buffer_is_a_clean_error);
 

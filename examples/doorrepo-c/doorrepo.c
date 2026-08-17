@@ -6,6 +6,8 @@
  *   listtxt.h - list.txt header/row parser.
  *   config.h  - DoorRepo.cfg loader.
  *   http.h    - streaming HTTP GET over netio.h.
+ *   netio.h   - only for net_last_error(), to tell the user WHY the
+ *               connection failed. No socket is touched from this file.
  *   aedoor.h  - the XIM message-port door I/O layer (or its native twin).
  * Pure decision logic (pagination maths, the download-verification retry
  * state machine, and query-string/path construction) lives in flow.h/
@@ -27,6 +29,7 @@
 #include "md5.h"
 #include "aedoor.h"
 #include "flow.h"
+#include "netio.h"
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
@@ -644,6 +647,19 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
                 log_line(cfg, "CATALOG: response exceeded MAX_CATALOG_BYTES, aborted");
             } else if (rc == 1) {
                 ae_put("The repository server sent a catalog this door does not understand (malformed header). Cannot continue.", 1);
+            } else if (rc == HTTP_ERR_CONNECT) {
+                /* The transport never came up. net_last_error() distinguishes
+                 * a refused port from a timeout, an unreachable network and a
+                 * failed name lookup - four situations with four different
+                 * fixes, and a sysop staring at "could not reach the server"
+                 * cannot tell which one they have. net_last_error() is at
+                 * most 127 characters (netio.c bounds it), so this buffer
+                 * cannot be overrun by it. */
+                char msg[220];
+                sprintf(msg, "Could not reach the door repository server (%s). Please try again later.",
+                        net_last_error());
+                ae_put(msg, 1);
+                log_line(cfg, msg);
             } else {
                 ae_put("Could not reach the door repository server. Please try again later.", 1);
             }

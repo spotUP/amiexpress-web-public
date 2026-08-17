@@ -166,6 +166,46 @@ void net_close(int s)
 struct Library *SocketBase = (struct Library *) 0;
 static int g_timeout_secs = 30;
 
+/* The fd_set handed to WaitSelect() below is a single `long`, built with the
+ * universal AmigaOS idiom `1L << s`. That shift is only defined while `s` is
+ * smaller than the number of bits in a long, so a descriptor at or above
+ * that bound cannot be represented in the mask at all: the bit lands nowhere
+ * WaitSelect() looks and the door waits forever on a socket that is ready.
+ *
+ * Rather than assume the stack cooperates, ask it: getdtablesize() reports
+ * how many descriptors it is willing to hand out. A stack that can exceed
+ * our mask width is clamped to the mask width, and a descriptor past the
+ * limit is refused with a clear message instead of hanging. This is the
+ * check every door building a single-long fd_set should be making. */
+#define NETIO_FD_MASK_BITS ((int) (sizeof(long) * 8))
+
+static int fd_mask_limit(void)
+{
+    int limit;
+
+    limit = (int) getdtablesize();
+    if (limit <= 0 || limit > NETIO_FD_MASK_BITS) {
+        limit = NETIO_FD_MASK_BITS;
+    }
+    return limit;
+}
+
+/* Maps a bsdsocket Errno() value to a specific message. These are the
+ * classic BSD/AmigaOS numbers the stack's own <errno.h> defines
+ * (ECONNREFUSED 61, ETIMEDOUT 60, ENETUNREACH 51, EHOSTUNREACH 65) - NOT
+ * the Linux numbering, which differs for everything above 34. Mirrors the
+ * POSIX branch, which already reported a refused port distinctly from an
+ * unreachable one; folding them all into "connect() failed" left a sysop
+ * unable to tell a closed port from a black hole. */
+static const char *connect_error_text(int err)
+{
+    if (err == ECONNREFUSED) return "netio: connect() refused";
+    if (err == ETIMEDOUT)    return "netio: connect() timed out";
+    if (err == ENETUNREACH)  return "netio: network unreachable";
+    if (err == EHOSTUNREACH) return "netio: no route to host";
+    return "netio: connect() failed";
+}
+
 static void close_socket_lib(void)
 {
     if (SocketBase != (struct Library *) 0) { CloseLibrary(SocketBase); SocketBase = (struct Library *) 0; }
@@ -197,6 +237,12 @@ int net_open(const char *host, int port, int timeout_secs)
 
     s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0) { set_error("netio: socket() failed"); return -1; }
+    if (s >= fd_mask_limit()) {
+        /* Cannot be expressed in the single-long fd_set used below. */
+        set_error("netio: socket descriptor above this stack's fd_set width");
+        CloseSocket(s);
+        return -1;
+    }
     on = 1;
     IoctlSocket(s, FIONBIO, (char *) &on); /* non-blocking, so connect() below can be timed */
 
@@ -206,8 +252,11 @@ int net_open(const char *host, int port, int timeout_secs)
     addr.sin_port = htons((unsigned short) port);
     memcpy(&addr.sin_addr, he->h_addr, (size_t) he->h_length);
 
-    if (connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0 && Errno() != EINPROGRESS) {
-        set_error("netio: connect() failed"); CloseSocket(s); return -1;
+    if (connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+        int err = Errno();
+        if (err != EINPROGRESS) {
+            set_error(connect_error_text(err)); CloseSocket(s); return -1;
+        }
     }
 
     wmask = 1L << s;
@@ -267,6 +316,19 @@ void net_close(int s)
 #include <errno.h>
 
 static int g_timeout_secs = 30;
+
+/* Same mapping as the Amiga branch's function of this name, over this
+ * platform's errno values (the identifiers are portable; the numbers are
+ * not, which is exactly why both branches compare names rather than
+ * literals). Keeps the two branches reporting the same distinctions. */
+static const char *connect_error_text(int err)
+{
+    if (err == ECONNREFUSED) return "netio: connect() refused";
+    if (err == ETIMEDOUT)    return "netio: connect() timed out";
+    if (err == ENETUNREACH)  return "netio: network unreachable";
+    if (err == EHOSTUNREACH) return "netio: no route to host";
+    return "netio: connect() failed";
+}
 
 /* Formats a non-negative int as decimal into `out` (at least 12 bytes).
  * Avoids sprintf()/snprintf(): C89 has no snprintf, and getaddrinfo()'s
@@ -344,7 +406,7 @@ int net_open(const char *host, int port, int timeout_secs)
             break;
         }
         if (errno != EINPROGRESS) {
-            fail_reason = "netio: connect() failed";
+            fail_reason = connect_error_text(errno);
             close(s);
             s = -1;
             continue;
@@ -365,7 +427,8 @@ int net_open(const char *host, int port, int timeout_secs)
         errlen = sizeof(err);
         getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &errlen);
         if (err != 0) {
-            fail_reason = "netio: connect() failed";
+            /* Asynchronous failure: the reason is in SO_ERROR, not errno. */
+            fail_reason = connect_error_text(err);
             close(s);
             s = -1;
             continue;
