@@ -454,15 +454,24 @@ export class BsdSocketLibrary {
 
     console.log(`[BsdSocketLibrary] gethostbyname("${hostname}")`);
 
-    // Synchronous DNS lookup with timeout
+    // Synchronous name resolution with timeout.
+    //
+    // dns.lookup(), NOT dns.resolve4(): resolve4() speaks to a DNS server and
+    // nothing else, so it fails on the two inputs a sysop is most likely to
+    // put in a door's config file - a dotted-quad literal ("192.168.0.10")
+    // and a hosts-file name ("localhost"). Real AmiTCP/Roadshow
+    // gethostbyname() resolves both without any DNS traffic: a literal goes
+    // through inet_addr(), and names are checked against the stack's hosts
+    // file first. lookup() is the faithful equivalent - it handles literals,
+    // consults /etc/hosts, and only then queries DNS.
     let addresses: string[] | null = null;
     let done = false;
     const startTime = Date.now();
     const DNS_TIMEOUT = 5000; // 5 second timeout
 
-    dns.resolve4(hostname, (err, addrs) => {
-      if (!err) {
-        addresses = addrs;
+    dns.lookup(hostname, { family: 4, all: true }, (err, addrs) => {
+      if (!err && addrs.length > 0) {
+        addresses = addrs.map((entry) => entry.address);
       }
       done = true;
     });

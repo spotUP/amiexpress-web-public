@@ -78,12 +78,22 @@ class FakeEmulator {
     this.writeMemory(address + 3, value & 0xff);
   }
 
-  readString(): string {
-    return '';
+  /** NUL-terminated 8-bit string, the way the 68K side stores one. */
+  readString(address: number): string {
+    let out = '';
+    for (let a = address; ; a++) {
+      const b = this.readMemory(a);
+      if (b === 0) break;
+      out += String.fromCharCode(b);
+    }
+    return out;
   }
 
-  writeString(): void {
-    // not exercised by these tests
+  writeString(address: number, value: string): void {
+    for (let i = 0; i < value.length; i++) {
+      this.writeMemory(address + i, value.charCodeAt(i));
+    }
+    this.writeMemory(address + value.length, 0);
   }
 }
 
@@ -267,6 +277,66 @@ describe('bsdsocket.library getdtablesize (regression)', () => {
     // Only the call PAST the advertised limit may fail.
     expect(callSocket(lib, fake)).toBe(-1);
     expect(lib.getErrno()).toBe(EMFILE);
+  });
+});
+
+describe('bsdsocket.library gethostbyname (regression)', () => {
+  /**
+   * gethostbyname() used dns.resolve4(), which only ever queries a DNS
+   * server. Real AmiTCP/Roadshow resolves a dotted-quad literal through
+   * inet_addr() and checks the hosts file before any DNS traffic, so the two
+   * inputs a sysop is most likely to type into a door's config file -
+   * "192.168.0.10" and "localhost" - both failed here with
+   * "gethostbyname() failed" while working on a real Amiga.
+   *
+   * Found by running the real m68k DoorRepo binary in this emulator with
+   * RepoHost pointed at a local address.
+   */
+  const HOSTENT_H_ADDR_LIST = 16;
+
+  /** Call gethostbyname(A0=name) and return the resolved dotted-quad, or null. */
+  function resolveHost(lib: BsdSocketLibrary, fake: FakeEmulator, name: string): string | null {
+    const namePtr = 0x400000;
+    for (let i = 0; i < name.length; i++) {
+      fake.writeMemory(namePtr + i, name.charCodeAt(i));
+    }
+    fake.writeMemory(namePtr + name.length, 0);
+
+    fake.setRegister(8, namePtr); // A0 = hostname
+    const hostent = lib.gethostbyname();
+    if (hostent === 0) {
+      return null;
+    }
+    // hostent.h_addr_list -> char** -> first char* -> 4 network-order bytes
+    const addrListPtr = fake.readMemory32(hostent + HOSTENT_H_ADDR_LIST);
+    const addrPtr = fake.readMemory32(addrListPtr);
+    return [
+      fake.readMemory(addrPtr),
+      fake.readMemory(addrPtr + 1),
+      fake.readMemory(addrPtr + 2),
+      fake.readMemory(addrPtr + 3),
+    ].join('.');
+  }
+
+  test('resolves a dotted-quad literal without any DNS lookup', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    expect(resolveHost(lib, fake, '127.0.0.1')).toBe('127.0.0.1');
+  });
+
+  test('resolves a hosts-file name such as localhost', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    expect(resolveHost(lib, fake, 'localhost')).toBe('127.0.0.1');
+  });
+
+  test('still returns NULL for a name that does not resolve', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    expect(resolveHost(lib, fake, 'no-such-host.invalid')).toBeNull();
   });
 });
 
