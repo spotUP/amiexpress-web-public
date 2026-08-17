@@ -98,9 +98,18 @@ struct JHMessage {
 /* Compile-time guard: if this struct's size ever drifts from 264 bytes
  * (e.g. someone "cleans up" the tail fields back out because they look
  * unused), the build fails here instead of silently reintroducing the
- * BBS-writes-past-a-248-byte-allocation bug described above. C89-safe
- * negative-array-size trick (no static_assert in C89). */
-typedef char jh_size_check[(sizeof(struct JHMessage) == 264) ? 1 : -1];
+ * BBS-writes-past-a-248-byte-allocation bug described above.
+ *
+ * NOT a negative-array-size typedef (the more common C89 static-assert
+ * trick): verified against vc +aos68k -c99 -- the only compiler that ever
+ * builds this file -- that vbcc treats an array declared with a negative
+ * size as a WARNING ("warning 61 ... array of size <=0 (set to 1)"), not
+ * an error, and exits 0 with a valid object file. That form is inert on
+ * this toolchain and would not have caught the exact bug this guard exists
+ * to prevent. A negative-width bitfield DOES hard-fail under vbcc (error
+ * 332, "illegal bitfield size", exit 1) as well as under host cc, so that
+ * is the form used here. */
+struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
 
 /* ---- command codes ------------------------------------------------------
  * Full numeric list: axcommon.e:72-364 (research doc). Only the subset this
@@ -124,6 +133,18 @@ typedef char jh_size_check[(sizeof(struct JHMessage) == 264) ? 1 : -1];
  * once, so no future caller has to remember the trap for every message it
  * ever adds.
  *
+ * MUST be evaluated PER CHUNK, not once against the caller's whole string:
+ * the BBS's reroute check runs on each JH_SM message independently (it has
+ * no notion of "this is a continuation of an earlier line"), so for text
+ * longer than one chunk, any chunk whose OWN first bytes happen to spell
+ * "bbs:" is just as vulnerable as the first one -- checking only offset 0
+ * of the logical string misses every later chunk. ae_put() below calls
+ * this once per iteration against exactly the bytes that iteration is
+ * about to send (text + offset, bounded to n = the candidate chunk length),
+ * not against the unbounded remainder of the string -- bounding to n also
+ * guarantees the p[1]/p[2]/p[3] lookahead never reads past this message's
+ * own content.
+ *
  * A leading SPACE does NOT defeat this: the BBS's check trims leading/
  * trailing whitespace BEFORE testing the prefix (text.trim(), io.ts:659),
  * and messages.ts:200 builds that JS string via String.fromCharCode() on
@@ -135,18 +156,21 @@ typedef char jh_size_check[(sizeof(struct JHMessage) == 264) ? 1 : -1];
  * ordinary visible character on every terminal. isspace() here mirrors
  * only ASCII whitespace, which is what a topaz/Latin-1 door string will
  * ever realistically start with. */
-static int would_reroute_to_file_display(const char *text)
+static int would_reroute_to_file_display(const char *text, unsigned long n)
 {
-    const char *p;
+    unsigned long i;
 
-    p = text;
-    while (*p != '\0' && isspace((unsigned char)*p)) {
-        p++;
+    i = 0;
+    while (i < n && isspace((unsigned char)text[i])) {
+        i++;
     }
-    return (p[0] == 'b' || p[0] == 'B')
-        && (p[1] == 'b' || p[1] == 'B')
-        && (p[2] == 's' || p[2] == 'S')
-        && p[3] == ':';
+    if (i + 4 > n) {
+        return 0; /* fewer than 4 bytes left in THIS message -- cannot match */
+    }
+    return (text[i] == 'b' || text[i] == 'B')
+        && (text[i + 1] == 'b' || text[i + 1] == 'B')
+        && (text[i + 2] == 's' || text[i + 2] == 'S')
+        && text[i + 3] == ':';
 }
 
 /* ---- module state: one outstanding message at a time, exactly as the
@@ -233,7 +257,8 @@ void ae_put(const char *text, int newline)
     unsigned long offset;
     unsigned long chunk;
     unsigned long budget;
-    int guard;
+    unsigned long remaining;
+    unsigned long check_len;
 
     if (msg == NULL || bbs_port == NULL) {
         return;
@@ -241,13 +266,6 @@ void ae_put(const char *text, int newline)
     if (text == NULL) {
         text = "";
     }
-
-    /* Only the FIRST JH_SM message of this call can literally begin with
-     * "bbs:" once the BBS trims it -- the reroute check runs per message,
-     * not on the accumulated text, so later chunks (continuations of the
-     * middle/end of the string) are never mistaken for a fresh line start
-     * and need no guard. */
-    guard = would_reroute_to_file_display(text) ? 1 : 0;
 
     len = (unsigned long)strlen(text);
     offset = 0;
@@ -265,14 +283,19 @@ void ae_put(const char *text, int newline)
     /* Usable String payload is AE_MAX_LINE (198) chars + NUL, not the full
      * 200-byte array -- research doc. Chunk longer text across multiple
      * JH_SM sends; only the FINAL chunk carries Data=1 (newline) so the
-     * BBS appends exactly one line break, never mid-string. */
+     * BBS appends exactly one line break, never mid-string. The bbs:
+     * reroute guard is re-evaluated on EVERY iteration, against exactly
+     * the bytes that iteration is about to send -- see the comment above
+     * would_reroute_to_file_display(). */
     while (offset < len) {
         int prefixed;
 
-        prefixed = (offset == 0 && guard) ? 1 : 0;
-        budget = (unsigned long)AE_MAX_LINE - (unsigned long)prefixed;
+        remaining = len - offset;
+        check_len = (remaining > (unsigned long)AE_MAX_LINE) ? (unsigned long)AE_MAX_LINE : remaining;
+        prefixed = would_reroute_to_file_display(text + offset, check_len) ? 1 : 0;
 
-        chunk = len - offset;
+        budget = (unsigned long)AE_MAX_LINE - (unsigned long)prefixed;
+        chunk = remaining;
         if (chunk > budget) {
             chunk = budget;
         }

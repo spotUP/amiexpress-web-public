@@ -58,7 +58,11 @@ int ae_start(int node);
  * a live trap for ordinary status lines, not a hypothetical one. Both
  * implementations guard it automatically -- a leading '.' is inserted so
  * the check's prefix test fails and the line still prints -- so callers
- * never need to remember this for any message they add. */
+ * never need to remember this for any message they add. The guard is
+ * re-checked on EVERY chunk, not just the first: the BBS's reroute check
+ * runs on each physical send independently, so a "bbs:" appearing at a
+ * later chunk's own start (not the caller's logical string start) is just
+ * as vulnerable and gets its own guard byte. */
 void ae_put(const char *text, int newline);
 
 /* GetString equivalent (AEDoor.c GetString(), lines 267-273). Reads a line

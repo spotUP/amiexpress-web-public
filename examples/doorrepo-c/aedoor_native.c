@@ -48,6 +48,16 @@
  * native twin's output matches byte-for-byte and the behaviour is testable
  * without a live emulator.
  *
+ * MUST be evaluated PER CHUNK, not once against the caller's whole string:
+ * the BBS's reroute check runs on each JH_SM message independently, so any
+ * chunk whose OWN first bytes spell "bbs:" is just as vulnerable as the
+ * first chunk -- see the matching comment in aedoor_amiga.c's ae_put() for
+ * the full reasoning. This is a stdio twin with no real 198-byte send
+ * limit, but ae_put() below still walks the same AE_MAX_LINE chunk
+ * boundaries as the real backend and re-checks on every iteration, so a
+ * caller (and the test suite) sees byte-identical placement of the guard
+ * byte on both backends.
+ *
  * A leading SPACE does NOT defeat the real check: the BBS trims leading/
  * trailing whitespace BEFORE testing the prefix (text.trim(), io.ts:659),
  * and messages.ts:200 builds that JS string via String.fromCharCode() on
@@ -57,18 +67,21 @@
  * The guard byte must be printable and non-whitespace to survive trim();
  * a single leading period reliably breaks the match and renders as an
  * ordinary visible character on every terminal. */
-static int would_reroute_to_file_display(const char *text)
+static int would_reroute_to_file_display(const char *text, unsigned long n)
 {
-    const char *p;
+    unsigned long i;
 
-    p = text;
-    while (*p != '\0' && isspace((unsigned char)*p)) {
-        p++;
+    i = 0;
+    while (i < n && isspace((unsigned char)text[i])) {
+        i++;
     }
-    return (p[0] == 'b' || p[0] == 'B')
-        && (p[1] == 'b' || p[1] == 'B')
-        && (p[2] == 's' || p[2] == 'S')
-        && p[3] == ':';
+    if (i + 4 > n) {
+        return 0; /* fewer than 4 bytes left in THIS message -- cannot match */
+    }
+    return (text[i] == 'b' || text[i] == 'B')
+        && (text[i + 1] == 'b' || text[i + 1] == 'B')
+        && (text[i + 2] == 's' || text[i + 2] == 'S')
+        && text[i + 3] == ':';
 }
 
 int ae_start(int node)
@@ -82,15 +95,13 @@ void ae_put(const char *text, int newline)
     unsigned long len;
     unsigned long offset;
     unsigned long chunk;
+    unsigned long remaining;
+    unsigned long check_len;
+    unsigned long budget;
+    int prefixed;
 
     if (text == NULL) {
         text = "";
-    }
-
-    /* Only the start of the message as a whole can be mistaken for a
-     * "bbs:" line -- guard once, up front, rather than per chunk. */
-    if (would_reroute_to_file_display(text)) {
-        fputc('.', stdout); /* guard byte: breaks the trimmed "bbs:" prefix match, see would_reroute_to_file_display() above */
     }
 
     len = (unsigned long)strlen(text);
@@ -98,13 +109,26 @@ void ae_put(const char *text, int newline)
 
     /* Chunk at AE_MAX_LINE even though stdout has no such limit, so the
      * boundary logic is identical to -- and testable as a twin of -- the
-     * real backend, which genuinely cannot send more than that per call. */
+     * real backend, which genuinely cannot send more than that per call.
+     * The bbs: reroute guard is re-evaluated on EVERY iteration against
+     * exactly the bytes that iteration is about to write -- see the
+     * comment above would_reroute_to_file_display(). */
     while (offset < len) {
-        chunk = len - offset;
-        if (chunk > AE_MAX_LINE) {
-            chunk = AE_MAX_LINE;
+        remaining = len - offset;
+        check_len = (remaining > (unsigned long)AE_MAX_LINE) ? (unsigned long)AE_MAX_LINE : remaining;
+        prefixed = would_reroute_to_file_display(text + offset, check_len) ? 1 : 0;
+
+        budget = (unsigned long)AE_MAX_LINE - (unsigned long)prefixed;
+        chunk = remaining;
+        if (chunk > budget) {
+            chunk = budget;
+        }
+
+        if (prefixed) {
+            fputc('.', stdout); /* guard byte: breaks the trimmed "bbs:" prefix match, see would_reroute_to_file_display() above */
         }
         fwrite(text + offset, 1, (size_t)chunk, stdout);
+
         offset += chunk;
     }
 

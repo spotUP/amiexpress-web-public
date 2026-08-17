@@ -244,6 +244,115 @@ TEST(put_bbs_substring_mid_line_is_untouched)
         "'bbs:' NOT at the start of the line needs no guard");
 }
 
+TEST(put_bbs_prefix_at_second_chunk_boundary_is_escaped)
+{
+    /* Constructed so chunk 1 (offset 0, length AE_MAX_LINE=198) does NOT
+     * itself start with "bbs:" -- it is correctly left unguarded and
+     * consumes the full 198-byte budget -- and chunk 2 begins EXACTLY at
+     * offset 198 with "bbs:doors/FOO.LHA". "bbs:" lands at a LATER
+     * physical JH_SM message's own start offset, not the caller's logical
+     * string start. The BBS's reroute check (io.ts:657-666) runs on each
+     * message independently, so that chunk needs its own guard byte even
+     * though the string as a whole does not start with "bbs:".
+     *
+     * This is deliberately built to discriminate a real per-chunk
+     * implementation from a whole-string-only check: a whole-string check
+     * sees text[0] == 'x', concludes "no guard needed anywhere", and
+     * leaves chunk 2 unguarded -- against that (the previous, buggy)
+     * implementation this test fails (see report for the RED run).
+     * Asserting the exact byte AT the chunk-boundary offset -- not just
+     * "output contains bbs: somewhere" -- is what makes this a test of
+     * chunk boundaries rather than a restatement of the single-chunk
+     * case; a native stdout capture cannot observe separate protocol
+     * messages, but this implementation's chunk math is identical to the
+     * Amiga backend's, so the guard byte's position in the byte stream is
+     * exactly where a live emulator would see it in the second message. */
+    char text[220];
+    char expected[222];
+    char *out;
+    int i;
+    int n;
+    int k;
+    const char *tail;
+
+    for (i = 0; i < AE_MAX_LINE; i++) {
+        text[i] = 'x';
+    }
+    n = AE_MAX_LINE;
+    tail = "bbs:doors/FOO.LHA";
+    for (i = 0; tail[i] != '\0'; i++) {
+        text[n++] = tail[i];
+    }
+    text[n] = '\0';
+
+    k = 0;
+    for (i = 0; i < AE_MAX_LINE; i++) {
+        expected[k++] = 'x';
+    }
+    expected[k++] = '.';
+    for (i = 0; tail[i] != '\0'; i++) {
+        expected[k++] = tail[i];
+    }
+    expected[k++] = '\n';
+    expected[k] = '\0';
+
+    capture_stdout_begin();
+    ae_put(text, 1);
+    out = capture_stdout_end();
+
+    ASSERT_EQ((int)strlen(out), (int)strlen(expected), "output length includes exactly one inserted guard byte");
+    ASSERT_TRUE(out[AE_MAX_LINE] == '.', "guard byte lands exactly at the second chunk's start offset (198)");
+    ASSERT_STR_EQ(out, expected, "chunk 1 unguarded, chunk 2 guarded, full content intact");
+}
+
+TEST(put_ansi_escape_straddling_chunk_boundary_is_not_corrupted)
+{
+    /* An ANSI SGR escape sequence deliberately straddles the AE_MAX_LINE
+     * (198) chunk boundary: it starts at byte 195 and its final 'm' lands
+     * at byte 201, three bytes past the split point. Chunking is dumb
+     * byte-splitting with no escape-sequence awareness by design (the
+     * protocol layer only knows about a 198-byte payload limit, not
+     * terminal semantics) -- this must reassemble byte-identical to the
+     * input regardless of where the split falls. */
+    char text[240];
+    char *out;
+    int i;
+    int n;
+
+    n = 0;
+    for (i = 0; i < 195; i++) {
+        text[n++] = (char)('a' + (i % 26));
+    }
+    text[n++] = 0x1B;
+    text[n++] = '[';
+    text[n++] = '1';
+    text[n++] = ';';
+    text[n++] = '3';
+    text[n++] = '3';
+    text[n++] = 'm';
+    {
+        const char *word = "Hello";
+        for (i = 0; word[i] != '\0'; i++) {
+            text[n++] = word[i];
+        }
+    }
+    text[n++] = 0x1B;
+    text[n++] = '[';
+    text[n++] = '0';
+    text[n++] = 'm';
+    for (i = 0; i < 20; i++) {
+        text[n++] = (char)('A' + (i % 26));
+    }
+    text[n] = '\0';
+
+    capture_stdout_begin();
+    ae_put(text, 0);
+    out = capture_stdout_end();
+
+    ASSERT_EQ((int)strlen(out), n, "full length preserved across the chunk split");
+    ASSERT_TRUE(strcmp(out, text) == 0, "byte-identical output: escape sequence not corrupted by the 198-byte split");
+}
+
 TEST(get_truncates_safely_at_maxlen)
 {
     char buf[12];
@@ -370,6 +479,8 @@ int main(void)
     RUN_TEST(put_bbs_prefix_is_escaped_to_avoid_file_display_reroute);
     RUN_TEST(put_bbs_prefix_case_insensitive_is_escaped);
     RUN_TEST(put_bbs_substring_mid_line_is_untouched);
+    RUN_TEST(put_bbs_prefix_at_second_chunk_boundary_is_escaped);
+    RUN_TEST(put_ansi_escape_straddling_chunk_boundary_is_not_corrupted);
     RUN_TEST(get_truncates_safely_at_maxlen);
     RUN_TEST(get_drains_overlong_line_so_next_get_starts_clean);
     RUN_TEST(get_returns_full_short_line_without_newline);
