@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { Readable } from 'stream';
 import Database from 'better-sqlite3';
 import express, { Express, Router } from 'express';
 import request from 'supertest';
@@ -140,7 +141,7 @@ describe('door-repo routes', () => {
       expect(res.headers['etag']).toBe(`"${revision}"`);
     });
 
-    it('returns 304 with an empty body when If-None-Match matches the current revision', async () => {
+    it('returns 304 with an empty body and the revision header when If-None-Match matches the current revision (strong exact match)', async () => {
       const first = await request(app).get('/api/door-repo/manifest');
       const etag = first.headers['etag'];
       expect(etag).toBeTruthy();
@@ -151,6 +152,76 @@ describe('door-repo routes', () => {
 
       expect(second.status).toBe(304);
       expect(second.text || '').toBe('');
+      expect(second.headers['x-door-repo-revision']).toBeTruthy();
+      expect(second.headers['x-door-repo-revision']).toBe(first.body.revision);
+    });
+
+    // RFC 7232: If-None-Match uses WEAK comparison by default (a W/"..."
+    // validator from a cache/intermediary must still match our strong
+    // "..." ETag), allows a comma-separated candidate list, and honors
+    // "*" as a match-anything wildcard. A real 68K client or an HTTP
+    // proxy sitting in front of this API will exercise all of these.
+    describe('If-None-Match variants (RFC 7232 conditional GET)', () => {
+      it('matches a weak validator (W/"<rev>") against our strong ETag', async () => {
+        const first = await request(app).get('/api/door-repo/manifest');
+        const revision = first.body.revision as string;
+
+        const second = await request(app)
+          .get('/api/door-repo/manifest')
+          .set('If-None-Match', `W/"${revision}"`);
+
+        expect(second.status).toBe(304);
+        expect(second.text || '').toBe('');
+      });
+
+      it('matches when the revision appears anywhere in a comma-separated candidate list', async () => {
+        const first = await request(app).get('/api/door-repo/manifest');
+        const revision = first.body.revision as string;
+
+        const second = await request(app)
+          .get('/api/door-repo/manifest')
+          .set('If-None-Match', `"some-other-rev", "${revision}", W/"yet-another"`);
+
+        expect(second.status).toBe(304);
+      });
+
+      it('matches the "*" wildcard', async () => {
+        const res = await request(app).get('/api/door-repo/manifest').set('If-None-Match', '*');
+        expect(res.status).toBe(304);
+      });
+
+      it('returns 200 for a non-matching If-None-Match value', async () => {
+        const res = await request(app)
+          .get('/api/door-repo/manifest')
+          .set('If-None-Match', '"totally-different-revision"');
+        expect(res.status).toBe(200);
+      });
+
+      it('returns 200 when If-None-Match is absent', async () => {
+        const res = await request(app).get('/api/door-repo/manifest');
+        expect(res.status).toBe(200);
+      });
+
+      // RFC 9111 s5.2.1.4: Cache-Control: no-cache forces end-to-end
+      // revalidation even when If-None-Match would otherwise match exactly.
+      // A hand-rolled `if (ifNoneMatch === etag)` shortcut that returns 304
+      // before Express's own conditional-GET handling runs would miss this
+      // — it has no Cache-Control awareness at all. Routing every case
+      // (including the exact match) through res.json()'s built-in
+      // freshness check (which respects Cache-Control: no-cache) is what
+      // this test guards.
+      it('ignores an otherwise-matching If-None-Match when Cache-Control: no-cache forces revalidation', async () => {
+        const first = await request(app).get('/api/door-repo/manifest');
+        const etag = first.headers['etag'];
+
+        const second = await request(app)
+          .get('/api/door-repo/manifest')
+          .set('If-None-Match', etag)
+          .set('Cache-Control', 'no-cache');
+
+        expect(second.status).toBe(200);
+        expect(second.body.formatVersion).toBe(1);
+      });
     });
 
     it('supports ?type= filtering', async () => {
@@ -216,6 +287,118 @@ describe('door-repo routes', () => {
       const res = await request(app).get('/api/door-repo/archive/..%2F..%2Fetc%2Fpasswd');
       expect(res.status).toBe(404);
       expect(res.text).toContain('NOT FOUND');
+    });
+
+    // TOCTOU guard: Content-Length and the streamed bytes must come from
+    // the SAME fd (one fs.openSync + fs.fstatSync), not from an independent
+    // statSync followed by a second, independent createReadStream(path)
+    // open — if the file's size changed between those two opens, the
+    // declared Content-Length would no longer match the streamed byte
+    // count and HTTP/1.1 framing corrupts for that connection. These tests
+    // assert the fd lifecycle directly: opened exactly once, closed
+    // exactly once, on both the success and the failure path — a
+    // deterministic assertion on *whether close was invoked*, not a
+    // sleep/poll waiting for the OS-level close to complete.
+    //
+    // Spying: `jest.spyOn(fs, 'openSync')` using this test file's own
+    // `import * as fs from 'fs'` does NOT intercept the router's calls —
+    // swc compiles namespace imports via `_interopRequireWildcard`, which
+    // snapshots each PROPERTY VALUE into a fresh per-file object at
+    // require-time (`newObj[key] = obj[key]`), so the test file's `fs` and
+    // the router's `fs` are two independently-copied objects, not the same
+    // reference. The fix mirrors the checksum-spy pattern above: spy on
+    // the raw `require('fs')` singleton (a genuine plain CJS `require()`
+    // call is left untouched by swc, no wrapping) BEFORE resetModules()
+    // forces a fresh require of the router, so the router's fresh
+    // namespace-import snapshot captures the already-spied functions.
+    describe('file descriptor lifecycle (TOCTOU guard)', () => {
+      it('opens the file exactly once and closes it exactly once after a successful stream', async () => {
+        jest.resetModules();
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fsCore = require('fs') as typeof fs;
+        const openSpy = jest.spyOn(fsCore, 'openSync');
+        const closeSpy = jest.spyOn(fsCore, 'close');
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { doorRepoRouter: freshRouter } = require('../../src/server/door-repo.routes') as {
+          doorRepoRouter: Router;
+        };
+        const freshApp = express();
+        freshApp.use('/api/door-repo', freshRouter);
+
+        // The resetModules()+fresh-require above reloads the router's
+        // ENTIRE dependency graph (express, better-sqlite3, etc.), which
+        // itself makes many unrelated fs.openSync/close calls as Node's
+        // module loader reads .js files off disk. Clear the spies now so
+        // only calls made while actually handling the request are counted.
+        openSpy.mockClear();
+        closeSpy.mockClear();
+
+        const res = await request(freshApp).get('/api/door-repo/archive/REAL_DOOR.LHA');
+
+        expect(res.status).toBe(200);
+        expect(res.headers['content-length']).toBe(String(realArchiveContent.length));
+
+        // Our own explicit fs.openSync(absPath, 'r') for the streaming fd.
+        // getArchiveChecksums() independently reads the same file via
+        // readFileSync (a documented, accepted separate read for metadata
+        // headers, not wire framing — see the route's doc comment) which
+        // may itself open+close a second fd; assert our streaming fd
+        // specifically opened `absPath` and was closed exactly once,
+        // rather than assuming a single global call count.
+        const ourOpenCall = openSpy.mock.calls.find((call) => call[0] === realArchivePath);
+        expect(ourOpenCall).toBeDefined();
+        const fd = openSpy.mock.results[openSpy.mock.calls.indexOf(ourOpenCall!)]!.value as number;
+
+        const closeCallsForFd = closeSpy.mock.calls.filter((call) => call[0] === fd);
+        expect(closeCallsForFd).toHaveLength(1);
+
+        openSpy.mockRestore();
+        closeSpy.mockRestore();
+      });
+
+      it('closes the file descriptor exactly once when the stream errors after opening (no leak on the failure path)', async () => {
+        jest.resetModules();
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fsCore = require('fs') as typeof fs;
+        const openSpy = jest.spyOn(fsCore, 'openSync');
+        const closeSpy = jest.spyOn(fsCore, 'close');
+        const createReadStreamSpy = jest.spyOn(fsCore, 'createReadStream').mockImplementation(() => {
+          const s = new Readable({ read() {} });
+          process.nextTick(() => s.emit('error', new Error('simulated mid-stream failure')));
+          return s as unknown as fs.ReadStream;
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { doorRepoRouter: freshRouter } = require('../../src/server/door-repo.routes') as {
+          doorRepoRouter: Router;
+        };
+        const freshApp = express();
+        freshApp.use('/api/door-repo', freshRouter);
+
+        // See the previous test: clear post-require module-loading noise
+        // before counting request-scoped fs calls.
+        openSpy.mockClear();
+        closeSpy.mockClear();
+
+        const res = await request(freshApp).get('/api/door-repo/archive/REAL_DOOR.LHA');
+
+        // The mocked stream errors before any bytes are pushed, so the
+        // route's error handler still has a clean slate to fall back to
+        // its usual 404 (see handleArchiveStreamError tests below).
+        expect(res.status).toBe(404);
+
+        const ourOpenCall = openSpy.mock.calls.find((call) => call[0] === realArchivePath);
+        expect(ourOpenCall).toBeDefined();
+        const fd = openSpy.mock.results[openSpy.mock.calls.indexOf(ourOpenCall!)]!.value as number;
+
+        const closeCallsForFd = closeSpy.mock.calls.filter((call) => call[0] === fd);
+        expect(closeCallsForFd).toHaveLength(1);
+
+        createReadStreamSpy.mockRestore();
+        openSpy.mockRestore();
+        closeSpy.mockRestore();
+      });
     });
   });
 

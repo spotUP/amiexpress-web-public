@@ -2,7 +2,9 @@
  * door-repo routes: read-only HTTP API over the door catalog, for both
  * modern (web) consumers and legacy AmigaDOS door-repo clients.
  *
- *   GET /manifest              JSON DoorRepoManifest; ETag + If-None-Match.
+ *   GET /manifest              JSON DoorRepoManifest; ETag + RFC 7232
+ *                              conditional GET (via Express's built-in
+ *                              freshness check, see the handler below).
  *   GET /list.txt              byte-exact ISO-8859-1/CRLF plain-text index.
  *   GET /archive/:archiveName  streams the archive file + its checksums.
  *   GET /health                { status, revision, doors } — lightweight;
@@ -62,18 +64,24 @@ export function handleArchiveStreamError(res: Response, archiveName: string): vo
 }
 
 // GET /manifest — JSON manifest with ETag / If-None-Match support.
+//
+// Conditional-GET (304) handling is delegated ENTIRELY to Express's
+// built-in freshness check (response.js: `if (req.fresh) this.status(304)`,
+// run inside res.send()/res.json() once an ETag response header is set) —
+// not hand-rolled here. `req.fresh` is backed by the `fresh` npm module,
+// which already implements RFC 7232 correctly: weak comparison (a
+// `W/"<rev>"` validator from a cache/proxy matches our strong `"<rev>"`
+// ETag), comma-separated candidate lists, the `*` wildcard, AND (the part
+// a hand-rolled `if (ifNoneMatch === etag)` shortcut would miss) RFC 9111's
+// `Cache-Control: no-cache` end-to-end-reload override, which must force
+// revalidation even when If-None-Match would otherwise match exactly. Only
+// requirement on our side: set the ETag header before calling res.json().
 doorRepoRouter.get('/manifest', (req: Request, res: Response) => {
   const manifest = buildManifest(parseManifestQuery(req));
   const revision = manifest.revision;
-  const etag = `"${revision}"`;
 
   res.set('X-Door-Repo-Revision', revision);
-  res.set('ETag', etag);
-
-  if (req.headers['if-none-match'] === etag) {
-    res.status(304).end();
-    return;
-  }
+  res.set('ETag', `"${revision}"`);
 
   res.json(manifest);
 });
@@ -88,6 +96,21 @@ doorRepoRouter.get('/list.txt', (req: Request, res: Response) => {
 });
 
 // GET /archive/:archiveName — stream the archive + checksum headers.
+//
+// The declared Content-Length and the streamed bytes MUST come from the
+// same open of the file. Doing an independent fs.statSync(path) for the
+// size and a later, separate fs.createReadStream(path) for the body is a
+// TOCTOU: if the file's size changes between those two opens (a
+// re-indexed/replaced archive), the declared Content-Length no longer
+// matches the byte count actually streamed and HTTP/1.1 framing corrupts
+// for that connection. So: open once (fs.openSync), size via fstatSync on
+// that fd, and stream from that same fd (autoClose disabled — we own and
+// verify the close ourselves, exactly once, on every path).
+//
+// Checksums are a separate concern: getArchiveChecksums() does its own
+// independent statSync+readFileSync via the Task 1 cache module. That's
+// fine — they're metadata headers, not wire framing, and re-reading lets
+// us keep reusing the existing cached-by-mtime+size implementation as-is.
 doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
   res.set('X-Door-Repo-Revision', getRepoRevision());
 
@@ -100,10 +123,19 @@ doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
 
   const absPath = resolveArchivePath(entry.archive_path);
 
+  let fd: number;
+  try {
+    fd = fs.openSync(absPath, 'r');
+  } catch {
+    sendNotFound(res, archiveName);
+    return;
+  }
+
   let size: number;
   try {
-    size = fs.statSync(absPath).size;
+    size = fs.fstatSync(fd).size;
   } catch {
+    fs.closeSync(fd);
     sendNotFound(res, archiveName);
     return;
   }
@@ -112,6 +144,7 @@ doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
   try {
     checksums = getArchiveChecksums(absPath);
   } catch {
+    fs.closeSync(fd);
     sendNotFound(res, archiveName);
     return;
   }
@@ -121,8 +154,22 @@ doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
   res.set('X-Archive-MD5', checksums.md5);
   res.set('X-Archive-SHA256', checksums.sha256);
 
-  const stream = fs.createReadStream(absPath);
-  stream.on('error', () => handleArchiveStreamError(res, archiveName));
+  let fdClosed = false;
+  const closeFd = (): void => {
+    if (fdClosed) return;
+    fdClosed = true;
+    fs.close(fd, () => {
+      /* best-effort close; nothing actionable if the OS-level close fails */
+    });
+  };
+
+  const stream = fs.createReadStream('', { fd, autoClose: false });
+  stream.on('end', closeFd);
+  stream.on('close', closeFd);
+  stream.on('error', () => {
+    closeFd();
+    handleArchiveStreamError(res, archiveName);
+  });
   stream.pipe(res);
 });
 
