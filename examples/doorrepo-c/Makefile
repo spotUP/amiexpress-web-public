@@ -3,13 +3,22 @@
 # Targets:
 #   native      - doorrepo, built for this host with aedoor_native.c (dev/test build)
 #   amiga       - doorrepo.amiga, cross-compiled with vbcc for a real AmigaOS
-#                 node, using aedoor_amiga.c and netio.c's real bsdsocket.library
-#                 branch. Needs NETINCLUDE (see below) - UNVERIFIED on this
-#                 toolchain, see netio.c's header comment.
+#                 node: aedoor_amiga.c + netio.c's real bsdsocket.library
+#                 branch, built against this repo's vendored NDK3.2R4 (see
+#                 the AMIGA_NETINCLUDE_VENDOR_LINK block below) by default -
+#                 COMPILE-VERIFIED here (see netio.c's header comment and
+#                 the task-4/task-6 reports for the full recipe and its
+#                 provenance); NOT link/run-verified against a real
+#                 bsdsocket.library, since no such runtime is available in
+#                 this environment. Pass NETINCLUDE=/path/to/sdk/include to
+#                 use a different (e.g. a builder's own AmiTCP/Roadshow) SDK
+#                 instead of the vendored one.
 #   amiga-stub  - doorrepo.amiga-stub, the same cross-compile but with netio.c's
 #                 NETIO_STUB branch instead of real sockets, so it needs no
-#                 AmiTCP SDK at all. This is what proves every module OTHER
-#                 than netio.c's real Amiga branch is m68k-clean.
+#                 AmiTCP SDK at all and fully LINKS (not just compiles) to a
+#                 loadseg()ble AmigaOS executable - the strongest m68k-clean
+#                 proof available here for every module other than netio.c's
+#                 real socket branch.
 #   test        - builds and runs every unit test under tests/ (native only).
 #   live        - builds native and runs it once against http://bbs.uprough.net
 #                 (a real, network-touching request against the live door
@@ -29,17 +38,59 @@ NATIVE_CFLAGS = -std=c89 -Wall -Wextra -pedantic -O2
 VBCC ?= /opt/homebrew/Cellar/vbcc/0.9hp3
 NDK ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-include
 
-# Path to a real AmiTCP/Roadshow SDK's include directory (must provide
+# Path to an AmiTCP/Roadshow SDK include directory (must provide
 # sys/socket.h, netinet/in.h, netdb.h - the headers netio.c's AMIGA branch
-# needs and which neither vbcc nor the NDK ship). Required ONLY for the
-# `amiga` target; `amiga-stub` needs no networking headers at all. Not set
-# by default because no such SDK is available in this environment - see
-# netio.c's header comment and examples/doorrepo-c's task-6 report for why
-# the `amiga` target is consequently unverified here.
+# needs and which neither vbcc's own SDK nor the m68k-amiga-elf-gcc NDK
+# ship). Only needed to override the vendored default below - see that
+# block's comment for why nothing needs to be set for `make amiga` to work
+# in THIS repo checkout.
 NETINCLUDE ?=
 
 VC = VBCC=$(VBCC) vc
-AMIGA_CFLAGS = +aos68k -c99 -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
+
+# Deliberately does NOT include -I"$(NDK)" here: $(NDK) (the
+# m68k-amiga-elf-gcc sys-include tree) must come LAST in the real `amiga`
+# target's search order (see the VENDOR_NDK_ROOT block below for why -
+# its own devices/timer.h must not shadow the vendored one), so each
+# target below appends $(NDK) itself, in the position that target needs.
+AMIGA_CFLAGS = +aos68k -c99 -I"$(VBCC)/targets/m68k-amigaos/include"
+
+# ---------------------------------------------------------------------
+# Vendored AmiTCP/Roadshow SDK (NDK3.2R4) used by `amiga` when NETINCLUDE
+# is not overridden. This repo vendors a full copy at
+# "Documentation/7-Reference Sources/NDK3.2R4/" - Task 4 chased down and
+# proved that netio.c's real bsdsocket.library branch compiles with ZERO
+# warnings against it (see task-4-report.md's fix-round section for the
+# full transcript and the struct __timeval investigation that made this
+# possible). Two symlinks are created here rather than pointing vc's -I
+# straight at the vendored paths, for two independent reasons:
+#
+#   1. devices/timer.h ORDERING: the m68k-amiga-elf-gcc tree's own
+#      devices/timer.h wraps tv_sec/tv_usec in anonymous unions - a GNU
+#      extension vbcc rejects (warning 53). The vendored NDK3.2R4's
+#      Include_H/devices/timer.h is a plain, non-union struct that
+#      compiles clean. AMIGA_NDK_SHIM contains ONLY that one file, so
+#      putting it ahead of $(NDK) in the -I list makes the good copy win
+#      without needing to reorganize $(NDK) itself.
+#   2. SPACE-IN-PATH: "Documentation/7-Reference Sources/NDK3.2R4/..."
+#      contains a literal space, which trips an argv-splitting bug in
+#      vc's own wrapper script when passed directly as a -I argument
+#      (confirmed in task-4-report.md's fix-round section). Symlinking it
+#      to a space-free path under this directory sidesteps the bug
+#      entirely.
+#
+# Both symlinks are (re)created on every `amiga` build (cheap; `ln -sf`/
+# `ln -sfn` are idempotent) so a stale link from a moved vendored tree
+# never lingers. Neither is committed - see .gitignore.
+VENDOR_NDK_ROOT = $(CURDIR)/../../Documentation/7-Reference Sources/NDK3.2R4
+AMIGA_NDK_SHIM = amiga-ndk-shim
+AMIGA_NETINCLUDE_VENDOR_LINK = amiga-netinclude-vendor
+
+ifeq ($(strip $(NETINCLUDE)),)
+AMIGA_NETINCLUDE_DIR = $(AMIGA_NETINCLUDE_VENDOR_LINK)
+else
+AMIGA_NETINCLUDE_DIR = $(NETINCLUDE)
+endif
 
 LIVE_HOST = http://bbs.uprough.net
 
@@ -63,16 +114,19 @@ doorrepo: $(NATIVE_SOURCES) $(HEADERS)
 	$(CC) $(NATIVE_CFLAGS) $(NATIVE_SOURCES) -o $@
 
 # ---------------------------------------------------------------------
-# amiga (real bsdsocket.library networking; needs a real AmiTCP SDK)
+# amiga (real bsdsocket.library networking, against the vendored NDK3.2R4
+# by default - see the VENDOR_NDK_ROOT block above)
 # ---------------------------------------------------------------------
 
 amiga: doorrepo.amiga
 
 doorrepo.amiga: $(AMIGA_SOURCES) $(HEADERS)
-ifeq ($(strip $(NETINCLUDE)),)
-	$(error NETINCLUDE is not set. The 'amiga' target needs a real AmiTCP/Roadshow SDK include directory (sys/socket.h, netinet/in.h, netdb.h) for netio.c's bsdsocket.library branch - pass it as NETINCLUDE=/path/to/sdk/include. Use 'make amiga-stub' instead to build every other module m68k-clean without a real SDK)
-endif
-	$(VC) $(AMIGA_CFLAGS) -I"$(NETINCLUDE)" -DAMIGA $(AMIGA_SOURCES) -lauto -o $@
+	@mkdir -p $(AMIGA_NDK_SHIM)/devices
+	@ln -sf "$(VENDOR_NDK_ROOT)/Include_H/devices/timer.h" $(AMIGA_NDK_SHIM)/devices/timer.h
+	@ln -sfn "$(VENDOR_NDK_ROOT)/SANA+RoadshowTCP-IP/netinclude" $(AMIGA_NETINCLUDE_VENDOR_LINK)
+	$(VC) $(AMIGA_CFLAGS) -DAMIGA \
+	  -I$(AMIGA_NDK_SHIM) -I"$(AMIGA_NETINCLUDE_DIR)" -I"$(NDK)" \
+	  $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
 # amiga-stub (proves every module other than netio.c's real socket branch
@@ -82,7 +136,7 @@ endif
 amiga-stub: doorrepo.amiga-stub
 
 doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
-	$(VC) $(AMIGA_CFLAGS) -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
 # test
@@ -138,3 +192,4 @@ clean:
 	rm -f build-test-flow build-test-md5 build-test-listtxt build-test-config build-test-http build-test-aedoor-native
 	rm -f *.o
 	rm -rf *.dSYM
+	rm -rf $(AMIGA_NDK_SHIM) $(AMIGA_NETINCLUDE_VENDOR_LINK)

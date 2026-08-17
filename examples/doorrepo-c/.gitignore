@@ -6,5 +6,7 @@ doorrepo
 doorrepo.amiga
 doorrepo.amiga-stub
 build-test-*
+amiga-ndk-shim/
+amiga-netinclude-vendor
 test_*
 !test_*.c
