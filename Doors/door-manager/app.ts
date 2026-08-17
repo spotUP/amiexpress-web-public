@@ -13,7 +13,7 @@ import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers
 import { FileExplorerOverlay } from './FileExplorerOverlay';
 import { InfoEditorOverlay } from './InfoEditorOverlay';
 import { showAmigaGuideViewer } from './AmigaGuideViewer';
-import { ViewManager, BaseView, sanitizeForTags, refreshDoorRegistry, resolveBbsRoot } from './ViewManager';
+import { ViewManager, BaseView, KeyBinder, sanitizeForTags, refreshDoorRegistry, resolveBbsRoot } from './ViewManager';
 import { ALL_TYPES, distinctTypes, cycleSystemFilter, filterByDoorType, formatSystemTag } from './systemFilter';
 import {
   resolveDoorRepoMode, loadLocalCatalogEntries, loadConsumerCatalog, mapManifestDoorToEntry,
@@ -833,6 +833,83 @@ class InstalledView extends BaseView {
 }
 
 // ── Repo Browser ──────────────────────────────────────────────────────────────
+//
+// Role gating (Task 8): RepoView browses either this BBS's own catalog
+// (owner/disabled mode -- an entry IS a repo copy this sysop curates) or the
+// CENTRAL door-repo API's manifest (consumer mode -- entries belong to a
+// repo this sysop does not own). Curation actions that mutate/prune a repo
+// copy's archive (Strip) must not be exposed in consumer mode. Install/
+// uninstall (always operates on THIS BBS's own Doors/ + Commands/BBSCmd/,
+// regardless of mode), viewing docs, browsing archive contents, and the
+// system-type filter stay available in every mode.
+//
+// The gating decision and its wiring are extracted into these three
+// exported functions -- RepoView.updateFooter()/enter() call them directly
+// -- rather than left inline, so doorman-role-gating.test.ts exercises the
+// EXACT code that runs in production (footer string, real KeyBinder/Screen
+// hotkey registration) instead of a hand-mirrored copy. RepoView itself
+// still cannot be unit-constructed without a live DoormanLayout/Screen (see
+// doorman-consumer-mode.test.ts's header comment) -- this extraction is
+// what makes the mode-gated PARTS of it testable without one.
+
+/** True when repo-curation actions (Strip on a repo copy, catalog-row
+ * edits, archive delete) are permitted. Owner mode and disabled mode both
+ * mean "local catalog only, full local control" (see repoDataSource.ts's
+ * module doc grouping them under "local") -- consumer mode is the only mode
+ * that does not own the catalog it's browsing. */
+export function repoViewCurationAllowed(mode: DoorRepoMode): boolean {
+  return mode.kind !== 'consumer';
+}
+
+/** RepoView's per-entry footer hint string, gated by repo mode. Byte-
+ * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled
+ * mode, which reads identically) -- only consumer mode differs, by omitting
+ * the Strip hint entirely rather than advertising a key that does nothing. */
+export function repoViewFooterParts(
+  mode: DoorRepoMode,
+  opts: { installed: boolean; hasJunk: boolean; hasDoc: boolean }
+): string {
+  const inst = opts.installed ? 'Uninst' : 'Inst';
+  const curationAllowed = repoViewCurationAllowed(mode);
+  const parts = [
+    `{yellow-fg}R{/yellow-fg}=${inst}`,
+    (opts.hasJunk && curationAllowed) ? `{yellow-fg}S{/yellow-fg}trip` : null,
+    opts.hasDoc  ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
+    `{yellow-fg}A{/yellow-fg}rchive`,
+    `{yellow-fg}F{/yellow-fg}=Filter`,
+    `{yellow-fg}C{/yellow-fg}=System`,
+    `{yellow-fg}ESC{/yellow-fg}=Back`,
+    `{yellow-fg}Q{/yellow-fg}uit`,
+  ].filter(Boolean).join('  ');
+  return `{center}${parts}{/center}`;
+}
+
+export interface RepoViewHotkeyHandlers {
+  onInstallUninstall: () => void;
+  onStrip: () => void;
+  onViewDoc: () => void;
+  onBrowseArchive: () => void;
+  onCycleFilter: () => void;
+}
+
+/** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
+ * mode: consumer mode omits the [S]trip binding entirely -- see
+ * repoViewCurationAllowed. Install/uninstall (R), view doc (V), browse
+ * archive contents (A), and the system-type filter (C) register in every
+ * mode. */
+export function registerRepoViewActionKeys(
+  keys: KeyBinder,
+  mode: DoorRepoMode,
+  handlers: RepoViewHotkeyHandlers
+): void {
+  keys.key(['r', 'R'], () => handlers.onInstallUninstall());
+  if (repoViewCurationAllowed(mode)) {
+    keys.key(['s', 'S'], () => handlers.onStrip());
+  }
+  keys.key(['v', 'V'], () => handlers.onViewDoc());
+  keys.key(['a', 'A'], () => handlers.onBrowseArchive());
+  keys.key(['c', 'C'], () => handlers.onCycleFilter());
+}
 
 class RepoView extends BaseView {
   private layout: DoormanLayout;
@@ -1063,20 +1140,12 @@ class RepoView extends BaseView {
 
   private updateFooter(): void {
     const e = this.entry();
-    const inst = e?.installed ? 'Uninst' : 'Inst';
-    const hasDoc = !!e?.doc_raw;
     const hasJunk = e ? this.getEntryJunkCount(e) > 0 : false;
-    const parts = [
-      `{yellow-fg}R{/yellow-fg}=${inst}`,
-      hasJunk ? `{yellow-fg}S{/yellow-fg}trip` : null,
-      hasDoc  ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
-      `{yellow-fg}A{/yellow-fg}rchive`,
-      `{yellow-fg}F{/yellow-fg}=Filter`,
-      `{yellow-fg}C{/yellow-fg}=System`,
-      `{yellow-fg}ESC{/yellow-fg}=Back`,
-      `{yellow-fg}Q{/yellow-fg}uit`,
-    ].filter(Boolean).join('  ');
-    this.layout.setFooter(`{center}${parts}{/center}`);
+    this.layout.setFooter(repoViewFooterParts(this.repoMode, {
+      installed: !!e?.installed,
+      hasJunk,
+      hasDoc: !!e?.doc_raw,
+    }));
   }
 
   private _onSelectItem: any;
@@ -1195,11 +1264,13 @@ class RepoView extends BaseView {
       if (filterActive) return;
       activateFilter();
     });
-    this.keys.key(['r', 'R'], () => this.doInstallUninstall());
-    this.keys.key(['s', 'S'], () => this.doStrip());
-    this.keys.key(['v', 'V'], () => this.doViewDoc());
-    this.keys.key(['a', 'A'], () => this.doBrowseArchive());
-    this.keys.key(['c', 'C'], () => this.cycleFilter());
+    registerRepoViewActionKeys(this.keys, this.repoMode, {
+      onInstallUninstall: () => this.doInstallUninstall(),
+      onStrip: () => this.doStrip(),
+      onViewDoc: () => this.doViewDoc(),
+      onBrowseArchive: () => this.doBrowseArchive(),
+      onCycleFilter: () => this.cycleFilter(),
+    });
     this.keys.key(['q', 'Q'], () => {
       clearTimeout(this.statusTimer);
       this.vm.destroy();

@@ -3,7 +3,8 @@
  * Rewritten around a ViewManager / view stack so each screen owns its
  * own key bindings and ESC always pops cleanly.
  */
-import type { LocalCatalogLookup } from './repoDataSource';
+import { KeyBinder } from './ViewManager';
+import type { DoorRepoMode, LocalCatalogLookup } from './repoDataSource';
 import type { RepoClientConfig, FetchManifestResult } from './repo-client';
 interface DoorSession {
     socket: any;
@@ -203,6 +204,34 @@ export type ConsumerInstallOutcome = {
     detail: string;
 };
 export declare function installConsumerDoor(cfg: RepoClientConfig, archiveName: string, doorType: string, binaryName: string | null, finalCmd: string, installDir: string, infoPath: string, tmpDir: string, deps: ConsumerInstallDeps): Promise<ConsumerInstallOutcome>;
+/** True when repo-curation actions (Strip on a repo copy, catalog-row
+ * edits, archive delete) are permitted. Owner mode and disabled mode both
+ * mean "local catalog only, full local control" (see repoDataSource.ts's
+ * module doc grouping them under "local") -- consumer mode is the only mode
+ * that does not own the catalog it's browsing. */
+export declare function repoViewCurationAllowed(mode: DoorRepoMode): boolean;
+/** RepoView's per-entry footer hint string, gated by repo mode. Byte-
+ * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled
+ * mode, which reads identically) -- only consumer mode differs, by omitting
+ * the Strip hint entirely rather than advertising a key that does nothing. */
+export declare function repoViewFooterParts(mode: DoorRepoMode, opts: {
+    installed: boolean;
+    hasJunk: boolean;
+    hasDoc: boolean;
+}): string;
+export interface RepoViewHotkeyHandlers {
+    onInstallUninstall: () => void;
+    onStrip: () => void;
+    onViewDoc: () => void;
+    onBrowseArchive: () => void;
+    onCycleFilter: () => void;
+}
+/** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
+ * mode: consumer mode omits the [S]trip binding entirely -- see
+ * repoViewCurationAllowed. Install/uninstall (R), view doc (V), browse
+ * archive contents (A), and the system-type filter (C) register in every
+ * mode. */
+export declare function registerRepoViewActionKeys(keys: KeyBinder, mode: DoorRepoMode, handlers: RepoViewHotkeyHandlers): void;
 export declare function createApp(session: DoorSession): Promise<void>;
 export {};
 //# sourceMappingURL=app.d.ts.map

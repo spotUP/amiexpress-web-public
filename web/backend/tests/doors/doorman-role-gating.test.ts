@@ -1,0 +1,177 @@
+/**
+ * Task 8: role-gate DOORMAN's RepoView curation actions.
+ *
+ * In consumer mode (browsing the CENTRAL door-repo API, not this BBS's own
+ * catalog), curation actions that mutate/prune a repo copy of an archive
+ * must be hidden -- a consumer sysop does not own the central catalog.
+ * Install/uninstall of doors on the sysop's OWN BBS, browsing, searching,
+ * and viewing docs/archive contents stay available in every mode.
+ *
+ * RepoView itself is not exported and cannot be constructed without a live
+ * blessed Screen/DoormanLayout (matches the existing test suite's
+ * convention -- see doorman-consumer-mode.test.ts's header comment and
+ * doorman-arrow-nav-escape.test.ts's harness). Rather than duplicate the
+ * gating decision in a test-only replica, the gating logic itself
+ * (repoViewCurationAllowed, repoViewFooterParts, registerRepoViewActionKeys)
+ * is extracted from RepoView into small exported functions in app.ts that
+ * RepoView.updateFooter()/enter() call directly -- so these tests exercise
+ * the EXACT function that runs in production, wired to a REAL KeyBinder
+ * bound to a REAL blessed Screen (same harness pattern as
+ * doorman-arrow-nav-escape.test.ts), not a hand-rolled mirror of the logic.
+ */
+import { Screen } from '../../../../sdk/engines/ui/blessed';
+import { KeyBinder } from '../../../../Doors/door-manager/ViewManager';
+import {
+  repoViewCurationAllowed,
+  repoViewFooterParts,
+  registerRepoViewActionKeys,
+  type RepoViewHotkeyHandlers,
+} from '../../../../Doors/door-manager/app';
+import type { DoorRepoMode } from '../../../../Doors/door-manager/repoDataSource';
+
+const OWNER: DoorRepoMode = { kind: 'owner' };
+const DISABLED: DoorRepoMode = { kind: 'disabled' };
+const CONSUMER: DoorRepoMode = { kind: 'consumer', url: 'https://bbs.uprough.net' };
+
+// ─── repoViewCurationAllowed ─────────────────────────────────────────────────
+
+describe('DOORMAN app: repoViewCurationAllowed', () => {
+  it('owner mode: curation allowed', () => {
+    expect(repoViewCurationAllowed(OWNER)).toBe(true);
+  });
+
+  it('disabled mode: curation allowed (local catalog only, full local control -- same as owner)', () => {
+    expect(repoViewCurationAllowed(DISABLED)).toBe(true);
+  });
+
+  it('consumer mode: curation NOT allowed', () => {
+    expect(repoViewCurationAllowed(CONSUMER)).toBe(false);
+  });
+});
+
+// ─── repoViewFooterParts ──────────────────────────────────────────────────────
+
+describe('DOORMAN app: repoViewFooterParts', () => {
+  const FULL_OWNER_HINT =
+    '{center}{yellow-fg}R{/yellow-fg}=Inst  {yellow-fg}S{/yellow-fg}trip  ' +
+    '{yellow-fg}V{/yellow-fg}iew doc  {yellow-fg}A{/yellow-fg}rchive  ' +
+    '{yellow-fg}F{/yellow-fg}=Filter  {yellow-fg}C{/yellow-fg}=System  ' +
+    '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}uit{/center}';
+
+  it('owner mode, entry with junk + doc: full hint string, byte-identical to pre-Task-8 DOORMAN', () => {
+    expect(
+      repoViewFooterParts(OWNER, { installed: false, hasJunk: true, hasDoc: true })
+    ).toBe(FULL_OWNER_HINT);
+  });
+
+  it('disabled mode, same entry state: IDENTICAL to owner mode (no dead/extra hints either way)', () => {
+    expect(
+      repoViewFooterParts(DISABLED, { installed: false, hasJunk: true, hasDoc: true })
+    ).toBe(FULL_OWNER_HINT);
+  });
+
+  it('consumer mode, same entry state: Strip hint omitted -- no dead hint for a key that does nothing', () => {
+    const hint = repoViewFooterParts(CONSUMER, { installed: false, hasJunk: true, hasDoc: true });
+    expect(hint).toBe(
+      '{center}{yellow-fg}R{/yellow-fg}=Inst  ' +
+      '{yellow-fg}V{/yellow-fg}iew doc  {yellow-fg}A{/yellow-fg}rchive  ' +
+      '{yellow-fg}F{/yellow-fg}=Filter  {yellow-fg}C{/yellow-fg}=System  ' +
+      '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}uit{/center}'
+    );
+    expect(hint).not.toContain('Strip');
+  });
+
+  it('installed entry: R hint reads Uninst in every mode', () => {
+    expect(repoViewFooterParts(OWNER, { installed: true, hasJunk: false, hasDoc: false }))
+      .toContain('{yellow-fg}R{/yellow-fg}=Uninst');
+    expect(repoViewFooterParts(CONSUMER, { installed: true, hasJunk: false, hasDoc: false }))
+      .toContain('{yellow-fg}R{/yellow-fg}=Uninst');
+  });
+
+  it('no junk: Strip hint omitted regardless of mode (pre-existing behavior, unrelated to role gating)', () => {
+    expect(repoViewFooterParts(OWNER, { installed: false, hasJunk: false, hasDoc: true })).not.toContain('Strip');
+  });
+
+  it('no doc: View doc hint omitted regardless of mode (pre-existing behavior, unrelated to role gating)', () => {
+    expect(repoViewFooterParts(OWNER, { installed: false, hasJunk: true, hasDoc: false })).not.toContain('View doc');
+  });
+});
+
+// ─── registerRepoViewActionKeys: real KeyBinder + real blessed Screen ───────
+
+function buildKeyHarness() {
+  const screen = new Screen({ title: 'role-gating-test', output: () => {} });
+  const keys = new KeyBinder(screen);
+  return {
+    screen,
+    keys,
+    send: (ch: string) => { (screen as any).program.emit('data', ch); },
+    destroy: () => { if (!screen.destroyed) screen.destroy(); },
+  };
+}
+
+function makeHandlers(): { [K in keyof RepoViewHotkeyHandlers]: jest.Mock } {
+  return {
+    onInstallUninstall: jest.fn(),
+    onStrip: jest.fn(),
+    onViewDoc: jest.fn(),
+    onBrowseArchive: jest.fn(),
+    onCycleFilter: jest.fn(),
+  };
+}
+
+describe('DOORMAN app: registerRepoViewActionKeys', () => {
+  it('owner mode: every hotkey registers and fires (R/S/V/A/C)', () => {
+    const h = buildKeyHarness();
+    const handlers = makeHandlers();
+    registerRepoViewActionKeys(h.keys, OWNER, handlers);
+
+    h.send('r'); h.send('s'); h.send('v'); h.send('a'); h.send('c');
+
+    expect(handlers.onInstallUninstall).toHaveBeenCalledTimes(1);
+    expect(handlers.onStrip).toHaveBeenCalledTimes(1);
+    expect(handlers.onViewDoc).toHaveBeenCalledTimes(1);
+    expect(handlers.onBrowseArchive).toHaveBeenCalledTimes(1);
+    expect(handlers.onCycleFilter).toHaveBeenCalledTimes(1);
+    h.destroy();
+  });
+
+  it('disabled mode: every hotkey registers and fires, identically to owner mode', () => {
+    const h = buildKeyHarness();
+    const handlers = makeHandlers();
+    registerRepoViewActionKeys(h.keys, DISABLED, handlers);
+
+    h.send('r'); h.send('s'); h.send('v'); h.send('a'); h.send('c');
+
+    expect(handlers.onInstallUninstall).toHaveBeenCalledTimes(1);
+    expect(handlers.onStrip).toHaveBeenCalledTimes(1);
+    expect(handlers.onViewDoc).toHaveBeenCalledTimes(1);
+    expect(handlers.onBrowseArchive).toHaveBeenCalledTimes(1);
+    expect(handlers.onCycleFilter).toHaveBeenCalledTimes(1);
+    h.destroy();
+  });
+
+  it('consumer mode: Strip is NOT registered -- pressing S does nothing (no throw, handler never fires)', () => {
+    const h = buildKeyHarness();
+    const handlers = makeHandlers();
+    registerRepoViewActionKeys(h.keys, CONSUMER, handlers);
+
+    expect(() => h.send('s')).not.toThrow();
+    expect(handlers.onStrip).not.toHaveBeenCalled();
+    h.destroy();
+  });
+
+  it('consumer mode: install/uninstall, view doc, browse archive, and system filter still register and fire', () => {
+    const h = buildKeyHarness();
+    const handlers = makeHandlers();
+    registerRepoViewActionKeys(h.keys, CONSUMER, handlers);
+
+    h.send('r'); h.send('v'); h.send('a'); h.send('c');
+
+    expect(handlers.onInstallUninstall).toHaveBeenCalledTimes(1);
+    expect(handlers.onViewDoc).toHaveBeenCalledTimes(1);
+    expect(handlers.onBrowseArchive).toHaveBeenCalledTimes(1);
+    expect(handlers.onCycleFilter).toHaveBeenCalledTimes(1);
+    h.destroy();
+  });
+});
