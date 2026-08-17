@@ -1,0 +1,87 @@
+name: Backend Tests
+
+# Runs the backend jest suite and the type-check on every push and PR.
+#
+# Why this exists: until now nothing in CI ran jest at all. The one workflow
+# named "Door CI" (kept disabled as door-ci.yml.disabled) runs `npm run
+# door:ci`, which is the doctor + fixture-door harness, not the test suite.
+# So every regression test in web/backend/tests was manual-only - including
+# the bsdsocket fd-lifecycle, errno, gethostbyname and non-blocking-connect
+# tests, whose entire purpose is to fail loudly if someone reintroduces a bug
+# that hangs real Amiga network doors.
+#
+# The suite is fast (~40-75s for 268 suites / 5090 tests) and passes clean, so
+# there is no reason for it not to gate merges.
+#
+# NOTE: do NOT set SKIP_DB_INIT=1 for a full run. It is meant for targeted
+# emulator suites; applied to the whole suite it disables the test database
+# that the ~39 database suites need and manufactures ~344 failures.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# A newer push to the same branch makes an in-flight run redundant.
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/backend/package-lock.json
+
+      # Build the SDK with its own pinned TypeScript before the backend
+      # install triggers the SDK's prepare hook, exactly as
+      # corpus-integration.yml does - see that file for why the version
+      # mismatch matters.
+      - name: Build SDK
+        working-directory: sdk
+        run: npm ci --no-audit --no-fund && npm run build
+
+      - name: Install backend deps
+        working-directory: web/backend
+        env:
+          SKIP_WEB_ASSET_BUILD: '1'
+          SKIP_SDK_PREPARE: '1'
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        working-directory: web/backend
+        run: npx tsc --noEmit
+
+      - name: Jest
+        working-directory: web/backend
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npx jest --config dev-scripts/jest.config.ts --rootDir . --ci
+
+  # The DoorRepo reference door is plain C89 with no dependencies beyond a
+  # host compiler, so its suite costs seconds. It is the only thing guarding
+  # the door's security predicates (shell-safety allowlist, archive-name
+  # path-traversal check) and its HTTP/list.txt parsers.
+  doorrepo-c-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build and run the DoorRepo C suite
+        working-directory: examples/doorrepo-c
+        run: make test
