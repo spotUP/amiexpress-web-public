@@ -490,7 +490,26 @@ describe('door-repo routes', () => {
         });
 
         expect(onDone).not.toBeNull(); // pipeline's callback reports the abort as an error
-        expect(() => fs.fstatSync(fd)).toThrow(); // the fd is closed, not leaked
+
+        // The fd must be closed, but not necessarily by the instant
+        // pipeline's callback runs: the underlying ReadStream's close is
+        // asynchronous, and on Linux it completes a tick or two later than it
+        // does on macOS. Asserting it synchronously pinned macOS timing and
+        // failed the first time this suite ran on Linux. Waiting still fails a
+        // real leak - a leaked fd never closes, so this times out and reports.
+        const closed = await (async () => {
+          const deadline = Date.now() + 5000;
+          for (;;) {
+            try {
+              fs.fstatSync(fd);
+            } catch {
+              return true; // fstat failed => fd is gone
+            }
+            if (Date.now() > deadline) return false;
+            await new Promise((r) => setTimeout(r, 10));
+          }
+        })();
+        expect(closed).toBe(true); // the fd is closed, not leaked
 
         fs.unlinkSync(bigPath);
       });

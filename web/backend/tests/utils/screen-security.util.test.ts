@@ -70,10 +70,16 @@ describe('Screen Security Utility (Security-Aware Screen Finding)', () => {
 
         const result = findSecurityScreen(screenPath, 0, null, false, false);
 
-        // findSecurityScreen returns the constructed path (based on input case),
-        // not the actual directory entry — on macOS case-insensitive FS it still finds the file
+        // The screen must be FOUND from a differently-cased request on either
+        // kind of filesystem. Which spelling comes back legitimately differs:
+        // on a case-insensitive filesystem (macOS) the constructed path
+        // 'test.TXT' exists as-is and is returned; on a case-sensitive one
+        // (Linux, and the production container) the lookup falls through to a
+        // directory scan and returns the real entry, 'Test.TXT'. Asserting the
+        // lowercase spelling pinned the macOS-only outcome and failed the
+        // first time this suite ran on Linux.
         expect(result).not.toBeNull();
-        expect(result).toContain('test.TXT');
+        expect(result!.toLowerCase()).toContain('test.txt');
       });
     });
 
