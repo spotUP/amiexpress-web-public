@@ -258,6 +258,20 @@ export function resolveDoorType(detectedFromBinary: string | null, corpusDoorTyp
   return detectedFromBinary ?? corpusDoorType ?? 'XIM';
 }
 
+// A bundled scene-release wrapper/ad-tro (e.g. a group's self-running intro
+// executable, re-packed into dozens of unrelated archives under names like
+// "eX-tRACT.exe") is itself a valid Amiga Hunk binary, so the primary-binary
+// scan below would otherwise happily latch onto it before ever reaching the
+// archive's real door executable — stamping binary_name/door_type from junk.
+// Reuses the SAME filenamePatterns/matchesPattern the file-listing junk_count
+// pass already uses (STRIPPER_SOURCES-derived "banner kill lists"); this is
+// not a new detection mechanism, just applying the existing one one loop
+// earlier, at candidate-selection time instead of only at listing time.
+export function isKnownJunkBinaryName(entryName: string, filenamePatterns: string[]): boolean {
+  const base = path.basename(entryName).toLowerCase();
+  return filenamePatterns.some(pat => matchesPattern(base, pat));
+}
+
 // ─── Step 1: Compile scene stripper pattern databases ───────────────────────
 
 function normalizePattern(p: string): string {
@@ -818,6 +832,7 @@ async function indexArchives(
     for (const entry of entries.slice(0, 30)) {
       if (entry.name.endsWith('/') || entry.size > 512 * 1024) continue;
       if (!isCandidateBinaryEntry(entry.name)) continue;
+      if (isKnownJunkBinaryName(entry.name, filenamePatterns)) continue;
       const buf = await extract(entry.name);
       if (buf && isAmigaHunk(buf)) {
         binaryName = path.basename(entry.name);
