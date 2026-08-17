@@ -23,6 +23,10 @@ amiexpress-web backend.
   classic AmigaDOS TCP/IP stacks (AmiTCP, Miami, Roadshow) and 68020+ door
   clients frequently have no practical way to do TLS, so plain HTTP is a
   first-class, permanently supported access path, not a legacy fallback.
+- **Deployment requirement.** The production host's reverse proxy (Caddy)
+  must explicitly exempt the `/api/door-repo/` path prefix from its automatic
+  HTTPS redirect (see `deploy/README.md`), or plain-HTTP requests 308-redirect
+  to `https://` and this guarantee does not hold.
 - **Read-only.** There are no write endpoints and no authentication. Every
   request in this document is a `GET`.
 - **Curation happens in git, not over the API.** The catalog contents

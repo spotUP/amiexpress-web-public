@@ -108,6 +108,46 @@ systemctl restart caddy
 
 Caddy automatically handles SSL certificates via Let's Encrypt.
 
+### Exempting /api/door-repo/ from the HTTPS redirect
+
+Caddy's automatic HTTPS adds an implicit 308 redirect from `http://` to
+`https://` for any bare domain site block (see above). The Door Repo API
+(`docs/DOOR-REPO-API.md`) promises plain-HTTP access for classic AmigaDOS TCP
+stacks that cannot do TLS, so `/api/door-repo/*` must be reachable over
+`http://` without a redirect while every other path keeps redirecting.
+Declaring an explicit `http://` site block for the host suppresses Caddy's
+automatic redirect for that host; the block below then re-adds the redirect
+for everything except the door-repo prefix:
+
+```bash
+cat > /etc/caddy/Caddyfile << 'EOF'
+bbs.uprough.net {
+    reverse_proxy localhost:3001
+}
+
+http://bbs.uprough.net {
+    @doorrepo path /api/door-repo/*
+    reverse_proxy @doorrepo localhost:3001
+
+    redir https://bbs.uprough.net{uri} 308
+}
+EOF
+
+# Validate before reloading (fails closed on a syntax error)
+caddy validate --config /etc/caddy/Caddyfile
+
+systemctl reload caddy
+```
+
+Verify: `curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/api/door-repo/health`
+must return `200`; `curl -s -o /dev/null -w '%{http_code}' http://bbs.uprough.net/health`
+must still return `308` (every other path keeps redirecting to HTTPS).
+
+Note: a browser that has already received the HSTS header from
+`https://bbs.uprough.net` will keep rewriting `http://` requests to `https://`
+itself and never reach this exemption -- that is expected and does not affect
+Amiga clients, which do not implement HSTS.
+
 ## Firewall
 
 Required ports:
