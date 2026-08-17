@@ -120,6 +120,8 @@ amiexpress-web backend.
 | GET    | `/api/door-repo/manifest`          | JSON manifest of the catalog (filterable)  |
 | GET    | `/api/door-repo/list.txt`          | Plain-text, byte-exact index (filterable)  |
 | GET    | `/api/door-repo/archive/:name`     | Download one archive by its archive name   |
+| GET    | `/api/door-repo/diz/:name`         | Raw `FILE_ID.DIZ`, newlines intact         |
+| GET    | `/api/door-repo/files/:name`       | What is inside the archive, + ad count     |
 | GET    | `/api/door-repo/health`            | Lightweight liveness + door count          |
 
 ## 2. Quick start (Amiga, 68020+)
@@ -521,6 +523,71 @@ as a background-job operator):
 
 ```
 wget "http://bbs.uprough.net/api/door-repo/archive/BR&IB20.LHA" -O T:BRandIB20.LHA
+```
+
+## 5b. `FILE_ID.DIZ` and archive contents
+
+Both endpoints were added after the first release of this document. They are
+**additive**: nothing above changed, so a client written against the earlier
+version keeps working untouched.
+
+### `GET /api/door-repo/diz/<archiveName>`
+
+The entry's `FILE_ID.DIZ` exactly as it appears in the archive — **newlines
+preserved**. `Content-Type: text/plain; charset=ISO-8859-1`.
+
+This exists because `list.txt` cannot carry it. That format is one row per
+line, so it collapses every newline to a space (see "Newline collapsing"
+above) — which is correct for a tabular format but destroys multi-line DIZ
+art before any client sees it. The art also survives in `/manifest`'s
+`fileIdDiz`, but the manifest is a multi-megabyte JSON document; a door on a
+real Amiga can neither parse nor hold it. This endpoint is a few hundred
+bytes and needs no parser at all.
+
+Render it **line for line, without re-wrapping**. The art only means anything
+if its own line breaks and column alignment are preserved; clip lines that
+are wider than your display rather than flowing them onto the next row.
+
+`404` when the archive is unknown **or** has no DIZ — the two are deliberately
+not distinguished, and an empty `200` is never returned, so "no art" is a
+single case to handle.
+
+```
+GET /api/door-repo/diz/-D-DOR11.LHA HTTP/1.0
+
+______    ________.  /\    ______.__________
+\____ \/\/  _  /  |_/\/\/\/ ___/ |  \  __  /
+|:  /   //    /\  | \_ \\  /  \     \\/  \/
+|______/_______/_____/___\____/__|___/____\
++-------------(bRinGs  ToDaY)-----------mk-+
+      dOOR-mENU v.1.1 by vASCAL/dLT
+```
+
+### `GET /api/door-repo/files/<archiveName>`
+
+What is inside the archive, and how much of it is advertising. Same charset
+and CRLF line endings as `list.txt`, so one reader serves both.
+
+```
+FILES|<totalFiles>|<junkFiles>
+<sizeBytes>|<isJunk 0|1>|<path>
+...
+```
+
+`isJunk` marks a file the repo has identified as an ad/BBS stamp rather than
+part of the door — the same classification the owner's own tooling uses. A
+client can show it (this repo's own doors flag those rows) or ignore it.
+
+Paths are sorted ascending. Any `|` inside a path is replaced with `!`, the
+same escaping rule `list.txt` uses, so the three fields can never be split
+incorrectly. An entry with no indexed contents returns `200` with
+`FILES|0|0`, not a 404; an unknown archive returns `404`.
+
+```
+FILES|15|2
+61|0|Children
+50|0|FILE_ID.DIZ
+2|1|LE-window5.exe
 ```
 
 ## 6. Health check

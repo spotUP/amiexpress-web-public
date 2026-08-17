@@ -31,12 +31,12 @@
  * consumer's local archive corpus). app.ts must only `app.use()` this
  * router when isDoorRepoOwner() is true.
  */
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import { pipeline } from 'stream';
 import { buildManifest, renderListTxt, getRepoRevision, getDoorCount } from '../doors/door-repo-manifest';
 import { getArchiveChecksums } from '../doors/door-repo-checksums';
-import { getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
+import { getArchiveFiles, getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
 
 // ─── Mount gating (owner mode only) ─────────────────────────────────────
 //
@@ -182,10 +182,9 @@ doorRepoRouter.get('/list.txt', (req: Request, res: Response) => {
 // independent statSync+readFileSync via the Task 1 cache module. That's
 // fine — they're metadata headers, not wire framing, and re-reading lets
 // us keep reusing the existing cached-by-mtime+size implementation as-is.
-doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
+function handleArchiveRequest(res: Response, archiveName: string): void {
   res.set('X-Door-Repo-Revision', getRepoRevision());
 
-  const { archiveName } = req.params;
   const entry = getCatalogEntryByArchive(archiveName);
   if (!entry) {
     sendNotFound(res, archiveName);
@@ -226,13 +225,149 @@ doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
   res.set('X-Archive-SHA256', checksums.sha256);
 
   streamArchive(fd, res, archiveName);
-});
+}
 
 // GET /health — { status, revision, doors }. Uses getDoorCount(), NOT
 // buildManifest(): buildManifest computes md5+sha256 for every catalog row
 // (~3300 archives), which is far too expensive to pay on every liveness
 // poll — a monitor hitting this endpoint would re-hash the whole repo on
 // the first request after any archive touch.
+// GET /diz/:archiveName — the entry's FILE_ID.DIZ as raw text, newlines
+// intact.
+//
+// Why this exists as its own endpoint rather than a list.txt field: the
+// list.txt contract deliberately collapses every newline to a space (see
+// docs/DOOR-REPO-API.md, "Newline collapsing"), because the format is one
+// row per line and a raw newline would split a row. That is the right call
+// for a tabular format, but it means multi-line FILE_ID.DIZ art cannot be
+// reconstructed by any list.txt client. The art survives only in
+// GET /manifest's fileIdDiz — and the manifest is ~2 MB of JSON, which a
+// C89 door on a real Amiga can neither parse nor hold.
+//
+// So: one small, plain-text, per-archive read. This is ADDITIVE. Every
+// existing endpoint and the byte-exact list.txt spec are untouched, which
+// keeps the published contract's append-only promise intact for clients
+// already written against it.
+//
+// 404 (not an empty 200) when the entry exists but has no DIZ, so a client
+// can tell "no art for this door" from "art that happens to be empty".
+// Lookup is the same parameterized getCatalogEntryByArchive() the archive
+// route uses, so an encoded traversal payload just fails the lookup — the
+// raw parameter never reaches the filesystem.
+function handleDizRequest(res: Response, archiveName: string): void {
+  res.set('X-Door-Repo-Revision', getRepoRevision());
+
+  const entry = getCatalogEntryByArchive(archiveName);
+  if (!entry || !entry.file_id_diz) {
+    sendNotFound(res, archiveName);
+    return;
+  }
+
+  // ISO-8859-1 for the same reason list.txt uses it: DIZ art is Latin-1
+  // high-bit box drawing, and declaring UTF-8 would mangle it.
+  res.set('Content-Type', 'text/plain; charset=ISO-8859-1');
+  res.send(Buffer.from(entry.file_id_diz, 'latin1'));
+}
+
+// GET /files/:archiveName — the archive's contents, one file per line.
+//
+// Mirrors what DOORMAN shows in its own info pane (getArchiveFiles(), rendered
+// as "N files / N ad files" plus the listing), so a client that is not sitting
+// on the catalog database can show the same thing.
+//
+// Format, deliberately trivial to parse in C89 — no JSON, no quoting rules:
+//
+//   FILES|<count>|<junkCount>
+//   <size>|<isJunk 0|1>|<path>
+//   ...
+//
+// Line ending is CRLF and the charset is ISO-8859-1, matching list.txt so a
+// client needs one reader for both. Paths cannot contain a pipe (they come
+// from archive listings and are filtered the same way list.txt escapes its
+// fields), and any that did would be escaped to "!" the same way.
+function handleFilesRequest(res: Response, archiveName: string): void {
+  res.set('X-Door-Repo-Revision', getRepoRevision());
+
+  const entry = getCatalogEntryByArchive(archiveName);
+  if (!entry) {
+    sendNotFound(res, archiveName);
+    return;
+  }
+
+  const files = getArchiveFiles(entry.id);
+  const junk = files.filter((f) => f.is_junk).length;
+
+  const lines: string[] = [`FILES|${files.length}|${junk}`];
+  for (const f of files) {
+    const safePath = String(f.path).replace(/\|/g, '!');
+    lines.push(`${f.size}|${f.is_junk ? 1 : 0}|${safePath}`);
+  }
+
+  res.set('Content-Type', 'text/plain; charset=ISO-8859-1');
+  res.send(Buffer.from(lines.join('\r\n') + '\r\n', 'latin1'));
+}
+
+// Per-entry routes are dispatched from the RAW request URL rather than
+// declared as ':archiveName' params.
+//
+// Express decodes a route parameter as UTF-8 before the handler runs, and
+// throws URIError on a percent-escape that is not valid UTF-8 — which turned
+// into a 500. Catalog archive names are Latin-1 (Amiga scene releases:
+// "$CP-BU\xDF1.LZX"), so a correct client percent-encoding that name as %DF
+// got a 500 instead of its download. That affected GET /archive too, and had
+// been there since before /diz existed.
+//
+// Decoding here instead: try UTF-8 (what a modern client sends), fall back to
+// Latin-1 (what a name like the above requires), and try the other spelling
+// against the catalog before giving up. Nothing can throw out of this path, so
+// a malformed escape is a 404 like any other unknown name — never a 500.
+function decodePercentLatin1(encoded: string): string {
+  return encoded.replace(/%([0-9A-Fa-f]{2})/g, (_full, hex: string) =>
+    String.fromCharCode(parseInt(hex, 16)));
+}
+
+/** Every decoding worth trying for a percent-encoded archive name, most
+ *  standard first, with duplicates removed. */
+export function candidateArchiveNames(encoded: string): string[] {
+  const out: string[] = [];
+  try {
+    out.push(decodeURIComponent(encoded));
+  } catch {
+    /* not valid UTF-8 — the Latin-1 reading below is the whole point */
+  }
+  const latin1 = decodePercentLatin1(encoded);
+  if (!out.includes(latin1)) {
+    out.push(latin1);
+  }
+  return out;
+}
+
+doorRepoRouter.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== 'GET') {
+    next();
+    return;
+  }
+  const match = /^\/(diz|archive|files)\/(.+)$/.exec(req.url.split('?')[0]);
+  if (!match) {
+    next();
+    return;
+  }
+
+  const kind = match[1];
+  const names = candidateArchiveNames(match[2]);
+  // Prefer a spelling that actually exists in the catalog; otherwise use the
+  // first, so the 404 body echoes what the client most likely meant.
+  const name = names.find((n) => getCatalogEntryByArchive(n)) ?? names[0];
+
+  if (kind === 'diz') {
+    handleDizRequest(res, name);
+  } else if (kind === 'files') {
+    handleFilesRequest(res, name);
+  } else {
+    handleArchiveRequest(res, name);
+  }
+});
+
 doorRepoRouter.get('/health', (req: Request, res: Response) => {
   const revision = getRepoRevision();
   const doors = getDoorCount();

@@ -304,6 +304,153 @@ describe('door-repo routes', () => {
     });
   });
 
+  describe('GET /api/door-repo/files/:archiveName', () => {
+    /**
+     * Mirrors what DOORMAN renders in its info pane from getArchiveFiles():
+     * the contents listing plus a junk ("ad files") count. Exposed so a
+     * client that is not sitting on the catalog database can show the same.
+     * Format is deliberately trivial to parse in C89 - no JSON.
+     */
+    beforeEach(() => {
+      const w = new Database(path.join(tmpDir, 'test.sqlite'));
+      w.exec(`CREATE TABLE IF NOT EXISTS door_catalog_files (
+                catalog_id TEXT NOT NULL, path TEXT NOT NULL, size INTEGER DEFAULT 0,
+                is_junk INTEGER DEFAULT 0, junk_reason TEXT,
+                PRIMARY KEY (catalog_id, path))`);
+      const ins = w.prepare('INSERT OR REPLACE INTO door_catalog_files (catalog_id, path, size, is_junk, junk_reason) VALUES (?,?,?,?,?)');
+      ins.run('id-1', 'door/DOOR.exe', 40960, 0, null);
+      ins.run('id-1', 'FILE_ID.DIZ', 473, 0, null);
+      ins.run('id-1', 'ads/JOIN_US.txt', 120, 1, 'pattern: ad');
+      w.close();
+    });
+
+    it('returns a parseable header line with total and junk counts', async () => {
+      const res = await request(app).get('/api/door-repo/files/REAL_DOOR.LHA');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('text/plain; charset=ISO-8859-1');
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      expect(lines[0]).toBe('FILES|3|1');
+      expect(lines).toHaveLength(4);
+    });
+
+    it('emits size, junk flag and path per file, sorted by path', async () => {
+      const res = await request(app).get('/api/door-repo/files/REAL_DOOR.LHA');
+      const lines = res.text.split('\r\n').filter(Boolean).slice(1);
+
+      expect(lines[0]).toBe('473|0|FILE_ID.DIZ');
+      expect(lines[1]).toBe('120|1|ads/JOIN_US.txt');
+      expect(lines[2]).toBe('40960|0|door/DOOR.exe');
+    });
+
+    it('returns an empty listing (not a 404) for an entry with no indexed files', async () => {
+      const res = await request(app).get('/api/door-repo/files/MISSING_DOOR.LHA');
+      expect(res.status).toBe(200);
+      expect(res.text.split('\r\n')[0]).toBe('FILES|0|0');
+    });
+
+    it('404s for an unknown archive', async () => {
+      const res = await request(app).get('/api/door-repo/files/NO_SUCH.LHA');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Latin-1 archive names (percent-escapes that are not valid UTF-8)', () => {
+    /**
+     * Catalog names are Amiga scene releases and are Latin-1, e.g.
+     * "$CP-BU\xDF1.LZX". A client percent-encoding that correctly sends %DF,
+     * which is not valid UTF-8 - and Express throws URIError while decoding a
+     * route parameter, which surfaced as HTTP 500. Both /archive and /diz did
+     * this; /archive had done so since long before /diz existed, so the door
+     * author's client would have got a 500 instead of a download.
+     */
+    const LATIN1_NAME = 'LATIN\u00DF.LHA';
+
+    beforeEach(() => {
+      const w = new Database(path.join(tmpDir, 'test.sqlite'));
+      w.prepare(
+        `INSERT INTO door_catalog
+          (id, archive_name, archive_path, door_type, name, description, file_id_diz, archive_size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('id-latin1', LATIN1_NAME, 'real.lha', 'XIM', 'Latin One',
+            'latin-1 named archive', 'diz line one\ndiz line two', realArchiveContent.length);
+      w.close();
+    });
+
+    it('serves the DIZ for a Latin-1 name instead of returning 500', async () => {
+      const res = await request(app).get('/api/door-repo/diz/LATIN%DF.LHA');
+      expect(res.status).toBe(200);
+      expect(res.text.split('\n')).toHaveLength(2);
+    });
+
+    it('serves the archive for a Latin-1 name instead of returning 500', async () => {
+      const res = await request(app).get('/api/door-repo/archive/LATIN%DF.LHA');
+      expect(res.status).toBe(200);
+      expect(res.headers['x-archive-md5']).toBeTruthy();
+    });
+
+    it('404s (never 500s) on a percent-escape matching no catalog entry', async () => {
+      const res = await request(app).get('/api/door-repo/diz/NOPE%DF%FE.LHA');
+      expect(res.status).toBe(404);
+    });
+
+    it('still serves a normal UTF-8 percent-encoded name', async () => {
+      const res = await request(app).get('/api/door-repo/diz/REAL_DOOR.LHA');
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('GET /api/door-repo/diz/:archiveName', () => {
+    /**
+     * This endpoint exists because list.txt collapses newlines to spaces by
+     * design (one row per line), so multi-line FILE_ID.DIZ art cannot be
+     * reconstructed from it - the art arrived at the door as a single flat
+     * line and rendered as garbage. The only other source of raw DIZ,
+     * GET /manifest, is ~2 MB of JSON on the live catalog, which a C89 door
+     * on a real Amiga can neither parse nor hold.
+     */
+    it('returns the raw FILE_ID.DIZ as ISO-8859-1 plain text', async () => {
+      const res = await request(app).get('/api/door-repo/diz/REAL_DOOR.LHA');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('text/plain; charset=ISO-8859-1');
+      expect(res.text).toBe('Real file_id.diz');
+    });
+
+    it('preserves newlines, which is the entire reason it exists', async () => {
+      const art = 'line one\nline two\nline three';
+      // beforeEach closes its handle after seeding, so reopen to mutate.
+      const w = new Database(path.join(tmpDir, 'test.sqlite'));
+      w.prepare('UPDATE door_catalog SET file_id_diz = ? WHERE archive_name = ?')
+        .run(art, 'REAL_DOOR.LHA');
+      w.close();
+
+      const res = await request(app).get('/api/door-repo/diz/REAL_DOOR.LHA');
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(art);
+      expect(res.text.split('\n')).toHaveLength(3);
+    });
+
+    it('404s when the entry exists but has no DIZ, so "none" is distinguishable from empty', async () => {
+      const w = new Database(path.join(tmpDir, 'test.sqlite'));
+      w.prepare('UPDATE door_catalog SET file_id_diz = NULL WHERE archive_name = ?')
+        .run('REAL_DOOR.LHA');
+      w.close();
+
+      const res = await request(app).get('/api/door-repo/diz/REAL_DOOR.LHA');
+      expect(res.status).toBe(404);
+    });
+
+    it('404s for an unknown archive', async () => {
+      const res = await request(app).get('/api/door-repo/diz/NO_SUCH.LHA');
+      expect(res.status).toBe(404);
+    });
+
+    it('404s on an encoded traversal payload rather than reaching the filesystem', async () => {
+      const res = await request(app).get('/api/door-repo/diz/..%2F..%2Fetc%2Fpasswd');
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('GET /api/door-repo/archive/:archiveName', () => {
     it('streams the archive with correct Content-Length and checksum headers', async () => {
       const res = await request(app).get('/api/door-repo/archive/REAL_DOOR.LHA');
