@@ -15,6 +15,13 @@ import { InfoEditorOverlay } from './InfoEditorOverlay';
 import { showAmigaGuideViewer } from './AmigaGuideViewer';
 import { ViewManager, BaseView, sanitizeForTags, refreshDoorRegistry, resolveBbsRoot } from './ViewManager';
 import { ALL_TYPES, distinctTypes, cycleSystemFilter, filterByDoorType, formatSystemTag } from './systemFilter';
+import {
+  resolveDoorRepoMode, loadLocalCatalogEntries, loadConsumerCatalog, mapManifestDoorToEntry,
+  filterManifestEntries, formatOfflineSuffix, consumerCacheFilePath,
+} from './repoDataSource';
+import type {
+  DoorRepoMode, CatalogEntry as RepoCatalogEntry, LocalCatalogRow, LocalCatalogLookup,
+} from './repoDataSource';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Install/re-extract now goes through the portable extractor factory
@@ -35,14 +42,9 @@ interface DoorInfo {
   resolvedPath?: string; enabled: boolean;
 }
 
-interface CatalogEntry {
-  id: string; archive_name: string; archive_path: string; binary_name: string | null;
-  door_type: string; name: string; version: string | null; author: string | null;
-  release_group: string | null; description: string | null; file_id_diz: string | null;
-  doc_filename: string | null; doc_raw: string | null; suggested_tooltypes: string | null;
-  category: string | null; archive_size: number; junk_count: number;
-  installed: number; installed_as: string | null; install_dir: string | null;
-}
+// Single source of truth for the row shape RepoView renders: repoDataSource.ts
+// (both the local-catalog and central-repo data sources produce this shape).
+type CatalogEntry = RepoCatalogEntry;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +78,32 @@ function getStripLib(): any {
   for (const k of Object.keys(require.cache))
     if (k.includes('ami-stripper.lib')) return require.cache[k]?.exports ?? null;
   return null;
+}
+
+/** Adapts the local catalog service's getCatalogEntryByArchive into the
+ * LocalCatalogLookup shape repoDataSource's mapManifestDoorToEntry expects
+ * (consumer mode: resolving what's installed on THIS BBS is always a local
+ * lookup, never something the central manifest knows). Missing service or a
+ * thrown lookup error both fold into "nothing known locally" rather than
+ * propagating -- a lookup failure must never abort the whole browse. */
+function buildLocalCatalogLookup(): LocalCatalogLookup {
+  const svc = getCatalogSvc();
+  return (archiveName: string): LocalCatalogRow | null => {
+    try {
+      const row = svc?.getCatalogEntryByArchive?.(archiveName);
+      if (!row) return null;
+      return {
+        id: row.id,
+        installed: row.installed,
+        installed_as: row.installed_as ?? null,
+        install_dir: row.install_dir ?? null,
+        binary_name: row.binary_name ?? null,
+        archive_path: row.archive_path ?? null,
+      };
+    } catch {
+      return null;
+    }
+  };
 }
 
 async function fetchDoors(bbs: any): Promise<DoorInfo[]> {
@@ -538,6 +566,18 @@ class RepoView extends BaseView {
   private statusTimer: any = null;
   private installing = false; // guards against double-fire on the async install handler
 
+  // Consumer mode: browsing the central door-repo API instead of the local
+  // catalog. repoMode is resolved once (env is static per-process).
+  // consumerEntries holds the FULL manifest-mapped list (unfiltered by
+  // text) so filterManifestEntries can re-run client-side on every
+  // keystroke without a network round trip -- see loadEntries() below.
+  private repoMode: DoorRepoMode = resolveDoorRepoMode();
+  private consumerEntries: CatalogEntry[] | null = null;
+  private consumerFromCache = false;
+  private consumerCachedAt: string | null = null;
+  private consumerError: string | null = null;
+  private consumerLoading = false;
+
   constructor(layout: DoormanLayout, bbs: any) { super(); this.layout = layout; this.bbs = bbs; }
 
   private static typeOf(e: CatalogEntry): string { return e.door_type || 'XIM'; }
@@ -552,9 +592,26 @@ class RepoView extends BaseView {
   }
 
   private refreshHeader(): void {
-    const svc = getCatalogSvc();
     let stats = '';
-    try { const s = svc?.catalogStats(); if (s) stats = `${s.total} in repo, ${s.installed} installed`; } catch {}
+    if (this.repoMode.kind === 'consumer') {
+      // Central-repo stats (never the local catalog's — a different data
+      // source is on screen) plus the offline/cached suffix when the last
+      // fetch served the on-disk cache instead of a live network response.
+      if (this.consumerEntries !== null) {
+        const installedCount = this.consumerEntries.filter(e => e.installed).length;
+        stats = `${this.consumerEntries.length} in repo, ${installedCount} installed`;
+      } else if (this.consumerError) {
+        stats = 'repo fetch failed';
+      } else {
+        stats = 'loading...';
+      }
+      stats += formatOfflineSuffix(this.consumerFromCache, this.consumerCachedAt);
+    } else {
+      // Owner mode AND disabled mode: byte-identical to pre-Task-6 —
+      // local catalog stats via the same getCatalogSvc()/catalogStats() call.
+      const svc = getCatalogSvc();
+      try { const s = svc?.catalogStats(); if (s) stats = `${s.total} in repo, ${s.installed} installed`; } catch {}
+    }
     // Always shown (including the default ALL state) — a sysop with no
     // idea the filter exists has no way to discover it otherwise. Count is
     // visibleEntries: rows surviving BOTH the text search (this.filter,
@@ -573,17 +630,67 @@ class RepoView extends BaseView {
   private repoUnavailable = false;
 
   private loadEntries(): void {
-    const svc = getCatalogSvc();
-    if (!svc) { this.entries = []; this.repoUnavailable = true; return; }
-    try {
-      this.entries = svc.searchCatalog(this.filter);
+    if (this.repoMode.kind === 'consumer') {
+      // consumerEntries is the FULL manifest-mapped list, fetched once (see
+      // loadConsumerManifest, kicked off from enter()) and re-filtered here
+      // client-side on every call — never a network fetch per keystroke.
+      if (this.consumerEntries === null) { this.entries = []; return; }
+      this.entries = filterManifestEntries(this.consumerEntries, this.filter);
       this.repoUnavailable = false;
-    } catch {
-      // e.g. live volume DB has no door_catalog table — repo browsing/install
-      // is a dev-checkout feature (catalog + archive files live there).
-      this.entries = [];
-      this.repoUnavailable = true;
+      return;
     }
+    // Owner mode AND disabled mode: byte-identical to pre-Task-6 —
+    // extracted into repoDataSource.ts's loadLocalCatalogEntries so both
+    // modes share one implementation.
+    const svc = getCatalogSvc();
+    const result = loadLocalCatalogEntries(svc, this.filter);
+    this.entries = result.entries;
+    this.repoUnavailable = result.repoUnavailable;
+  }
+
+  /** Fetches + maps the central manifest once (guarded against overlapping
+   * calls — enter() re-runs every time a child view like ConfirmView/
+   * InputView pops back to RepoView, per ViewManager.pop()). Retries on a
+   * later enter() if the previous attempt failed (consumerEntries still
+   * null) — a transient network blip should not permanently disable
+   * browsing for the rest of the session. */
+  private async loadConsumerManifest(): Promise<void> {
+    if (this.repoMode.kind !== 'consumer' || this.consumerLoading || this.consumerEntries !== null) return;
+    this.consumerLoading = true;
+    this.updateInfo();
+    this.layout.render();
+    try {
+      const cacheFile = consumerCacheFilePath(PROJECT_ROOT);
+      const lookupLocal = buildLocalCatalogLookup();
+      const result = await loadConsumerCatalog(this.repoMode.url, cacheFile, lookupLocal);
+      this.consumerEntries = result.entries;
+      this.consumerFromCache = result.fromCache;
+      this.consumerCachedAt = result.cachedAt;
+      this.consumerError = null;
+      this.consumerLoading = false;
+      this.refresh(this.layout.listSelected);
+      this.layout.render();
+    } catch (err: any) {
+      this.consumerLoading = false;
+      this.reportRepoFetchFailure(err?.message ?? String(err));
+    }
+  }
+
+  /** Loud-error convention matching reportInstallFailure below: log to the
+   * process console (docker logs / journald visibility) and hold a
+   * persistent message in the info panel — no cache and no network must
+   * never silently present as an empty catalog. */
+  private reportRepoFetchFailure(detail: string): void {
+    console.log(`[DOORMAN] repo fetch failed: ${detail}`);
+    this.consumerError = detail;
+    // updateInfo() first (info panel), THEN setStatus() (header flash +
+    // the render() that paints both together) — calling refreshHeader()
+    // after setStatus() here would overwrite the red flash before it is
+    // ever rendered. setStatus's own 9s timer reverts to refreshHeader(),
+    // whose consumer branch already renders "repo fetch failed" in the
+    // header from consumerError once the flash clears.
+    this.updateInfo();
+    this.setStatus('Repo fetch failed', 'red', 9000);
   }
 
   private refresh(selectIdx = 0): void {
@@ -606,15 +713,29 @@ class RepoView extends BaseView {
     this.refreshHeader();
   }
 
+  private noEntryMessage(): string {
+    if (this.repoMode.kind === 'consumer') {
+      if (this.consumerLoading) return '{yellow-fg}Loading central door-repo catalog...{/yellow-fg}';
+      if (this.consumerError) {
+        return `{red-fg}Central door-repo unavailable.{/red-fg}\n\n` +
+          `{yellow-fg}Detail:{/yellow-fg} ${sanitizeForTags(this.consumerError)}\n\n` +
+          'No offline cache is available either. Check network connectivity\n' +
+          'or the DOOR_REPO_URL setting.';
+      }
+      return 'No entry selected.';
+    }
+    return this.repoUnavailable
+      ? '{yellow-fg}Repo catalog unavailable on this system.{/yellow-fg}\n\n' +
+        'Repo browsing/install runs from a dev checkout, where the door\n' +
+        'catalog database and the archive files live. Installed doors on\n' +
+        'this system are unaffected.'
+      : 'No entry selected.';
+  }
+
   private updateInfo(): void {
     const e = this.entry();
     if (!e) {
-      this.layout.setInfo(this.repoUnavailable
-        ? '{yellow-fg}Repo catalog unavailable on this system.{/yellow-fg}\n\n' +
-          'Repo browsing/install runs from a dev checkout, where the door\n' +
-          'catalog database and the archive files live. Installed doors on\n' +
-          'this system are unaffected.'
-        : 'No entry selected.');
+      this.layout.setInfo(this.noEntryMessage());
       return;
     }
 
@@ -685,6 +806,7 @@ class RepoView extends BaseView {
   enter(): void {
     this.layout.showRepoLayout();
     this.refresh(0);
+    if (this.repoMode.kind === 'consumer') void this.loadConsumerManifest();
     this.layout.focusList();
     this.layout.render();
 
