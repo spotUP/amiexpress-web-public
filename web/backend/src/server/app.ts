@@ -7,6 +7,7 @@ import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
 import { getSystemTime } from '../utils/date-time.util';
+import { getRepoRevision } from './repo-revision';
 
 /**
  * Express Application Setup
@@ -175,24 +176,18 @@ app.post('/api/csp-report', (req, res) => {
 // expect?" via a single HTTP call. Falls back to "unknown" for local
 // dev where the file isn't written (docker-compose default for non-CI
 // builds).
-let _cachedGitSha: string | null = null;
-function readGitSha(): string {
-  if (_cachedGitSha !== null) return _cachedGitSha;
-  try {
-    // /app/.git-sha is written by Dockerfile RUN echo at /app stage.
-    // Local dev: file doesn't exist → fall through to "unknown".
-    _cachedGitSha = fs.readFileSync('/app/.git-sha', 'utf-8').trim() || 'unknown';
-  } catch {
-    _cachedGitSha = 'unknown';
-  }
-  return _cachedGitSha;
-}
-
+//
+// The read-'/app/.git-sha'-with-'unknown'-fallback logic (memoized in its
+// own module-level `_cachedGitSha` variable) lives in repo-revision.ts —
+// getRepoRevision() — so it's a single source of truth shared with the
+// door-repo manifest builder (door-repo-manifest.ts), which needs the same
+// revision string but can't import this file (app.ts pulls in the entire
+// express/helmet/cors/log-stream stack at import time).
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: getSystemTime().toISOString(),
-    revision: readGitSha(),
+    revision: getRepoRevision(),
   });
 });
 

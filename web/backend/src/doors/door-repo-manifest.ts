@@ -13,10 +13,10 @@
  * generation.
  */
 import Database from 'better-sqlite3';
-import * as fs from 'fs';
 import * as path from 'path';
 import { getArchiveChecksums } from './door-repo-checksums';
 import { resolveArchivePath } from './door-catalog.service';
+import { getRepoRevision } from '../server/repo-revision';
 
 export interface ManifestDoor {
   archiveName: string;
@@ -70,31 +70,15 @@ interface DoorCatalogRow {
 
 // ─── Revision source ────────────────────────────────────────────────────
 //
-// Must reuse the exact same revision the /health endpoint reports
-// (web/backend/src/server/app.ts:178-197: readGitSha() reads
-// /app/.git-sha, written by the Dockerfile at image build time, falling
-// back to "unknown" for local dev where the file doesn't exist).
-//
-// app.ts cannot be imported here: it pulls in the entire express +
-// helmet/cors/log-stream middleware stack as import-time side effects and
-// is documented as unit-untestable under jest (see the comment atop
-// tests/health-revision.test.ts, which instead greps app.ts's source for
-// this exact mechanism). So this function replicates the identical
-// read-and-fallback logic against the identical source file rather than
-// inventing a second revision source — same file, same fallback, just a
-// second, independently memoized, importable copy of the same mechanism.
+// Must reuse the exact same revision the /health endpoint reports. Both
+// /health (web/backend/src/server/app.ts) and this module import the
+// single shared implementation from web/backend/src/server/repo-revision.ts
+// — a pure fs/env module with no express imports, so it's safe to import
+// here without dragging in the HTTP stack. Re-exported (not just called)
+// so `getRepoRevision` stays part of this module's public API per its
+// documented interface.
 
-let _cachedRevision: string | null = null;
-
-export function getRepoRevision(): string {
-  if (_cachedRevision !== null) return _cachedRevision;
-  try {
-    _cachedRevision = fs.readFileSync('/app/.git-sha', 'utf-8').trim() || 'unknown';
-  } catch {
-    _cachedRevision = 'unknown';
-  }
-  return _cachedRevision;
-}
+export { getRepoRevision } from '../server/repo-revision';
 
 // ─── Manifest builder ───────────────────────────────────────────────────
 
