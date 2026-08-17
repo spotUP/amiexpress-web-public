@@ -197,7 +197,7 @@ I/O or a plain text-file line reader.
 | `archiveName` | string                   | The archive's filename, e.g. `AETRIV10.LHA`. Also the download key for section 5. |
 | `doorType`    | string                   | e.g. `XIM`, `DD`, `REXX`. See section 8 for the `?type=` filter.       |
 | `archiveSize` | integer                  | Archive size in bytes. `0` if unknown.                                 |
-| `md5`         | string, or empty         | Lowercase hex MD5 of the archive file. Empty string if the archive file is currently unreadable on the server (a null-checksum row still appears; only the download in section 5 fails). |
+| `md5`         | string, or empty         | Lowercase hex MD5 of the archive file, recorded when the server indexed that archive (see "Digest freshness" below). Empty string when no digest has been recorded and one could not be computed on request; such a row still appears in the listing, and only the download in section 5 fails. |
 | `name`        | string, possibly empty   | Door name from the catalog metadata.                                   |
 | `description` | string, possibly empty   | See truncation/collapsing rules below.                                 |
 
@@ -314,8 +314,22 @@ Each entry in `doors` has this shape:
 | `description`  | string or null   | Raw text, not escaped or truncated (unlike the `list.txt` field). |
 | `fileIdDiz`    | string or null   | Raw FILE_ID.DIZ contents, if any, newlines included.             |
 | `archiveSize`  | integer or null  | Bytes.                                                            |
-| `md5`          | string or null   | Lowercase hex. `null` if the archive file is currently unreadable on the server. |
+| `md5`          | string or null   | Lowercase hex, recorded when the server indexed that archive (see "Digest freshness" below). `null` when no digest has been recorded and one could not be computed on request. |
 | `sha256`       | string or null   | Lowercase hex. `null` under the same condition as `md5`.         |
+
+### Digest freshness
+
+The `md5` and `sha256` values are recorded when the server indexes an archive,
+not recomputed on every request (recomputing them for the whole catalog would
+stall the server). They therefore describe the archive as it was at index time.
+
+For a client this has one practical consequence: if a checksum you compute over
+a downloaded file disagrees with the digest in the listing, the cause may be a
+stale server-side digest -- an archive replaced without re-indexing -- and not
+a corrupted transfer. The recommended handling in section 9 still applies
+(discard the file, retry once, treat a second mismatch as fatal and do not
+install); a persistent mismatch on an otherwise healthy download is worth
+reporting to the repo owner rather than retrying indefinitely.
 
 Real full response, captured for one door (`AETRIV10.LHA`, filtered with
 `?q=AETRIV10` for brevity -- the unfiltered response is the same shape with
