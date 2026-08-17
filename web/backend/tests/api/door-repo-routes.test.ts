@@ -15,9 +15,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { Readable } from 'stream';
+import { PassThrough } from 'stream';
 import Database from 'better-sqlite3';
-import express, { Express, Router } from 'express';
+import express, { Express, Response, Router } from 'express';
 import request from 'supertest';
 
 describe('door-repo routes', () => {
@@ -121,6 +121,18 @@ describe('door-repo routes', () => {
   });
 
   afterEach(() => {
+    // Safety net: a few tests jest.doMock() the manifest/checksums modules
+    // and jest.dontMock() them again at the end of their own body. If an
+    // assertion inside one of those tests throws first, that cleanup call
+    // never runs and the mock silently leaks into every later test in this
+    // file (jest.doMock registrations persist until explicitly undone) —
+    // manifesting as unrelated tests getting 500s from a mocked
+    // buildManifest()/getArchiveChecksums() returning undefined. Calling
+    // dontMock() here unconditionally (harmless no-op if nothing was
+    // mocked) guarantees cleanup regardless of how the test body exits.
+    jest.dontMock('../../src/doors/door-repo-manifest');
+    jest.dontMock('../../src/doors/door-repo-checksums');
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
     process.env = { ...ORIGINAL_ENV };
     jest.resetModules();
@@ -221,6 +233,44 @@ describe('door-repo routes', () => {
 
         expect(second.status).toBe(200);
         expect(second.body.formatVersion).toBe(1);
+      });
+
+      // Perf guard: a fresh (304) request must short-circuit BEFORE
+      // buildManifest() runs. buildManifest() computes md5/sha256 for
+      // every catalog row (~3300 archives in production) — paying that
+      // cost only to discard the result and return an empty 304 body
+      // defeats the point of conditional GET. Uses the same jest.doMock
+      // technique as the /health checksum-avoidance test (spyOn can't
+      // redefine swc's frozen export getters).
+      it('does not call buildManifest for a fresh (matching ETag) request', async () => {
+        const first = await request(app).get('/api/door-repo/manifest');
+        const etag = first.headers['etag'];
+        expect(etag).toBeTruthy();
+
+        const actualManifestModule = jest.requireActual('../../src/doors/door-repo-manifest');
+        const buildManifestSpy = jest.fn();
+
+        jest.resetModules();
+        jest.doMock('../../src/doors/door-repo-manifest', () => ({
+          ...actualManifestModule,
+          buildManifest: buildManifestSpy,
+        }));
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { doorRepoRouter: freshRouter } = require('../../src/server/door-repo.routes') as {
+          doorRepoRouter: Router;
+        };
+        const freshApp = express();
+        freshApp.use('/api/door-repo', freshRouter);
+
+        const res = await request(freshApp)
+          .get('/api/door-repo/manifest')
+          .set('If-None-Match', etag);
+
+        expect(res.status).toBe(304);
+        expect(buildManifestSpy).not.toHaveBeenCalled();
+
+        jest.dontMock('../../src/doors/door-repo-manifest');
       });
     });
 
@@ -357,47 +407,90 @@ describe('door-repo routes', () => {
         closeSpy.mockRestore();
       });
 
-      it('closes the file descriptor exactly once when the stream errors after opening (no leak on the failure path)', async () => {
-        jest.resetModules();
+    });
+
+    // Round 3 (coordinator re-review): a standalone Node probe reproduced
+    // that raw `.pipe()` leaves the source fs.ReadStream's fd OPEN when
+    // the destination is destroyed mid-transfer -- `.pipe()` only unpipes
+    // on a destination close, it never destroys the source. That's a real
+    // fd leak on every client-aborted download (closed browser tab, flaky
+    // mobile link, curl Ctrl-C) on a public endpoint. Fixed by switching
+    // to stream.pipeline(readStream, res, callback): it destroys BOTH
+    // ends of the pipe on any termination (success, error, OR the other
+    // side closing early), and for a real fs.ReadStream, destroying it
+    // ALWAYS closes its fd via _destroy() -- regardless of the `autoClose`
+    // option, verified with the same probe before relying on it (a naive
+    // "pipeline callback fires, so close there too" would double-close;
+    // pipeline already owns the fd once autoClose isn't overridden to
+    // false).
+    //
+    // The fd-closing logic now lives entirely inside `stream.pipeline()`
+    // (Node's own, independently-tested primitive) rather than in our own
+    // event listeners, so it's extracted into `streamArchive()` and
+    // unit-tested directly with a real fd + a real Writable stand-in for
+    // `res` -- reproducing an actual client abort over real HTTP in jest
+    // is racy (timing-dependent on when the abort lands relative to the
+    // transfer), so per the coordinator's own fallback guidance this uses
+    // the deterministic fake-`res` path instead, synchronized via an
+    // (test-only) completion callback rather than a sleep/tick guess.
+    //
+    // This replaces round 2's "stream errors after opening" test, which
+    // mocked fs.createReadStream() to return a disconnected fake Readable
+    // with no relationship to the real fd. That was meaningful under the
+    // OLD design (fd-closing was OUR OWN explicit code, wired to ANY
+    // stream's 'error' event, fake or real) but isn't under this one,
+    // where fd-closing is delegated to the real fs.ReadStream's own
+    // _destroy(). A genuine mid-read disk I/O error on a REAL
+    // fs.ReadStream self-destroys (and closes its own fd) via that same
+    // Node-internal mechanism independent of pipeline() -- Node's own
+    // guarantee, not application code, so it isn't re-tested here (we
+    // don't unit-test that fs.readFileSync reads bytes correctly either).
+    describe('streamArchive (fd lifecycle owned by stream.pipeline, direct unit test)', () => {
+      it('closes the real fd when the destination is destroyed mid-transfer (client abort)', async () => {
+        // A real fd from a real, larger-than-one-chunk file, so there's a
+        // deterministic "first chunk already flowing, more still pending"
+        // window before destroying the destination -- mirrors a client
+        // closing the connection partway through a download.
+        const bigPath = path.join(archiveDir, 'big-for-abort-test.bin');
+        fs.writeFileSync(bigPath, Buffer.alloc(256 * 1024, 7));
+        const fd = fs.openSync(bigPath, 'r');
+
         // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const fsCore = require('fs') as typeof fs;
-        const openSpy = jest.spyOn(fsCore, 'openSync');
-        const closeSpy = jest.spyOn(fsCore, 'close');
-        const createReadStreamSpy = jest.spyOn(fsCore, 'createReadStream').mockImplementation(() => {
-          const s = new Readable({ read() {} });
-          process.nextTick(() => s.emit('error', new Error('simulated mid-stream failure')));
-          return s as unknown as fs.ReadStream;
+        const { streamArchive } = require('../../src/server/door-repo.routes') as {
+          streamArchive: (
+            fd: number,
+            res: Response,
+            archiveName: string,
+            onDone?: (err: Error | null) => void
+          ) => void;
+        };
+
+        // A real Writable (PassThrough) stands in for `res` -- pipeline()
+        // needs a genuine stream, not a mock object -- augmented with the
+        // handful of Response-shaped members handleArchiveStreamError
+        // reads on its error path (mirrors the fakeRes() helper below).
+        const fakeRes = Object.assign(new PassThrough(), {
+          headersSent: false,
+          status: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          send: jest.fn().mockReturnThis(),
+        });
+        fakeRes.resume(); // drain so 'data' actually fires
+
+        const onDone = await new Promise<Error | null>((resolve) => {
+          fakeRes.once('data', () => {
+            // A real client would already have received the headers by
+            // the time any body bytes arrived.
+            fakeRes.headersSent = true;
+            fakeRes.destroy(); // simulate the client's socket closing mid-download
+          });
+          streamArchive(fd, fakeRes as unknown as Response, 'BIG_ABORT_TEST.LHA', (err) => resolve(err));
         });
 
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { doorRepoRouter: freshRouter } = require('../../src/server/door-repo.routes') as {
-          doorRepoRouter: Router;
-        };
-        const freshApp = express();
-        freshApp.use('/api/door-repo', freshRouter);
+        expect(onDone).not.toBeNull(); // pipeline's callback reports the abort as an error
+        expect(() => fs.fstatSync(fd)).toThrow(); // the fd is closed, not leaked
 
-        // See the previous test: clear post-require module-loading noise
-        // before counting request-scoped fs calls.
-        openSpy.mockClear();
-        closeSpy.mockClear();
-
-        const res = await request(freshApp).get('/api/door-repo/archive/REAL_DOOR.LHA');
-
-        // The mocked stream errors before any bytes are pushed, so the
-        // route's error handler still has a clean slate to fall back to
-        // its usual 404 (see handleArchiveStreamError tests below).
-        expect(res.status).toBe(404);
-
-        const ourOpenCall = openSpy.mock.calls.find((call) => call[0] === realArchivePath);
-        expect(ourOpenCall).toBeDefined();
-        const fd = openSpy.mock.results[openSpy.mock.calls.indexOf(ourOpenCall!)]!.value as number;
-
-        const closeCallsForFd = closeSpy.mock.calls.filter((call) => call[0] === fd);
-        expect(closeCallsForFd).toHaveLength(1);
-
-        createReadStreamSpy.mockRestore();
-        openSpy.mockRestore();
-        closeSpy.mockRestore();
+        fs.unlinkSync(bigPath);
       });
     });
   });

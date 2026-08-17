@@ -26,6 +26,7 @@
  */
 import express, { Request, Response } from 'express';
 import * as fs from 'fs';
+import { pipeline } from 'stream';
 import { buildManifest, renderListTxt, getRepoRevision, getDoorCount } from '../doors/door-repo-manifest';
 import { getArchiveChecksums } from '../doors/door-repo-checksums';
 import { getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
@@ -48,7 +49,7 @@ function sendNotFound(res: Response, archiveName: string): void {
 /**
  * Handles a mid-stream fs.createReadStream error so it never hangs the
  * request. Extracted as a standalone, exported function (rather than an
- * inline arrow in the 'error' listener) specifically so it can be
+ * inline arrow in the pipeline callback) specifically so it can be
  * unit-tested directly against fake Response objects — reproducing a real
  * mid-stream failure end-to-end over HTTP is racy (the moment any bytes
  * are written, the client has already committed to the declared
@@ -63,26 +64,72 @@ export function handleArchiveStreamError(res: Response, archiveName: string): vo
   }
 }
 
+/**
+ * Streams an already-open archive fd to `res` and reports failure via
+ * `handleArchiveStreamError`. Uses stream.pipeline() rather than a plain
+ * `.pipe()` specifically because pipe() does NOT destroy the source when
+ * the destination closes early — verified with a standalone Node probe
+ * (see task-3-report.md): with a real fs.ReadStream(fd) piped via
+ * `.pipe(res)`, destroying `res` mid-transfer (a client aborting the
+ * download) leaves the source stream — and its fd — untouched, a leak on
+ * every interrupted download on a public endpoint. pipeline() destroys
+ * BOTH ends on any termination (success, error, or the other side closing
+ * early), and destroying a real fs.ReadStream always closes its fd via
+ * _destroy(), independent of the `autoClose` option — so this deliberately
+ * does NOT pass `autoClose: false` and does NOT close the fd itself in the
+ * callback: pipeline has already done that by the time the callback runs
+ * (same probe), and closing it again would double-close.
+ *
+ * `onDone` is test-only instrumentation (the production call site never
+ * passes it) — pipeline's own completion is otherwise only observable via
+ * the callback closure, and tests need a race-free way to know the fd has
+ * already been closed before asserting on it.
+ */
+export function streamArchive(
+  fd: number,
+  res: Response,
+  archiveName: string,
+  onDone?: (err: Error | null) => void
+): void {
+  const stream = fs.createReadStream('', { fd });
+  pipeline(stream, res, (err) => {
+    if (err) {
+      handleArchiveStreamError(res, archiveName);
+    }
+    if (onDone) onDone(err ?? null);
+  });
+}
+
 // GET /manifest — JSON manifest with ETag / If-None-Match support.
 //
-// Conditional-GET (304) handling is delegated ENTIRELY to Express's
-// built-in freshness check (response.js: `if (req.fresh) this.status(304)`,
-// run inside res.send()/res.json() once an ETag response header is set) —
-// not hand-rolled here. `req.fresh` is backed by the `fresh` npm module,
-// which already implements RFC 7232 correctly: weak comparison (a
-// `W/"<rev>"` validator from a cache/proxy matches our strong `"<rev>"`
-// ETag), comma-separated candidate lists, the `*` wildcard, AND (the part
-// a hand-rolled `if (ifNoneMatch === etag)` shortcut would miss) RFC 9111's
+// Conditional-GET (304) handling is delegated to Express's own freshness
+// primitive, `req.fresh` — backed by the `fresh` npm module, which already
+// implements RFC 7232 correctly: weak comparison (a `W/"<rev>"` validator
+// from a cache/proxy matches our strong `"<rev>"` ETag), comma-separated
+// candidate lists, the `*` wildcard, AND (the part a hand-rolled
+// `if (ifNoneMatch === etag)` shortcut would miss) RFC 9111's
 // `Cache-Control: no-cache` end-to-end-reload override, which must force
-// revalidation even when If-None-Match would otherwise match exactly. Only
-// requirement on our side: set the ETag header before calling res.json().
+// revalidation even when If-None-Match would otherwise match exactly.
+// Verified directly (see task-3-report.md) before relying on it, both for
+// the implicit form (inside res.json()/res.send()) and this explicit one.
+//
+// The ETag is just the revision string — getRepoRevision() alone, no
+// catalog access. So: compute it, set the headers, and check `req.fresh`
+// BEFORE calling buildManifest() at all. A 304 must never pay for
+// building (and, transitively, checksumming) the full manifest just to
+// throw the result away.
 doorRepoRouter.get('/manifest', (req: Request, res: Response) => {
-  const manifest = buildManifest(parseManifestQuery(req));
-  const revision = manifest.revision;
+  const revision = getRepoRevision();
 
   res.set('X-Door-Repo-Revision', revision);
   res.set('ETag', `"${revision}"`);
 
+  if (req.fresh) {
+    res.status(304).end();
+    return;
+  }
+
+  const manifest = buildManifest(parseManifestQuery(req));
   res.json(manifest);
 });
 
@@ -104,8 +151,9 @@ doorRepoRouter.get('/list.txt', (req: Request, res: Response) => {
 // re-indexed/replaced archive), the declared Content-Length no longer
 // matches the byte count actually streamed and HTTP/1.1 framing corrupts
 // for that connection. So: open once (fs.openSync), size via fstatSync on
-// that fd, and stream from that same fd (autoClose disabled — we own and
-// verify the close ourselves, exactly once, on every path).
+// that fd, and stream from that same fd via streamArchive() (see its own
+// doc comment for why that's stream.pipeline()-based, not a plain
+// .pipe(), and who owns closing the fd).
 //
 // Checksums are a separate concern: getArchiveChecksums() does its own
 // independent statSync+readFileSync via the Task 1 cache module. That's
@@ -154,23 +202,7 @@ doorRepoRouter.get('/archive/:archiveName', (req: Request, res: Response) => {
   res.set('X-Archive-MD5', checksums.md5);
   res.set('X-Archive-SHA256', checksums.sha256);
 
-  let fdClosed = false;
-  const closeFd = (): void => {
-    if (fdClosed) return;
-    fdClosed = true;
-    fs.close(fd, () => {
-      /* best-effort close; nothing actionable if the OS-level close fails */
-    });
-  };
-
-  const stream = fs.createReadStream('', { fd, autoClose: false });
-  stream.on('end', closeFd);
-  stream.on('close', closeFd);
-  stream.on('error', () => {
-    closeFd();
-    handleArchiveStreamError(res, archiveName);
-  });
-  stream.pipe(res);
+  streamArchive(fd, res, archiveName);
 });
 
 // GET /health — { status, revision, doors }. Uses getDoorCount(), NOT
