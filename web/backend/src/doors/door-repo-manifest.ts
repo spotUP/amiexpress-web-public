@@ -110,14 +110,36 @@ interface DoorCatalogRow {
  * whole manifest rather than one field. Falling back to the column keeps
  * those callers working with the value they had before.
  */
-function junkCountExpr(db: Database.Database): string {
-  const present = db
+function hasFilesTable(db: Database.Database): boolean {
+  return !!db
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'door_catalog_files'")
     .get();
-  return present
-    ? '(SELECT COUNT(*) FROM door_catalog_files f WHERE f.catalog_id = door_catalog.id AND f.is_junk = 1)'
-    : 'junk_count';
 }
+
+/**
+ * Junk counts as a single grouped pass, joined once - NOT a correlated
+ * subquery per catalog row.
+ *
+ * The first version of this was
+ *   (SELECT COUNT(*) FROM door_catalog_files f
+ *     WHERE f.catalog_id = door_catalog.id AND f.is_junk = 1)
+ * which reads as O(1) per row but is not: SQLite chose idx_dcf_is_junk for
+ * it, so every one of the 3301 catalog rows rescanned the thousands of rows
+ * with is_junk = 1. Measured on the live catalog: 13.05 SECONDS for the
+ * query, which every catalog fetch paid - the whole reason the door took so
+ * long to start. The same data as a grouped join: 0.03 seconds.
+ *
+ * A join is also immune to the planner changing its mind, which a
+ * correlated subquery with two candidate indexes is not.
+ */
+const JUNK_JOIN = `
+  LEFT JOIN (
+    SELECT catalog_id, COUNT(*) AS n
+    FROM door_catalog_files
+    WHERE is_junk = 1
+    GROUP BY catalog_id
+  ) j ON j.catalog_id = door_catalog.id
+`;
 
 // Upper bound on how many rows buildManifest() will lazily hash (NULL
 // md5/sha256, i.e. not yet indexed with digests) in a single call. At the
@@ -220,12 +242,14 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
     // text of every door in the catalog (3218 of 3301 rows carry one), so
     // selecting it to compute a boolean would pull several MB per manifest
     // build. The emptiness test runs in SQL and only the flag comes back.
+    const filesTable = hasFilesTable(db);
     const sql = `
       SELECT archive_name, archive_path, door_type, name, author, release_group,
              category, description, file_id_diz, archive_size, md5, sha256,
-             ${junkCountExpr(db)} AS junk_live,
+             ${filesTable ? 'COALESCE(j.n, 0)' : 'junk_count'} AS junk_live,
              (CASE WHEN doc_raw IS NOT NULL AND doc_raw <> '' THEN 1 ELSE 0 END) AS has_doc
       FROM door_catalog
+      ${filesTable ? JUNK_JOIN : ''}
       ${where}
       ORDER BY archive_name COLLATE NOCASE ASC
     `;
@@ -346,6 +370,59 @@ function toLatin1Safe(s: string): string {
     out += cp <= 0xff ? ch : '?';
   }
   return out;
+}
+
+/**
+ * Rendered-catalog cache, keyed by the catalog revision and the filters.
+ *
+ * Every client start fetches list.txt, and until now every one of those
+ * rebuilt the whole thing: query 3301 rows, map them, render ~620 KB of
+ * text. The revision already changes exactly when the catalog changes
+ * (getCatalogRevision: row count + newest indexed_at), so between two
+ * catalog edits the answer is byte-identical and there is no reason to
+ * compute it twice.
+ *
+ * Bounded to a handful of entries because the filtered variants (?type=,
+ * ?q=) share this cache: an unbounded map keyed by a client-supplied query
+ * string is a memory leak with a rude name. The unfiltered catalog - the
+ * one every door asks for - is ~620 KB, so the cap is small on purpose.
+ */
+const LIST_CACHE_MAX = 8;
+const listCache = new Map<string, Buffer>();
+
+export function renderListTxtCached(opts?: { type?: string; q?: string }): Buffer {
+  const key = `${getCatalogRevision()}|${opts?.type ?? ''}|${opts?.q ?? ''}`;
+  const hit = listCache.get(key);
+  if (hit) {
+    return hit;
+  }
+
+  const rendered = renderListTxt(buildManifest(opts));
+
+  // A revision change makes every existing entry unreachable, so drop them
+  // rather than letting stale-revision buffers age out one eviction at a
+  // time while holding megabytes.
+  const currentRevision = key.split('|')[0];
+  for (const existing of Array.from(listCache.keys())) {
+    if (!existing.startsWith(`${currentRevision}|`)) {
+      listCache.delete(existing);
+    }
+  }
+  while (listCache.size >= LIST_CACHE_MAX) {
+    const oldest = listCache.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    listCache.delete(oldest);
+  }
+
+  listCache.set(key, rendered);
+  return rendered;
+}
+
+/** Exported for tests: forget everything rendered so far. */
+export function _clearListCacheForTests(): void {
+  listCache.clear();
 }
 
 export function renderListTxt(m: DoorRepoManifest): Buffer {

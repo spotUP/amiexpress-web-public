@@ -352,6 +352,69 @@ describe('door-repo-manifest', () => {
     });
   });
 
+  describe('renderListTxtCached', () => {
+    it('returns byte-identical output to an uncached render', () => {
+      const { renderListTxt, renderListTxtCached, buildManifest, _clearListCacheForTests } = mod();
+      _clearListCacheForTests();
+      const direct = renderListTxt(buildManifest());
+      const cached = renderListTxtCached();
+      expect(cached.equals(direct)).toBe(true);
+    });
+
+    it('does not rebuild the catalog for a repeat request', () => {
+      // The point of the cache: every door start fetches list.txt, and
+      // rebuilding it meant re-querying and re-rendering 3301 rows every
+      // time. Asserted on buffer IDENTITY - a rebuild necessarily produces a
+      // new Buffer, so the same reference proves nothing was rebuilt. (A
+      // jest spy cannot show this: renderListTxtCached calls buildManifest
+      // through the module's own internal binding, which a spy on the
+      // exports object never intercepts.)
+      const { renderListTxtCached, _clearListCacheForTests } = mod();
+      _clearListCacheForTests();
+
+      const first = renderListTxtCached();
+      const second = renderListTxtCached();
+      expect(second).toBe(first);
+
+      // ...and a cleared cache does rebuild, so the assertion above is
+      // testing the cache rather than a coincidence.
+      _clearListCacheForTests();
+      const third = renderListTxtCached();
+      expect(third).not.toBe(first);
+      expect(third.equals(first)).toBe(true);
+    });
+
+    it('serves a different body for a different filter', () => {
+      const { renderListTxtCached, _clearListCacheForTests } = mod();
+      _clearListCacheForTests();
+      const all = renderListTxtCached().toString('latin1');
+      const dd = renderListTxtCached({ type: 'DD' }).toString('latin1');
+      expect(all).not.toBe(dd);
+      expect(dd.split('\r\n')[0]).toContain('|1'); // still a well-formed header
+    });
+
+    it('re-renders once the catalog revision changes', () => {
+      const { renderListTxtCached, _clearListCacheForTests } = mod();
+      _clearListCacheForTests();
+      const before = renderListTxtCached().toString('latin1');
+      expect(before).not.toContain('LATE_ARRIVAL.LHA');
+
+      // A new row changes both the count and max(indexed_at), which is what
+      // getCatalogRevision() fingerprints.
+      const db2 = new Database(dbPath);
+      db2.prepare(
+        `INSERT INTO door_catalog
+          (id, archive_name, archive_path, door_type, name, archive_size, indexed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run('id-late', 'LATE_ARRIVAL.LHA', 'late.lha', 'XIM', 'Late Arrival', 1,
+            Math.floor(Date.now() / 1000) + 60);
+      db2.close();
+
+      const after = renderListTxtCached().toString('latin1');
+      expect(after).toContain('LATE_ARRIVAL.LHA');
+    });
+  });
+
   describe('renderListTxt', () => {
     it('produces the exact byte format: header, 10-field pipe rows, CRLF endings, escaping + truncation', () => {
       const { buildManifest, renderListTxt } = mod();

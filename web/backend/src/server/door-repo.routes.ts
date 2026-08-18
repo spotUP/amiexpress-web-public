@@ -34,7 +34,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import { pipeline } from 'stream';
-import { buildManifest, renderListTxt, getCatalogRevision, getDoorCount } from '../doors/door-repo-manifest';
+import { buildManifest, renderListTxt, renderListTxtCached, getCatalogRevision, getDoorCount } from '../doors/door-repo-manifest';
 import { getArchiveChecksums } from '../doors/door-repo-checksums';
 import { getArchiveFiles, getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
 
@@ -158,11 +158,14 @@ doorRepoRouter.get('/manifest', (req: Request, res: Response) => {
 
 // GET /list.txt — byte-exact ISO-8859-1/CRLF plain-text index.
 doorRepoRouter.get('/list.txt', (req: Request, res: Response) => {
-  const manifest = buildManifest(parseManifestQuery(req));
+  // Served from the revision-keyed cache: the bytes only change when the
+  // catalog does, and every door start asks for this exact resource.
+  const query = parseManifestQuery(req);
+  const body = renderListTxtCached(query);
 
-  res.set('X-Door-Repo-Revision', manifest.revision);
+  res.set('X-Door-Repo-Revision', getCatalogRevision());
   res.set('Content-Type', 'text/plain; charset=ISO-8859-1');
-  res.send(renderListTxt(manifest));
+  res.send(body);
 });
 
 // GET /archive/:archiveName — stream the archive + checksum headers.
