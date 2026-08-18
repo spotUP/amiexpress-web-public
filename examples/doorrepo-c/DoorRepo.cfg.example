@@ -9,7 +9,8 @@ The HTTP path prefix for the repository API endpoints.
 # RepoPath=/api/door-repo
 
 The AmigaDOS directory where downloaded door archives are saved. Must exist
-before use. This door will not create the directory automatically.
+before use. This door will not create the directory automatically. The
+install index (DoorRepo.idx, one line per installed door) is kept here too.
 # DownloadDir=T:
 
 The number of doors to display per page when browsing the repository.

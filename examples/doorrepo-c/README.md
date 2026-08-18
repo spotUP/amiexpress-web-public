@@ -375,7 +375,8 @@ same thing:
 | cursor up/down, PgUp/PgDn, Home/End | move the selection |
 | `ENTER` or `R` | download the selected archive (confirm first), verify its digest, optionally extract |
 | `I` | install it as a BBS command: extract, write the command config, offer to strip ads |
-| `U` | uninstall a BBS command this door installed |
+| `U` | uninstall it again (only shown for an installed door) |
+| `S` | strip the ad files from an installed door (only shown when it has any) |
 | `A` | show what is inside the archive, with ad files flagged |
 | `V` | show the door's own documentation - offered only for a door that has any |
 | `F` | filter by text - live, over the rows already loaded, no refetch |
@@ -403,6 +404,14 @@ the door reachable at all), then the files the archive listing says it put
 there, then the directory; anything else left in that directory is reported
 rather than deleted.
 
+What is installed, and under which command name, is remembered in
+`DownloadDir/DoorRepo.idx` -- one `<archive>|<CMD>` line per door. That file
+is why the list can mark installed rows without probing the disk once per row
+per keystroke, why `U` already knows the command name instead of asking you
+to remember it, and why `S` knows which directory to strip. It is plain text
+with one record per line, on the assumption that a sysop may need to read or
+repair it with nothing but a text editor.
+
 Which extracted file is the program is decided from the repository's own
 archive listing, not by looking at the directory: C89 has no way to enumerate
 one. The listing names an exact match on the archive or command name first,
@@ -419,8 +428,10 @@ catalog row was indexed from a different copy than the one being served (see
 the digest that verified describes the bytes actually received.
 
 While `A` or `V` is open the cursor keys scroll THAT pane rather than moving
-the selection, and the same key closes it. `*` in the list and `[downloaded]`
-in the detail pane mark an archive already present in `DownloadDir`.
+the selection, and the same key closes it. `+` in the list and a green `[CMD]` in the
+detail pane mark a door installed as a BBS command; `*` and `[downloaded]`
+mark an archive merely present in `DownloadDir`. The header counts the
+installed ones.
 
 `ESC` is deliberately not a binding. A lone ESC cannot be told apart from the
 start of an arrow-key sequence without a timer, and arrow keys reach a door as

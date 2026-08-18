@@ -722,3 +722,92 @@ int flow_key_ends_session(int key)
 {
     return (key < 0) ? 1 : 0;
 }
+
+/* ---- Install index -----------------------------------------------------
+ *
+ * See flow.h for why this file exists at all. Pure line formatting and
+ * parsing only; doorrepo.c owns the file I/O and the in-memory table.
+ */
+
+int flow_index_format_line(char *out, unsigned long outsize,
+                            const char *archive, const char *cmd)
+{
+    unsigned long need;
+
+    if (out == (char *) 0 || outsize == 0
+        || archive == (const char *) 0 || cmd == (const char *) 0
+        || archive[0] == '\0' || cmd[0] == '\0') {
+        if (out != (char *) 0 && outsize > 0) {
+            out[0] = '\0';
+        }
+        return -1;
+    }
+    /* A '|' in either field would make the line unparseable. archive names
+     * come from the catalog, which the format doc says may contain almost
+     * anything except a pipe (the server escapes those to '!'), and cmd is
+     * A-Z0-9 by flow_is_valid_bbs_command. Checked anyway: this file is
+     * read back and acted on, and a malformed line would silently point an
+     * uninstall at the wrong directory. */
+    if (strchr(archive, '|') != (const char *) 0 || strchr(cmd, '|') != (const char *) 0) {
+        out[0] = '\0';
+        return -1;
+    }
+
+    need = (unsigned long) (strlen(archive) + 1 + strlen(cmd) + 1);
+    if (need + 1 > outsize) {
+        out[0] = '\0';
+        return -1;
+    }
+    strcpy(out, archive);
+    strcat(out, "|");
+    strcat(out, cmd);
+    strcat(out, "\n");
+    return (int) need;
+}
+
+int flow_index_parse_line(const char *line, char *archive_out, unsigned long archive_size,
+                           char *cmd_out, unsigned long cmd_size)
+{
+    const char *bar;
+    const char *end;
+
+    if (line == (const char *) 0 || archive_out == (char *) 0 || cmd_out == (char *) 0
+        || archive_size == 0 || cmd_size == 0) {
+        return 1;
+    }
+    archive_out[0] = '\0';
+    cmd_out[0] = '\0';
+
+    bar = strchr(line, '|');
+    if (bar == (const char *) 0 || bar == line) {
+        return 1;
+    }
+    {
+        unsigned long alen = (unsigned long) (bar - line);
+        unsigned long n = (alen > archive_size - 1) ? archive_size - 1 : alen;
+        memcpy(archive_out, line, (size_t) n);
+        archive_out[n] = '\0';
+    }
+
+    end = bar + 1;
+    while (*end != '\0' && *end != '\n' && *end != '\r') {
+        end++;
+    }
+    {
+        unsigned long clen = (unsigned long) (end - (bar + 1));
+        unsigned long n = (clen > cmd_size - 1) ? cmd_size - 1 : clen;
+        memcpy(cmd_out, bar + 1, (size_t) n);
+        cmd_out[n] = '\0';
+    }
+
+    if (cmd_out[0] == '\0') {
+        archive_out[0] = '\0';
+        return 1;
+    }
+    return 0;
+}
+
+int flow_build_index_path(char *out, unsigned long outsize, const char *download_dir)
+{
+    return flow_build_local_path(out, outsize, download_dir, FLOW_INDEX_FILENAME);
+}

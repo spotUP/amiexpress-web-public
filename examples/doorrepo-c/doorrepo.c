@@ -1310,8 +1310,15 @@ static void ui_draw_bar(ansi_buf *b, int top, int cols, const char *text)
     ansi_center(b, top + 1, 1, cols, text);
 }
 
+/* Install index, defined further down with the rest of its file I/O. The
+ * browser needs it here: the list mark, the header count and the detail
+ * pane's "[CMD]" tag all read it. */
+static const char *index_lookup(const dr_config *cfg, const char *archive);
+static int index_installed_count(const dr_config *cfg);
+
 static void ui_draw_header(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
-                           const ui_view *v, const char *filter_desc)
+                           const ui_view *v, const char *filter_desc,
+                           int installed_count)
 {
     char title[160];
 
@@ -1322,6 +1329,13 @@ static void ui_draw_header(ansi_buf *b, const ui_geometry *g, const dr_catalog *
     strcat(title, " of ");
     ui_append_ulong(title, cat->count);
     strcat(title, " doors");
+    /* "N installed" mirrors DOORMAN's own header, which reports the same
+     * two numbers for the repo it is browsing. */
+    if (installed_count > 0) {
+        strcat(title, "   ");
+        ui_append_ulong(title, (unsigned long) installed_count);
+        strcat(title, " installed");
+    }
 
     /* Show WHICH filters are active, not merely that some are - otherwise a
      * user who forgot a type filter sees a short list with no explanation. */
@@ -1355,11 +1369,22 @@ static void ui_draw_header(ansi_buf *b, const ui_geometry *g, const dr_catalog *
  * -1 ("the server never said" - an older repo, or a cached listing written
  * by one). Both show the key: an unknown is not a "no", and hiding a key
  * that would have worked is the worse error of the two. */
-static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e)
+static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
+                          int installed, int has_junk)
 {
     char bar[160];
 
-    strcpy(bar, "ENTER/R=Get  I=Install  A=Archive");
+    strcpy(bar, installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install");
+    /* S appears on the same condition DOORMAN applies: the door is
+     * installed AND its archive actually contains ads. Offering it
+     * otherwise advertises an action that can only answer "nothing to
+     * do". A junk count of -1 (an older server that does not report one)
+     * counts as "might have some", the same way an unknown has_doc still
+     * offers V. */
+    if (installed && has_junk) {
+        strcat(bar, "  S=Strip ads");
+    }
+    strcat(bar, "  A=Archive");
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
         strcat(bar, "  V=Doc");
     }
@@ -1454,11 +1479,19 @@ static void ui_draw_list(ansi_buf *b, const dr_config *cfg, const ui_geometry *g
             namew = 1;
         }
 
-        /* '*' marks an archive already sitting in DownloadDir - the same
-         * at-a-glance cue DOORMAN gives for a door it has installed. Probed
-         * only for the rows actually on screen, never for the whole catalog. */
+        /* Two different states, two different marks, most significant
+         * first: '+' means this archive is installed as a BBS command
+         * (from the install index - no disk probe), '*' means it is merely
+         * sitting in DownloadDir. DOORMAN shows the installed state the
+         * same way round, as its own list mark rather than only in the
+         * detail pane. The DownloadDir probe still happens only for rows
+         * actually on screen. */
         n = 0;
-        line[n++] = ui_already_downloaded(cfg, cat->rows[idx].archive) ? '*' : ' ';
+        if (index_lookup(cfg, cat->rows[idx].archive) != (const char *) 0) {
+            line[n++] = '+';
+        } else {
+            line[n++] = ui_already_downloaded(cfg, cat->rows[idx].archive) ? '*' : ' ';
+        }
         while (n < namew && cat->rows[idx].archive[n - 1] != '\0') {
             line[n] = cat->rows[idx].archive[n - 1];
             n++;
@@ -1545,9 +1578,9 @@ static void ui_wrap_text(ansi_buf *b, const ui_geometry *g, const char *text,
 /* The static chrome: header bar, footer bar and both panel frames. None of
  * it changes while browsing, so it is painted once per full redraw instead
  * of on every keystroke. */
-static void ui_draw_chrome(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
-                           const ui_view *v, const char *filter_desc,
-                           const dr_entry *sel_entry)
+static void ui_draw_chrome(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
+                           const dr_catalog *cat, const ui_view *v,
+                           const char *filter_desc, const dr_entry *sel_entry)
 {
     char label[48];
 
@@ -1556,11 +1589,14 @@ static void ui_draw_chrome(ansi_buf *b, const ui_geometry *g, const dr_catalog *
     ui_append_ulong(label, v->count);
     strcat(label, ")");
 
-    ui_draw_header(b, g, cat, v, filter_desc);
+    ui_draw_header(b, g, cat, v, filter_desc, index_installed_count(cfg));
     ansi_box(b, g->pane_top, g->list_left, g->pane_height, g->list_width, ANSI_CYAN, label);
     ansi_box(b, g->pane_top, g->info_left, g->pane_height, g->info_width, ANSI_BLUE,
              (const char *) 0);
-    ui_draw_footer(b, g, sel_entry);
+    ui_draw_footer(b, g, sel_entry,
+                   sel_entry != (const dr_entry *) 0
+                       && index_lookup(cfg, sel_entry->archive) != (const char *) 0,
+                   sel_entry != (const dr_entry *) 0 && sel_entry->junk != 0);
     ansi_reset(b);
 }
 
@@ -1636,10 +1672,24 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
     ansi_color(b, ANSI_CYAN, ANSI_BLACK, 0);
     ansi_text(b, row + 1, g->info_left + 2, line, inner - 2);
 
-    if (ui_already_downloaded(cfg, e->archive)) {
+    {
+        /* DOORMAN puts a green "[installed_as]" here for a door it has
+         * installed, and nothing else if it has not. Same rule: the
+         * install state is the more useful fact, so it wins the space. */
+        const char *installed_as = index_lookup(cfg, e->archive);
         int at = (int) strlen(line) + 3;
-        ansi_color(b, ANSI_GREEN, ANSI_BLACK, 1);
-        ansi_text_raw(b, row + 1, g->info_left + 2 + at, "[downloaded]", 12);
+
+        if (installed_as != (const char *) 0) {
+            char tag[32];
+            strcpy(tag, "[");
+            strncat(tag, installed_as, sizeof(tag) - 4);
+            strcat(tag, "]");
+            ansi_color(b, ANSI_GREEN, ANSI_BLACK, 1);
+            ansi_text_raw(b, row + 1, g->info_left + 2 + at, tag, (int) strlen(tag));
+        } else if (ui_already_downloaded(cfg, e->archive)) {
+            ansi_color(b, ANSI_GREEN, ANSI_BLACK, 1);
+            ansi_text_raw(b, row + 1, g->info_left + 2 + at, "[downloaded]", 12);
+        }
     }
 
     /* Credits line: author and release group, both from list.txt fields 7
@@ -2015,6 +2065,155 @@ static int ui_confirm(ansi_buf *b, char *frame, long framecap,
     return (key == 'y' || key == 'Y' || key == UI_KEY_ENTER);
 }
 
+/* ---------------------------------------------------------------------
+ * Install index
+ *
+ * One line per installed door in <DownloadDir>DoorRepo.idx (see flow.h).
+ * Held in memory for the whole session so the list can mark installed rows
+ * without a disk probe per row per keystroke, and rewritten whole on every
+ * change - the file is a few dozen lines at most, and rewriting it is the
+ * only way to delete a record with portable C89 (no truncate, no rename
+ * that is guaranteed to work on AmigaDOS from stdio alone).
+ * ------------------------------------------------------------------- */
+
+/* A node with more installed doors than this has bigger problems than a
+ * missing marker; the browser still works, only the marks stop. */
+#define INDEX_MAX_ENTRIES 256
+
+typedef struct {
+    char archive[64];
+    char cmd[FLOW_MAX_BBS_COMMAND + 1];
+} index_entry;
+
+static index_entry g_index[INDEX_MAX_ENTRIES];
+static int g_index_count = 0;
+static int g_index_loaded = 0;
+
+static void index_load(const dr_config *cfg)
+{
+    char path[256];
+    char line[192];
+    FILE *f;
+
+    g_index_count = 0;
+    g_index_loaded = 1;
+
+    if (flow_build_index_path(path, sizeof(path), cfg->download_dir) < 0) {
+        return;
+    }
+    f = fopen(path, "rb");
+    if (f == (FILE *) 0) {
+        return; /* nothing installed yet, or DownloadDir is not readable */
+    }
+    while (g_index_count < INDEX_MAX_ENTRIES && fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        index_entry *e = &g_index[g_index_count];
+        if (flow_index_parse_line(line, e->archive, sizeof(e->archive),
+                                   e->cmd, sizeof(e->cmd)) == 0) {
+            g_index_count++;
+        }
+        /* A malformed line is skipped, not fatal: this file can be edited
+         * by hand on a machine with no better tools. */
+    }
+    fclose(f);
+}
+
+/* Rewrites the whole file from the in-memory table. Returns 1 on success. */
+static int index_save(const dr_config *cfg)
+{
+    char path[256];
+    char line[192];
+    FILE *f;
+    int i;
+
+    if (flow_build_index_path(path, sizeof(path), cfg->download_dir) < 0) {
+        return 0;
+    }
+    f = fopen(path, "wb");
+    if (f == (FILE *) 0) {
+        return 0;
+    }
+    for (i = 0; i < g_index_count; i++) {
+        if (flow_index_format_line(line, sizeof(line), g_index[i].archive, g_index[i].cmd) > 0) {
+            fputs(line, f);
+        }
+    }
+    fclose(f);
+    return 1;
+}
+
+/* Command this archive was installed as, or NULL. */
+static const char *index_lookup(const dr_config *cfg, const char *archive)
+{
+    int i;
+
+    if (!g_index_loaded) {
+        index_load(cfg);
+    }
+    for (i = 0; i < g_index_count; i++) {
+        if (strcmp(g_index[i].archive, archive) == 0) {
+            return g_index[i].cmd;
+        }
+    }
+    return (const char *) 0;
+}
+
+static int index_installed_count(const dr_config *cfg)
+{
+    if (!g_index_loaded) {
+        index_load(cfg);
+    }
+    return g_index_count;
+}
+
+static void index_add(const dr_config *cfg, const char *archive, const char *cmd)
+{
+    int i;
+
+    if (!g_index_loaded) {
+        index_load(cfg);
+    }
+    /* Re-installing an archive replaces its record rather than adding a
+     * second one - otherwise the marker would be right and the uninstall
+     * would act on whichever line happened to come first. */
+    for (i = 0; i < g_index_count; i++) {
+        if (strcmp(g_index[i].archive, archive) == 0) {
+            strncpy(g_index[i].cmd, cmd, sizeof(g_index[i].cmd) - 1);
+            g_index[i].cmd[sizeof(g_index[i].cmd) - 1] = '\0';
+            (void) index_save(cfg);
+            return;
+        }
+    }
+    if (g_index_count >= INDEX_MAX_ENTRIES) {
+        return;
+    }
+    strncpy(g_index[g_index_count].archive, archive, sizeof(g_index[0].archive) - 1);
+    g_index[g_index_count].archive[sizeof(g_index[0].archive) - 1] = '\0';
+    strncpy(g_index[g_index_count].cmd, cmd, sizeof(g_index[0].cmd) - 1);
+    g_index[g_index_count].cmd[sizeof(g_index[0].cmd) - 1] = '\0';
+    g_index_count++;
+    (void) index_save(cfg);
+}
+
+static void index_remove(const dr_config *cfg, const char *archive)
+{
+    int i;
+
+    if (!g_index_loaded) {
+        index_load(cfg);
+    }
+    for (i = 0; i < g_index_count; i++) {
+        if (strcmp(g_index[i].archive, archive) == 0) {
+            int j;
+            for (j = i + 1; j < g_index_count; j++) {
+                g_index[j - 1] = g_index[j];
+            }
+            g_index_count--;
+            (void) index_save(cfg);
+            return;
+        }
+    }
+}
+
 /* Defined below, next to the other UI prompt helpers. */
 static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
                           const ui_geometry *g, const char *label,
@@ -2107,6 +2306,65 @@ static int strip_ad_files(const char *install_dir, const char *files_body)
     }
 
     return removed;
+}
+
+/* Removes the ad files from a door that is ALREADY installed - DOORMAN's
+ * [S]trip, which works on an installed door at any time rather than only
+ * during the install. Needs two things this door did not have until the
+ * install index existed: which command the archive was installed as, and
+ * therefore which directory to delete from.
+ *
+ * The ad paths come from the same /files listing the install used. That
+ * listing describes the ARCHIVE, so it only names files this door itself
+ * extracted - nothing a sysop added afterwards can match it. */
+static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
+                                 ansi_buf *b, char *frame, long framecap,
+                                 const ui_geometry *g)
+{
+    const char *cmdname = index_lookup(cfg, entry->archive);
+    char install_dir[256];
+    char msg[320];
+    int removed;
+
+    if (cmdname == (const char *) 0) {
+        return; /* not installed by this door - S does nothing, per the footer */
+    }
+    if (entry->junk == 0) {
+        return; /* the server says there is nothing to strip */
+    }
+    if (flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0) {
+        return;
+    }
+
+    sprintf(msg, "Remove ad files from %s?  [Y/N]", cmdname);
+    if (!ui_confirm(b, frame, framecap, g, msg)) {
+        return;
+    }
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    files_load(cfg, entry->archive);
+    if (!g_files_ok) {
+        ae_put("The repository has no file listing for this archive, so there is no way", 1);
+        ae_put("to tell which of its files are ads. Nothing was removed.", 1);
+    } else {
+        removed = strip_ad_files(install_dir, g_files);
+        sprintf(msg, "Removed %d ad file(s) from %s.", removed, install_dir);
+        ae_put(msg, 1);
+        {
+            char logmsg[256];
+            sprintf(logmsg, "STRIP OK cmd=%s files=%d", cmdname, removed);
+            log_line(cfg, logmsg);
+        }
+    }
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
 }
 
 /* The whole install, from an entry in the list to a runnable BBS command.
@@ -2369,6 +2627,10 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         }
     }
 
+    /* Recorded BEFORE the success message, so what the user is told
+     * matches what the door will remember. */
+    index_add(cfg, entry->archive, cmdname);
+
     sprintf(msg, "Installed as %s.  Program: %s", cmdname, binary_rel);
     ae_put(msg, 1);
     sprintf(msg, "Command config written to %s.", info_path);
@@ -2405,8 +2667,21 @@ static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
     char msg[320];
     int removed = 0;
 
+    /* The index knows exactly what this archive was installed as, so the
+     * prompt is pre-filled with the right answer instead of a guess from
+     * the archive name - which was wrong for anyone who installed under a
+     * name of their own. The prompt stays (a sysop may have installed the
+     * same archive by hand under another name) but ENTER is now correct. */
     cmdname[0] = '\0';
-    (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+    {
+        const char *known = index_lookup(cfg, entry->archive);
+        if (known != (const char *) 0) {
+            strncpy(cmdname, known, sizeof(cmdname) - 1);
+            cmdname[sizeof(cmdname) - 1] = '\0';
+        } else {
+            (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+        }
+    }
 
     if (!ui_text_prompt(b, frame, framecap, g, "Uninstall which BBS command:",
                         cmdname, FLOW_MAX_BBS_COMMAND)) {
@@ -2485,6 +2760,8 @@ static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
         ae_put(msg, 1);
         ae_put("part of the archive and has been left alone.", 1);
     }
+
+    index_remove(cfg, entry->archive);
 
     {
         char logmsg[256];
@@ -2663,7 +2940,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         if (need_full_redraw) {
             ansi_clear(&buf);
             ansi_cursor(&buf, 0);
-            ui_draw_chrome(&buf, &g, cat, &view, filter_desc, sel_entry);
+            ui_draw_chrome(&buf, cfg, &g, cat, &view, filter_desc, sel_entry);
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
             need_full_redraw = 0;
         } else if (top_index != prev_top) {
@@ -2682,7 +2959,10 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
          * composed - it is flushed with everything else, so it does not
          * reintroduce the blue-flash of an out-of-band write. */
         if (selected != prev_selected) {
-            ui_draw_footer(&buf, &g, sel_entry);
+            ui_draw_footer(&buf, &g, sel_entry,
+                           sel_entry != (const dr_entry *) 0
+                               && index_lookup(cfg, sel_entry->archive) != (const char *) 0,
+                           sel_entry != (const dr_entry *) 0 && sel_entry->junk != 0);
             ansi_reset(&buf);
         }
         info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
@@ -2826,6 +3106,16 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             if (view.count > 0) {
                 install_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
                              (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 's': case 'S':
+            if (view.count > 0) {
+                strip_installed_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                                     (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
                 ansi_flush(&buf);

@@ -925,10 +925,101 @@ TEST(eof_key_ends_the_session)
     ASSERT_TRUE(!flow_key_ends_session(1000), "a synthetic cursor-key code does not end it");
 }
 
+
+TEST(index_line_round_trips)
+{
+    char line[192];
+    char archive[64];
+    char cmd[16];
+
+    ASSERT_TRUE(flow_index_format_line(line, sizeof(line), "TELSER40.LHA", "TELSER40") > 0,
+                "formats");
+    ASSERT_STR_EQ(line, "TELSER40.LHA|TELSER40\n", "exact line format");
+
+    ASSERT_EQ(flow_index_parse_line(line, archive, sizeof(archive), cmd, sizeof(cmd)), 0,
+              "parses back");
+    ASSERT_STR_EQ(archive, "TELSER40.LHA", "archive survives the round trip");
+    ASSERT_STR_EQ(cmd, "TELSER40", "command survives the round trip");
+}
+
+TEST(index_line_handles_real_archive_names)
+{
+    char line[192];
+    char archive[64];
+    char cmd[16];
+
+    /* Scene names carry '$', '!', '&' and '-'; none of them may break the
+     * one-record-per-line rule. */
+    (void) flow_index_format_line(line, sizeof(line), "$CP-PS12.LZX", "CPPS12");
+    (void) flow_index_parse_line(line, archive, sizeof(archive), cmd, sizeof(cmd));
+    ASSERT_STR_EQ(archive, "$CP-PS12.LZX", "punctuation-heavy archive name");
+    ASSERT_STR_EQ(cmd, "CPPS12", "command beside it");
+}
+
+TEST(index_line_rejects_what_it_cannot_represent)
+{
+    char line[192];
+
+    ASSERT_EQ(flow_index_format_line(line, sizeof(line), "", "CMD"), -1, "empty archive");
+    ASSERT_EQ(flow_index_format_line(line, sizeof(line), "A.LHA", ""), -1, "empty command");
+    ASSERT_EQ(flow_index_format_line(line, sizeof(line), "A|B.LHA", "CMD"), -1,
+              "a pipe in the archive would make the line unparseable");
+    ASSERT_EQ(flow_index_format_line(line, 8, "TELSER40.LHA", "TELSER40"), -1,
+              "buffer too small");
+}
+
+TEST(index_parse_rejects_half_records)
+{
+    char archive[64];
+    char cmd[16];
+
+    ASSERT_TRUE(flow_index_parse_line("no-separator-here", archive, sizeof(archive),
+                                       cmd, sizeof(cmd)) != 0, "no separator");
+    ASSERT_TRUE(flow_index_parse_line("|CMD", archive, sizeof(archive),
+                                       cmd, sizeof(cmd)) != 0, "empty archive field");
+    ASSERT_TRUE(flow_index_parse_line("A.LHA|", archive, sizeof(archive),
+                                       cmd, sizeof(cmd)) != 0, "empty command field");
+    /* Both outputs must be emptied on failure, so a caller cannot act on
+     * half a record. */
+    ASSERT_STR_EQ(archive, "", "archive emptied on failure");
+    ASSERT_STR_EQ(cmd, "", "command emptied on failure");
+}
+
+TEST(index_parse_tolerates_crlf_and_long_fields)
+{
+    char archive[64];
+    char cmd[16];
+
+    ASSERT_EQ(flow_index_parse_line("A.LHA|MYDOOR\r\n", archive, sizeof(archive),
+                                     cmd, sizeof(cmd)), 0, "CRLF line ending");
+    ASSERT_STR_EQ(cmd, "MYDOOR", "no CR left on the command");
+
+    ASSERT_EQ(flow_index_parse_line("A.LHA|ABCDEFGHIJKLMNOP", archive, sizeof(archive),
+                                     cmd, sizeof(cmd)), 0, "over-long command truncates");
+    ASSERT_EQ((long) strlen(cmd), (long) (sizeof(cmd) - 1), "truncated to the buffer");
+}
+
+TEST(index_path_sits_in_the_download_dir)
+{
+    char out[128];
+
+    (void) flow_build_index_path(out, sizeof(out), "T:");
+    ASSERT_STR_EQ(out, "T:DoorRepo.idx", "AmigaDOS assign needs no separator");
+
+    (void) flow_build_index_path(out, sizeof(out), "Work:Downloads");
+    ASSERT_STR_EQ(out, "Work:Downloads/DoorRepo.idx", "separator inserted");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
 
+    RUN_TEST(index_line_round_trips);
+    RUN_TEST(index_line_handles_real_archive_names);
+    RUN_TEST(index_line_rejects_what_it_cannot_represent);
+    RUN_TEST(index_parse_rejects_half_records);
+    RUN_TEST(index_parse_tolerates_crlf_and_long_fields);
+    RUN_TEST(index_path_sits_in_the_download_dir);
     RUN_TEST(eof_key_ends_the_session);
     RUN_TEST(bbs_command_accepts_upper_alnum);
     RUN_TEST(bbs_command_rejects_everything_else);

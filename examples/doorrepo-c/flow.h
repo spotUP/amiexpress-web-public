@@ -440,4 +440,40 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
  * killed. */
 int flow_key_ends_session(int key);
 
+/* ---- Install index -----------------------------------------------------
+ *
+ * DOORMAN knows which catalog rows it has installed because it has a local
+ * database; this door has none, and probing the filesystem per visible row
+ * per keystroke is exactly the kind of per-row disk work a real Amiga node
+ * cannot afford. So an install appends one line to a small text file in
+ * DownloadDir, and an uninstall removes it:
+ *
+ *   <archiveName>|<CMD>
+ *
+ * That one line is what lets the list mark an installed door, the header
+ * count them, an uninstall know the command name without asking, and the
+ * ad-strip act on an already-installed door. Kept deliberately as text with
+ * one record per line: it is a file a sysop may end up reading or editing
+ * by hand on a machine with no other tools.
+ */
+
+#define FLOW_INDEX_FILENAME "DoorRepo.idx"
+
+/* "<archive>|<cmd>\n" into `out`. Returns the length written, or -1 for a
+ * NULL/empty field, a field containing '|' (which would make the line
+ * unparseable), or a buffer too small. */
+int flow_index_format_line(char *out, unsigned long outsize,
+                            const char *archive, const char *cmd);
+
+/* Splits one index line. Returns 0 on success, non-zero when the line has
+ * no separator, an empty archive, or an empty command - in which case both
+ * outputs are emptied, so a truncated or hand-mangled file cannot leave a
+ * caller acting on half a record. */
+int flow_index_parse_line(const char *line, char *archive_out, unsigned long archive_size,
+                           char *cmd_out, unsigned long cmd_size);
+
+/* "<download_dir>/DoorRepo.idx". Returns the length, or -1 if it would not
+ * fit. */
+int flow_build_index_path(char *out, unsigned long outsize, const char *download_dir);
+
 #endif /* DOORREPO_FLOW_H */
