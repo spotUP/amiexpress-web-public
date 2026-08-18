@@ -43,6 +43,16 @@ export interface ManifestDoor {
   archiveSize: number | null;
   md5: string | null;
   sha256: string | null;
+  // Number of files inside the archive flagged as ads/junk, and whether the
+  // row carries documentation at all. Both exist so a client can decide what
+  // to OFFER before it fetches anything: DOORMAN gates its [S]trip and
+  // [V]iew doc footer keys on exactly these two values
+  // (Doors/door-manager/app.ts, repoViewFooterParts), and a list.txt client
+  // had no way to answer either question without a per-entry round trip to
+  // /files or /doc — so it advertised keys that then turned out to do
+  // nothing.
+  junkCount: number;
+  hasDoc: boolean;
 }
 
 export interface DoorRepoManifest {
@@ -81,6 +91,32 @@ interface DoorCatalogRow {
   archive_size: number | null;
   md5: string | null;
   sha256: string | null;
+  junk_live: number;
+  has_doc: number;
+}
+
+/**
+ * Live ad/junk count expression for the SELECT below.
+ *
+ * door_catalog.junk_count is a denormalised copy written at index time and
+ * can disagree with the per-file rows (12 of 3301 rows on the current live
+ * catalog). DOORMAN already prefers the live per-file count over the column
+ * for exactly this reason (app.ts, getEntryJunkCount), so the manifest — the
+ * thing every OTHER client reads — must not publish the staler number.
+ *
+ * door_catalog_files is created by the same migration as door_catalog, but
+ * several test fixtures build a door_catalog-only database, and a subquery
+ * against a missing table is a prepare-time error that would take out the
+ * whole manifest rather than one field. Falling back to the column keeps
+ * those callers working with the value they had before.
+ */
+function junkCountExpr(db: Database.Database): string {
+  const present = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'door_catalog_files'")
+    .get();
+  return present
+    ? '(SELECT COUNT(*) FROM door_catalog_files f WHERE f.catalog_id = door_catalog.id AND f.is_junk = 1)'
+    : 'junk_count';
 }
 
 // Upper bound on how many rows buildManifest() will lazily hash (NULL
@@ -180,9 +216,15 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    // doc_raw is deliberately NOT selected — it is the full documentation
+    // text of every door in the catalog (3218 of 3301 rows carry one), so
+    // selecting it to compute a boolean would pull several MB per manifest
+    // build. The emptiness test runs in SQL and only the flag comes back.
     const sql = `
       SELECT archive_name, archive_path, door_type, name, author, release_group,
-             category, description, file_id_diz, archive_size, md5, sha256
+             category, description, file_id_diz, archive_size, md5, sha256,
+             ${junkCountExpr(db)} AS junk_live,
+             (CASE WHEN doc_raw IS NOT NULL AND doc_raw <> '' THEN 1 ELSE 0 END) AS has_doc
       FROM door_catalog
       ${where}
       ORDER BY archive_name COLLATE NOCASE ASC
@@ -232,6 +274,8 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
       archiveSize: row.archive_size,
       md5,
       sha256,
+      junkCount: row.junk_live ?? 0,
+      hasDoc: row.has_doc === 1,
     };
   });
 
@@ -249,8 +293,30 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
 // AmigaDOS-side clients with no JSON parser:
 //   DOORREPO|1|<revision>|<count>
 //   <archiveName>|<doorType>|<archiveSize>|<md5>|<name>|<description>
+//     |<author>|<releaseGroup>|<junkCount>|<hasDoc>
 //   ... (one line per door)
 // with a trailing CRLF after the last row.
+//
+// Fields 7-10 are an APPEND, added 2026-08-18. The format contract
+// (docs/DOOR-REPO-API.md section 3) states that appending trailing fields
+// never bumps the header's version number, because a conforming client
+// reads the first six fields by position and ignores the rest — so the
+// header still says 1 and every already-deployed client keeps working
+// byte-for-byte. Fields 1-6 keep their exact position, meaning and type.
+//
+// Why these four: author and releaseGroup are two of the six fields the
+// server's own ?q= search matches (section 8) and two of the six DOORMAN
+// filters on, so a list.txt client that held only archive/name/description
+// could not reproduce either behaviour — searching for a group name found
+// nothing locally while the same query worked server-side. junkCount and
+// hasDoc let a client gate its own action keys the way DOORMAN does instead
+// of advertising [V]iew doc on a door with no documentation.
+//
+// sha256 is deliberately NOT here: /archive already returns X-Archive-SHA256
+// (and X-Archive-MD5) with the bytes themselves, so a downloading client can
+// verify against the strong digest without every client paying 64 bytes per
+// row (~211 KB of extra catalog on the current 3301-row corpus) on every
+// catalog fetch.
 
 function esc(s: string): string {
   return s.replace(/\|/g, '!');
@@ -316,7 +382,19 @@ export function renderListTxt(m: DoorRepoManifest): Buffer {
     // characters instead of risking a cut through the middle of a
     // surrogate pair.
     const description = toLatin1Safe(esc(oneLine(d.description ?? ''))).slice(0, 120);
-    lines.push(`${archiveName}|${doorType}|${archiveSize}|${md5}|${name}|${description}`);
+    // Same escape/oneLine/latin1 treatment as every other free-text field —
+    // author and releaseGroup come from scene-release metadata and carry
+    // both non-ASCII characters and (rarely) a literal '|'. Capped well
+    // above the real corpus maxima (28 and 7 characters) purely to bound
+    // the line length against arbitrary future catalog content.
+    const author = toLatin1Safe(esc(oneLine(d.author ?? ''))).slice(0, 48);
+    const releaseGroup = toLatin1Safe(esc(oneLine(d.releaseGroup ?? ''))).slice(0, 32);
+    // '1'/'0' rather than a word: a C89 client tests one byte.
+    const hasDoc = d.hasDoc ? '1' : '0';
+    lines.push(
+      `${archiveName}|${doorType}|${archiveSize}|${md5}|${name}|${description}` +
+        `|${author}|${releaseGroup}|${d.junkCount}|${hasDoc}`
+    );
   }
 
   const out = lines.join('\r\n') + '\r\n';

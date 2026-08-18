@@ -61,6 +61,21 @@ describe('door-repo-manifest', () => {
         sha256               TEXT
       )
     `);
+    // Real deployments always have this table (same migration as
+    // door_catalog); the manifest reads the live per-file ad count from it
+    // in preference to door_catalog.junk_count, which is a denormalised
+    // copy that can lag. A fixture WITHOUT the table is covered separately
+    // by the fallback test below.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS door_catalog_files (
+        catalog_id TEXT NOT NULL,
+        path       TEXT NOT NULL,
+        size       INTEGER DEFAULT 0,
+        is_junk    INTEGER DEFAULT 0,
+        junk_reason TEXT,
+        PRIMARY KEY (catalog_id, path)
+      )
+    `);
 
     // Row 1: real archive file on disk, checksum coverage.
     fs.writeFileSync(path.join(archiveDir, 'foo.lha'), Buffer.from('hello'));
@@ -120,6 +135,25 @@ describe('door-repo-manifest', () => {
       42
     );
     fs.writeFileSync(path.join(archiveDir, 'rexx-script.lha'), Buffer.from('rexx-body'));
+
+    // Documentation: only id-1 carries any. id-3 has an EMPTY doc_raw, which
+    // must read as "no documentation" exactly like NULL — a client gating a
+    // [V]iew key on this flag would otherwise offer an empty viewer.
+    db.prepare('UPDATE door_catalog SET doc_raw = ?, doc_filename = ? WHERE id = ?')
+      .run('Foo docs, line one', 'foo.doc', 'id-1');
+    db.prepare('UPDATE door_catalog SET doc_raw = ? WHERE id = ?').run('', 'id-3');
+
+    // Per-file rows: id-1 has 2 ad files among 3, id-2 has none. The stale
+    // junk_count column is seeded to a DIFFERENT number on purpose so the
+    // tests can tell which of the two sources the manifest actually used.
+    const insFile = db.prepare(
+      'INSERT INTO door_catalog_files (catalog_id, path, size, is_junk) VALUES (?, ?, ?, ?)'
+    );
+    insFile.run('id-1', 'foo/FOO', 1024, 0);
+    insFile.run('id-1', 'foo/BBSAD.TXT', 200, 1);
+    insFile.run('id-1', 'foo/ADVERT.TXT', 300, 1);
+    insFile.run('id-2', 'missing/MISSING', 10, 0);
+    db.prepare('UPDATE door_catalog SET junk_count = 99 WHERE id = ?').run('id-1');
 
     db.close();
   });
@@ -286,8 +320,40 @@ describe('door-repo-manifest', () => {
     });
   });
 
+  describe('junkCount / hasDoc', () => {
+    it('reports the live per-file ad count, not the denormalised junk_count column', () => {
+      const m = mod().buildManifest();
+      const foo = m.doors.find((d: any) => d.archiveName === 'FOO_XIM.LHA');
+      // The fixture seeds junk_count = 99 against 2 real is_junk rows.
+      expect(foo.junkCount).toBe(2);
+      const missing = m.doors.find((d: any) => d.archiveName === 'MISSING_DDD.LHA');
+      expect(missing.junkCount).toBe(0);
+    });
+
+    it('sets hasDoc only for a non-empty doc_raw', () => {
+      const m = mod().buildManifest();
+      const byName = (n: string) => m.doors.find((d: any) => d.archiveName === n);
+      expect(byName('FOO_XIM.LHA').hasDoc).toBe(true);
+      expect(byName('REXX_SCRIPT.LHA').hasDoc).toBe(false); // doc_raw = ''
+      expect(byName('MISSING_DDD.LHA').hasDoc).toBe(false); // doc_raw IS NULL
+    });
+
+    it('falls back to the junk_count column when door_catalog_files does not exist', () => {
+      // A door_catalog-only database (several other fixtures build one). The
+      // subquery would be a prepare-time "no such table" error, taking out
+      // the whole manifest rather than one field.
+      const d2 = new Database(dbPath);
+      d2.exec('DROP TABLE door_catalog_files');
+      d2.close();
+
+      const m = mod().buildManifest();
+      const foo = m.doors.find((d: any) => d.archiveName === 'FOO_XIM.LHA');
+      expect(foo.junkCount).toBe(99); // the column's value, not a throw
+    });
+  });
+
   describe('renderListTxt', () => {
-    it('produces the exact byte format: header, 6-field pipe rows, CRLF endings, escaping + truncation', () => {
+    it('produces the exact byte format: header, 10-field pipe rows, CRLF endings, escaping + truncation', () => {
       const { buildManifest, renderListTxt } = mod();
       const m = buildManifest();
       const txt = renderListTxt(m);
@@ -297,11 +363,13 @@ describe('door-repo-manifest', () => {
       const lines = asLatin1.split('\r\n');
       expect(lines[0]).toBe(`DOORREPO|1|${m.revision}|${m.doors.length}`);
 
-      // Every data line has exactly 6 pipe-delimited fields.
+      // Every data line has exactly 10 pipe-delimited fields: the original
+      // six, plus the 2026-08-18 append (author, releaseGroup, junkCount,
+      // hasDoc).
       const dataLines = lines.slice(1).filter((l: string) => l.length > 0);
       expect(dataLines).toHaveLength(m.doors.length);
       for (const line of dataLines) {
-        expect(line.split('|')).toHaveLength(6);
+        expect(line.split('|')).toHaveLength(10);
       }
 
       // The FOO_XIM row's description was seeded as 'a|b'.repeat(60): pipes
@@ -324,6 +392,101 @@ describe('door-repo-manifest', () => {
       expect(missingLine!.split('|')[3]).toBe('');
 
       expect(asLatin1.endsWith('\r\n')).toBe(true);
+    });
+
+    it('appends author, releaseGroup, junkCount and hasDoc as fields 7-10 without moving fields 1-6', () => {
+      const { buildManifest, renderListTxt } = mod();
+      const txt = renderListTxt(buildManifest()).toString('latin1');
+      const rows = txt.split('\r\n').slice(1).filter((l: string) => l.length > 0);
+
+      const foo = rows.find((l: string) => l.startsWith('FOO_XIM.LHA|'))!.split('|');
+      // Fields 1-6, unchanged in position and value — this is the promise
+      // the append-only contract makes to already-deployed clients.
+      expect(foo.slice(0, 6)).toEqual([
+        'FOO_XIM.LHA',
+        'XIM',
+        '12345',
+        '5d41402abc4b2a76b9719d911017c592',
+        'Foo Door',
+        foo[5],
+      ]);
+      expect(foo[6]).toBe('Some Author');
+      expect(foo[7]).toBe('SomeGroup');
+      expect(foo[8]).toBe('2'); // live is_junk rows, NOT the seeded junk_count of 99
+      expect(foo[9]).toBe('1'); // doc_raw is non-empty
+
+      // A row with NULL author/releaseGroup emits empty fields, never the
+      // string "null" — same rule the md5 field already follows.
+      const missing = rows.find((l: string) => l.startsWith('MISSING_DDD.LHA|'))!.split('|');
+      expect(missing[6]).toBe('Nobody');
+      expect(missing[7]).toBe('');
+      expect(missing[8]).toBe('0');
+      expect(missing[9]).toBe('0');
+
+      // Empty-string doc_raw is "no documentation", like NULL.
+      const rexx = rows.find((l: string) => l.startsWith('REXX_SCRIPT.LHA|'))!.split('|');
+      expect(rexx[9]).toBe('0');
+    });
+
+    it('escapes a literal pipe and collapses newlines in author and releaseGroup', () => {
+      const { renderListTxt } = mod();
+      const out = renderListTxt({
+        formatVersion: 1 as const,
+        revision: 'rev',
+        generatedAt: new Date().toISOString(),
+        doors: [
+          {
+            archiveName: 'A.LHA',
+            doorType: 'XIM',
+            name: 'A',
+            author: 'Bad|Author\nSecond line',
+            releaseGroup: 'Gr|oup',
+            category: null,
+            description: 'd',
+            fileIdDiz: null,
+            archiveSize: 1,
+            md5: 'x',
+            sha256: 'y',
+            junkCount: 0,
+            hasDoc: false,
+          },
+        ],
+      }).toString('latin1');
+
+      const fields = out.split('\r\n')[1].split('|');
+      expect(fields).toHaveLength(10);
+      expect(fields[6]).toBe('Bad!Author Second line');
+      expect(fields[7]).toBe('Gr!oup');
+    });
+
+    it('caps author at 48 and releaseGroup at 32 characters so one row stays one line', () => {
+      const { renderListTxt } = mod();
+      const out = renderListTxt({
+        formatVersion: 1 as const,
+        revision: 'rev',
+        generatedAt: new Date().toISOString(),
+        doors: [
+          {
+            archiveName: 'A.LHA',
+            doorType: 'XIM',
+            name: 'A',
+            author: 'z'.repeat(200),
+            releaseGroup: 'g'.repeat(200),
+            category: null,
+            description: 'd',
+            fileIdDiz: null,
+            archiveSize: 1,
+            md5: 'x',
+            sha256: 'y',
+            junkCount: 0,
+            hasDoc: false,
+          },
+        ],
+      }).toString('latin1');
+
+      const fields = out.split('\r\n')[1].split('|');
+      expect(fields[6]).toHaveLength(48);
+      expect(fields[7]).toHaveLength(32);
     });
 
     it('collapses CR/LF/tab runs in the description to single spaces', () => {

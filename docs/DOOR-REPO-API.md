@@ -192,8 +192,13 @@ I/O or a plain text-file line reader.
   case-insensitive):
 
   ```
-  <archiveName>|<doorType>|<archiveSize>|<md5>|<name>|<description>
+  <archiveName>|<doorType>|<archiveSize>|<md5>|<name>|<description>|<author>|<releaseGroup>|<junkCount>|<hasDoc>
   ```
+
+  Fields 7-10 were appended on 2026-08-18. Per the append-only promise
+  below, the header's version number stays `1`: a client that reads only the
+  first six fields is correct and unaffected, and a client that wants the
+  new fields reads them by position after the sixth.
 
 | Field         | Type                     | Notes                                                                 |
 |---------------|--------------------------|------------------------------------------------------------------------|
@@ -203,31 +208,45 @@ I/O or a plain text-file line reader.
 | `md5`         | string, or empty         | Lowercase hex MD5 of the archive file, recorded when the server indexed that archive (see "Digest freshness" below). Empty string when no digest has been recorded and one could not be computed on request; such a row still appears in the listing, and only the download in section 5 fails. |
 | `name`        | string, possibly empty   | Door name from the catalog metadata.                                   |
 | `description` | string, possibly empty   | See truncation/collapsing rules below.                                 |
+| `author`      | string, possibly empty   | Author from the catalog metadata; empty when unknown (never the literal `null`). Truncated to 48 characters. One of the six fields `?q=` searches (section 8). |
+| `releaseGroup`| string, possibly empty   | Release group, same rules as `author`; truncated to 32 characters. Also searched by `?q=`. |
+| `junkCount`   | integer                  | How many files inside the archive are flagged as ads/junk. `0` means the archive is clean. This is the live per-file count, the same number `GET /files/<archive>` reports in its header line (section 6). |
+| `hasDoc`      | `0` or `1`               | `1` when `GET /doc/<archive>` will return documentation for this door, `0` when the catalog holds none. Exactly one byte, so a C client tests it without parsing. |
 
-Field-level rules, applied identically to all three text fields
-(`archiveName`, `name`, `description`) unless noted otherwise:
+`junkCount` and `hasDoc` exist so a client can decide what to OFFER before
+it fetches anything. Both the reference C door and DOORMAN gate their
+per-entry action keys on them: no `[V]iew doc` on a door with no
+documentation, no strip/clean action on an archive with nothing to strip.
+Without them a text-mode client had to issue a per-entry request to `/doc`
+or `/files` just to find out whether a key was worth showing.
+
+Field-level rules, applied identically to all five text fields
+(`archiveName`, `name`, `description`, `author`, `releaseGroup`) unless
+noted otherwise:
 
 - **Pipe escaping:** any literal `|` character inside a text field is
-  replaced with `!` before the row is assembled, so the six pipe-delimited
+  replaced with `!` before the row is assembled, so the pipe-delimited
   fields never get corrupted by a pipe that was part of the original text.
-- **Line collapsing (all three text fields):** CR, LF, and TAB runs inside
-  `archiveName`, `name`, and `description` are each collapsed to a single
-  space, so a raw newline anywhere in the source metadata can never split
+- **Line collapsing (all five text fields):** CR, LF, and TAB runs inside
+  `archiveName`, `name`, `description`, `author`, and `releaseGroup` are
+  each collapsed to a single space, so a raw newline anywhere in the source metadata can never split
   one data row into two physical lines -- which would desync the header's
   `<count>` from the real number of data lines and break a naive
   line-by-line parser. Verified against the live catalog on 2026-08-17: none
   of the 3301 current `name` or `archiveName` values contain an embedded
   CR/LF/TAB, so this rule is currently latent (it protects against future
   catalog content, not a problem seen in the corpus today).
-- **120-character truncation (description only).** `archiveName` and `name`
-  have no length cap -- the real catalog's longest `name` value observed is
+- **Length caps: `description` 120, `author` 48, `releaseGroup` 32.**
+  `archiveName` and `name` have no length cap -- the real catalog's longest `name` value observed is
   44 characters (verified directly against the live manifest on
   2026-08-17), well short of anything that would threaten line-based
   parsing once the line-collapsing rule above has already removed the only
   thing that could split a row into two lines. `description` alone is
   truncated to at most 120 characters after escaping and collapsing, since
   it is free-text (drawn from `FILE_ID.DIZ` content) with no realistic upper
-  bound otherwise.
+  bound otherwise. `author` and `releaseGroup` are capped well above the
+  real corpus maxima (28 and 7 characters, measured against the live catalog
+  on 2026-08-18) purely to bound the row length against future content.
 - **Bytes outside ISO-8859-1 are replaced with '?'.** Source metadata is
   stored as Unicode text and can contain characters with no ISO-8859-1
   representation (accented letters in decomposed form, stray symbols,
@@ -249,8 +268,12 @@ The corresponding `list.txt` row (pipes replaced with `!`, then truncated to
 description field alone exceeds 120 characters after escaping):
 
 ```
-24STDCAL.LHA|XIM|62882|f44bbb901422c344fd5c2ecb4dea88fd|.------------------------------------------.|!NEW    ____________   ____________  BRINGS! !ORDER  \    \      \  \           \    YOU! !       /     \     /\ /    \ 
+24STDCAL.LHA|XIM|62882|f44bbb901422c344fd5c2ecb4dea88fd|.------------------------------------------.|!NEW    ____________   ____________  BRINGS! !ORDER  \    \      \  \           \    YOU! !       /     \     /\ /    \ |||5|1
 ```
+
+(re-captured 2026-08-18 against the ten-field row: this archive has no
+recorded `author` or `releaseGroup`, so fields 7 and 8 are empty, and it
+contains 5 ad files and documentation)
 
 Real example of the `?` substitution rule, captured for archive `H26VL.LHA`.
 Its catalog `name` field is Unicode text using combining diacritics (an "a"
@@ -269,19 +292,27 @@ The corresponding `list.txt` row substitutes `?` for each out-of-range
 character:
 
 ```
-H26VL.LHA|XIM|41974|ca325b47ec3561ca892cb1c2b15ec979|Cp_na?ha?_Du!!|___/   __/___  ___/  ___/___ O\____   /    \-\____   /    \-------------O /    _/    //  /     /    //   iN 1994
+H26VL.LHA|XIM|41974|ca325b47ec3561ca892cb1c2b15ec979|Cp_na?ha?_Du!!|___/   __/___  ___/  ___/___ O\____   /    \-\____   /    \-------------O /    _/    //  /     /    //   iN 1994|Dux/Humane&Vanity||4|1
 ```
+
+(also re-captured 2026-08-18: `author` is `Dux/Humane&Vanity`, no
+`releaseGroup`, 4 ad files, documentation present)
 
 ### Append-only format-evolution promise
 
 `list.txt` and the JSON manifest (section 4) will only ever grow new fields
 by appending them. A client parsing `list.txt`:
 
-- **MUST split each data row on `|` and read only the first six fields by
-  position.** A future format revision may append a seventh, eighth, etc.
-  field to the end of each data row. Existing fields never change position,
-  meaning, or type.
-- **MUST ignore any trailing fields it does not recognize.**
+- **MUST split each data row on `|` and read fields by position, ignoring
+  any field it does not recognize.** A row carries at least six fields; the
+  2026-08-18 revision appended four more (fields 7-10), and a later revision
+  may append further ones. Existing fields never change position, meaning,
+  or type, so reading only the first six is always valid.
+- **MUST ignore any trailing fields it does not recognize.** A client
+  written against the six-field row keeps working byte-for-byte against a
+  ten-field row.
+- **MUST NOT require a fixed field count.** Rejecting a row because it has
+  more fields than expected is the one way to break under this promise.
 - **MUST treat the header line's version number (`DOORREPO|1|...`) as the
   authority for what fields to expect.** Appending a new trailing field never
   bumps this number -- a conforming parser ignores fields it does not
@@ -319,6 +350,8 @@ Each entry in `doors` has this shape:
 | `archiveSize`  | integer or null  | Bytes.                                                            |
 | `md5`          | string or null   | Lowercase hex, recorded when the server indexed that archive (see "Digest freshness" below). `null` when no digest has been recorded and one could not be computed on request. |
 | `sha256`       | string or null   | Lowercase hex. `null` under the same condition as `md5`.         |
+| `junkCount`    | integer          | Files inside the archive flagged as ads/junk; `0` for a clean archive. Live per-file count, matching `GET /files/<archive>`'s header line. Added 2026-08-18. |
+| `hasDoc`       | boolean          | `true` when `GET /doc/<archive>` will return documentation. Added 2026-08-18. |
 
 ### Digest freshness
 
@@ -355,7 +388,9 @@ Real full response, captured for one door (`AETRIV10.LHA`, filtered with
       "fileIdDiz": "*** /X Door Trivia ***\n",
       "archiveSize": 16080,
       "md5": "52ee1086c055fc1c82407dc0961ab04d",
-      "sha256": "d918a826c5ea694ba2aca4a5e18f464f5947c59d85e6d1e15cc14341e805b367"
+      "sha256": "d918a826c5ea694ba2aca4a5e18f464f5947c59d85e6d1e15cc14341e805b367",
+      "junkCount": 0,
+      "hasDoc": true
     }
   ]
 }
@@ -691,7 +726,9 @@ is a different, ASCII-art-named entry):
   "category": "DD-Reference",
   "archiveSize": 9256,
   "md5": "d184a28e733083b9de6b2f9352065abc",
-  "sha256": "d219ce1b071797e47a13725eb498b946d12647b61eb67e9e9c49ecd1a4f5624a"
+  "sha256": "d219ce1b071797e47a13725eb498b946d12647b61eb67e9e9c49ecd1a4f5624a",
+  "junkCount": 4,
+  "hasDoc": true
 }
 ```
 
@@ -723,7 +760,12 @@ verification.
 Steps:
 
 1. Fetch the archive's row from `list.txt` (or its entry from `/manifest`)
-   and note its `md5` (and, if you want it, `sha256`) field.
+   and note its `md5` field. **`list.txt` carries no `sha256` field** -- a
+   64-character digest on every row would grow the catalog every client
+   downloads by roughly a third, for a value only a downloading client
+   needs. Get SHA256 either from `/manifest`, or -- the cheaper route for a
+   text-mode client -- from the `X-Archive-SHA256` response header that
+   `GET /archive/<archiveName>` sends with the bytes themselves (section 5).
 2. Fetch `GET /api/door-repo/archive/<archiveName>`.
 3. Compute MD5 (and/or SHA256) over the full response body.
 4. Compare against the value from step 1. They must match exactly
