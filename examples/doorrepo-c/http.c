@@ -19,7 +19,17 @@
 
 #define LINE_BUF_SIZE     512  /* one status/header line, including the field value */
 #define READ_AHEAD_SIZE    512  /* socket read-ahead chunk used while scanning headers */
-#define BODY_CHUNK_SIZE    512  /* socket read chunk once streaming the body */
+/* Socket read chunk once streaming the body.
+ *
+ * Every net_read() is a WaitSelect + recv pair across the bsdsocket boundary,
+ * so this size decides how many round trips a body costs: the 3300-row
+ * catalog is ~110 KB, which at the original 512 bytes meant ~220 reads and a
+ * visibly slow startup. At 4 KB it is ~27. The buffer is static rather than
+ * automatic because the door's icon declares STACK=8192 - a 4 KB stack array
+ * inside a function that also holds the request, line and connection buffers
+ * would be a real risk of running the stack out on a real Amiga. Static is
+ * safe here: this door is single-threaded and http_get() never recurses. */
+#define BODY_CHUNK_SIZE   4096
 #define REQUEST_BUF_SIZE   512  /* the whole "GET ... HTTP/1.1\r\n...\r\n\r\n" request */
 
 /* A buffered socket reader: net_read() is called in READ_AHEAD_SIZE-byte
@@ -360,7 +370,7 @@ int http_get(const dr_config *cfg, const char *path_and_query,
     int result;
     unsigned long total;
     unsigned long avail;
-    unsigned char bodybuf[BODY_CHUNK_SIZE];
+    static unsigned char bodybuf[BODY_CHUNK_SIZE];
 
     if (cfg == (const dr_config *) 0 || path_and_query == (const char *) 0
         || resp == (http_response *) 0 || sink == 0) {

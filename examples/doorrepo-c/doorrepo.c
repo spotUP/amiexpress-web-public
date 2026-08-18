@@ -108,8 +108,15 @@
 #define FETCH_ERR_CATALOG_TOO_LARGE (-101)
 
 /* Read chunk used while re-parsing list.txt out of the local cache file
- * (the fresh-fetch path already streams via http.c's own chunking). */
-#define CACHE_READ_CHUNK 512
+ * (the fresh-fetch path already streams via http.c's own chunking).
+ *
+ * Each fread() here is a dos.library Read() across the emulator boundary, so
+ * this size decides how many of them a warm start costs: the cached catalog
+ * is ~580 KB, which at the original 512 bytes meant over 1100 Read() calls
+ * before the door could draw anything. At 8 KB it is ~72. The buffer is
+ * static for the same reason http.c's is - the door's icon declares
+ * STACK=8192, so an 8 KB automatic array would not fit. */
+#define CACHE_READ_CHUNK 8192
 
 /* ---------------------------------------------------------------------
  * Catalog storage - exactly ONE heap allocation for the whole program's
@@ -381,7 +388,7 @@ static int load_catalog_from_cache(const char *path, dr_catalog *cat)
 {
     listtxt_parse_state st;
     FILE *f;
-    unsigned char buf[CACHE_READ_CHUNK];
+    static unsigned char buf[CACHE_READ_CHUNK];
     size_t n;
 
     f = fopen(path, "rb");
@@ -914,6 +921,12 @@ static void diz_load(const dr_config *cfg, const char *archive)
 
 #define UI_FILTER_MAX 32
 
+/* What the detail pane is showing. DOORMAN offers the same three views of an
+ * entry: its DIZ, its archive contents ("A"), and its documentation ("V"). */
+#define UI_INFO_DIZ   0
+#define UI_INFO_FILES 1
+#define UI_INFO_DOC   2
+
 typedef struct {
     unsigned long *index;      /* into cat->rows */
     unsigned long count;
@@ -1072,6 +1085,44 @@ static int files_sink(void *ctx, const unsigned char *buf, unsigned long len)
     return 0;
 }
 
+#define DOC_MAX_BYTES 8192
+
+static char g_doc[DOC_MAX_BYTES + 1];
+static char g_doc_archive[64] = "";
+static int g_doc_ok = 0;
+
+static void doc_load(const dr_config *cfg, const char *archive)
+{
+    char path[256];
+    http_response resp;
+    diz_ctx dc;
+    int rc;
+
+    if (strcmp(g_doc_archive, archive) == 0) {
+        return;
+    }
+
+    strncpy(g_doc_archive, archive, sizeof(g_doc_archive) - 1);
+    g_doc_archive[sizeof(g_doc_archive) - 1] = '\0';
+    g_doc[0] = '\0';
+    g_doc_ok = 0;
+
+    if (flow_build_doc_path(path, sizeof(path), cfg->path, archive) < 0) {
+        return;
+    }
+
+    dc.buf = g_doc;
+    dc.len = 0;
+    dc.cap = (unsigned long) DOC_MAX_BYTES;
+
+    rc = http_get(cfg, path, &resp, files_sink, &dc);
+    if (rc == HTTP_OK && resp.status == 200 && dc.len > 0) {
+        g_doc_ok = 1;
+    } else {
+        g_doc[0] = '\0';
+    }
+}
+
 static void files_load(const dr_config *cfg, const char *archive)
 {
     char path[256];
@@ -1103,6 +1154,8 @@ static void files_load(const dr_config *cfg, const char *archive)
         g_files[0] = '\0';
     }
 }
+
+static int ui_already_downloaded(const dr_config *cfg, const char *archive);
 
 #define UI_HEADER_ROWS 3
 #define UI_FOOTER_ROWS 3
@@ -1228,7 +1281,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g)
      * actions substituted for the ones it does not have (it downloads and
      * verifies rather than installing into the BBS). */
     ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols,
-                "ENTER=Get  V=Files  F=Find  C=System  A=All  Q=Quit");
+                "ENTER=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit");
 }
 
 /* Draws list rows. `only_row_a`/`only_row_b` are visible-row indices to
@@ -1278,8 +1331,8 @@ static void ui_draw_scroll_marker(ansi_buf *b, const ui_geometry *g,
     }
 }
 
-static void ui_draw_list(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
-                         const ui_view *v,
+static void ui_draw_list(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
+                         const dr_catalog *cat, const ui_view *v,
                          unsigned long top_index, unsigned long selected,
                          int only_row_a, int only_row_b)
 {
@@ -1318,9 +1371,13 @@ static void ui_draw_list(ansi_buf *b, const ui_geometry *g, const dr_catalog *ca
             namew = 1;
         }
 
+        /* '*' marks an archive already sitting in DownloadDir - the same
+         * at-a-glance cue DOORMAN gives for a door it has installed. Probed
+         * only for the rows actually on screen, never for the whole catalog. */
         n = 0;
-        while (n < namew && cat->rows[idx].archive[n] != '\0') {
-            line[n] = cat->rows[idx].archive[n];
+        line[n++] = ui_already_downloaded(cfg, cat->rows[idx].archive) ? '*' : ' ';
+        while (n < namew && cat->rows[idx].archive[n - 1] != '\0') {
+            line[n] = cat->rows[idx].archive[n - 1];
             n++;
         }
         while (n < namew) {
@@ -1455,7 +1512,8 @@ static int ui_already_downloaded(const dr_config *cfg, const char *archive)
 
 static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
                         const dr_catalog *cat, const ui_view *v,
-                        unsigned long selected, int used_last, int show_files)
+                        unsigned long selected, int used_last, int info_mode,
+                        int info_scroll)
 {
     int inner;
     int row;
@@ -1509,13 +1567,44 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
     ansi_text(b, row + 2, g->info_left + 1, "", inner);
     row += 3;
 
-    if (show_files && g_files_ok && strcmp(g_files_archive, e->archive) == 0) {
+    if (info_mode == UI_INFO_DOC && g_doc_ok && strcmp(g_doc_archive, e->archive) == 0) {
+        /* Documentation, rendered line for line and clipped, never
+         * re-wrapped: Amiga door docs are laid out in columns and ASCII
+         * art that reflowing would destroy. `info_scroll` is the first
+         * source line shown, so the pane is a window onto a file far
+         * larger than it. */
+        const char *p = g_doc;
+        int skip = info_scroll;
+
+        ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+        while (*p != '\0' && skip > 0) {
+            while (*p != '\0' && *p != '\n') p++;
+            while (*p == '\n' || *p == '\r') p++;
+            skip--;
+        }
+        while (*p != '\0' && row <= last_row) {
+            char dline[256];
+            int n = 0;
+            while (p[n] != '\0' && p[n] != '\n' && p[n] != '\r'
+                   && n < inner - 2 && n < (int) sizeof(dline) - 1) {
+                dline[n] = p[n];
+                n++;
+            }
+            dline[n] = '\0';
+            ansi_text(b, row, g->info_left + 2, dline, inner - 2);
+            row++;
+            while (p[n] != '\0' && p[n] != '\n') n++;
+            p += n;
+            while (*p == '\n' || *p == '\r') p++;
+        }
+    } else if (info_mode == UI_INFO_FILES && g_files_ok && strcmp(g_files_archive, e->archive) == 0) {
         /* "<size>|<junk>|<path>" lines, after a "FILES|<n>|<junk>" header.
          * Junk entries are marked with a red '!' the way DOORMAN flags its
          * "ad files", so a user can see at a glance whether an archive is
          * mostly door or mostly advertising. */
         const char *p = g_files;
         int first_line = 1;
+        int skipped = 0;
 
         while (*p != '\0' && row <= last_row) {
             char field[3][160];
@@ -1554,6 +1643,10 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
                 continue;
             }
 
+            if (skipped < info_scroll) {
+                skipped++;      /* scrolled past */
+                continue;
+            }
             {
                 int isjunk = (field[1][0] == '1');
                 strcpy(out, isjunk ? "! " : "  ");
@@ -1563,6 +1656,19 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
                 row++;
             }
         }
+    } else if (info_mode == UI_INFO_DOC || info_mode == UI_INFO_FILES) {
+        /* The view was asked for but there is nothing to show. Say so
+         * explicitly rather than falling back to the DIZ: silently showing
+         * something else makes "this door has no docs" indistinguishable
+         * from "the fetch failed" or "it is still loading". DOORMAN states
+         * its empty cases outright for the same reason. */
+        ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 1);
+        ansi_text(b, row, g->info_left + 2,
+                  (info_mode == UI_INFO_DOC)
+                      ? "No documentation for this door."
+                      : "No file listing for this door.",
+                  inner - 2);
+        row++;
     } else if (g_diz_ok && strcmp(g_diz_archive, e->archive) == 0) {
         /* Real FILE_ID.DIZ: render it line for line, exactly as authored.
          * This is the whole reason the /diz endpoint exists - the art only
@@ -1747,7 +1853,8 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
     unsigned long prev_selected = 0;
     unsigned long prev_top = 0;
     int info_rows_used = 0;
-    int show_files = 0;
+    int info_mode = UI_INFO_DIZ;
+    int info_scroll = 0;
 
     ui_compute_geometry(cfg, &g);
 
@@ -1769,6 +1876,9 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             stop_for_carrier_loss();
         }
 
+        if (selected != prev_selected) {
+            info_scroll = 0;   /* a different entry starts at its own top */
+        }
         if (view.count > 0 && selected >= view.count) {
             selected = view.count - 1;
         }
@@ -1791,10 +1901,36 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         /* Fetch before composing the frame, so the pane is drawn once with
          * its final contents rather than flashing placeholder text. */
         if (view.count > 0) {
-            if (show_files) {
-                files_load(cfg, cat->rows[view.index[selected]].archive);
+            const char *sel_archive = cat->rows[view.index[selected]].archive;
+            /* Every load below is a blocking HTTP fetch. On a real link that
+             * is seconds, during which the screen would otherwise sit there
+             * looking hung, so say what is happening first. Only when the
+             * cache will actually miss - no flicker when it will not. */
+            int will_fetch =
+                (info_mode == UI_INFO_FILES) ? (strcmp(g_files_archive, sel_archive) != 0) :
+                (info_mode == UI_INFO_DOC)   ? (strcmp(g_doc_archive, sel_archive) != 0) :
+                                               (strcmp(g_diz_archive, sel_archive) != 0);
+            if (will_fetch) {
+                /* Drawn INTO THE DETAIL PANE, whose first row ui_draw_info()
+                 * overwrites moments later anyway. The first version wrote
+                 * over the footer and then forced a full redraw to restore
+                 * it - which repainted the header and footer bars on every
+                 * selection change, undoing the incremental redraw entirely
+                 * and flashing blue across the screen. Nothing here may
+                 * touch a region the normal draw path does not already
+                 * repaint. */
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                ansi_text(&buf, g.pane_top + 1, g.info_left + 2,
+                          "Fetching...", g.info_width - 4);
+                ansi_flush(&buf);
+            }
+            if (info_mode == UI_INFO_FILES) {
+                files_load(cfg, sel_archive);
+            } else if (info_mode == UI_INFO_DOC) {
+                doc_load(cfg, sel_archive);
             } else {
-                diz_load(cfg, cat->rows[view.index[selected]].archive);
+                diz_load(cfg, sel_archive);
             }
         }
 
@@ -1803,21 +1939,21 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_clear(&buf);
             ansi_cursor(&buf, 0);
             ui_draw_chrome(&buf, &g, cat, &view, filter_desc);
-            ui_draw_list(&buf, &g, cat, &view, top_index, selected, -1, -1);
+            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
             need_full_redraw = 0;
         } else if (top_index != prev_top) {
             /* The window scrolled: every row is different. */
-            ui_draw_list(&buf, &g, cat, &view, top_index, selected, -1, -1);
+            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
         } else if (selected != prev_selected) {
             /* Only the highlight moved: repaint the row that lost it and the
              * row that gained it. */
-            ui_draw_list(&buf, &g, cat, &view, top_index, selected,
+            ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected,
                          (int) (prev_selected - top_index),
                          (int) (selected - top_index));
         }
         info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
                                       need_full_redraw ? 0 : info_rows_used,
-                                      show_files);
+                                      info_mode, info_scroll);
         prev_selected = selected;
         prev_top = top_index;
         /* Park the cursor out of the way, bottom-right, so a terminal that
@@ -1833,6 +1969,28 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_reset(&buf);
             ansi_flush(&buf);
             stop_for_carrier_loss();
+        }
+
+        /* While a detail view is open the cursor keys scroll IT, not the
+         * list - the pane is a window onto a file much larger than itself,
+         * and moving the selection would just refetch and reset it. The
+         * same key that opened the view closes it. */
+        if (info_mode != UI_INFO_DIZ
+            && (key == UI_KEY_UP || key == UI_KEY_DOWN
+                || key == UI_KEY_PGUP || key == UI_KEY_PGDN
+                || key == UI_KEY_HOME || key == UI_KEY_END)) {
+            int page = g.visible_rows - 1;
+            if (page < 1) page = 1;
+            if (key == UI_KEY_UP && info_scroll > 0) info_scroll--;
+            else if (key == UI_KEY_DOWN) info_scroll++;
+            else if (key == UI_KEY_PGUP) info_scroll = (info_scroll > page) ? info_scroll - page : 0;
+            else if (key == UI_KEY_PGDN) info_scroll += page;
+            else if (key == UI_KEY_HOME) info_scroll = 0;
+            /* Deliberately NOT a full redraw: the detail pane is repainted on
+             * every pass anyway, and ui_draw_info() blanks whatever the last
+             * draw used. Forcing a full redraw here repainted the header and
+             * footer bars on every scroll keystroke. */
+            continue;
         }
 
         switch (key) {
@@ -1884,20 +2042,16 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             top_index = 0;
             need_full_redraw = 1;
             break;
+        case 'a': case 'A':
+            info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
+            info_scroll = 0;
+            break;
         case 'v': case 'V':
-            show_files = !show_files;
-            need_full_redraw = 1;
+            info_mode = (info_mode == UI_INFO_DOC) ? UI_INFO_DIZ : UI_INFO_DOC;
+            info_scroll = 0;
             break;
         case 'c': case 'C':
             ui_view_cycle_type(&view, cat);
-            ui_view_rebuild(&view, cat);
-            selected = 0;
-            top_index = 0;
-            need_full_redraw = 1;
-            break;
-        case 'a': case 'A':
-            view.text[0] = '\0';
-            view.type[0] = '\0';
             ui_view_rebuild(&view, cat);
             selected = 0;
             top_index = 0;

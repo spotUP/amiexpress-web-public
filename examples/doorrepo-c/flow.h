@@ -98,6 +98,11 @@ int flow_build_diz_path(char *out, unsigned long outsize,
 int flow_build_files_path(char *out, unsigned long outsize,
                           const char *base_path, const char *archive_name);
 
+/* Same, for "<base_path>/doc/<archive_name>" - the door's own documentation
+ * as raw bytes (Latin-1, control bytes intact). */
+int flow_build_doc_path(char *out, unsigned long outsize,
+                        const char *base_path, const char *archive_name);
+
 /* Builds a local filesystem path for a downloaded archive:
  * "<download_dir><archive_name>", inserting a "/" separator between them
  * only when `download_dir` does not already end in a path separator.

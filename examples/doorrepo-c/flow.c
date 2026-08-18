@@ -219,6 +219,12 @@ int flow_build_files_path(char *out, unsigned long outsize,
     return build_entry_path(out, outsize, base_path, "/files/", archive_name);
 }
 
+int flow_build_doc_path(char *out, unsigned long outsize,
+                        const char *base_path, const char *archive_name)
+{
+    return build_entry_path(out, outsize, base_path, "/doc/", archive_name);
+}
+
 int flow_contains_forbidden_shell_char(const char *value)
 {
     /* "#" added after the Round 2 bypass (LhaCommand's trailing-comment
