@@ -140,6 +140,15 @@ int listtxt_parse_row(const char *line, dr_entry *out)
     const char *end;
     char sizebuf[32];
 
+    /* The optional fields' "not supplied" state, set BEFORE any parsing so
+     * a row that ends after field six - or one that fails partway - never
+     * leaves a caller reading whatever the previous row put in a reused
+     * dr_entry. */
+    out->author[0] = '\0';
+    out->group[0] = '\0';
+    out->junk = -1;
+    out->has_doc = -1;
+
     end = field_end(p);
     if (*end != '|') {
         return 1;
@@ -176,13 +185,65 @@ int listtxt_parse_row(const char *line, dr_entry *out)
     copy_field(p, end, out->name, sizeof(out->name));
     p = end + 1;
 
-    /* Sixth (last known) field. Whatever follows it - nothing (end of
-     * row), or a '|' introducing a seventh-or-later field from a future
-     * format revision - is not our concern per the append-only promise:
-     * parsing has already succeeded once all six known fields are
-     * captured. */
+    /* Sixth field. Everything from here on is optional: the row is already
+     * valid, and a server that predates the 2026-08-18 append ends the line
+     * here. */
     end = field_end(p);
     copy_field(p, end, out->desc, sizeof(out->desc));
+    if (*end != '|') {
+        return 0;
+    }
+    p = end + 1;
 
+    /* Seventh: author. */
+    end = field_end(p);
+    copy_field(p, end, out->author, sizeof(out->author));
+    if (*end != '|') {
+        return 0;
+    }
+    p = end + 1;
+
+    /* Eighth: release group. */
+    end = field_end(p);
+    copy_field(p, end, out->group, sizeof(out->group));
+    if (*end != '|') {
+        return 0;
+    }
+    p = end + 1;
+
+    /* Ninth: junk/ad file count. An empty or non-numeric field stays -1
+     * ("unknown") rather than becoming 0 ("clean"): claiming an archive
+     * has no ads because a field was garbled is the one wrong answer here,
+     * since it is the answer that makes a UI hide a warning. Validated the
+     * same way listtxt_parse_header validates its numeric fields - via
+     * strtoul's endptr, which catches both a partly-numeric field and one
+     * that never advanced at all. */
+    end = field_end(p);
+    copy_field(p, end, sizebuf, sizeof(sizebuf));
+    if (sizebuf[0] != '\0') {
+        char *junk_end;
+        unsigned long parsed = strtoul(sizebuf, &junk_end, 10);
+        if (*junk_end == '\0') {
+            out->junk = (long) parsed;
+        }
+    }
+    if (*end != '|') {
+        return 0;
+    }
+    p = end + 1;
+
+    /* Tenth: documentation flag, exactly '0' or '1'. Anything else (empty,
+     * a word, a longer number) leaves it unknown, for the same reason. */
+    end = field_end(p);
+    if (end == p + 1) {
+        if (*p == '0') {
+            out->has_doc = 0;
+        } else if (*p == '1') {
+            out->has_doc = 1;
+        }
+    }
+
+    /* Any eleventh-or-later field is ignored, per the append-only
+     * promise - reaching one is not an error. */
     return 0;
 }

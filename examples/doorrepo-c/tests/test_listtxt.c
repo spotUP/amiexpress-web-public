@@ -132,7 +132,7 @@ static void test_header_malformed(void)
 static void test_row_real(void)
 {
     const char *line =
-        "ABS-PLC2.LHA|DD|28272|715de1907a9cb4a3fadd3aea6bbd875f|_______________.--:_________________-zS!|.___\\    .   /___   / !   / .   /  .   /___. \246    \\___! _/  !/ _/  ! _/  !__/__ !__/_   ! !     / \\! \254\\_ !\\ \254\\_ \267 \254\\____";
+        "ABS-PLC2.LHA|DD|28272|715de1907a9cb4a3fadd3aea6bbd875f|_______________.--:_________________-zS!|.___\\    .   /___   / !   / .   /  .   /___. \246    \\___! _/  !/ _/  ! _/  !__/__ !__/_   ! !     / \\! \254\\_ !\\ \254\\_ \267 \254\\____|LOOP/ABUSE|ABS|4|1";
     const char *expected_desc =
         ".___\\    .   /___   / !   / .   /  .   /___. \246    \\___! _/  !/ _/  ! _/  !__/__ !__/_   ! !     / \\! \254\\_ !\\ \254\\_ \267 \254\\____";
     dr_entry e;
@@ -158,6 +158,109 @@ static void test_row_real(void)
           strstr(e.desc, "___! _/") != (char *) 0);
     CHECK("row real: desc contains no raw '|' (unescape or mis-split bug)",
           strchr(e.desc, '|') == (char *) 0);
+    /* Fields 7-10, captured from the same real row on 2026-08-18. */
+    CHECK("row real: author", strcmp(e.author, "LOOP/ABUSE") == 0);
+    CHECK("row real: release group", strcmp(e.group, "ABS") == 0);
+    CHECK("row real: junk count == 4", e.junk == 4L);
+    CHECK("row real: has_doc == 1", e.has_doc == 1);
+}
+
+/* A row from a server that predates the 2026-08-18 append, or a cached
+ * list.txt written by one. The six known fields must parse exactly as
+ * before, and the four new ones must read as UNKNOWN (-1 / empty), never
+ * as "no author, no ads, no documentation" - a UI gating a key on a
+ * fabricated 0 would hide an action that actually works. */
+static void test_row_six_fields_optional_absent(void)
+{
+    const char *line = "OLD.LHA|XIM|1234|abc|Old Door|Old description";
+    dr_entry e;
+    int rc;
+
+    memset(&e, 0xAA, sizeof(e));
+    rc = listtxt_parse_row(line, &e);
+
+    CHECK("row six fields: returns 0", rc == 0);
+    CHECK("row six fields: desc still parses", strcmp(e.desc, "Old description") == 0);
+    CHECK("row six fields: author is empty", e.author[0] == '\0');
+    CHECK("row six fields: group is empty", e.group[0] == '\0');
+    CHECK("row six fields: junk is UNKNOWN (-1), not 0", e.junk == -1L);
+    CHECK("row six fields: has_doc is UNKNOWN (-1), not 0", e.has_doc == -1);
+}
+
+/* A row that stops partway through the appended fields - the shape a
+ * truncated transfer or a half-upgraded server produces. Everything
+ * present is kept; everything absent stays unknown. */
+static void test_row_optional_fields_partial(void)
+{
+    const char *line = "PART.LHA|XIM|10|md5|Part|Desc|Some Author";
+    dr_entry e;
+    int rc;
+
+    memset(&e, 0xAA, sizeof(e));
+    rc = listtxt_parse_row(line, &e);
+
+    CHECK("row partial: returns 0", rc == 0);
+    CHECK("row partial: author parsed", strcmp(e.author, "Some Author") == 0);
+    CHECK("row partial: group absent -> empty", e.group[0] == '\0');
+    CHECK("row partial: junk absent -> unknown", e.junk == -1L);
+    CHECK("row partial: has_doc absent -> unknown", e.has_doc == -1);
+}
+
+/* Empty and garbled values in the appended fields. An empty author is a
+ * real, everyday case (the live catalog has no author for 1863 of 3301
+ * rows); a non-numeric junkCount or a hasDoc that is not exactly '0'/'1'
+ * is corruption, and must read as unknown rather than as a confident
+ * "clean" / "no documentation". */
+static void test_row_optional_fields_empty_and_garbled(void)
+{
+    dr_entry e;
+
+    memset(&e, 0xAA, sizeof(e));
+    (void) listtxt_parse_row("E.LHA|XIM|1|md5|N|D|||0|0", &e);
+    CHECK("row empty optionals: author empty", e.author[0] == '\0');
+    CHECK("row empty optionals: group empty", e.group[0] == '\0');
+    CHECK("row empty optionals: junk 0 parsed as 0 (a real 'clean' answer)", e.junk == 0L);
+    CHECK("row empty optionals: has_doc 0 parsed as 0", e.has_doc == 0);
+
+    memset(&e, 0xAA, sizeof(e));
+    (void) listtxt_parse_row("G.LHA|XIM|1|md5|N|D|A|B|notanumber|yes", &e);
+    CHECK("row garbled optionals: junk stays unknown, NOT 0", e.junk == -1L);
+    CHECK("row garbled optionals: has_doc stays unknown, NOT 0", e.has_doc == -1);
+
+    memset(&e, 0xAA, sizeof(e));
+    (void) listtxt_parse_row("H.LHA|XIM|1|md5|N|D|A|B|3|12", &e);
+    CHECK("row garbled optionals: multi-digit has_doc is unknown", e.has_doc == -1);
+    CHECK("row garbled optionals: valid junk beside it still parses", e.junk == 3L);
+}
+
+/* An author or release group longer than the server's own caps must be
+ * truncated into the destination buffer, never overrun it. */
+static void test_row_oversized_optional_fields(void)
+{
+    static const char prefix[] = "BIG.LHA|XIM|1|md5|N|D|";
+    char line[512];
+    dr_entry e;
+    unsigned long pos = (unsigned long) (sizeof(prefix) - 1);
+
+    memcpy(line, prefix, (size_t) pos);
+    memset(line + pos, 'a', 200);
+    pos += 200;
+    line[pos++] = '|';
+    memset(line + pos, 'g', 200);
+    pos += 200;
+    line[pos] = '\0';
+
+    memset(&e, 0xAA, sizeof(e));
+    (void) listtxt_parse_row(line, &e);
+
+    CHECK("row oversized optionals: author truncated to its buffer",
+          strlen(e.author) == sizeof(e.author) - 1);
+    CHECK("row oversized optionals: group truncated to its buffer",
+          strlen(e.group) == sizeof(e.group) - 1);
+    CHECK("row oversized optionals: author NUL-terminated",
+          e.author[sizeof(e.author) - 1] == '\0');
+    CHECK("row oversized optionals: group NUL-terminated",
+          e.group[sizeof(e.group) - 1] == '\0');
 }
 
 /* Synthetic: an empty md5 field is a documented valid state (the format
@@ -184,33 +287,38 @@ static void test_row_empty_md5(void)
           strcmp(e.desc, "A simple trivia door") == 0);
 }
 
-/* Real six-field row (same fixture as test_row_real) with one synthetic
- * seventh field appended, simulating the append-only format-evolution
- * promise (DOOR-REPO-API.md section 3): "MUST split each data row on
- * '|' and read only the first six fields by position... MUST ignore any
- * trailing fields it does not recognize." */
-static void test_row_seven_fields(void)
+/* The real ten-field row with one synthetic ELEVENTH field appended,
+ * standing in for the next format revision. The append-only promise
+ * (DOOR-REPO-API.md section 3) says a client must ignore fields it does
+ * not recognize and must not require a fixed field count — an eleventh
+ * field is not a parse failure and must not bleed into the tenth.
+ *
+ * (This test used to append a SEVENTH field for the same purpose; the
+ * seventh is a real field now, so the unknown-field case moved up.) */
+static void test_row_eleven_fields(void)
 {
     const char *line =
-        "ABS-PLC2.LHA|DD|28272|715de1907a9cb4a3fadd3aea6bbd875f|_______________.--:_________________-zS!|.___\\    .   /___   / !   / .   /  .   /___. \246    \\___! _/  !/ _/  ! _/  !__/__ !__/_   ! !     / \\! \254\\_ !\\ \254\\_ \267 \254\\____|EXTRA-FUTURE-FIELD";
+        "ABS-PLC2.LHA|DD|28272|715de1907a9cb4a3fadd3aea6bbd875f|_______________.--:_________________-zS!|.___\\    .   /___   / !   / .   /  .   /___. \246    \\___! _/  !/ _/  ! _/  !__/__ !__/_   ! !     / \\! \254\\_ !\\ \254\\_ \267 \254\\____|LOOP/ABUSE|ABS|4|1|EXTRA-FUTURE-FIELD";
     dr_entry e;
     int rc;
 
     memset(&e, 0xAA, sizeof(e));
     rc = listtxt_parse_row(line, &e);
 
-    CHECK("row seven fields: returns 0 (extra field ignored, not a parse failure)", rc == 0);
-    CHECK("row seven fields: archive still correct", strcmp(e.archive, "ABS-PLC2.LHA") == 0);
-    CHECK("row seven fields: type still correct", strcmp(e.type, "DD") == 0);
-    CHECK("row seven fields: size still correct", e.size == 28272UL);
-    CHECK("row seven fields: md5 still correct",
+    CHECK("row eleven fields: returns 0 (extra field ignored, not a parse failure)", rc == 0);
+    CHECK("row eleven fields: archive still correct", strcmp(e.archive, "ABS-PLC2.LHA") == 0);
+    CHECK("row eleven fields: type still correct", strcmp(e.type, "DD") == 0);
+    CHECK("row eleven fields: size still correct", e.size == 28272UL);
+    CHECK("row eleven fields: md5 still correct",
           strcmp(e.md5, "715de1907a9cb4a3fadd3aea6bbd875f") == 0);
-    CHECK("row seven fields: name still correct",
+    CHECK("row eleven fields: name still correct",
           strcmp(e.name, "_______________.--:_________________-zS!") == 0);
-    CHECK("row seven fields: desc has NO trace of the seventh field",
-          strstr(e.desc, "EXTRA-FUTURE-FIELD") == (char *) 0);
-    CHECK("row seven fields: desc length unchanged by the extra field",
+    CHECK("row eleven fields: desc length unchanged by the extra fields",
           strlen(e.desc) == 120UL);
+    CHECK("row eleven fields: author still correct", strcmp(e.author, "LOOP/ABUSE") == 0);
+    CHECK("row eleven fields: group still correct", strcmp(e.group, "ABS") == 0);
+    CHECK("row eleven fields: junk still correct", e.junk == 4L);
+    CHECK("row eleven fields: has_doc unaffected by the eleventh field", e.has_doc == 1);
 }
 
 /* Synthetic: non-numeric archiveSize. Unlike the header's
@@ -334,7 +442,11 @@ int main(void)
     test_header_malformed();
     test_row_real();
     test_row_empty_md5();
-    test_row_seven_fields();
+    test_row_six_fields_optional_absent();
+    test_row_optional_fields_partial();
+    test_row_optional_fields_empty_and_garbled();
+    test_row_oversized_optional_fields();
+    test_row_eleven_fields();
     test_row_size_non_numeric();
     test_row_malformed();
     test_row_oversized_fields();

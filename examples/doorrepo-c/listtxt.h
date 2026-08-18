@@ -5,7 +5,15 @@
  *
  *   DOORREPO|<formatVersion>|<revision>|<count>
  *   <archiveName>|<doorType>|<archiveSize>|<md5>|<name>|<description>
+ *     |<author>|<releaseGroup>|<junkCount>|<hasDoc>
  *   ... (one row per door)
+ *
+ * Fields 7-10 were appended to the format on 2026-08-18 and are OPTIONAL
+ * here: a row that stops after the sixth field parses exactly as before,
+ * with the new members set to their "the server did not say" values (see
+ * dr_entry below). That is not defensive padding - the door has to keep
+ * working against a repo server that has not been redeployed yet, and
+ * against the cached list.txt of one that had not been.
  *
  * C89. No stdint.h (not available on the m68k-amiga-elf/vbcc toolchain).
  */
@@ -20,6 +28,19 @@ typedef struct {
     char md5[33];
     char name[64];
     char desc[128];
+    /* Fields 7-10, appended to the format 2026-08-18. Sized to the
+     * server's own caps (48 and 32 characters plus a NUL) so a value is
+     * never truncated on this side - a client-truncated author would
+     * silently stop matching a search for its tail. */
+    char author[49];
+    char group[33];
+    /* Ad/junk files inside the archive, and whether documentation exists.
+     * Both use -1 for "the row did not carry this field", which is NOT the
+     * same as 0/"none": a UI gating a key on these must treat unknown as
+     * "offer it" (the pre-append behaviour) rather than hiding a key that
+     * would have worked. */
+    long junk;
+    int has_doc;
 } dr_entry;
 
 /* Parses one header line ("DOORREPO|<formatVersion>|<revision>|<count>").
@@ -44,14 +65,23 @@ int listtxt_parse_header(const char *line, int *format_version,
                           unsigned long *count);
 
 /* Parses one data row ("<archiveName>|<doorType>|<archiveSize>|<md5>|
- * <name>|<description>") into `out`. `line` must be NUL-terminated and is
- * never modified (no strtok - bounded copies only).
+ * <name>|<description>|<author>|<releaseGroup>|<junkCount>|<hasDoc>")
+ * into `out`. `line` must be NUL-terminated and is never modified (no
+ * strtok - bounded copies only).
  *
  * Per the append-only format-evolution promise (DOOR-REPO-API.md section
- * 3): a row may carry MORE than six pipe-delimited fields in a future
- * format revision. This parser reads only the first six fields by
- * position and silently ignores anything after the sixth - a seventh (or
- * later) field never causes a parse failure.
+ * 3): a row may carry MORE fields than this parser knows. Fields 1-6 are
+ * required; fields 7-10 are read when present and left at their "not
+ * supplied" values when the row ends early; anything after the tenth is
+ * silently ignored and never causes a parse failure.
+ *
+ * "Not supplied" is `author[0] == '\0'`, `group[0] == '\0'`, `junk == -1`
+ * and `has_doc == -1`. Note that an EMPTY field seven or eight is a
+ * different statement from an absent one (the server sends an empty author
+ * when the catalog has none), but both leave the same empty string here -
+ * a caller that needs to tell those apart cannot, by design: there is
+ * nothing a UI would do differently for "no author recorded" versus "this
+ * server predates the author field".
  *
  * The server has already replaced any literal '|' inside a text field
  * with '!' before transmission (see "Pipe escaping" in the format doc).

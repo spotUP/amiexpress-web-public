@@ -27,6 +27,7 @@
 #include "http.h"
 #include "listtxt.h"
 #include "md5.h"
+#include "sha256.h"
 #include "aedoor.h"
 #include "flow.h"
 #include "netio.h"
@@ -38,16 +39,19 @@
 #define DOOR_CACHE_NAME "listtxt.cache"
 
 /* Hard cap on catalog rows held in memory at once (brief requirement 10).
- * At sizeof(dr_entry) == 312 bytes (verified on this host; the layout is
- * platform-independent since every field is a fixed-size char array or an
- * unsigned long), 4096 rows is ~1.22 MB - a deliberate, disclosed ceiling,
- * not a number chosen to fit some specific machine's free RAM. See the
- * task report's memory-accounting section. */
+ * At sizeof(dr_entry) == 408 bytes (measured on this host after list.txt
+ * fields 7-10 were added on 2026-08-18; it was 312 before. The layout is
+ * platform-independent since every field is a fixed-size char array, a
+ * long, or an int), 4096 rows is ~1.6 MB - a deliberate, disclosed
+ * ceiling, not a number chosen to fit some specific machine's free RAM.
+ * See the task report's memory-accounting section. */
 #define MAX_CATALOG_ROWS 4096UL
 
 /* One line of list.txt, generously bounded: archive(64) + type(8) +
  * size(<=20 digits) + md5(32) + name(64) + description(120, per the format
- * doc's 120-char truncation rule) + 5 '|' separators + CRLF + slack. */
+ * doc's 120-char truncation rule) + author(48) + releaseGroup(32) +
+ * junkCount(<=10 digits) + hasDoc(1) + 9 '|' separators + CRLF + slack.
+ * That worst case is ~410 bytes, so 512 still holds a full row. */
 #define LISTTXT_LINE_MAX 512
 
 /* Progress is reported every 8 KB of a download, per the brief. */
@@ -981,8 +985,17 @@ static int ui_equals_ci(const char *a, const char *b)
 }
 
 /* Rebuilds `v->index` from the current filters. Text matches the archive
- * name, the door name, or the description - the same three fields a user can
- * actually see. */
+ * name, door name, description, author and release group - the same five
+ * catalog fields the server's own ?q= search matches (DOOR-REPO-API.md
+ * section 8) and the same ones DOORMAN filters on.
+ *
+ * Author and group only became matchable when list.txt grew fields 7 and 8
+ * (2026-08-18). Before that this door searched three fields while the
+ * server searched six, so the SAME query typed into the ANSI browser (which
+ * filters in memory) and into the line-mode search (which asks the server)
+ * returned different results - typing a group name found nothing here and
+ * everything there. Against a server that predates the append the two
+ * fields are simply empty and match nothing, which is the old behaviour. */
 static void ui_view_rebuild(ui_view *v, const dr_catalog *cat)
 {
     unsigned long i;
@@ -997,7 +1010,9 @@ static void ui_view_rebuild(ui_view *v, const dr_catalog *cat)
         if (v->text[0] != '\0'
             && !ui_contains_ci(e->archive, v->text)
             && !ui_contains_ci(e->name, v->text)
-            && !ui_contains_ci(e->desc, v->text)) {
+            && !ui_contains_ci(e->desc, v->text)
+            && !ui_contains_ci(e->author, v->text)
+            && !ui_contains_ci(e->group, v->text)) {
             continue;
         }
         v->index[v->count++] = i;
@@ -1276,13 +1291,31 @@ static void ui_draw_header(ansi_buf *b, const ui_geometry *g, const dr_catalog *
     ui_draw_bar(b, 1, g->cols, title);
 }
 
-static void ui_draw_footer(ansi_buf *b, const ui_geometry *g)
+/* Same shape as DOORMAN's repoViewFooterParts(), with this door's real
+ * actions substituted for the ones it does not have (it downloads and
+ * verifies rather than installing into the BBS).
+ *
+ * V=Doc appears only when the selected entry actually has documentation,
+ * exactly as DOORMAN drops its "View doc" part when doc_raw is empty. The
+ * flag rides in on list.txt field 10, so this costs no request: before that
+ * field existed the key was advertised unconditionally and a user pressing
+ * it on one of the 83 doc-less doors waited out a fetch to be told there
+ * was nothing.
+ *
+ * `e` may be NULL (empty/filtered-to-nothing list), and e->has_doc may be
+ * -1 ("the server never said" - an older repo, or a cached listing written
+ * by one). Both show the key: an unknown is not a "no", and hiding a key
+ * that would have worked is the worse error of the two. */
+static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e)
 {
-    /* Same shape as DOORMAN's repoViewFooterParts(), with this door's real
-     * actions substituted for the ones it does not have (it downloads and
-     * verifies rather than installing into the BBS). */
-    ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols,
-                "ENTER/R=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit");
+    char bar[160];
+
+    strcpy(bar, "ENTER/R=Get  A=Archive");
+    if (e == (const dr_entry *) 0 || e->has_doc != 0) {
+        strcat(bar, "  V=Doc");
+    }
+    strcat(bar, "  F=Find  C=System  Q=Quit");
+    ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
 }
 
 /* Draws list rows. `only_row_a`/`only_row_b` are visible-row indices to
@@ -1464,7 +1497,8 @@ static void ui_wrap_text(ansi_buf *b, const ui_geometry *g, const char *text,
  * it changes while browsing, so it is painted once per full redraw instead
  * of on every keystroke. */
 static void ui_draw_chrome(ansi_buf *b, const ui_geometry *g, const dr_catalog *cat,
-                           const ui_view *v, const char *filter_desc)
+                           const ui_view *v, const char *filter_desc,
+                           const dr_entry *sel_entry)
 {
     char label[48];
 
@@ -1477,7 +1511,7 @@ static void ui_draw_chrome(ansi_buf *b, const ui_geometry *g, const dr_catalog *
     ansi_box(b, g->pane_top, g->list_left, g->pane_height, g->list_width, ANSI_CYAN, label);
     ansi_box(b, g->pane_top, g->info_left, g->pane_height, g->info_width, ANSI_BLUE,
              (const char *) 0);
-    ui_draw_footer(b, g);
+    ui_draw_footer(b, g, sel_entry);
     ansi_reset(b);
 }
 
@@ -1559,14 +1593,48 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
         ansi_text_raw(b, row + 1, g->info_left + 2 + at, "[downloaded]", 12);
     }
 
+    /* Credits line: author and release group, both from list.txt fields 7
+     * and 8, and the archive's ad-file count from field 9. DOORMAN shows
+     * the same metadata from its local catalog; before those fields existed
+     * this door could not show any of it, and the ad count in particular
+     * needed a separate /files request per entry to learn.
+     *
+     * Painted unconditionally even when there is nothing to say - see the
+     * spacer note below; a counted-but-unpainted row keeps the previous
+     * entry's pixels. */
+    line[0] = '\0';
+    if (e->author[0] != '\0') {
+        strcpy(line, "by ");
+        strncat(line, e->author, sizeof(line) - 40);
+    }
+    if (e->group[0] != '\0') {
+        strcat(line, (line[0] != '\0') ? " / " : "");
+        strncat(line, e->group, 33);
+    }
+    ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+    ansi_text(b, row + 2, g->info_left + 2, line, inner - 2);
+    if (e->junk > 0) {
+        /* Right after the credits, in red, the way DOORMAN colours its ad
+         * files: this is the number that decides whether [A]rchive is worth
+         * opening. junk == -1 means the server never said, so nothing is
+         * claimed either way. */
+        char ads[32];
+        int at = (int) strlen(line);
+        strcpy(ads, "   ");
+        ui_append_ulong(ads, (unsigned long) e->junk);
+        strcat(ads, " ads");
+        ansi_color(b, ANSI_RED, ANSI_BLACK, 1);
+        ansi_text_raw(b, row + 2, g->info_left + 2 + at, ads, (int) strlen(ads));
+    }
+
     /* The spacer row must be PAINTED, not merely skipped. Every row counted
      * as "used" is excluded from the blanking pass below, so a row that is
      * counted but never written keeps whatever the previously selected
      * entry left there - which showed up as a stray line of the previous
      * door's ASCII art hanging under a short entry. */
     ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
-    ansi_text(b, row + 2, g->info_left + 1, "", inner);
-    row += 3;
+    ansi_text(b, row + 3, g->info_left + 1, "", inner);
+    row += 4;
 
     if (info_mode == UI_INFO_DOC && g_doc_ok && strcmp(g_doc_archive, e->archive) == 0) {
         /* Documentation, rendered line for line and clipped, never
@@ -1890,6 +1958,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
 
     for (;;) {
         int key;
+        const dr_entry *sel_entry;
 
         if (carrier_lost()) {
             ansi_begin(&buf, frame, (long) sizeof(frame));
@@ -1957,11 +2026,17 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             }
         }
 
+        /* The entry the footer describes. NULL when the filter matched
+         * nothing, which ui_draw_footer treats as "show every key". */
+        sel_entry = (view.count > 0)
+            ? &cat->rows[view.index[selected]]
+            : (const dr_entry *) 0;
+
         ansi_begin(&buf, frame, (long) sizeof(frame));
         if (need_full_redraw) {
             ansi_clear(&buf);
             ansi_cursor(&buf, 0);
-            ui_draw_chrome(&buf, &g, cat, &view, filter_desc);
+            ui_draw_chrome(&buf, &g, cat, &view, filter_desc, sel_entry);
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
             need_full_redraw = 0;
         } else if (top_index != prev_top) {
@@ -1973,6 +2048,15 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected,
                          (int) (prev_selected - top_index),
                          (int) (selected - top_index));
+        }
+        /* The footer describes the SELECTED entry (V=Doc appears only for a
+         * door that has documentation), so it is repainted whenever the
+         * selection moves. One 60-byte row inside the frame already being
+         * composed - it is flushed with everything else, so it does not
+         * reintroduce the blue-flash of an out-of-band write. */
+        if (selected != prev_selected) {
+            ui_draw_footer(&buf, &g, sel_entry);
+            ansi_reset(&buf);
         }
         info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
                                       need_full_redraw ? 0 : info_rows_used,
@@ -2088,6 +2172,14 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             info_scroll = 0;
             break;
         case 'v': case 'V':
+            /* Gated on the same flag as the footer's V=Doc part: hiding a
+             * key while still honouring it would make the footer a lie in
+             * the other direction, and pressing it on a doc-less door
+             * costs a request that can only answer "nothing here". A -1
+             * (server never said) still opens the view, as before. */
+            if (sel_entry != (const dr_entry *) 0 && sel_entry->has_doc == 0) {
+                break;
+            }
             info_mode = (info_mode == UI_INFO_DOC) ? UI_INFO_DIZ : UI_INFO_DOC;
             info_scroll = 0;
             break;
@@ -2190,6 +2282,12 @@ static browse_exit browse_loop(const dr_config *cfg, dr_catalog *cat, const char
 typedef struct {
     FILE *file;
     md5_ctx md5;
+    /* Both digests are computed in the SAME pass over the stream. The
+     * bytes are in memory once, on their way to disk; hashing them twice
+     * there costs one extra pass of arithmetic, while computing SHA-256
+     * afterwards would mean reading the whole archive back off an Amiga
+     * floppy or hard disk a second time. */
+    sha256_ctx sha;
     unsigned long received;
     unsigned long last_progress_report;
     unsigned long max_bytes;      /* ceiling from flow_archive_byte_ceiling(), enforced below */
@@ -2220,6 +2318,7 @@ static int download_sink(void *ctx, const unsigned char *buf, unsigned long len)
 
     fwrite(buf, 1, (size_t) len, dc->file);
     md5_update(&dc->md5, buf, len);
+    sha256_update(&dc->sha, buf, len);
     dc->received += len;
 
     if (dc->received - dc->last_progress_report >= PROGRESS_INTERVAL) {
@@ -2232,20 +2331,63 @@ static int download_sink(void *ctx, const unsigned char *buf, unsigned long len)
     return 0;
 }
 
+/* Case-insensitive comparison of two hex digest strings. Both sides are
+ * lowercase hex by contract, but a hand-edited catalog row or a proxy that
+ * upper-cases a header should not read as a mismatch. */
+static int hex_digest_equals(const char *a, const char *b)
+{
+    int i;
+
+    for (i = 0; a[i] != '\0' && b[i] != '\0'; i++) {
+        char x = a[i];
+        char y = b[i];
+        if (x >= 'A' && x <= 'Z') x = (char) (x - 'A' + 'a');
+        if (y >= 'A' && y <= 'Z') y = (char) (y - 'A' + 'a');
+        if (x != y) {
+            return 0;
+        }
+    }
+    return strlen(a) == strlen(b);
+}
+
 /* Performs one download attempt of `entry` into `local_path`, hashing as
- * it streams. Returns 1 if the archive was written AND its MD5 matches
- * the catalog's listing (or the listing had no digest to compare - see
- * below), 0 otherwise (transport failure, HTTP error, length mismatch, or
- * digest mismatch - the caller distinguishes these via *out_had_digest
- * and *out_computed_md5 for the retry state machine and the log line). */
+ * it streams. Returns 1 if the archive was written AND its digest matched,
+ * 0 otherwise (transport failure, HTTP error, length mismatch, or digest
+ * mismatch - the caller distinguishes these via the out-parameters for the
+ * retry state machine and the log line).
+ *
+ * WHICH digest decides:
+ *
+ *   1. The X-Archive-SHA256 response header, when the server sent one.
+ *      The server computes it from the very file it is streaming (see
+ *      door-repo.routes.ts: getArchiveChecksums on the resolved path,
+ *      keyed by mtime+size), so it describes THESE bytes rather than
+ *      whatever was indexed weeks ago - and SHA-256 is what DOORMAN, the
+ *      other client of this same API, has always verified.
+ *   2. Failing that, the catalog row's MD5, which is what this door used
+ *      exclusively before 2026-08-18 and remains the fallback for a
+ *      server too old to send the header.
+ *
+ * *used_sha_out reports which one ran, so the caller's messages and log
+ * lines can name the digest they are talking about instead of always
+ * saying "MD5". When SHA-256 decided AND the catalog also carried an MD5,
+ * a disagreement between the computed MD5 and that catalog value is
+ * reported as a stale-catalog note rather than a failure: the archive
+ * itself verified against a digest of the actual bytes, and the format
+ * doc's "Digest freshness" section already documents catalog digests as
+ * potentially out of date. */
 static int attempt_download(const dr_config *cfg, const dr_entry *entry,
-                             const char *local_path, char *computed_md5_out)
+                             const char *local_path, char *computed_md5_out,
+                             char *computed_sha_out, int *used_sha_out)
 {
     download_ctx dc;
     unsigned char digest[16];
+    unsigned char shadigest[32];
     char path[256];
     http_response resp;
     int rc;
+
+    *used_sha_out = 0;
 
     /* RepoPath[128] + "/archive/" + a real catalog archiveName always fits
      * sizeof(path); initialize to empty first regardless, so an
@@ -2262,6 +2404,7 @@ static int attempt_download(const dr_config *cfg, const dr_entry *entry,
         return 0;
     }
     md5_init(&dc.md5);
+    sha256_init(&dc.sha);
     dc.received = 0;
     dc.last_progress_report = 0;
     dc.max_bytes = flow_archive_byte_ceiling(entry->size, ARCHIVE_ABSOLUTE_MAX_BYTES,
@@ -2319,33 +2462,37 @@ static int attempt_download(const dr_config *cfg, const dr_entry *entry,
 
     md5_final(&dc.md5, digest);
     md5_hex(digest, computed_md5_out);
+    sha256_final(&dc.sha, shadigest);
+    sha256_hex(shadigest, computed_sha_out);
+
+    if (resp.sha256[0] != '\0') {
+        *used_sha_out = 1;
+        if (entry->md5[0] != '\0' && !hex_digest_equals(computed_md5_out, entry->md5)) {
+            /* Not a failure: see this function's header comment. Worth
+             * saying out loud because it is actionable for the repo
+             * owner - it means the catalog row was indexed from a
+             * different copy of this archive than the one being served. */
+            ae_put("Note: this archive's catalog MD5 does not match the file the server sent;", 1);
+            ae_put("the catalog digest is probably stale. Verifying against SHA-256 instead.", 1);
+        }
+        return hex_digest_equals(computed_sha_out, resp.sha256);
+    }
 
     if (entry->md5[0] == '\0') {
-        ae_put("Note: the catalog has no MD5 on file for this archive; skipping digest verification.", 1);
+        ae_put("Note: neither a SHA-256 header nor a catalog MD5 is available for this", 1);
+        ae_put("archive; skipping digest verification.", 1);
         return 1;
     }
 
-    {
-        int i;
-        int matches = 1;
-        for (i = 0; computed_md5_out[i] != '\0' && entry->md5[i] != '\0'; i++) {
-            char a = computed_md5_out[i];
-            char b = entry->md5[i];
-            if (a >= 'A' && a <= 'Z') a = (char) (a - 'A' + 'a');
-            if (b >= 'A' && b <= 'Z') b = (char) (b - 'A' + 'a');
-            if (a != b) { matches = 0; break; }
-        }
-        if (strlen(computed_md5_out) != strlen(entry->md5)) {
-            matches = 0;
-        }
-        return matches;
-    }
+    return hex_digest_equals(computed_md5_out, entry->md5);
 }
 
 static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
 {
     char local_path[256];
     char computed_md5[33];
+    char computed_sha[65];
+    int used_sha;
     int attempt;
     int matched;
     flow_verify_outcome outcome;
@@ -2373,13 +2520,22 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
         return;
     }
 
-    computed_md5[0] = '\0'; /* never read uninitialized if attempt_download() fails before computing a digest */
+    /* Never read uninitialized if attempt_download() fails before it
+     * computes a digest. */
+    computed_md5[0] = '\0';
+    computed_sha[0] = '\0';
+    used_sha = 0;
 
     attempt = 1;
     for (;;) {
-        matched = attempt_download(cfg, entry, local_path, computed_md5);
+        matched = attempt_download(cfg, entry, local_path, computed_md5,
+                                    computed_sha, &used_sha);
 
-        if (entry->md5[0] == '\0') {
+        /* "Nothing to verify against" now means BOTH digests were absent:
+         * a server that sent X-Archive-SHA256 has given this door a real
+         * check even when the catalog row's md5 field is empty (which is
+         * a documented, ordinary state - see "Digest freshness"). */
+        if (!used_sha && entry->md5[0] == '\0') {
             /* No listing digest to compare against - attempt_download()
              * already reported the specific reason on failure; nothing
              * left for the retry machine to decide either way (see the
@@ -2394,30 +2550,37 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
              * digest still attempt extraction of whatever sat at that
              * path). */
             if (!matched) {
-                log_line(cfg, "DOWNLOAD FAILED (no catalog digest to verify)");
+                log_line(cfg, "DOWNLOAD FAILED (no digest to verify)");
                 return;
             }
-            log_line(cfg, "DOWNLOAD OK (no catalog digest to verify)");
+            log_line(cfg, "DOWNLOAD OK (no digest to verify)");
             break;
         }
 
         outcome = flow_next_verify_outcome(attempt, matched);
 
         if (outcome == FLOW_VERIFY_OK) {
-            char msg[64];
-            sprintf(msg, "Checksum verified OK (MD5 %s).", computed_md5);
+            char msg[96];
+            sprintf(msg, "Checksum verified OK (%s %s).",
+                    used_sha ? "SHA-256" : "MD5",
+                    used_sha ? computed_sha : computed_md5);
             ae_put(msg, 1);
             {
                 char logmsg[256];
-                sprintf(logmsg, "DOWNLOAD OK archive=%s attempt=%d md5=%s", entry->archive, attempt, computed_md5);
+                sprintf(logmsg, "DOWNLOAD OK archive=%s attempt=%d %s=%s", entry->archive, attempt,
+                        used_sha ? "sha256" : "md5",
+                        used_sha ? computed_sha : computed_md5);
                 log_line(cfg, logmsg);
             }
             break;
         }
 
         {
-            char msg[192];
-            sprintf(msg, "Checksum MISMATCH: catalog says %s, downloaded file is %s.", entry->md5, computed_md5);
+            char msg[224];
+            sprintf(msg, "Checksum MISMATCH (%s): server says %s, downloaded file is %s.",
+                    used_sha ? "SHA-256" : "MD5",
+                    used_sha ? "the SHA-256 it sent with the file" : entry->md5,
+                    used_sha ? computed_sha : computed_md5);
             ae_put(msg, 1);
         }
         remove(local_path);
@@ -2426,8 +2589,10 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
             ae_put("Retrying download once...", 1);
             {
                 char logmsg[256];
-                sprintf(logmsg, "DOWNLOAD MISMATCH archive=%s attempt=%d listing_md5=%s computed_md5=%s (retrying)",
-                        entry->archive, attempt, entry->md5, computed_md5);
+                sprintf(logmsg, "DOWNLOAD MISMATCH archive=%s attempt=%d digest=%s computed=%s (retrying)",
+                        entry->archive, attempt,
+                        used_sha ? "sha256" : "md5",
+                        used_sha ? computed_sha : computed_md5);
                 log_line(cfg, logmsg);
             }
             attempt = 2;
@@ -2441,8 +2606,10 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
         ae_put("this persists.", 1);
         {
             char logmsg[256];
-            sprintf(logmsg, "DOWNLOAD ABORT archive=%s attempt=%d listing_md5=%s computed_md5=%s",
-                    entry->archive, attempt, entry->md5, computed_md5);
+            sprintf(logmsg, "DOWNLOAD ABORT archive=%s attempt=%d digest=%s computed=%s",
+                    entry->archive, attempt,
+                    used_sha ? "sha256" : "md5",
+                    used_sha ? computed_sha : computed_md5);
             log_line(cfg, logmsg);
         }
         return;
