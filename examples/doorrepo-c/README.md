@@ -363,7 +363,7 @@ same thing:
 +- REPO (3301) ------------++--------------------------------------------------+
 |*!ALSTER.LHA           39k|| !ALSTER.LHA                                      |
 | $CP-PS12.LZX          17k|| XIM   39k   #1   [downloaded]                    |
-| -D-DOR11.LHA           7k||                                                  |
+| -D-DOR11.LHA           7k|| by Loop/Abuse / ABS            2 ads             |
 | ...                      ||   ______    ________.  /\    ______.__________   |   FILE_ID.DIZ,
 +--------------------------++--------------------------------------------------+   line for line
 |         ENTER/R=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit               |
@@ -373,12 +373,29 @@ same thing:
 | Key | Does |
 |-----|------|
 | cursor up/down, PgUp/PgDn, Home/End | move the selection |
-| `ENTER` or `R` | download the selected archive (confirm first), verify its MD5, optionally extract |
+| `ENTER` or `R` | download the selected archive (confirm first), verify its digest, optionally extract |
 | `A` | show what is inside the archive, with ad files flagged |
-| `V` | show the door's own documentation |
+| `V` | show the door's own documentation - offered only for a door that has any |
 | `F` | filter by text - live, over the rows already loaded, no refetch |
 | `C` | cycle the door type (the types actually present, so it never offers an empty one) |
 | `Q` | leave the door |
+
+`F` matches the archive name, door name, description, author and release
+group - the same fields the server's own `?q=` search matches, so typing a
+group name into the browser and sending it to the API return the same rows.
+Author, release group and the archive's ad-file count all ride in on
+`list.txt` (fields 7-10), so the detail pane can show them, and the footer can
+drop `V=Doc`, without a per-entry request. Against an older server that sends
+six-field rows those fields read as unknown and every key is offered, as
+before.
+
+**Digest verification:** the download is checked against the
+`X-Archive-SHA256` header the server sends with the archive bytes, falling
+back to the catalog row's MD5 when no such header arrives. If the SHA-256
+matches while the catalog MD5 does not, the door says so - that means the
+catalog row was indexed from a different copy than the one being served (see
+"Digest freshness" in `docs/DOOR-REPO-API.md`) - and keeps the file, because
+the digest that verified describes the bytes actually received.
 
 While `A` or `V` is open the cursor keys scroll THAT pane rather than moving
 the selection, and the same key closes it. `*` in the list and `[downloaded]`
