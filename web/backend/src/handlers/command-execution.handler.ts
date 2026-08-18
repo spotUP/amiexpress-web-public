@@ -6,8 +6,10 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import {
   scanCommandDirectory,
+  getCommandSearchPaths,
   findCommand,
   CommandDefinition,
   CommandType,
@@ -60,6 +62,92 @@ export const commandCache: {
   syscmd: new Map(),
   bbscmd: new Map()
 };
+
+/**
+ * Freshness of the BBSCMD cache, keyed on the modification time of the
+ * directories it was built from.
+ *
+ * Why this exists: on a real AmiExpress node a BBS command is resolved from
+ * disk on EVERY invocation (express.e:4630-4647 - getNodeFile() then
+ * configFileExists()), so dropping a <CMD>.info into BBSCmd makes the
+ * command live immediately. This server loads those .info files once at
+ * startup instead, which is faster but means a door installed while the BBS
+ * is running - by DOORMAN's install, by the DoorRepo C door writing a
+ * .info, or by a sysop with an FTP client - stays invisible until a
+ * restart. DOORMAN gets away with it by calling refreshDoorRegistry()
+ * in-process; nothing running inside the emulator can do that.
+ *
+ * Why mtime rather than simply rescanning on a miss: a miss is the COMMON
+ * case, not a rare one. Every internal command falls through SYSCMD then
+ * BBSCMD before reaching processCommand(), so "rescan whenever a command is
+ * not found" would readdir + parse every .info file on almost every
+ * keystroke a user makes. Comparing the directories' mtime is a stat() per
+ * search path, and a directory's mtime changes exactly when a file is added
+ * to or removed from it - which is precisely the event that matters here.
+ */
+let bbscmdDirsStamp: string | null = null;
+
+function bbsCommandDirsStamp(
+  baseDir: string,
+  conferenceId?: number,
+  nodeId?: number
+): string {
+  const paths = getCommandSearchPaths(baseDir, CommandType.BBSCMD, conferenceId, nodeId);
+  const parts: string[] = [];
+
+  for (const dir of paths) {
+    try {
+      // A directory that does not exist contributes "-": its later
+      // CREATION must read as a change, not as "still nothing there".
+      parts.push(`${dir}:${fs.statSync(dir).mtimeMs}`);
+    } catch {
+      parts.push(`${dir}:-`);
+    }
+  }
+  return parts.join('|');
+}
+
+/**
+ * Reloads the BBSCMD cache if (and only if) the directories it came from
+ * have changed since the last load. Returns true when a reload happened.
+ *
+ * Safe to call on every command miss: the cost when nothing changed is one
+ * stat() per search directory.
+ */
+export function revalidateBbsCommandsIfChanged(
+  baseDir: string,
+  conferenceId?: number,
+  nodeId: number = 0
+): boolean {
+  const stamp = bbsCommandDirsStamp(baseDir, conferenceId, nodeId);
+
+  if (bbscmdDirsStamp === stamp) {
+    return false;
+  }
+
+  // First call after startup establishes the baseline without a reload:
+  // loadCommands() has already read these directories, so re-reading them
+  // here would be pure waste on the first command a user types.
+  const firstCall = bbscmdDirsStamp === null;
+  bbscmdDirsStamp = stamp;
+  if (firstCall) {
+    return false;
+  }
+
+  commandCache.bbscmd.clear();
+  loadCommands(baseDir, conferenceId, nodeId);
+  return true;
+}
+
+/**
+ * Drops the freshness stamp so the next command lookup revalidates
+ * unconditionally. Used by the BBSCmd watcher, which knows a change
+ * happened but should not do the reload itself - a reload belongs on the
+ * command path, where exactly one request is waiting for it.
+ */
+export function invalidateBbsCommandFreshness(): void {
+  bbscmdDirsStamp = null;
+}
 
 /**
  * Load all command definitions from disk
@@ -203,6 +291,26 @@ async function runCommand(
     commandDef = commandCache.syscmd.get(cmdUpper) || null;
   } else if (cmdType === CommandType.BBSCMD) {
     commandDef = commandCache.bbscmd.get(cmdUpper) || null;
+  }
+
+  // A BBSCMD miss is the one place worth asking whether the command exists
+  // on disk but not in the cache - which is what happens when a door was
+  // installed while this server was running (see
+  // revalidateBbsCommandsIfChanged above for why the check is an mtime
+  // comparison rather than a rescan). On a real node express.e resolves
+  // every command from disk anyway, so this only narrows the gap between
+  // the two.
+  if (!commandDef && cmdType === CommandType.BBSCMD) {
+    try {
+      const baseDir = require('../config').config.get('dataDir');
+      if (revalidateBbsCommandsIfChanged(baseDir, session?.conferenceId, session?.nodeId ?? 0)) {
+        commandDef = commandCache.bbscmd.get(cmdUpper) || null;
+      }
+    } catch (err: any) {
+      // Never let a freshness check turn an unknown command into an error:
+      // the caller's next step (internal commands) is still valid.
+      debugLog(socket, session, `BBSCMD revalidation skipped: ${err?.message ?? err}`);
+    }
   }
 
   // If no external command found in cache, return FAILURE

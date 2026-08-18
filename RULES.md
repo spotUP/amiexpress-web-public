@@ -202,6 +202,30 @@ AmiExpress is **disk-based**, not database-driven.
 - DB only: users, messages, call logs, stats.
 - **Batch files** (`batch0`..`batch6`): AmigaDOS command scripts for MultiTop / Bulls / QuickNew. They are standalone binaries run at maintenance events, not doors. **Never modify or clear them.** Args come from batch files, not `.info`.
 
+### 10b. Commands Installed At Runtime Must Not Need A Restart
+
+`express.e:4630-4647` resolves a BBS command from disk on **every**
+invocation, so on a real node a `<CMD>.info` dropped into `Commands/BBSCmd`
+is live on the next keypress. This server loads them once at startup, which
+is faster but is a behaviour difference, not just an optimisation — anything
+that installs a door while the BBS runs (DOORMAN, the DoorRepo C door, a
+sysop with an FTP client) would otherwise be invisible until a restart.
+
+Two mechanisms keep it honest; keep both working if you touch command
+loading:
+
+- `revalidateBbsCommandsIfChanged()` (`command-execution.handler.ts`) runs on
+  a BBSCMD **miss** and reloads only when the command directories' mtime has
+  changed. Do **not** "simplify" it into an unconditional rescan: a miss is
+  the common case — every internal command falls through SYSCMD then BBSCMD
+  first — so that would parse every `.info` on nearly every keystroke.
+- `bbscmd-watcher.ts` watches those directories and clears the freshness
+  stamp, so the listing paths (door menus, DOORMAN) see the change too. It is
+  best-effort by design; `fs.watch` is unreliable on some filesystems and
+  nothing may depend on it firing.
+
+Covered by `tests/handlers/bbscmd-freshness.test.ts`.
+
 ### 11. AmigaOS Is Case-Insensitive -- Use amigafs
 
 `AquaScan.EXE` == `aquascan.exe` == `AQUASCAN.exe`. Never use `fs` directly:

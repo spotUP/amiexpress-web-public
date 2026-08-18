@@ -586,8 +586,27 @@ describe('door-repo routes', () => {
         expect(ourOpenCall).toBeDefined();
         const fd = openSpy.mock.results[openSpy.mock.calls.indexOf(ourOpenCall!)]!.value as number;
 
-        const closeCallsForFd = closeSpy.mock.calls.filter((call) => call[0] === fd);
+        // The fd is closed from the stream's own 'close'/'finish' handler,
+        // which runs AFTER the response supertest is awaiting has completed
+        // - so asserting immediately is asserting on a race, and it loses
+        // whenever the machine is loaded enough for that handler to slip
+        // past the next tick (observed: this test failed in a full-suite
+        // run at load average 60 and passed in isolation on the same
+        // commit). Wait for the close instead of assuming it already
+        // happened; the assertion still means "closed exactly once",
+        // because the count is re-checked after the wait settles.
+        const deadline = Date.now() + 5000;
+        let closeCallsForFd = closeSpy.mock.calls.filter((call) => call[0] === fd);
+        while (closeCallsForFd.length === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          closeCallsForFd = closeSpy.mock.calls.filter((call) => call[0] === fd);
+        }
         expect(closeCallsForFd).toHaveLength(1);
+
+        // A second close of the same fd would be a double-close bug, and
+        // could only show up after a further delay - give it a chance to.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(closeSpy.mock.calls.filter((call) => call[0] === fd)).toHaveLength(1);
 
         openSpy.mockRestore();
         closeSpy.mockRestore();

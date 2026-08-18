@@ -412,6 +412,20 @@ to remember it, and why `S` knows which directory to strip. It is plain text
 with one record per line, on the assumption that a sysop may need to read or
 repair it with nothing but a text editor.
 
+**When does the BBS see a newly installed door?** On a real AmiExpress node,
+immediately: `express.e:4630-4647` resolves a BBS command from disk on every
+invocation, so the `.info` this door writes is live on the next command. This
+project's TypeScript BBS loads those `.info` files once at startup instead,
+so it needs help; it now has two mechanisms, and neither requires anything
+from the door:
+
+- a command that is not in the cache triggers a freshness check
+  (`revalidateBbsCommandsIfChanged()` -- a `stat()` of the command
+  directories, reloading only if their mtime changed), so a freshly
+  installed door runs the first time someone types its name;
+- a watcher on `Commands/BBSCmd/` clears that stamp when the directory
+  changes, so the door menus and listings see it too.
+
 Which extracted file is the program is decided from the repository's own
 archive listing, not by looking at the directory: C89 has no way to enumerate
 one. The listing names an exact match on the archive or command name first,

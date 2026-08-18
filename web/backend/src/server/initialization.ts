@@ -473,6 +473,20 @@ export async function initializeData(io?: SocketIOServer) {
     // Pre-populate door cache for instant DOORS/DOORMAN command response
     await initializeDoorCache();
 
+    // Notice doors installed while the BBS is running. On a real AmiExpress
+    // node every command is resolved from disk on each invocation
+    // (express.e:4630-4647), so a .info dropped into BBSCmd is live at once;
+    // this server loads them once, here. The watcher restores that behaviour
+    // for the listing paths, and command-execution.handler.ts's mtime check
+    // covers the execution path even if the watcher never fires.
+    try {
+      const { startBbsCmdWatcher } = require('../handlers/bbscmd-watcher');
+      const watched = startBbsCmdWatcher(bbsBaseDir, 1, 0);
+      console.log(`[BBSCmd watcher] watching ${watched} command director${watched === 1 ? 'y' : 'ies'}`);
+    } catch (err: any) {
+      console.log(`[BBSCmd watcher] not started: ${err?.message ?? err}`);
+    }
+
     // Inject dependencies into door handler
     // Note: initializeDoors() already sets the doors internally, so we use getDoors()
     setDoors(getDoors());

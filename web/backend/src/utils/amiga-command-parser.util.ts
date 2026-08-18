@@ -665,6 +665,34 @@ console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.loc
  * 2. Node-specific commands (NODECMD)
  * 3. Global BBS commands (BBSCMD)
  */
+export function getCommandSearchPaths(
+  baseDir: string,
+  commandType: CommandType,
+  conferenceId?: number,
+  nodeId?: number
+): string[] {
+  const searchPaths: string[] = [];
+  const leaf = commandType === CommandType.BBSCMD ? 'BBSCmd'
+    : commandType === CommandType.SYSCMD ? 'SysCmd'
+    : null;
+
+  if (leaf === null) {
+    return searchPaths;
+  }
+
+  if (conferenceId) {
+    for (const confName of getConferenceDirNames(conferenceId)) {
+      searchPaths.push(path.join(baseDir, confName, 'Commands', leaf));
+    }
+  }
+  if (nodeId) {
+    searchPaths.push(path.join(baseDir, `Node${nodeId}`, 'Commands', leaf));
+  }
+  searchPaths.push(path.join(baseDir, 'Commands', leaf));
+
+  return searchPaths;
+}
+
 export function scanCommandDirectory(
   baseDir: string,
   commandType: CommandType,
@@ -673,30 +701,10 @@ export function scanCommandDirectory(
 ): Map<string, CommandDefinition> {
   const commands = new Map<string, CommandDefinition>();
 
-  // Build search paths in priority order
-  const searchPaths: string[] = [];
-
-  if (commandType === CommandType.BBSCMD) {
-    if (conferenceId) {
-      for (const confName of getConferenceDirNames(conferenceId)) {
-        searchPaths.push(path.join(baseDir, confName, 'Commands', 'BBSCmd'));
-      }
-    }
-    if (nodeId) {
-      searchPaths.push(path.join(baseDir, `Node${nodeId}`, 'Commands', 'BBSCmd'));
-    }
-    searchPaths.push(path.join(baseDir, 'Commands', 'BBSCmd'));
-  } else if (commandType === CommandType.SYSCMD) {
-    if (conferenceId) {
-      for (const confName of getConferenceDirNames(conferenceId)) {
-        searchPaths.push(path.join(baseDir, confName, 'Commands', 'SysCmd'));
-      }
-    }
-    if (nodeId) {
-      searchPaths.push(path.join(baseDir, `Node${nodeId}`, 'Commands', 'SysCmd'));
-    }
-    searchPaths.push(path.join(baseDir, 'Commands', 'SysCmd'));
-  }
+  // Build search paths in priority order — shared with the freshness check
+  // in command-execution.handler.ts, which must watch exactly the
+  // directories this scan reads and no others.
+  const searchPaths = getCommandSearchPaths(baseDir, commandType, conferenceId, nodeId);
 
   // Scan each directory for .info files
   for (const dirPath of searchPaths) {
