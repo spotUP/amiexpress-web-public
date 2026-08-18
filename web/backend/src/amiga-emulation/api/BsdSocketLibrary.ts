@@ -533,18 +533,31 @@ export class BsdSocketLibrary {
 
     console.log(`[BsdSocketLibrary] recv(fd=${fd}, len=${len})`);
 
-    // Check if we have buffered data
+    // Check if we have buffered data.
+    //
+    // Drains ACROSS queued chunks up to `len`, as a real recv() does. It used
+    // to return whatever was in the single frontmost chunk and no more, so a
+    // door asking for 4 KB with 40 KB already queued got back one network
+    // packet's worth - and paid a full WaitSelect + recv round trip through
+    // the emulator for each one. That put a hard ceiling on throughput for
+    // every 68K network door regardless of the buffer size it asked for.
     if (state.readBuffer.length > 0) {
-      const data = state.readBuffer.shift()!;
-      const copyLen = Math.min(data.length, len);
-      for (let i = 0; i < copyLen; i++) {
-        this.emulator.writeMemory(bufPtr + i, data[i]);
+      let copied = 0;
+      while (copied < len && state.readBuffer.length > 0) {
+        const data = state.readBuffer[0];
+        const take = Math.min(data.length, len - copied);
+        for (let i = 0; i < take; i++) {
+          this.emulator.writeMemory(bufPtr + copied + i, data[i]);
+        }
+        copied += take;
+        if (take < data.length) {
+          // Partially consumed: keep the remainder at the head of the queue.
+          state.readBuffer[0] = data.slice(take);
+        } else {
+          state.readBuffer.shift();
+        }
       }
-      // If we have leftover data, put it back
-      if (data.length > len) {
-        state.readBuffer.unshift(data.slice(len));
-      }
-      return copyLen;
+      return copied;
     }
 
     if (!state.connected) {

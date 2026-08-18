@@ -304,6 +304,43 @@ describe('door-repo routes', () => {
     });
   });
 
+  describe('GET /api/door-repo/doc/:archiveName', () => {
+    /**
+     * Backs DOORMAN's "V=View doc". Amiga door docs are Latin-1 and routinely
+     * carry form feeds and ANSI art, so the body must be byte-exact - anything
+     * that sanitised it would destroy what the reader came for. The filename
+     * therefore travels in a header, not the body.
+     */
+    it('returns the raw doc bytes untransformed, with the filename in a header', async () => {
+      const w = new Database(path.join(tmpDir, 'test.sqlite'));
+      w.prepare('UPDATE door_catalog SET doc_raw = ?, doc_filename = ? WHERE archive_name = ?')
+        .run('page one\f\x1b[1mBOLD\x1b[0m page two', 'STATUS.doc', 'REAL_DOOR.LHA');
+      w.close();
+
+      const res = await request(app).get('/api/door-repo/doc/REAL_DOOR.LHA');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('text/plain; charset=ISO-8859-1');
+      expect(res.headers['x-doc-filename']).toBe('STATUS.doc');
+      // Control bytes survive verbatim.
+      expect(res.text).toContain('\f');
+      expect(res.text).toContain('\x1b[1m');
+    });
+
+    it('404s when the entry has no doc', async () => {
+      const w = new Database(path.join(tmpDir, 'test.sqlite'));
+      w.prepare('UPDATE door_catalog SET doc_raw = NULL WHERE archive_name = ?').run('REAL_DOOR.LHA');
+      w.close();
+
+      const res = await request(app).get('/api/door-repo/doc/REAL_DOOR.LHA');
+      expect(res.status).toBe(404);
+    });
+
+    it('404s for an unknown archive', async () => {
+      const res = await request(app).get('/api/door-repo/doc/NO_SUCH.LHA');
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('GET /api/door-repo/files/:archiveName', () => {
     /**
      * Mirrors what DOORMAN renders in its info pane from getArchiveFiles():

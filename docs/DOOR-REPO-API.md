@@ -122,6 +122,7 @@ amiexpress-web backend.
 | GET    | `/api/door-repo/archive/:name`     | Download one archive by its archive name   |
 | GET    | `/api/door-repo/diz/:name`         | Raw `FILE_ID.DIZ`, newlines intact         |
 | GET    | `/api/door-repo/files/:name`       | What is inside the archive, + ad count     |
+| GET    | `/api/door-repo/doc/:name`         | The door's own documentation, raw bytes    |
 | GET    | `/api/door-repo/health`            | Lightweight liveness + door count          |
 
 ## 2. Quick start (Amiga, 68020+)
@@ -589,6 +590,23 @@ FILES|15|2
 50|0|FILE_ID.DIZ
 2|1|LE-window5.exe
 ```
+
+### `GET /api/door-repo/doc/<archiveName>`
+
+The door's own documentation, exactly as it sits in the archive. 3216 of the
+3301 catalogued doors have one.
+
+Served as **raw bytes with no transformation**, `Content-Type: text/plain;
+charset=ISO-8859-1`. Amiga door docs are Latin-1 and routinely contain form
+feeds, ANSI art and other control bytes; anything that "cleaned them up"
+would destroy what the reader is trying to look at. Render it the same way
+you would a text file on the Amiga: line for line, clipped rather than
+re-wrapped.
+
+The source filename travels in an `X-Doc-Filename` response header rather
+than the body, so the body stays byte-exact.
+
+`404` when the archive is unknown or has no doc.
 
 ## 6. Health check
 

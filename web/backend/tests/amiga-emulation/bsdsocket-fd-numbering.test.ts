@@ -479,6 +479,82 @@ describe('bsdsocket.library non-blocking connect (regression)', () => {
   }, IO_TEST_TIMEOUT_MS);
 });
 
+describe('bsdsocket.library recv chunk draining (regression)', () => {
+  /**
+   * recv() used to copy from only the frontmost queued chunk, so a door
+   * asking for 4 KB with far more already buffered got back one network
+   * packet's worth - and paid a WaitSelect + recv round trip through the
+   * emulator for each one. Fetching a 110 KB catalog cost hundreds of round
+   * trips and was visibly slow to start, no matter how large a buffer the
+   * door asked for. A real recv() drains up to `len` across whatever is
+   * buffered.
+   */
+  function callRecv(lib: BsdSocketLibrary, fake: FakeEmulator, fd: number,
+                    bufPtr: number, len: number): number {
+    fake.setRegister(0, fd);
+    fake.setRegister(8, bufPtr);
+    fake.setRegister(1, len);
+    fake.setRegister(2, 0);
+    return lib.recv();
+  }
+
+  test('fills the requested length from several queued chunks in one call', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+
+    const state = lib.getSocketState(fd)!;
+    // recv() requires an attached socket; these tests exercise the buffered
+    // path only, so a bare stand-in is enough and keeps them off the network.
+    state.socket = new net.Socket();
+    state.connected = true;
+    // Six 100-byte chunks, as a real socket would deliver a stream.
+    for (let c = 0; c < 6; c++) {
+      state.readBuffer.push(Buffer.alloc(100, 0x41 + c));
+    }
+
+    const got = callRecv(lib, fake, fd, 0x600000, 512);
+
+    expect(got).toBe(512);                    // not 100
+    expect(state.readBuffer.length).toBe(1);  // 88 bytes of the last chunk left
+    expect(fake.readMemory(0x600000)).toBe(0x41);       // first chunk
+    expect(fake.readMemory(0x600000 + 100)).toBe(0x42); // second, contiguous
+    expect(fake.readMemory(0x600000 + 511)).toBe(0x46); // into the sixth
+  });
+
+  test('returns only what is available when the queue is shorter than asked', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+
+    const state = lib.getSocketState(fd)!;
+    state.socket = new net.Socket();
+    state.connected = true;
+    state.readBuffer.push(Buffer.alloc(30, 0x5a));
+
+    expect(callRecv(lib, fake, fd, 0x610000, 4096)).toBe(30);
+    expect(state.readBuffer.length).toBe(0);
+  });
+
+  test('leaves the unconsumed remainder of a partly-read chunk queued', () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+    const fd = callSocket(lib, fake);
+
+    const state = lib.getSocketState(fd)!;
+    state.socket = new net.Socket();
+    state.connected = true;
+    state.readBuffer.push(Buffer.alloc(100, 0x11));
+
+    expect(callRecv(lib, fake, fd, 0x620000, 40)).toBe(40);
+    expect(state.readBuffer.length).toBe(1);
+    expect(state.readBuffer[0].length).toBe(60);
+    // The rest must still be readable, in order.
+    expect(callRecv(lib, fake, fd, 0x630000, 60)).toBe(60);
+    expect(fake.readMemory(0x630000)).toBe(0x11);
+  });
+});
+
 describe('bsdsocket.library gethostbyname (regression)', () => {
   /**
    * gethostbyname() used dns.resolve4(), which only ever queries a DNS

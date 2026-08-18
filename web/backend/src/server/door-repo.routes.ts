@@ -34,7 +34,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import { pipeline } from 'stream';
-import { buildManifest, renderListTxt, getRepoRevision, getDoorCount } from '../doors/door-repo-manifest';
+import { buildManifest, renderListTxt, getCatalogRevision, getDoorCount } from '../doors/door-repo-manifest';
 import { getArchiveChecksums } from '../doors/door-repo-checksums';
 import { getArchiveFiles, getCatalogEntryByArchive, resolveArchivePath } from '../doors/door-catalog.service';
 
@@ -136,13 +136,13 @@ export function streamArchive(
 // Verified directly (see task-3-report.md) before relying on it, both for
 // the implicit form (inside res.json()/res.send()) and this explicit one.
 //
-// The ETag is just the revision string — getRepoRevision() alone, no
+// The ETag is just the revision string — getCatalogRevision() alone, no
 // catalog access. So: compute it, set the headers, and check `req.fresh`
 // BEFORE calling buildManifest() at all. A 304 must never pay for
 // building (and, transitively, checksumming) the full manifest just to
 // throw the result away.
 doorRepoRouter.get('/manifest', (req: Request, res: Response) => {
-  const revision = getRepoRevision();
+  const revision = getCatalogRevision();
 
   res.set('X-Door-Repo-Revision', revision);
   res.set('ETag', `"${revision}"`);
@@ -183,7 +183,7 @@ doorRepoRouter.get('/list.txt', (req: Request, res: Response) => {
 // fine — they're metadata headers, not wire framing, and re-reading lets
 // us keep reusing the existing cached-by-mtime+size implementation as-is.
 function handleArchiveRequest(res: Response, archiveName: string): void {
-  res.set('X-Door-Repo-Revision', getRepoRevision());
+  res.set('X-Door-Repo-Revision', getCatalogRevision());
 
   const entry = getCatalogEntryByArchive(archiveName);
   if (!entry) {
@@ -255,7 +255,7 @@ function handleArchiveRequest(res: Response, archiveName: string): void {
 // route uses, so an encoded traversal payload just fails the lookup — the
 // raw parameter never reaches the filesystem.
 function handleDizRequest(res: Response, archiveName: string): void {
-  res.set('X-Door-Repo-Revision', getRepoRevision());
+  res.set('X-Door-Repo-Revision', getCatalogRevision());
 
   const entry = getCatalogEntryByArchive(archiveName);
   if (!entry || !entry.file_id_diz) {
@@ -286,7 +286,7 @@ function handleDizRequest(res: Response, archiveName: string): void {
 // from archive listings and are filtered the same way list.txt escapes its
 // fields), and any that did would be escaped to "!" the same way.
 function handleFilesRequest(res: Response, archiveName: string): void {
-  res.set('X-Door-Repo-Revision', getRepoRevision());
+  res.set('X-Door-Repo-Revision', getCatalogRevision());
 
   const entry = getCatalogEntryByArchive(archiveName);
   if (!entry) {
@@ -305,6 +305,36 @@ function handleFilesRequest(res: Response, archiveName: string): void {
 
   res.set('Content-Type', 'text/plain; charset=ISO-8859-1');
   res.send(Buffer.from(lines.join('\r\n') + '\r\n', 'latin1'));
+}
+
+// GET /doc/<archiveName> — the door's own documentation, raw.
+//
+// DOORMAN offers "V=View doc" for entries that carry one; this exposes the
+// same doc_raw so a client that is not sitting on the catalog database can
+// too. 3216 of 3301 catalog entries have one.
+//
+// Served as raw bytes with no transformation. Amiga door docs are Latin-1 and
+// routinely contain form feeds, ANSI art and other control bytes; anything
+// that "cleaned them up" would corrupt the very thing the reader wants to see.
+// The filename is exposed in a header rather than the body so the body stays
+// byte-exact.
+//
+// 404 when the archive is unknown or has no doc — as with /diz, "none" and
+// "unknown" are one case for the client to handle.
+function handleDocRequest(res: Response, archiveName: string): void {
+  res.set('X-Door-Repo-Revision', getCatalogRevision());
+
+  const entry = getCatalogEntryByArchive(archiveName);
+  if (!entry || !entry.doc_raw) {
+    sendNotFound(res, archiveName);
+    return;
+  }
+
+  if (entry.doc_filename) {
+    res.set('X-Doc-Filename', String(entry.doc_filename).replace(/[^\x20-\x7e]/g, '_'));
+  }
+  res.set('Content-Type', 'text/plain; charset=ISO-8859-1');
+  res.send(Buffer.from(entry.doc_raw, 'latin1'));
 }
 
 // Per-entry routes are dispatched from the RAW request URL rather than
@@ -347,7 +377,7 @@ doorRepoRouter.use((req: Request, res: Response, next: NextFunction) => {
     next();
     return;
   }
-  const match = /^\/(diz|archive|files)\/(.+)$/.exec(req.url.split('?')[0]);
+  const match = /^\/(diz|archive|files|doc)\/(.+)$/.exec(req.url.split('?')[0]);
   if (!match) {
     next();
     return;
@@ -363,13 +393,15 @@ doorRepoRouter.use((req: Request, res: Response, next: NextFunction) => {
     handleDizRequest(res, name);
   } else if (kind === 'files') {
     handleFilesRequest(res, name);
+  } else if (kind === 'doc') {
+    handleDocRequest(res, name);
   } else {
     handleArchiveRequest(res, name);
   }
 });
 
 doorRepoRouter.get('/health', (req: Request, res: Response) => {
-  const revision = getRepoRevision();
+  const revision = getCatalogRevision();
   const doors = getDoorCount();
   res.set('X-Door-Repo-Revision', revision);
   res.json({ status: 'ok', revision, doors });

@@ -110,6 +110,43 @@ export { getRepoRevision } from '../server/repo-revision';
 // not pay buildManifest()'s per-archive md5/sha256 cost (~3300 files) on
 // every call.
 
+/**
+ * Revision string for the door-repo API: a cheap fingerprint of the CATALOG,
+ * not of the deployment.
+ *
+ * It used to be the deployed image's git SHA (server/repo-revision.ts, still
+ * what the top-level /health reports). Two problems with that here:
+ *
+ *   1. It changes on EVERY deploy, catalog or not, so every client threw away
+ *      a good cached catalog and re-downloaded ~580 KB after unrelated code
+ *      changes - the opposite of what docs/DOOR-REPO-API.md promises ("changes
+ *      exactly when the deployed catalog changes").
+ *   2. It is read from /app/.git-sha, written into the container image at
+ *      build time, so a local development server has no such file and reports
+ *      the literal "unknown". A correct client MUST refuse to treat "unknown"
+ *      as proof of freshness, so caching could never work against a dev
+ *      server at all: DoorRepo re-fetched the whole catalog on every single
+ *      launch, which is exactly the "slow to start" that led here.
+ *
+ * COUNT + the newest indexed_at changes whenever any row is added, removed or
+ * re-indexed, is a single indexed aggregate query, and needs no file that only
+ * exists in a container.
+ */
+export function getCatalogRevision(): string {
+  const db = openDb();
+  try {
+    const row = db.prepare(
+      'SELECT COUNT(*) AS n, COALESCE(MAX(indexed_at), 0) AS t FROM door_catalog'
+    ).get() as { n: number; t: number };
+    return `c${row.n}-t${row.t}`;
+  } catch {
+    // A catalog we cannot read has no revision we can honestly assert.
+    return 'unknown';
+  } finally {
+    db.close();
+  }
+}
+
 export function getDoorCount(): number {
   const db = openDb();
   try {
@@ -200,7 +237,7 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
 
   return {
     formatVersion: 1,
-    revision: getRepoRevision(),
+    revision: getCatalogRevision(),
     generatedAt: new Date().toISOString(),
     doors,
   };
