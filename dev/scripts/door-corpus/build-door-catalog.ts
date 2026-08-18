@@ -29,6 +29,9 @@ import Database from 'better-sqlite3';
 import { detectDoorType, AMIGA_68K_BINARY_EXT_RE } from '../../../web/backend/src/doors/door-installer';
 import { getExtractorForFile } from '../../../web/backend/src/utils/archive-extractor';
 import { resolveArchivePath } from '../../../web/backend/src/doors/door-catalog.service';
+// parseLhaList lives in web/backend/src so it can be unit-tested; a silent
+// defect there shrinks catalog entries without failing anything loudly.
+import { parseLhaList } from '../../../web/backend/src/utils/lha-list-parser';
 import { getArchiveChecksums } from '../../../web/backend/src/doors/door-repo-checksums';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -145,25 +148,6 @@ function lhaExtractFile(archivePath: string, internalPath: string): Buffer | nul
   } catch {
     return null;
   }
-}
-
-// Parse lha list output to get file entries: [{name, size}]
-function parseLhaList(lines: string[]): Array<{ name: string; size: number }> {
-  const entries: Array<{ name: string; size: number }> = [];
-  for (const line of lines) {
-    // lha -l output: permission  uid/gid  size  ratio  date  name
-    // Try to extract the last field as name and size as 3rd field
-    const parts = line.split(/\s+/);
-    if (parts.length < 6) continue;
-    // Skip header/footer lines
-    if (line.startsWith('-') || line.startsWith('=') || line.includes('file') && line.includes('Kbyte')) continue;
-    const name = parts[parts.length - 1];
-    const sizeStr = parts[2];
-    const size = parseInt(sizeStr, 10);
-    if (!name || isNaN(size)) continue;
-    entries.push({ name, size });
-  }
-  return entries;
 }
 
 // Case-insensitive filename basename match within archive path
