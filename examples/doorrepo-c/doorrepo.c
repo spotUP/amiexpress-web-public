@@ -28,6 +28,7 @@
 #include "listtxt.h"
 #include "md5.h"
 #include "sha256.h"
+#include "guide.h"
 #include "aedoor.h"
 #include "flow.h"
 #include "netio.h"
@@ -1101,11 +1102,46 @@ static int files_sink(void *ctx, const unsigned char *buf, unsigned long len)
     return 0;
 }
 
-#define DOC_MAX_BYTES 8192
+/* Raised from 8192 on 2026-08-18, when node navigation arrived: 918 of the
+ * catalog's 3218 documents are larger than 8 KB, so more than a quarter of
+ * them used to be cut off - and a truncated AmigaGuide loses whole nodes,
+ * not just a tail. 24 KB covers all but 186 of them. It is static, not
+ * stack (this door's icon declares STACK=8192). */
+#define DOC_MAX_BYTES 24576
 
 static char g_doc[DOC_MAX_BYTES + 1];
 static char g_doc_archive[64] = "";
 static int g_doc_ok = 0;
+
+/* ---- AmigaGuide state -------------------------------------------------
+ *
+ * A third of the catalog's documentation is AmigaGuide. Rendering happens
+ * once per node visit, into g_guide_render, and the pane then windows over
+ * that buffer exactly as it does over a plain document - so link numbers
+ * stay put while the reader scrolls, and scrolling costs no re-parsing.
+ * All of it is static for the same reason as g_doc. */
+static guide_doc g_guide;
+static guide_link g_guide_links[GUIDE_MAX_LINKS];
+static char g_guide_render[DOC_MAX_BYTES + 2048];
+static int g_guide_ok = 0;
+static int g_guide_link_count = 0;
+static int g_guide_node = -1;
+/* Where B goes back to. 16 deep: real documents are shallow, and a reader
+ * who has gone deeper than that still gets back one step at a time. */
+static int g_guide_history[16];
+static int g_guide_history_len = 0;
+
+/* Renders `node` into g_guide_render and makes it the current node. */
+static void guide_show_node(int node)
+{
+    if (node < 0 || node >= g_guide.node_count) {
+        return;
+    }
+    g_guide_node = node;
+    (void) guide_render_node(g_doc, &g_guide, node, g_guide_render,
+                             (unsigned long) sizeof(g_guide_render),
+                             g_guide_links, GUIDE_MAX_LINKS, &g_guide_link_count);
+}
 
 static void doc_load(const dr_config *cfg, const char *archive)
 {
@@ -1122,6 +1158,10 @@ static void doc_load(const dr_config *cfg, const char *archive)
     g_doc_archive[sizeof(g_doc_archive) - 1] = '\0';
     g_doc[0] = '\0';
     g_doc_ok = 0;
+    g_guide_ok = 0;
+    g_guide_node = -1;
+    g_guide_link_count = 0;
+    g_guide_history_len = 0;
 
     if (flow_build_doc_path(path, sizeof(path), cfg->path, archive) < 0) {
         return;
@@ -1134,6 +1174,10 @@ static void doc_load(const dr_config *cfg, const char *archive)
     rc = http_get(cfg, path, &resp, files_sink, &dc);
     if (rc == HTTP_OK && resp.status == 200 && dc.len > 0) {
         g_doc_ok = 1;
+        if (guide_looks_like_guide(g_doc) && guide_parse(g_doc, &g_guide) > 0) {
+            g_guide_ok = 1;
+            guide_show_node(g_guide.main_node >= 0 ? g_guide.main_node : 0);
+        }
     } else {
         g_doc[0] = '\0';
     }
@@ -1641,9 +1685,32 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
          * re-wrapped: Amiga door docs are laid out in columns and ASCII
          * art that reflowing would destroy. `info_scroll` is the first
          * source line shown, so the pane is a window onto a file far
-         * larger than it. */
-        const char *p = g_doc;
+         * larger than it.
+         *
+         * For an AmigaGuide document this shows the CURRENT NODE, already
+         * rendered (markup stripped, links numbered) by guide_show_node,
+         * with one header line naming the node and how to move around it.
+         * Everything else below is shared with the plain-text path. */
+        const char *p = g_guide_ok ? g_guide_render : g_doc;
         int skip = info_scroll;
+
+        if (g_guide_ok) {
+            char hdr[160];
+            const char *title = (g_guide_node >= 0)
+                ? g_guide.nodes[g_guide_node].title : "";
+
+            strcpy(hdr, "Guide: ");
+            strncat(hdr, title, sizeof(hdr) - 40);
+            if (g_guide_link_count > 0) {
+                strcat(hdr, "   [1-9] follow");
+            }
+            if (g_guide_history_len > 0) {
+                strcat(hdr, "   B=back");
+            }
+            ansi_color(b, ANSI_CYAN, ANSI_BLACK, 1);
+            ansi_text(b, row, g->info_left + 2, hdr, inner - 2);
+            row++;
+        }
 
         ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
         while (*p != '\0' && skip > 0) {
@@ -2170,6 +2237,36 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         case 'a': case 'A':
             info_mode = (info_mode == UI_INFO_FILES) ? UI_INFO_DIZ : UI_INFO_FILES;
             info_scroll = 0;
+            break;
+        case '1': case '2': case '3': case '4': case '5':
+        case '6': case '7': case '8': case '9':
+            /* Follow an AmigaGuide link by number, the same numbering
+             * DOORMAN's viewer uses. Only meaningful while a guide is on
+             * screen; anywhere else a digit stays unbound, as before. */
+            if (info_mode == UI_INFO_DOC && g_guide_ok) {
+                int idx = key - '1';
+                if (idx < g_guide_link_count) {
+                    int target = guide_find_node(&g_guide, g_guide_links[idx].target);
+                    if (target >= 0) {
+                        if (g_guide_history_len
+                            < (int) (sizeof(g_guide_history) / sizeof(g_guide_history[0]))) {
+                            g_guide_history[g_guide_history_len++] = g_guide_node;
+                        }
+                        guide_show_node(target);
+                        info_scroll = 0;
+                    }
+                    /* A link to a node this document does not contain (an
+                     * external file, or a typo in the original) is left
+                     * alone rather than clearing the pane: the reader
+                     * keeps what they were reading. */
+                }
+            }
+            break;
+        case 'b': case 'B':
+            if (info_mode == UI_INFO_DOC && g_guide_ok && g_guide_history_len > 0) {
+                guide_show_node(g_guide_history[--g_guide_history_len]);
+                info_scroll = 0;
+            }
             break;
         case 'v': case 'V':
             /* Gated on the same flag as the footer's V=Doc part: hiding a
