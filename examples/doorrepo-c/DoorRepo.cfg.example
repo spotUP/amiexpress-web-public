@@ -29,6 +29,18 @@ Whether to automatically extract downloaded archives after downloading them.
 Accepts: yes, no, 1, or 0. Any other value defaults to no (0).
 # ExtractAfterDownload=no
 
+Whether to use the full-screen ANSI browser. Accepts: yes, no, 1, or 0.
+Default is yes. Set it to no on a terminal that cannot handle CSI escape
+sequences; the door then falls back to the original line-at-a-time listing,
+which needs nothing but plain text.
+# Ansi=yes
+
+Terminal geometry for the full-screen browser. Ignored when Ansi=no.
+Defaults are the universal BBS 80x24; raise them if your users connect on a
+larger window. Valid ranges: ScreenRows 10-200, ScreenCols 40-250.
+# ScreenRows=24
+# ScreenCols=80
+
 The AmigaDOS path where the door logs its activity and errors.
 # LogFile=T:DoorRepo.log
 

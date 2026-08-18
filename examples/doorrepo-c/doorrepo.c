@@ -777,6 +777,7 @@ static int is_all_digits(const char *s)
 }
 
 static void view_entry(const dr_config *cfg, dr_catalog *cat, unsigned long global_index);
+static void download_and_verify(const dr_config *cfg, const dr_entry *entry);
 
 /* Runs the paged browse loop over whatever catalog `cat` currently holds
  * (the full catalog, or a server-side type/search-filtered one - the
@@ -1281,7 +1282,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g)
      * actions substituted for the ones it does not have (it downloads and
      * verifies rather than installing into the BBS). */
     ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols,
-                "ENTER=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit");
+                "ENTER/R=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit");
 }
 
 /* Draws list rows. `only_row_a`/`only_row_b` are visible-row indices to
@@ -1837,6 +1838,28 @@ static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
     }
 }
 
+/* Asks a yes/no question on the footer bar and returns non-zero for yes.
+ *
+ * Drawn in place rather than by dropping to a line prompt: the detail pane
+ * already shows everything the old confirmation screen re-printed (archive,
+ * type, size, name, description), so re-rendering it line-by-line was a
+ * context switch that bought the user nothing. DOORMAN acts on the selected
+ * entry directly; so does this now. */
+static int ui_confirm(ansi_buf *b, char *frame, long framecap,
+                      const ui_geometry *g, const char *question)
+{
+    int key;
+
+    ansi_begin(b, frame, framecap);
+    ansi_fill(b, g->rows - UI_FOOTER_ROWS + 2, 1, g->cols, ANSI_WHITE, ANSI_BLUE);
+    ansi_color(b, ANSI_YELLOW, ANSI_BLUE, 1);
+    ansi_center(b, g->rows - UI_FOOTER_ROWS + 2, 1, g->cols, question);
+    ansi_flush(b);
+
+    key = ui_read_key();
+    return (key == 'y' || key == 'Y' || key == UI_KEY_ENTER);
+}
+
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
 {
     ui_geometry g;
@@ -2022,16 +2045,34 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             if (view.count > 0) selected = view.count - 1;
             break;
         case UI_KEY_ENTER:
+        case 'r': case 'R':
             if (view.count > 0) {
-                /* view_entry() is line-oriented (it prompts, downloads and
-                 * reports progress), so hand the terminal back in a clean
-                 * state and repaint the browser from scratch afterwards. */
-                ansi_begin(&buf, frame, (long) sizeof(frame));
-                ansi_cursor(&buf, 1);
-                ansi_reset(&buf);
-                ansi_clear(&buf);
-                ansi_flush(&buf);
-                view_entry(cfg, cat, view.index[selected] + 1);
+                const dr_entry *sel = &cat->rows[view.index[selected]];
+                char question[160];
+
+                strcpy(question, "Download ");
+                strncat(question, sel->archive, sizeof(question) - 40);
+                strcat(question, "?  [Y/N]");
+
+                if (ui_confirm(&buf, frame, (long) sizeof(frame), &g, question)) {
+                    /* download_and_verify() reports progress line by line, so
+                     * give the terminal back in a clean state, let it run, and
+                     * repaint the browser afterwards. */
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_cursor(&buf, 1);
+                    ansi_reset(&buf);
+                    ansi_clear(&buf);
+                    ansi_flush(&buf);
+
+                    download_and_verify(cfg, sel);
+
+                    ae_put("", 1);
+                    ae_put("Press any key to return to the list.", 1);
+                    (void) ae_key();
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_cursor(&buf, 0);
+                    ansi_flush(&buf);
+                }
                 need_full_redraw = 1;
             }
             break;

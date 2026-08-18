@@ -351,6 +351,48 @@ shipped; adding an `LhaArgs` key (itself allowlisted per-token, joined with
 single spaces, never taken as one free-form string) would be the natural
 follow-up.
 
+## What the door looks like in use
+
+A full-screen ANSI browser, modelled panel for panel on DOORMAN (this
+project's TypeScript door manager) so a sysop moving between the two sees the
+same thing:
+
+```
++------------------------------------------------------------------------------+
+|                  DoorRepo v1.0   3301 of 3301 doors                          |   header bar
++- REPO (3301) ------------++--------------------------------------------------+
+|*!ALSTER.LHA           39k|| !ALSTER.LHA                                      |
+| $CP-PS12.LZX          17k|| XIM   39k   #1   [downloaded]                    |
+| -D-DOR11.LHA           7k||                                                  |
+| ...                      ||   ______    ________.  /\    ______.__________   |   FILE_ID.DIZ,
++--------------------------++--------------------------------------------------+   line for line
+|         ENTER/R=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit               |
++------------------------------------------------------------------------------+
+```
+
+| Key | Does |
+|-----|------|
+| cursor up/down, PgUp/PgDn, Home/End | move the selection |
+| `ENTER` or `R` | download the selected archive (confirm first), verify its MD5, optionally extract |
+| `A` | show what is inside the archive, with ad files flagged |
+| `V` | show the door's own documentation |
+| `F` | filter by text - live, over the rows already loaded, no refetch |
+| `C` | cycle the door type (the types actually present, so it never offers an empty one) |
+| `Q` | leave the door |
+
+While `A` or `V` is open the cursor keys scroll THAT pane rather than moving
+the selection, and the same key closes it. `*` in the list and `[downloaded]`
+in the detail pane mark an archive already present in `DownloadDir`.
+
+`ESC` is deliberately not a binding. A lone ESC cannot be told apart from the
+start of an arrow-key sequence without a timer, and arrow keys reach a door as
+single bytes anyway under AmiExpress (2/3/4/5, per `express.e:7514-7528`) --
+so `Q` is the one documented way out.
+
+**Terminals that cannot do ANSI:** set `Ansi=no` in `DoorRepo.cfg` and the
+door falls back to the original line-at-a-time listing, which needs nothing
+but plain text. `ScreenRows`/`ScreenCols` set the geometry (default 80x24).
+
 ## Configuration
 
 See `DoorRepo.cfg.example` for the full, commented reference -- every key,
