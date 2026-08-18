@@ -100,8 +100,8 @@ endif
 
 LIVE_HOST = http://bbs.uprough.net
 
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c ansi.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h aedoor.h netio.h ansi.h
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c ansi.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h aedoor.h netio.h ansi.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c
@@ -153,9 +153,9 @@ doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
 # POSIX socket declarations that glibc hides under -std=c89.
 TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
-.PHONY: test-flow test-md5 test-listtxt test-config test-http test-aedoor-native
+.PHONY: test-flow test-md5 test-sha256 test-listtxt test-config test-http test-aedoor-native
 
-test: test-flow test-md5 test-listtxt test-config test-http test-aedoor-native
+test: test-flow test-md5 test-sha256 test-listtxt test-config test-http test-aedoor-native
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
@@ -164,6 +164,10 @@ test-flow: flow.c tests/test_flow.c flow.h
 test-md5: md5.c tests/test_md5.c md5.h
 	$(CC) $(TEST_CFLAGS) md5.c tests/test_md5.c -o build-test-md5
 	./build-test-md5
+
+test-sha256: sha256.c tests/test_sha256.c sha256.h
+	$(CC) $(TEST_CFLAGS) sha256.c tests/test_sha256.c -o build-test-sha256
+	./build-test-sha256
 
 test-listtxt: listtxt.c tests/test_listtxt.c listtxt.h
 	$(CC) $(TEST_CFLAGS) listtxt.c tests/test_listtxt.c -o build-test-listtxt
@@ -198,7 +202,7 @@ live: native
 
 clean:
 	rm -f doorrepo doorrepo.amiga doorrepo.amiga-stub
-	rm -f build-test-flow build-test-md5 build-test-listtxt build-test-config build-test-http build-test-aedoor-native
+	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-listtxt build-test-config build-test-http build-test-aedoor-native
 	rm -f *.o
 	rm -rf *.dSYM
 	rm -rf $(AMIGA_NDK_SHIM) $(AMIGA_NETINCLUDE_VENDOR_LINK)
