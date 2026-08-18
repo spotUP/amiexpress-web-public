@@ -426,6 +426,26 @@ TEST(key_returns_minus1_on_eof)
     ASSERT_EQ(key, -1, "EOF on stdin reports as carrier loss (-1)");
 }
 
+TEST(raw_arrows_is_a_harmless_noop_natively)
+{
+    /* The native backend has no BBS to ask. What matters here is that the
+     * call EXISTS with this signature on both backends and is safe to make
+     * unconditionally at startup, because the door calls it before it knows
+     * which backend it was linked against.
+     *
+     * The behaviour that actually matters is on the Amiga side and cannot be
+     * exercised without a running AmiExpress: without the RAWARROW toggle,
+     * readChar() marks an arrow as a control key and loops past it, so the
+     * door never receives one (express.e:7514-7528 with rawArrow FALSE at
+     * express.e:303). That is a live bug report from a real node, and it is
+     * invisible to this project's emulator, which hands arrows to a door
+     * either way. */
+    ae_raw_arrows(1);
+    ae_raw_arrows(1); /* idempotent - the BBS command is a toggle */
+    ae_raw_arrows(0);
+    ASSERT_EQ(ae_check(), 0, "native ae_raw_arrows changes nothing observable");
+}
+
 TEST(check_is_always_zero_natively)
 {
     ASSERT_EQ(ae_check(), 0, "native ae_check never asks the caller to stop");
@@ -487,6 +507,7 @@ int main(void)
     RUN_TEST(get_on_eof_yields_empty_string);
     RUN_TEST(key_reads_single_char);
     RUN_TEST(key_returns_minus1_on_eof);
+    RUN_TEST(raw_arrows_is_a_harmless_noop_natively);
     RUN_TEST(check_is_always_zero_natively);
     RUN_TEST(start_returns_zero);
     RUN_TEST(shutdown_returns_to_caller);

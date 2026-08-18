@@ -120,6 +120,26 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
 #define JH_SM       4   /* the normal output call: writes String; Data != 0 appends the BBS's line break and runs its pause check; research doc, express.e:3406-3411 */
 #define JH_PM       5   /* prompt (String) + line input; unused here -- ae_get()'s prompt is already emitted via ae_put() */
 #define JH_HK       6   /* prompt (String) then blocking single-key read; reply key lands in String[0]; research doc */
+/* RAWARROW toggles the BBS's rawArrow flag (axcommon.e:187, handled at
+ * express.e:3814-3815). It is the difference between a door seeing the
+ * cursor keys and never seeing them at all:
+ *
+ *   JH_HK is answered by readChar(), which loops
+ *     UNTIL (((wasControl=FALSE) OR (raw)) AND (ch<>0)) ...
+ *   and processInputMessage() sets wasControl:=1 for an arrow key UNLESS
+ *   rawArrow is TRUE (express.e:7514-7528). rawArrow starts FALSE
+ *   (express.e:303), so with it off the BBS swallows every arrow and keeps
+ *   waiting for the "real" key - the door is never told anything happened.
+ *
+ * With rawArrow ON the same code still converts the sequence to
+ * LEFT/RIGHT/UP/DOWN = 2/3/4/5 (axconsts.e:75-78); it only stops treating
+ * them as control keys to be eaten. So a door enables this once and then
+ * reads the single-byte codes it already understood.
+ *
+ * Reported from a real AmiExpress node: cursor keys did nothing. It went
+ * unnoticed here because this project's emulator delivers arrows to a door
+ * whether or not rawArrow is set. */
+#define RAWARROW  501
 
 /* AmiExpress doors sometimes deliberately send "bbs:" device/volume paths
  * via JH_SM to trigger file display instead of a printed line: our emulator
@@ -374,6 +394,28 @@ int ae_check(void)
     return carrier_lost;
 }
 
+/* Whether this door has flipped the BBS's rawArrow flag, so do_shutdown()
+ * can flip it back. RAWARROW is a TOGGLE with no way to read the current
+ * state, which is exactly why the restore has to be tracked rather than
+ * assumed: leaving it on would change how the BBS's own line editor treats
+ * the cursor keys for everything the user does after this door exits. */
+static int raw_arrows_on = 0;
+
+void ae_raw_arrows(int on)
+{
+    if (msg == NULL || bbs_port == NULL) {
+        return;
+    }
+    if (on == raw_arrows_on) {
+        return; /* already in the requested state - toggling would undo it */
+    }
+    msg->Command = RAWARROW;
+    msg->Data = 0;
+    msg->String[0] = '\0';
+    xim_call();
+    raw_arrows_on = on ? 1 : 0;
+}
+
 /* Shared tail of ae_shutdown()/ae_fatal(): notify the BBS (JH_SHUTDOWN is
  * mandatory on every exit path -- research doc: "Never exit without
  * JH_SHUTDOWN ... the BBS waits forever", AEDoor.c:147-148), then release
@@ -382,6 +424,12 @@ int ae_check(void)
  * through. */
 static void do_shutdown(int code)
 {
+    /* Restore the BBS's arrow handling BEFORE the shutdown message, on every
+     * exit path this function funnels (normal quit, carrier loss, fatal). */
+    if (raw_arrows_on) {
+        ae_raw_arrows(0);
+    }
+
     if (bbs_port != NULL && msg != NULL) {
         msg->Command = JH_SHUTDOWN;
         msg->Data = 0;

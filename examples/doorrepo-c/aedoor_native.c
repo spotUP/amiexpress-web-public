@@ -190,6 +190,14 @@ int ae_key(void)
     return c;
 }
 
+void ae_raw_arrows(int on)
+{
+    /* No BBS on this backend: a terminal delivers whatever it delivers, and
+     * ui_read_key() already understands both the single-byte codes and the
+     * escape sequences. */
+    (void) on;
+}
+
 int ae_check(void)
 {
     return 0;

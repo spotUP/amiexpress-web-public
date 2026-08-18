@@ -83,6 +83,23 @@ int ae_key(void);
  * perform any protocol exchange. */
 int ae_check(void);
 
+/* Ask the BBS to stop swallowing the cursor keys.
+ *
+ * On a real AmiExpress node an arrow key is marked "control" and consumed
+ * by readChar()'s loop, so a door never receives one, until the door
+ * toggles the BBS's rawArrow flag (express.e:3814-3815, 7514-7528). With it
+ * on, arrows arrive as the single-byte codes 2/3/4/5 (LEFT/RIGHT/UP/DOWN,
+ * axconsts.e:75-78) - NOT as escape sequences.
+ *
+ * Call ae_raw_arrows(1) once after ae_start() if the door reads cursor
+ * keys. The backend restores the previous state on every shutdown path, so
+ * a door does not have to remember to. Calling it twice with the same
+ * argument is a no-op, which matters because the underlying BBS command is
+ * a toggle with no way to read the current state.
+ *
+ * The native backend has no BBS to ask and does nothing. */
+void ae_raw_arrows(int on);
+
 /* ShutDown equivalent (AEDoor.c ShutDown(), lines 255-265): the normal,
  * successful end of the door. Notifies the BBS (JH_SHUTDOWN) then
  * terminates the process with exit(0). On the Amiga backend this never

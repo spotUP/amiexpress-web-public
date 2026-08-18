@@ -3737,6 +3737,15 @@ int main(int argc, char **argv)
         return 1; /* not running under AmiExpress (or setup failed); nothing to report to */
     }
 
+    /* Ask the BBS to stop eating the cursor keys. Without this a real
+     * AmiExpress node marks every arrow as a control key and readChar()
+     * loops right past it, so the door is never told a key was pressed at
+     * all - reported from a real node as "cannot navigate with the cursor
+     * keys", and invisible here because this project's emulator delivers
+     * arrows either way. See ae_raw_arrows() in aedoor.h. The backend
+     * restores the previous state on every shutdown path. */
+    ae_raw_arrows(1);
+
     config_defaults(&cfg);
     skipped = 0;
     config_load(&cfg, DOOR_CONFIG_PATH, &skipped);
