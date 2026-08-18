@@ -374,6 +374,8 @@ same thing:
 |-----|------|
 | cursor up/down, PgUp/PgDn, Home/End | move the selection |
 | `ENTER` or `R` | download the selected archive (confirm first), verify its digest, optionally extract |
+| `I` | install it as a BBS command: extract, write the command config, offer to strip ads |
+| `U` | uninstall a BBS command this door installed |
 | `A` | show what is inside the archive, with ad files flagged |
 | `V` | show the door's own documentation - offered only for a door that has any |
 | `F` | filter by text - live, over the rows already loaded, no refetch |
@@ -388,6 +390,25 @@ Author, release group and the archive's ad-file count all ride in on
 drop `V=Doc`, without a per-entry request. Against an older server that sends
 six-field rows those fields read as unknown and every key is offered, as
 before.
+
+**Install and uninstall.** `I` turns an archive into a BBS command, the same
+three steps DOORMAN performs: extract into `DoorsDir/<CMD>/`, work out which
+extracted file is the door's program, and write `BBSCmdDir/<CMD>.info` with
+the four tooltypes the BBS reads (`TYPE`, `LOCATION`, `STACK`, `ACCESS`) --
+byte-identical to what DOORMAN writes, so a door installed by either one
+looks the same to the BBS. The archive is downloaded first if it is not
+already in `DownloadDir`. When the archive contains ad files, removing them
+is offered, never done silently. `U` removes the `.info` (which is what makes
+the door reachable at all), then the files the archive listing says it put
+there, then the directory; anything else left in that directory is reported
+rather than deleted.
+
+Which extracted file is the program is decided from the repository's own
+archive listing, not by looking at the directory: C89 has no way to enumerate
+one. The listing names an exact match on the archive or command name first,
+otherwise the largest file with no extension -- the Amiga convention. For the
+35 catalog archives the server has no listing for, `LOCATION` falls back to
+the command name and the door says so.
 
 **Digest verification:** the download is checked against the
 `X-Archive-SHA256` header the server sends with the archive bytes, falling

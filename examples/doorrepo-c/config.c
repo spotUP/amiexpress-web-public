@@ -16,6 +16,10 @@ void config_defaults(dr_config *cfg)
     cfg->download_dir[sizeof(cfg->download_dir) - 1] = '\0';
     cfg->page_size = 20;
     cfg->timeout_secs = 30;
+    strncpy(cfg->doors_dir, "Doors/", sizeof(cfg->doors_dir) - 1);
+    cfg->doors_dir[sizeof(cfg->doors_dir) - 1] = '\0';
+    strncpy(cfg->bbscmd_dir, "BBSCmd/", sizeof(cfg->bbscmd_dir) - 1);
+    cfg->bbscmd_dir[sizeof(cfg->bbscmd_dir) - 1] = '\0';
     strncpy(cfg->lha_command, "lha", sizeof(cfg->lha_command) - 1);
     cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';
     cfg->extract_after_download = 0;
@@ -259,6 +263,25 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
             } else {
                 strncpy(cfg->download_dir, value, sizeof(cfg->download_dir) - 1);
                 cfg->download_dir[sizeof(cfg->download_dir) - 1] = '\0';
+            }
+        } else if (str_icmp(key, "DoorsDir") == 0) {
+            /* Same checks as DownloadDir, and for the stronger of its two
+             * reasons: this value is interpolated (inside quotes) into the
+             * extraction system() command line. */
+            if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
+                local_skipped++;
+                g_last_unsafe_value_count++;
+            } else {
+                strncpy(cfg->doors_dir, value, sizeof(cfg->doors_dir) - 1);
+                cfg->doors_dir[sizeof(cfg->doors_dir) - 1] = '\0';
+            }
+        } else if (str_icmp(key, "BBSCmdDir") == 0) {
+            if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
+                local_skipped++;
+                g_last_unsafe_value_count++;
+            } else {
+                strncpy(cfg->bbscmd_dir, value, sizeof(cfg->bbscmd_dir) - 1);
+                cfg->bbscmd_dir[sizeof(cfg->bbscmd_dir) - 1] = '\0';
             }
         } else if (str_icmp(key, "PageSize") == 0) {
             parsed_value = validate_page_size(value);

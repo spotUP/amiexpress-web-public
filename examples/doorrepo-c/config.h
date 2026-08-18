@@ -6,6 +6,15 @@ typedef struct {
     int port;
     char path[128];
     char download_dir[128];
+    /* Where an installed door's files are put, and where its BBS command
+     * config is written. Both are joined with the command name chosen at
+     * install time: <doors_dir>/<CMD>/ and <bbscmd_dir>/<CMD>.info.
+     * doors_dir is interpolated into the extraction system() command line,
+     * so it gets the same shell-safety and '..' checks as download_dir;
+     * bbscmd_dir is only ever fopen()ed, and is checked the same way for
+     * consistency. */
+    char doors_dir[128];
+    char bbscmd_dir[128];
     int page_size;
     int timeout_secs;
     char lha_command[128];

@@ -6,6 +6,7 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
 #include "flow.h"
 
 void flow_compute_page(unsigned long total_rows, int page_size,
@@ -416,4 +417,308 @@ int flow_is_plain_alnum(const char *value)
         }
     }
     return 1;
+}
+
+/* ---- Install support: command names, paths, .info content, file lists ----
+ *
+ * All pure string work, deliberately here rather than in doorrepo.c so it
+ * can be tested without a server, a terminal or a filesystem. See flow.h
+ * for what each one guarantees.
+ */
+
+int flow_is_valid_bbs_command(const char *cmd)
+{
+    unsigned long len;
+    unsigned long i;
+
+    if (cmd == (const char *) 0 || cmd[0] == '\0') {
+        return 0;
+    }
+    len = (unsigned long) strlen(cmd);
+    if (len > FLOW_MAX_BBS_COMMAND) {
+        return 0;
+    }
+    for (i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) cmd[i];
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int flow_suggest_bbs_command(const char *archive_name, char *out, unsigned long outsize)
+{
+    unsigned long n = 0;
+    const char *p;
+
+    if (out == (char *) 0 || outsize == 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (archive_name == (const char *) 0) {
+        return -1;
+    }
+
+    for (p = archive_name; *p != '\0'; p++) {
+        unsigned char c = (unsigned char) *p;
+
+        if (c == '.') {
+            break; /* stop at the extension */
+        }
+        if (c >= 'a' && c <= 'z') {
+            c = (unsigned char) (c - 'a' + 'A');
+        }
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+            continue; /* scene names are full of !, $, -, & */
+        }
+        if (n + 1 >= outsize || n >= FLOW_MAX_BBS_COMMAND) {
+            break;
+        }
+        out[n++] = (char) c;
+    }
+    out[n] = '\0';
+    return (n > 0) ? (int) n : -1;
+}
+
+int flow_build_install_dir(char *out, unsigned long outsize,
+                            const char *doors_dir, const char *cmd)
+{
+    int len = flow_build_local_path(out, outsize, doors_dir, cmd);
+
+    if (len < 0) {
+        return -1;
+    }
+    /* Trailing separator: this path is handed to the extractor as a
+     * destination directory, and AmigaDOS and POSIX both accept the
+     * trailing '/' while only one of them tolerates its absence in every
+     * tool. */
+    if ((unsigned long) len + 2 > outsize) {
+        return -1;
+    }
+    out[len] = '/';
+    out[len + 1] = '\0';
+    return len + 1;
+}
+
+int flow_build_info_path(char *out, unsigned long outsize,
+                          const char *bbscmd_dir, const char *cmd)
+{
+    int len = flow_build_local_path(out, outsize, bbscmd_dir, cmd);
+
+    if (len < 0) {
+        return -1;
+    }
+    if ((unsigned long) len + 6 > outsize) {
+        return -1;
+    }
+    memcpy(out + len, ".info", 5);
+    out[len + 5] = '\0';
+    return len + 5;
+}
+
+int flow_build_info_content(char *out, unsigned long outsize,
+                             const char *door_type, const char *cmd,
+                             const char *binary_rel)
+{
+    unsigned long need;
+    const char *type = (door_type != (const char *) 0 && door_type[0] != '\0')
+        ? door_type : "XIM";
+
+    if (out == (char *) 0 || outsize == 0
+        || cmd == (const char *) 0 || binary_rel == (const char *) 0) {
+        return -1;
+    }
+
+    need = (unsigned long) (strlen("TYPE=\nLOCATION=Doors:/\nSTACK=65536\nACCESS=0\n")
+                            + strlen(type) + strlen(cmd) + strlen(binary_rel));
+    if (need + 1 > outsize) {
+        out[0] = '\0';
+        return -1;
+    }
+
+    /* Byte-identical to DOORMAN's buildDoorInfoContent() (app.ts) - the
+     * BBS reads these four tooltypes, and a door installed by either
+     * client must be indistinguishable to it. LOCATION is always the
+     * "Doors:" assign, never the sysop's DoorsDir spelling, because that
+     * is what the BBS resolves against. */
+    strcpy(out, "TYPE=");
+    strcat(out, type);
+    strcat(out, "\nLOCATION=Doors:");
+    strcat(out, cmd);
+    strcat(out, "/");
+    strcat(out, binary_rel);
+    strcat(out, "\nSTACK=65536\nACCESS=0\n");
+    return (int) need;
+}
+
+/* Copies field `index` (0-based, '|'-delimited) of `line` into `out`.
+ * Returns 0 on success, non-zero when the line has no such field. */
+static int files_field(const char *line, int index, char *out, unsigned long outsize)
+{
+    const char *p = line;
+    int i;
+
+    if (outsize == 0) {
+        return 1;
+    }
+    out[0] = '\0';
+
+    for (i = 0; i < index; i++) {
+        while (*p != '\0' && *p != '|' && *p != '\n' && *p != '\r') {
+            p++;
+        }
+        if (*p != '|') {
+            return 1;
+        }
+        p++;
+    }
+    {
+        unsigned long n = 0;
+        while (*p != '\0' && *p != '|' && *p != '\n' && *p != '\r') {
+            if (n + 1 < outsize) {
+                out[n++] = *p;
+            }
+            p++;
+        }
+        out[n] = '\0';
+    }
+    return 0;
+}
+
+const char *flow_files_next_line(const char *p)
+{
+    if (p == (const char *) 0) {
+        return (const char *) 0;
+    }
+    while (*p != '\0' && *p != '\n') {
+        p++;
+    }
+    while (*p == '\n' || *p == '\r') {
+        p++;
+    }
+    return (*p == '\0') ? (const char *) 0 : p;
+}
+
+int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
+                          char *path_out, unsigned long path_outsize)
+{
+    char sizebuf[32];
+    char junkbuf[8];
+
+    if (line == (const char *) 0 || path_out == (char *) 0) {
+        return 1;
+    }
+    if (files_field(line, 0, sizebuf, sizeof(sizebuf)) != 0
+        || files_field(line, 1, junkbuf, sizeof(junkbuf)) != 0
+        || files_field(line, 2, path_out, path_outsize) != 0) {
+        return 1;
+    }
+    if (path_out[0] == '\0') {
+        return 1;
+    }
+    if (size != (unsigned long *) 0) {
+        *size = strtoul(sizebuf, (char **) 0, 10);
+    }
+    if (is_junk != (int *) 0) {
+        *is_junk = (junkbuf[0] == '1');
+    }
+    return 0;
+}
+
+/* Basename of an archive-internal path, i.e. everything after the last
+ * '/' (the /files listing always uses '/' regardless of the archive's own
+ * separator). */
+static const char *files_basename(const char *path)
+{
+    const char *slash = strrchr(path, '/');
+
+    return (slash != (const char *) 0) ? slash + 1 : path;
+}
+
+static int name_has_extension(const char *name)
+{
+    return strchr(name, '.') != (const char *) 0;
+}
+
+int flow_pick_door_binary(const char *files_body, const char *archive_name,
+                          const char *cmd, char *out, unsigned long outsize)
+{
+    char base[64];
+    const char *line;
+    char best[160];
+    unsigned long best_size = 0;
+    int found_exact = 0;
+
+    if (out == (char *) 0 || outsize == 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    best[0] = '\0';
+
+    /* The archive's own base name, upper-cased: "AETRIV10.LHA" -> the
+     * executable is very often "AETRIV10". */
+    (void) flow_suggest_bbs_command(archive_name, base, sizeof(base));
+
+    line = files_body;
+    /* Skip the "FILES|<count>|<junk>" header line. */
+    if (line != (const char *) 0 && strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+
+    while (line != (const char *) 0 && !found_exact) {
+        char path[160];
+        unsigned long size = 0;
+        int junk = 0;
+
+        if (flow_files_parse_row(line, &size, &junk, path, sizeof(path)) == 0 && !junk) {
+            const char *name = files_basename(path);
+            unsigned long len = (unsigned long) strlen(name);
+
+            if (len > 0 && path[strlen(path) - 1] != '/') {
+                char upper[64];
+                unsigned long i;
+
+                for (i = 0; i < len && i + 1 < sizeof(upper); i++) {
+                    char c = name[i];
+                    if (c >= 'a' && c <= 'z') {
+                        c = (char) (c - 'a' + 'A');
+                    }
+                    upper[i] = c;
+                }
+                upper[(i < sizeof(upper)) ? i : sizeof(upper) - 1] = '\0';
+
+                /* 1. Exact match on the archive base name or the chosen
+                 *    BBS command - as good an answer as this can get. */
+                if ((base[0] != '\0' && strcmp(upper, base) == 0)
+                    || (cmd != (const char *) 0 && cmd[0] != '\0' && strcmp(upper, cmd) == 0)) {
+                    strncpy(best, path, sizeof(best) - 1);
+                    best[sizeof(best) - 1] = '\0';
+                    found_exact = 1;
+                } else if (!name_has_extension(name) && size > best_size) {
+                    /* 2. Otherwise the largest extension-less file: Amiga
+                     *    executables conventionally have no suffix, while
+                     *    the .doc/.txt/.info files around them do. */
+                    strncpy(best, path, sizeof(best) - 1);
+                    best[sizeof(best) - 1] = '\0';
+                    best_size = size;
+                }
+            }
+        }
+        line = flow_files_next_line(line);
+    }
+
+    if (best[0] == '\0') {
+        return -1;
+    }
+    if ((unsigned long) strlen(best) + 1 > outsize) {
+        return -1;
+    }
+    strcpy(out, best);
+    return (int) strlen(out);
+}
+
+int flow_key_ends_session(int key)
+{
+    return (key < 0) ? 1 : 0;
 }

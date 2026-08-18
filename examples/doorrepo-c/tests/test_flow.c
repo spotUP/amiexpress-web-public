@@ -740,9 +740,207 @@ TEST(plain_alnum_rejects_whitespace_and_punctuation)
     ASSERT_TRUE(!flow_is_plain_alnum("XIM."), "period is rejected");
 }
 
+
+/* ---- Install support (2026-08-18) ---------------------------------- */
+
+TEST(bbs_command_accepts_upper_alnum)
+{
+    ASSERT_TRUE(flow_is_valid_bbs_command("DOORREPO"), "plain upper-case name");
+    ASSERT_TRUE(flow_is_valid_bbs_command("X"), "single character");
+    ASSERT_TRUE(flow_is_valid_bbs_command("LORD2"), "digits allowed");
+    ASSERT_TRUE(flow_is_valid_bbs_command("ABCDEFGHIJKL"), "exactly 12 characters");
+}
+
+TEST(bbs_command_rejects_everything_else)
+{
+    ASSERT_TRUE(!flow_is_valid_bbs_command(""), "empty");
+    ASSERT_TRUE(!flow_is_valid_bbs_command("ABCDEFGHIJKLM"), "13 characters is too long");
+    ASSERT_TRUE(!flow_is_valid_bbs_command("lower"), "lower case is rejected, not folded");
+    ASSERT_TRUE(!flow_is_valid_bbs_command("MY DOOR"), "space");
+    ASSERT_TRUE(!flow_is_valid_bbs_command("MY/DOOR"), "path separator");
+    ASSERT_TRUE(!flow_is_valid_bbs_command("MY:DOOR"), "AmigaDOS device separator");
+    ASSERT_TRUE(!flow_is_valid_bbs_command(".."), "traversal");
+}
+
+TEST(suggest_command_from_real_archive_names)
+{
+    char out[32];
+
+    (void) flow_suggest_bbs_command("AETRIV10.LHA", out, sizeof(out));
+    ASSERT_STR_EQ(out, "AETRIV10", "extension dropped");
+
+    /* Real catalog names: scene releases are full of punctuation. */
+    (void) flow_suggest_bbs_command("!ALSTER.LHA", out, sizeof(out));
+    ASSERT_STR_EQ(out, "ALSTER", "leading '!' removed");
+
+    (void) flow_suggest_bbs_command("$CP-PS12.LZX", out, sizeof(out));
+    ASSERT_STR_EQ(out, "CPPS12", "'$' and '-' removed");
+
+    (void) flow_suggest_bbs_command("abs-plc2.lha", out, sizeof(out));
+    ASSERT_STR_EQ(out, "ABSPLC2", "lower case folded up");
+
+    (void) flow_suggest_bbs_command("VERYLONGARCHIVENAME.LHA", out, sizeof(out));
+    ASSERT_EQ((long) strlen(out), 12L, "truncated to the command-name limit");
+}
+
+TEST(suggest_command_fails_when_nothing_usable_remains)
+{
+    char out[32];
+
+    ASSERT_EQ(flow_suggest_bbs_command("!!!.LHA", out, sizeof(out)), -1, "all punctuation");
+    ASSERT_STR_EQ(out, "", "output emptied on failure");
+}
+
+TEST(install_paths_join_amigados_style)
+{
+    char out[128];
+
+    (void) flow_build_install_dir(out, sizeof(out), "Doors/", "MYDOOR");
+    ASSERT_STR_EQ(out, "Doors/MYDOOR/", "trailing separator already present");
+
+    (void) flow_build_install_dir(out, sizeof(out), "Work:Doors", "MYDOOR");
+    ASSERT_STR_EQ(out, "Work:Doors/MYDOOR/", "separator inserted for a bare directory");
+
+    (void) flow_build_install_dir(out, sizeof(out), "RAM:", "MYDOOR");
+    ASSERT_STR_EQ(out, "RAM:MYDOOR/", "device assign needs no separator");
+
+    (void) flow_build_info_path(out, sizeof(out), "BBSCmd/", "MYDOOR");
+    ASSERT_STR_EQ(out, "BBSCmd/MYDOOR.info", "info path");
+
+    ASSERT_EQ(flow_build_install_dir(out, 8, "Doors/", "MYDOOR"), -1, "too small a buffer");
+    ASSERT_EQ(flow_build_info_path(out, 8, "BBSCmd/", "MYDOOR"), -1, "too small a buffer");
+}
+
+TEST(info_content_matches_doormans_format)
+{
+    char out[256];
+
+    (void) flow_build_info_content(out, sizeof(out), "XIM", "MYDOOR", "bin/MyDoor");
+    ASSERT_STR_EQ(out,
+                  "TYPE=XIM\nLOCATION=Doors:MYDOOR/bin/MyDoor\nSTACK=65536\nACCESS=0\n",
+                  "byte-identical to buildDoorInfoContent()");
+
+    (void) flow_build_info_content(out, sizeof(out), "", "MYDOOR", "MyDoor");
+    ASSERT_STR_EQ(out,
+                  "TYPE=XIM\nLOCATION=Doors:MYDOOR/MyDoor\nSTACK=65536\nACCESS=0\n",
+                  "empty door type defaults to XIM");
+
+    ASSERT_EQ(flow_build_info_content(out, 10, "XIM", "MYDOOR", "MyDoor"), -1,
+              "too small a buffer");
+}
+
+/* A real /files body: this is what GET /files/1OO-WALL.LHA returns, with
+ * the ad file the indexer flagged. */
+static const char FILES_BODY[] =
+    "FILES|4|1\n"
+    "1273|0|file_id.diz\n"
+    "20984|0|PFiles/1oo/Wall/1oo_Wall\n"
+    "3112|0|PFiles/1oo/Wall/1oo_Wall.doc\n"
+    "412|1|PFiles/1oo/Wall/BBSAD.TXT\n";
+
+TEST(files_rows_parse)
+{
+    const char *line = flow_files_next_line(FILES_BODY);
+    unsigned long size = 0;
+    int junk = -1;
+    char path[128];
+
+    ASSERT_EQ(flow_files_parse_row(line, &size, &junk, path, sizeof(path)), 0, "first row parses");
+    ASSERT_EQ((long) size, 1273L, "size");
+    ASSERT_EQ(junk, 0, "not junk");
+    ASSERT_STR_EQ(path, "file_id.diz", "path");
+
+    line = flow_files_next_line(line);
+    line = flow_files_next_line(line);
+    line = flow_files_next_line(line);
+    ASSERT_EQ(flow_files_parse_row(line, &size, &junk, path, sizeof(path)), 0, "ad row parses");
+    ASSERT_EQ(junk, 1, "flagged as junk");
+    ASSERT_STR_EQ(path, "PFiles/1oo/Wall/BBSAD.TXT", "nested path");
+
+    ASSERT_TRUE(flow_files_next_line(line) == (const char *) 0, "no line after the last");
+    ASSERT_TRUE(flow_files_parse_row("garbage", &size, &junk, path, sizeof(path)) != 0,
+                "a malformed row is rejected");
+}
+
+TEST(pick_binary_prefers_the_extensionless_file)
+{
+    char out[128];
+
+    /* Nothing here is named after the archive, so the largest file with no
+     * extension wins - and the ad file must not, even though .TXT files can
+     * be large. */
+    ASSERT_TRUE(flow_pick_door_binary(FILES_BODY, "1OO-WALL.LHA", "WALL",
+                                       out, sizeof(out)) > 0, "found a binary");
+    ASSERT_STR_EQ(out, "PFiles/1oo/Wall/1oo_Wall", "the extensionless file");
+}
+
+TEST(pick_binary_prefers_an_exact_name_match)
+{
+    static const char body[] =
+        "FILES|3|0\n"
+        "100|0|readme.txt\n"
+        "9000|0|data/BIGBLOB\n"
+        "500|0|AETRIV10\n";
+    char out[128];
+
+    /* The archive's own base name beats the bigger extensionless file. */
+    (void) flow_pick_door_binary(body, "AETRIV10.LHA", "TRIVIA", out, sizeof(out));
+    ASSERT_STR_EQ(out, "AETRIV10", "matched the archive base name");
+}
+
+TEST(pick_binary_gives_up_when_everything_has_an_extension)
+{
+    static const char body[] =
+        "FILES|2|0\n"
+        "100|0|readme.txt\n"
+        "200|0|art.iff\n";
+    char out[128];
+
+    ASSERT_EQ(flow_pick_door_binary(body, "SOMEDOOR.LHA", "SOMEDOOR", out, sizeof(out)), -1,
+              "no candidate - caller falls back to the command name");
+}
+
+TEST(pick_binary_ignores_ad_files)
+{
+    static const char body[] =
+        "FILES|2|1\n"
+        "50000|1|BBSAD\n"
+        "100|0|realdoor\n";
+    char out[128];
+
+    /* An ad file with no extension and a huge size would otherwise win. */
+    (void) flow_pick_door_binary(body, "X.LHA", "X", out, sizeof(out));
+    ASSERT_STR_EQ(out, "realdoor", "junk rows are never candidates");
+}
+
+
+TEST(eof_key_ends_the_session)
+{
+    /* ae_key() returns -1 at EOF / carrier loss. Every other value is a
+     * keystroke, including 0 and the synthetic codes ui_read_key() uses
+     * for the cursor keys (>= 1000). */
+    ASSERT_TRUE(flow_key_ends_session(-1), "-1 ends the session");
+    ASSERT_TRUE(!flow_key_ends_session(0), "0 is a keystroke, not an ending");
+    ASSERT_TRUE(!flow_key_ends_session('q'), "an ordinary key does not end it");
+    ASSERT_TRUE(!flow_key_ends_session(1000), "a synthetic cursor-key code does not end it");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
+
+    RUN_TEST(eof_key_ends_the_session);
+    RUN_TEST(bbs_command_accepts_upper_alnum);
+    RUN_TEST(bbs_command_rejects_everything_else);
+    RUN_TEST(suggest_command_from_real_archive_names);
+    RUN_TEST(suggest_command_fails_when_nothing_usable_remains);
+    RUN_TEST(install_paths_join_amigados_style);
+    RUN_TEST(info_content_matches_doormans_format);
+    RUN_TEST(files_rows_parse);
+    RUN_TEST(pick_binary_prefers_the_extensionless_file);
+    RUN_TEST(pick_binary_prefers_an_exact_name_match);
+    RUN_TEST(pick_binary_gives_up_when_everything_has_an_extension);
+    RUN_TEST(pick_binary_ignores_ad_files);
 
     RUN_TEST(page_first_page_full);
     RUN_TEST(page_middle_page_full);

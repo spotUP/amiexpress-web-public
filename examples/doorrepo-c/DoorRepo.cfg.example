@@ -21,8 +21,17 @@ Valid range: 1-3600 (1 second to 1 hour). If an invalid value is specified,
 the default is used.
 # TimeoutSecs=30
 
-The name or full path of the LHA archive extraction utility, used if
-ExtractAfterDownload is enabled.
+The AmigaDOS directory an installed door's files are put in. The BBS
+command name chosen at install time is appended to it, so a door installed
+as MYDOOR lands in Doors/MYDOOR/. Must exist before use.
+# DoorsDir=Doors/
+
+The AmigaDOS directory holding BBS command configs. Installing writes
+<CMD>.info here; uninstalling removes it. Must exist before use.
+# BBSCmdDir=BBSCmd/
+
+The name or full path of the LHA archive extraction utility, used by
+[I]nstall and if ExtractAfterDownload is enabled.
 # LhaCommand=lha
 
 Whether to automatically extract downloaded archives after downloading them.

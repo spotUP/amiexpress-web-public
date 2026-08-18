@@ -87,6 +87,14 @@ static int would_reroute_to_file_display(const char *text, unsigned long n)
 int ae_start(int node)
 {
     (void)node; /* nothing to register with when there is no AmiExpress */
+    /* Unbuffered stdout for the dev backend only. With a pipe or a file on
+     * the other end, stdio buffers 4 KB and the door's abrupt exit paths
+     * (carrier loss, ae_fatal) do not flush - so a captured run of a real
+     * session came back truncated mid-sentence, and a test could not tell
+     * "the door stopped there" from "the buffer was never written". On the
+     * Amiga side output goes through AmiExpress, which has no such
+     * buffering, so this has no equivalent there. */
+    setvbuf(stdout, (char *) 0, _IONBF, 0);
     return 0;
 }
 

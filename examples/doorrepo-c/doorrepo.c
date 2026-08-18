@@ -1078,7 +1078,12 @@ static void ui_view_cycle_type(ui_view *v, const dr_catalog *cat)
  * one archive, exactly like the DIZ.
  * ------------------------------------------------------------------- */
 
-#define FILES_MAX_BYTES 4096
+/* Raised from 4096 on 2026-08-18. The listing stopped being only a display
+ * for the [A]rchive pane when install arrived: it is now the manifest the
+ * door picks the executable from and deletes ad files by, and a truncated
+ * manifest silently leaves ads on disk. 16 KB holds the full listing for
+ * every archive in the current catalog. Static, not stack. */
+#define FILES_MAX_BYTES 16384
 
 static char g_files[FILES_MAX_BYTES + 1];
 static char g_files_archive[64] = "";
@@ -1354,7 +1359,7 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e)
 {
     char bar[160];
 
-    strcpy(bar, "ENTER/R=Get  A=Archive");
+    strcpy(bar, "ENTER/R=Get  I=Install  A=Archive");
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
         strcat(bar, "  V=Doc");
     }
@@ -1883,6 +1888,21 @@ static int ui_read_key(void)
     int c;
 
     c = ae_key();
+    /* EOF on the input stream means the user is gone - a dropped carrier
+     * on a real node, the end of a scripted session on the dev backend.
+     * Handled HERE rather than in each caller because every one of them
+     * (the browse loop, the filter box, the yes/no confirm, the install
+     * prompt) reads keys in a loop whose only exit is a key: a -1 that
+     * matches no case falls through to "redraw and read again", and the
+     * loop spins as fast as the terminal will take output. That is not
+     * theoretical - a run whose input ran out wrote 21 GB of frames in two
+     * minutes before it was killed. Line mode already gives up on repeated
+     * empty input (note_empty_input_and_check_giveup); this is the
+     * full-screen equivalent, and putting it at the single point where
+     * keys enter the door means no future prompt can forget it. */
+    if (flow_key_ends_session(c)) {
+        stop_for_carrier_loss();
+    }
     if (c == '\r' || c == '\n') {
         return UI_KEY_ENTER;
     }
@@ -1993,6 +2013,546 @@ static int ui_confirm(ansi_buf *b, char *frame, long framecap,
 
     key = ui_read_key();
     return (key == 'y' || key == 'Y' || key == UI_KEY_ENTER);
+}
+
+/* Defined below, next to the other UI prompt helpers. */
+static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
+                          const ui_geometry *g, const char *label,
+                          char *buf, int maxlen);
+
+/* ---------------------------------------------------------------------
+ * Install / uninstall (DOORMAN parity)
+ *
+ * Downloading leaves an archive in DownloadDir; installing turns it into a
+ * BBS command. Three steps, the same three DOORMAN's install performs:
+ * extract into <DoorsDir>/<CMD>/, find the executable inside it, and write
+ * <BBSCmdDir>/<CMD>.info with the tooltypes the BBS reads.
+ *
+ * The one thing this door cannot do the way DOORMAN does is LOOK at what
+ * came out of the archive: C89 has no directory enumeration, and the
+ * portable backend exposes none. The /files listing stands in for it -
+ * the server already knows every path inside the archive and which of them
+ * are ads, so the same listing that draws the [A]rchive pane picks the
+ * binary and drives the ad strip. That is also why the strip is offered at
+ * install time rather than as a separate key on an installed door: the
+ * listing describes the ARCHIVE, so it can only be trusted to name what
+ * this door just extracted itself.
+ * ------------------------------------------------------------------- */
+
+/* Non-zero when `path` can be opened for reading - the only existence test
+ * portable C89 offers. */
+static int file_exists(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+
+    if (f == (FILE *) 0) {
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+/* Runs the archiver over `archive_path`, extracting into `dest_dir`.
+ * Returns 1 on success.
+ *
+ * The command SHAPE differs by target and there is no single spelling that
+ * works on both: AmigaDOS LhA takes the destination as a third argument
+ * ("LhA x foo.lha Doors:MYDOOR/"), while Unix lha reads that same third
+ * argument as a member-name filter and extracts NOTHING (verified on this
+ * host: exit 1, empty destination). The native build is only useful if it
+ * really extracts, so it uses lha's own "xw=<dir>" form. Both spellings
+ * quote every interpolated value, and every value has already been through
+ * the allowlist/denylist checks below. */
+static int run_extractor(const dr_config *cfg, const char *archive_path, const char *dest_dir)
+{
+    char cmd[600];
+    int rc;
+
+#ifdef AMIGA
+    sprintf(cmd, "\"%s\" x \"%s\" \"%s\"", cfg->lha_command, archive_path, dest_dir);
+#else
+    sprintf(cmd, "\"%s\" xw=\"%s\" \"%s\"", cfg->lha_command, dest_dir, archive_path);
+#endif
+    rc = system(cmd);
+    return (rc == 0);
+}
+
+/* Deletes the files the /files listing flags as ads, under `install_dir`.
+ * Returns how many were removed. Silent per-file failures are counted as
+ * not-removed rather than aborting: a strip that half-worked has still
+ * improved the install, and the caller reports the real number. */
+static int strip_ad_files(const char *install_dir, const char *files_body)
+{
+    const char *line = files_body;
+    int removed = 0;
+
+    if (line != (const char *) 0 && strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+
+    while (line != (const char *) 0) {
+        char rel[160];
+        char full[320];
+        int junk = 0;
+
+        if (flow_files_parse_row(line, (unsigned long *) 0, &junk, rel, sizeof(rel)) == 0
+            && junk) {
+            if (flow_build_local_path(full, sizeof(full), install_dir, rel) >= 0) {
+                if (remove(full) == 0) {
+                    removed++;
+                }
+            }
+        }
+        line = flow_files_next_line(line);
+    }
+
+    return removed;
+}
+
+/* The whole install, from an entry in the list to a runnable BBS command.
+ * Reports every step to the user, because on a real node this is the one
+ * action that changes what the BBS itself will do. */
+static void install_door(const dr_config *cfg, const dr_entry *entry,
+                         ansi_buf *b, char *frame, long framecap,
+                         const ui_geometry *g)
+{
+    char cmdname[FLOW_MAX_BBS_COMMAND + 1];
+    char local_path[256];
+    char install_dir[256];
+    char info_path[256];
+    char binary_rel[160];
+    char binary_check[420];
+    char info_content[320];
+    char msg[420];
+    int extract_ok;
+    int have_listing;
+    int program_readable;
+    FILE *f;
+
+    /* The archive name has already passed the CWE-22 filename check at
+     * catalog-parse time; re-checked here for the same reason the
+     * download path re-checks it - this is a different dangerous
+     * operation, and the check belongs next to it. */
+    if (!flow_is_safe_archive_filename(entry->archive)) {
+        ae_put("Install refused: this catalog entry's archive name is not a safe filename.", 1);
+        return;
+    }
+
+    cmdname[0] = '\0';
+    (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+
+    if (!ui_text_prompt(b, frame, framecap, g, "Install as BBS command:",
+                        cmdname, FLOW_MAX_BBS_COMMAND)) {
+        return; /* empty answer = changed their mind */
+    }
+    if (!flow_is_valid_bbs_command(cmdname)) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        ae_put("That is not a usable BBS command name: use A-Z and 0-9 only, up to 12", 1);
+        ae_put("characters. Nothing was installed.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (flow_build_local_path(local_path, sizeof(local_path), cfg->download_dir, entry->archive) < 0
+        || flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0
+        || flow_build_info_path(info_path, sizeof(info_path), cfg->bbscmd_dir, cmdname) < 0) {
+        ae_put("Install refused: DownloadDir, DoorsDir or BBSCmdDir plus this name is too long.", 1);
+        return;
+    }
+
+    if (file_exists(info_path)) {
+        if (!ui_confirm(b, frame, framecap, g, "That BBS command already exists. Replace it?  [Y/N]")) {
+            return;
+        }
+    }
+
+    /* Leave the full-screen browser: everything from here on reports line
+     * by line, exactly as the download does. */
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    if (getenv("DOORREPO_TRACE") != (char *) 0) {
+        sprintf(msg, "TRACE local_path=%s exists=%d", local_path, file_exists(local_path));
+        ae_put(msg, 1);
+    }
+    if (!file_exists(local_path)) {
+        ae_put("Archive not downloaded yet - fetching it first.", 1);
+        download_and_verify(cfg, entry);
+        if (!file_exists(local_path)) {
+            ae_put("Install stopped: the archive was not downloaded.", 1);
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+    }
+
+    /* Same re-validation as the download path performs before ITS system()
+     * call, for the same two reasons (a config field set without going
+     * through config_load, and a server-supplied archive name that
+     * config.c never sees). DoorsDir joins that list here because it is
+     * interpolated into this command line too. */
+    if (!flow_is_valid_command_token(cfg->lha_command, sizeof(cfg->lha_command))
+        || flow_contains_forbidden_shell_char(cfg->download_dir)
+        || flow_contains_forbidden_shell_char(cfg->doors_dir)
+        || flow_contains_forbidden_shell_char(entry->archive)
+        || !flow_is_safe_archive_filename(entry->archive)) {
+        ae_put("Install refused: LhaCommand, DownloadDir, DoorsDir or the archive name is", 1);
+        ae_put("not safe to pass to a shell command. Nothing was installed.", 1);
+        log_line(cfg, "INSTALL REFUSED: unsafe value in the extraction command line");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    sprintf(msg, "Extracting %s into %s ...", entry->archive, install_dir);
+    ae_put(msg, 1);
+    extract_ok = run_extractor(cfg, local_path, install_dir);
+
+    /* The archive listing doubles as the manifest of what was just
+     * extracted - see this section's header comment. */
+    files_load(cfg, entry->archive);
+
+    binary_rel[0] = '\0';
+    if (!g_files_ok
+        || flow_pick_door_binary(g_files, entry->archive, cmdname,
+                                 binary_rel, sizeof(binary_rel)) < 0) {
+        /* Same fallback DOORMAN uses when its own search comes up empty:
+         * name the command itself and let the sysop correct LOCATION. */
+        strcpy(binary_rel, cmdname);
+        ae_put("Could not tell which extracted file is the door's program.", 1);
+        sprintf(msg, "LOCATION was set to %s - check it in %s.", binary_rel, info_path);
+        ae_put(msg, 1);
+    }
+
+    /* Whether the install worked is decided by the FILE the .info is about
+     * to point at, not by the archiver's exit code.
+     *
+     * The exit code turned out to be the wrong test in both directions.
+     * Amiga-authored archives routinely make Unix lha report a CRC error
+     * or an unknown header level on one member while extracting every
+     * other file perfectly (1OO-WALL.LHA does exactly this on this host) -
+     * refusing there would have failed an install whose door is sitting on
+     * disk, runnable. And an archiver that exits 0 having written nothing
+     * useful would have produced a .info pointing at a file that does not
+     * exist, which the BBS only discovers when a user picks the command.
+     * So: check the program is really there, and report the archiver's
+     * complaint as the warning it is. */
+    have_listing = (g_files_ok && strncmp(g_files, "FILES|0|", 8) != 0);
+    program_readable = (flow_build_local_path(binary_check, sizeof(binary_check),
+                                              install_dir, binary_rel) >= 0)
+        && file_exists(binary_check);
+
+    /* How much weight the "is the program there?" check carries.
+     *
+     * fopen() is the only existence test portable C89 offers, and it
+     * answers a narrower question than it looks: TELSER40.LHA extracts a
+     * bin/ directory whose Amiga protection bits become a Unix mode with
+     * no read permission, so bin/telser IS on disk and fopen() still
+     * fails. Refusing there would block a perfectly good install on the
+     * strength of a check that cannot tell "missing" from "unreadable" -
+     * and on the real target the door needs the executable bit, not the
+     * read bit, so the same file is fine.
+     *
+     * So an unopenable program is a WARNING on its own, and a refusal only
+     * when the archiver ALSO reported failure - two independent signals
+     * pointing the same way, which is the case where a .info would
+     * genuinely point at nothing. */
+    if (!program_readable && !extract_ok) {
+        ae_put("Install stopped: the archiver reported an error and the door's program", 1);
+        sprintf(msg, "is not readable at %s.", binary_check);
+        ae_put(msg, 1);
+        ae_put("The archive may be damaged, or LhaCommand may not handle this format.", 1);
+        log_line(cfg, "INSTALL FAILED: archiver error and no readable program");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+    if (!have_listing) {
+        /* No listing at all - 35 of the catalog's 3301 archives have none,
+         * because the server could not read their contents. Absent
+         * evidence is not contradicting evidence: install with the command
+         * name as LOCATION (what DOORMAN does whenever its own search
+         * finds nothing) and say plainly that it needs checking. */
+        ae_put("The repository has no file listing for this archive, so the door's program", 1);
+        sprintf(msg, "could not be identified. LOCATION was set to %s and almost", binary_rel);
+        ae_put(msg, 1);
+        sprintf(msg, "certainly needs correcting in %s.", info_path);
+        ae_put(msg, 1);
+        log_line(cfg, "INSTALL WARN: no file listing, LOCATION guessed");
+    } else if (!program_readable) {
+        ae_put("Note: the door's program could not be opened for reading at", 1);
+        sprintf(msg, "%s.", binary_check);
+        ae_put(msg, 1);
+        ae_put("On AmigaDOS that is usually just its protection bits and the door will run;", 1);
+        ae_put("check LOCATION in the command config if it does not.", 1);
+        log_line(cfg, "INSTALL WARN: program not readable, LOCATION kept");
+    } else if (!extract_ok) {
+        ae_put("Note: the archiver reported an error, but the door's program did extract.", 1);
+        ae_put("Some other file in the archive may be damaged or incomplete.", 1);
+        log_line(cfg, "INSTALL WARN: archiver reported an error, program present");
+    }
+
+    if (flow_build_info_content(info_content, sizeof(info_content),
+                                 entry->type, cmdname, binary_rel) < 0) {
+        ae_put("Install failed: the command config would not fit its buffer.", 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    f = fopen(info_path, "wb");
+    if (f == (FILE *) 0) {
+        sprintf(msg, "Install failed: could not write %s.", info_path);
+        ae_put(msg, 1);
+        ae_put("Check BBSCmdDir in DoorRepo.cfg - the directory must already exist.", 1);
+        log_line(cfg, "INSTALL FAILED: could not write the .info");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+    fputs(info_content, f);
+    fclose(f);
+
+    /* Ads are offered, never removed silently: they are files the archive's
+     * author put there, and a sysop may want to read one. entry->junk is -1
+     * against a server that does not report the count, in which case the
+     * listing itself still knows and the offer is made from that. */
+    if (g_files_ok) {
+        int junk_total = 0;
+        const char *line = g_files;
+
+        if (strncmp(line, "FILES|", 6) == 0) {
+            char header_junk[16];
+            const char *p = line + 6;
+            while (*p != '\0' && *p != '|') {
+                p++;
+            }
+            if (*p == '|') {
+                unsigned long n = 0;
+                p++;
+                while (*p >= '0' && *p <= '9' && n + 1 < sizeof(header_junk)) {
+                    header_junk[n++] = *p++;
+                }
+                header_junk[n] = '\0';
+                junk_total = atoi(header_junk);
+            }
+        }
+
+        if (junk_total > 0) {
+            sprintf(msg, "This archive contains %d ad file(s). Remove them?  [Y/N] ", junk_total);
+            ae_put(msg, 0);
+            {
+                int key = ae_key();
+                if (key == 'y' || key == 'Y') {
+                    int removed = strip_ad_files(install_dir, g_files);
+                    sprintf(msg, "Removed %d of %d ad file(s).", removed, junk_total);
+                    ae_put("", 1);
+                    ae_put(msg, 1);
+                } else {
+                    ae_put("", 1);
+                }
+            }
+        }
+    }
+
+    sprintf(msg, "Installed as %s.  Program: %s", cmdname, binary_rel);
+    ae_put(msg, 1);
+    sprintf(msg, "Command config written to %s.", info_path);
+    ae_put(msg, 1);
+    {
+        char logmsg[256];
+        sprintf(logmsg, "INSTALL OK archive=%s cmd=%s binary=%s", entry->archive, cmdname, binary_rel);
+        log_line(cfg, logmsg);
+    }
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
+}
+
+/* Removes a BBS command this door installed: the .info first (that is what
+ * makes the door reachable at all), then the files the archive listing says
+ * are in its directory, then the directory itself.
+ *
+ * Why file-by-file rather than a recursive delete: C89 cannot enumerate a
+ * directory, and building a "delete all" shell command would put a second,
+ * far more destructive command line next to the extraction one. Deleting
+ * exactly the paths the server says the archive contained is bounded by
+ * something already known. Anything else in that directory - a config the
+ * sysop wrote, a log the door kept - is deliberately left, and the final
+ * message says so when the directory could not be removed. */
+static void uninstall_door(const dr_config *cfg, const dr_entry *entry,
+                           ansi_buf *b, char *frame, long framecap,
+                           const ui_geometry *g)
+{
+    char cmdname[FLOW_MAX_BBS_COMMAND + 1];
+    char install_dir[256];
+    char info_path[256];
+    char msg[320];
+    int removed = 0;
+
+    cmdname[0] = '\0';
+    (void) flow_suggest_bbs_command(entry->archive, cmdname, sizeof(cmdname));
+
+    if (!ui_text_prompt(b, frame, framecap, g, "Uninstall which BBS command:",
+                        cmdname, FLOW_MAX_BBS_COMMAND)) {
+        return;
+    }
+    if (!flow_is_valid_bbs_command(cmdname)
+        || flow_build_install_dir(install_dir, sizeof(install_dir), cfg->doors_dir, cmdname) < 0
+        || flow_build_info_path(info_path, sizeof(info_path), cfg->bbscmd_dir, cmdname) < 0) {
+        return;
+    }
+
+    if (!file_exists(info_path)) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        sprintf(msg, "No such BBS command: %s", info_path);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    sprintf(msg, "Uninstall %s?  [Y/N]", cmdname);
+    if (!ui_confirm(b, frame, framecap, g, msg)) {
+        return;
+    }
+
+    ansi_begin(b, frame, framecap);
+    ansi_cursor(b, 1);
+    ansi_reset(b);
+    ansi_clear(b);
+    ansi_flush(b);
+
+    if (remove(info_path) != 0) {
+        sprintf(msg, "Could not remove %s. The command is still installed.", info_path);
+        ae_put(msg, 1);
+        log_line(cfg, "UNINSTALL FAILED: could not remove the .info");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+    ae_put("BBS command removed.", 1);
+
+    files_load(cfg, entry->archive);
+    if (g_files_ok) {
+        const char *line = g_files;
+
+        if (strncmp(line, "FILES|", 6) == 0) {
+            line = flow_files_next_line(line);
+        }
+        while (line != (const char *) 0) {
+            char rel[160];
+            char full[320];
+
+            if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0,
+                                      rel, sizeof(rel)) == 0) {
+                if (flow_build_local_path(full, sizeof(full), install_dir, rel) >= 0) {
+                    if (remove(full) == 0) {
+                        removed++;
+                    }
+                }
+            }
+            line = flow_files_next_line(line);
+        }
+    }
+
+    sprintf(msg, "Removed %d file(s) from %s.", removed, install_dir);
+    ae_put(msg, 1);
+
+    if (remove(install_dir) != 0) {
+        sprintf(msg, "%s still exists - it is not empty. Anything left there was not", install_dir);
+        ae_put(msg, 1);
+        ae_put("part of the archive and has been left alone.", 1);
+    }
+
+    {
+        char logmsg[256];
+        sprintf(logmsg, "UNINSTALL OK cmd=%s files=%d", cmdname, removed);
+        log_line(cfg, logmsg);
+    }
+
+    ae_put("", 1);
+    ae_put("Press any key to return to the list.", 1);
+    (void) ae_key();
+}
+
+/* Reads a short line of text on the footer bar, seeded with `buf`'s current
+ * contents (the caller's suggested default) so the common answer is one
+ * keypress. Returns 1 when accepted with ENTER, 0 when abandoned with an
+ * empty line. Upper-cases as it goes: every value asked for through here is
+ * a BBS command name, and typing one in lower case is a mistake the door
+ * should absorb rather than reject. */
+static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
+                          const ui_geometry *g, const char *label,
+                          char *buf, int maxlen)
+{
+    int len = (int) strlen(buf);
+    int row = g->rows - UI_FOOTER_ROWS + 2;
+
+    for (;;) {
+        char line[160];
+        int key;
+
+        strcpy(line, label);
+        strcat(line, " ");
+        strncat(line, buf, sizeof(line) - strlen(line) - 2);
+
+        ansi_begin(b, frame, framecap);
+        ansi_fill(b, row, 1, g->cols, ANSI_WHITE, ANSI_BLUE);
+        ansi_color(b, ANSI_YELLOW, ANSI_BLUE, 1);
+        ansi_text(b, row, 2, line, g->cols - 2);
+        ansi_goto(b, row, 2 + (int) strlen(line));
+        ansi_cursor(b, 1);
+        ansi_flush(b);
+
+        key = ui_read_key();
+
+        if (key == UI_KEY_ENTER) {
+            ansi_begin(b, frame, framecap);
+            ansi_cursor(b, 0);
+            ansi_flush(b);
+            return (buf[0] != '\0') ? 1 : 0;
+        }
+        if (key == 27 || key >= 1000) {
+            continue; /* cursor keys and stray escapes mean nothing here */
+        }
+        if (key == 8 || key == 127) {
+            if (len > 0) {
+                buf[--len] = '\0';
+            }
+        } else if (key == 21) {              /* CTRL-U clears */
+            len = 0;
+            buf[0] = '\0';
+        } else if (key >= 32 && key < 127 && len < maxlen) {
+            char c = (char) key;
+            if (c >= 'a' && c <= 'z') {
+                c = (char) (c - 'a' + 'A');
+            }
+            buf[len++] = c;
+            buf[len] = '\0';
+        }
+    }
 }
 
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
@@ -2260,6 +2820,26 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                      * alone rather than clearing the pane: the reader
                      * keeps what they were reading. */
                 }
+            }
+            break;
+        case 'i': case 'I':
+            if (view.count > 0) {
+                install_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                             (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
+            }
+            break;
+        case 'u': case 'U':
+            if (view.count > 0) {
+                uninstall_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
+                               (long) sizeof(frame), &g);
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                ansi_cursor(&buf, 0);
+                ansi_flush(&buf);
+                need_full_redraw = 1;
             }
             break;
         case 'b': case 'B':
@@ -2657,7 +3237,12 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
         outcome = flow_next_verify_outcome(attempt, matched);
 
         if (outcome == FLOW_VERIFY_OK) {
-            char msg[96];
+            /* 96 bytes was enough while only a 32-character MD5 could
+             * appear here; a 64-character SHA-256 needs 97 and smashed the
+             * stack (found by AddressSanitizer on a real download, after
+             * the verification itself had already succeeded). Sized for
+             * the longest digest plus the sentence around it. */
+            char msg[160];
             sprintf(msg, "Checksum verified OK (%s %s).",
                     used_sha ? "SHA-256" : "MD5",
                     used_sha ? computed_sha : computed_md5);
@@ -2759,7 +3344,6 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
         }
 
         {
-            char cmd[600];
             int rc;
             /* system() is a dev-convenience choice, not the Amiga-native
              * idiom: AmigaDOS's real equivalent is SystemTags()/Execute()
@@ -2781,9 +3365,8 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
              * permissive edit to the allowlist cannot immediately become
              * an unquoted-argument execution bug the way LhaCommand's
              * denylist just did. */
-            sprintf(cmd, "\"%s\" x \"%s\" \"%s\"", cfg->lha_command, local_path, cfg->download_dir);
             ae_put("Extracting archive...", 1);
-            rc = system(cmd);
+            rc = run_extractor(cfg, local_path, cfg->download_dir) ? 0 : 1;
             if (rc == 0) {
                 ae_put("Extraction complete.", 1);
                 log_line(cfg, "EXTRACT OK");

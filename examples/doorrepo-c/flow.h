@@ -342,4 +342,102 @@ unsigned long flow_archive_byte_ceiling(unsigned long declared_size,
  * inject extra, unintended query parameters into the request line. */
 int flow_is_plain_alnum(const char *value);
 
+/* ---- Install support ---------------------------------------------------
+ *
+ * Installing means three things a download does not: the archive is
+ * extracted into its own directory under DoorsDir, a <CMD>.info naming the
+ * door's binary is written into BBSCmdDir, and the BBS can then run it.
+ * Everything below is the pure part of that, kept here so it is testable
+ * without a server, a terminal or a filesystem.
+ */
+
+/* AmiExpress BBS command names are short and upper-case; 12 is the limit
+ * DOORMAN's own install prompt applies. */
+#define FLOW_MAX_BBS_COMMAND 12
+
+/* Non-zero when `cmd` is a usable BBS command name: 1..FLOW_MAX_BBS_COMMAND
+ * characters, A-Z and 0-9 only. Deliberately stricter than "not dangerous":
+ * this value becomes both a directory name and a filename on an AmigaDOS
+ * volume and is typed by a user at a BBS prompt, so anything outside the
+ * alphabet is rejected rather than sanitized (silently altering what
+ * somebody typed produces a door they cannot find again). */
+int flow_is_valid_bbs_command(const char *cmd);
+
+/* Derives a default command name from an archive name: extension dropped,
+ * lower-case folded up, every character outside A-Z0-9 removed (real
+ * catalog names contain '!', '$', '-', '&'), truncated to
+ * FLOW_MAX_BBS_COMMAND. Returns the length, or -1 when nothing usable
+ * remains (in which case *out is empty and the caller must ask). */
+int flow_suggest_bbs_command(const char *archive_name, char *out, unsigned long outsize);
+
+/* "<doors_dir>/<cmd>/" and "<bbscmd_dir>/<cmd>.info", both using
+ * flow_build_local_path's AmigaDOS-aware separator rule (a "Work:" or
+ * "Doors/" prefix already ends in a separator; a bare "Doors" does not).
+ * Return the length written, or -1 if it would not fit. */
+int flow_build_install_dir(char *out, unsigned long outsize,
+                            const char *doors_dir, const char *cmd);
+int flow_build_info_path(char *out, unsigned long outsize,
+                          const char *bbscmd_dir, const char *cmd);
+
+/* Renders the four tooltype lines the BBS reads for a door command:
+ *
+ *   TYPE=<doorType>
+ *   LOCATION=Doors:<CMD>/<binaryRel>
+ *   STACK=65536
+ *   ACCESS=0
+ *
+ * Byte-identical to DOORMAN's buildDoorInfoContent() (Doors/door-manager/
+ * app.ts) - a door installed by either client must look the same to the
+ * BBS. An empty door_type becomes "XIM", the same default DOORMAN applies.
+ * Returns the length written, or -1 if it would not fit. */
+int flow_build_info_content(char *out, unsigned long outsize,
+                             const char *door_type, const char *cmd,
+                             const char *binary_rel);
+
+/* ---- /files listing helpers ----
+ *
+ * The archive-contents listing (GET /files/<archive>, section 6 of the API
+ * doc) is "FILES|<count>|<junk>" followed by "<size>|<junk>|<path>" rows.
+ * It is the ONLY way this door can know what came out of an archive: C89
+ * has no directory enumeration at all, and AmigaDOS's Examine/ExNext is
+ * not available through the portable backend. So the listing doubles as
+ * the manifest used to pick the door's binary and to delete ad files after
+ * extraction. */
+
+/* Start of the line after the one `p` points into, or NULL at the end. */
+const char *flow_files_next_line(const char *p);
+
+/* Parses one "<size>|<junk>|<path>" row. Returns 0 on success (and fills
+ * whichever out-parameters are non-NULL), non-zero for a header line, a
+ * malformed row, or an empty path. */
+int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
+                          char *path_out, unsigned long path_outsize);
+
+/* Chooses which extracted file is the door's executable, from the /files
+ * body. Preference order:
+ *   1. a non-junk file whose name equals the archive's base name or the
+ *      chosen BBS command (case-insensitive) - e.g. AETRIV10.LHA's
+ *      "AETRIV10";
+ *   2. otherwise the largest non-junk file with no extension, since Amiga
+ *      executables conventionally carry none while the .doc/.txt/.info
+ *      files beside them do.
+ * Returns the length written, or -1 when nothing qualifies - the caller
+ * then falls back to the command name, exactly as DOORMAN does when its
+ * own search finds nothing. */
+int flow_pick_door_binary(const char *files_body, const char *archive_name,
+                          const char *cmd, char *out, unsigned long outsize);
+
+/* Non-zero when a key value read from the door layer means "there is no
+ * user any more" rather than a keystroke: ae_key() returns -1 at EOF /
+ * carrier loss.
+ *
+ * This is a one-line rule with a large blast radius, which is why it lives
+ * here rather than inline: every interactive loop in the full-screen
+ * browser (list, filter box, yes/no confirm, install prompt) exits only on
+ * a key, so a -1 that matches no case falls through to "redraw and read
+ * again" and the door spins as fast as the terminal accepts output - a run
+ * whose input ran out wrote 21 GB of frames in two minutes before it was
+ * killed. */
+int flow_key_ends_session(int key);
+
 #endif /* DOORREPO_FLOW_H */
