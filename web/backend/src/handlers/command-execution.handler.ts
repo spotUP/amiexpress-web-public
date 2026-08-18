@@ -287,30 +287,37 @@ async function runCommand(
   // Then fall back to internal commands if not found
   let commandDef: CommandDefinition | null = null;
 
+  // Freshness check BEFORE the lookup, not only after a miss.
+  //
+  // The first version of this ran only when a command was NOT found, on the
+  // reasoning that a hit needs no disk work. That was wrong for half the
+  // problem: it catches a door being ADDED but never one being CHANGED. An
+  // existing command is a cache HIT, so an edited .info - a new LOCATION, a
+  // corrected TYPE, or an ACCESS level tightened to lock a door to sysops -
+  // went on serving the values read at startup, and the reload the watcher
+  // had armed was never consumed. Found by tightening
+  // Commands/BBSCmd/DOORREPO.info to ACCESS=255 on the live BBS and
+  // realising the running process would have admitted everyone until the
+  // next restart.
+  //
+  // The cost is unchanged: one stat() per search directory, and nothing is
+  // re-read unless an mtime actually moved. These are commands typed by a
+  // human at a BBS prompt, not a hot loop.
+  if (cmdType === CommandType.BBSCMD) {
+    try {
+      const baseDir = require('../config').config.get('dataDir');
+      revalidateBbsCommandsIfChanged(baseDir, session?.conferenceId, session?.nodeId ?? 0);
+    } catch (err: any) {
+      // A freshness check must never turn a working command into an error;
+      // whatever is in the cache is still usable.
+      debugLog(socket, session, `BBSCMD revalidation skipped: ${err?.message ?? err}`);
+    }
+  }
+
   if (cmdType === CommandType.SYSCMD) {
     commandDef = commandCache.syscmd.get(cmdUpper) || null;
   } else if (cmdType === CommandType.BBSCMD) {
     commandDef = commandCache.bbscmd.get(cmdUpper) || null;
-  }
-
-  // A BBSCMD miss is the one place worth asking whether the command exists
-  // on disk but not in the cache - which is what happens when a door was
-  // installed while this server was running (see
-  // revalidateBbsCommandsIfChanged above for why the check is an mtime
-  // comparison rather than a rescan). On a real node express.e resolves
-  // every command from disk anyway, so this only narrows the gap between
-  // the two.
-  if (!commandDef && cmdType === CommandType.BBSCMD) {
-    try {
-      const baseDir = require('../config').config.get('dataDir');
-      if (revalidateBbsCommandsIfChanged(baseDir, session?.conferenceId, session?.nodeId ?? 0)) {
-        commandDef = commandCache.bbscmd.get(cmdUpper) || null;
-      }
-    } catch (err: any) {
-      // Never let a freshness check turn an unknown command into an error:
-      // the caller's next step (internal commands) is still valid.
-      debugLog(socket, session, `BBSCMD revalidation skipped: ${err?.message ?? err}`);
-    }
   }
 
   // If no external command found in cache, return FAILURE

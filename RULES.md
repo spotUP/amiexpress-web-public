@@ -214,11 +214,15 @@ sysop with an FTP client) would otherwise be invisible until a restart.
 Two mechanisms keep it honest; keep both working if you touch command
 loading:
 
-- `revalidateBbsCommandsIfChanged()` (`command-execution.handler.ts`) runs on
-  a BBSCMD **miss** and reloads only when the command directories' mtime has
-  changed. Do **not** "simplify" it into an unconditional rescan: a miss is
-  the common case — every internal command falls through SYSCMD then BBSCMD
-  first — so that would parse every `.info` on nearly every keystroke.
+- `revalidateBbsCommandsIfChanged()` (`command-execution.handler.ts`) runs
+  **before every BBSCMD lookup** and reloads only when the command
+  directories' mtime has changed. It must run before the lookup, not only on
+  a miss: an existing command is a cache HIT, so a miss-only check picks up a
+  door being ADDED but never one being CHANGED — an edited `LOCATION`, `TYPE`
+  or a tightened `ACCESS` would keep serving startup's values. Equally, do
+  **not** "simplify" it into an unconditional rescan: that would parse every
+  `.info` on nearly every command. The mtime guard is what makes running it
+  every time cheap.
 - `bbscmd-watcher.ts` watches those directories and clears the freshness
   stamp, so the listing paths (door menus, DOORMAN) see the change too. It is
   best-effort by design; `fs.watch` is unreliable on some filesystems and

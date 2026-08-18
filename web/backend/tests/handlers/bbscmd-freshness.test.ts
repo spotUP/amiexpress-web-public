@@ -83,6 +83,29 @@ describe('BBSCmd freshness', () => {
     expect(found.name).toBe('NEWDOOR');
   });
 
+  it('picks up an EDITED .info, not just a new one (ACCESS tightened to sysop)', () => {
+    // The case the first version of this fix missed. An existing command is
+    // a cache HIT, so a lookup never reached the miss-path revalidation and
+    // an edited .info kept serving startup's values. That matters most for
+    // exactly this edit: a door locked down to sysops would have gone on
+    // admitting everyone until the next restart.
+    const { loadCommands, commandCache, revalidateBbsCommandsIfChanged } = mod();
+    loadCommands(baseDir, undefined, 0);
+    expect(commandCache.bbscmd.get('EXISTING').access ?? 0).toBe(0);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
+
+    fs.writeFileSync(
+      path.join(cmdDir, 'EXISTING.info'),
+      'TYPE=XIM\nLOCATION=Doors:EXISTING/existing\nSTACK=65536\nACCESS=255\n',
+      'latin1'
+    );
+    const future = new Date(Date.now() + 10_000);
+    fs.utimesSync(cmdDir, future, future);
+
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
+    expect(commandCache.bbscmd.get('EXISTING').access).toBe(255);
+  });
+
   it('does not reload when nothing changed', () => {
     const { loadCommands, revalidateBbsCommandsIfChanged } = mod();
     loadCommands(baseDir, undefined, 0);
