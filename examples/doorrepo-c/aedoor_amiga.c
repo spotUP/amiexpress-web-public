@@ -120,7 +120,6 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
 #define JH_SM       4   /* the normal output call: writes String; Data != 0 appends the BBS's line break and runs its pause check; research doc, express.e:3406-3411 */
 #define JH_PM       5   /* prompt (String) + line input; unused here -- ae_get()'s prompt is already emitted via ae_put() */
 #define JH_HK       6   /* prompt (String) then blocking single-key read; reply key lands in String[0]; research doc */
-#define JH_FetchKey 17  /* non-blocking read: key in Command, or 0 when nothing is queued (express.e:3465-3472) */
 /* RAWARROW toggles the BBS's rawArrow flag (axcommon.e:187, handled at
  * express.e:3814-3815). It is the difference between a door seeing the
  * cursor keys and never seeing them at all:
@@ -388,26 +387,6 @@ int ae_key(void)
         return -1;
     }
     return (int)(unsigned char)msg->String[0];
-}
-
-int ae_key_nowait(void)
-{
-    if (msg == NULL || bbs_port == NULL) {
-        return -1;
-    }
-
-    /* Unlike JH_HK the answer comes back in Command, not String[0]: the BBS
-     * writes msg.command:=readChar(...) when checkInput() says something is
-     * waiting, and msg.command:=0 when it is not (express.e:3465-3472). */
-    msg->Command = JH_FetchKey;
-    msg->Data = 1;
-    msg->String[0] = '\0';
-    xim_call();
-
-    if (msg->Data == -1) {
-        return -1;
-    }
-    return (int)(msg->Command & 0xff);
 }
 
 int ae_check(void)

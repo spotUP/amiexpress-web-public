@@ -75,25 +75,6 @@ void ae_get(char *buf, int maxlen);
  * carrier loss or console timeout. */
 int ae_key(void);
 
-/* Non-blocking keypress read (JH_FetchKey, command 17; express.e:3465-3472).
- *
- *   CASE JH_FetchKey
- *     IF checkInput()
- *       msg.command:=readChar(doorTimeout)
- *       ...
- *     ELSE
- *       msg.command:=0
- *
- * So: the key when the user has already typed one, 0 when they have not, and
- * -1 on carrier loss. It NEVER waits, which is the whole point - it lets a
- * door find out whether more input is already queued before it spends a
- * network fetch or a screen repaint on the state it is about to leave.
- *
- * The native backend always reports 0 (see aedoor_native.c): there is no BBS
- * holding an input queue, and a door driven from a pipe has no meaningful
- * "already typed" to report. */
-int ae_key_nowait(void);
-
 /* CheckMessage equivalent (AEDoor.c CheckMessage(), lines 154-183), but
  * non-blocking and read-only: returns non-zero once a prior ae_get/ae_key/
  * ae_put round trip has observed Data == -1 -- carrier lost or console

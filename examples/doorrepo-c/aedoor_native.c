@@ -179,20 +179,6 @@ void ae_get(char *buf, int maxlen)
     } while (c != '\n' && c != EOF);
 }
 
-/* Always "nothing queued". The native build has no BBS holding an input
- * queue, and its input is usually a pipe or a terminal in line mode, where
- * "has the user already typed the next key" is not a question the stream can
- * answer without putting the terminal into raw mode - which this backend
- * deliberately does not do, since it exists to drive the door from scripts.
- *
- * Reporting 0 is the honest answer AND the safe one: a door using this to
- * coalesce keystrokes simply never coalesces here, and behaves exactly as it
- * did before the call existed. */
-int ae_key_nowait(void)
-{
-    return 0;
-}
-
 int ae_key(void)
 {
     int c;
