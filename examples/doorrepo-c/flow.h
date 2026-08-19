@@ -32,6 +32,28 @@ typedef struct {
 void flow_compute_page(unsigned long total_rows, int page_size,
                         int page_number, flow_page_info *out);
 
+/* ---- List navigation ----
+ *
+ * Where a navigation key moves the selection. Pure arithmetic, extracted so
+ * the browser can apply it from TWO places without the two drifting: the
+ * ordinary key handler, and the input-coalescing drain that coalesces keys
+ * the user has already typed (see doorrepo.c's browse loop). */
+
+#define FLOW_NAV_NONE 0
+#define FLOW_NAV_UP   1
+#define FLOW_NAV_DOWN 2
+#define FLOW_NAV_PGUP 3
+#define FLOW_NAV_PGDN 4
+#define FLOW_NAV_HOME 5
+#define FLOW_NAV_END  6
+
+/* Returns the new selection. `count` is how many rows the filtered view has
+ * and `page` how many fit on screen. Clamps at both ends rather than
+ * wrapping, and an empty view always selects 0. FLOW_NAV_NONE returns the
+ * selection unchanged, so a caller can hand it any key it likes. */
+unsigned long flow_nav_target(int action, unsigned long selected,
+                              unsigned long count, unsigned long page);
+
 /* ---- Download verification retry state machine ---- */
 
 typedef enum {

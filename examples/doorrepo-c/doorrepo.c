@@ -2095,11 +2095,24 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
 #define UI_KEY_END   1005
 #define UI_KEY_ENTER 1006
 
-static int ui_read_key(void)
-{
-    int c;
+/* One key of pushback. The input-coalescing drain below reads ahead to find
+ * out whether the user is still moving; when it meets a key that is NOT
+ * navigation it has to give it back, because the main handler is the only
+ * thing that knows what to do with it. One slot is enough: the drain never
+ * reads a second key after finding a non-navigation one. */
+static int g_key_pushback = 0;
 
-    c = ae_key();
+static void ui_push_back_key(int key)
+{
+    g_key_pushback = key;
+}
+
+/* Turns a first byte into a UI_KEY_*. Continuation bytes of a CSI sequence
+ * are read with the BLOCKING ae_key(): once the escape has arrived the rest
+ * of the sequence is already on its way, and a half-read arrow would be
+ * worse than a brief wait. */
+static int ui_decode_key(int c)
+{
     /* EOF on the input stream means the user is gone - a dropped carrier
      * on a real node, the end of a scripted session on the dev backend.
      * Handled HERE rather than in each caller because every one of them
@@ -2148,6 +2161,48 @@ static int ui_read_key(void)
     case '1': (void) ae_key(); return UI_KEY_HOME;
     case '4': (void) ae_key(); return UI_KEY_END;
     default:  return 0;
+    }
+}
+
+static int ui_read_key(void)
+{
+    if (g_key_pushback != 0) {
+        int key = g_key_pushback;
+        g_key_pushback = 0;
+        return key;
+    }
+    return ui_decode_key(ae_key());
+}
+
+/* A key the user has ALREADY typed, or 0 if they have not typed one. Never
+ * waits. See ae_key_nowait(). */
+static int ui_read_key_nowait(void)
+{
+    int c;
+
+    if (g_key_pushback != 0) {
+        int key = g_key_pushback;
+        g_key_pushback = 0;
+        return key;
+    }
+    c = ae_key_nowait();
+    if (c <= 0) {
+        return 0;   /* nothing queued, or carrier loss the blocking read will see */
+    }
+    return ui_decode_key(c);
+}
+
+/* The navigation action a UI key stands for, or FLOW_NAV_NONE. */
+static int ui_nav_action(int key)
+{
+    switch (key) {
+    case UI_KEY_UP:   return FLOW_NAV_UP;
+    case UI_KEY_DOWN: return FLOW_NAV_DOWN;
+    case UI_KEY_PGUP: case 'p': case 'P': return FLOW_NAV_PGUP;
+    case UI_KEY_PGDN: case 'n': case 'N': return FLOW_NAV_PGDN;
+    case UI_KEY_HOME: return FLOW_NAV_HOME;
+    case UI_KEY_END:  return FLOW_NAV_END;
+    default:          return FLOW_NAV_NONE;
     }
 }
 
@@ -3056,6 +3111,38 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             prev_info_mode = info_mode;
         }
 
+        /* Input coalescing. Holding the cursor key down, or typing faster
+         * than the link, used to cost one HTTP fetch and one repaint PER
+         * KEY - for entries the user was never going to look at, because
+         * the next key was already queued behind the one being served.
+         *
+         * So before spending anything on the current selection, ask the BBS
+         * whether more input is already waiting (JH_FetchKey, which never
+         * blocks) and apply every navigation key that is, moving the
+         * selection without drawing or fetching anything in between. The
+         * work happens once, for wherever the user actually stopped.
+         *
+         * A key that is not navigation is pushed back untouched: it may be a
+         * download, a mode change or a quit, and only the main handler below
+         * knows what those mean. */
+        if (info_mode == UI_INFO_DIZ && view.count > 0) {
+            for (;;) {
+                int ahead = ui_read_key_nowait();
+                int action;
+
+                if (ahead == 0) {
+                    break;
+                }
+                action = ui_nav_action(ahead);
+                if (action == FLOW_NAV_NONE) {
+                    ui_push_back_key(ahead);
+                    break;
+                }
+                selected = flow_nav_target(action, selected, view.count,
+                                            (unsigned long) g.visible_rows);
+            }
+        }
+
         if (selected != prev_selected) {
             info_scroll = 0;   /* a different entry starts at its own top */
         }
@@ -3189,32 +3276,17 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         }
 
         switch (key) {
+        /* All six go through flow_nav_target(), the same call the coalescing
+         * drain above makes - two places moving the selection by two sets of
+         * rules is how they end up disagreeing. */
         case UI_KEY_UP:
-            if (selected > 0) selected--;
-            break;
         case UI_KEY_DOWN:
-            if (view.count > 0 && selected + 1 < view.count) selected++;
-            break;
-        case UI_KEY_PGUP:
-        case 'p': case 'P':
-            if (selected > (unsigned long) g.visible_rows) {
-                selected -= (unsigned long) g.visible_rows;
-            } else {
-                selected = 0;
-            }
-            break;
-        case UI_KEY_PGDN:
-        case 'n': case 'N':
-            if (view.count > 0) {
-                selected += (unsigned long) g.visible_rows;
-                if (selected >= view.count) selected = view.count - 1;
-            }
-            break;
+        case UI_KEY_PGUP: case 'p': case 'P':
+        case UI_KEY_PGDN: case 'n': case 'N':
         case UI_KEY_HOME:
-            selected = 0;
-            break;
         case UI_KEY_END:
-            if (view.count > 0) selected = view.count - 1;
+            selected = flow_nav_target(ui_nav_action(key), selected, view.count,
+                                        (unsigned long) g.visible_rows);
             break;
         case UI_KEY_ENTER:
         case 'r': case 'R':
