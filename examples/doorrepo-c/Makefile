@@ -106,7 +106,13 @@ HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c
 
-.PHONY: all native amiga amiga-stub test live clean
+# tools/probe_fetch.c is a head-less diagnostic, not part of the door: it
+# pulls one archive through the same http.c/netio.c path with no catalog and
+# no console, so the SAME source can be run natively and under this project's
+# 68K emulator and the two byte streams compared. See its header comment.
+PROBE_SOURCES = tools/probe_fetch.c config.c flow.c http.c md5.c sha256.c netio.c
+
+.PHONY: all native amiga amiga-stub test live clean probe-native probe-amiga
 
 all: native
 
@@ -143,6 +149,21 @@ amiga-stub: doorrepo.amiga-stub
 
 doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
 	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
+
+# ---------------------------------------------------------------------
+# probe (diagnostic; see tools/probe_fetch.c)
+# ---------------------------------------------------------------------
+
+probe-native: $(PROBE_SOURCES) $(HEADERS)
+	$(CC) $(NATIVE_CFLAGS) -I. $(PROBE_SOURCES) -o probe-fetch
+
+probe-amiga: $(PROBE_SOURCES) $(HEADERS)
+	@mkdir -p $(AMIGA_NDK_SHIM)/devices
+	@ln -sf "$(VENDOR_NDK_ROOT)/Include_H/devices/timer.h" $(AMIGA_NDK_SHIM)/devices/timer.h
+	@ln -sfn "$(VENDOR_NDK_ROOT)/SANA+RoadshowTCP-IP/netinclude" $(AMIGA_NETINCLUDE_VENDOR_LINK)
+	$(VC) $(AMIGA_CFLAGS) -DAMIGA \
+	  -I. -I$(AMIGA_NDK_SHIM) -I"$(AMIGA_NETINCLUDE_DIR)" -I"$(NDK)" \
+	  $(PROBE_SOURCES) -lauto -o probe-fetch.amiga
 
 # ---------------------------------------------------------------------
 # test

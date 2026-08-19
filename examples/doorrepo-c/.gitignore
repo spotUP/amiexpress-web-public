@@ -5,6 +5,12 @@
 doorrepo
 doorrepo.amiga
 doorrepo.amiga-stub
+probe-fetch
+probe-fetch.amiga
+# The probe writes next to itself; on a host that is a literal "PROGDIR:" name.
+PROGDIR:*
+probe.bin
+probe.txt
 build-test-*
 amiga-ndk-shim/
 amiga-netinclude-vendor
