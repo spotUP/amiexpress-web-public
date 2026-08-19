@@ -18,6 +18,7 @@ import * as net from 'net';
 import * as dns from 'dns';
 import * as deasync from 'deasync';
 import type { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { SocketTee } from './bsdsocket-tee';
 
 // Amiga socket constants
 export const AF_INET = 2;
@@ -108,6 +109,11 @@ interface SocketState {
   // Buffers for async data
   readBuffer: Buffer[];
   readResolve?: (data: Buffer | null) => void;
+  /**
+   * Byte capture for this connection, or undefined when BSDSOCKET_TEE_DIR is
+   * unset (the normal case). See bsdsocket-tee.ts.
+   */
+  tee?: SocketTee;
   connectResolve?: (success: boolean) => void;
   // For TLS upgrade
   tlsSocket?: any; // Will be set by AmiSSLLibrary
@@ -360,9 +366,14 @@ export class BsdSocketLibrary {
   private attachStreamHandlers(state: SocketState): void {
     if (!state.socket) return;
 
+    // Both connect paths converge here, so this is the one place a capture
+    // can be started without the two drifting apart.
+    state.tee = SocketTee.create(state.fd, state.host ?? '') ?? undefined;
+
     state.socket.on('data', (data) => {
       console.log(`[BsdSocketLibrary] Received ${data.length} bytes`);
       console.log(`[BsdSocketLibrary] recv data (full): ${data.toString('utf8')}`);
+      if (state.tee) state.tee.wire(data);
       state.readBuffer.push(data);
       if (state.readResolve) {
         const resolve = state.readResolve;
@@ -549,6 +560,7 @@ export class BsdSocketLibrary {
         for (let i = 0; i < take; i++) {
           this.emulator.writeMemory(bufPtr + copied + i, data[i]);
         }
+        if (state.tee) state.tee.recv(data.subarray(0, take));
         copied += take;
         if (take < data.length) {
           // Partially consumed: keep the remainder at the head of the queue.
@@ -587,6 +599,7 @@ export class BsdSocketLibrary {
       for (let i = 0; i < copyLen; i++) {
         this.emulator.writeMemory(bufPtr + i, data[i]);
       }
+      if (state.tee) state.tee.recv(data.subarray(0, copyLen));
       // If we have leftover data, buffer it
       if (data.length > len) {
         state.readBuffer.unshift(data.slice(len));
