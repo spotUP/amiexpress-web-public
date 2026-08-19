@@ -374,6 +374,32 @@ unsigned long flow_nav_target(int action, unsigned long selected,
     }
 }
 
+int flow_build_info_temp_path(char *out, unsigned long outsize, const char *info_path)
+{
+    static const char suffix[] = ".new";
+    unsigned long plen;
+    unsigned long slen;
+
+    if (out == (char *) 0 || outsize == 0 || info_path == (const char *) 0) {
+        return -1;
+    }
+
+    plen = (unsigned long) strlen(info_path);
+    slen = (unsigned long) (sizeof(suffix) - 1);
+    if (plen == 0) {
+        return -1;
+    }
+    if (plen + slen + 1 > outsize) {
+        return -1;
+    }
+
+    memcpy(out, info_path, plen);
+    memcpy(out + plen, suffix, slen);
+    out[plen + slen] = '\0';
+
+    return (int) (plen + slen);
+}
+
 int flow_build_bad_path(char *out, unsigned long outsize, const char *local_path)
 {
     static const char suffix[] = ".bad";

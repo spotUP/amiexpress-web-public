@@ -640,6 +640,37 @@ TEST(nav_treats_a_zero_page_as_one)
  * Quarantine path for a mismatching download (KeepFailedDownloads)
  * ------------------------------------------------------------------- */
 
+TEST(info_temp_path_is_the_config_path_plus_new)
+{
+    char out[128];
+    flow_build_info_temp_path(out, sizeof(out), "BBS:Commands/BBSCmd/ZIPPY.info");
+    ASSERT_STR_EQ(out, "BBS:Commands/BBSCmd/ZIPPY.info.new",
+                  "written here, then renamed onto the real name");
+}
+
+TEST(info_temp_path_stays_in_the_same_directory)
+{
+    /* The rename must be within one directory: that is what makes it atomic,
+     * and what makes the directory's mtime change when the finished content
+     * appears - which is the whole reason for the dance. */
+    char out[128];
+    flow_build_info_temp_path(out, sizeof(out), "BBSCmd/A.info");
+    ASSERT_STR_EQ(out, "BBSCmd/A.info.new", "same directory as the target");
+}
+
+TEST(info_temp_path_too_small_buffer_returns_error)
+{
+    char out[8];
+    int n = flow_build_info_temp_path(out, sizeof(out), "BBSCmd/A.info");
+    ASSERT_TRUE(n < 0, "buffer too small must fail, not truncate");
+}
+
+TEST(info_temp_path_rejects_an_empty_target)
+{
+    char out[64];
+    ASSERT_TRUE(flow_build_info_temp_path(out, sizeof(out), "") < 0, "nothing to rename onto");
+}
+
 TEST(bad_path_appends_suffix_to_the_local_path)
 {
     char out[128];
@@ -1214,6 +1245,10 @@ int main(void)
     RUN_TEST(nav_repairs_a_selection_left_past_the_end);
     RUN_TEST(nav_none_leaves_the_selection_alone);
     RUN_TEST(nav_treats_a_zero_page_as_one);
+    RUN_TEST(info_temp_path_is_the_config_path_plus_new);
+    RUN_TEST(info_temp_path_stays_in_the_same_directory);
+    RUN_TEST(info_temp_path_too_small_buffer_returns_error);
+    RUN_TEST(info_temp_path_rejects_an_empty_target);
     RUN_TEST(bad_path_appends_suffix_to_the_local_path);
     RUN_TEST(bad_path_keeps_the_directory_the_download_went_to);
     RUN_TEST(bad_path_too_small_buffer_returns_error);

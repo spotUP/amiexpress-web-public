@@ -2490,6 +2490,59 @@ static int run_extractor(const dr_config *cfg, const char *archive_path, const c
  * Returns how many were removed. Silent per-file failures are counted as
  * not-removed rather than aborting: a strip that half-worked has still
  * improved the install, and the caller reports the real number. */
+/* Most ad-stripping decisions are made on one line of text, so that line has
+ * to name the files. "This archive contains 1 ad file" tells a sysop nothing
+ * they can judge - the whole question is WHICH file, because the listing's
+ * idea of an ad is a heuristic and the file may be a genuine doc, a BBS
+ * advert worth keeping, or the door's own README.
+ *
+ * Prints every file the listing flags, and returns how many there were. The
+ * count comes from the rows rather than the FILES| header because the rows
+ * are what strip_ad_files() will actually delete; if the two ever disagree,
+ * the sysop should be shown the truth about what is about to happen.
+ *
+ * Bounded output: a pathological listing cannot scroll the screen away. */
+#define AD_LIST_MAX 20
+
+static int ui_show_ad_files(const char *files_body)
+{
+    const char *line = files_body;
+    int found = 0;
+    int shown = 0;
+
+    if (line == (const char *) 0) {
+        return 0;
+    }
+    if (strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+
+    while (line != (const char *) 0) {
+        char rel[160];
+        int junk = 0;
+
+        if (flow_files_parse_row(line, (unsigned long *) 0, &junk, rel, sizeof(rel)) == 0
+            && junk) {
+            found++;
+            if (shown < AD_LIST_MAX) {
+                char msg[192];
+                sprintf(msg, "    %.170s", rel);
+                ae_put(msg, 1);
+                shown++;
+            }
+        }
+        line = flow_files_next_line(line);
+    }
+
+    if (found > shown) {
+        char msg[64];
+        sprintf(msg, "    ... and %d more", found - shown);
+        ae_put(msg, 1);
+    }
+
+    return found;
+}
+
 static int strip_ad_files(const char *install_dir, const char *files_body)
 {
     const char *line = files_body;
@@ -2528,8 +2581,7 @@ static int strip_ad_files(const char *install_dir, const char *files_body)
  * listing describes the ARCHIVE, so it only names files this door itself
  * extracted - nothing a sysop added afterwards can match it. */
 static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
-                                 ansi_buf *b, char *frame, long framecap,
-                                 const ui_geometry *g)
+                                 ansi_buf *b, char *frame, long framecap)
 {
     const char *cmdname = index_lookup(cfg, entry->archive);
     char install_dir[256];
@@ -2546,11 +2598,9 @@ static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    sprintf(msg, "Remove ad files from %s?  [Y/N]", cmdname);
-    if (!ui_confirm(b, frame, framecap, g, msg)) {
-        return;
-    }
-
+    /* The listing is fetched BEFORE anything is asked. The old order put the
+     * confirm first and only then discovered which files were involved,
+     * which meant the sysop agreed to delete a set nobody had shown them. */
     ansi_begin(b, frame, framecap);
     ansi_cursor(b, 1);
     ansi_reset(b);
@@ -2562,13 +2612,36 @@ static void strip_installed_door(const dr_config *cfg, const dr_entry *entry,
         ae_put("The repository has no file listing for this archive, so there is no way", 1);
         ae_put("to tell which of its files are ads. Nothing was removed.", 1);
     } else {
-        removed = strip_ad_files(install_dir, g_files);
-        sprintf(msg, "Removed %d ad file(s) from %s.", removed, install_dir);
+        int listed;
+
+        sprintf(msg, "Ad files in %s:", cmdname);
         ae_put(msg, 1);
-        {
-            char logmsg[256];
-            sprintf(logmsg, "STRIP OK cmd=%s files=%d", cmdname, removed);
-            log_line(cfg, logmsg);
+        listed = ui_show_ad_files(g_files);
+
+        if (listed == 0) {
+            /* The catalog row said there were ads but the listing names
+             * none - nothing can be deleted, and saying so is better than a
+             * prompt that would remove nothing. */
+            ae_put("The file listing names none of them, so there is nothing to remove.", 1);
+        } else {
+            ae_put("", 1);
+            ae_put("Remove these?  [Y/N] ", 0);
+            {
+                int key = ae_key();
+                ae_put("", 1);
+                if (key != 'y' && key != 'Y') {
+                    ae_put("Nothing was removed.", 1);
+                } else {
+                    removed = strip_ad_files(install_dir, g_files);
+                    sprintf(msg, "Removed %d ad file(s) from %s.", removed, install_dir);
+                    ae_put(msg, 1);
+                    {
+                        char logmsg[256];
+                        sprintf(logmsg, "STRIP OK cmd=%s files=%d", cmdname, removed);
+                        log_line(cfg, logmsg);
+                    }
+                }
+            }
         }
     }
 
@@ -2591,6 +2664,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     char binary_rel[160];
     char binary_check[420];
     char info_content[320];
+    char info_tmp_path[288];
     char msg[420];
     int extract_ok;
     int have_listing;
@@ -2781,9 +2855,37 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    f = fopen(info_path, "wb");
+    /* Written to a temporary name and RENAMED into place, so the command
+     * config appears in BBSCmd complete or not at all.
+     *
+     * Reported from the live BBS: a door installed while the BBS was running
+     * was not recognised until the user reconnected. This server caches
+     * BBSCmd and revalidates it on the directory's mtime
+     * (command-execution.handler.ts) - and a directory's mtime changes when
+     * a file is CREATED, not when it is later filled in. fopen() therefore
+     * published an empty .info, and any command typed in the window before
+     * fclose() made the BBS reload the directory, parse nothing useful for
+     * this command, and mark itself fresh. Writing the content afterwards
+     * does not touch the directory again, so the door stayed invisible until
+     * a restart. The timestamps on the reported case show the gap exactly:
+     * directory 22:33:30, file contents 22:33:31.
+     *
+     * rename() moves the finished file in as one directory operation, which
+     * is also what makes the mtime change at the moment the CONTENT becomes
+     * visible. C89 guarantees rename(); on AmigaDOS it is a Rename() within
+     * the same directory, which is atomic. */
+    if (flow_build_info_temp_path(info_tmp_path, sizeof(info_tmp_path), info_path) < 0) {
+        ae_put("Install failed: the command config path would not fit its buffer.", 1);
+        log_line(cfg, "INSTALL FAILED: .info temp path too long");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    f = fopen(info_tmp_path, "wb");
     if (f == (FILE *) 0) {
-        sprintf(msg, "Install failed: could not write %s.", info_path);
+        sprintf(msg, "Install failed: could not write %s.", info_tmp_path);
         ae_put(msg, 1);
         ae_put("Check BBSCmdDir in DoorRepo.cfg - the directory must already exist.", 1);
         log_line(cfg, "INSTALL FAILED: could not write the .info");
@@ -2794,6 +2896,21 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     }
     fputs(info_content, f);
     fclose(f);
+
+    /* An existing config is replaced: rename() over an existing file is not
+     * portable, and leaving the old one in place would silently keep the
+     * door pointing at whatever it used to point at. */
+    remove(info_path);
+    if (rename(info_tmp_path, info_path) != 0) {
+        remove(info_tmp_path);
+        sprintf(msg, "Install failed: could not put %s in place.", info_path);
+        ae_put(msg, 1);
+        log_line(cfg, "INSTALL FAILED: could not rename the .info into place");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
 
     /* Ads are offered, never removed silently: they are files the archive's
      * author put there, and a sysop may want to read one. entry->junk is -1
@@ -2821,8 +2938,18 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         }
 
         if (junk_total > 0) {
-            sprintf(msg, "This archive contains %d ad file(s). Remove them?  [Y/N] ", junk_total);
-            ae_put(msg, 0);
+            int listed;
+
+            sprintf(msg, "This archive contains %d ad file(s):", junk_total);
+            ae_put(msg, 1);
+            listed = ui_show_ad_files(g_files);
+            if (listed > 0 && listed != junk_total) {
+                /* The header and the rows disagree. What gets deleted is the
+                 * rows, so say so rather than quietly using the other number. */
+                sprintf(msg, "(%d are named above; those are the ones that would go.)", listed);
+                ae_put(msg, 1);
+            }
+            ae_put("Remove them?  [Y/N] ", 0);
             {
                 int key = ae_key();
                 if (key == 'y' || key == 'Y') {
@@ -3387,7 +3514,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         case 's': case 'S':
             if (view.count > 0) {
                 strip_installed_door(cfg, &cat->rows[view.index[selected]], &buf, frame,
-                                     (long) sizeof(frame), &g);
+                                     (long) sizeof(frame));
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
                 ansi_flush(&buf);

@@ -156,6 +156,22 @@ int flow_build_local_path(char *out, unsigned long outsize,
  * Returns the output length, or -1 if it would not fit `outsize`. */
 int flow_build_bad_path(char *out, unsigned long outsize, const char *local_path);
 
+/* Builds the temporary name a command config is written under before being
+ * renamed into place: "<info_path>.new".
+ *
+ * Why the install writes via a temporary at all: this server caches the
+ * BBSCmd directory and revalidates it on the directory's MTIME, and a
+ * directory's mtime changes when a file is CREATED, not when it is later
+ * filled in. Writing straight to <CMD>.info therefore publishes an empty
+ * config, and a command typed in the window before it is closed makes the
+ * BBS reload the directory, find nothing useful, and mark itself fresh -
+ * after which the finished content never triggers another reload and the
+ * door stays invisible until a restart. Renaming a completed file in makes
+ * the directory change at the moment the CONTENT appears.
+ *
+ * Returns the output length, or -1 if it would not fit `outsize`. */
+int flow_build_info_temp_path(char *out, unsigned long outsize, const char *info_path);
+
 /* ---- Shell-injection defense: allowlist for LhaCommand, denylist for
  * everything else that lands inside a double-quoted shell argument ----
  *
