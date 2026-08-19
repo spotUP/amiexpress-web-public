@@ -79,10 +79,16 @@ ascii_only "$REPO/docs/DOOR-REPO-API.md" "$PKG/docs/DoorRepoAPI.txt"
 echo "[INFO] capturing live samples from $HOST"
 api=$HOST/api/door-repo
 curl -fsS "$api/health"                        -o "$PKG/samples/health.json"
-curl -fsS "$api/list.txt"    | head -c 3000    > "$PKG/samples/list-first-lines.txt"
+# Fetch whole, then truncate from the FILE. Piping curl into `head -c` makes
+# head close the pipe, curl die of SIGPIPE, and the failure vanish into a
+# pipeline exit status nothing checks - it wrote a short sample and reported
+# success on the first run of this script.
+curl -fsS "$api/list.txt"                      -o "$STAGE/list.txt"
+head -c 3000 "$STAGE/list.txt"                 > "$PKG/samples/list-first-lines.txt"
 curl -fsS "$api/files/TELSER40.LHA"            -o "$PKG/samples/files-TELSER40.txt"
 curl -fsS "$api/diz/ABS-PLC2.LHA"              -o "$PKG/samples/diz-ABS-PLC2.txt"
-curl -fsS "$api/doc/TELSER40.LHA" | head -c 2000 > "$PKG/samples/doc-TELSER40.txt"
+curl -fsS "$api/doc/TELSER40.LHA"              -o "$STAGE/doc.txt"
+head -c 2000 "$STAGE/doc.txt"                  > "$PKG/samples/doc-TELSER40.txt"
 curl -fsS "$api/manifest?q=AETRIV10"           -o "$PKG/samples/manifest-AETRIV10.json"
 curl -fsS -D "$PKG/samples/archive-headers.txt" -o /dev/null "$api/archive/AETRIV10.LHA"
 
