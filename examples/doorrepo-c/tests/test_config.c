@@ -183,6 +183,25 @@ TEST(parse_extract_no)
     unlink("/tmp/test_config_ex_no.cfg");
 }
 
+TEST(keep_failed_downloads_defaults_to_off)
+{
+    dr_config cfg;
+    config_defaults(&cfg);
+    ASSERT_EQ(cfg.keep_failed_downloads, 0, "a door must not hoard corrupt archives unasked");
+}
+
+TEST(keep_failed_downloads_yes_is_parsed)
+{
+    dr_config cfg;
+    FILE *f = fopen("/tmp/test_config_keepbad.cfg", "w");
+    fprintf(f, "KeepFailedDownloads=yes\n");
+    fclose(f);
+    config_defaults(&cfg);
+    config_load(&cfg, "/tmp/test_config_keepbad.cfg", NULL);
+    ASSERT_EQ(cfg.keep_failed_downloads, 1, "KeepFailedDownloads=yes -> 1");
+    unlink("/tmp/test_config_keepbad.cfg");
+}
+
 TEST(parse_extract_1)
 {
     dr_config cfg;
@@ -1067,6 +1086,8 @@ int main(void)
     RUN_TEST(unsafe_value_count_excludes_ordinary_invalid_values);
     RUN_TEST(unsafe_value_count_resets_each_call);
     RUN_TEST(legitimate_amiga_paths_are_not_rejected);
+    RUN_TEST(keep_failed_downloads_defaults_to_off);
+    RUN_TEST(keep_failed_downloads_yes_is_parsed);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);

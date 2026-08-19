@@ -23,6 +23,7 @@ void config_defaults(dr_config *cfg)
     strncpy(cfg->lha_command, "lha", sizeof(cfg->lha_command) - 1);
     cfg->lha_command[sizeof(cfg->lha_command) - 1] = '\0';
     cfg->extract_after_download = 0;
+    cfg->keep_failed_downloads = 0;
     /* 80x24 is the universal BBS terminal geometry and what AmiExpress
      * assumes throughout; the keys exist so a sysop on a taller window can
      * use it rather than because the default is in doubt. */
@@ -327,6 +328,8 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines)
             }
         } else if (str_icmp(key, "ExtractAfterDownload") == 0) {
             cfg->extract_after_download = parse_boolean(value);
+        } else if (str_icmp(key, "KeepFailedDownloads") == 0) {
+            cfg->keep_failed_downloads = parse_boolean(value);
         } else if (str_icmp(key, "LogFile") == 0) {
             if (flow_contains_forbidden_shell_char(value) || flow_contains_dotdot_segment(value)) {
                 local_skipped++;

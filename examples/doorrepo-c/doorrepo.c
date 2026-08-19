@@ -3464,6 +3464,47 @@ static int attempt_download(const dr_config *cfg, const dr_entry *entry,
     return hex_digest_equals(computed_md5_out, entry->md5);
 }
 
+/* Disposes of a download whose digest did not match.
+ *
+ * Default: delete it, so a corrupt archive never sits around waiting to be
+ * mistaken for a good one. With KeepFailedDownloads on it is renamed to
+ * "<name>.bad" instead, because the bytes are the only thing that can
+ * explain a mismatch and the door deleting them is what left the -D-CALC.LHA
+ * case unanswerable (see flow_build_bad_path()'s comment).
+ *
+ * Any previous .bad for the same archive is removed first: rename() over an
+ * existing file is not portable, and the retry would otherwise leave the
+ * FIRST attempt's bytes on disk while reporting the second's digest. Falling
+ * back to remove() when the rename fails keeps the default promise - a
+ * mismatching file is never left where a good one belongs. */
+static void discard_mismatched_download(const dr_config *cfg, const char *local_path)
+{
+    char bad_path[288];
+
+    if (!cfg->keep_failed_downloads
+        || flow_build_bad_path(bad_path, sizeof(bad_path), local_path) < 0) {
+        remove(local_path);
+        return;
+    }
+
+    remove(bad_path);
+    if (rename(local_path, bad_path) != 0) {
+        remove(local_path);
+        return;
+    }
+
+    {
+        char msg[192];
+        sprintf(msg, "Kept the mismatching file as %.160s for inspection.", bad_path);
+        ae_put(msg, 1);
+    }
+    {
+        char logmsg[256];
+        sprintf(logmsg, "DOWNLOAD KEPT-BAD path=%.200s", bad_path);
+        log_line(cfg, logmsg);
+    }
+}
+
 static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
 {
     char local_path[256];
@@ -3565,7 +3606,7 @@ static void download_and_verify(const dr_config *cfg, const dr_entry *entry)
                     used_sha ? computed_sha : computed_md5);
             ae_put(msg, 1);
         }
-        remove(local_path);
+        discard_mismatched_download(cfg, local_path);
 
         if (outcome == FLOW_VERIFY_RETRY) {
             ae_put("Retrying download once...", 1);

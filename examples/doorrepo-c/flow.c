@@ -343,6 +343,32 @@ int flow_build_local_path(char *out, unsigned long outsize,
     return (int) need;
 }
 
+int flow_build_bad_path(char *out, unsigned long outsize, const char *local_path)
+{
+    static const char suffix[] = ".bad";
+    unsigned long plen;
+    unsigned long slen;
+
+    if (out == (char *) 0 || outsize == 0 || local_path == (const char *) 0) {
+        return -1;
+    }
+
+    plen = (unsigned long) strlen(local_path);
+    slen = (unsigned long) (sizeof(suffix) - 1);
+    if (plen == 0) {
+        return -1;
+    }
+    if (plen + slen + 1 > outsize) {
+        return -1;
+    }
+
+    memcpy(out, local_path, plen);
+    memcpy(out + plen, suffix, slen);
+    out[plen + slen] = '\0';
+
+    return (int) (plen + slen);
+}
+
 int flow_should_use_cache(const char *cached_revision, const char *server_revision)
 {
     if (cached_revision == (const char *) 0 || server_revision == (const char *) 0) {

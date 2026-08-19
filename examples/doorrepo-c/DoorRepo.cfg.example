@@ -39,6 +39,13 @@ Whether to automatically extract downloaded archives after downloading them.
 Accepts: yes, no, 1, or 0. Any other value defaults to no (0).
 # ExtractAfterDownload=no
 
+Whether to keep a downloaded archive whose checksum did not match, renamed
+to <name>.bad, instead of deleting it. Accepts: yes, no, 1, or 0. Default is
+no. Turn it on only while investigating a mismatch: the digest tells you the
+bytes were wrong, the file is the only thing that can tell you how. Any
+previous .bad for the same archive is replaced, so this cannot accumulate.
+# KeepFailedDownloads=no
+
 Whether to use the full-screen ANSI browser. Accepts: yes, no, 1, or 0.
 Default is yes. Set it to no on a terminal that cannot handle CSI escape
 sequences; the door then falls back to the original line-at-a-time listing,

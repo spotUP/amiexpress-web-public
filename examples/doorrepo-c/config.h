@@ -26,6 +26,10 @@ typedef struct {
     int ansi;
     int screen_rows;
     int screen_cols;
+    /* Keep a download whose checksum did not match, as "<name>.bad", instead
+     * of deleting it. Off by default; see flow.h's flow_build_bad_path() for
+     * why the option exists at all and why it is not the default. */
+    int keep_failed_downloads;
 } dr_config;
 
 void config_defaults(dr_config *cfg);

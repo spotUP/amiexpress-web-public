@@ -582,6 +582,41 @@ TEST(local_path_too_small_buffer_returns_error)
 }
 
 /* ---------------------------------------------------------------------
+ * Quarantine path for a mismatching download (KeepFailedDownloads)
+ * ------------------------------------------------------------------- */
+
+TEST(bad_path_appends_suffix_to_the_local_path)
+{
+    char out[128];
+    flow_build_bad_path(out, sizeof(out), "T:AETRIV10.LHA");
+    ASSERT_STR_EQ(out, "T:AETRIV10.LHA.bad", "keeps the archive name, adds .bad");
+}
+
+TEST(bad_path_keeps_the_directory_the_download_went_to)
+{
+    char out[128];
+    flow_build_bad_path(out, sizeof(out), "Work:Doors/Downloads/-D-CALC.LHA");
+    ASSERT_STR_EQ(out, "Work:Doors/Downloads/-D-CALC.LHA.bad", "quarantine file stays beside the download");
+}
+
+TEST(bad_path_too_small_buffer_returns_error)
+{
+    /* One byte short of "T:X.bad" plus its NUL: it must fail rather than
+     * truncate, because a truncated path would rename the download onto
+     * some other file's name. */
+    char out[7];
+    int n = flow_build_bad_path(out, sizeof(out), "T:X.LHA");
+    ASSERT_TRUE(n < 0, "buffer too small must fail, not truncate");
+}
+
+TEST(bad_path_rejects_an_empty_local_path)
+{
+    char out[128];
+    int n = flow_build_bad_path(out, sizeof(out), "");
+    ASSERT_TRUE(n < 0, "an empty path has no download to quarantine");
+}
+
+/* ---------------------------------------------------------------------
  * Catalog cache-reuse decision
  * ------------------------------------------------------------------- */
 
@@ -1116,6 +1151,10 @@ int main(void)
     RUN_TEST(local_path_directory_with_trailing_slash_needs_no_separator);
     RUN_TEST(local_path_bare_directory_gets_separator_inserted);
     RUN_TEST(local_path_too_small_buffer_returns_error);
+    RUN_TEST(bad_path_appends_suffix_to_the_local_path);
+    RUN_TEST(bad_path_keeps_the_directory_the_download_went_to);
+    RUN_TEST(bad_path_too_small_buffer_returns_error);
+    RUN_TEST(bad_path_rejects_an_empty_local_path);
 
     RUN_TEST(cache_reused_when_revisions_match);
     RUN_TEST(cache_not_reused_when_revisions_differ);

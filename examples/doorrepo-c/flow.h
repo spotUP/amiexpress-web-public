@@ -117,6 +117,23 @@ int flow_build_doc_path(char *out, unsigned long outsize,
 int flow_build_local_path(char *out, unsigned long outsize,
                            const char *download_dir, const char *archive_name);
 
+/* Builds the quarantine path a mismatching download is kept under when
+ * KeepFailedDownloads is on: "<local_path>.bad".
+ *
+ * Why the door keeps such a file at all: a checksum mismatch is the one
+ * failure whose cause cannot be worked out from the log line it writes. The
+ * digest tells you the bytes were wrong, not HOW - and the bytes are the
+ * only thing that answers that. A real case on this project's own BBS
+ * (-D-CALC.LHA, twice, same wrong digest, while the server, the network and
+ * the same binary all verified clean elsewhere) was unresolvable precisely
+ * because the door had already deleted the evidence.
+ *
+ * Off by default, because a door that silently keeps corrupt archives on a
+ * sysop's disk is worse than one that discards them.
+ *
+ * Returns the output length, or -1 if it would not fit `outsize`. */
+int flow_build_bad_path(char *out, unsigned long outsize, const char *local_path);
+
 /* ---- Shell-injection defense: allowlist for LhaCommand, denylist for
  * everything else that lands inside a double-quoted shell argument ----
  *
