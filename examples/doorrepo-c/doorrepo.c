@@ -2062,6 +2062,15 @@ static int ui_confirm(ansi_buf *b, char *frame, long framecap,
     ansi_flush(b);
 
     key = ui_read_key();
+
+    /* Restore the colours this prompt set. A function that changes terminal
+     * state owns putting it back: without this the white-on-blue bar's
+     * attributes outlive the answer, and the next ansi_clear() repaints the
+     * whole screen blue - reported from the live BBS after answering N. */
+    ansi_begin(b, frame, framecap);
+    ansi_reset(b);
+    ansi_flush(b);
+
     return (key == 'y' || key == 'Y' || key == UI_KEY_ENTER);
 }
 
@@ -2808,6 +2817,7 @@ static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
         if (key == UI_KEY_ENTER) {
             ansi_begin(b, frame, framecap);
             ansi_cursor(b, 0);
+            ansi_reset(b);   /* same reason as ui_confirm: put the colours back */
             ansi_flush(b);
             return (buf[0] != '\0') ? 1 : 0;
         }

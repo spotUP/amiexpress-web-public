@@ -76,7 +76,15 @@ void ansi_flush(ansi_buf *b)
 
 void ansi_clear(ansi_buf *b)
 {
-    put_str(b, "\033[2J\033[H");
+    /* The reset is not decoration: ESC[2J erases using the CURRENT
+     * background colour, so clearing while a coloured bar's attributes are
+     * still set paints the WHOLE screen in that colour. Reported from the
+     * live BBS as "answer N at the install prompt and the background goes
+     * blue" - the confirm bar is white-on-blue, and the redraw that followed
+     * inherited it. Prompts restore their own colours too (that is where the
+     * ownership belongs), but clearing is the operation that turns a stray
+     * attribute into a full-screen one, so it defends itself. */
+    put_str(b, "\033[0m\033[2J\033[H");
 }
 
 void ansi_goto(ansi_buf *b, int row, int col)

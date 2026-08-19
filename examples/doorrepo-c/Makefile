@@ -153,9 +153,9 @@ doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
 # POSIX socket declarations that glibc hides under -std=c89.
 TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
-.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native
+.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi
 
-test: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native
+test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
@@ -172,6 +172,10 @@ test-sha256: sha256.c tests/test_sha256.c sha256.h
 test-guide: guide.c tests/test_guide.c guide.h
 	$(CC) $(TEST_CFLAGS) guide.c tests/test_guide.c -o build-test-guide
 	./build-test-guide
+
+test-ansi: ansi.c aedoor_native.c tests/test_ansi.c ansi.h
+	$(CC) $(TEST_CFLAGS) ansi.c aedoor_native.c tests/test_ansi.c -o build-test-ansi
+	./build-test-ansi
 
 test-listtxt: listtxt.c tests/test_listtxt.c listtxt.h
 	$(CC) $(TEST_CFLAGS) listtxt.c tests/test_listtxt.c -o build-test-listtxt
@@ -206,7 +210,7 @@ live: native
 
 clean:
 	rm -f doorrepo doorrepo.amiga doorrepo.amiga-stub
-	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-guide build-test-listtxt build-test-config build-test-http build-test-aedoor-native
+	rm -f build-test-flow build-test-md5 build-test-sha256 build-test-guide build-test-ansi build-test-listtxt build-test-config build-test-http build-test-aedoor-native
 	rm -f *.o
 	rm -rf *.dSYM
 	rm -rf $(AMIGA_NDK_SHIM) $(AMIGA_NETINCLUDE_VENDOR_LINK)
