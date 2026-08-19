@@ -19,6 +19,7 @@ import * as dns from 'dns';
 import * as deasync from 'deasync';
 import type { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { SocketTee } from './bsdsocket-tee';
+import { debugLog, isDebugEnabled } from '../../utils/debug-log';
 
 // Amiga socket constants
 export const AF_INET = 2;
@@ -372,7 +373,15 @@ export class BsdSocketLibrary {
 
     state.socket.on('data', (data) => {
       console.log(`[BsdSocketLibrary] Received ${data.length} bytes`);
-      console.log(`[BsdSocketLibrary] recv data (full): ${data.toString('utf8')}`);
+      // The full body is a debug aid, and an expensive one: it decodes every
+      // chunk as UTF-8 and writes it to the container log, so a door pulling
+      // the 620 KB catalog logged 620 KB of mojibake (it is binary) on top of
+      // the transfer it was already waiting for. isDebugEnabled() is checked
+      // BEFORE the template is built - passing it to debugLog() would still
+      // pay for the toString() on every chunk, which is the whole cost.
+      if (isDebugEnabled()) {
+        debugLog(`[BsdSocketLibrary] recv data (full): ${data.toString('utf8')}`);
+      }
       if (state.tee) state.tee.wire(data);
       state.readBuffer.push(data);
       if (state.readResolve) {
@@ -517,6 +526,39 @@ export class BsdSocketLibrary {
   }
 
   /**
+   * Copies received bytes into the door's buffer.
+   *
+   * writeMemory() is the wrong tool for a payload: per byte it reads the PC,
+   * asks isCodeAddress() whether this is self-modifying code, range-checks
+   * ROM and consults the watchpoint list. A door pulling the 620 KB catalog
+   * paid all of that 620,000 times, and it is the single largest cost of
+   * starting DoorRepo - measured at ~6.3s of a 12.9s cold start, against
+   * ~0.4s for the same bytes over the same link with curl.
+   *
+   * writeMemoryBuffer() is the emulator's existing bulk path (it is how hunks
+   * are loaded) and does one range check for the whole span. Skipping the
+   * self-modifying-code check is correct here rather than merely faster:
+   * this is a socket payload landing in a buffer the door passed us, not an
+   * instruction stream, and a door that recv()s into its own code would be
+   * broken in ways prefetch invalidation cannot rescue.
+   *
+   * Falls back to the per-byte path when the emulator has no bulk write, so
+   * a test double implementing only writeMemory() still works.
+   */
+  private writeBytes(address: number, bytes: Buffer): void {
+    const emu = this.emulator as unknown as {
+      writeMemoryBuffer?: (addr: number, buf: Buffer) => void;
+    };
+    if (typeof emu.writeMemoryBuffer === 'function') {
+      emu.writeMemoryBuffer(address, bytes);
+      return;
+    }
+    for (let i = 0; i < bytes.length; i++) {
+      this.emulator.writeMemory(address + i, bytes[i]);
+    }
+  }
+
+  /**
    * recv() - Receive data from a socket
    * LVO: -78
    *
@@ -557,9 +599,7 @@ export class BsdSocketLibrary {
       while (copied < len && state.readBuffer.length > 0) {
         const data = state.readBuffer[0];
         const take = Math.min(data.length, len - copied);
-        for (let i = 0; i < take; i++) {
-          this.emulator.writeMemory(bufPtr + copied + i, data[i]);
-        }
+        this.writeBytes(bufPtr + copied, data.subarray(0, take));
         if (state.tee) state.tee.recv(data.subarray(0, take));
         copied += take;
         if (take < data.length) {
@@ -596,9 +636,7 @@ export class BsdSocketLibrary {
     const data = received as Buffer | null;
     if (data !== null && data.length > 0) {
       const copyLen = Math.min(data.length, len);
-      for (let i = 0; i < copyLen; i++) {
-        this.emulator.writeMemory(bufPtr + i, data[i]);
-      }
+      this.writeBytes(bufPtr, data.subarray(0, copyLen));
       if (state.tee) state.tee.recv(data.subarray(0, copyLen));
       // If we have leftover data, buffer it
       if (data.length > len) {
