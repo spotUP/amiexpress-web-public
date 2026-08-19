@@ -77,13 +77,36 @@ export const commandCache: {
  * restart. DOORMAN gets away with it by calling refreshDoorRegistry()
  * in-process; nothing running inside the emulator can do that.
  *
- * Why mtime rather than simply rescanning on a miss: a miss is the COMMON
+ * Why a stamp rather than simply rescanning on a miss: a miss is the COMMON
  * case, not a rare one. Every internal command falls through SYSCMD then
  * BBSCMD before reaching processCommand(), so "rescan whenever a command is
- * not found" would readdir + parse every .info file on almost every
- * keystroke a user makes. Comparing the directories' mtime is a stat() per
- * search path, and a directory's mtime changes exactly when a file is added
- * to or removed from it - which is precisely the event that matters here.
+ * not found" would PARSE every .info file on almost every keystroke. The
+ * stamp only has to detect change; parsing happens when it actually moves.
+ *
+ * Why the stamp covers the FILES and not just the directory: a directory's
+ * mtime changes when an entry is added or removed, and at no other time.
+ * Two real cases slip through that:
+ *
+ *   - A file created and then filled in. fopen() publishes an empty .info
+ *     and bumps the directory; fclose() writes the content and bumps
+ *     nothing. A lookup landing in that window reloads, parses an empty
+ *     config, and marks itself fresh - so the finished door stays invisible
+ *     until a restart. Reported from the live BBS, and the timestamps show
+ *     it: directory 22:33:30, contents 22:33:31. (DoorRepo now renames a
+ *     completed file into place, but a sysop with an FTP client does not.)
+ *   - An .info EDITED in place. Same size or not, the directory never
+ *     changes, so a door tightened to ACCESS=255 would go on admitting
+ *     everyone. The test that was supposed to cover this passed only
+ *     because it bumped the directory's mtime by hand.
+ *
+ * So each directory contributes its own mtime plus a digest of the .info
+ * files in it: how many, the newest mtime, and their total size. That is a
+ * readdir plus one stat per .info per lookup - still no parsing, and these
+ * are commands typed by a human at a BBS prompt, not a hot loop.
+ *
+ * Files that are not exactly *.info are ignored, which also keeps a
+ * half-written <CMD>.info.new from churning the stamp while it is being
+ * written.
  */
 let bbscmdDirsStamp: string | null = null;
 
@@ -99,7 +122,25 @@ function bbsCommandDirsStamp(
     try {
       // A directory that does not exist contributes "-": its later
       // CREATION must read as a change, not as "still nothing there".
-      parts.push(`${dir}:${fs.statSync(dir).mtimeMs}`);
+      const dirMtime = fs.statSync(dir).mtimeMs;
+      let count = 0;
+      let newest = 0;
+      let bytes = 0;
+
+      for (const name of fs.readdirSync(dir)) {
+        if (!/\.info$/i.test(name)) continue;
+        try {
+          const st = fs.statSync(path.join(dir, name));
+          if (!st.isFile()) continue;
+          count++;
+          bytes += st.size;
+          if (st.mtimeMs > newest) newest = st.mtimeMs;
+        } catch {
+          // Vanished between readdir and stat - the next check sees it.
+        }
+      }
+
+      parts.push(`${dir}:${dirMtime}:${count}:${newest}:${bytes}`);
     } catch {
       parts.push(`${dir}:-`);
     }

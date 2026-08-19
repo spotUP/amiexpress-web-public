@@ -106,6 +106,92 @@ describe('BBSCmd freshness', () => {
     expect(commandCache.bbscmd.get('EXISTING').access).toBe(255);
   });
 
+  it('picks up an in-place edit WITHOUT the directory mtime moving', () => {
+    // The weakness the other edit test hid by calling utimesSync on the
+    // directory. Editing a file in place does not touch its directory, so a
+    // stamp built from directory mtimes alone never notices - and a door
+    // tightened to ACCESS=255 goes on admitting everyone until a restart.
+    const { loadCommands, commandCache, revalidateBbsCommandsIfChanged } = mod();
+    loadCommands(baseDir, undefined, 0);
+    expect(commandCache.bbscmd.get('EXISTING').access ?? 0).toBe(0);
+
+    // Pin the directory FIRST, then take the baseline, so the only thing
+    // that can move the stamp afterwards is the file itself. Taking the
+    // baseline first would make the pin the change under test - which is
+    // how the first version of this test passed against the very stamp it
+    // was supposed to condemn.
+    const pinned = new Date(Math.floor((Date.now() - 60_000) / 1000) * 1000);
+    fs.utimesSync(cmdDir, pinned, pinned);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // stable
+
+    const target = path.join(cmdDir, 'EXISTING.info');
+    fs.writeFileSync(
+      target,
+      'TYPE=XIM\nLOCATION=Doors:EXISTING/existing\nSTACK=65536\nACCESS=255\n',
+      'latin1'
+    );
+    // Make the file unambiguously newer without touching the directory.
+    const future = new Date(Date.now() + 10_000);
+    fs.utimesSync(target, future, future);
+    fs.utimesSync(cmdDir, pinned, pinned);   // directory deliberately unchanged
+
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
+    expect(commandCache.bbscmd.get('EXISTING').access).toBe(255);
+  });
+
+  it('picks up content written AFTER the file was created', () => {
+    // The reported install bug: fopen() publishes an empty .info and bumps
+    // the directory, fclose() writes the content and bumps nothing. A lookup
+    // in that window used to cache the empty parse and mark itself fresh.
+    const { loadCommands, commandCache, revalidateBbsCommandsIfChanged } = mod();
+    loadCommands(baseDir, undefined, 0);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
+
+    // Step 1: the empty file appears. This DOES change the directory.
+    const target = path.join(cmdDir, 'HALFWAY.info');
+    fs.writeFileSync(target, '', 'latin1');
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
+    expect(commandCache.bbscmd.get('HALFWAY')).toBeFalsy();  // nothing to parse yet
+
+    // Step 2: the content arrives. Pin the directory and re-establish the
+    // baseline first, so what follows is measured purely on the file.
+    const pinned = new Date(Math.floor((Date.now() - 60_000) / 1000) * 1000);
+    fs.utimesSync(cmdDir, pinned, pinned);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);  // the pin
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // settled
+
+    fs.writeFileSync(
+      target,
+      'TYPE=XIM\nLOCATION=Doors:HALFWAY/bin/halfway\nSTACK=65536\nACCESS=0\n',
+      'latin1'
+    );
+    const future = new Date(Date.now() + 10_000);
+    fs.utimesSync(target, future, future);
+    fs.utimesSync(cmdDir, pinned, pinned);   // directory deliberately unchanged
+
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
+    expect(commandCache.bbscmd.get('HALFWAY')).toBeTruthy();
+  });
+
+  it('ignores a half-written .info.new so it cannot churn the stamp', () => {
+    // DoorRepo writes <CMD>.info.new and renames it into place. The
+    // temporary must not count as a change on its own, or every install
+    // would trigger a reload of a file that is not there yet.
+    const { loadCommands, revalidateBbsCommandsIfChanged } = mod();
+    loadCommands(baseDir, undefined, 0);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
+
+    const pinned = new Date(Math.floor((Date.now() - 60_000) / 1000) * 1000);
+    fs.utimesSync(cmdDir, pinned, pinned);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);  // the pin itself
+
+    fs.writeFileSync(path.join(cmdDir, 'PENDING.info.new'), 'TYPE=XIM\n', 'latin1');
+    fs.utimesSync(cmdDir, pinned, pinned);
+
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false);
+  });
+
   it('does not reload when nothing changed', () => {
     const { loadCommands, revalidateBbsCommandsIfChanged } = mod();
     loadCommands(baseDir, undefined, 0);
