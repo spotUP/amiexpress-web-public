@@ -872,71 +872,27 @@ class InstalledView extends BaseView {
  * Clamped because the list can shrink underneath the index: deleting the
  * last row leaves the old index one past the end.
  */
-export function clampSelection(index: number, count: number): number {
-  if (count <= 0) return 0;
-  if (!Number.isFinite(index) || index < 0) return 0;
-  return Math.min(Math.floor(index), count - 1);
-}
-
-export function repoViewCurationAllowed(mode: DoorRepoMode): boolean {
-  return mode.kind !== 'consumer';
-}
-
-/** RepoView's per-entry footer hint string, gated by repo mode. Byte-
- * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled
- * mode, which reads identically) -- only consumer mode differs, by omitting
- * the Strip hint entirely rather than advertising a key that does nothing. */
-export function repoViewFooterParts(
-  mode: DoorRepoMode,
-  opts: { installed: boolean; hasJunk: boolean; hasDoc: boolean }
-): string {
-  const inst = opts.installed ? 'Uninst' : 'Inst';
-  const curationAllowed = repoViewCurationAllowed(mode);
-  const parts = [
-    `{yellow-fg}R{/yellow-fg}=${inst}`,
-    (opts.hasJunk && curationAllowed) ? `{yellow-fg}S{/yellow-fg}trip` : null,
-    opts.hasDoc  ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
-    `{yellow-fg}A{/yellow-fg}rchive`,
-    curationAllowed ? `{yellow-fg}D{/yellow-fg}el` : null,
-    `{yellow-fg}F{/yellow-fg}=Filter`,
-    `{yellow-fg}C{/yellow-fg}=System`,
-    `{yellow-fg}ESC{/yellow-fg}=Back`,
-    `{yellow-fg}Q{/yellow-fg}uit`,
-  ].filter(Boolean).join('  ');
-  return `{center}${parts}{/center}`;
-}
-
-export interface RepoViewHotkeyHandlers {
-  onInstallUninstall: () => void;
-  onStrip: () => void;
-  onViewDoc: () => void;
-  onBrowseArchive: () => void;
-  onCycleFilter: () => void;
-  onDelete: () => void;
-}
-
-/** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
- * mode: consumer mode omits the [S]trip binding entirely -- see
- * repoViewCurationAllowed. Install/uninstall (R), view doc (V), browse
- * archive contents (A), and the system-type filter (C) register in every
- * mode. */
-export function registerRepoViewActionKeys(
-  keys: KeyBinder,
-  mode: DoorRepoMode,
-  handlers: RepoViewHotkeyHandlers
-): void {
-  keys.key(['r', 'R'], () => handlers.onInstallUninstall());
-  if (repoViewCurationAllowed(mode)) {
-    keys.key(['s', 'S'], () => handlers.onStrip());
-    // Deleting removes the archive from the repository permanently. A
-    // consumer browses somebody else's catalog, so the binding must not
-    // exist for them at all rather than be refused at the far end.
-    keys.key(['d', 'D'], () => handlers.onDelete());
-  }
-  keys.key(['v', 'V'], () => handlers.onViewDoc());
-  keys.key(['a', 'A'], () => handlers.onBrowseArchive());
-  keys.key(['c', 'C'], () => handlers.onCycleFilter());
-}
+/**
+ * Repo-view presentation helpers live in repo-view-helpers.ts (app.ts hit the
+ * 2000-line ceiling). Re-exported so importers and tests do not care where
+ * they moved to.
+ */
+export {
+  wrapText,
+  clampSelection,
+  repoViewCurationAllowed,
+  repoViewFooterParts,
+  registerRepoViewActionKeys,
+  type RepoViewHotkeyHandlers,
+} from './repo-view-helpers';
+import {
+  wrapToInfoPane,
+  clampSelection,
+  repoViewCurationAllowed,
+  repoViewFooterParts,
+  registerRepoViewActionKeys,
+  type RepoViewHotkeyHandlers,
+} from './repo-view-helpers';
 
 class RepoView extends BaseView {
   private layout: DoormanLayout;
@@ -1661,7 +1617,11 @@ class DocView extends BaseView {
     }
     // Plain text viewer
     const { Panel, ScrollableBox } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
-    const text = this.content.replace(/[^\x09\x0a\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`);
+    // Keeps 0x80+ for the same reason sanitizeForTags() does: Amiga door
+    // documentation is drawn with high-bit glyphs, and dropping them pulls
+    // the columns out of alignment. Tabs and newlines survive; other control
+    // characters do not.
+    const text = this.content.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').replace(/[{}]/g, c => `\\${c}`);
     this.panel = new Panel({ parent: this.layout.screen, top: 0, left: 0, width: '100%',
       height: '100%-3', label: ` ${this.title} `, tags: true, style: { border:{ fg:'cyan' } } } as any);
     const box = new ScrollableBox({ parent: this.panel, top: 1, left: 1, width: '100%-2',
@@ -1711,6 +1671,9 @@ class StripView extends BaseView {
   // factory) so the sysop can preview what would be stripped, but [S] just
   // explains that installing comes first.
   private canStrip = false;
+  /** Set when this strip would edit the repository archive rather than an
+   *  installed directory; `reason` explains why it cannot, when it cannot. */
+  private archiveStrip: { reason: string | null } | null = null;
 
   constructor(layout: DoormanLayout, entry: CatalogEntry, archivePath: string | null, overrideDir: string | undefined,
               onDone: (stripped: number | null) => void) {
@@ -1742,7 +1705,23 @@ class StripView extends BaseView {
       return;
     }
     const installDir = this.overrideDir;
+    // Two ways to strip. An installed door's DIRECTORY is edited in place
+    // (always possible, pure fs). A repository ARCHIVE is edited in place by
+    // the lha binary, which works for .lha/.lzh and not for .lzx - so a door
+    // that was never installed can still be cleaned on the server, which is
+    // the whole point of curating the repo rather than each install.
     this.canStrip = !!installDir;
+    this.archiveStrip = null;
+    if (!installDir && this.archivePath) {
+      const svc = getCatalogSvc();
+      const capability = svc?.canStripArchiveOnServer?.(this.archivePath);
+      if (capability?.ok) {
+        this.canStrip = true;
+        this.archiveStrip = { reason: null };
+      } else if (capability?.reason) {
+        this.archiveStrip = { reason: capability.reason };
+      }
+    }
 
     this.layout.setFooter('{center}{cyan-fg}Analyzing...{/cyan-fg}{/center}'); this.layout.render();
     (installDir ? lib.analyzeDirectory(installDir) : lib.analyzeArchive(this.archivePath))
@@ -1766,13 +1745,23 @@ class StripView extends BaseView {
         this.keys.key(['a','A'], () => { this.checked.fill(true); this.renderFiles(); });
         this.keys.key(['n','N'], () => { this.checked.fill(false); this.renderFiles(); });
         this.keys.key(['s','S'], () => {
+          if (this.canStrip && !this.overrideDir && this.archiveStrip) {
+            this.doStripArchive();
+            return;
+          }
           if (!this.canStrip) {
+            // Wrapped to the pane rather than hard-wrapped at a guessed
+            // width: the old fixed line breaks re-broke mid-word on a
+            // narrower pane ("fi les", "thi s platform").
+            const why = this.archiveStrip?.reason
+              ?? "This archive cannot be edited in place on this server.";
             this.layout.setInfo(
-              `{yellow-fg}This door is not installed.{/yellow-fg}\n\n` +
-              `DOORMAN strips junk from an INSTALLED door's files, not from\n` +
-              `the archive itself — there is no portable way to rewrite a\n` +
-              `.lha/.lzx archive in its original format on this platform.\n\n` +
-              `Install {yellow-fg}${sanitizeForTags(this.entry.archive_name)}{/yellow-fg} first, then Strip.`
+              `{yellow-fg}Cannot strip this archive.{/yellow-fg}\n\n` +
+              wrapToInfoPane(why, this.layout) + '\n\n' +
+              wrapToInfoPane(
+                `Install ${sanitizeForTags(this.entry.archive_name)} first and strip the ` +
+                `installed copy instead.`, this.layout
+              )
             );
             this.layout.render();
             return;
@@ -1812,6 +1801,45 @@ class StripView extends BaseView {
       : '{center}{yellow-fg}Space{/yellow-fg}=Toggle  {yellow-fg}A{/yellow-fg}=All  {yellow-fg}N{/yellow-fg}=None  {grey-fg}Preview only{/grey-fg}  {yellow-fg}ESC/Q{/yellow-fg}=Cancel{/center}'
     );
     this.layout.render();
+  }
+
+  /**
+   * Strip the REPOSITORY archive in place: the published bytes change, so
+   * the backend re-describes the row (size, digests, junk rows) in the same
+   * step. Every other sysop downloads this file, which is why it is worth
+   * doing here rather than making each of them strip their own copy.
+   */
+  private doStripArchive(): void {
+    const toStrip = this.files.filter((_: any, i: number) => this.checked[i]);
+    if (toStrip.length === 0) { this.vm.pop(); this.onDone(null); return; }
+
+    const svc = getCatalogSvc();
+    if (!svc?.stripArchiveOnServer) {
+      this.reportFailure('strip', 'catalog service unavailable');
+      setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
+      return;
+    }
+
+    this.layout.setFooter('{center}{cyan-fg}Stripping archive...{/cyan-fg}{/center}');
+    this.layout.render();
+
+    let result: { ok: boolean; removed?: number; reason?: string };
+    try {
+      result = svc.stripArchiveOnServer(this.entry.id, toStrip.map((f: any) => f.path));
+    } catch (e: any) {
+      this.reportFailure('strip', e?.message ?? String(e));
+      setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
+      return;
+    }
+
+    if (!result.ok) {
+      this.reportFailure('strip', result.reason ?? 'unknown error');
+      setTimeout(() => { this.vm.pop(); this.onDone(null); }, 2500);
+      return;
+    }
+
+    this.vm.pop();
+    this.onDone(result.removed ?? toStrip.length);
   }
 
   private doStrip(lib: any, installDir: string): void {

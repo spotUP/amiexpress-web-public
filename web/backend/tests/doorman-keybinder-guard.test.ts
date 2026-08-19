@@ -65,8 +65,17 @@ describe('DOORMAN sanitizeForTags', () => {
   it('escapes brace runs so blessed does not eat ASCII art', () => {
     expect(sanitizeForTags('_{___}_')).toBe('_\\{___\\}_');
   });
-  it('drops high-bit and control bytes, keeps printable ASCII and newlines', () => {
-    expect(sanitizeForTags('A\xb1B\x1b[31mC\nD')).toBe('AB[31mC\nD');
+  it('drops control bytes but KEEPS high-bit ones, and keeps newlines', () => {
+    // Changed deliberately 2026-08-19. This used to assert that high-bit
+    // bytes were dropped, which is what broke FILE_ID.DIZ art on the live
+    // BBS: Amiga art is drawn with those glyphs, and deleting one shortens
+    // its line by a column, so a rectangular 44-column box loses its right
+    // border on exactly the lines that used one. The BBS speaks
+    // ISO-8859-1/Amiga - 0xB1 is a display character, not noise.
+    //
+    // Control bytes are still removed: an ESC in catalog text could move the
+    // cursor or set colours, which is the reason this function exists.
+    expect(sanitizeForTags('A\xb1B\x1b[31mC\nD')).toBe('A\xb1B[31mC\nD');
   });
 });
 

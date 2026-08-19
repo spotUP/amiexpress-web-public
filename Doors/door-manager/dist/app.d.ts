@@ -3,8 +3,7 @@
  * Rewritten around a ViewManager / view stack so each screen owns its
  * own key bindings and ESC always pops cleanly.
  */
-import { KeyBinder } from './ViewManager';
-import type { DoorRepoMode, LocalCatalogLookup } from './repoDataSource';
+import type { LocalCatalogLookup } from './repoDataSource';
 import type { RepoClientConfig, FetchManifestResult } from './repo-client';
 interface DoorSession {
     socket: any;
@@ -222,31 +221,11 @@ export declare function installConsumerDoor(cfg: RepoClientConfig, archiveName: 
  * Clamped because the list can shrink underneath the index: deleting the
  * last row leaves the old index one past the end.
  */
-export declare function clampSelection(index: number, count: number): number;
-export declare function repoViewCurationAllowed(mode: DoorRepoMode): boolean;
-/** RepoView's per-entry footer hint string, gated by repo mode. Byte-
- * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled
- * mode, which reads identically) -- only consumer mode differs, by omitting
- * the Strip hint entirely rather than advertising a key that does nothing. */
-export declare function repoViewFooterParts(mode: DoorRepoMode, opts: {
-    installed: boolean;
-    hasJunk: boolean;
-    hasDoc: boolean;
-}): string;
-export interface RepoViewHotkeyHandlers {
-    onInstallUninstall: () => void;
-    onStrip: () => void;
-    onViewDoc: () => void;
-    onBrowseArchive: () => void;
-    onCycleFilter: () => void;
-    onDelete: () => void;
-}
-/** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
- * mode: consumer mode omits the [S]trip binding entirely -- see
- * repoViewCurationAllowed. Install/uninstall (R), view doc (V), browse
- * archive contents (A), and the system-type filter (C) register in every
- * mode. */
-export declare function registerRepoViewActionKeys(keys: KeyBinder, mode: DoorRepoMode, handlers: RepoViewHotkeyHandlers): void;
+/**
+ * Repo-view presentation helpers live in repo-view-helpers.ts (app.ts hit the
+ * 2000-line ceiling). Re-exported so importers and tests do not care where
+ * they moved to.
+ */
+export { wrapText, clampSelection, repoViewCurationAllowed, repoViewFooterParts, registerRepoViewActionKeys, type RepoViewHotkeyHandlers, } from './repo-view-helpers';
 export declare function createApp(session: DoorSession): Promise<void>;
-export {};
 //# sourceMappingURL=app.d.ts.map

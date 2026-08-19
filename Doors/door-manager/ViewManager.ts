@@ -19,9 +19,22 @@ import * as path from 'path';
  * and drop non-printable/high-bit bytes that render as garbage glyphs.
  */
 export function sanitizeForTags(text: string): string {
+  // Strips C0 control characters (which could move the cursor or set
+  // colours from catalog text) and escapes blessed's tag braces - but KEEPS
+  // everything from 0x80 up.
+  //
+  // This used to strip anything outside \x20-\x7e, which deleted the
+  // high-bit glyphs Amiga scene art is drawn with. That is not cosmetic:
+  // removing a character shortens its line by one column, so a rectangular
+  // 44-column FILE_ID.DIZ loses its right-hand border on exactly the lines
+  // that used one, and the art comes apart. Reported from the live BBS as
+  // "many file_id's break like this"; $CP-ST14.LZX is a clean example, 13
+  // lines of exactly 44 columns bordered with 0xA1 and 0xF7.
+  //
+  // The BBS speaks ISO-8859-1/Amiga, so those bytes are display characters.
   return text
     .split('\n')
-    .map(l => l.replace(/[^\x20-\x7e]/g, '').replace(/[{}]/g, c => `\\${c}`))
+    .map(l => l.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').replace(/[{}]/g, c => `\\${c}`))
     .join('\n');
 }
 

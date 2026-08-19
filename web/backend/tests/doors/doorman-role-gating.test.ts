@@ -53,12 +53,15 @@ describe('DOORMAN app: repoViewCurationAllowed', () => {
 // ─── repoViewFooterParts ──────────────────────────────────────────────────────
 
 describe('DOORMAN app: repoViewFooterParts', () => {
+  // Every hint reads KEY=Label. The older mixed form (bare "Strip",
+  // "Archive", "Quit" with only a colour highlight marking the key) was
+  // unreadable on a real terminal - a sysop could not tell that S strips.
   const FULL_OWNER_HINT =
-    '{center}{yellow-fg}R{/yellow-fg}=Inst  {yellow-fg}S{/yellow-fg}trip  ' +
-    '{yellow-fg}V{/yellow-fg}iew doc  {yellow-fg}A{/yellow-fg}rchive  ' +
-    '{yellow-fg}D{/yellow-fg}el  ' +
+    '{center}{yellow-fg}R{/yellow-fg}=Inst  {yellow-fg}S{/yellow-fg}=Strip  ' +
+    '{yellow-fg}V{/yellow-fg}=Doc  {yellow-fg}A{/yellow-fg}=Archive  ' +
+    '{yellow-fg}D{/yellow-fg}=Delete  ' +
     '{yellow-fg}F{/yellow-fg}=Filter  {yellow-fg}C{/yellow-fg}=System  ' +
-    '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}uit{/center}';
+    '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}=Quit{/center}';
 
   it('owner mode, entry with junk + doc: full hint string, byte-identical to pre-Task-8 DOORMAN', () => {
     expect(
@@ -76,9 +79,9 @@ describe('DOORMAN app: repoViewFooterParts', () => {
     const hint = repoViewFooterParts(CONSUMER, { installed: false, hasJunk: true, hasDoc: true });
     expect(hint).toBe(
       '{center}{yellow-fg}R{/yellow-fg}=Inst  ' +
-      '{yellow-fg}V{/yellow-fg}iew doc  {yellow-fg}A{/yellow-fg}rchive  ' +
+      '{yellow-fg}V{/yellow-fg}=Doc  {yellow-fg}A{/yellow-fg}=Archive  ' +
       '{yellow-fg}F{/yellow-fg}=Filter  {yellow-fg}C{/yellow-fg}=System  ' +
-      '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}uit{/center}'
+      '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}=Quit{/center}'
     );
     expect(hint).not.toContain('Strip');
     expect(hint).not.toContain('{yellow-fg}D{/yellow-fg}el');
@@ -231,5 +234,37 @@ describe('DOORMAN app: clampSelection', () => {
     expect(clampSelection(-1, 10)).toBe(0);
     expect(clampSelection(NaN, 10)).toBe(0);
     expect(clampSelection(3.7, 10)).toBe(3);
+  });
+});
+
+// ─── wrapText ────────────────────────────────────────────────────────────────
+
+describe('DOORMAN app: wrapText', () => {
+  // Messages used to carry hard-coded line breaks at a guessed width, which
+  // re-broke mid-word on a narrower pane: the live BBS showed "fi les" and
+  // "thi s platform".
+  const { wrapText } = require('../../../../Doors/door-manager/app');
+
+  it('breaks on spaces, never mid-word', () => {
+    const out: string = wrapText('DOORMAN strips junk from an INSTALLED door', 20);
+    for (const line of out.split('\n')) {
+      expect(line.length).toBeLessThanOrEqual(20);
+    }
+    expect(out).not.toMatch(/\bfi\n/);
+    expect(out.replace(/\n/g, ' ')).toBe('DOORMAN strips junk from an INSTALLED door');
+  });
+
+  it('keeps a word longer than the width on its own line rather than losing it', () => {
+    const out: string = wrapText('see ANNOYINGLYLONGARCHIVENAME.LHA now', 10);
+    expect(out.split('\n')).toContain('ANNOYINGLYLONGARCHIVENAME.LHA');
+  });
+
+  it('preserves paragraph breaks', () => {
+    expect(wrapText('one\ntwo', 40).split('\n')).toEqual(['one', 'two']);
+  });
+
+  it('never divides by a nonsense width', () => {
+    expect(() => wrapText('a b c', 0)).not.toThrow();
+    expect(() => wrapText('a b c', -5)).not.toThrow();
   });
 });

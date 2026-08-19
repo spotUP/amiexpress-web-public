@@ -266,6 +266,128 @@ export interface ArchiveFile {
   junk_reason: string | null;
 }
 
+/**
+ * Whether a repository archive can be stripped in place on this server.
+ * Exposed so a door can decide what to OFFER before the user commits to
+ * anything - DOORMAN asks this to know whether S does something for a door
+ * that is not installed.
+ */
+export function canStripArchiveOnServer(archivePath: string): { ok: boolean; reason?: string } {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { canDeleteMembers } = require('./lha-member-delete');
+  return canDeleteMembers(archivePath);
+}
+
+export interface StripArchiveOnServerResult {
+  ok: boolean;
+  archiveName?: string;
+  removed?: number;
+  newSize?: number;
+  reason?: string;
+}
+
+/**
+ * Remove ad/junk files from a REPOSITORY archive, in place, and make the
+ * catalog describe the archive that now exists.
+ *
+ * This is the "strip on the server" case, distinct from DOORMAN's existing
+ * strip, which edits an already-installed door's directory and leaves the
+ * published archive untouched. Here the published bytes change, so
+ * everything derived from them has to change with it: size, md5, sha256, the
+ * per-file rows. Leaving any of those stale would hand clients a digest that
+ * no longer matches the file they download - the one failure this API's
+ * whole verification story is built to prevent.
+ *
+ * Digests are recomputed from the file on disk rather than adjusted, because
+ * only the file knows what it now contains.
+ *
+ * The row's archive_size and digests changing does NOT change the catalog
+ * revision on its own (that is row count + max indexed_at), so indexed_at is
+ * bumped too - otherwise clients would keep serving a cached catalog that
+ * describes the pre-strip archive.
+ */
+export function stripArchiveOnServer(
+  catalogId: string,
+  memberPaths: string[]
+): StripArchiveOnServerResult {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { deleteMembers, canDeleteMembers } = require('./lha-member-delete');
+  const db = openDb();
+  let row: { id: string; archive_name: string; archive_path: string } | undefined;
+  try {
+    row = db
+      .prepare('SELECT id, archive_name, archive_path FROM door_catalog WHERE id = ?')
+      .get(catalogId) as typeof row;
+  } finally {
+    db.close();
+  }
+
+  if (!row) {
+    return { ok: false, reason: `catalog entry not found: ${catalogId}` };
+  }
+  if (memberPaths.length === 0) {
+    return { ok: false, archiveName: row.archive_name, reason: 'nothing selected to strip' };
+  }
+
+  const absPath = resolveArchivePath(row.archive_path);
+  if (!absPath || !fs.existsSync(absPath)) {
+    return { ok: false, archiveName: row.archive_name, reason: 'archive not present on this server' };
+  }
+
+  const capability = canDeleteMembers(absPath);
+  if (!capability.ok) {
+    return { ok: false, archiveName: row.archive_name, reason: capability.reason };
+  }
+
+  const result = deleteMembers(absPath, memberPaths);
+  if (!result.ok) {
+    return { ok: false, archiveName: row.archive_name, reason: result.reason };
+  }
+
+  // Re-describe the archive that now exists.
+  const size = fs.statSync(absPath).size;
+  let md5: string | null = null;
+  let sha256: string | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const sums = require('./door-repo-checksums').getArchiveChecksums(absPath);
+    md5 = sums.md5;
+    sha256 = sums.sha256;
+  } catch {
+    // A digest we cannot compute must be NULL rather than the old value:
+    // publishing a stale digest for changed bytes is worse than publishing
+    // none, which clients already handle (see docs/DOOR-REPO-API.md).
+  }
+
+  const wdb = new Database(DB_PATH);
+  try {
+    const apply = wdb.transaction(() => {
+      const del = wdb.prepare('DELETE FROM door_catalog_files WHERE catalog_id = ? AND path = ?');
+      for (const p of memberPaths) {
+        del.run(catalogId, p);
+      }
+      wdb.prepare(
+        `UPDATE door_catalog
+            SET archive_size = ?, md5 = ?, sha256 = ?,
+                junk_count = (SELECT COUNT(*) FROM door_catalog_files f
+                               WHERE f.catalog_id = ? AND f.is_junk = 1),
+                indexed_at = ?
+          WHERE id = ?`
+      ).run(size, md5, sha256, catalogId, Math.floor(Date.now() / 1000), catalogId);
+    });
+    apply();
+  } finally {
+    wdb.close();
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `[door-catalog] STRIPPED ${row.archive_name}: removed ${result.removed} file(s), now ${size} bytes`
+  );
+
+  return { ok: true, archiveName: row.archive_name, removed: result.removed, newSize: size };
+}
+
 export interface DeleteCatalogEntryResult {
   ok: boolean;
   archiveName?: string;
