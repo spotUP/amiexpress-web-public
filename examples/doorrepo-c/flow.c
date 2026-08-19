@@ -725,6 +725,28 @@ static int name_has_extension(const char *name)
     return strchr(name, '.') != (const char *) 0;
 }
 
+/* Non-zero when `name` ends in ".rexx", case-insensitively. The suffix must
+ * be the last thing in the name - "notes.rexxdoc" is not a script. */
+static int name_is_rexx(const char *name)
+{
+    unsigned long len;
+    const char *suffix;
+
+    if (name == (const char *) 0) {
+        return 0;
+    }
+    len = (unsigned long) strlen(name);
+    if (len < 5) {
+        return 0;
+    }
+    suffix = name + (len - 5);
+    return (suffix[0] == '.')
+        && (suffix[1] == 'r' || suffix[1] == 'R')
+        && (suffix[2] == 'e' || suffix[2] == 'E')
+        && (suffix[3] == 'x' || suffix[3] == 'X')
+        && (suffix[4] == 'x' || suffix[4] == 'X');
+}
+
 int flow_pick_door_binary(const char *files_body, const char *archive_name,
                           const char *cmd, char *out, unsigned long outsize)
 {
@@ -732,6 +754,8 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
     const char *line;
     char best[160];
     unsigned long best_size = 0;
+    unsigned long script_size = 0;
+    int best_is_script = 0;
     int found_exact = 0;
 
     if (out == (char *) 0 || outsize == 0) {
@@ -786,6 +810,17 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
                     strncpy(best, path, sizeof(best) - 1);
                     best[sizeof(best) - 1] = '\0';
                     best_size = size;
+                    best_is_script = 0;
+                } else if (name_is_rexx(name)
+                           && (best[0] == '\0' || best_is_script)
+                           && size > script_size) {
+                    /* 3. A .rexx script, but only while no real executable
+                     *    has been seen: a script beside a binary is an
+                     *    installer, a script alone is the door. */
+                    strncpy(best, path, sizeof(best) - 1);
+                    best[sizeof(best) - 1] = '\0';
+                    script_size = size;
+                    best_is_script = 1;
                 }
             }
         }

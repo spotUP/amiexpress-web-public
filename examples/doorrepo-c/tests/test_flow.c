@@ -1260,6 +1260,82 @@ TEST(verdict_does_not_refuse_when_no_row_could_be_checked)
               "no census taken is not a failed census");
 }
 
+
+/* ---- AREXX doors ----
+ *
+ * ACC-V103.LHA contains no executable at all: its program is
+ * Account/AccEd.Rexx, and every other member carries a .TXT/.Doc/.snd
+ * suffix. Both existing rules came up empty, so the install fell back to
+ * the command name and wrote LOCATION=Doors:ACC/ACC - a path guaranteed
+ * not to exist. The BBS then said "Door executable not found".
+ */
+
+static const char *ACC_LISTING =
+    "FILES|16|5\n"
+    "1025|0|2Nodez.TXT\n"
+    "868|1|7TH_HEAVEN.NFO\n"
+    "15220|0|Account/AccEd.Doc\n"
+    "2458|0|Account/AccEd.History\n"
+    "640|0|Account/AccEd.Presets\n"
+    "25552|0|Account/AccEd.Rexx\n"
+    "396|0|Account/VTL_ECC1.snd\n"
+    "12431|0|Account/VTL_ECC1.txt\n"
+    "4034|1|CONSOL.DISPLAYME\n"
+    "1025|0|DiGital.TXT\n"
+    "1060|0|Dream-Machine-team.TXT\n"
+    "1000|0|FREEDL.txt\n"
+    "28|0|File_Id.Diz\n"
+    "671|1|TBRAD.TXT.DISPLAYME\n"
+    "1346|1|TC.displayme\n"
+    "851|1|TSLAD.TXT.DISPLAYME\n";
+
+TEST(picker_finds_the_rexx_script_when_there_is_no_executable)
+{
+    char out[160];
+    ASSERT_TRUE(flow_pick_door_binary(ACC_LISTING, "ACC-V103.LHA", "ACC",
+                                      out, sizeof(out)) > 0,
+                "a door whose program is a script is still a door");
+    ASSERT_STR_EQ(out, "Account/AccEd.Rexx", "the .rexx is the program");
+}
+
+TEST(picker_still_prefers_a_real_executable_over_a_script)
+{
+    /* An AmigaDOS executable carries no suffix. When one is present it is
+     * the program, and any .rexx beside it is a helper. */
+    static const char *mixed =
+        "FILES|3|0\n"
+        "40000|0|BbsDoor\n"
+        "25552|0|Install.rexx\n"
+        "800|0|BbsDoor.doc\n";
+    char out[160];
+    flow_pick_door_binary(mixed, "SOMEDOOR.LHA", "SOMEDOOR", out, sizeof(out));
+    ASSERT_STR_EQ(out, "BbsDoor", "extension-less beats .rexx");
+}
+
+TEST(picker_still_prefers_an_exact_name_match_over_a_script)
+{
+    static const char *mixed =
+        "FILES|2|0\n"
+        "25552|0|Setup.rexx\n"
+        "9000|0|bin/SOMEDOOR\n";
+    char out[160];
+    flow_pick_door_binary(mixed, "SOMEDOOR.LHA", "SOMEDOOR", out, sizeof(out));
+    ASSERT_STR_EQ(out, "bin/SOMEDOOR", "an exact name match wins outright");
+}
+
+TEST(picker_takes_the_largest_rexx_when_several_are_present)
+{
+    static const char *several =
+        "FILES|3|0\n"
+        "300|0|Small.rexx\n"
+        "25552|0|Account/AccEd.Rexx\n"
+        "1200|0|Other.REXX\n";
+    char out[160];
+    flow_pick_door_binary(several, "X.LHA", "X", out, sizeof(out));
+    ASSERT_STR_EQ(out, "Account/AccEd.Rexx", "size is the only signal available");
+}
+
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -1400,6 +1476,11 @@ int main(void)
     RUN_TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_clamped);
     RUN_TEST(archive_ceiling_never_exceeds_absolute_max_for_any_plausible_declared_size);
     RUN_TEST(archive_ceiling_real_catalog_max_size_is_reasonable);
+
+    RUN_TEST(picker_finds_the_rexx_script_when_there_is_no_executable);
+    RUN_TEST(picker_still_prefers_a_real_executable_over_a_script);
+    RUN_TEST(picker_still_prefers_an_exact_name_match_over_a_script);
+    RUN_TEST(picker_takes_the_largest_rexx_when_several_are_present);
 
     RUN_TEST(verdict_refuses_when_the_listing_names_files_and_none_arrived);
     RUN_TEST(verdict_refuses_when_the_archiver_failed_and_the_program_is_missing);

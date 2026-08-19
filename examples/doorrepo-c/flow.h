@@ -535,7 +535,13 @@ int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
  *      "AETRIV10";
  *   2. otherwise the largest non-junk file with no extension, since Amiga
  *      executables conventionally carry none while the .doc/.txt/.info
- *      files beside them do.
+ *      files beside them do;
+ *   3. otherwise the largest non-junk ".rexx" script. Some doors ship no
+ *      executable at all: ACC-V103.LHA's program is Account/AccEd.Rexx and
+ *      every other member carries a suffix, so rules 1 and 2 both came up
+ *      empty and the install wrote a LOCATION that could not exist. A
+ *      script ranks BELOW a real executable, because a .rexx sitting next
+ *      to one is an installer or a helper.
  * Returns the length written, or -1 when nothing qualifies - the caller
  * then falls back to the command name, exactly as DOORMAN does when its
  * own search finds nothing. */

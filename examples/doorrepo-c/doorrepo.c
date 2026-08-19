@@ -2775,6 +2775,11 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         ae_put("Could not tell which extracted file is the door's program.", 1);
         sprintf(msg, "LOCATION was set to %s - check it in %s.", binary_rel, info_path);
         ae_put(msg, 1);
+        /* Logged as its own line: the warning further down says "program not
+         * readable", which reads as a protection-bit quirk and hides the
+         * real situation - LOCATION is a GUESS, and the file it names has
+         * never been seen. */
+        log_line(cfg, "INSTALL WARN: program could not be identified, LOCATION guessed");
     }
 
     /* Whether the install worked is decided by the FILE the .info is about
@@ -2901,6 +2906,13 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         log_line(cfg, "INSTALL WARN: archiver reported an error, program present");
     }
 
+    /* The type stays exactly as the catalog gives it, even when the program
+     * turns out to be an AREXX script. TYPE=AREXX is an AmiExpress-WEB
+     * extension (amiga-command-parser.util.ts) and would not be understood
+     * on a real node; the convention both this server and AmiExpress itself
+     * follow is to leave the XIM/AIM marker alone and route on the .rexx
+     * suffix in LOCATION (door.handler.ts's XIM case). A .info written here
+     * has to work on Phantasm's Amiga, not only on this BBS. */
     if (flow_build_info_content(info_content, sizeof(info_content),
                                  entry->type, cmdname, binary_rel) < 0) {
         ae_put("Install failed: the command config would not fit its buffer.", 1);
