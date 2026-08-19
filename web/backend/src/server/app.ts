@@ -7,6 +7,7 @@ import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
 import { doorRepoRouter, isDoorRepoOwner } from './door-repo.routes';
+import { doorRepoCors, isDoorRepoPath } from './door-repo-cors';
 import { getSystemTime } from '../utils/date-time.util';
 import { getRepoRevision } from './repo-revision';
 
@@ -81,6 +82,13 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// The public door-repo API gets its own cross-origin policy, and it has to
+// be installed BEFORE the global one: the global policy REJECTS an unknown
+// origin with 403, so a browser client would never reach the router below no
+// matter what the router itself said. See door-repo-cors.ts for why a public
+// read-only catalog wants a different shape from the BBS's own API.
+app.use('/api/door-repo', doorRepoCors);
+
 // Configure CORS with centralized origin list (includes production domains)
 // Uses config.corsOrigins which already includes https://bbs.uprough.net
 const corsOrigins = config.get('corsOrigins') as string[];
@@ -88,7 +96,7 @@ const corsOrigins = config.get('corsOrigins') as string[];
 console.log('[CORS] NODE_ENV:', process.env.NODE_ENV);
 console.log('[CORS] Configured origins:', corsOrigins);
 
-app.use(cors({
+const globalCors = cors({
   origin: (origin, callback) => {
     // Silence health check CORS logs (no origin = internal requests)
     // Only log if there's an actual origin header
@@ -121,7 +129,19 @@ console.log('[CORS] Development mode - allowing all origins');
       },
       credentials: true,  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+});
+
+// Everything except the public catalog goes through the allowlist. The
+// door-repo paths are skipped rather than allowlisted because the two
+// policies are contradictory by design - allowlist+credentials for the BBS,
+// wildcard and no credentials for a catalog anyone may write a client for -
+// and running both would leave the response carrying half of each.
+app.use((req, res, next) => {
+  if (isDoorRepoPath(req.path)) {
+    return next();
+  }
+  return globalCors(req, res, next);
+});
 
 // Access log (HTTP only; telnet/ssh handled elsewhere)
 const projectRoot = path.resolve(__dirname, '../../../..');

@@ -113,6 +113,33 @@ amiexpress-web backend.
   already been committed there -- it has no mechanism to add, edit, or
   remove catalog entries.
 
+- **Readable from a browser.** Every endpoint below answers with
+  `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy:
+  cross-origin`, so a web client on any origin may fetch and read it. This
+  grants nothing a `curl` could not already do -- the catalog is public,
+  read-only and unauthenticated either way; it only stops the browser
+  refusing to hand the reply to its own script.
+
+  Credentials are deliberately NOT permitted (no
+  `Access-Control-Allow-Credentials`): there is no session here to carry, and
+  a wildcard origin combined with credentials is invalid per the Fetch spec.
+  Send no cookies and no `Authorization`.
+
+  These response headers are listed in `Access-Control-Expose-Headers`, so
+  script can read them:
+
+  | Header                  | Why a client wants it                    |
+  |-------------------------|------------------------------------------|
+  | `Content-Length`        | download progress                        |
+  | `X-Archive-MD5`         | digest verification (section 9)          |
+  | `X-Archive-SHA256`      | digest verification (section 9)          |
+  | `X-Door-Repo-Revision`  | update detection (section 7)             |
+
+  A plain `GET` is a "simple request" and never preflights. A CONDITIONAL
+  fetch does, because `If-None-Match` is not CORS-safelisted -- `OPTIONS` is
+  answered with `204` and allows `If-None-Match`, `If-Modified-Since`,
+  `Range` and `Content-Type`.
+
 ### Endpoints at a glance
 
 | Method | Path                              | Purpose                                   |
