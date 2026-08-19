@@ -110,6 +110,22 @@ export const commandCache: {
  */
 let bbscmdDirsStamp: string | null = null;
 
+/**
+ * Set by invalidateBbsCommandFreshness() when somebody KNOWS the command
+ * directories changed - today, the BBSCmd watcher.
+ *
+ * It is a separate flag rather than `bbscmdDirsStamp = null` because those
+ * are two different states and sharing one representation cost a whole
+ * evening: a null stamp also means "no baseline yet", which the next check
+ * treats as startup and deliberately does not reload for. So the watcher's
+ * signal - fired precisely because a door had just been installed - was
+ * consumed and discarded by the startup guard, and the door stayed
+ * invisible until the process restarted. Reported twice from the live BBS
+ * and reproduced in logs/backend.log (watcher at 15729, the user's command
+ * at 16878).
+ */
+let bbscmdForcedStale = false;
+
 function bbsCommandDirsStamp(
   baseDir: string,
   conferenceId?: number,
@@ -162,16 +178,25 @@ export function revalidateBbsCommandsIfChanged(
 ): boolean {
   const stamp = bbsCommandDirsStamp(baseDir, conferenceId, nodeId);
 
-  if (bbscmdDirsStamp === stamp) {
+  // A forced invalidation outranks the stamp entirely, and is consumed
+  // whether or not it leads to a reload. The stamp is an optimisation; the
+  // caller who forced this knows something the stamp may not be able to see
+  // (a coarse filesystem timestamp, an edit that preserved size and mtime).
+  const forced = bbscmdForcedStale;
+  bbscmdForcedStale = false;
+
+  if (!forced && bbscmdDirsStamp === stamp) {
     return false;
   }
 
   // First call after startup establishes the baseline without a reload:
   // loadCommands() has already read these directories, so re-reading them
-  // here would be pure waste on the first command a user types.
+  // here would be pure waste on the first command a user types. A forced
+  // invalidation is NOT that case, even when it arrives before any baseline
+  // exists - a change really did happen.
   const firstCall = bbscmdDirsStamp === null;
   bbscmdDirsStamp = stamp;
-  if (firstCall) {
+  if (firstCall && !forced) {
     return false;
   }
 
@@ -181,13 +206,17 @@ export function revalidateBbsCommandsIfChanged(
 }
 
 /**
- * Drops the freshness stamp so the next command lookup revalidates
- * unconditionally. Used by the BBSCmd watcher, which knows a change
- * happened but should not do the reload itself - a reload belongs on the
- * command path, where exactly one request is waiting for it.
+ * Forces the next command lookup to reload, whatever the stamp says. Used by
+ * the BBSCmd watcher, which knows a change happened but should not do the
+ * reload itself - a reload belongs on the command path, where exactly one
+ * request is waiting for it.
+ *
+ * This raises a flag rather than clearing the stamp: a cleared stamp is
+ * indistinguishable from "no baseline yet", and the startup guard then
+ * swallowed the signal. See bbscmdForcedStale.
  */
 export function invalidateBbsCommandFreshness(): void {
-  bbscmdDirsStamp = null;
+  bbscmdForcedStale = true;
 }
 
 /**

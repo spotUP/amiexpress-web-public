@@ -227,16 +227,40 @@ describe('BBSCmd freshness', () => {
   });
 
   it('invalidateBbsCommandFreshness forces the next check to reload', () => {
+    // This test used to assert FALSE here, with a comment explaining that a
+    // cleared stamp re-baselines "as on startup". That explanation was the
+    // bug written down: the watcher clears the stamp precisely BECAUSE it
+    // knows a change happened, and the startup guard then threw that signal
+    // away. A forced invalidation and "no baseline yet" are different
+    // states and must not share one representation.
     const {
-      loadCommands, revalidateBbsCommandsIfChanged, invalidateBbsCommandFreshness
+      loadCommands, commandCache, revalidateBbsCommandsIfChanged, invalidateBbsCommandFreshness
     } = mod();
     loadCommands(baseDir, undefined, 0);
     expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
     expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false);
 
+    // A door is installed and the stamp is invalidated by the watcher - the
+    // real sequence, in which the file lands before the signal.
+    writeInfo('FORCED', 'Doors:FORCED/forced');
     invalidateBbsCommandFreshness();
-    // The stamp is gone, so the next call re-establishes it - and, as on
-    // startup, does not reload for that alone.
+
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
+    expect(commandCache.bbscmd.get('FORCED')).toBeTruthy();
+  });
+
+  it('a forced invalidation reloads even when nothing on disk moved', () => {
+    // The stamp is an optimisation, not the authority. Whoever calls
+    // invalidate knows something changed - honour it even if the stamp
+    // cannot see it (a filesystem with coarse timestamps, an edit that
+    // preserved size and mtime).
+    const { loadCommands, revalidateBbsCommandsIfChanged, invalidateBbsCommandFreshness } = mod();
+    loadCommands(baseDir, undefined, 0);
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false); // baseline
+
+    invalidateBbsCommandFreshness();
+    expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
+    // ...and the forcing is consumed, not sticky.
     expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(false);
   });
 
@@ -255,13 +279,30 @@ describe('BBSCmd freshness', () => {
       // behaviour it triggers, not the OS event itself.
       await onBbsCmdDirectoryChanged();
 
-      // Stamp cleared -> next check re-baselines -> the one after sees the
-      // directory as current. Either way the door must be findable once a
-      // reload has happened.
-      revalidateBbsCommandsIfChanged(baseDir, undefined, 0);
-      commandCache.bbscmd.clear();
-      loadCommands(baseDir, undefined, 0);
+      // The next command lookup must find the door. The earlier version of
+      // this test cleared the cache and called loadCommands() by hand
+      // before asserting - which tested loadCommands, not the watcher, and
+      // passed while the live path was broken.
+      expect(revalidateBbsCommandsIfChanged(baseDir, undefined, 0)).toBe(true);
       expect(commandCache.bbscmd.get('WATCHED')).toBeTruthy();
+    });
+
+    it('reproduces the reported install: watcher fires, then the user types the command', async () => {
+      // Exactly the live sequence (logs/backend.log:15729 then 16878):
+      // DoorRepo writes BULLV.info, fs.watch fires, the user types BULLV,
+      // and the BBS answered "No such command" because the watcher's signal
+      // had been consumed by the startup guard.
+      const { loadCommands, revalidateBbsCommandsIfChanged, commandCache } = mod();
+      const { onBbsCmdDirectoryChanged } = require('../../src/handlers/bbscmd-watcher');
+
+      loadCommands(baseDir, undefined, 0);
+      revalidateBbsCommandsIfChanged(baseDir, undefined, 0); // the user's first command
+
+      writeInfo('BULLV', 'Doors:BULLV/Bull');
+      await onBbsCmdDirectoryChanged();
+
+      revalidateBbsCommandsIfChanged(baseDir, undefined, 0); // the user types BULLV
+      expect(commandCache.bbscmd.get('BULLV')).toBeTruthy();
     });
 
     it('startBbsCmdWatcher watches existing directories and stops cleanly', () => {
