@@ -1201,9 +1201,30 @@ debugLog('  [WAITING] No input, pausing emulator');
     }
 
     if (this.inputQueue.length > 0) {
-      const char = this.inputQueue.shift()!;
-      this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
-      this.reply(msg, 1, char);
+      // The queue holds TOKENS, and an arrow key is one token ("\x1b[B"), so
+      // charCodeAt(0) reported a bare ESC and threw the rest of the sequence
+      // away. express.e answers JH_FetchKey with readChar() - the same call
+      // that answers JH_HK - so a real node hands the door the converted
+      // code (2=LEFT, 3=RIGHT, 4=UP, 5=DOWN), never a raw escape. This path
+      // has to do the same or the two ways of reading a key disagree about
+      // what the user pressed: caught by a door that polled JH_FetchKey to
+      // coalesce queued cursor keys and got ESC, then read the NEXT arrow as
+      // the continuation of the first, silently eating every other keypress.
+      const token = this.inputQueue.shift()!;
+      const keyData = this.processHotkeyToken(token);
+
+      // An ignored sequence (Home, End, PgUp/PgDn) converts to nothing.
+      // Report "no input" rather than a zero byte the door would decode as
+      // a keypress - and unlike JH_HK there is nothing to wait for here,
+      // because this call is defined as never blocking.
+      if (keyData === '') {
+        this.messageParser.writeCommand(msg.msgAddr, 0);
+        this.reply(msg, 1, '');
+        return;
+      }
+
+      this.messageParser.writeCommand(msg.msgAddr, keyData.charCodeAt(0));
+      this.reply(msg, 1, keyData);
       return;
     }
 
