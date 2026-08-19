@@ -1380,18 +1380,33 @@ typedef struct {
     int visible_rows;
 } ui_geometry;
 
-static void ui_compute_geometry(const dr_config *cfg, ui_geometry *g)
+/* `wide` drops the list and gives the detail pane the whole screen.
+ *
+ * The archive listing and the documentation are the two views that are
+ * genuinely too big for 65% of an 80-column terminal: Amiga documentation is
+ * written to 80 columns, so reading it through a 51-column window wraps
+ * every line of it, and a file listing loses its size column. Nothing is
+ * given up by hiding the list while one of them is open - the cursor keys
+ * scroll the pane rather than the list in that state (see the browser loop),
+ * so the list is not interactive there at all. */
+static void ui_compute_geometry(const dr_config *cfg, ui_geometry *g, int wide)
 {
     g->rows = cfg->screen_rows;
     g->cols = cfg->screen_cols;
     g->list_left = 1;
-    /* 35% of the width, matching DoormanLayout's listPanel. */
-    g->list_width = (g->cols * 35) / 100;
-    if (g->list_width < 18) {
-        g->list_width = 18;
+    if (wide) {
+        g->list_width = 0;
+        g->info_left = g->list_left;
+        g->info_width = g->cols;
+    } else {
+        /* 35% of the width, matching DoormanLayout's listPanel. */
+        g->list_width = (g->cols * 35) / 100;
+        if (g->list_width < 18) {
+            g->list_width = 18;
+        }
+        g->info_left = g->list_left + g->list_width;
+        g->info_width = g->cols - g->list_width;
     }
-    g->info_left = g->list_left + g->list_width;
-    g->info_width = g->cols - g->list_width;
     g->pane_top = UI_HEADER_ROWS + 1;
     g->pane_height = g->rows - UI_HEADER_ROWS - UI_FOOTER_ROWS;
     if (g->pane_height < 3) {
@@ -1585,6 +1600,13 @@ static void ui_draw_list(ansi_buf *b, const dr_config *cfg, const ui_geometry *g
     int i;
     int inner;
 
+    /* No list at all while a detail view has the screen. Guarding here
+     * rather than at each call site keeps the browser loop's redraw logic
+     * (full / scrolled / two rows changed) in one shape for both layouts. */
+    if (g->list_width <= 0) {
+        return;
+    }
+
     inner = g->list_width - 2;
 
     for (i = 0; i < g->visible_rows; i++) {
@@ -1728,7 +1750,9 @@ static void ui_draw_chrome(ansi_buf *b, const dr_config *cfg, const ui_geometry 
     strcat(label, ")");
 
     ui_draw_header(b, g, cat, v, filter_desc, index_installed_count(cfg));
-    ansi_box(b, g->pane_top, g->list_left, g->pane_height, g->list_width, ANSI_CYAN, label);
+    if (g->list_width > 0) {
+        ansi_box(b, g->pane_top, g->list_left, g->pane_height, g->list_width, ANSI_CYAN, label);
+    }
     ansi_box(b, g->pane_top, g->info_left, g->pane_height, g->info_width, ANSI_BLUE,
              (const char *) 0);
     ui_draw_footer(b, g, sel_entry,
@@ -2997,9 +3021,10 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
     unsigned long prev_top = 0;
     int info_rows_used = 0;
     int info_mode = UI_INFO_DIZ;
+    int prev_info_mode = UI_INFO_DIZ;
     int info_scroll = 0;
 
-    ui_compute_geometry(cfg, &g);
+    ui_compute_geometry(cfg, &g, 0);
 
     view.index = view_index;
     view.count = 0;
@@ -3018,6 +3043,17 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_reset(&buf);
             ansi_flush(&buf);
             stop_for_carrier_loss();
+        }
+
+        /* Opening or closing a detail view changes the LAYOUT, not just the
+         * contents: the list disappears and the pane takes the full width.
+         * Recomputing here, at the top of the pass that will draw it, keeps
+         * every drawing routine reading one geometry that already matches
+         * the mode it is drawing. */
+        if (info_mode != prev_info_mode) {
+            ui_compute_geometry(cfg, &g, info_mode != UI_INFO_DIZ);
+            need_full_redraw = 1;
+            prev_info_mode = info_mode;
         }
 
         if (selected != prev_selected) {
