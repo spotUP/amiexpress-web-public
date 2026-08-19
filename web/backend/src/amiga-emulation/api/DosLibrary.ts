@@ -83,6 +83,42 @@ import {
  * @see ./dos/dos-env-manager.ts for environment variable management
  */
 
+/**
+ * Splits an AmigaDOS/shell command line into arguments, honouring double
+ * quotes. Needed because the paths a door passes to an archiver routinely
+ * contain no spaces but ARE quoted ("LhA" x "PROGDIR:downloads/A.LHA"
+ * "Doors:MYDOOR/"), and a plain whitespace split leaves the quotes glued
+ * to the path, where no resolver can match them.
+ */
+function tokenizeShellArgs(line: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let started = false;
+
+  for (const ch of line) {
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      started = true;
+      continue;
+    }
+    if (!inQuotes && /\s/.test(ch)) {
+      if (started) {
+        args.push(current);
+        current = '';
+        started = false;
+      }
+      continue;
+    }
+    current += ch;
+    started = true;
+  }
+  if (started) {
+    args.push(current);
+  }
+  return args;
+}
+
 export class DosLibrary {
   private emulator: MoiraEmulator;
   private openFiles: Map<number, FileHandle> = new Map();
@@ -3892,6 +3928,96 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       this.emulator.setRegister(CPURegister.D0, 0); // Failure
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
+    }
+
+    // ARCHIVER (LhA/LZX) - unpack an archive into a directory.
+    //
+    // The single exception to "shell command execution blocked": an
+    // archiver call is not arbitrary code, it is a file operation this
+    // process already knows how to do. DoorRepo installs a door by asking
+    // the archiver to unpack it, and with no shell and no LhA inside the
+    // emulator that call reached nothing - every install wrote a command
+    // config pointing at files that were never created, which is how a
+    // door could be "installed" and then answer "No such command".
+    //
+    // Only extraction is honoured, and only into a path this process can
+    // already resolve. Anything else about the command line - options,
+    // member filters, a different verb - is not interpreted: an
+    // unrecognised shape fails rather than silently doing something else.
+    {
+      const argv = tokenizeShellArgs(commandPart);
+      const program = (argv[0] || '').split(/[/:]/).pop()?.toUpperCase() || '';
+      const isArchiver = program === 'LHA' || program === 'LZX' || program === 'UNLZX';
+
+      if (isArchiver) {
+        const verb = (argv[1] || '').toLowerCase();
+        const archiveArg = argv[2];
+        const destArg = argv[3];
+        const wantsExtract = verb === 'x' || verb === 'e' || verb === '-x';
+
+        const fail = (why: string, err: number = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND) => {
+          console.warn(`[dos.library] Execute ${program}: ${why} ("${commandPart}")`);
+          if (ownedOutputHandle && this.fileManager) {
+            this.fileManager.close(ownedOutputHandle);
+          }
+          this.emulator.setRegister(CPURegister.D0, 0);
+          this.lastError = err;
+        };
+
+        if (!wantsExtract || !archiveArg || !destArg) {
+          fail('only "x <archive> <destination>" is supported');
+          return;
+        }
+        if (program !== 'LHA') {
+          // LZX needs the wasm extractor, which is async and cannot be
+          // awaited inside a trap. Failing here is honest; DoorRepo
+          // refuses the install instead of writing a broken .info.
+          fail('LZX extraction is not available inside the emulator', DOS_ERRORS.ERROR_NOT_IMPLEMENTED);
+          return;
+        }
+
+        const archivePath =
+          this.pathManager?.amiToSysPath(archiveArg, process.cwd()) ||
+          this.pathResolver.resolve(archiveArg);
+        const destPath =
+          this.pathManager?.amiToSysPath(destArg, process.cwd()) ||
+          this.pathResolver.resolve(destArg);
+
+        if (!archivePath || !destPath) {
+          fail(`could not resolve "${archiveArg}" / "${destArg}"`);
+          return;
+        }
+        if (!amigafs.existsSync(archivePath)) {
+          fail(`archive not found at "${archivePath}"`);
+          return;
+        }
+
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { extractLhaArchiveSync } = require('../../utils/extractors/lha-extractor');
+          const result = extractLhaArchiveSync(archivePath, destPath);
+          console.log(
+            `[dos.library] Execute ${program}: extracted ${result.extracted.length} file(s) ` +
+              `from "${archivePath}" into "${destPath}"` +
+              (result.failed.length ? ` (${result.failed.length} refused/failed)` : '')
+          );
+
+          if (result.extracted.length === 0) {
+            fail('the archive yielded no files');
+            return;
+          }
+
+          if (ownedOutputHandle && this.fileManager) {
+            this.fileManager.close(ownedOutputHandle);
+          }
+          this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
+          this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+          return;
+        } catch (err: any) {
+          fail(`extraction failed: ${err?.message || err}`);
+          return;
+        }
+      }
     }
 
 debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command execution blocked for security), returning failure`);
