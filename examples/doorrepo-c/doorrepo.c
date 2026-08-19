@@ -33,6 +33,7 @@
 #include "flow.h"
 #include "netio.h"
 #include "ansi.h"
+#include "infocache.h"
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
@@ -827,18 +828,30 @@ typedef enum {
  * as noise. The API therefore exposes the raw DIZ per archive, and this is
  * the only place that reads it.
  *
- * Cached for exactly one archive: the browser refetches when the selection
- * moves to a different entry, and never refetches while the user sits on
- * one. A larger cache would buy little - moving the cursor is the only
- * thing that invalidates it - and a real Amiga has better uses for the RAM.
+ * Backed by an LRU (infocache.h). It used to be cached for exactly ONE
+ * archive, on the reasoning that a larger cache "would buy little - moving
+ * the cursor is the only thing that invalidates it". That is backwards:
+ * moving the cursor is what browsing IS. Measured against the live server,
+ * every arrow key opened a fresh TCP connection and took 430-620 ms, and
+ * arrowing back onto the entry you had just left fetched it all over again.
+ *
+ * 32 entries is two screens' worth, so the up-and-down movement that
+ * dominates browsing stops touching the network entirely. The slab is
+ * static (66 KB) and sits against a door that already reserves 1.6 MB for
+ * the catalog itself.
  * ------------------------------------------------------------------- */
 
 #define DIZ_MAX_BYTES 2048
+#define DIZ_CACHE_SLOTS 32
 
 static char g_diz[DIZ_MAX_BYTES + 1];
 static unsigned long g_diz_len = 0;
 static char g_diz_archive[64] = "";
 static int g_diz_ok = 0;
+
+static info_cache g_diz_cache;
+static info_cache_slot g_diz_cache_slots[DIZ_CACHE_SLOTS];
+static char g_diz_cache_data[DIZ_CACHE_SLOTS * (DIZ_MAX_BYTES + 1)];
 
 /* Sink context: the destination buffer and how much of it is used. Passing
  * this through http_get()'s ctx parameter - rather than writing to the
@@ -882,8 +895,10 @@ static void diz_load(const dr_config *cfg, const char *archive)
     diz_ctx dc;
     int rc;
 
+    int slot;
+
     if (strcmp(g_diz_archive, archive) == 0) {
-        return; /* already cached */
+        return; /* already the one on screen */
     }
 
     strncpy(g_diz_archive, archive, sizeof(g_diz_archive) - 1);
@@ -891,6 +906,17 @@ static void diz_load(const dr_config *cfg, const char *archive)
     g_diz_len = 0;
     g_diz[0] = '\0';
     g_diz_ok = 0;
+
+    /* Seen before - including "the server has no DIZ for this one", which
+     * is the commonest answer and so the one most worth remembering. */
+    slot = info_cache_find(&g_diz_cache, archive);
+    if (slot >= 0) {
+        g_diz_len = g_diz_cache.slots[slot].len;
+        memcpy(g_diz, info_cache_buffer(&g_diz_cache, slot), (size_t) g_diz_len);
+        g_diz[g_diz_len] = '\0';
+        g_diz_ok = g_diz_cache.slots[slot].present;
+        return;
+    }
 
     if (flow_build_diz_path(path, sizeof(path), cfg->path, archive) < 0) {
         return;
@@ -907,6 +933,18 @@ static void diz_load(const dr_config *cfg, const char *archive)
     } else {
         g_diz_len = 0;
         g_diz[0] = '\0';
+    }
+
+    /* A transport failure is NOT cached: that is a link problem, not a fact
+     * about the archive, and the next attempt deserves to reach the server.
+     * A 200 and a 404 are both facts and are both kept. */
+    if (rc == HTTP_OK) {
+        unsigned long cap = 0;
+        slot = info_cache_reserve(&g_diz_cache, archive, &cap);
+        if (slot >= 0) {
+            memcpy(info_cache_buffer(&g_diz_cache, slot), g_diz, (size_t) g_diz_len);
+            info_cache_commit(&g_diz_cache, slot, g_diz_len, g_diz_ok);
+        }
     }
 }
 
@@ -1084,10 +1122,18 @@ static void ui_view_cycle_type(ui_view *v, const dr_catalog *cat)
  * manifest silently leaves ads on disk. 16 KB holds the full listing for
  * every archive in the current catalog. Static, not stack. */
 #define FILES_MAX_BYTES 16384
+/* Four entries, not the DIZ pane's 32: these are 16 KB each, and the archive
+ * listing is something a sysop opens for one door at a time rather than
+ * scrolls a page of. Enough to make going back to the previous few free. */
+#define FILES_CACHE_SLOTS 4
 
 static char g_files[FILES_MAX_BYTES + 1];
 static char g_files_archive[64] = "";
 static int g_files_ok = 0;
+
+static info_cache g_files_cache;
+static info_cache_slot g_files_cache_slots[FILES_CACHE_SLOTS];
+static char g_files_cache_data[FILES_CACHE_SLOTS * (FILES_MAX_BYTES + 1)];
 
 static int files_sink(void *ctx, const unsigned char *buf, unsigned long len)
 {
@@ -1113,10 +1159,18 @@ static int files_sink(void *ctx, const unsigned char *buf, unsigned long len)
  * not just a tail. 24 KB covers all but 186 of them. It is static, not
  * stack (this door's icon declares STACK=8192). */
 #define DOC_MAX_BYTES 24576
+/* Two: a document is read, not skimmed past, and at 24 KB each these are the
+ * most expensive entries in the door. Two makes "back to the one before"
+ * free, which is the only revisit that happens in practice. */
+#define DOC_CACHE_SLOTS 2
 
 static char g_doc[DOC_MAX_BYTES + 1];
 static char g_doc_archive[64] = "";
 static int g_doc_ok = 0;
+
+static info_cache g_doc_cache;
+static info_cache_slot g_doc_cache_slots[DOC_CACHE_SLOTS];
+static char g_doc_cache_data[DOC_CACHE_SLOTS * (DOC_MAX_BYTES + 1)];
 
 /* ---- AmigaGuide state -------------------------------------------------
  *
@@ -1155,6 +1209,8 @@ static void doc_load(const dr_config *cfg, const char *archive)
     diz_ctx dc;
     int rc;
 
+    int slot;
+
     if (strcmp(g_doc_archive, archive) == 0) {
         return;
     }
@@ -1167,6 +1223,25 @@ static void doc_load(const dr_config *cfg, const char *archive)
     g_guide_node = -1;
     g_guide_link_count = 0;
     g_guide_history_len = 0;
+
+    /* A cached document is re-parsed rather than the parse being cached
+     * alongside it. guide_doc holds offsets into g_doc and the renderer
+     * reads its node/link/history state from single globals, so keeping N
+     * parsed guides would mean N copies of all of that; re-parsing is local
+     * CPU against an HTTP fetch, and it keeps one source of truth for what
+     * the reader is currently looking at. */
+    slot = info_cache_find(&g_doc_cache, archive);
+    if (slot >= 0) {
+        unsigned long len = g_doc_cache.slots[slot].len;
+        memcpy(g_doc, info_cache_buffer(&g_doc_cache, slot), (size_t) len);
+        g_doc[len] = '\0';
+        g_doc_ok = g_doc_cache.slots[slot].present;
+        if (g_doc_ok && guide_looks_like_guide(g_doc) && guide_parse(g_doc, &g_guide) > 0) {
+            g_guide_ok = 1;
+            guide_show_node(g_guide.main_node >= 0 ? g_guide.main_node : 0);
+        }
+        return;
+    }
 
     if (flow_build_doc_path(path, sizeof(path), cfg->path, archive) < 0) {
         return;
@@ -1185,6 +1260,16 @@ static void doc_load(const dr_config *cfg, const char *archive)
         }
     } else {
         g_doc[0] = '\0';
+        dc.len = 0;
+    }
+
+    if (rc == HTTP_OK) {
+        unsigned long cap = 0;
+        slot = info_cache_reserve(&g_doc_cache, archive, &cap);
+        if (slot >= 0) {
+            memcpy(info_cache_buffer(&g_doc_cache, slot), g_doc, (size_t) dc.len);
+            info_cache_commit(&g_doc_cache, slot, dc.len, g_doc_ok);
+        }
     }
 }
 
@@ -1195,6 +1280,8 @@ static void files_load(const dr_config *cfg, const char *archive)
     diz_ctx fc;
     int rc;
 
+    int slot;
+
     if (strcmp(g_files_archive, archive) == 0) {
         return;
     }
@@ -1203,6 +1290,15 @@ static void files_load(const dr_config *cfg, const char *archive)
     g_files_archive[sizeof(g_files_archive) - 1] = '\0';
     g_files[0] = '\0';
     g_files_ok = 0;
+
+    slot = info_cache_find(&g_files_cache, archive);
+    if (slot >= 0) {
+        unsigned long len = g_files_cache.slots[slot].len;
+        memcpy(g_files, info_cache_buffer(&g_files_cache, slot), (size_t) len);
+        g_files[len] = '\0';
+        g_files_ok = g_files_cache.slots[slot].present;
+        return;
+    }
 
     if (flow_build_files_path(path, sizeof(path), cfg->path, archive) < 0) {
         return;
@@ -1217,7 +1313,49 @@ static void files_load(const dr_config *cfg, const char *archive)
         g_files_ok = 1;
     } else {
         g_files[0] = '\0';
+        fc.len = 0;
     }
+
+    if (rc == HTTP_OK) {
+        unsigned long cap = 0;
+        slot = info_cache_reserve(&g_files_cache, archive, &cap);
+        if (slot >= 0) {
+            memcpy(info_cache_buffer(&g_files_cache, slot), g_files, (size_t) fc.len);
+            info_cache_commit(&g_files_cache, slot, fc.len, g_files_ok);
+        }
+    }
+}
+
+/* Whether selecting `archive` in `mode` will actually go to the network.
+ * The browser paints "Fetching..." before a load, and after the caches
+ * arrived that banner was the only thing still behaving as if every
+ * selection change were a fetch - it would flash on entries being served
+ * from memory in well under a millisecond. */
+static int info_needs_fetch(int mode, const char *archive)
+{
+    info_cache *cache = (mode == UI_INFO_FILES) ? &g_files_cache :
+                        (mode == UI_INFO_DOC)   ? &g_doc_cache :
+                                                  &g_diz_cache;
+    const char *current = (mode == UI_INFO_FILES) ? g_files_archive :
+                          (mode == UI_INFO_DOC)   ? g_doc_archive :
+                                                    g_diz_archive;
+
+    if (strcmp(current, archive) == 0) {
+        return 0;
+    }
+    return info_cache_find(cache, archive) < 0;
+}
+
+/* Sets up the info-pane caches. Called once at startup, before the browser
+ * runs: the slabs are static, so this only has to establish the bookkeeping. */
+static void info_caches_init(void)
+{
+    info_cache_init(&g_diz_cache, g_diz_cache_slots, g_diz_cache_data,
+                    DIZ_CACHE_SLOTS, (unsigned long) DIZ_MAX_BYTES);
+    info_cache_init(&g_files_cache, g_files_cache_slots, g_files_cache_data,
+                    FILES_CACHE_SLOTS, (unsigned long) FILES_MAX_BYTES);
+    info_cache_init(&g_doc_cache, g_doc_cache_slots, g_doc_cache_data,
+                    DOC_CACHE_SLOTS, (unsigned long) DOC_MAX_BYTES);
 }
 
 static int ui_already_downloaded(const dr_config *cfg, const char *archive);
@@ -2912,10 +3050,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
              * is seconds, during which the screen would otherwise sit there
              * looking hung, so say what is happening first. Only when the
              * cache will actually miss - no flicker when it will not. */
-            int will_fetch =
-                (info_mode == UI_INFO_FILES) ? (strcmp(g_files_archive, sel_archive) != 0) :
-                (info_mode == UI_INFO_DOC)   ? (strcmp(g_doc_archive, sel_archive) != 0) :
-                                               (strcmp(g_diz_archive, sel_archive) != 0);
+            int will_fetch = info_needs_fetch(info_mode, sel_archive);
             if (will_fetch) {
                 /* Drawn INTO THE DETAIL PANE, whose first row ui_draw_info()
                  * overwrites moments later anyway. The first version wrote
@@ -3796,6 +3931,8 @@ int main(int argc, char **argv)
      * arrows either way. See ae_raw_arrows() in aedoor.h. The backend
      * restores the previous state on every shutdown path. */
     ae_raw_arrows(1);
+
+    info_caches_init();
 
     config_defaults(&cfg);
     skipped = 0;

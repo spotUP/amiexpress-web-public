@@ -100,8 +100,8 @@ endif
 
 LIVE_HOST = http://bbs.uprough.net
 
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c
@@ -174,9 +174,9 @@ probe-amiga: $(PROBE_SOURCES) $(HEADERS)
 # POSIX socket declarations that glibc hides under -std=c89.
 TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
 
-.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi
+.PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache
 
-test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native
+test: test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache
 
 test-flow: flow.c tests/test_flow.c flow.h
 	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
@@ -213,6 +213,10 @@ test-http: http.c netio.c config.c flow.c tests/test_http.c tests/stub_server.c 
 test-aedoor-native: aedoor_native.c tests/test_aedoor_native.c aedoor.h
 	$(CC) $(TEST_CFLAGS) aedoor_native.c tests/test_aedoor_native.c -o build-test-aedoor-native
 	./build-test-aedoor-native
+
+test-infocache: infocache.c tests/test_infocache.c infocache.h
+	$(CC) $(TEST_CFLAGS) infocache.c tests/test_infocache.c -o build-test-infocache
+	./build-test-infocache
 
 # ---------------------------------------------------------------------
 # live (explicitly network-touching: runs the real native binary against
