@@ -23,13 +23,15 @@
  *
  * Every net_read() is a WaitSelect + recv pair across the bsdsocket boundary,
  * so this size decides how many round trips a body costs: the 3300-row
- * catalog is ~110 KB, which at the original 512 bytes meant ~220 reads and a
- * visibly slow startup. At 4 KB it is ~27. The buffer is static rather than
+ * catalog is now ~620 KB, which at the original 512 bytes meant ~1200 reads
+ * and at 4 KB still ~152 - measured as seconds of a cold start, because each
+ * one crosses the emulator boundary twice. At 32 KB it is ~19. The buffer is
+ * static rather than
  * automatic because the door's icon declares STACK=8192 - a 4 KB stack array
  * inside a function that also holds the request, line and connection buffers
  * would be a real risk of running the stack out on a real Amiga. Static is
  * safe here: this door is single-threaded and http_get() never recurses. */
-#define BODY_CHUNK_SIZE   4096
+#define BODY_CHUNK_SIZE  32768
 #define REQUEST_BUF_SIZE   512  /* the whole "GET ... HTTP/1.1\r\n...\r\n\r\n" request */
 
 /* A buffered socket reader: net_read() is called in READ_AHEAD_SIZE-byte
