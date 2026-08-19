@@ -68,12 +68,73 @@ export class AmigaDoorSession {
   private onSocketDisconnect?: () => void;
   private onDoorTerminate?: () => void;
 
+  /**
+   * Runs the door at full speed unless its .info asks to be paced.
+   *
+   * 68K door output went through the user's modem throttle unconditionally
+   * (io.ts directEmit, policy of 2026-04-29). That is right for a door whose
+   * VISUALS are paced for a modem - it was introduced because Conftop's
+   * clear/redraw rendered too fast to see - and wrong for everything else.
+   *
+   * Measured on DoorRepo's full-screen browser, same binary both sides:
+   * ~7ms per 198-byte JH_SM with no modem emulator in the path, ~200ms on a
+   * session throttled to 56000 bps, because sendThrottled() walks the
+   * payload in <=64-char slices and sleeps in 5ms quanta whenever the byte
+   * budget runs dry. One redraw is 11-80 of those messages, so a cursor
+   * keypress cost 1-2 seconds of pure pacing. 68K execution was 5ms of it.
+   *
+   * So pacing is opt-in now, the same choice TypeScript doors have always
+   * had: THROTTLE=YES in the .info for a door that wants the modem look.
+   */
+  private suspendModemThrottle(): void {
+    if (this.wantsModemThrottle) return;
+    try {
+      const { getModemEmulator } = require('../utils/modem-emulator.util');
+      const modem = getModemEmulator(this.socket);
+      if (!modem || !modem.isEnabled()) return;
+      this.suspendedModemBps = modem.getBps();
+      modem.disable();
+      console.log(
+        `[AmigaDoorSession] Door output unthrottled (was ${this.suspendedModemBps} bps); ` +
+        `set THROTTLE=YES in the door's .info to pace it at modem speed`
+      );
+    } catch {
+      /* No modem emulator on this socket (harness, tests): nothing to do. */
+    }
+  }
+
+  /**
+   * Puts the user's modem speed back. Must run on EVERY exit path: a door
+   * that left the BBS unthrottled would silently change how the whole board
+   * renders for the rest of the session. Safe to call more than once.
+   */
+  private restoreModemThrottle(): void {
+    if (this.suspendedModemBps === null) return;
+    const bps = this.suspendedModemBps;
+    this.suspendedModemBps = null;
+    try {
+      const { getModemEmulator } = require('../utils/modem-emulator.util');
+      const modem = getModemEmulator(this.socket);
+      if (modem && bps > 0) {
+        modem.enable(bps);
+        console.log(`[AmigaDoorSession] Modem emulation restored at ${bps} bps`);
+      }
+    } catch {
+      /* Socket already gone - the throttle goes with it. */
+    }
+  }
+
   // Port tracking for cleanup (express.e:4527 - deletePort if we created it)
   private createdDoorPort = false;
   private doorPortName = "";
 
   // If we registered with DebugRegistry, this holds the nodeId used
   private registeredWithDebug: number | null = null;
+
+  /** THROTTLE=YES in the door's .info: pace output at the user's modem speed. */
+  private wantsModemThrottle = false;
+  /** The user's baud rate, held while the door runs unthrottled. */
+  private suspendedModemBps: number | null = null;
 
   // FIM protocol handler for FAME BBS doors (doorType === "FIM")
   private fimProtocol: FIMProtocol | null = null;
@@ -299,6 +360,11 @@ debugLog(`[AmigaDoorSession] Tooltypes not found at ${infoPath}, trying fallback
 debugLog(`[AmigaDoorSession] Loaded ${tooltypes.size} tooltypes from ${infoPath}`);
         this.config.toolTypes = { ...this.config.toolTypes, ...Object.fromEntries(tooltypes) };
         
+        // Pacing is opt-in; see suspendModemThrottle().
+        const throttleTooltype = (tooltypes.get('THROTTLE') || '').trim().toUpperCase();
+        this.wantsModemThrottle =
+          throttleTooltype === 'YES' || throttleTooltype === '1' || throttleTooltype === 'ON';
+
         // Update doorType if specified in tooltypes
         const typeTooltype = tooltypes.get('TYPE');
         if (typeTooltype) {
@@ -306,6 +372,10 @@ debugLog(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeToolt
           this.config.doorType = typeTooltype.toUpperCase();
         }
       }
+
+      // Tooltypes are known now, so this is decided before the door emits
+      // its first byte.
+      this.suspendModemThrottle();
 
       // Map ROM into emulator memory at 0xF80000-0xFFFFFF
       const romData = this.sharedState.kickstartRom.getRomData();
@@ -1139,6 +1209,9 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     multicomManager.unregisterEmulator(sessionId);
 
 debugLog(`[AmigaDoorSession] Cleared node ${nodeId} and unregistered MULTICOM for session ${sessionId}`);
+
+    // Give the user their modem speed back before anything else can throw.
+    this.restoreModemThrottle();
 
     // Cleanup library state to release memory (RAM optimization)
     if (this.sharedState.execLibrary) {
