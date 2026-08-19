@@ -343,6 +343,37 @@ int flow_build_local_path(char *out, unsigned long outsize,
     return (int) need;
 }
 
+unsigned long flow_nav_target(int action, unsigned long selected,
+                              unsigned long count, unsigned long page)
+{
+    if (count == 0) {
+        return 0;
+    }
+    if (page == 0) {
+        page = 1;
+    }
+    if (selected >= count) {
+        selected = count - 1;
+    }
+
+    switch (action) {
+    case FLOW_NAV_UP:
+        return (selected > 0) ? selected - 1 : 0;
+    case FLOW_NAV_DOWN:
+        return (selected + 1 < count) ? selected + 1 : count - 1;
+    case FLOW_NAV_PGUP:
+        return (selected > page) ? selected - page : 0;
+    case FLOW_NAV_PGDN:
+        return (selected + page < count) ? selected + page : count - 1;
+    case FLOW_NAV_HOME:
+        return 0;
+    case FLOW_NAV_END:
+        return count - 1;
+    default:
+        return selected;
+    }
+}
+
 int flow_build_bad_path(char *out, unsigned long outsize, const char *local_path)
 {
     static const char suffix[] = ".bad";

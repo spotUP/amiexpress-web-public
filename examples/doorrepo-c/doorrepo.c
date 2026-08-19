@@ -1368,6 +1368,25 @@ static int ui_already_downloaded(const dr_config *cfg, const char *archive);
  * overflowing if a much larger terminal is configured. */
 #define UI_FRAME_BYTES 16384
 
+/* How long the detail pane waits for the user to settle before it draws.
+ *
+ * Moving the highlight is cheap - two list rows and a footer. Filling the
+ * pane beside it is not: it can be an HTTP fetch plus most of a screenful of
+ * output, and on a BBS link every 198 bytes of that is a separate round
+ * trip. Drawing it for a row the cursor is passing over is pure waste, and
+ * it is what makes a list feel like it is fighting back.
+ *
+ * So the pane holds off for a quiet period after the selection moves. The
+ * wait is done in slices with Delay(), checking between them whether the
+ * user has typed again - so a held cursor key never pays the full wait, it
+ * just keeps postponing the pane until the user stops.
+ *
+ * 3 x 4 ticks = 240ms at 50 ticks/second. Long enough to swallow a fast
+ * repeat, short enough that a deliberate single keypress does not feel
+ * laggy. */
+#define PANE_DEBOUNCE_SLICES 3
+#define PANE_DEBOUNCE_TICKS  4
+
 typedef struct {
     int rows;
     int cols;
@@ -2095,11 +2114,12 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
 #define UI_KEY_END   1005
 #define UI_KEY_ENTER 1006
 
-static int ui_read_key(void)
+/* Turns a first byte into a UI_KEY_*. Continuation bytes of a CSI sequence
+ * are read with the BLOCKING ae_key(), so this must only ever be called from
+ * a path that is allowed to wait. Everything except the ESC branch decides
+ * from the single byte it was given. */
+static int ui_decode_key(int c)
 {
-    int c;
-
-    c = ae_key();
     /* EOF on the input stream means the user is gone - a dropped carrier
      * on a real node, the end of a scripted session on the dev backend.
      * Handled HERE rather than in each caller because every one of them
@@ -2148,6 +2168,25 @@ static int ui_read_key(void)
     case '1': (void) ae_key(); return UI_KEY_HOME;
     case '4': (void) ae_key(); return UI_KEY_END;
     default:  return 0;
+    }
+}
+
+static int ui_read_key(void)
+{
+    return ui_decode_key(ae_key());
+}
+
+/* The navigation action a UI key stands for, or FLOW_NAV_NONE. */
+static int ui_nav_action(int key)
+{
+    switch (key) {
+    case UI_KEY_UP:   return FLOW_NAV_UP;
+    case UI_KEY_DOWN: return FLOW_NAV_DOWN;
+    case UI_KEY_PGUP: case 'p': case 'P': return FLOW_NAV_PGUP;
+    case UI_KEY_PGDN: case 'n': case 'N': return FLOW_NAV_PGDN;
+    case UI_KEY_HOME: return FLOW_NAV_HOME;
+    case UI_KEY_END:  return FLOW_NAV_END;
+    default:          return FLOW_NAV_NONE;
     }
 }
 
@@ -3023,6 +3062,11 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
     int info_mode = UI_INFO_DIZ;
     int prev_info_mode = UI_INFO_DIZ;
     int info_scroll = 0;
+    /* Which row the detail pane currently describes, so a pass can tell
+     * whether the pane is stale without asking the network. ULONG_MAX-ish
+     * sentinel: nothing drawn yet. */
+    unsigned long pane_selected = (unsigned long) -1;
+    int pane_is_stale = 0;
 
     ui_compute_geometry(cfg, &g, 0);
 
@@ -3056,6 +3100,29 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             prev_info_mode = info_mode;
         }
 
+        /* Whether to pay for the detail pane on this pass.
+         *
+         * Moving the selection is cheap and local; loading the pane for it is
+         * an HTTP fetch. Holding the cursor key down used to buy one fetch per
+         * key, for entries the user was already scrolling past.
+         *
+         * GETKEY answers "has the user typed something already?" WITHOUT
+         * consuming it (express.e:3811-3813), so the loop can skip the fetch
+         * while they are still moving and do it once when they stop. The list
+         * is still redrawn on every pass, which is the part that has to stay
+         * immediate - an earlier attempt deferred the redraw too, so nothing
+         * moved while keys were being pressed, which just made the user press
+         * more.
+         *
+         * Skipping degrades honestly rather than lying: ui_draw_info() only
+         * renders DIZ/files/doc when the cached copy belongs to the selected
+         * entry, so a skipped pass shows the catalog's own description
+         * instead of the previous door's art. */
+        /* The pane is stale whenever the highlight has moved away from the
+         * row it was drawn for. The cheap part of the frame never waits for
+         * this - only the pane does. */
+        pane_is_stale = (selected != pane_selected) || need_full_redraw;
+
         if (selected != prev_selected) {
             info_scroll = 0;   /* a different entry starts at its own top */
         }
@@ -3078,52 +3145,34 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
          * the rows that actually changed removes most of what was left. */
         view.scroll_top = top_index;
 
-        /* Fetch before composing the frame, so the pane is drawn once with
-         * its final contents rather than flashing placeholder text. */
-        if (view.count > 0) {
-            const char *sel_archive = cat->rows[view.index[selected]].archive;
-            /* Every load below is a blocking HTTP fetch. On a real link that
-             * is seconds, during which the screen would otherwise sit there
-             * looking hung, so say what is happening first. Only when the
-             * cache will actually miss - no flicker when it will not. */
-            int will_fetch = info_needs_fetch(info_mode, sel_archive);
-            if (will_fetch) {
-                /* Drawn INTO THE DETAIL PANE, whose first row ui_draw_info()
-                 * overwrites moments later anyway. The first version wrote
-                 * over the footer and then forced a full redraw to restore
-                 * it - which repainted the header and footer bars on every
-                 * selection change, undoing the incremental redraw entirely
-                 * and flashing blue across the screen. Nothing here may
-                 * touch a region the normal draw path does not already
-                 * repaint. */
-                ansi_begin(&buf, frame, (long) sizeof(frame));
-                ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
-                ansi_text(&buf, g.pane_top + 1, g.info_left + 2,
-                          "Fetching...", g.info_width - 4);
-                ansi_flush(&buf);
-            }
-            if (info_mode == UI_INFO_FILES) {
-                files_load(cfg, sel_archive);
-            } else if (info_mode == UI_INFO_DOC) {
-                doc_load(cfg, sel_archive);
-            } else {
-                diz_load(cfg, sel_archive);
-            }
-        }
-
         /* The entry the footer describes. NULL when the filter matched
          * nothing, which ui_draw_footer treats as "show every key". */
         sel_entry = (view.count > 0)
             ? &cat->rows[view.index[selected]]
             : (const dr_entry *) 0;
 
+        /* PHASE 1: the cheap frame - chrome, the two list rows whose
+         * highlight changed, and the footer. This ALWAYS paints, so the
+         * cursor keeps up with the user no matter what else is deferred.
+         * An earlier version gated the whole frame on "is input waiting",
+         * which meant a queue that never drained froze the display.
+         *
+         * A frame costs real time on a BBS link - it is a screenful of
+         * escapes chunked over XIM at AE_MAX_LINE - and every one drawn for
+         * a row the user is already scrolling past is time they spend
+         * watching the screen crawl. Holding an arrow now moves the
+         * selection silently and paints once, where they stopped.
+         *
+         */
         ansi_begin(&buf, frame, (long) sizeof(frame));
         if (need_full_redraw) {
             ansi_clear(&buf);
             ansi_cursor(&buf, 0);
             ui_draw_chrome(&buf, cfg, &g, cat, &view, filter_desc, sel_entry);
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
-            need_full_redraw = 0;
+            /* ansi_clear() already blanked the pane, so the next pane draw
+             * must not try to blank rows from before the clear. */
+            info_rows_used = 0;
         } else if (top_index != prev_top) {
             /* The window scrolled: every row is different. */
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
@@ -3146,15 +3195,72 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                            sel_entry != (const dr_entry *) 0 && sel_entry->junk != 0);
             ansi_reset(&buf);
         }
-        info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
-                                      need_full_redraw ? 0 : info_rows_used,
-                                      info_mode, info_scroll);
-        prev_selected = selected;
-        prev_top = top_index;
         /* Park the cursor out of the way, bottom-right, so a terminal that
          * ignores the hide request does not leave it blinking mid-listing. */
         ansi_goto(&buf, g.rows, g.cols);
         ansi_flush(&buf);
+        prev_selected = selected;
+        prev_top = top_index;
+        need_full_redraw = 0;
+
+        /* PHASE 2: the detail pane, once the user has stopped moving.
+         *
+         * The wait is sliced so a held cursor key never pays for it: each
+         * slice checks whether another key has arrived and abandons the pane
+         * immediately if so, leaving it stale for the next pass to deal
+         * with. Only a genuine pause gets the fetch and the pane repaint. */
+        if (pane_is_stale && view.count > 0) {
+            int settled = 1;
+            int slice;
+
+            for (slice = 0; slice < PANE_DEBOUNCE_SLICES; slice++) {
+                if (ae_input_pending()) {
+                    settled = 0;
+                    break;
+                }
+                ae_delay_ticks(PANE_DEBOUNCE_TICKS);
+            }
+            if (settled && ae_input_pending()) {
+                settled = 0;
+            }
+
+            if (settled) {
+                const char *sel_archive = cat->rows[view.index[selected]].archive;
+
+                /* Every load below is a blocking HTTP fetch. On a real link
+                 * that is seconds, during which the screen would otherwise
+                 * sit there looking hung, so say what is happening first -
+                 * but only when the cache will actually miss.
+                 *
+                 * Drawn INTO THE DETAIL PANE, whose first row ui_draw_info()
+                 * overwrites moments later anyway. An earlier version wrote
+                 * over the footer and then forced a full redraw to restore
+                 * it, which repainted the header and footer bars on every
+                 * selection change and flashed blue across the screen. */
+                if (info_needs_fetch(info_mode, sel_archive)) {
+                    ansi_begin(&buf, frame, (long) sizeof(frame));
+                    ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
+                    ansi_text(&buf, g.pane_top + 1, g.info_left + 2,
+                              "Fetching...", g.info_width - 4);
+                    ansi_flush(&buf);
+                }
+
+                if (info_mode == UI_INFO_FILES) {
+                    files_load(cfg, sel_archive);
+                } else if (info_mode == UI_INFO_DOC) {
+                    doc_load(cfg, sel_archive);
+                } else {
+                    diz_load(cfg, sel_archive);
+                }
+
+                ansi_begin(&buf, frame, (long) sizeof(frame));
+                info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
+                                              info_rows_used, info_mode, info_scroll);
+                ansi_goto(&buf, g.rows, g.cols);
+                ansi_flush(&buf);
+                pane_selected = selected;
+            }
+        }
 
         key = ui_read_key();
 
@@ -3189,32 +3295,17 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         }
 
         switch (key) {
+        /* All six go through flow_nav_target(), the same call the coalescing
+         * drain above makes - two places moving the selection by two sets of
+         * rules is how they end up disagreeing. */
         case UI_KEY_UP:
-            if (selected > 0) selected--;
-            break;
         case UI_KEY_DOWN:
-            if (view.count > 0 && selected + 1 < view.count) selected++;
-            break;
-        case UI_KEY_PGUP:
-        case 'p': case 'P':
-            if (selected > (unsigned long) g.visible_rows) {
-                selected -= (unsigned long) g.visible_rows;
-            } else {
-                selected = 0;
-            }
-            break;
-        case UI_KEY_PGDN:
-        case 'n': case 'N':
-            if (view.count > 0) {
-                selected += (unsigned long) g.visible_rows;
-                if (selected >= view.count) selected = view.count - 1;
-            }
-            break;
+        case UI_KEY_PGUP: case 'p': case 'P':
+        case UI_KEY_PGDN: case 'n': case 'N':
         case UI_KEY_HOME:
-            selected = 0;
-            break;
         case UI_KEY_END:
-            if (view.count > 0) selected = view.count - 1;
+            selected = flow_nav_target(ui_nav_action(key), selected, view.count,
+                                        (unsigned long) g.visible_rows);
             break;
         case UI_KEY_ENTER:
         case 'r': case 'R':

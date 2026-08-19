@@ -32,6 +32,7 @@
 #include <exec/ports.h>
 #include <exec/memory.h>
 #include <proto/exec.h>
+#include <proto/dos.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,18 +43,13 @@
 
 /* struct Process is only ever held here as an opaque pointer (JHMessage's
  * "task" field, BB_GETTASK result) -- never dereferenced -- so a forward
- * declaration is enough. This file makes no dos.library calls at all (every
- * function used -- AllocMem/FreeMem/CreateMsgPort/DeleteMsgPort/PutMsg/
- * WaitPort/GetMsg/FindPort/Forbid/Permit -- is exec.library), so <dos/dos.h>
- * and <proto/dos.h> are omitted entirely rather than just <dos/dosextens.h>.
- * This also sidesteps two "struct/union member needs identifier" warnings
- * from <devices/timer.h> (it declares anonymous unions, a C11-ism vbcc's
- * C99 mode does not parse) that would otherwise be dragged in transitively
- * -- confirmed by compiling both ways: with <proto/dos.h> included, vbcc's
- * own error trace shows the chain proto/dos.h -> (NDK) clib/dos_protos.h ->
- * dos/dosextens.h -> devices/timer.h, i.e. the warnings originate entirely
- * inside vendored NDK/vbcc headers, not this file's own code or include
- * order -- and without it, the warnings are gone. */
+ * declaration is enough.
+ *
+ * <proto/dos.h> is included for Delay() alone (ae_delay_ticks()). It used to
+ * be omitted because it dragged <devices/timer.h> in transitively and that
+ * header's anonymous unions produced two vbcc warnings; that is no longer
+ * the case with the vendored NDK - verified by building both ways, output is
+ * warning-free. Everything else here is exec.library. */
 struct Process;
 
 /* ---- struct JHMessage --------------------------------------------------
@@ -120,6 +116,7 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
 #define JH_SM       4   /* the normal output call: writes String; Data != 0 appends the BBS's line break and runs its pause check; research doc, express.e:3406-3411 */
 #define JH_PM       5   /* prompt (String) + line input; unused here -- ae_get()'s prompt is already emitted via ae_put() */
 #define JH_HK       6   /* prompt (String) then blocking single-key read; reply key lands in String[0]; research doc */
+#define GETKEY     500  /* non-consuming "is input waiting?": String[0] is '1' or '0' (express.e:3811-3813) */
 /* RAWARROW toggles the BBS's rawArrow flag (axcommon.e:187, handled at
  * express.e:3814-3815). It is the difference between a door seeing the
  * cursor keys and never seeing them at all:
@@ -387,6 +384,29 @@ int ae_key(void)
         return -1;
     }
     return (int)(unsigned char)msg->String[0];
+}
+
+void ae_delay_ticks(int ticks)
+{
+    if (ticks > 0) {
+        Delay((ULONG)ticks);
+    }
+}
+
+int ae_input_pending(void)
+{
+    if (msg == NULL || bbs_port == NULL) {
+        return 0;
+    }
+
+    /* The answer is a character in String[0], not a code in Command: the BBS
+     * writes '1' or '0' there and leaves the input queue untouched. */
+    msg->Command = GETKEY;
+    msg->Data = 0;
+    msg->String[0] = '\0';
+    xim_call();
+
+    return (msg->String[0] == '1') ? 1 : 0;
 }
 
 int ae_check(void)

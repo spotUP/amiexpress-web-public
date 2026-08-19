@@ -75,6 +75,38 @@ void ae_get(char *buf, int maxlen);
  * carrier loss or console timeout. */
 int ae_key(void);
 
+/* Is there input already waiting? (GETKEY, command 500; express.e:3811-3813)
+ *
+ *   CASE GETKEY
+ *     IF checkInput() THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
+ *
+ * Returns 1 when the user has already typed something, 0 when they have not,
+ * and 0 on carrier loss (the next blocking read reports that properly).
+ *
+ * Crucially it does NOT consume the key - it only answers the question. That
+ * is what makes it safe for a door to ask before doing something expensive:
+ * an earlier attempt at this used JH_FetchKey, which DOES consume, and so had
+ * to decode and push back what it took. That went wrong twice - once on an
+ * escape sequence it could not finish without blocking, and once by eating
+ * every queued key before redrawing, so the screen never moved while the user
+ * was pressing keys.
+ *
+ * The native backend always reports 0: there is no BBS holding an input
+ * queue, so a door simply never defers anything. */
+int ae_input_pending(void);
+
+/* Sleep for `ticks` fiftieths of a second (dos.library Delay()).
+ *
+ * Used to hold off expensive work for a moment to see whether the user is
+ * still typing - a detail pane that costs an HTTP fetch and a screenful of
+ * output should not be drawn for a row the cursor is passing over. Delay()
+ * is the AmigaOS way to wait without burning the CPU, and this project's
+ * emulator honours it (the door is descheduled rather than spun).
+ *
+ * The native backend returns immediately: it has no BBS, reports no pending
+ * input, and exists to be driven by scripts that should not be slowed. */
+void ae_delay_ticks(int ticks);
+
 /* CheckMessage equivalent (AEDoor.c CheckMessage(), lines 154-183), but
  * non-blocking and read-only: returns non-zero once a prior ae_get/ae_key/
  * ae_put round trip has observed Data == -1 -- carrier lost or console

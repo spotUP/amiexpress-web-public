@@ -468,3 +468,9 @@ System/Rexxc/
 thoughts/spot/
 thoughts/searchable/
 dev/scripts/door-corpus/corpus-progress.json
+
+# DoorRepo's runtime working directory: the catalog cache and any archives a
+# sysop downloaded through the door. Regenerated on demand; the .keep marker
+# is tracked so the directory exists in a fresh checkout.
+Doors/DoorRepo/downloads/*
+!Doors/DoorRepo/downloads/.keep

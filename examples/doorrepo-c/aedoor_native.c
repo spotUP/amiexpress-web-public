@@ -179,6 +179,27 @@ void ae_get(char *buf, int maxlen)
     } while (c != '\n' && c != EOF);
 }
 
+/* Always "nothing waiting". The native build has no BBS holding an input
+ * queue, and its input is usually a pipe or a line-mode terminal, where
+ * "has the user already typed the next key" cannot be answered without
+ * putting the terminal into raw mode - which this backend deliberately does
+ * not do, since it exists to drive the door from scripts.
+ *
+ * Reporting 0 is the honest answer AND the safe one: a door using this to
+ * defer expensive work simply never defers, and behaves exactly as it did
+ * before the call existed. */
+void ae_delay_ticks(int ticks)
+{
+    /* Nothing to wait for: this backend never reports pending input, so a
+     * quiet-period wait here would only slow a scripted run down. */
+    (void) ticks;
+}
+
+int ae_input_pending(void)
+{
+    return 0;
+}
+
 int ae_key(void)
 {
     int c;

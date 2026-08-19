@@ -582,6 +582,61 @@ TEST(local_path_too_small_buffer_returns_error)
 }
 
 /* ---------------------------------------------------------------------
+ * List navigation arithmetic
+ * ------------------------------------------------------------------- */
+
+TEST(nav_down_advances_one_and_stops_at_the_end)
+{
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_DOWN, 0, 10, 5), 1UL, "down from the top");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_DOWN, 9, 10, 5), 9UL, "down at the last row stays");
+}
+
+TEST(nav_up_retreats_one_and_stops_at_the_top)
+{
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_UP, 4, 10, 5), 3UL, "up from the middle");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_UP, 0, 10, 5), 0UL, "up at the first row stays");
+}
+
+TEST(nav_pages_clamp_at_both_ends)
+{
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_PGDN, 0, 100, 20), 20UL, "page down");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_PGDN, 95, 100, 20), 99UL, "page down near the end clamps");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_PGUP, 50, 100, 20), 30UL, "page up");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_PGUP, 5, 100, 20), 0UL, "page up near the top clamps");
+}
+
+TEST(nav_home_and_end_go_to_the_edges)
+{
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_HOME, 55, 100, 20), 0UL, "home");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_END, 5, 100, 20), 99UL, "end");
+}
+
+TEST(nav_on_an_empty_view_selects_nothing)
+{
+    /* An empty filter result must not produce an index into rows that are
+     * not there - every caller uses the answer to subscript the view. */
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_DOWN, 0, 0, 20), 0UL, "down on empty");
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_END, 0, 0, 20), 0UL, "end on empty");
+}
+
+TEST(nav_repairs_a_selection_left_past_the_end)
+{
+    /* Filtering shrinks the view under a selection that was valid a moment
+     * ago; the next key must land inside the new view, not off it. */
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_DOWN, 900, 10, 5), 9UL, "clamped into range");
+}
+
+TEST(nav_none_leaves_the_selection_alone)
+{
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_NONE, 7, 100, 20), 7UL, "a non-navigation key moves nothing");
+}
+
+TEST(nav_treats_a_zero_page_as_one)
+{
+    ASSERT_EQ(flow_nav_target(FLOW_NAV_PGDN, 0, 100, 0), 1UL, "degenerate page size still advances");
+}
+
+/* ---------------------------------------------------------------------
  * Quarantine path for a mismatching download (KeepFailedDownloads)
  * ------------------------------------------------------------------- */
 
@@ -1151,6 +1206,14 @@ int main(void)
     RUN_TEST(local_path_directory_with_trailing_slash_needs_no_separator);
     RUN_TEST(local_path_bare_directory_gets_separator_inserted);
     RUN_TEST(local_path_too_small_buffer_returns_error);
+    RUN_TEST(nav_down_advances_one_and_stops_at_the_end);
+    RUN_TEST(nav_up_retreats_one_and_stops_at_the_top);
+    RUN_TEST(nav_pages_clamp_at_both_ends);
+    RUN_TEST(nav_home_and_end_go_to_the_edges);
+    RUN_TEST(nav_on_an_empty_view_selects_nothing);
+    RUN_TEST(nav_repairs_a_selection_left_past_the_end);
+    RUN_TEST(nav_none_leaves_the_selection_alone);
+    RUN_TEST(nav_treats_a_zero_page_as_one);
     RUN_TEST(bad_path_appends_suffix_to_the_local_path);
     RUN_TEST(bad_path_keeps_the_directory_the_download_went_to);
     RUN_TEST(bad_path_too_small_buffer_returns_error);
