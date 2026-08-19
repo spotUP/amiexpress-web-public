@@ -209,6 +209,20 @@ export declare function installConsumerDoor(cfg: RepoClientConfig, archiveName: 
  * mean "local catalog only, full local control" (see repoDataSource.ts's
  * module doc grouping them under "local") -- consumer mode is the only mode
  * that does not own the catalog it's browsing. */
+/**
+ * Where the selection should land after a list is rebuilt.
+ *
+ * Actions that change the list used to send the cursor back to the top,
+ * which loses the reader's place: delete row 400 of 3301 and you are back at
+ * row 1 with no idea where you were. Keeping the INDEX (rather than the
+ * entry) is what a user means by "stay where I am" here - after a delete the
+ * row that moved up into that slot is the one under the cursor, which is
+ * also the next thing they are likely to act on.
+ *
+ * Clamped because the list can shrink underneath the index: deleting the
+ * last row leaves the old index one past the end.
+ */
+export declare function clampSelection(index: number, count: number): number;
 export declare function repoViewCurationAllowed(mode: DoorRepoMode): boolean;
 /** RepoView's per-entry footer hint string, gated by repo mode. Byte-
  * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled

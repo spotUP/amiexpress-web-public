@@ -46,6 +46,7 @@ exports.findExtractedBinary = findExtractedBinary;
 exports.extractAndRegisterDoor = extractAndRegisterDoor;
 exports.catalogIdForArchive = catalogIdForArchive;
 exports.installConsumerDoor = installConsumerDoor;
+exports.clampSelection = clampSelection;
 exports.repoViewCurationAllowed = repoViewCurationAllowed;
 exports.repoViewFooterParts = repoViewFooterParts;
 exports.registerRepoViewActionKeys = registerRepoViewActionKeys;
@@ -520,7 +521,9 @@ class InstalledView extends ViewManager_1.BaseView {
         });
         this.layout.setListLabel(' INSTALLED DOORS ');
         this.layout.setListItems(items);
-        this.layout.setListSelect(selectIdx);
+        // Same clamp as the repo view: uninstalling or deleting the last door in
+        // the list would otherwise leave the index one past the end.
+        this.layout.setListSelect(clampSelection(selectIdx, items.length));
         this.updateInfo();
         this.updateFooter();
         this.refreshHeader();
@@ -599,7 +602,7 @@ class InstalledView extends ViewManager_1.BaseView {
         }).then((result) => {
             if (result?.success) {
                 this.setStatus(`Installed: ${result.command}`, 'green');
-                fetchDoors(this.bbs).then(doors => { this.doors = doors; this.refresh(0); });
+                fetchDoors(this.bbs).then(doors => { this.doors = doors; this.refresh(this.layout.listSelected); });
             }
             else {
                 this.setStatus(`Install failed: ${result?.message}`, 'red');
@@ -749,6 +752,26 @@ class InstalledView extends ViewManager_1.BaseView {
  * mean "local catalog only, full local control" (see repoDataSource.ts's
  * module doc grouping them under "local") -- consumer mode is the only mode
  * that does not own the catalog it's browsing. */
+/**
+ * Where the selection should land after a list is rebuilt.
+ *
+ * Actions that change the list used to send the cursor back to the top,
+ * which loses the reader's place: delete row 400 of 3301 and you are back at
+ * row 1 with no idea where you were. Keeping the INDEX (rather than the
+ * entry) is what a user means by "stay where I am" here - after a delete the
+ * row that moved up into that slot is the one under the cursor, which is
+ * also the next thing they are likely to act on.
+ *
+ * Clamped because the list can shrink underneath the index: deleting the
+ * last row leaves the old index one past the end.
+ */
+function clampSelection(index, count) {
+    if (count <= 0)
+        return 0;
+    if (!Number.isFinite(index) || index < 0)
+        return 0;
+    return Math.min(Math.floor(index), count - 1);
+}
 function repoViewCurationAllowed(mode) {
     return mode.kind !== 'consumer';
 }
@@ -944,7 +967,7 @@ class RepoView extends ViewManager_1.BaseView {
         });
         this.layout.setListLabel(` REPO (${this.visibleEntries.length}) `);
         this.layout.setListItems(items);
-        this.layout.setListSelect(selectIdx);
+        this.layout.setListSelect(clampSelection(selectIdx, this.visibleEntries.length));
         this.updateInfo();
         this.updateFooter();
         this.refreshHeader();
@@ -1407,9 +1430,10 @@ class RepoView extends ViewManager_1.BaseView {
             this.setStatus(result.fileRemoved
                 ? `Deleted ${result.archiveName}`
                 : `Deleted ${result.archiveName} (archive was already missing)`, 'green', 4000);
-            // The row is gone, so the list must be rebuilt rather than repainted
-            // around a selection that no longer exists.
-            this.refresh(0);
+            // The row is gone, so the list is rebuilt - but the cursor stays on
+            // the same INDEX, which now holds the door that moved up into the
+            // slot. clampSelection() handles deleting the last row.
+            this.refresh(this.layout.listSelected);
         }));
     }
     doViewDoc() {

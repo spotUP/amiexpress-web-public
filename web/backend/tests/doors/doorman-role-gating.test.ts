@@ -22,6 +22,7 @@
 import { Screen } from '../../../../sdk/engines/ui/blessed';
 import { KeyBinder } from '../../../../Doors/door-manager/ViewManager';
 import {
+  clampSelection,
   repoViewCurationAllowed,
   repoViewFooterParts,
   registerRepoViewActionKeys,
@@ -200,5 +201,35 @@ describe('DOORMAN app: registerRepoViewActionKeys', () => {
     expect(handlers.onBrowseArchive).toHaveBeenCalledTimes(1);
     expect(handlers.onCycleFilter).toHaveBeenCalledTimes(1);
     h.destroy();
+  });
+});
+
+// ─── clampSelection ──────────────────────────────────────────────────────────
+
+describe('DOORMAN app: clampSelection', () => {
+  // Actions that rebuild the list used to send the cursor back to row 1,
+  // which loses the reader's place in a 3301-row catalog. Keeping the index
+  // means the row that moved up into the slot is under the cursor.
+  it('keeps the index when the list is still that long', () => {
+    expect(clampSelection(400, 3301)).toBe(400);
+    expect(clampSelection(0, 1)).toBe(0);
+  });
+
+  it('clamps to the new last row when the list shrank underneath it', () => {
+    // Deleting the last row: the old index is now one past the end.
+    expect(clampSelection(9, 9)).toBe(8);
+    expect(clampSelection(500, 10)).toBe(9);
+  });
+
+  it('returns 0 for an empty list', () => {
+    // Deleting the only remaining door.
+    expect(clampSelection(0, 0)).toBe(0);
+    expect(clampSelection(7, 0)).toBe(0);
+  });
+
+  it('never returns a negative or fractional index', () => {
+    expect(clampSelection(-1, 10)).toBe(0);
+    expect(clampSelection(NaN, 10)).toBe(0);
+    expect(clampSelection(3.7, 10)).toBe(3);
   });
 });
