@@ -876,6 +876,7 @@ export function repoViewFooterParts(
     (opts.hasJunk && curationAllowed) ? `{yellow-fg}S{/yellow-fg}trip` : null,
     opts.hasDoc  ? `{yellow-fg}V{/yellow-fg}iew doc` : null,
     `{yellow-fg}A{/yellow-fg}rchive`,
+    curationAllowed ? `{yellow-fg}D{/yellow-fg}el` : null,
     `{yellow-fg}F{/yellow-fg}=Filter`,
     `{yellow-fg}C{/yellow-fg}=System`,
     `{yellow-fg}ESC{/yellow-fg}=Back`,
@@ -890,6 +891,7 @@ export interface RepoViewHotkeyHandlers {
   onViewDoc: () => void;
   onBrowseArchive: () => void;
   onCycleFilter: () => void;
+  onDelete: () => void;
 }
 
 /** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
@@ -905,6 +907,10 @@ export function registerRepoViewActionKeys(
   keys.key(['r', 'R'], () => handlers.onInstallUninstall());
   if (repoViewCurationAllowed(mode)) {
     keys.key(['s', 'S'], () => handlers.onStrip());
+    // Deleting removes the archive from the repository permanently. A
+    // consumer browses somebody else's catalog, so the binding must not
+    // exist for them at all rather than be refused at the far end.
+    keys.key(['d', 'D'], () => handlers.onDelete());
   }
   keys.key(['v', 'V'], () => handlers.onViewDoc());
   keys.key(['a', 'A'], () => handlers.onBrowseArchive());
@@ -1270,6 +1276,7 @@ class RepoView extends BaseView {
       onViewDoc: () => this.doViewDoc(),
       onBrowseArchive: () => this.doBrowseArchive(),
       onCycleFilter: () => this.cycleFilter(),
+      onDelete: () => this.doDeleteFromRepo(),
     });
     this.keys.key(['q', 'Q'], () => {
       clearTimeout(this.statusTimer);
@@ -1484,6 +1491,60 @@ class RepoView extends BaseView {
     }
     this.vm.push(new StripView(this.layout, e, hasArchive ? resolvedArchive : null, installDir ?? undefined,
       (stripped) => { if (stripped) { this.setStatus(`Stripped ${stripped} ad file(s)`, 'green', 4000); this.refresh(this.layout.listSelected); } }
+    ));
+  }
+
+  /**
+   * Remove a door from the repository: catalog rows and the archive file,
+   * permanently.
+   *
+   * Deliberately does NOT consult `installed`. Install state and repository
+   * publication share a catalog row but are different concerns, and making
+   * curation wait on local state gets it backwards. A door installed here
+   * keeps running - its directory and BBS command are untouched - the
+   * repository simply stops carrying it.
+   *
+   * The confirmation says "permanently" and names the archive because there
+   * is no undo: the archive is unlinked, and D sits one key away from S.
+   */
+  private doDeleteFromRepo(): void {
+    const e = this.entry(); if (!e) return;
+    const svc = getCatalogSvc();
+    if (!svc?.deleteCatalogEntry) {
+      this.setStatus('Catalog service not available', 'yellow');
+      return;
+    }
+
+    this.vm.push(new ConfirmView(this.layout,
+      `Delete {yellow-fg}${e.archive_name}{/yellow-fg} from the repository?\n\n` +
+      `This removes the catalog entry AND the archive file.\n` +
+      `It cannot be undone.` +
+      (e.installed ? `\n\n{green-fg}${e.installed_as}{/green-fg} stays installed and keeps working.` : ''),
+      'Delete', 'Cancel',
+      () => {
+        let result: { ok: boolean; archiveName?: string; fileRemoved?: boolean; reason?: string };
+        try {
+          result = svc.deleteCatalogEntry(e.id);
+        } catch (err: any) {
+          this.setStatus(`Delete failed: ${err?.message ?? err}`, 'red', 6000);
+          return;
+        }
+
+        if (!result.ok) {
+          this.setStatus(`Delete failed: ${result.reason ?? 'unknown error'}`, 'red', 6000);
+          return;
+        }
+
+        this.setStatus(
+          result.fileRemoved
+            ? `Deleted ${result.archiveName}`
+            : `Deleted ${result.archiveName} (archive was already missing)`,
+          'green', 4000
+        );
+        // The row is gone, so the list must be rebuilt rather than repainted
+        // around a selection that no longer exists.
+        this.refresh(0);
+      }
     ));
   }
 

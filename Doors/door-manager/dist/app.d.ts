@@ -225,6 +225,7 @@ export interface RepoViewHotkeyHandlers {
     onViewDoc: () => void;
     onBrowseArchive: () => void;
     onCycleFilter: () => void;
+    onDelete: () => void;
 }
 /** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
  * mode: consumer mode omits the [S]trip binding entirely -- see

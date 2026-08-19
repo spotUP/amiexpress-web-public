@@ -55,6 +55,7 @@ describe('DOORMAN app: repoViewFooterParts', () => {
   const FULL_OWNER_HINT =
     '{center}{yellow-fg}R{/yellow-fg}=Inst  {yellow-fg}S{/yellow-fg}trip  ' +
     '{yellow-fg}V{/yellow-fg}iew doc  {yellow-fg}A{/yellow-fg}rchive  ' +
+    '{yellow-fg}D{/yellow-fg}el  ' +
     '{yellow-fg}F{/yellow-fg}=Filter  {yellow-fg}C{/yellow-fg}=System  ' +
     '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}uit{/center}';
 
@@ -79,6 +80,7 @@ describe('DOORMAN app: repoViewFooterParts', () => {
       '{yellow-fg}ESC{/yellow-fg}=Back  {yellow-fg}Q{/yellow-fg}uit{/center}'
     );
     expect(hint).not.toContain('Strip');
+    expect(hint).not.toContain('{yellow-fg}D{/yellow-fg}el');
   });
 
   it('installed entry: R hint reads Uninst in every mode', () => {
@@ -117,6 +119,7 @@ function makeHandlers(): { [K in keyof RepoViewHotkeyHandlers]: jest.Mock } {
     onViewDoc: jest.fn(),
     onBrowseArchive: jest.fn(),
     onCycleFilter: jest.fn(),
+    onDelete: jest.fn(),
   };
 }
 
@@ -148,6 +151,30 @@ describe('DOORMAN app: registerRepoViewActionKeys', () => {
     expect(handlers.onViewDoc).toHaveBeenCalledTimes(1);
     expect(handlers.onBrowseArchive).toHaveBeenCalledTimes(1);
     expect(handlers.onCycleFilter).toHaveBeenCalledTimes(1);
+    h.destroy();
+  });
+
+  it('owner mode: D fires the delete handler', () => {
+    const h = buildKeyHarness();
+    const handlers = makeHandlers();
+    registerRepoViewActionKeys(h.keys, OWNER, handlers);
+
+    h.send('d');
+
+    expect(handlers.onDelete).toHaveBeenCalledTimes(1);
+    h.destroy();
+  });
+
+  it('consumer mode: Delete is NOT registered -- pressing D does nothing', () => {
+    // Deleting removes the archive from the repository permanently. A
+    // consumer is browsing somebody else's catalog and must not be able to
+    // reach it at all, not merely be refused at the far end.
+    const h = buildKeyHarness();
+    const handlers = makeHandlers();
+    registerRepoViewActionKeys(h.keys, CONSUMER, handlers);
+
+    expect(() => h.send('d')).not.toThrow();
+    expect(handlers.onDelete).not.toHaveBeenCalled();
     h.destroy();
   });
 

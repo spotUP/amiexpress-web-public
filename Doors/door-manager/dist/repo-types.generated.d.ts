@@ -17,6 +17,8 @@ export interface ManifestDoor {
     archiveSize: number | null;
     md5: string | null;
     sha256: string | null;
+    junkCount: number;
+    hasDoc: boolean;
 }
 export interface DoorRepoManifest {
     formatVersion: 1;

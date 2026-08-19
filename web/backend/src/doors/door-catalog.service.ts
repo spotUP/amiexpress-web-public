@@ -266,6 +266,87 @@ export interface ArchiveFile {
   junk_reason: string | null;
 }
 
+export interface DeleteCatalogEntryResult {
+  ok: boolean;
+  archiveName?: string;
+  /** Whether an archive file was actually unlinked (false when it was already gone). */
+  fileRemoved?: boolean;
+  reason?: string;
+}
+
+/**
+ * Remove a door from the repository: its catalog row, its per-file rows, and
+ * its archive on disk. Permanent - there is no undo and no backup.
+ *
+ * ORDER IS DELIBERATE: the archive file goes FIRST, then the rows.
+ *
+ * The indexer (dev/scripts/door-corpus/build-door-catalog.ts) walks the
+ * archive directories and upserts whatever it finds, and it has no prune
+ * step. So removing the rows first and failing to unlink would leave the
+ * file behind for the next re-index to RESURRECT - silently undoing a
+ * deliberate, irreversible action. File-first inverts that into a visible
+ * and harmless failure instead: a row whose archive is missing, which
+ * /archive already answers with a 404 by design (see docs/DOOR-REPO-API.md,
+ * "Digest freshness" and section 5).
+ *
+ * Deletion is UNIFORM and does not consult `installed`. A door installed on
+ * this BBS keeps working - its directory and BBS command are never touched -
+ * the repository simply stops publishing it. That was a deliberate call:
+ * install state and repository publication share a row but are different
+ * concerns, and making curation wait on local state gets it backwards.
+ *
+ * Removing a row changes the row count, so getCatalogRevision() changes,
+ * which invalidates the rendered-catalog cache and makes every client
+ * refetch. Nothing else needs to be told.
+ */
+export function deleteCatalogEntry(id: string): DeleteCatalogEntryResult {
+  const db = openDb();
+  try {
+    const row = db
+      .prepare('SELECT id, archive_name, archive_path FROM door_catalog WHERE id = ?')
+      .get(id) as { id: string; archive_name: string; archive_path: string } | undefined;
+
+    if (!row) {
+      return { ok: false, reason: `catalog entry not found: ${id}` };
+    }
+
+    let fileRemoved = false;
+    const absPath = resolveArchivePath(row.archive_path);
+    try {
+      if (absPath && fs.existsSync(absPath)) {
+        fs.unlinkSync(absPath);
+        fileRemoved = true;
+      }
+    } catch (err: any) {
+      // Stop here with the rows intact: the entry still resolves, and the
+      // sysop can see exactly what failed. Continuing would publish a row
+      // pointing at a file we could not remove.
+      return {
+        ok: false,
+        archiveName: row.archive_name,
+        reason: `could not delete ${absPath}: ${err?.message ?? err}`,
+      };
+    }
+
+    const removeRows = db.transaction((catalogId: string) => {
+      db.prepare('DELETE FROM door_catalog_files WHERE catalog_id = ?').run(catalogId);
+      db.prepare('DELETE FROM door_catalog WHERE id = ?').run(catalogId);
+    });
+    removeRows(row.id);
+
+    // Audit line: the archive is unrecoverable after this, so the log is the
+    // only remaining record that it ever existed here.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[door-catalog] DELETED ${row.archive_name} (id=${row.id}, archive ${fileRemoved ? 'removed' : 'already missing'})`
+    );
+
+    return { ok: true, archiveName: row.archive_name, fileRemoved };
+  } finally {
+    db.close();
+  }
+}
+
 export function getArchiveFiles(catalogId: string): ArchiveFile[] {
   const db = openDb();
   try {
