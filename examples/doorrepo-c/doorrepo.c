@@ -34,6 +34,7 @@
 #include "netio.h"
 #include "ansi.h"
 #include "infocache.h"
+#include "shell.h"
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
@@ -2462,28 +2463,18 @@ static int file_exists(const char *path)
 }
 
 /* Runs the archiver over `archive_path`, extracting into `dest_dir`.
- * Returns 1 on success.
+ * Returns 1 when the archiver REPORTED success - which is not the same as
+ * any file existing; flow_install_verdict() decides that.
  *
- * The command SHAPE differs by target and there is no single spelling that
- * works on both: AmigaDOS LhA takes the destination as a third argument
- * ("LhA x foo.lha Doors:MYDOOR/"), while Unix lha reads that same third
- * argument as a member-name filter and extracts NOTHING (verified on this
- * host: exit 1, empty destination). The native build is only useful if it
- * really extracts, so it uses lha's own "xw=<dir>" form. Both spellings
- * quote every interpolated value, and every value has already been through
- * the allowlist/denylist checks below. */
+ * Both the command's spelling and the means of running it live behind
+ * shell.h's platform pair, so this file keeps its no-platform-branches
+ * rule. The Amiga side calls dos.library/Execute() rather than C system(),
+ * because under this project's 68K emulator system() reaches nothing at
+ * all: it returns 0 without a single DOS call, so every install "extracted"
+ * an archive into a directory that was never created. */
 static int run_extractor(const dr_config *cfg, const char *archive_path, const char *dest_dir)
 {
-    char cmd[600];
-    int rc;
-
-#ifdef AMIGA
-    sprintf(cmd, "\"%s\" x \"%s\" \"%s\"", cfg->lha_command, archive_path, dest_dir);
-#else
-    sprintf(cmd, "\"%s\" xw=\"%s\" \"%s\"", cfg->lha_command, dest_dir, archive_path);
-#endif
-    rc = system(cmd);
-    return (rc == 0);
+    return shell_extract(cfg->lha_command, archive_path, dest_dir);
 }
 
 /* Deletes the files the /files listing flags as ads, under `install_dir`.
@@ -2503,6 +2494,12 @@ static int run_extractor(const dr_config *cfg, const char *archive_path, const c
  *
  * Bounded output: a pathological listing cannot scroll the screen away. */
 #define AD_LIST_MAX 20
+
+/* How many rows of the repository listing an install samples to answer
+ * "did ANY file arrive?". fopen() per row is not free on an Amiga and the
+ * first hit ends the walk, so this is only the ceiling for the negative
+ * case - the one where nothing was unpacked at all. */
+#define INSTALL_CENSUS_MAX 12
 
 static int ui_show_ad_files(const char *files_body)
 {
@@ -2669,6 +2666,9 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     int extract_ok;
     int have_listing;
     int program_readable;
+    int listed_checked;
+    int listed_present;
+    int verdict;
     FILE *f;
 
     /* The archive name has already passed the CWE-22 filename check at
@@ -2810,7 +2810,50 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
      * when the archiver ALSO reported failure - two independent signals
      * pointing the same way, which is the case where a .info would
      * genuinely point at nothing. */
-    if (!program_readable && !extract_ok) {
+    /* Did anything actually come out of the archive?
+     *
+     * "The archiver reported success" turned out to be worth nothing on
+     * its own: under this project's 68K emulator the door's system() call
+     * returned 0 without running a thing, so INSTALL OK was written for
+     * archives that had never been unpacked and the BBS then answered "No
+     * such command" for a door its own command config named. The listing
+     * the server already sent names the files that SHOULD be there, so
+     * sample it and look.
+     *
+     * Bounded at INSTALL_CENSUS_MAX rows because this is fopen() per row on
+     * an Amiga, and the question ("did ANY file arrive?") is answered by
+     * the first hit. */
+    listed_checked = 0;
+    listed_present = 0;
+    if (have_listing) {
+        const char *row = g_files;
+
+        if (strncmp(row, "FILES|", 6) == 0) {
+            row = flow_files_next_line(row);
+        }
+        while (row != (const char *) 0 && listed_checked < INSTALL_CENSUS_MAX) {
+            char rel[160];
+            char probe[420];
+
+            if (flow_files_parse_row(row, (unsigned long *) 0, (int *) 0,
+                                     rel, sizeof(rel)) == 0
+                && rel[0] != '\0') {
+                if (flow_build_local_path(probe, sizeof(probe), install_dir, rel) >= 0) {
+                    listed_checked++;
+                    if (file_exists(probe)) {
+                        listed_present++;
+                        break;  /* one hit is enough - files did arrive */
+                    }
+                }
+            }
+            row = flow_files_next_line(row);
+        }
+    }
+
+    verdict = flow_install_verdict(extract_ok, have_listing, program_readable,
+                                   listed_checked, listed_present);
+
+    if (verdict == FLOW_INSTALL_REFUSE_ARCHIVER_AND_MISSING) {
         ae_put("Install stopped: the archiver reported an error and the door's program", 1);
         sprintf(msg, "is not readable at %s.", binary_check);
         ae_put(msg, 1);
@@ -2821,7 +2864,19 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         (void) ae_key();
         return;
     }
-    if (!have_listing) {
+    if (verdict == FLOW_INSTALL_REFUSE_NOTHING_EXTRACTED) {
+        ae_put("Install stopped: the archiver said it succeeded, but not one of the files", 1);
+        sprintf(msg, "it should have written is in %s.", install_dir);
+        ae_put(msg, 1);
+        ae_put("Nothing was installed. Check that LhaCommand names an archiver this", 1);
+        ae_put("system can actually run.", 1);
+        log_line(cfg, "INSTALL FAILED: archiver reported success but extracted nothing");
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+    if (verdict == FLOW_INSTALL_WARN_NO_LISTING) {
         /* No listing at all - 35 of the catalog's 3301 archives have none,
          * because the server could not read their contents. Absent
          * evidence is not contradicting evidence: install with the command
@@ -2833,14 +2888,14 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         sprintf(msg, "certainly needs correcting in %s.", info_path);
         ae_put(msg, 1);
         log_line(cfg, "INSTALL WARN: no file listing, LOCATION guessed");
-    } else if (!program_readable) {
+    } else if (verdict == FLOW_INSTALL_WARN_PROGRAM_UNREADABLE) {
         ae_put("Note: the door's program could not be opened for reading at", 1);
         sprintf(msg, "%s.", binary_check);
         ae_put(msg, 1);
         ae_put("On AmigaDOS that is usually just its protection bits and the door will run;", 1);
         ae_put("check LOCATION in the command config if it does not.", 1);
         log_line(cfg, "INSTALL WARN: program not readable, LOCATION kept");
-    } else if (!extract_ok) {
+    } else if (verdict == FLOW_INSTALL_WARN_ARCHIVER_ERROR) {
         ae_put("Note: the archiver reported an error, but the door's program did extract.", 1);
         ae_put("Some other file in the archive may be damaged or incomplete.", 1);
         log_line(cfg, "INSTALL WARN: archiver reported an error, program present");

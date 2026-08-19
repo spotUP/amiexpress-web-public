@@ -101,10 +101,10 @@ endif
 LIVE_HOST = http://bbs.uprough.net
 
 CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h
 
-NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c
-AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c
+NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c
+AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c
 
 # tools/probe_fetch.c is a head-less diagnostic, not part of the door: it
 # pulls one archive through the same http.c/netio.c path with no catalog and

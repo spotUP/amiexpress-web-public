@@ -50,8 +50,9 @@ int config_load(dr_config *cfg, const char *path, int *skipped_lines);
  * RepoPort/PageSize/TimeoutSecs/ExtractAfterDownload are not - they are
  * never interpolated into a shell command line or a raw HTTP request
  * line the way those four are). This exists because DownloadDir and
- * LhaCommand both flow, unescaped, into a system() command line built by
- * doorrepo.c for optional archive extraction - a config value containing
+ * LhaCommand both flow, unescaped, into the archiver command line built
+ * by flow_build_extract_command() and run through shell.h (system() on
+ * the host build, dos.library/Execute() on AmigaOS) - a config value containing
  * shell metacharacters is therefore a real command-injection path from
  * a config file, not merely a formatting concern. RepoPath and LogFile
  * are checked too: RepoPath is concatenated raw into an HTTP request

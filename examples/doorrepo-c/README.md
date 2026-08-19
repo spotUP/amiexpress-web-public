@@ -292,8 +292,10 @@ fix -- listed here because a re-implementer copying this door's structure
 needs to know the rules, not just that "it was reviewed":
 
 1. **Shell command injection via sysop configuration.** `DownloadDir` and
-   `LhaCommand` (from `DoorRepo.cfg`) are interpolated into a `system()`
-   call to invoke the archive extractor. A `DownloadDir` value such as
+   `LhaCommand` (from `DoorRepo.cfg`) are interpolated into the archiver
+   command line built by `flow_build_extract_command()` and run by
+   `shell.h`'s platform pair -- `system()` on the host build,
+   `dos.library/Execute()` on AmigaOS. A `DownloadDir` value such as
    `INJECTDIR" ; touch /tmp/PWNED ; echo "` executed arbitrary shell
    commands. **Rule kept:** `LhaCommand` is validated with a strict
    **allowlist** (`[A-Za-z0-9_.:/-]` only, no whitespace, length-capped) --

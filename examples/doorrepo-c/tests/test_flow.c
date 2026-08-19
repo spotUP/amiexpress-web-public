@@ -1131,6 +1131,135 @@ TEST(index_path_sits_in_the_download_dir)
     ASSERT_STR_EQ(out, "Work:Downloads/DoorRepo.idx", "separator inserted");
 }
 
+
+/* ---- flow_build_extract_command ----
+ *
+ * The archiver is reached differently on each target and the command SHAPE
+ * differs with it, which is exactly the kind of thing that is wrong for
+ * months without anyone noticing: nothing here can be checked by reading
+ * the door's output, because a wrong command still prints "Extracting...".
+ */
+
+TEST(extract_command_amiga_form_puts_the_destination_last)
+{
+    char out[600];
+    ASSERT_TRUE(flow_build_extract_command(out, sizeof(out), "LhA",
+                                           "PROGDIR:downloads/5D!DP002.LHA",
+                                           "Doors:5DD/", 1) > 0,
+                "amiga form builds");
+    ASSERT_STR_EQ(out, "\"LhA\" x \"PROGDIR:downloads/5D!DP002.LHA\" \"Doors:5DD/\"",
+                  "AmigaDOS LhA takes the destination as a third argument");
+}
+
+TEST(extract_command_native_form_uses_xw_because_lha_reads_arg_three_as_a_filter)
+{
+    char out[600];
+    ASSERT_TRUE(flow_build_extract_command(out, sizeof(out), "lha",
+                                           "/tmp/dl/A.LHA",
+                                           "/tmp/doors/A/", 0) > 0,
+                "native form builds");
+    ASSERT_STR_EQ(out, "\"lha\" xw=\"/tmp/doors/A/\" \"/tmp/dl/A.LHA\"",
+                  "Unix lha needs xw= or it extracts nothing");
+}
+
+TEST(extract_command_rejects_a_quote_in_any_value)
+{
+    char out[600];
+    ASSERT_EQ(flow_build_extract_command(out, sizeof(out), "LhA",
+                                         "T:evil\" ; rm -rf /", "Doors:X/", 0), -1,
+              "a value carrying a double quote cannot be quoted safely");
+    ASSERT_EQ(flow_build_extract_command(out, sizeof(out), "l\"ha",
+                                         "T:A.LHA", "Doors:X/", 1), -1,
+              "the archiver name is checked too");
+}
+
+TEST(extract_command_too_small_buffer_returns_error)
+{
+    char out[16];
+    ASSERT_EQ(flow_build_extract_command(out, sizeof(out), "LhA",
+                                         "PROGDIR:downloads/5D!DP002.LHA",
+                                         "Doors:5DD/", 1), -1,
+              "does not half-build a command");
+}
+
+TEST(extract_command_rejects_null_and_empty_arguments)
+{
+    char out[600];
+    ASSERT_EQ(flow_build_extract_command(out, sizeof(out), (const char *) 0,
+                                         "A.LHA", "Doors:X/", 1), -1, "null archiver");
+    ASSERT_EQ(flow_build_extract_command(out, sizeof(out), "LhA",
+                                         "", "Doors:X/", 1), -1, "empty archive path");
+    ASSERT_EQ(flow_build_extract_command(out, sizeof(out), "LhA",
+                                         "A.LHA", "", 1), -1, "empty destination");
+}
+
+
+/* ---- flow_install_verdict ----
+ *
+ * The reported bug in one line: the archiver reported success, not one
+ * file had been written, and the door installed anyway. The BBS then
+ * answered "No such command" for a door its own command config named.
+ *
+ * "The archiver said it worked" is the weakest of the three signals here
+ * and the only one that was being trusted.
+ */
+
+TEST(verdict_refuses_when_the_listing_names_files_and_none_arrived)
+{
+    /* The live case: Execute()/system() reported success, the destination
+     * directory was never created, every listed file is absent. */
+    ASSERT_EQ(flow_install_verdict(1, 1, 0, 6, 0), FLOW_INSTALL_REFUSE_NOTHING_EXTRACTED,
+              "archiver success is not evidence a file exists");
+}
+
+TEST(verdict_refuses_when_the_archiver_failed_and_the_program_is_missing)
+{
+    ASSERT_EQ(flow_install_verdict(0, 1, 0, 6, 3), FLOW_INSTALL_REFUSE_ARCHIVER_AND_MISSING,
+              "two independent signals pointing the same way");
+}
+
+TEST(verdict_keeps_installing_when_only_the_protection_bits_hide_the_program)
+{
+    /* TELSER40.LHA: bin/telser IS on disk, fopen() cannot open it. Other
+     * members of the same archive opened fine, which is what tells the two
+     * cases apart. */
+    ASSERT_EQ(flow_install_verdict(1, 1, 0, 6, 5), FLOW_INSTALL_WARN_PROGRAM_UNREADABLE,
+              "an unreadable program among readable siblings is a warning");
+}
+
+TEST(verdict_installs_cleanly_when_the_program_is_there)
+{
+    ASSERT_EQ(flow_install_verdict(1, 1, 1, 6, 6), FLOW_INSTALL_OK, "nothing to report");
+}
+
+TEST(verdict_trusts_a_readable_program_over_a_useless_file_census)
+{
+    /* If the program itself opened, the install worked whatever the row
+     * sampling made of the rest. */
+    ASSERT_EQ(flow_install_verdict(1, 1, 1, 6, 0), FLOW_INSTALL_OK,
+              "a readable program settles it");
+}
+
+TEST(verdict_warns_rather_than_refuses_when_there_is_no_listing_to_check)
+{
+    ASSERT_EQ(flow_install_verdict(1, 0, 0, 0, 0), FLOW_INSTALL_WARN_NO_LISTING,
+              "absent evidence is not contradicting evidence");
+}
+
+TEST(verdict_warns_when_the_archiver_complained_but_the_program_extracted)
+{
+    ASSERT_EQ(flow_install_verdict(0, 1, 1, 6, 6), FLOW_INSTALL_WARN_ARCHIVER_ERROR,
+              "Amiga archives routinely fail one member and extract the rest");
+}
+
+TEST(verdict_does_not_refuse_when_no_row_could_be_checked)
+{
+    /* listed_checked == 0 means the sampling itself found nothing to test,
+     * not that the destination is empty. */
+    ASSERT_EQ(flow_install_verdict(1, 1, 0, 0, 0), FLOW_INSTALL_WARN_PROGRAM_UNREADABLE,
+              "no census taken is not a failed census");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -1271,6 +1400,21 @@ int main(void)
     RUN_TEST(archive_ceiling_declared_size_exactly_at_absolute_max_is_clamped);
     RUN_TEST(archive_ceiling_never_exceeds_absolute_max_for_any_plausible_declared_size);
     RUN_TEST(archive_ceiling_real_catalog_max_size_is_reasonable);
+
+    RUN_TEST(verdict_refuses_when_the_listing_names_files_and_none_arrived);
+    RUN_TEST(verdict_refuses_when_the_archiver_failed_and_the_program_is_missing);
+    RUN_TEST(verdict_keeps_installing_when_only_the_protection_bits_hide_the_program);
+    RUN_TEST(verdict_installs_cleanly_when_the_program_is_there);
+    RUN_TEST(verdict_trusts_a_readable_program_over_a_useless_file_census);
+    RUN_TEST(verdict_warns_rather_than_refuses_when_there_is_no_listing_to_check);
+    RUN_TEST(verdict_warns_when_the_archiver_complained_but_the_program_extracted);
+    RUN_TEST(verdict_does_not_refuse_when_no_row_could_be_checked);
+
+    RUN_TEST(extract_command_amiga_form_puts_the_destination_last);
+    RUN_TEST(extract_command_native_form_uses_xw_because_lha_reads_arg_three_as_a_filter);
+    RUN_TEST(extract_command_rejects_a_quote_in_any_value);
+    RUN_TEST(extract_command_too_small_buffer_returns_error);
+    RUN_TEST(extract_command_rejects_null_and_empty_arguments);
 
     RUN_TEST(plain_alnum_accepts_real_door_types);
     RUN_TEST(plain_alnum_rejects_query_injection_attempt);

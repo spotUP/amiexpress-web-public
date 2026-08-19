@@ -5,6 +5,7 @@
  * deterministic transform over its arguments.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include "flow.h"
@@ -893,4 +894,80 @@ int flow_index_parse_line(const char *line, char *archive_out, unsigned long arc
 int flow_build_index_path(char *out, unsigned long outsize, const char *download_dir)
 {
     return flow_build_local_path(out, outsize, download_dir, FLOW_INDEX_FILENAME);
+}
+
+/* Quotes are the only character this refuses; see flow.h for why escaping
+ * is not attempted. */
+static int extract_arg_ok(const char *value)
+{
+    if (value == (const char *) 0 || value[0] == '\0') {
+        return 0;
+    }
+    return strchr(value, '"') == (char *) 0;
+}
+
+int flow_build_extract_command(char *out, unsigned long outsize,
+                                const char *lha_command,
+                                const char *archive_path,
+                                const char *dest_dir,
+                                int amiga_form)
+{
+    unsigned long need;
+
+    if (out == (char *) 0 || outsize == 0) {
+        return -1;
+    }
+    if (!extract_arg_ok(lha_command) || !extract_arg_ok(archive_path)
+        || !extract_arg_ok(dest_dir)) {
+        return -1;
+    }
+
+    /* Both shapes carry 2 quotes per value (6). The Amiga form adds " x "
+     * (3) and the space before the destination (1); the native one adds
+     * " xw=" (4) and the space before the archive (1). */
+    need = (unsigned long) (strlen(lha_command) + strlen(archive_path)
+                            + strlen(dest_dir) + 6);
+    need += amiga_form ? 4 : 5;
+    if (need + 1 > outsize) {
+        return -1;
+    }
+
+    if (amiga_form) {
+        sprintf(out, "\"%s\" x \"%s\" \"%s\"", lha_command, archive_path, dest_dir);
+    } else {
+        sprintf(out, "\"%s\" xw=\"%s\" \"%s\"", lha_command, dest_dir, archive_path);
+    }
+
+    return (int) need;
+}
+
+int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
+                         int listed_checked, int listed_present)
+{
+    /* A program that opens settles the question: the archive unpacked and
+     * LOCATION points at something real. */
+    if (program_readable) {
+        if (!extract_ok) {
+            return FLOW_INSTALL_WARN_ARCHIVER_ERROR;
+        }
+        return have_listing ? FLOW_INSTALL_OK : FLOW_INSTALL_WARN_NO_LISTING;
+    }
+
+    /* Two independent signals pointing the same way: the archiver
+     * complained AND the program is not there. */
+    if (!extract_ok) {
+        return FLOW_INSTALL_REFUSE_ARCHIVER_AND_MISSING;
+    }
+
+    /* The archiver claims success, so if the listing named files and not
+     * one of them arrived, the claim is false and nothing was unpacked. */
+    if (listed_checked > 0 && listed_present == 0) {
+        return FLOW_INSTALL_REFUSE_NOTHING_EXTRACTED;
+    }
+
+    if (!have_listing) {
+        return FLOW_INSTALL_WARN_NO_LISTING;
+    }
+
+    return FLOW_INSTALL_WARN_PROGRAM_UNREADABLE;
 }

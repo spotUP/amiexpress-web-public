@@ -139,6 +139,66 @@ int flow_build_doc_path(char *out, unsigned long outsize,
 int flow_build_local_path(char *out, unsigned long outsize,
                            const char *download_dir, const char *archive_name);
 
+/* ---- Install verdict ----
+ *
+ * Whether an install may proceed, decided from three INDEPENDENT signals
+ * rather than the archiver's word alone:
+ *
+ *   extract_ok      - the archiver reported success. The weakest signal of
+ *                     the three, and the only one that used to be trusted:
+ *                     under this project's 68K emulator the door's system()
+ *                     returned 0 without running anything, so every install
+ *                     "succeeded" into a directory that was never created.
+ *   program_readable- the file LOCATION is about to name can be opened.
+ *                     Cannot tell "missing" from "protected": TELSER40.LHA
+ *                     extracts bin/telser with Amiga protection bits that
+ *                     become a Unix mode with no read permission.
+ *   listed_present  - how many of `listed_checked` files the repository's
+ *                     listing names were found on disk afterwards. This is
+ *                     what separates the two cases above: an unreadable
+ *                     program among readable siblings is a protection-bit
+ *                     quirk, an unreadable program with NO sibling present
+ *                     means nothing was unpacked at all.
+ *
+ * listed_checked == 0 means no census was taken (no listing, or no row
+ * worth testing) - which is not the same as a census that came back empty,
+ * and never causes a refusal on its own.
+ */
+#define FLOW_INSTALL_OK                        0
+#define FLOW_INSTALL_WARN_NO_LISTING           1
+#define FLOW_INSTALL_WARN_PROGRAM_UNREADABLE   2
+#define FLOW_INSTALL_WARN_ARCHIVER_ERROR       3
+#define FLOW_INSTALL_REFUSE_ARCHIVER_AND_MISSING 4
+#define FLOW_INSTALL_REFUSE_NOTHING_EXTRACTED    5
+
+int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
+                         int listed_checked, int listed_present);
+
+/* Builds the archiver command line that unpacks `archive_path` into
+ * `dest_dir`, in the spelling `amiga_form` selects.
+ *
+ * The two targets need DIFFERENT shapes and there is no wording that works
+ * on both. AmigaDOS LhA takes the destination as a third argument
+ * ("LhA x foo.lha Doors:MYDOOR/"), while Unix lha reads that same third
+ * argument as a MEMBER NAME FILTER and extracts nothing at all (verified on
+ * this host: exit 1, empty destination), so the native build has to use
+ * lha's own "xw=<dir>" form.
+ *
+ * Every interpolated value is wrapped in double quotes, and a value that
+ * itself contains a double quote is REFUSED rather than escaped: quoting
+ * rules differ between /bin/sh and the AmigaDOS shell, and a door has no
+ * business trying to be right about both. Catalog archive names are
+ * server-supplied, so this is the boundary where that matters.
+ *
+ * Returns the command length, or -1 if any argument is missing, carries a
+ * double quote, or the result would not fit `outsize`. On -1 nothing
+ * usable is left in `out`. */
+int flow_build_extract_command(char *out, unsigned long outsize,
+                                const char *lha_command,
+                                const char *archive_path,
+                                const char *dest_dir,
+                                int amiga_form);
+
 /* Builds the quarantine path a mismatching download is kept under when
  * KeepFailedDownloads is on: "<local_path>.bad".
  *
