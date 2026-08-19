@@ -747,6 +747,16 @@ static int name_is_rexx(const char *name)
         && (suffix[4] == 'x' || suffix[4] == 'X');
 }
 
+/* Case-insensitive comparison against "XIM", the only catalog type
+ * flow_effective_door_type() is willing to override. */
+static int str_type_is_xim(const char *type)
+{
+    return (type[0] == 'X' || type[0] == 'x')
+        && (type[1] == 'I' || type[1] == 'i')
+        && (type[2] == 'M' || type[2] == 'm')
+        && type[3] == '\0';
+}
+
 int flow_pick_door_binary(const char *files_body, const char *archive_name,
                           const char *cmd, char *out, unsigned long outsize)
 {
@@ -1005,4 +1015,18 @@ int flow_install_verdict(int extract_ok, int have_listing, int program_readable,
     }
 
     return FLOW_INSTALL_WARN_PROGRAM_UNREADABLE;
+}
+
+const char *flow_effective_door_type(const char *catalog_type,
+                                     const char *binary_rel)
+{
+    const char *type = (catalog_type != (const char *) 0) ? catalog_type : "";
+
+    if (binary_rel == (const char *) 0 || !name_is_rexx(binary_rel)) {
+        return type;
+    }
+    if (type[0] == '\0' || str_type_is_xim(type)) {
+        return "AIM";
+    }
+    return type;
 }

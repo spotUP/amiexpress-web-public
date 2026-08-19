@@ -548,6 +548,36 @@ int flow_files_parse_row(const char *line, unsigned long *size, int *is_junk,
 int flow_pick_door_binary(const char *files_body, const char *archive_name,
                           const char *cmd, char *out, unsigned long outsize);
 
+/* The door type to write into the command config, given the catalog's type
+ * and the program that was actually chosen.
+ *
+ * The catalog classifies an ARCHIVE; the type has to say how the BBS should
+ * RUN what came out of it, and for a script those differ. ACC-V103.LHA is
+ * catalogued XIM and contains no executable at all - its program is
+ * Account/AccEd.Rexx.
+ *
+ * express.e is the authority here (AmiExpress-Sources/express.e:4681-4697
+ * for the type table):
+ *   DOORTYPE_XIM runs the LOCATION file as a program (express.e:4278) -
+ *     which a text script is not, so XIM is simply wrong for a .rexx and
+ *     fails on a real node even though this server's suffix check happens
+ *     to save it.
+ *   DOORTYPE_AIM runs "REXXDOOR <node> <cmd>" (express.e:4272-4276), i.e.
+ *     it hands the LOCATION to REXXDOOR. That is how AmiExpress has always
+ *     run ARexx doors, and it is what this returns.
+ *   DOORTYPE_AEM ("REXXEXEC", express.e:4298-4302) is the other ARexx
+ *     spelling; a catalog entry already saying AEM is left alone.
+ * There is no TYPE=AREXX in express.e - that marker exists only in this
+ * server's parser, and a .info written here has to work on a real Amiga.
+ *
+ * Only an empty or XIM catalog type is overridden: anything more specific
+ * was chosen deliberately and is not this function's to second-guess.
+ *
+ * Returns a pointer to either `catalog_type` itself or a static literal -
+ * never a buffer the caller owns. */
+const char *flow_effective_door_type(const char *catalog_type,
+                                     const char *binary_rel);
+
 /* Non-zero when a key value read from the door layer means "there is no
  * user any more" rather than a keystroke: ae_key() returns -1 at EOF /
  * carrier loss.

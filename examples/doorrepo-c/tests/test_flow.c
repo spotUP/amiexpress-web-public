@@ -1336,6 +1336,39 @@ TEST(picker_takes_the_largest_rexx_when_several_are_present)
 }
 
 
+TEST(effective_type_makes_a_rexx_program_an_AIM_door)
+{
+    /* express.e:4272-4276: DOORTYPE_AIM runs "REXXDOOR <node> <cmd>", which
+     * is how AmiExpress runs an ARexx door. XIM (express.e:4278) executes
+     * the LOCATION file as a program, which a script is not - so a catalog
+     * entry calling ACC-V103.LHA an XIM door would fail on a real node. */
+    ASSERT_STR_EQ(flow_effective_door_type("XIM", "Account/AccEd.Rexx"), "AIM",
+                  "an ARexx script is an AIM door");
+    ASSERT_STR_EQ(flow_effective_door_type("xim", "Account/acced.rexx"), "AIM",
+                  "case-insensitive both sides");
+    ASSERT_STR_EQ(flow_effective_door_type("", "Setup.rexx"), "AIM",
+                  "an empty catalog type is the default XIM, so override it too");
+}
+
+TEST(effective_type_never_second_guesses_a_deliberate_type)
+{
+    /* AEM is the other ARexx spelling (REXXEXEC, express.e:4298-4302). A
+     * catalog that already says AEM, or AIM, or anything else specific,
+     * chose that on purpose. */
+    ASSERT_STR_EQ(flow_effective_door_type("AEM", "Account/AccEd.Rexx"), "AEM",
+                  "REXXEXEC doors are left alone");
+    ASSERT_STR_EQ(flow_effective_door_type("AIM", "x.rexx"), "AIM", "already right");
+    ASSERT_STR_EQ(flow_effective_door_type("TIM", "x.rexx"), "TIM", "not ours to change");
+}
+
+TEST(effective_type_leaves_a_real_executable_alone)
+{
+    ASSERT_STR_EQ(flow_effective_door_type("XIM", "Bull"), "XIM", "a binary keeps XIM");
+    ASSERT_STR_EQ(flow_effective_door_type("", "prog"), "", "empty stays empty for the caller to default");
+    ASSERT_STR_EQ(flow_effective_door_type("XIM", "notes.rexxdoc"), "XIM",
+                  "only a real .rexx suffix counts");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -1477,6 +1510,9 @@ int main(void)
     RUN_TEST(archive_ceiling_never_exceeds_absolute_max_for_any_plausible_declared_size);
     RUN_TEST(archive_ceiling_real_catalog_max_size_is_reasonable);
 
+    RUN_TEST(effective_type_makes_a_rexx_program_an_AIM_door);
+    RUN_TEST(effective_type_never_second_guesses_a_deliberate_type);
+    RUN_TEST(effective_type_leaves_a_real_executable_alone);
     RUN_TEST(picker_finds_the_rexx_script_when_there_is_no_executable);
     RUN_TEST(picker_still_prefers_a_real_executable_over_a_script);
     RUN_TEST(picker_still_prefers_an_exact_name_match_over_a_script);
