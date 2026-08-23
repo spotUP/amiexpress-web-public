@@ -89,27 +89,31 @@ def render(diz, binary, name, archive, version='', author=''):
     body = R.describe_block(diz, name, archive, prog=prog)
     body = R.to_plain(R.prettify_in_text(body))
     body, credit = R.split_banner_credit(body)
+    body, requires = R.split_bbs_requirement(body)
+    if not requires:
+        requires = R.bbs_requirement_from_diz(diz)
     body, ver = R.split_version(body, version)
     body, who = R.split_author(body, author or credit)
     prog = R.capitalise_name(R.strip_version_tail(prog, ver))
     if prog and R.prog_covered_by_body(prog, body):
         prog = None
     desc = R.finalise(R.to_plain(R.compose(R.tidy_case(prog), R.tidy_case(body)) or ''))
-    return desc, (ver or R.version_from_filename(archive)), R.tidy_case(R.clean_author(who), handles=True)
+    return (desc, (ver or R.version_from_filename(archive)),
+            R.tidy_case(R.clean_author(who), handles=True), requires)
 
 
 BORDER_RUN = re.compile(r'[-_=~*/\\]{3,}')
 DANGLING = re.compile(r'\[[^\]]*$|\([^)]*$')
 
 # 1. a border run between two box cells is not part of the description
-desc, ver, who = render(JC40, 'JoinCnf', 'JoinCnf', 'MST-JC40.LHA')
+desc, ver, who, req = render(JC40, 'JoinCnf', 'JoinCnf', 'MST-JC40.LHA')
 check('border run "]-----[" never reaches the description',
       not BORDER_RUN.search(desc), f'got {desc!r}')
 check('the neighbouring cell ("MYSTiC /X-POWER") is not read as the door',
       'POWER' not in desc.upper(), f'got {desc!r}')
 
 # 2. the version leaves no empty bracket behind, and the release tag goes
-desc, ver, who = render(MT20, 'MultiTop', 'MultiTop', 'MST-MT20.LHA')
+desc, ver, who, req = render(MT20, 'MultiTop', 'MultiTop', 'MST-MT20.LHA')
 check('"(Version 2.0)" leaves no "(Version )" scar',
       'Version' not in desc, f'got {desc!r}')
 check('"[RELEASE 2]" is publishing metadata, not description',
@@ -120,25 +124,25 @@ check('the door\'s real line survives instead',
 check('version still extracted', ver == '2.0', f'got {ver!r}')
 
 # 3. a mid-line banner splits into description + author credit
-desc, ver, who = render(KB13, 'KiLLER_Baud', 'KiLLER_Baud', 'MST-KB13.LHA')
+desc, ver, who, req = render(KB13, 'KiLLER_Baud', 'KiLLER_Baud', 'MST-KB13.LHA')
 check('"<handle> BRiNGS:" is stripped from the description',
       'BRINGS' not in desc.upper() and 'Killraven' not in desc, f'got {desc!r}')
 check('the credit becomes the author', who == 'Killraven/Mystic', f'got {who!r}')
 check('the door is still named', 'Killer' in desc, f'got {desc!r}')
 
 # 4. dropping a credit tag must not take real prose with it
-desc, ver, who = render(USR11, '5D-User', '5D-User', '5D-USR11.LHA')
+desc, ver, who, req = render(USR11, '5D-User', '5D-User', '5D-USR11.LHA')
 check('"[-5th Dynasty" tag removed', 'Dynasty' not in desc, f'got {desc!r}')
 check('the description after the tag is KEPT',
       'list all users' in desc, f'got {desc!r}')
 
 # 5. a compatibility note is not a description
-desc, ver, who = render(WHO24, None, '5D-Who', '5D-WHO24.LZH')
+desc, ver, who, req = render(WHO24, None, '5D-Who', '5D-WHO24.LZH')
 check('"Now working on /X 3.30" is not chosen as the description',
       'working on' not in desc.lower(), f'got {desc!r}')
 
 # 6. removing an author credit must not leave "by" dangling
-desc, ver, who = render(AMN10, '5D-AdiMenu', '5D-AdiMenu', '5D_AMN10.LHA')
+desc, ver, who, req = render(AMN10, '5D-AdiMenu', '5D-AdiMenu', '5D_AMN10.LHA')
 check('no trailing "by" once the credit tag is gone',
       not re.search(r'\bby$', desc, re.I), f'got {desc!r}')
 
@@ -156,6 +160,50 @@ check('ANSI colour sequences are stripped',
       'escape survived clean()')
 check('a version number alone adds nothing to the door name',
       R.body_adds_nothing('Join Cnf', 'JoinCnf 4.0'))
+
+# 8. "/X" is the BBS's NAME - the slash is part of the word, not decoration
+CL0T0 = '''.------------[ CALL 13th HOUR ]------------.
+|                                          |
+| CALLERS LOTTERY v1.o (c) cYBER/iNDY 1995 |
+|                                          |
+| /X 3.x+ Give your users a Byte Bonus and |
+| File bonus when they call your cool BBS! |
+|   Totally configurable to your needs!    |
+|        Download/Leech/Suck NOW!          |
+`--------------------------------------[c]-'
+'''
+desc, ver, who, req = render(CL0T0, None, 'Callers Lottery', 'AECL0T0.LHA')
+check('the requirement moves to its own field', req == '/X 3.x+', f'got {req!r}')
+check('and leaves the description behind it',
+      'Byte Bonus' in desc and '/X 3.x' not in desc, f'got {desc!r}')
+check('a slash in front of X is never stripped as decoration',
+      R.clean('  /X dIVISION .') == '/X dIVISION', f'got {R.clean("  /X dIVISION .")!r}')
+check('a border run does not swallow the slash of /X',
+      R.best_cell('|-------- /X 3.xx door by DELTAFORCE |')[1].startswith('/X'),
+      f'got {R.best_cell("|-------- /X 3.xx door by DELTAFORCE |")!r}')
+
+# 9. CP437 box art is not a description, however Python classifies its bytes
+SNES = '''  \u00daÂÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÂ¿
+  ³Y³   ÓÄÄÙ Ð  Á ÐÄÄÙ ÓÄÄÙ   ³Y³
+  ³Y³ Tricks&PWs for 200 games³Y³
+  ÀÁÁÄÄÄÄÄ#10ÄÄSpooNManÄÄÄÄÄÄÄÁÁÙ
+'''
+desc, ver, who, req = render(SNES, None, 'SnesDX', 'SNESDX10.LZH')
+check('box-drawing art never reaches the description',
+      'Tricks' in desc and not re.search(r'[\u00b3\u00c4\u00d3\u00da\u00c1]', desc),
+      f'got {desc!r}')
+check('a superscript digit is art, not an alphanumeric',
+      R.to_plain('\u00b3Y\u00b3 games') == 'Y games', f'got {R.to_plain(chr(0xb3) + "Y" + chr(0xb3) + " games")!r}')
+
+# 10. the requirement is read from the whole DIZ, not only the chosen line
+desc, ver, who, req = render(JC40, 'JoinCnf', 'JoinCnf', 'MST-JC40.LHA')
+check('a requirement in the box border is still found',
+      req == '/X 3.38+', f'got {req!r}')
+
+check('"/X", "X" and "AE" name the same BBS',
+      R.normalise_requirement('AE', '3,30') == '/X 3.30')
+check('4.X and 4.x are one value',
+      R.normalise_requirement('AmiExpress', '4.X') == 'AmiExpress 4.x')
 
 print()
 if FAILURES:

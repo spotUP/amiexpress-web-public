@@ -67,13 +67,13 @@ DOORISH = re.compile(r'\b(door|tool|util|utility|wall|scan|stat|list|chat|game|e
 # in a border open a block that then swallows the real line. Split the row
 # on border runs and pillars, and judge each cell alone: the door's name
 # lives in ONE cell.
-CELL_SPLIT = re.compile(r'[|¦]+|[\[\]]?\s*[-_=~*^/\\¬]{3,}\s*[\[\]]?|\]\s*\[')
+CELL_SPLIT = re.compile(r'[|¦]+|[\[\]]?\s*[-_=~*^/\\¬]{3,}(?![Xx](?![A-Za-zÀ-ÿ]))\s*[\[\]]?|\]\s*\[')
 
 # Publishing metadata, not description: the release sequence number a group
 # stamps on a box ("[RELEASE 2]", "[DISK 1/2]"), and a bracket left empty by
 # pulling its contents into a column of their own ("(Version 2.0)" becomes
 # "(Version )" once the version is extracted).
-META_BRACKET = re.compile(r'[\[(]\s*(?:release|disk|part|file)\s*\d+(?:\s*(?:of|/)\s*\d+)?\s*[\])]?', re.I)
+META_BRACKET = re.compile(r'[\[(]\s*(?:release|rel\.?|disk|part|file)\s*\d+(?:\s*(?:of|/)\s*\d+)?\s*[\])]?', re.I)
 EMPTY_BRACKET = re.compile(r'[\[(]\s*(?:version|ver|v|rel|no)?\s*[.:]?\s*(?:[\])]|$)', re.I)
 
 
@@ -103,7 +103,9 @@ def _strip_frame(s):
             if head.count(opener) > head.count(ch):
                 break                      # matched pair - leave it alone
         s = s[:-1]
-    return s.lstrip(FRAME).strip()
+    while s and s[0] in FRAME and not XNAME.match(s):
+        s = s[1:]
+    return s.strip()
 
 
 def finalise(s, cap=60):
@@ -141,23 +143,52 @@ def finalise(s, cap=60):
     return _strip_frame(s)
 
 
+WORD = re.compile(r'[A-Za-zÀ-ÿ]*[A-Za-z][A-Za-zÀ-ÿ]*[A-Za-z][A-Za-zÀ-ÿ]*')
+
+
+def high_bit_share(s):
+    """Share of characters above ASCII. Scene box art is drawn with them."""
+    return (sum(ord(c) > 0x7f for c in s) / len(s)) if s else 0
+
+
 def alnum_share(s):
-    return (sum(c.isalnum() for c in s) / len(s)) if s else 0
+    return (sum((c.isascii() and c.isalnum()) or (0xC0 <= ord(c) <= 0xFF and c.isalpha())
+                for c in s) / len(s)) if s else 0
 
 # ANSI colour sequences ride along in DIZ text ("ESC[33m") and are invisible
 # in a terminal but not in a package listing.
 ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]|\x1b')
 
 
+# "/X" IS the name of the BBS (short for AmiExpress), so the slash is part of
+# a word, not frame decoration. Stripping it turned "/X dIVISION" into
+# "X Division" on 47 rows.
+XNAME = re.compile(r'^/[Xx](?![A-Za-zÀ-ÿ])')
+
+
+def strip_frame_both(s):
+    """strip(FRAME) at both ends, without eating the slash of "/X"."""
+    while s and s[-1] in FRAME:
+        s = s[:-1]
+    while s and s[0] in FRAME and not XNAME.match(s):
+        s = s[1:]
+    return s
+
+
 def clean(s):
     s = ANSI.sub('', s)
     s = re.sub(r'[\x00-\x1f\x7f]', ' ', s)
-    return re.sub(r'\s+', ' ', s).strip(FRAME).strip()
+    return strip_frame_both(re.sub(r'\s+', ' ', s).strip()).strip()
 
 def score(line):
     c = clean(line)
     if not c or ART.match(c): return -99, c
-    if not re.search(r'[A-Za-zÀ-ÿ]{3}', c): return -99, c
+    # A 3-letter run is not enough on its own: CP437/Amiga box art
+    # ("³Y³ Óääù Ð Á") lands in the Latin-1 letter range and passes that
+    # test. Real words in this corpus are ASCII with the odd accent, so
+    # demand at least two ASCII letters inside the run.
+    if not WORD.search(c): return -99, c
+    if high_bit_share(c) > 0.3: return -99, c
     if alnum_share(c) < 0.5: return -99, c
     if len(c) < 6: return -50, c
     s = 0
@@ -228,7 +259,7 @@ def describe(diz, binary, name, archive):
     out = finalise(clean(out))
     # drop trailing orphan symbols/single chars left by scene decoration
     out = re.sub(r'(\s+[^A-Za-z0-9À-ÿ]{1,3})+$', '', out)
-    return out.strip(FRAME).strip()
+    return strip_frame_both(out).strip()
 
 
 # ─── version extraction ────────────────────────────────────────────────
@@ -272,8 +303,71 @@ def split_version(desc, catalog_version):
     if not found and catalog_version and catalog_version.strip():
         found = normalise_version(catalog_version)
     desc = drop_meta_brackets(re.sub(r'\s+', ' ', desc))
-    desc = re.sub(r'\s*([-|:/])\s*$', '', desc).strip(FRAME).strip()
+    desc = re.sub(r'\s*([-|:/])\s*$', '', strip_frame_both(desc)).strip()
     return desc, (found or '')
+
+
+# ─── which BBS the door needs ──────────────────────────────────────────
+# "For /X 2.3x", "/X 3.x+", "requires AmiExpress 4.x" - the BBS version a
+# door was coded against is the single fact a sysop needs before installing
+# it, and it is NOT the door's own version. Pull it into its own field so a
+# listing can filter on it, the same way the door's version was pulled out.
+BBS_NAMES = {'/x': '/X', 'x': '/X', 'ami-express': 'AmiExpress', 'amiexpress': 'AmiExpress',
+             'ae': '/X', 's!x': 'S!X', 'sx': 'S!X', 'fame': 'FAME',
+             'daydream': 'DayDream', 'dd': 'DayDream', 'dreamdoor': 'DayDream'}
+BBS_REQ = re.compile(
+    r'(?:\b(?:for|only\s+for|requires?|required|needs?|works?\s+(?:only\s+)?(?:with|on)|'
+    r'coded\s+for|written\s+for|compatible\s+with)\b\s*[:\-]?\s*)?'
+    r'(?<![A-Za-zÀ-ÿ0-9])(/X|Ami-?Express|S!X|FAME|DayDream|AE|X)\s*'
+    r'(?:v(?:er(?:sion)?)?\.?\s*)?'
+    r'(\d{1,2}(?:[.,](?:[0-9]{1,3}[a-z]?|[xX]{1,3}))?\+?)', re.I)
+
+
+def normalise_requirement(name, ver):
+    name = BBS_NAMES.get(name.lower().replace('-', ''), name)
+    ver = ver.replace(',', '.')
+    head, _, tail = ver.partition('.')
+    if tail:
+        ver = f"{head}.{tail.replace('X', 'x')}"      # 4.X and 4.x are one thing
+    return f"{name} {ver}"
+
+
+def split_bbs_requirement(desc):
+    """Return (description_without_requirement, requirement_or_empty).
+
+    "Sexystat For /X 2.3x" -> ("Sexystat", "/X 2.3x").
+    """
+    if not desc:
+        return desc, ''
+    m = BBS_REQ.search(desc)
+    if not m:
+        return desc, ''
+    req = normalise_requirement(m.group(1), m.group(2))
+    rest = (desc[:m.start()] + ' ' + desc[m.end():])
+    rest = strip_frame_both(re.sub(r'\s+', ' ', rest)).strip()
+    # A row that says nothing BUT which BBS it needs keeps saying it: the
+    # requirement is then all the description has.
+    if not re.search(r'[A-Za-zÀ-ÿ]{3}', rest):
+        return desc, req
+    return rest, req
+
+
+def bbs_requirement_from_diz(diz):
+    """The requirement is a property of the ARCHIVE, not of the one line that
+    got picked as the description - "XIM - /X 3.38+" often sits in the
+    bottom border of the box, which no description would ever quote."""
+    if not diz:
+        return ''
+    for raw in diz.replace('\r', '').split('\n'):
+        # Raw, minus control codes only: every tidy-up in this module strips
+        # frame characters off the ends, and "/X 3.38+" sits flush against
+        # the box border - so the "+", the whole difference between "3.38"
+        # and "3.38 or later", would be stripped as decoration.
+        line = re.sub(r'[\x00-\x1f\x7f]', ' ', ANSI.sub('', raw))
+        m = BBS_REQ.search(line)
+        if m:
+            return normalise_requirement(m.group(1), m.group(2))
+    return ''
 
 
 # ─── program-name prettifying ──────────────────────────────────────────
@@ -351,13 +445,15 @@ def to_plain(s):
     s = ANSI.sub('', s)
     out = []
     for ch in s:
-        if ch.isalnum() or ch in ALLOWED_PUNCT:
+        if (ch.isascii() and ch.isalnum()) or ch in ALLOWED_PUNCT:
             out.append(ch)
         elif ch in '\u00d7\u00f7':      # multiplication/division signs used as bullets
             out.append(' ')
         else:
             code = ord(ch)
-            # keep Latin-1 letters (accented), drop Latin-1 symbols
+            # keep Latin-1 letters (accented), drop Latin-1 symbols - which
+            # includes everything below 0xC0 ('³', 'µ', '·'), the range scene
+            # art draws its pillars and shades from
             if 0xC0 <= code <= 0xFF and ch.isalpha():
                 out.append(ch)
             else:
@@ -367,7 +463,7 @@ def to_plain(s):
     # a lone trailing character is scene ornament, not a word ("Viewer ß")
     t = re.sub(r'\s+[^\sA-Za-z0-9]$', '', t)
     t = re.sub(r'\s+([b-hj-z])$', '', t, flags=re.I)
-    return t.strip(FRAME).strip()
+    return strip_frame_both(t).strip()
 
 
 # ─── author extraction ─────────────────────────────────────────────────
@@ -382,17 +478,17 @@ def split_author(desc, catalog_author):
     found = None
     m = AUTHOR_RE.search(desc)
     if m:
-        raw = (m.group(1) or '').strip(FRAME).strip()
+        raw = strip_frame_both(m.group(1) or '').strip()
         # a credit runs to the end of the line; trim only trailing clauses
         # that clearly are not part of a handle ("for /X", a version, a year)
-        cand = AUTHOR_TAIL.sub('', raw).strip(FRAME).strip()
+        cand = strip_frame_both(AUTHOR_TAIL.sub('', raw)).strip()
         cand = re.sub(r'\s+', ' ', cand)
         if cand and len(cand) <= 40 and len(re.findall(r'[A-Za-z0-9]', cand)) >= 2:
             found = cand
             desc = (desc[:m.start()] + ' ' + desc[m.end():])
     if not found and catalog_author and catalog_author.strip():
         found = catalog_author.strip()
-    desc = re.sub(r'\s+', ' ', desc).strip(FRAME).strip()
+    desc = strip_frame_both(re.sub(r'\s+', ' ', desc)).strip()
     return desc, (found or '')
 
 
@@ -415,8 +511,8 @@ def split_banner_credit(text):
         last = m
     if not last:
         return text, ''
-    after = text[last.end():].strip(FRAME).strip()
-    before = text[:last.start()].strip(FRAME).strip()
+    after = strip_frame_both(text[last.end():]).strip()
+    before = strip_frame_both(text[:last.start()]).strip()
     if len(after) < 4 or not re.search(r'[A-Za-zÀ-ÿ]{3}', after):
         return text, ''
     credit = before if (before and len(before) <= 40 and HANDLE.match(before)) else ''
@@ -459,7 +555,7 @@ def describe_block(diz, name, archive, cap=70, prog=None):
     parts = [c for _, _, c in best]
     # strip a leading banner word and any "1." numbering from the opener
     parts[0] = re.sub(r'^(presents?|brings?|proudly|releases?|presenting|bringing)\b[\s:.\-]*', '', parts[0], flags=re.I)
-    parts[0] = re.sub(r'^\d{1,2}[.)]\s+', '', parts[0]).strip(FRAME).strip()
+    parts[0] = strip_frame_both(re.sub(r'^\d{1,2}[.)]\s+', '', parts[0])).strip()
     # DIZ feature lists are bulleted ("o Totally NEW Lay-Out"); the bullet is
     # decoration, and joining two bulleted lines must not read "Lay-Out o
     # Manages up to 256 Cnfs"
@@ -572,7 +668,7 @@ def strip_version_tail(prog, version):
     flat_trim = flat.rstrip('0') or flat        # 2.40 -> "24"
     if digits and flat and (digits == flat or digits.lstrip('0') == flat.lstrip('0')
                             or digits == flat_trim or digits.lstrip('0') == flat_trim.lstrip('0')):
-        return prog[:m.start()].strip(FRAME).strip()
+        return strip_frame_both(prog[:m.start()]).strip()
     return prog
 
 

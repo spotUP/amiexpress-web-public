@@ -22,6 +22,9 @@ def render_row(row):
     body = R.prettify_in_text(body)
     body = R.to_plain(body)
     body, credit = R.split_banner_credit(body)
+    body, requires = R.split_bbs_requirement(body)
+    if not requires:
+        requires = R.bbs_requirement_from_diz(diz)
     body, version = R.split_version(body, ver)
     body, who = R.split_author(body, author or credit)
     prog = R.strip_version_tail(prog, version)
@@ -35,7 +38,7 @@ def render_row(row):
     who = R.tidy_case(R.clean_author(who), handles=True)
     system = path.split('/')[0] if '/' in path else 'Unsorted'
     size = f"{size}B" if size < 1024 else f"{round(size/1024)}K"
-    return f"{archive}\t{system}\t{size}\t{version or '-'}\t{who or '-'}\t{desc}"
+    return f"{archive}\t{system}\t{size}\t{version or '-'}\t{requires or '-'}\t{who or '-'}\t{desc}"
 
 
 def main():
@@ -45,7 +48,7 @@ def main():
         "SELECT archive_name, archive_path, binary_name, name, version, author,"
         " file_id_diz, COALESCE(archive_size,0) FROM door_catalog ORDER BY archive_name").fetchall()
     R.load_group_tags([r[0] for r in rows])
-    print("Filename\tSystem\tSize\tVersion\tAuthor\tDescription")
+    print("Filename\tSystem\tSize\tVersion\tRequires\tAuthor\tDescription")
     for r in rows:
         if filters and not any(f in r[0].upper() for f in filters):
             continue
