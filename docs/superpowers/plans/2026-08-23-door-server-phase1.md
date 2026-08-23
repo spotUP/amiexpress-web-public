@@ -2046,6 +2046,15 @@ cp ~/Code/amiexpress-web/docs/superpowers/specs/2026-08-23-door-server-split-des
 
 Add a line at the top of `docs/DOOR-REPO-API.md`: the API is served by this repo; amiexpress-web proxies `/api/door-repo/*` for compatibility. Leave the amiexpress-web copy in place until phase 2 replaces it with a pointer - deleting it now would strand the BBS's own docs.
 
+> **STOP — everything from here on leaves this machine.** Steps 1-5 are local
+> files and are safe to run unattended. Steps 6-10 create a public GitHub
+> repository, push source to it, clone it onto the live VPS, seed a docker
+> volume, deploy a container and edit the live reverse proxy. Each needs
+> explicit approval, and the GitHub repository does not exist yet
+> (`gh repo view spotUP/amiexpress-doorserver` -> "Could not resolve to a
+> Repository"), so its name, owner and visibility are decisions to confirm
+> before anything is pushed. The local `git remote` is unset too.
+
 - [ ] **Step 6: Provision the host**
 
 ```bash
