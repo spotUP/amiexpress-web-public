@@ -18,7 +18,11 @@ import description_rules as R
 def render_row(row):
     archive, path, binary, name, ver, author, diz, size = row
     prog = R.prettify_program(R.to_plain(binary or ''))
-    body = R.describe_block(diz, name, archive, prog=prog)
+    # binary_name is sometimes a stray token like "8" or "."; a program name
+    # has to look like a name, or the row reads "8 - Door Menu 1996".
+    if not R.looks_like_program(prog):
+        prog = ''
+    body = R.describe_block(diz, name, archive, prog=prog or None)
     body = R.prettify_in_text(body)
     body = R.to_plain(body)
     body, credit = R.split_banner_credit(body)

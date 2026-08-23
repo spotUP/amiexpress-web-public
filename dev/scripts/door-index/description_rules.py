@@ -53,6 +53,8 @@ JUNK = re.compile(r'passed\s+thr|courier|released?\s+(on|at|by)|\bthanx|greets?\
 # A note about which BBS version the door runs on - true, useful, and still
 # not a description of what the door DOES.
 COMPAT = re.compile(r'\b(?:now\s+work(?:s|ing)|works?\s+(?:only\s+)?(?:with|on)|requires?|needs?)\b.{0,12}\b(?:/?X|amiexpress|fame|daydream|\d)', re.I)
+# A copyright/credit line is attribution, not a description.
+COPYRIGHT = re.compile(r'©|\(c\)', re.I)
 HANDLE = re.compile(r'^[A-Za-z0-9!._\-]{2,20}\s*[\^/]\s*[A-Za-z0-9!._\-]{2,20}$')  # sNoW^5D, Jordan/5D
 VERSIONISH = re.compile(r'\bv?\d+\.\d+\b', re.I)
 DOORISH = re.compile(r'\b(door|tool|util|utility|wall|scan|stat|list|chat|game|edit|menu|logon|logoff|'
@@ -193,6 +195,7 @@ def score(line):
     if len(c) < 6: return -50, c
     s = 0
     if JUNK.search(c): s -= 40
+    if COPYRIGHT.search(c): s -= 40
     if COMPAT.search(c): s -= 20      # "Now working on /X 3.30" is a compatibility note
     if HANDLE.match(c): s -= 40
     if VERSIONISH.search(c): s += 12
@@ -230,6 +233,17 @@ def best_cell(line):
     return best
 
 
+def looks_like_program(prog):
+    """Does a program name actually look like a name?
+
+    binary_name is sometimes a stray token like "8" or "." - which made a
+    useless "8 - real description" prefix. Three characters, three letters,
+    mostly alphanumeric.
+    """
+    p = prog or ''
+    return len(p) >= 3 and len(re.findall(r'[A-Za-zÀ-ÿ]', p)) >= 3 and alnum_share(p) > 0.5
+
+
 def describe(diz, binary, name, archive):
     lines = [l for l in (diz or '').replace('\r','').split('\n')]
     scored = []
@@ -247,7 +261,7 @@ def describe(diz, binary, name, archive):
     # a program name must actually look like a name: 3+ chars with 3+ letters.
     # binary_name is sometimes a stray token like "8" or ".", which made a
     # useless "8 - real description" prefix.
-    prog = pc if (len(pc) >= 3 and len(re.findall(r'[A-Za-zÀ-ÿ]', pc)) >= 3 and alnum_share(pc) > 0.5) else None
+    prog = pc if looks_like_program(pc) else None
     if prog and body and prog.lower() not in body.lower(): out = f"{prog} - {body}"
     elif prog: out = prog
     elif body: out = body
