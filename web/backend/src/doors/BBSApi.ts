@@ -28,8 +28,28 @@ import {
   enableGameMode as enableGameModeForSession,
   disableGameMode as disableGameModeForSession,
 } from '../services/game-mode.service';
-import { getInstallByCommand } from './door-installs.repository';
+import { getInstallByCommand, DoorInstall } from './door-installs.repository';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
+
+/** Overlay the metadata captured when a door was installed onto the door
+ *  object the doors list renders. Exported so the mapping itself is
+ *  testable: it lives inside a large builder method, and the fields it
+ *  carries (description, version, release group) are user-visible in the
+ *  door menu with no error path if they go missing. */
+export function applyInstallMetadata<T extends Record<string, unknown>>(
+  door: T,
+  match: DoorInstall | null
+): T {
+  if (!match) return door;
+  return {
+    ...door,
+    name: match.name || door.name,
+    description: match.description || door.description,
+    category: match.category || door.category,
+    version: match.version || undefined,
+    releaseGroup: match.release_group || undefined,
+  } as T;
+}
 
 export interface BBSUser {
   id: string;
@@ -1345,17 +1365,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
       // server, and door_installs holds this node's snapshot of it (keyed by
       // command, so no installed_as matching is needed any more).
       try {
-        const match = getInstallByCommand(door.command);
-        if (match) {
-          return {
-            ...door,
-            name: match.name || door.name,
-            description: match.description || door.description,
-            category: match.category || door.category,
-            version: match.version || undefined,
-            releaseGroup: match.release_group || undefined,
-          };
-        }
+        return applyInstallMetadata(door, getInstallByCommand(door.command));
       } catch { /* catalog not yet built — return door as-is */ }
       return door;
     });
