@@ -1930,16 +1930,45 @@ Expected: disk reported before any build; clone succeeds.
 
 - [ ] **Step 7: Seed the volume with the catalog and archives**
 
+The archives live INSIDE the BBS's own docker volume, not in the checkout:
+`amiexpress-bbs-data` mounts at
+`/var/lib/docker/volumes/amiexpress-bbs-data/_data`, and the corpus is
+`.../\_data/bbs/Archives` (175 MB, verified on the host).
+
+**They are COPIED here, not moved.** Phase 1 leaves amiexpress-web serving
+its own door-repo API - that is this phase's whole safety property - and the
+BBS resolves archives from `<BBS_DATA_DIR>/Archives`. Moving the corpus out
+would 404 every archive on the live BBS the moment it ran, before any proxy
+exists to cover it. The BBS's copy is deleted in PHASE 2, after the proxy
+lands and the BBS stops serving archives itself.
+
+Disk before doing this: the host is at **91% (3.6 GB free)**, so a 175 MB
+copy is affordable but a docker build on top of it is not automatic - prune
+first, and re-check with `df -h /` between steps.
+
 ```bash
-# on the host, with the migrated doors.db copied up
+# on the host, with the migrated doors.db copied to /root/seed/doors.db
+docker builder prune -f          # 5.9 GB of build cache, ~4 GB reclaimable
+df -h / | tail -1
 docker volume create doorserver-data
 docker run --rm -v doorserver-data:/data -v /root/seed:/seed alpine \
   sh -c 'cp /seed/doors.db /data/doors.db && mkdir -p /data/Archives'
-# archives MOVE, they are not duplicated - the host has ~20% free
-docker run --rm -v doorserver-data:/data -v /app/amiexpress/data/bbs/Archives:/src alpine \
-  sh -c 'mv /src/* /data/Archives/'
+# COPY (not mv) - the BBS still serves these until phase 2 cuts over
+docker run --rm -v doorserver-data:/data \
+  -v /var/lib/docker/volumes/amiexpress-bbs-data/_data/bbs/Archives:/src:ro alpine \
+  sh -c 'cp -a /src/. /data/Archives/'
 ```
-Expected: `docker run --rm -v doorserver-data:/data alpine sh -c 'ls /data/Archives | wc -l'` matches the source count taken beforehand.
+Verify the copy is complete before trusting it - count and total size on both
+sides must match:
+
+```bash
+docker run --rm -v doorserver-data:/data alpine sh -c 'find /data/Archives -type f | wc -l; du -sh /data/Archives'
+find /var/lib/docker/volumes/amiexpress-bbs-data/_data/bbs/Archives -type f | wc -l
+du -sh /var/lib/docker/volumes/amiexpress-bbs-data/_data/bbs/Archives
+df -h / | tail -1
+```
+Expected: identical file counts, matching sizes (~175 MB), and the BBS's own
+copy still in place and still serving.
 
 - [ ] **Step 8: Deploy and verify against the rule that a green workflow can lie**
 
@@ -1975,6 +2004,6 @@ git commit -m "feat: container, CI and deployment for the door server"
 - The parity harness passes against the MIGRATED `doors.db`, not just a copy of the BBS's.
 - `https://doors.uprough.net/api/door-repo/health` reports the full door count and a catalog revision.
 - A real archive downloads from the new host with a correct `x-archive-md5`.
-- amiexpress-web is untouched and still serving its own copy - nothing has been cut over.
+- amiexpress-web is untouched and still serving its own copy - nothing has been cut over, and the BBS's archive corpus is still where it was (the door server got a copy, not the original).
 
 Phases 2 (BBS proxy + `door_installs`) and 3 (admin API + DOORMAN owner mode + curation tooling) get their own plans, written after this one lands.
