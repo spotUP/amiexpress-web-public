@@ -574,6 +574,22 @@ git commit -m "feat(bbs): backfill door_installs from the catalog's installed ro
 - Consumes: nothing from Tasks 1-2.
 - Produces: `export function isDoorRepoProxyEnabled(env?: NodeJS.ProcessEnv): boolean` (true when `DOOR_SERVER_URL` is a non-empty string) and `export const doorRepoRouter: express.Router`. `app.ts` mounts it only when `isDoorRepoProxyEnabled()`.
 
+**Facts measured before this task was written - do not re-derive them, and do not "fix" what they establish:**
+
+1. **`req.url` inside this mounted router excludes the mount path and keeps the query string**, verified against express 5.1.0:
+   `/api/door-repo/list.txt?type=XIM` -> `req.url = /list.txt?type=XIM`, `baseUrl = /api/door-repo`.
+   So `${base}/api/door-repo${req.url}` is the correct target. Using `originalUrl` would double the prefix.
+2. **Percent-encoding survives raw**: `/api/door-repo/files/%24CP-BU%DF1.LZX` arrives as
+   `req.url = /files/%24CP-BU%DF1.LZX` - NOT decoded. This is load-bearing. The door server's
+   `candidateArchiveNames` needs the raw `%DF` to do its Latin-1 fallback, and the catalog has an
+   archive named `$CP-BUß1.LZX`. Never decode and re-encode the path in the proxy; pass `req.url`
+   through byte-for-byte.
+3. **CORS preflight never reaches this router.** `doorRepoCors` (mounted at app.ts:90, ahead of the
+   router at :234) answers `OPTIONS` itself with 204 and returns WITHOUT calling `next()`
+   (door-repo-cors.ts:72-77). Do NOT add OPTIONS handling or CORS headers to the proxy - doing so
+   would duplicate headers, which is precisely the bug that broke `Cross-Origin-Resource-Policy` on
+   this host before.
+
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
