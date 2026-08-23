@@ -595,6 +595,10 @@ describe('catalog reads', () => {
     expect(getCatalogEntryByArchive(cfg, 'NOPE.LHA')).toBeNull();
   });
 
+  it('finds an entry whose name differs only in case', () => {
+    expect(getCatalogEntryByArchive(cfg, 'acc-v103.lha')?.id).toBe('id1');
+  });
+
   it('returns the archive files in path order with junk flags', () => {
     const files = getArchiveFiles(cfg, 'id1');
     expect(files.map((f) => f.path)).toEqual(['Account/AccEd.Rexx', 'TC.displayme']);
@@ -682,8 +686,10 @@ export function resolveArchivePath(cfg: ServerConfig, archivePath: string): stri
 export function getCatalogEntryByArchive(cfg: ServerConfig, archiveName: string): CatalogEntry | null {
   const db = openDb(cfg, { readonly: true });
   try {
+    // COLLATE NOCASE matches the BBS original (door-catalog.service.ts:150):
+    // archive-name lookup is case-insensitive, and clients rely on it.
     const row = db
-      .prepare('SELECT * FROM door_catalog WHERE archive_name = ?')
+      .prepare('SELECT * FROM door_catalog WHERE archive_name = ? COLLATE NOCASE')
       .get(archiveName) as CatalogEntry | undefined;
     return row ?? null;
   } finally {
@@ -737,7 +743,7 @@ export function getDoorCount(cfg: ServerConfig): number {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx jest --config jest.config.ts tests/catalog.test.ts`
-Expected: PASS, 8 tests
+Expected: PASS, 9 tests
 
 - [ ] **Step 5: Commit**
 
