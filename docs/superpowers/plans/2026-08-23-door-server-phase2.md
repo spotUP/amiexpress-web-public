@@ -1148,17 +1148,54 @@ git commit -m "feat(doorman): vendor the door server's contract and test it for 
 - Consumes: everything above.
 - Produces: a live BBS whose `/api/door-repo/*` is served by the door server.
 
-- [ ] **Step 1: Add the environment variable to compose**
+- [ ] **Step 1: Put both containers on a shared network, then set the URL**
 
-In `docker-compose.yml`'s `bbs` service environment block:
+**Do NOT use `http://127.0.0.1:3010`.** Measured on the live host: inside the
+BBS container that address is the container itself, and the two containers sit
+on separate bridge networks (`amiexpress_default`, `doorserver_default`), so
+the BBS cannot reach the door server at all. The door server publishes on
+`127.0.0.1:3010` of the HOST deliberately - that is what keeps it off every
+interface - so widening the bind or using `host.docker.internal` would undo a
+phase-1 security decision.
 
+Instead, give the two containers a shared network and let service DNS do the
+work. The host publish stays loopback-only, so Caddy keeps serving the public
+vhost exactly as it does now (verified: host -> 127.0.0.1:3010 returns 200).
+
+On the host, once:
+```bash
+docker network create doorserver-net
+```
+
+In THIS repo's `docker-compose.yml`, on the `bbs` service:
 ```yaml
+    networks:
+      - default
+      - doorserver-net
+    environment:
       # The door catalog lives in the standalone door server; this BBS proxies
       # to it so shipped clients (RepoHost=bbs.uprough.net) keep working.
       # Unset = the /api/door-repo paths 404, exactly as a disabled feature should.
-      DOOR_SERVER_URL: ${DOOR_SERVER_URL:-http://127.0.0.1:3010}
+      # Reached by service DNS over the shared network - NOT 127.0.0.1, which
+      # inside a container is the container.
+      DOOR_SERVER_URL: ${DOOR_SERVER_URL:-http://doorserver:3010}
 ```
-127.0.0.1:3010 is the door server's loopback bind on the same host; it never leaves the machine.
+and at the file's top level:
+```yaml
+networks:
+  doorserver-net:
+    external: true
+```
+
+In the OTHER repo (`~/Code/amiexpress-doorserver/docker-compose.yml`),
+add the same `networks:` stanza to its `doorserver` service and the same
+top-level `external: true` block, so the service is reachable by the name
+`doorserver`. That is a separate commit in that repo; it is additive and does
+not change the published port. Verify from inside the BBS container before
+trusting it:
+```bash
+docker exec amiexpress-bbs sh -lc 'wget -qO- http://doorserver:3010/api/door-repo/health'
+```
 
 - [ ] **Step 2: Capture the CURRENT live responses before changing anything**
 
