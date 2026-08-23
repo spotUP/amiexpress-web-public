@@ -20,14 +20,29 @@
 #     "for" is the BBS's REQUIREMENT, not the door's, and stays in the prose
 #   - authors to their own column, handles cleaned ("/X\\ardanpet" -> ardanpet)
 #   - a body that only restates the program name collapses to the name
+#   - a DIZ line is a BOX ROW, scored by its best CELL: the cells either side
+#     of a border run ("]-----[") are independent, so neither the border nor
+#     the neighbouring cell can bleed into the description
+#   - release metadata goes ("[RELEASE 2]"), brackets emptied by extraction go
+#     ("(Version )"), and the 60-character cap cuts on a word boundary so it
+#     can never sever a bracket group into "[RELEASE 2"
+#   - a mid-line banner splits the row: "<handle> BRiNGS: <door>" puts the
+#     handle in the author column and the door in the description
+#   - a compatibility note ("Now working on /X 3.30") is true but is not a
+#     description, and loses to the line that names the door
 #
-# Coverage on the 3301-row catalog: 77% version, 42% author, 100% plain text.
+# Run the regression tests after any change here:
+#     python3 dev/scripts/door-index/test_description_rules.py
+# and re-render with dev/scripts/door-index/render_index.py to diff the whole
+# catalog before/after - every rule above was found by reading that diff.
+#
+# Coverage on the 3301-row catalog: 77% version, 43% author, 100% plain text.
 # Known gaps: block selection can fuse art-heavy DIZ lines (-L-OFFL.LHA,
 # KLR_BD14.LHA), and binary_name sometimes names a helper file rather than the
 # door (that is a corpus-builder bug, not a renderer bug).
 
 import sqlite3, re, io
-FRAME = " :-*()[]|_=+~<>.,'\"`^¦·°#!?/\\"
+FRAME = " :-*()[]|_=+~<>.,'\"`^¦¬·°#!?/\\"
 ART = re.compile(r'^[\s_\-=*#~/\\|:.,+()\[\]<>\'"`^¦°·;!?%$&@]*$')
 BANNER = re.compile(r'\b(presents?|brings?|proudly|releases?|bringing|presenting)\b', re.I)
 # lines that are credits / distribution / dates, never a description
@@ -35,15 +50,108 @@ JUNK = re.compile(r'passed\s+thr|courier|released?\s+(on|at|by)|\bthanx|greets?\
                   r'\bdate\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b|'
                   r'^\s*(by|coded\s+by|written\s+by)\b|'
                   r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*,?\s*\d', re.I)
+# A note about which BBS version the door runs on - true, useful, and still
+# not a description of what the door DOES.
+COMPAT = re.compile(r'\b(?:now\s+work(?:s|ing)|works?\s+(?:only\s+)?(?:with|on)|requires?|needs?)\b.{0,12}\b(?:/?X|amiexpress|fame|daydream|\d)', re.I)
 HANDLE = re.compile(r'^[A-Za-z0-9!._\-]{2,20}\s*[\^/]\s*[A-Za-z0-9!._\-]{2,20}$')  # sNoW^5D, Jordan/5D
 VERSIONISH = re.compile(r'\bv?\d+\.\d+\b', re.I)
 DOORISH = re.compile(r'\b(door|tool|util|utility|wall|scan|stat|list|chat|game|edit|menu|logon|logoff|'
                      r'upload|download|msg|mail|page|check|info|view|manager|maker)\w*\b', re.I)
 
+# ─── a box row is CELLS, not a sentence ────────────────────────────────
+# A DIZ line is a row of an ASCII box. "+[ MYSTiC /X-POWER ]-----[ JoinCnf
+# 4.0 ]---+" holds two INDEPENDENT cells either side of a border run, and
+# ".---\\/---\\/-/X-pOwEr!-\\/^-----|" is a border with one word trapped in
+# it. Scoring the whole row drags the border and the neighbouring cell into
+# the description ("Mystic /POWER ]-----[ Joincnf"), or lets a word caught
+# in a border open a block that then swallows the real line. Split the row
+# on border runs and pillars, and judge each cell alone: the door's name
+# lives in ONE cell.
+CELL_SPLIT = re.compile(r'[|¦]+|[\[\]]?\s*[-_=~*^/\\¬]{3,}\s*[\[\]]?|\]\s*\[')
+
+# Publishing metadata, not description: the release sequence number a group
+# stamps on a box ("[RELEASE 2]", "[DISK 1/2]"), and a bracket left empty by
+# pulling its contents into a column of their own ("(Version 2.0)" becomes
+# "(Version )" once the version is extracted).
+META_BRACKET = re.compile(r'[\[(]\s*(?:release|disk|part|file)\s*\d+(?:\s*(?:of|/)\s*\d+)?\s*[\])]?', re.I)
+EMPTY_BRACKET = re.compile(r'[\[(]\s*(?:version|ver|v|rel|no)?\s*[.:]?\s*(?:[\])]|$)', re.I)
+
+
+def drop_meta_brackets(s):
+    if not s: return s
+    s = META_BRACKET.sub(' ', s)
+    s = EMPTY_BRACKET.sub(' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _strip_frame(s):
+    """strip(FRAME), except for a closing bracket that HAS its opener.
+
+    FRAME contains ")" and "]", so a plain strip turns "MultiTop (Version
+    2.0)" into "MultiTop (Version 2.0" - it unbalances the very brackets the
+    next rule then has to repair, and the repair loses the text.
+    """
+    if not s:
+        return s
+    while s:
+        ch = s[-1]
+        if ch not in FRAME:
+            break
+        if ch in ')]':
+            opener = '(' if ch == ')' else '['
+            head = s[:-1]
+            if head.count(opener) > head.count(ch):
+                break                      # matched pair - leave it alone
+        s = s[:-1]
+    return s.lstrip(FRAME).strip()
+
+
+def finalise(s, cap=60):
+    """Cap the description without leaving a scar.
+
+    Cutting at exactly `cap` characters severed "[RELEASE 2]" into
+    "[RELEASE 2" - a bracket opened and never closed reads as corruption.
+    Cut on a word boundary, then drop any group left hanging open.
+    """
+    s = _strip_frame(drop_meta_brackets(re.sub(r'\s+', ' ', s or '').strip()))
+    if len(s) > cap:
+        cut = s[:cap]
+        if ' ' in cut:
+            cut = cut.rsplit(' ', 1)[0]
+        s = cut
+    # A bracket opened and never closed is either a truncation scar or a
+    # credit tag whose closer the frame-strip already ate ("[-5th Dynasty-]"
+    # arrives as "[-5th Dynasty"). Drop it - but only when what follows the
+    # opener is a short tag, never when real prose follows it, or
+    # "5D-User V1.10 [-5th Dynasty Command to list all users" would lose the
+    # description along with the tag.
+    for op, cl in (('[', ']'), ('(', ')')):
+        i = s.rfind(op)
+        if i == -1 or s.find(cl, i) != -1:
+            continue
+        tail = s[i + 1:]
+        if len(tail) <= 24 and len(re.findall(r"[A-Za-zÀ-ÿ0-9']+", tail)) <= 3:
+            s = s[:i]                      # a tag: "[-5th Dynasty"
+        else:
+            s = s[:i] + s[i + 1:]          # prose: drop the bracket, keep the words
+    # Removing a credit tag can leave the word that introduced it dangling
+    # ("Adi Menu V1.0 by"). A trailing connector is not a description.
+    s = re.sub(r'[\s,;:-]*\b(?:coded|written|programmed|created|made|done)?\s*'
+               r'(?:by|from|for|with|of|and)\s*$', '', s, flags=re.I)
+    return _strip_frame(s)
+
+
 def alnum_share(s):
     return (sum(c.isalnum() for c in s) / len(s)) if s else 0
 
+# ANSI colour sequences ride along in DIZ text ("ESC[33m") and are invisible
+# in a terminal but not in a package listing.
+ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]|\x1b')
+
+
 def clean(s):
+    s = ANSI.sub('', s)
+    s = re.sub(r'[\x00-\x1f\x7f]', ' ', s)
     return re.sub(r'\s+', ' ', s).strip(FRAME).strip()
 
 def score(line):
@@ -54,19 +162,48 @@ def score(line):
     if len(c) < 6: return -50, c
     s = 0
     if JUNK.search(c): s -= 40
+    if COMPAT.search(c): s -= 20      # "Now working on /X 3.30" is a compatibility note
     if HANDLE.match(c): s -= 40
     if VERSIONISH.search(c): s += 12
     if DOORISH.search(c): s += 8
     words = len(re.findall(r'[A-Za-zÀ-ÿ]{3,}', c))
     s += min(words, 6) * 3
     if len(c) > 55: s -= 4
+    # "Added Features:" heads a list, it does not describe the door. The
+    # colon is tested on the RAW line because clean() strips it off.
+    if re.search(r':[\s|¦:.]*$', line): s -= 6
     return s, c
+
+def best_cell(line):
+    """Score a box row by its best CELL, falling back to the whole row when
+    there is no border inside it.
+
+    A cell torn out of a border must stand on its own to count: two words,
+    or one word carrying a version or a door word ("JoinCnf 4.0"). That is
+    what keeps "/X-pOwEr!" and "mYSTIC!" - single words trapped in border
+    art - from being read as descriptions.
+    """
+    parts = CELL_SPLIT.split(line)
+    if len(parts) <= 1:
+        return score(line)
+    best = (-99, '')
+    for part in parts:
+        sc, c = score(part)
+        if sc <= -50:
+            continue
+        words = len(re.findall(r'[A-Za-zÀ-ÿ]{3,}', c))
+        if words < 2 and not (words and (VERSIONISH.search(c) or DOORISH.search(c))):
+            continue
+        if sc > best[0]:
+            best = (sc, c)
+    return best
+
 
 def describe(diz, binary, name, archive):
     lines = [l for l in (diz or '').replace('\r','').split('\n')]
     scored = []
     for i, l in enumerate(lines):
-        sc, c = score(l)
+        sc, c = best_cell(l)
         if sc <= -50: continue
         # a line right after a banner is likely the door's own name
         if i > 0 and BANNER.search(lines[i-1]): sc += 10
@@ -88,7 +225,7 @@ def describe(diz, binary, name, archive):
     # A chosen line can still start with the banner word itself
     # ("PRESENTS : ACCOUNT ED"). Strip it - the group is not the door.
     out = re.sub(r'^(presents?|brings?|proudly|releases?|presenting|bringing)\b[\s:.\-]*', '', out, flags=re.I)
-    out = clean(out)[:60]
+    out = finalise(clean(out))
     # drop trailing orphan symbols/single chars left by scene decoration
     out = re.sub(r'(\s+[^A-Za-z0-9À-ÿ]{1,3})+$', '', out)
     return out.strip(FRAME).strip()
@@ -134,7 +271,7 @@ def split_version(desc, catalog_version):
         desc = (desc[:m.start()] + ' ' + desc[m.end():])
     if not found and catalog_version and catalog_version.strip():
         found = normalise_version(catalog_version)
-    desc = re.sub(r'\s+', ' ', desc)
+    desc = drop_meta_brackets(re.sub(r'\s+', ' ', desc))
     desc = re.sub(r'\s*([-|:/])\s*$', '', desc).strip(FRAME).strip()
     return desc, (found or '')
 
@@ -211,6 +348,7 @@ ALLOWED_PUNCT = set(" .,:;!?'\"()[]/\\-_+&%#@*")
 
 def to_plain(s):
     if not s: return s
+    s = ANSI.sub('', s)
     out = []
     for ch in s:
         if ch.isalnum() or ch in ALLOWED_PUNCT:
@@ -258,7 +396,34 @@ def split_author(desc, catalog_author):
     return desc, (found or '')
 
 
-def describe_block(diz, name, archive, cap=70):
+BANNER_SPLIT = re.compile(r'\b(?:presents?|presenting|brings?|bringing|proudly|releases?)\b\s*[:\-]*\s*', re.I)
+
+
+def split_banner_credit(text):
+    """Split "KiLLraVeN/MYSTiC BRiNGS: KiLLER-BAUD 1.3".
+
+    A banner names WHO released the door before it names the door. Splitting
+    on the LAST banner word puts the door in the description and hands the
+    credit back as an author when it reads like a handle - the same rule the
+    line-picker uses, applied to a banner that sits mid-line instead of on a
+    line of its own.
+    """
+    if not text:
+        return text, ''
+    last = None
+    for m in BANNER_SPLIT.finditer(text):
+        last = m
+    if not last:
+        return text, ''
+    after = text[last.end():].strip(FRAME).strip()
+    before = text[:last.start()].strip(FRAME).strip()
+    if len(after) < 4 or not re.search(r'[A-Za-zÀ-ÿ]{3}', after):
+        return text, ''
+    credit = before if (before and len(before) <= 40 and HANDLE.match(before)) else ''
+    return after, credit
+
+
+def describe_block(diz, name, archive, cap=70, prog=None):
     """Pick the best PARAGRAPH, not the best line.
 
     DIZ descriptions wrap across lines behind decoration ("<<<<<<< very
@@ -266,10 +431,10 @@ def describe_block(diz, name, archive, cap=70):
     single line yields a mid-sentence fragment. Group consecutive prose
     lines into blocks, score the block, and read from its start.
     """
-    lines = [clean(l) for l in (diz or '').replace('\r','').split('\n')]
+    lines = [l for l in (diz or '').replace('\r','').split('\n')]
     blocks, cur = [], []
     for i, l in enumerate(lines):
-        sc, c = score(l)
+        sc, c = best_cell(l)
         prose = sc > 0 and not JUNK.search(c) and not HANDLE.match(c)
         if prose:
             cur.append((sc, i, c))
@@ -281,21 +446,37 @@ def describe_block(diz, name, archive, cap=70):
     def block_score(b):
         best = max(s for s, _, _ in b)
         return best + min(len(b), 4) * 4 - b[0][1]      # earlier blocks win ties
-    best = max(blocks, key=block_score)
+    ranked = sorted(blocks, key=block_score, reverse=True)
+    # The top block is often the header cell, which is the door's NAME with
+    # its version ("JoinCnf 4.0") - and the name is already its own column.
+    # Take the best block that adds something the name does not.
+    best = ranked[0]
+    if prog:
+        for b in ranked:
+            if not body_adds_nothing(prog, ' '.join(c for _, _, c in b)):
+                best = b
+                break
     parts = [c for _, _, c in best]
     # strip a leading banner word and any "1." numbering from the opener
     parts[0] = re.sub(r'^(presents?|brings?|proudly|releases?|presenting|bringing)\b[\s:.\-]*', '', parts[0], flags=re.I)
     parts[0] = re.sub(r'^\d{1,2}[.)]\s+', '', parts[0]).strip(FRAME).strip()
+    # DIZ feature lists are bulleted ("o Totally NEW Lay-Out"); the bullet is
+    # decoration, and joining two bulleted lines must not read "Lay-Out o
+    # Manages up to 256 Cnfs"
+    parts = [re.sub(r'^[o*·+]\s+', '', pt) for pt in parts]
+    parts = [finalise(pt, cap) for pt in parts]
+    parts = [pt for pt in parts if pt]
+    if not parts:
+        return describe(diz, '', name, archive)
     # A first line that already stands on its own IS the description - only
     # keep appending when it is too short to mean anything by itself.
     text = parts[0]
     for nxt in parts[1:]:
         if len(text) >= 30: break
         text = f"{text} {nxt}"
-    text = re.sub(r'\s+', ' ', text).strip()
-    if len(text) > cap:
-        text = text[:cap].rsplit(' ', 1)[0]
-    return text.strip(FRAME).strip()
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\s+[o*·]\s+', ' ', text).strip()
+    return finalise(text, cap)
 
 
 # ─── elite-case normalisation ──────────────────────────────────────────
@@ -413,8 +594,10 @@ def body_adds_nothing(prog, body):
     sp, sb = squash(prog), squash(body)
     if not sp or sp not in sb:
         return False
+    # A version number is not information either - it has its own column -
+    # so "JoinCnf 4.0" still says nothing the name does not.
     rest = [w for w in re.findall(r"[A-Za-zÀ-ÿ0-9']+", body)
-            if w.lower() not in FILLER and squash(w) not in sp]
+            if w.lower() not in FILLER and squash(w) not in sp and not w.isdigit()]
     return len(rest) < 2
 
 def capitalise_name(prog):
