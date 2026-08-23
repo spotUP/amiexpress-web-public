@@ -1142,7 +1142,7 @@ cp ~/Code/amiexpress-web/web/backend/src/server/door-repo.routes.ts \
 
 Apply exactly these edits:
 1. Delete `isDoorRepoOwner()` and its comment block. Mount gating is gone: this whole process IS the repo.
-2. Imports: `../doors/door-repo-manifest` becomes `./manifest`; `../doors/door-repo-checksums` becomes `./checksums`; `../doors/door-catalog.service` becomes `./catalog`.
+2. Imports: `../doors/door-repo-checksums` becomes `./checksums`; `../doors/door-catalog.service` becomes `./catalog`. `../doors/door-repo-manifest` splits in TWO: `buildManifest`, `renderListTxt` and `renderListTxtCached` come from `./manifest`, but `getCatalogRevision` and `getDoorCount` come from **`./catalog`** - Task 3 owns them now and Task 5 deleted them from the manifest module. Importing them from `./manifest` will not compile.
 3. Replace the module-level `export const doorRepoRouter = express.Router()` with `export function createRouter(cfg: ServerConfig): express.Router`, declaring the router inside and passing `cfg` to every catalog/manifest call.
 4. Keep, unchanged: `parseManifestQuery`, `sendNotFound` (including its `NOT FOUND: <name>\r\n` body and `text/plain` type), `handleArchiveStreamError`, `streamArchive` (`stream.pipeline`, no `autoClose: false`, no manual close), the single-`openSync` archive handler, `candidateArchiveNames` + `decodePercentLatin1`, the `/^\/(diz|archive|files|doc)\/(.+)$/` dispatcher, every `X-Door-Repo-Revision` set, the `req.fresh` check BEFORE `buildManifest()`, the Latin-1 `Buffer.from(..., 'latin1')` sends and the `X-Doc-Filename` sanitiser.
 
