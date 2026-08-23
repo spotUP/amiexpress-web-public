@@ -8,18 +8,28 @@
  * door_installs.command is UNIQUE (one archive occupies a given command slot
  * per node), but door_catalog can hold more than one row with installed = 1
  * for the same installed_as - the live database has 14 such commands (28
- * rows) as of 2026-08-23, and they are not near-duplicates, they are
- * different VERSIONS (e.g. ED: 5D-ED110.LHA vs 5D-ED121.LHA). Picking the
- * wrong one means BBSApi's doors-list overlay shows the wrong version.
+ * rows) as of 2026-08-23. The cause: this BBS never cleared installed back
+ * to 0 when a command name was re-used for a new install, so every archive
+ * ever installed under that command stayed flagged. Some are different
+ * versions of one door (ED: 5D-ED110.LHA vs 5D-ED121.LHA); some are
+ * unrelated doors that happen to share a command name (Z is claimed by nine
+ * archives, including both DCSXC100.LHA and 5D-ZS001.LZH). Nothing in the
+ * data records which one is actually installed right now - install_dir is
+ * identical across every contested command's candidates (it is the command's
+ * fixed target directory, not a per-archive fact), so there is no fact here
+ * to recover, only a guess to make and disclose.
  *
- * The authority for "what's actually installed" is the on-disk command
- * config: Commands/BBSCmd/<CMD>.info carries a LOCATION=Doors:<dir>/... line
- * naming the real install directory. When a commands directory is given,
- * a contested command is resolved by preferring the catalog row whose
- * install_dir ends with that directory segment (case-insensitive -
- * AmigaDOS paths are). No .info, no LOCATION line, or no row whose
- * install_dir matches: fall back to the most recently indexed row
- * (highest rowid) for that command.
+ * The guess: prefer the on-disk command config as the nearest thing to
+ * ground truth. Commands/BBSCmd/<CMD>.info carries a
+ * LOCATION=Doors:<dir>/... tooltype; when a commands directory is given and
+ * exactly one candidate's install_dir ends with that directory (case
+ * insensitive - AmigaDOS paths are), that row wins and is marked resolvedBy
+ * 'info'. Every other case - no commandsDir, no .info, no LOCATION line, no
+ * match, or an AMBIGUOUS match (more than one candidate shares the named
+ * directory, which is every real contested command today) - falls back to
+ * the most recently indexed row (highest rowid), marked resolvedBy
+ * 'fallback'. Both the winner and the discarded rows are returned in
+ * `contested` so nothing is picked silently.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,6 +42,17 @@ const Database = require(
   path.join(__dirname, '..', '..', 'web', 'backend', 'node_modules', 'better-sqlite3')
 );
 
+export interface ContestedCommand {
+  command: string;
+  /** archive_name of the catalog row written to door_installs. */
+  winner: string;
+  /** archive_name of every catalog row that lost the contest. */
+  losers: string[];
+  /** 'info' when the on-disk .info uniquely named the winning row's
+   *  directory; 'fallback' when it came down to rowid DESC. */
+  resolvedBy: 'info' | 'fallback';
+}
+
 export interface BackfillCounts {
   migrated: number;
   /** Row had no installed_as - cannot become an install record. */
@@ -39,6 +60,12 @@ export interface BackfillCounts {
   /** Row lost a contest for its command name (to another catalog row in
    *  this run, or to a row already recorded by a previous run). */
   skippedDuplicate: number;
+  /** Commands claimed by more than one installed catalog row, with the
+   *  archive that won and the ones that lost. The BBS never cleared the
+   *  installed flag when a command name was re-used, so these rows
+   *  accumulated; which one is actually on disk is not recorded anywhere.
+   *  Re-installing the door through DOORREPO writes an authoritative row. */
+  contested: ContestedCommand[];
 }
 
 export interface BackfillOptions {
@@ -82,25 +109,28 @@ function readInstalledDirSegment(commandsDir: string, command: string): string |
 /**
  * Picks which of a command's contested catalog rows becomes the
  * door_installs record. `group` is in rowid-DESC order (newest first).
+ * Only reports resolvedBy 'info' when the .info narrows the field to
+ * exactly one candidate - an ambiguous match (more than one candidate
+ * shares the named directory) is not a resolution, so it is honestly
+ * reported as 'fallback' even though a commandsDir was supplied.
  */
-function pickWinner(group: CatalogRow[], command: string, commandsDir: string | undefined): CatalogRow {
-  if (group.length === 1) return group[0];
+function pickWinner(
+  group: CatalogRow[],
+  command: string,
+  commandsDir: string | undefined
+): { row: CatalogRow; resolvedBy: 'info' | 'fallback' } {
   if (commandsDir) {
     const segment = readInstalledDirSegment(commandsDir, command);
     if (segment) {
       const matches = group.filter(
         (row) => (row.install_dir ?? '').toLowerCase().endsWith(segment.toLowerCase())
       );
-      if (matches.length > 0) {
-        // If more than one row shares the winning directory (the live
-        // database's contested commands all do - every version installs
-        // to the same directory name), matches[0] keeps group order,
-        // i.e. the most recently indexed row among the matches.
-        return matches[0];
+      if (matches.length === 1) {
+        return { row: matches[0], resolvedBy: 'info' };
       }
     }
   }
-  return group[0]; // fall back: most recently indexed row for this command
+  return { row: group[0], resolvedBy: 'fallback' }; // most recently indexed row
 }
 
 export function backfillDoorInstalls(dbFile: string, opts?: BackfillOptions): BackfillCounts {
@@ -144,9 +174,18 @@ export function backfillDoorInstalls(dbFile: string, opts?: BackfillOptions): Ba
 
     let migrated = 0;
     let skippedDuplicate = 0;
+    const contested: ContestedCommand[] = [];
     const now = Math.floor(Date.now() / 1000);
     for (const [command, group] of groups) {
-      const winner = pickWinner(group, command, opts?.commandsDir);
+      const { row: winner, resolvedBy } = pickWinner(group, command, opts?.commandsDir);
+      if (group.length > 1) {
+        contested.push({
+          command,
+          winner: winner.archive_name,
+          losers: group.filter((row) => row !== winner).map((row) => row.archive_name),
+          resolvedBy,
+        });
+      }
       for (const row of group) {
         if (row !== winner) {
           // Lost the contest for this command's name to the winning row -
@@ -169,7 +208,7 @@ export function backfillDoorInstalls(dbFile: string, opts?: BackfillOptions): Ba
         }
       }
     }
-    return { migrated, skippedNoCommand, skippedDuplicate };
+    return { migrated, skippedNoCommand, skippedDuplicate, contested };
   } finally {
     db.close();
   }
@@ -184,8 +223,21 @@ if (require.main === module) {
   }
   const counts = backfillDoorInstalls(target, commandsDir ? { commandsDir } : undefined);
   console.log(
-    `[OK] backfilled ${counts.migrated} installs, ` +
-    `skipped ${counts.skippedNoCommand} (no command name), ` +
-    `skipped ${counts.skippedDuplicate} (lost duplicate contest)`
+    `[OK] backfilled ${counts.migrated} installs ` +
+    `(${counts.skippedNoCommand + counts.skippedDuplicate} skipped: ` +
+    `${counts.skippedNoCommand} without a command, ${counts.skippedDuplicate} lost a contest)`
   );
+  if (counts.contested.length > 0) {
+    console.log(
+      `[WARN] ${counts.contested.length} commands were claimed by more than one installed archive; the flag was`
+    );
+    console.log(
+      `[WARN] never cleared when a command was re-used, so the winner is a best guess:`
+    );
+    for (const c of counts.contested) {
+      const shown = c.losers.slice(0, 4).join(', ') + (c.losers.length > 4 ? ', ...' : '');
+      console.log(`[WARN]   ${c.command.padEnd(8)} -> ${c.winner} (${c.resolvedBy})  losing: ${shown}`);
+    }
+    console.log('[WARN] Re-install any of these through DOORREPO to record the real one.');
+  }
 }

@@ -169,4 +169,21 @@ describe('backfillDoorInstalls', () => {
     expect(counts.skippedDuplicate).toBeGreaterThanOrEqual(1);
     expect(counts.skippedNoCommand).toBeGreaterThanOrEqual(1);
   });
+
+  it('names the contested commands rather than silently picking one', () => {
+    const db = new Database(dbFile);
+    db.prepare(
+      `INSERT INTO door_catalog (id, archive_name, archive_path, name, installed, installed_as, install_dir)
+       VALUES ('z1','A.LHA','A/A.LHA','Z',1,'Z','Doors/Z'),
+              ('z2','B.LHA','A/B.LHA','Z',1,'Z','Doors/Z'),
+              ('z3','C.LHA','A/C.LHA','Z',1,'Z','Doors/Z')`
+    ).run();
+    db.close();
+    const counts = backfillDoorInstalls(dbFile);
+    const z = counts.contested.find((c) => c.command === 'Z');
+    expect(z).toBeDefined();
+    expect(z!.losers).toHaveLength(2);
+    expect(z!.resolvedBy).toBe('fallback');
+    expect([...z!.losers, z!.winner].sort()).toEqual(['A.LHA', 'B.LHA', 'C.LHA']);
+  });
 });
