@@ -1788,9 +1788,18 @@ git commit -m "feat: lossless catalog migration out of the BBS database"
 
 - [ ] **Step 1: Write the `Dockerfile`**
 
+**better-sqlite3 has no musl prebuild**, so on `node:20-alpine` it compiles
+from source and needs a toolchain. amiexpress-web's own Dockerfile installs
+`python3 make g++ build-base` for exactly this reason (Dockerfile:181-189).
+Install it in the BUILD stage only, produce the production `node_modules`
+there - native binding already compiled - and copy that into a clean runtime
+image, so the toolchain never ships.
+
 ```dockerfile
 FROM node:20-alpine AS build
 WORKDIR /app
+# better-sqlite3 ships no musl prebuild; node-gyp compiles it here.
+RUN apk add --no-cache python3 make g++ build-base
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
@@ -1798,17 +1807,28 @@ COPY src ./src
 COPY contract ./contract
 COPY scripts ./scripts
 RUN npm run build
+# Prune to production deps in the SAME stage, so the rebuilt native binding
+# is compiled by this toolchain rather than needing one at runtime.
+RUN npm ci --omit=dev
 
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY package.json ./
 ARG GIT_SHA=unknown
 RUN echo "$GIT_SHA" > /app/.git-sha
 EXPOSE 3010
 CMD ["node", "dist/src/index.js"]
+```
+
+Verify the binding actually loads in the runtime image before deploying -
+a missing musl build fails at require time, not at build time:
+
+```bash
+docker build -t doorserver-probe .
+docker run --rm doorserver-probe node -e "require('better-sqlite3'); console.log('[OK] native binding loads')"
 ```
 
 - [ ] **Step 2: Write `docker-compose.yml`**
