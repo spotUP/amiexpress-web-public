@@ -1331,7 +1331,7 @@ git commit -m "feat: door-repo read API served by the standalone server"
 | `ACC-V103.LHA` | ARexx door, has doc, real junk files |
 | `5D!DP002.LHA` | doorpack, many files |
 | `-D-CALC.LHA` | the archive at the centre of the download corruption |
-| a Latin-1 name (from `SELECT archive_name FROM door_catalog WHERE archive_name GLOB '*[^ -~]*' LIMIT 1`) | percent-decoding path |
+| `$CP-BUß1.LZX` | percent-decoding path - the only Latin-1 name in the live catalog (verified). Capture it BOTH ways: UTF-8 percent-encoded (`%C3%9F`, what `encodeURIComponent` produces) and Latin-1 percent-encoded (`%DF`, what an Amiga client sends). The route tries both spellings; a port that lost `candidateArchiveNames` would still pass the UTF-8 capture alone. |
 | `NOPE-NOT-REAL.LHA` | 404 body |
 
 - [ ] **Step 1: Write the capture script**
@@ -1404,6 +1404,9 @@ async function main(): Promise<void> {
     captures.push(await capture(`archive-${a}`, `/archive/${enc}`));
   }
   captures.push(await capture('archive-missing', '/archive/NOPE-NOT-REAL.LHA'));
+  // Latin-1 archive name, percent-encoded the way an Amiga client encodes it
+  // (%DF, not UTF-8's %C3%9F). Passed raw, NOT through encodeURIComponent.
+  captures.push(await capture('files-latin1-raw', '/files/%24CP-BU%DF1.LZX'));
   fs.writeFileSync(path.join(OUT, 'captures.json'), JSON.stringify(captures, null, 1), 'utf-8');
   console.log(`[OK] captured ${captures.length} responses from ${BASE}`);
 }
@@ -1418,7 +1421,7 @@ With the BBS backend running locally in owner mode:
 ```bash
 cd ~/Code/amiexpress-doorserver
 npx tsx scripts/capture-parity-fixtures.ts http://localhost:3001/api/door-repo \
-  ACC-V103.LHA '5D!DP002.LHA' -D-CALC.LHA
+  ACC-V103.LHA '5D!DP002.LHA' -D-CALC.LHA '$CP-BUß1.LZX'
 ```
 Expected: `[OK] captured N responses`, `tests/fixtures/parity/captures.json` written.
 
