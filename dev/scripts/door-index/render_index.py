@@ -37,6 +37,13 @@ def render_row(row):
         prog = None
     desc = R.compose(R.tidy_case(prog), R.tidy_case(body)) or ''
     desc = R.finalise(R.to_plain(desc))
+    if not desc:
+        # Everything the DIZ offered was a credit (KDZ!LUDB.LHA's only prose
+        # line is "dONE bY sERAPH - !BUGFIXED VERSION", which moves wholesale
+        # into the author column). A row named after its archive beats a row
+        # with no description at all.
+        base = archive.rsplit('.', 1)[0]
+        desc = R.finalise(R.to_plain(R.tidy_case(R.prettify_in_text(base))))
     if not version:
         version = R.version_from_filename(archive)
     who = R.tidy_case(R.clean_author(who), handles=True)
