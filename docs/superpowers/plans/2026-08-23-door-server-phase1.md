@@ -1324,6 +1324,13 @@ git commit -m "feat: door-repo read API served by the standalone server"
 - Consumes: `createApp` (Task 6).
 - Produces: a committed fixture set and a test that fails if any ported endpoint's status, headers or bytes differ from what the BBS-hosted API produced. This is the gate for Task 8 - data does not move until this is green.
 
+**One field is exempt from byte comparison.** `/manifest` and `/health` are
+JSON; the manifest's `generatedAt` is a wall-clock timestamp, so its bytes
+differ on every call. The harness compares JSON bodies structurally with
+`generatedAt` removed and asserts the field is a valid ISO instant; every
+non-JSON endpoint (`list.txt`, `diz`, `doc`, `files`, `archive`) is compared
+byte-for-byte, which is where the Latin-1 and CRLF risk actually lives.
+
 **Fixture sample (each chosen because it exercises a different failure mode):**
 
 | Archive | Why |
@@ -1484,7 +1491,27 @@ describeOrSkip('parity with the BBS-hosted API', () => {
           expect(`${key}=${res.headers[key]}`).toBe(`${key}=${value}`);
         }
       }
-      expect((res.body as Buffer).toString('base64')).toBe(c.bodyBase64);
+
+      // The manifest body carries `generatedAt: new Date().toISOString()`
+      // (door-repo-manifest.ts:309), so its bytes are never twice the same
+      // and a raw base64 comparison could not pass even against the server
+      // that produced the capture. Verified against the live API: two calls
+      // one second apart differ only in that field. Compare the manifest
+      // structurally with the timestamp lifted out, and assert separately
+      // that the field is still a real ISO instant. Its length is fixed
+      // (24 chars), so Content-Length above stays a valid check.
+      // EVERY other endpoint is compared byte-for-byte.
+      const isJson = (c.headers['content-type'] ?? '').includes('application/json');
+      if (isJson) {
+        const expected = JSON.parse(Buffer.from(c.bodyBase64, 'base64').toString('utf-8'));
+        const actual = JSON.parse((res.body as Buffer).toString('utf-8'));
+        expect(actual.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        delete expected.generatedAt;
+        delete actual.generatedAt;
+        expect(actual).toEqual(expected);
+      } else {
+        expect((res.body as Buffer).toString('base64')).toBe(c.bodyBase64);
+      }
     });
   }
 });
