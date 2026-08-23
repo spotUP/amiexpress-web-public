@@ -1354,6 +1354,8 @@ byte-for-byte, which is where the Latin-1 and CRLF risk actually lives.
 | `-D-CALC.LHA` | the archive at the centre of the download corruption |
 | `$CP-BUß1.LZX` | percent-decoding path - the only Latin-1 name in the live catalog (verified). Capture it BOTH ways: UTF-8 percent-encoded (`%C3%9F`, what `encodeURIComponent` produces) and Latin-1 percent-encoded (`%DF`, what an Amiga client sends). The route tries both spellings; a port that lost `candidateArchiveNames` would still pass the UTF-8 capture alone. |
 | `NOPE-NOT-REAL.LHA` | 404 body |
+| `HEAD /archive/...` and `HEAD /files/...` | both 404 today (non-GET falls through the catch-all router) - captured so the port cannot silently change it |
+| `GET /archive/... Range: bytes=0-99` | Range is ignored today; the full 25528 bytes come back with a 200 |
 
 - [ ] **Step 1: Write the capture script**
 
@@ -1381,6 +1383,7 @@ const HEADERS_OF_INTEREST = [
 
 interface Capture {
   name: string;
+  method: 'GET' | 'HEAD';
   requestPath: string;
   requestHeaders: Record<string, string>;
   status: number;
@@ -1388,15 +1391,20 @@ interface Capture {
   bodyBase64: string;
 }
 
-async function capture(name: string, requestPath: string, requestHeaders: Record<string, string> = {}): Promise<Capture> {
-  const res = await fetch(`${BASE}${requestPath}`, { headers: requestHeaders });
+async function capture(
+  name: string,
+  requestPath: string,
+  requestHeaders: Record<string, string> = {},
+  method: 'GET' | 'HEAD' = 'GET'
+): Promise<Capture> {
+  const res = await fetch(`${BASE}${requestPath}`, { method, headers: requestHeaders });
   const body = Buffer.from(await res.arrayBuffer());
   const headers: Record<string, string> = {};
   for (const key of HEADERS_OF_INTEREST) {
     const value = res.headers.get(key);
     if (value !== null) headers[key] = value;
   }
-  return { name, requestPath, requestHeaders, status: res.status, headers, bodyBase64: body.toString('base64') };
+  return { name, method, requestPath, requestHeaders, status: res.status, headers, bodyBase64: body.toString('base64') };
 }
 
 async function main(): Promise<void> {
@@ -1425,6 +1433,20 @@ async function main(): Promise<void> {
     captures.push(await capture(`archive-${a}`, `/archive/${enc}`));
   }
   captures.push(await capture('archive-missing', '/archive/NOPE-NOT-REAL.LHA'));
+  // HEAD and Range are captured because they are ODD today and the port must
+  // not quietly "fix" them. Verified against the live API: the catch-all
+  // router bails on any method that is not GET (door-repo.routes.ts:379), so
+  // HEAD on a per-archive path falls through to Express's HTML 404 - even
+  // for an archive that GET serves happily. And GET ignores Range entirely:
+  // a `bytes=0-99` request returns 200 with all 25528 bytes. Both are
+  // pre-existing behaviour, tracked separately; parity means preserving
+  // them here, not repairing them mid-move.
+  if (archives.length > 0) {
+    const first = encodeURIComponent(archives[0]);
+    captures.push(await capture(`head-archive-${archives[0]}`, `/archive/${first}`, {}, 'HEAD'));
+    captures.push(await capture(`head-files-${archives[0]}`, `/files/${first}`, {}, 'HEAD'));
+    captures.push(await capture(`range-archive-${archives[0]}`, `/archive/${first}`, { Range: 'bytes=0-99' }));
+  }
   // Latin-1 archive name, percent-encoded the way an Amiga client encodes it
   // (%DF, not UTF-8's %C3%9F). Passed raw, NOT through encodeURIComponent.
   captures.push(await capture('files-latin1-raw', '/files/%24CP-BU%DF1.LZX'));
@@ -1471,6 +1493,7 @@ const CAPTURES = path.join(__dirname, 'fixtures', 'parity', 'captures.json');
 
 interface Capture {
   name: string;
+  method: 'GET' | 'HEAD';
   requestPath: string;
   requestHeaders: Record<string, string>;
   status: number;
@@ -1490,8 +1513,10 @@ describeOrSkip('parity with the BBS-hosted API', () => {
 
   for (const c of captures) {
     it(`${c.name} matches`, async () => {
-      const res = await request(app)
-        .get(`/api/door-repo${c.requestPath}`)
+      const agent = request(app);
+      const res = await (c.method === 'HEAD'
+        ? agent.head(`/api/door-repo${c.requestPath}`)
+        : agent.get(`/api/door-repo${c.requestPath}`))
         .set(c.requestHeaders)
         .buffer(true)
         .parse((r, cb) => {
@@ -1515,6 +1540,10 @@ describeOrSkip('parity with the BBS-hosted API', () => {
       // that the field is still a real ISO instant. Its length is fixed
       // (24 chars), so Content-Length above stays a valid check.
       // EVERY other endpoint is compared byte-for-byte.
+      // A HEAD response has no body by definition; its status and headers are
+      // the whole contract.
+      if (c.method === 'HEAD') return;
+
       const isJson = (c.headers['content-type'] ?? '').includes('application/json');
       if (isJson) {
         const expected = JSON.parse(Buffer.from(c.bodyBase64, 'base64').toString('utf-8'));
