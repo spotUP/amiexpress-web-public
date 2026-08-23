@@ -55,8 +55,8 @@ mkdir -p src tests contract scripts
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json && cp src/schema.sql dist/src/schema.sql",
+    "start": "node dist/src/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "jest --config jest.config.ts",
@@ -492,10 +492,10 @@ export function applySchema(db: Database.Database): void {
 
 - [ ] **Step 5: Make sure `schema.sql` ships next to the compiled JS**
 
-Add to `package.json` scripts so `dist/schema.sql` exists after a build:
+`package.json` already carries this from Task 1 (tsconfig's `rootDir: "."` plus the contract/ and scripts/ roots make tsc emit under `dist/src/`, so the entry point is `dist/src/index.js`). Confirm the script reads:
 
 ```json
-"build": "tsc -p tsconfig.json && cp src/schema.sql dist/schema.sql"
+"build": "tsc -p tsconfig.json && cp src/schema.sql dist/src/schema.sql"
 ```
 
 - [ ] **Step 6: Run the tests to verify they pass**
@@ -505,8 +505,8 @@ Expected: PASS, 4 tests
 
 - [ ] **Step 7: Verify the build copies the schema**
 
-Run: `npm run build && ls dist/schema.sql`
-Expected: `dist/schema.sql` listed
+Run: `npm run build && ls dist/src/schema.sql`
+Expected: `dist/src/schema.sql` listed
 
 - [ ] **Step 8: Commit**
 
@@ -1703,7 +1703,7 @@ COPY --from=build /app/dist ./dist
 ARG GIT_SHA=unknown
 RUN echo "$GIT_SHA" > /app/.git-sha
 EXPOSE 3010
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]
 ```
 
 - [ ] **Step 2: Write `docker-compose.yml`**
