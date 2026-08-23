@@ -4,6 +4,7 @@
  * Exact replica of blessed widget-shadow.js demo
  * Demonstrates shadows and neo-blessed style transparency
  */
+import { ServerDoor } from '@amiexpress/bbs-door-sdk';
 /** Door metadata */
 export declare const metadata: {
     name: string;
@@ -15,6 +16,6 @@ export declare const metadata: {
 /**
  * Main door class
  */
-declare const door: any;
+declare const door: ServerDoor;
 export default door;
 //# sourceMappingURL=index.d.ts.map

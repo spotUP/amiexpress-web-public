@@ -235,6 +235,7 @@ function parseTags(text) {
           return attrs.noInverse;
         case "invisible":
           return attrs.noInvisible;
+        // Foreground color closing tags - reset to default fg
         case "black-fg":
         case "red-fg":
         case "green-fg":
@@ -273,6 +274,7 @@ function parseTags(text) {
         case "grey":
         case "fg":
           return defaultFg;
+        // Background color closing tags - reset to default bg
         case "black-bg":
         case "red-bg":
         case "green-bg":
@@ -330,6 +332,7 @@ function parseTags(text) {
       case "gray":
       case "grey":
         return fg(name === "grey" ? "gray" : name);
+      // Standard foreground colors (0-7)
       case "black-fg":
         return fg("black");
       case "red-fg":
@@ -349,6 +352,7 @@ function parseTags(text) {
       case "gray-fg":
       case "grey-fg":
         return fg("gray");
+      // Bright/light foreground colors (8-15)
       case "lightblack-fg":
       case "brightblack-fg":
         return fg("lightblack");
@@ -373,6 +377,7 @@ function parseTags(text) {
       case "lightwhite-fg":
       case "brightwhite-fg":
         return fg("lightwhite");
+      // Standard background colors (0-7)
       case "black-bg":
         return bg("black");
       case "red-bg":
@@ -392,6 +397,7 @@ function parseTags(text) {
       case "gray-bg":
       case "grey-bg":
         return bg("gray");
+      // Bright/light background colors (8-15)
       case "lightblack-bg":
       case "brightblack-bg":
         return bg("lightblack");
@@ -420,6 +426,7 @@ function parseTags(text) {
         return value ? fg(value) : "";
       case "bg":
         return value ? bg(value) : "";
+      // Escape sequences for literal braces
       case "open":
         return "{";
       case "close":
@@ -525,7 +532,7 @@ var init_colors = __esm({
         push(i, l, l, l);
       }
     })();
-    ccolors = function() {
+    ccolors = (function() {
       const _cols = vcolors.slice();
       const cols = colors.slice();
       vcolors.length = 8;
@@ -538,7 +545,7 @@ var init_colors = __esm({
         colors[i] = cols[i];
       }
       return out;
-    }();
+    })();
     colorNames = {
       // special
       default: -1,
@@ -3087,6 +3094,9 @@ var init_element = __esm({
       onMouse(event) {
         if (this.hidden || !this.visible)
           return false;
+        if (!this.options.mouse && !this.options.clickable && !this.options.scrollable) {
+          return false;
+        }
         const coords = this._getCoords();
         if (!coords)
           return false;
@@ -3121,8 +3131,15 @@ var init_element = __esm({
             this._startScrollbarDrag(event);
             return true;
           }
-          this.emit("click", event);
-          if (this.clickable) {
+          const btn = event.button;
+          if (btn === "right") {
+            this.emit("rightclick", event);
+          } else if (btn === "middle") {
+            this.emit("middleclick", event);
+          } else {
+            this.emit("click", event);
+          }
+          if (btn !== "right" && btn !== "middle" && this.clickable) {
             this.focus();
             return true;
           }
@@ -3179,36 +3196,36 @@ var init_element = __esm({
         const type = typeof this.options.border === "string" ? this.options.border : this.options.border.type || "line";
         const borders = {
           line: {
-            topLeft: "\u250C",
-            topRight: "\u2510",
-            bottomLeft: "\u2514",
-            bottomRight: "\u2518",
-            horizontal: "\u2500",
-            vertical: "\u2502"
+            topLeft: ".",
+            topRight: ".",
+            bottomLeft: "`",
+            bottomRight: "'",
+            horizontal: "-",
+            vertical: "|"
           },
           heavy: {
-            topLeft: "\u250F",
-            topRight: "\u2513",
-            bottomLeft: "\u2517",
-            bottomRight: "\u251B",
-            horizontal: "\u2501",
-            vertical: "\u2503"
+            topLeft: "+",
+            topRight: "+",
+            bottomLeft: "+",
+            bottomRight: "+",
+            horizontal: "=",
+            vertical: "|"
           },
           double: {
-            topLeft: "\u2554",
-            topRight: "\u2557",
-            bottomLeft: "\u255A",
-            bottomRight: "\u255D",
-            horizontal: "\u2550",
-            vertical: "\u2551"
+            topLeft: "+",
+            topRight: "+",
+            bottomLeft: "+",
+            bottomRight: "+",
+            horizontal: "=",
+            vertical: "|"
           },
           round: {
-            topLeft: "\u256D",
-            topRight: "\u256E",
-            bottomLeft: "\u2570",
-            bottomRight: "\u256F",
-            horizontal: "\u2500",
-            vertical: "\u2502"
+            topLeft: ".",
+            topRight: ".",
+            bottomLeft: "`",
+            bottomRight: "'",
+            horizontal: "-",
+            vertical: "|"
           },
           bg: {
             topLeft: " ",
@@ -5469,6 +5486,8 @@ var init_dockable_panel = __esm({
           });
           if (options.draggable !== false) {
             this.titleBar.on("mousedown", (data) => {
+              if (data?.button && data.button !== "left")
+                return;
               if (!this.panelState.minimized && !this.isMaximized) {
                 this.startDrag(data.x, data.y);
               }
@@ -5552,6 +5571,8 @@ var init_dockable_panel = __esm({
         if (this.fixed || this.isStatic)
           return;
         this.on("mousedown", (data) => {
+          if (data?.button && data.button !== "left")
+            return;
           if (this.resizable) {
             const edge = this.detectResizeEdge(data.x, data.y);
             if (edge) {
@@ -5577,6 +5598,8 @@ var init_dockable_panel = __esm({
         if (this.fixed || !this.resizable)
           return;
         this.on("mousedown", (data) => {
+          if (data?.button && data.button !== "left")
+            return;
           const edge = this.detectResizeEdge(data.x, data.y);
           if (edge) {
             this.startResizeFromEdge(edge, data.x, data.y);
@@ -6664,6 +6687,38 @@ var init_dockable_panel = __esm({
           btn.on("press", () => {
             this.switchTab(index);
           });
+          let dragStart = null;
+          let detached = false;
+          btn.on("mousedown", (data) => {
+            if (data?.button && data.button !== "left")
+              return;
+            dragStart = { x: data?.x ?? 0, y: data?.y ?? 0 };
+            detached = false;
+          });
+          if (this.screen) {
+            const onMove = (data) => {
+              if (!dragStart || detached)
+                return;
+              if (data.action !== "mousemove" && data.action !== "mousedown")
+                return;
+              const dx = (data.x ?? 0) - dragStart.x;
+              const dy = (data.y ?? 0) - dragStart.y;
+              if (Math.abs(dx) + Math.abs(dy) < 3)
+                return;
+              detached = true;
+              const panelToDetach = this.tabs[index];
+              if (panelToDetach && panelToDetach !== this) {
+                this.detachTab(index);
+                panelToDetach.startDrag?.(data.x, data.y);
+              }
+            };
+            const onUp = () => {
+              dragStart = null;
+              detached = false;
+            };
+            this.screen.on("mousemove", onMove);
+            this.screen.on("mouseup", onUp);
+          }
           this.tabButtons.push(btn);
           currentX += String(label).length + 3;
         });
@@ -6688,6 +6743,61 @@ var init_dockable_panel = __esm({
         this.activeTab = index;
         this.updateTabs();
         this.emit("tab-switch", index);
+      }
+      /**
+       * Detach a tab back into its own floating DockablePanel. The inverse of
+       * `mergeWith`. Right-click on the tab button triggers this so a user
+       * who accidentally merged two panels can separate them again.
+       *
+       * Behaviour:
+       *  - The extracted panel re-parents to the screen, restores its label
+       *    and border, floats at an offset position, and is shown.
+       *  - If only one tab is left in the container after removal, the tab
+       *    bar is cleared and the remaining panel goes back to behaving as
+       *    a normal single-panel container.
+       */
+      detachTab(index) {
+        if (index < 0 || index >= this.tabs.length)
+          return;
+        const detached = this.tabs[index];
+        if (!detached || detached === this) {
+          const other = this.tabs.find((t, i) => i !== index && t !== this);
+          if (other)
+            this.detachTab(this.tabs.indexOf(other));
+          return;
+        }
+        this.tabs.splice(index, 1);
+        if (this.activeTab >= this.tabs.length)
+          this.activeTab = Math.max(0, this.tabs.length - 1);
+        detached.detach?.();
+        const root = this.screen;
+        if (root) {
+          root.append?.(detached);
+          detached.parent = root;
+        }
+        const hostCoords = this._getCoords();
+        const offsetLeft = (hostCoords?.xi ?? 0) + 4;
+        const offsetTop = (hostCoords?.yi ?? 0) + 2;
+        detached.position = {
+          left: offsetLeft,
+          top: offsetTop,
+          width: detached.options?.width ?? 40,
+          height: detached.options?.height ?? 15
+        };
+        detached.border = detached.options?.border ?? { type: "line" };
+        detached.show?.();
+        detached._invalidateCoords?.();
+        if (this.tabs.length <= 1) {
+          for (const btn of this.tabButtons)
+            btn.destroy();
+          this.tabButtons = [];
+          this.tabs = [];
+        } else {
+          this.updateTabs();
+        }
+        detached.emit("undock-tab");
+        this.emit("detach", detached);
+        this.screen?.render();
       }
       /**
        * Set dock position with visual feedback
@@ -7267,12 +7377,16 @@ var init_dockable_panel = __esm({
         switch (this.dockPosition) {
           case "left":
             return direction === "right";
+          // Swipe right to undock left panel
           case "right":
             return direction === "left";
+          // Swipe left to undock right panel
           case "top":
             return direction === "down";
+          // Swipe down to undock top panel
           case "bottom":
             return direction === "up";
+          // Swipe up to undock bottom panel
           default:
             return false;
         }
@@ -8266,7 +8380,7 @@ var init_lcd = __esm({
   "../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js"() {
     "use strict";
     init_contrib_canvas();
-    CharacterMasks = function() {
+    CharacterMasks = (function() {
       const a1 = 1 << 0, a2 = 1 << 1, b = 1 << 2, c = 1 << 3, d1 = 1 << 4, d2 = 1 << 5, e = 1 << 6, f = 1 << 7, g1 = 1 << 8, g2 = 1 << 9, h = 1 << 10, i = 1 << 11, j = 1 << 12, k = 1 << 13, l = 1 << 14, m = 1 << 15;
       return {
         " ": 0,
@@ -8312,7 +8426,7 @@ var init_lcd = __esm({
         "+": g1 | g2 | i | l,
         "*": g1 | g2 | h | i | j | k | l | m
       };
-    }();
+    })();
   }
 });
 
@@ -8631,8 +8745,7 @@ var init_blessed = __esm({
 var require_arrayWithHoles = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
     function _arrayWithHoles(r) {
-      if (Array.isArray(r))
-        return r;
+      if (Array.isArray(r)) return r;
     }
     module.exports = _arrayWithHoles, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
@@ -8647,21 +8760,16 @@ var require_iterableToArrayLimit = __commonJS({
         var e, n, i, u, a = [], f = true, o = false;
         try {
           if (i = (t = t.call(r)).next, 0 === l) {
-            if (Object(t) !== t)
-              return;
+            if (Object(t) !== t) return;
             f = false;
-          } else
-            for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true)
-              ;
+          } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true) ;
         } catch (r2) {
           o = true, n = r2;
         } finally {
           try {
-            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u))
-              return;
+            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
           } finally {
-            if (o)
-              throw n;
+            if (o) throw n;
           }
         }
         return a;
@@ -8676,8 +8784,7 @@ var require_arrayLikeToArray = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
     function _arrayLikeToArray(r, a) {
       (null == a || a > r.length) && (a = r.length);
-      for (var e = 0, n = Array(a); e < a; e++)
-        n[e] = r[e];
+      for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
       return n;
     }
     module.exports = _arrayLikeToArray, module.exports.__esModule = true, module.exports["default"] = module.exports;
@@ -8690,8 +8797,7 @@ var require_unsupportedIterableToArray = __commonJS({
     var arrayLikeToArray = require_arrayLikeToArray();
     function _unsupportedIterableToArray(r, a) {
       if (r) {
-        if ("string" == typeof r)
-          return arrayLikeToArray(r, a);
+        if ("string" == typeof r) return arrayLikeToArray(r, a);
         var t = {}.toString.call(r).slice(8, -1);
         return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? arrayLikeToArray(r, a) : void 0;
       }
@@ -8728,8 +8834,7 @@ var require_slicedToArray = __commonJS({
 var require_classCallCheck = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
     function _classCallCheck(a, n) {
-      if (!(a instanceof n))
-        throw new TypeError("Cannot call a class as a function");
+      if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
     }
     module.exports = _classCallCheck, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
@@ -8755,13 +8860,11 @@ var require_toPrimitive = __commonJS({
   "../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     function toPrimitive(t, r) {
-      if ("object" != _typeof(t) || !t)
-        return t;
+      if ("object" != _typeof(t) || !t) return t;
       var e = t[Symbol.toPrimitive];
       if (void 0 !== e) {
         var i = e.call(t, r || "default");
-        if ("object" != _typeof(i))
-          return i;
+        if ("object" != _typeof(i)) return i;
         throw new TypeError("@@toPrimitive must return a primitive value.");
       }
       return ("string" === r ? String : Number)(t);
@@ -8807,7 +8910,7 @@ var require_bundle = __commonJS({
   "../../sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
     (function(global, factory) {
       typeof exports === "object" && typeof module !== "undefined" ? factory(exports, require_slicedToArray(), require_classCallCheck(), require_createClass()) : typeof define === "function" && define.amd ? define(["exports", "@babel/runtime/helpers/slicedToArray", "@babel/runtime/helpers/classCallCheck", "@babel/runtime/helpers/createClass"], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global.automationEvents = {}, global._slicedToArray, global._classCallCheck, global._createClass));
-    })(exports, function(exports2, _slicedToArray, _classCallCheck, _createClass) {
+    })(exports, (function(exports2, _slicedToArray, _classCallCheck, _createClass) {
       "use strict";
       var createExtendedExponentialRampToValueAutomationEvent = function createExtendedExponentialRampToValueAutomationEvent2(value, endTime, insertTime) {
         return {
@@ -8911,7 +9014,7 @@ var require_bundle = __commonJS({
       var isSetTargetAutomationEvent = function isSetTargetAutomationEvent2(automationEvent) {
         return automationEvent.type === "setTarget";
       };
-      var AutomationEventList2 = /* @__PURE__ */ function() {
+      var AutomationEventList2 = /* @__PURE__ */ (function() {
         function AutomationEventList3(defaultValue) {
           _classCallCheck(this, AutomationEventList3);
           this._automationEvents = [];
@@ -9041,7 +9144,7 @@ var require_bundle = __commonJS({
             return this._defaultValue;
           }
         }]);
-      }();
+      })();
       var createCancelAndHoldAutomationEvent2 = function createCancelAndHoldAutomationEvent3(cancelTime) {
         return {
           cancelTime,
@@ -9084,7 +9187,7 @@ var require_bundle = __commonJS({
       exports2.createSetTargetAutomationEvent = createSetTargetAutomationEvent2;
       exports2.createSetValueAutomationEvent = createSetValueAutomationEvent2;
       exports2.createSetValueCurveAutomationEvent = createSetValueCurveAutomationEvent2;
-    });
+    }));
   }
 });
 
@@ -9109,28 +9212,27 @@ var require_events = __commonJS({
       };
     }
     function ProcessEmitWarning(warning) {
-      if (console && console.warn)
-        console.warn(warning);
+      if (console && console.warn) console.warn(warning);
     }
     var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value) {
       return value !== value;
     };
-    function EventEmitter23() {
-      EventEmitter23.init.call(this);
+    function EventEmitter24() {
+      EventEmitter24.init.call(this);
     }
-    module.exports = EventEmitter23;
+    module.exports = EventEmitter24;
     module.exports.once = once;
-    EventEmitter23.EventEmitter = EventEmitter23;
-    EventEmitter23.prototype._events = void 0;
-    EventEmitter23.prototype._eventsCount = 0;
-    EventEmitter23.prototype._maxListeners = void 0;
+    EventEmitter24.EventEmitter = EventEmitter24;
+    EventEmitter24.prototype._events = void 0;
+    EventEmitter24.prototype._eventsCount = 0;
+    EventEmitter24.prototype._maxListeners = void 0;
     var defaultMaxListeners = 10;
     function checkListener(listener) {
       if (typeof listener !== "function") {
         throw new TypeError('The "listener" argument must be of type Function. Received type ' + typeof listener);
       }
     }
-    Object.defineProperty(EventEmitter23, "defaultMaxListeners", {
+    Object.defineProperty(EventEmitter24, "defaultMaxListeners", {
       enumerable: true,
       get: function() {
         return defaultMaxListeners;
@@ -9142,14 +9244,14 @@ var require_events = __commonJS({
         defaultMaxListeners = arg;
       }
     });
-    EventEmitter23.init = function() {
+    EventEmitter24.init = function() {
       if (this._events === void 0 || this._events === Object.getPrototypeOf(this)._events) {
         this._events = /* @__PURE__ */ Object.create(null);
         this._eventsCount = 0;
       }
       this._maxListeners = this._maxListeners || void 0;
     };
-    EventEmitter23.prototype.setMaxListeners = function setMaxListeners(n) {
+    EventEmitter24.prototype.setMaxListeners = function setMaxListeners(n) {
       if (typeof n !== "number" || n < 0 || NumberIsNaN(n)) {
         throw new RangeError('The value of "n" is out of range. It must be a non-negative number. Received ' + n + ".");
       }
@@ -9158,16 +9260,15 @@ var require_events = __commonJS({
     };
     function _getMaxListeners(that) {
       if (that._maxListeners === void 0)
-        return EventEmitter23.defaultMaxListeners;
+        return EventEmitter24.defaultMaxListeners;
       return that._maxListeners;
     }
-    EventEmitter23.prototype.getMaxListeners = function getMaxListeners() {
+    EventEmitter24.prototype.getMaxListeners = function getMaxListeners() {
       return _getMaxListeners(this);
     };
-    EventEmitter23.prototype.emit = function emit(type) {
+    EventEmitter24.prototype.emit = function emit(type) {
       var args = [];
-      for (var i = 1; i < arguments.length; i++)
-        args.push(arguments[i]);
+      for (var i = 1; i < arguments.length; i++) args.push(arguments[i]);
       var doError = type === "error";
       var events = this._events;
       if (events !== void 0)
@@ -9242,11 +9343,11 @@ var require_events = __commonJS({
       }
       return target;
     }
-    EventEmitter23.prototype.addListener = function addListener(type, listener) {
+    EventEmitter24.prototype.addListener = function addListener(type, listener) {
       return _addListener(this, type, listener, false);
     };
-    EventEmitter23.prototype.on = EventEmitter23.prototype.addListener;
-    EventEmitter23.prototype.prependListener = function prependListener(type, listener) {
+    EventEmitter24.prototype.on = EventEmitter24.prototype.addListener;
+    EventEmitter24.prototype.prependListener = function prependListener(type, listener) {
       return _addListener(this, type, listener, true);
     };
     function onceWrapper() {
@@ -9265,17 +9366,17 @@ var require_events = __commonJS({
       state.wrapFn = wrapped;
       return wrapped;
     }
-    EventEmitter23.prototype.once = function once2(type, listener) {
+    EventEmitter24.prototype.once = function once2(type, listener) {
       checkListener(listener);
       this.on(type, _onceWrap(this, type, listener));
       return this;
     };
-    EventEmitter23.prototype.prependOnceListener = function prependOnceListener(type, listener) {
+    EventEmitter24.prototype.prependOnceListener = function prependOnceListener(type, listener) {
       checkListener(listener);
       this.prependListener(type, _onceWrap(this, type, listener));
       return this;
     };
-    EventEmitter23.prototype.removeListener = function removeListener(type, listener) {
+    EventEmitter24.prototype.removeListener = function removeListener(type, listener) {
       var list, events, position, i, originalListener;
       checkListener(listener);
       events = this._events;
@@ -9315,8 +9416,8 @@ var require_events = __commonJS({
       }
       return this;
     };
-    EventEmitter23.prototype.off = EventEmitter23.prototype.removeListener;
-    EventEmitter23.prototype.removeAllListeners = function removeAllListeners(type) {
+    EventEmitter24.prototype.off = EventEmitter24.prototype.removeListener;
+    EventEmitter24.prototype.removeAllListeners = function removeAllListeners(type) {
       var listeners, events, i;
       events = this._events;
       if (events === void 0)
@@ -9338,8 +9439,7 @@ var require_events = __commonJS({
         var key;
         for (i = 0; i < keys.length; ++i) {
           key = keys[i];
-          if (key === "removeListener")
-            continue;
+          if (key === "removeListener") continue;
           this.removeAllListeners(key);
         }
         this.removeAllListeners("removeListener");
@@ -9368,20 +9468,20 @@ var require_events = __commonJS({
         return unwrap ? [evlistener.listener || evlistener] : [evlistener];
       return unwrap ? unwrapListeners(evlistener) : arrayClone(evlistener, evlistener.length);
     }
-    EventEmitter23.prototype.listeners = function listeners(type) {
+    EventEmitter24.prototype.listeners = function listeners(type) {
       return _listeners(this, type, true);
     };
-    EventEmitter23.prototype.rawListeners = function rawListeners(type) {
+    EventEmitter24.prototype.rawListeners = function rawListeners(type) {
       return _listeners(this, type, false);
     };
-    EventEmitter23.listenerCount = function(emitter, type) {
+    EventEmitter24.listenerCount = function(emitter, type) {
       if (typeof emitter.listenerCount === "function") {
         return emitter.listenerCount(type);
       } else {
         return listenerCount.call(emitter, type);
       }
     };
-    EventEmitter23.prototype.listenerCount = listenerCount;
+    EventEmitter24.prototype.listenerCount = listenerCount;
     function listenerCount(type) {
       var events = this._events;
       if (events !== void 0) {
@@ -9394,7 +9494,7 @@ var require_events = __commonJS({
       }
       return 0;
     }
-    EventEmitter23.prototype.eventNames = function eventNames() {
+    EventEmitter24.prototype.eventNames = function eventNames() {
       return this._eventsCount > 0 ? ReflectOwnKeys(this._events) : [];
     };
     function arrayClone(arr, n) {
@@ -17533,12 +17633,8 @@ var Timeline = class _Timeline extends Tone {
 // ../../sdk/node_modules/tslib/tslib.es6.mjs
 function __decorate(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-  if (typeof Reflect === "object" && typeof Reflect.decorate === "function")
-    r = Reflect.decorate(decorators, target, key, desc);
-  else
-    for (var i = decorators.length - 1; i >= 0; i--)
-      if (d = decorators[i])
-        r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
   return c > 3 && r && Object.defineProperty(target, key, r), r;
 }
 function __awaiter(thisArg, _arguments, P, generator) {
@@ -29914,53 +30010,53 @@ var AudioEngine = class {
   }
 };
 
-// ../../sdk/dist-esm/engines/network/network-engine.js
-var import_events18 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/broker/broker-client.js
+// ../../sdk/dist-esm/media/VoiceCapture.js
 var import_events6 = __toESM(require_events());
 
-// ../../sdk/dist-esm/engines/network/broker/lobby-broker.js
-var BROKER_KEY = Symbol.for("aex-lobby-broker");
-
-// ../../sdk/dist-esm/engines/network/modules/connection.js
-var import_events7 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/lobby.js
-var import_events8 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
-var import_events9 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/sync.js
-var import_events10 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/prediction.js
-var import_events11 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/interpolation.js
-var import_events12 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/presence.js
-var import_events13 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/social.js
-var import_events14 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
-var import_events15 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/replay.js
-var import_events16 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/security.js
-var import_events17 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/ai/ai-engine.js
+// ../../sdk/dist-esm/engines/network/network-engine.js
 var import_events19 = __toESM(require_events());
 
-// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+// ../../sdk/dist-esm/engines/network/broker/broker-client.js
+var import_events7 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/connection.js
+var import_events8 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/lobby.js
+var import_events9 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
+var import_events10 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/sync.js
+var import_events11 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/prediction.js
+var import_events12 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/interpolation.js
+var import_events13 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/presence.js
+var import_events14 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/social.js
+var import_events15 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
+var import_events16 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/replay.js
+var import_events17 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/network/modules/security.js
+var import_events18 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/ai/ai-engine.js
 var import_events20 = __toESM(require_events());
+
+// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
+var import_events21 = __toESM(require_events());
 var TerrainType;
 (function(TerrainType2) {
   TerrainType2["Plains"] = "plains";
@@ -30010,19 +30106,19 @@ var UnitClass;
 })(UnitClass || (UnitClass = {}));
 
 // ../../sdk/dist-esm/components/level/level-manager.js
-var import_events21 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events22 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
+// ../../sdk/dist-esm/components/inventory/inventory-system.js
 var import_events23 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/quest/quest-system.js
+// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
 var import_events24 = __toESM(require_events());
 
-// ../../sdk/dist-esm/components/tactical/class-system.js
+// ../../sdk/dist-esm/components/quest/quest-system.js
 var import_events25 = __toESM(require_events());
+
+// ../../sdk/dist-esm/components/tactical/class-system.js
+var import_events26 = __toESM(require_events());
 var MovementType;
 (function(MovementType2) {
   MovementType2["Infantry"] = "Infantry";
@@ -30061,7 +30157,6 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
    */
   constructor(config) {
     super();
-    this.ws = null;
     this.user = null;
     this.state = "idle";
     this.frameCount = 0;
@@ -30103,18 +30198,16 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
     }
   }
   /**
-   * Start the door and connect to BBS
-   *
-   * @param wsUrl - WebSocket URL (default: ws://localhost:3001) - ignored if window.__BBS__ exists
+   * Start the door and connect to BBS via the existing Socket.IO connection.
+   * window.__BBS__ must be set by the frontend before this is called.
    */
-  start(wsUrl = "ws://localhost:3001") {
+  start() {
     if (this.state !== "idle" && this.state !== "shutdown") {
       console.warn("[ClientDoor] Door was in running state from previous session - resetting");
       this.state = "idle";
       this.frameCount = 0;
       this.lastFrameTime = 0;
       this.user = null;
-      this.ws = null;
       this.rpcRequests.clear();
     }
     this.state = "connecting";
@@ -30127,8 +30220,9 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         return;
       }
     }
-    console.log("[ClientDoor] Creating new WebSocket connection");
-    this.connectWebSocket(wsUrl);
+    console.error("[ClientDoor] window.__BBS__ not set; cannot start door.");
+    this.state = "idle";
+    this.emit("error", new Error("BBS connection unavailable"));
   }
   /**
    * Connect via existing Socket.IO connection (bundled door scenario)
@@ -30170,52 +30264,27 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         socket.on("audio:mute", (data) => {
           this.emit("audio:mute", data);
         });
+        socket.on("video:start-stream", (data) => {
+          console.log("[ClientDoor] Received video:start-stream event:", data);
+          this.emit("video:start-stream", data);
+        });
+        socket.on("video:stop-stream", (data) => {
+          console.log("[ClientDoor] Received video:stop-stream event:", data);
+          this.emit("video:stop-stream", data);
+        });
+        socket.on("video:frame", (data) => {
+          this.emit("video:frame", data);
+        });
         socket.on("audio:data", (data) => {
           this.emit("audio:data", data);
+        });
+        socket.on("voice:speaking", (data) => {
+          this.emit("voice:speaking", data);
         });
       }
       this.mainLoop();
     } catch (err) {
       console.error("[ClientDoor] Failed to connect via Socket.IO:", err);
-      this.state = "idle";
-      throw err;
-    }
-  }
-  /**
-   * Connect to BBS via WebSocket (standalone scenario)
-   * @private
-   */
-  connectWebSocket(url) {
-    if (typeof WebSocket === "undefined") {
-      throw new Error("WebSocket is not available. ClientDoor requires a browser environment.");
-    }
-    try {
-      this.ws = new WebSocket(url);
-      this.ws.onopen = () => {
-        console.log("Connected to BBS");
-        this.state = "running";
-        this.emit("ws:connected");
-      };
-      this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          this.handleMessage(message);
-        } catch (err) {
-          console.error("Failed to parse WebSocket message:", err);
-        }
-      };
-      this.ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        this.emit("ws:error", error);
-      };
-      this.ws.onclose = () => {
-        console.log("Disconnected from BBS");
-        this.state = "shutdown";
-        this.emit("ws:closed");
-        this.shutdown();
-      };
-    } catch (err) {
-      console.error("Failed to connect to BBS:", err);
       this.state = "idle";
       throw err;
     }
@@ -30294,8 +30363,6 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
         sessionId,
         message
       });
-    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
     }
   }
   /**
@@ -30491,10 +30558,6 @@ var ClientDoor = class _ClientDoor extends EventEmitter {
     if (this.user) {
       this.emit("disconnect", this.user);
     }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
     this.emit("shutdown");
     this.removeAllListeners();
   }
@@ -30600,7 +30663,13 @@ ClientDoor.SERVER_FORWARD_EVENTS = /* @__PURE__ */ new Set([
   "audio:chunk",
   "audio:data",
   // Voice activity detection
-  "voice:speaking"
+  "voice:speaking",
+  "voice:level",
+  // Video streaming events
+  "video:started",
+  "video:stopped",
+  "video:error",
+  "video:frame"
 ]);
 
 // client.ts

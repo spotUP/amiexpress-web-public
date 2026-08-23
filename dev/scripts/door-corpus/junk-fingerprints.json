@@ -2,7 +2,7 @@
   "d41d8cd98f00b204e9800998ecf8427e": {
     "filename": "iff_examples",
     "md5": "d41d8cd98f00b204e9800998ecf8427e",
-    "archiveCount": 679,
+    "archiveCount": 711,
     "archives": [
       "!ALSTER.LHA",
       "-J-LCV30.LHA",
@@ -84,6 +84,36 @@
       "GENGUI21.LHA",
       "GFFT203.LHA",
       "GNT-AC11.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
+  "ba28511c2c3f92f2c30e7f931dd81e88": {
+    "filename": "exe.-l0S-eND0S-bBS-.exe",
+    "md5": "ba28511c2c3f92f2c30e7f931dd81e88",
+    "archiveCount": 107,
+    "archives": [
+      "!ALSTER.LHA",
+      "23-FFC09.LHA",
+      "ADN-C120.LHA",
+      "AEDOC4G.LHA",
+      "AFL-S10.LHA",
+      "BSTRIP.LHA",
+      "BULLVIEW.LHA",
+      "CHECKNU.LHA",
+      "COMMENT.LHA",
+      "D!-GTSAB.LHA",
+      "DATATYPE.LHA",
+      "DCT-BS02.LHA",
+      "DIVE-BOA.LHA",
+      "DIVE-SNA.LHA",
+      "DONATSND.LHA",
+      "DOWNMANI.LHA",
+      "DVS-LCNA.LHA",
+      "EMP-DD20.LHA",
+      "FIFOLIB3.LHA",
+      "GENGUI21.LHA"
     ],
     "methods": [
       "md5"
@@ -659,6 +689,36 @@
       "md5"
     ]
   },
+  "2ef557024ec8e5840d4c7cdbacb49144": {
+    "filename": "eX-tRACT.exe",
+    "md5": "2ef557024ec8e5840d4c7cdbacb49144",
+    "archiveCount": 242,
+    "archives": [
+      "24STDCAL.LHA",
+      "5D-CS3_.LHA",
+      "5D-DC010.LZH",
+      "5D-JC072.LZH",
+      "5D-LCS.LHA",
+      "AE-TRADE.LHA",
+      "AEED400.LHA",
+      "AMI-XST.LHA",
+      "AMIEX.LHA",
+      "AMIOPEN.LHA",
+      "ARCDOOR.LHA",
+      "AS.LHA",
+      "ASKIIREQ.LHA",
+      "ATX-NEWL.LHA",
+      "ATX-SAL1.LHA",
+      "ATX-SAL2.LHA",
+      "ATX-SAL3.LHA",
+      "ATX-TBAR.LHA",
+      "ATX-TCON.LHA",
+      "AXO-SW10.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
   "591e2ef896e94180a60679d83a632fed": {
     "filename": "History.guid",
     "md5": "591e2ef896e94180a60679d83a632fed",
@@ -868,6 +928,36 @@
       "md5"
     ]
   },
+  "b41361a3f358cc1d3faa33803d6271fd": {
+    "filename": "dO-xTREME.exe",
+    "md5": "b41361a3f358cc1d3faa33803d6271fd",
+    "archiveCount": 37,
+    "archives": [
+      "5D-ADD12.LHA",
+      "5D-AF001.LHA",
+      "5D-CK001.LZH",
+      "5D-CS3.LHA",
+      "5D-ED110.LHA",
+      "5D-GVS.LHA",
+      "5D-LG112.LHA",
+      "5D-MS001.LHA",
+      "5D-QA001.LHA",
+      "5D-QA005.LHA",
+      "5D-SRT02.LZH",
+      "5D-UL001.LZH",
+      "5D-WHO12.LHA",
+      "5D^AMN10.LHA",
+      "5D^SA001.LZH",
+      "5D^VB001.LZH",
+      "A!-FRON.LHA",
+      "CDS-CL10.LHA",
+      "DP!-TP12.LHA",
+      "FG-FC26.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
   "69f2e7c067221a52083542c8775c7319": {
     "filename": ".Exe",
     "md5": "69f2e7c067221a52083542c8775c7319",
@@ -915,6 +1005,27 @@
       "SDM!W1O.LHA",
       "SDM!WH10.LHA",
       "SDM!WH11.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
+  "a56f789e1f853ac1e3982e2e6e535f6a": {
+    "filename": "LE-win1196.exe",
+    "md5": "a56f789e1f853ac1e3982e2e6e535f6a",
+    "archiveCount": 11,
+    "archives": [
+      "5D-CK001.LZH",
+      "5D^AMN10.LHA",
+      "5D^SA001.LZH",
+      "5D^VB001.LZH",
+      "A!-FRON.LHA",
+      "KLR-CHAT.LHA",
+      "KLR-KBAU.LHA",
+      "KLR-KCOM.LHA",
+      "WS-AE27.LHA",
+      "WS-MUI35.LHA",
+      "WS-SH26.LHA"
     ],
     "methods": [
       "md5"
@@ -1378,6 +1489,36 @@
     "filename": "Schnabeltasse.doc",
     "md5": "1d495a30fb645e9d42da49a4e3546027",
     "archiveCount": 97,
+    "archives": [
+      "5D-TC002.LZH",
+      "5D-ZS001.LZH",
+      "5D^DC007.LZH",
+      "5D^DC010.LZH",
+      "5D^QA001.LZH",
+      "ACP-ST10.LHA",
+      "ACS-XIM2.LHA",
+      "AD-D12A.LHA",
+      "AEH3381B.LHA",
+      "AEICON16.LHA",
+      "AFL-MSG2.LHA",
+      "ANNO12.LHA",
+      "ATX-T101.LHA",
+      "AWAIT_2.LHA",
+      "A^D-SUP3.LHA",
+      "BAUD14.LHA",
+      "BB_H1O.LHA",
+      "BK-CRASH.LHA",
+      "BK-SIN10.LHA",
+      "BK-UP112.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
+  "37e222ccc3aa543a036a4d15eaabebd4": {
+    "filename": "sonnencreme.exe",
+    "md5": "37e222ccc3aa543a036a4d15eaabebd4",
+    "archiveCount": 102,
     "archives": [
       "5D-TC002.LZH",
       "5D-ZS001.LZH",
@@ -2477,10 +2618,11 @@
   "4478890479078acfc448c1fb4d0685ea": {
     "filename": "Delete",
     "md5": "4478890479078acfc448c1fb4d0685ea",
-    "archiveCount": 14,
+    "archiveCount": 15,
     "archives": [
       "ALARM.LHA",
       "BBSSCAN.LHA",
+      "GOD-DA20.LHA",
       "IMPST231.LHA",
       "LSD_VDRQ.LHA",
       "MOMAIL15.LHA",
@@ -2547,6 +2689,36 @@
       "SAD-LC20.LHA",
       "TRB-DV10.LHA",
       "TRB-II10.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
+  "68746f8dfac471ca9548b216d63bc3c4": {
+    "filename": "Relyscully.exe",
+    "md5": "68746f8dfac471ca9548b216d63bc3c4",
+    "archiveCount": 47,
+    "archives": [
+      "AMB-V100.LHA",
+      "AMIX.LHA",
+      "BB28NRM.LHA",
+      "BK-APPRD.LHA",
+      "BK-FILEC.LHA",
+      "BK-RL01.LHA",
+      "BK-SI11.LHA",
+      "BK-SIZEC.LHA",
+      "BONDOSV9.LHA",
+      "BREAD13.LHA",
+      "CRD!SX.LHA",
+      "CRX-NTA.LHA",
+      "CRX-NU12.LHA",
+      "DCD!XPRT.LHA",
+      "DCN!FX40.LHA",
+      "DCN_FID3.LHA",
+      "EXC_WAL2.LHA",
+      "F123_DOC.LHA",
+      "F123_INS.LHA",
+      "F123_MAI.LHA"
     ],
     "methods": [
       "md5"
@@ -3071,6 +3243,28 @@
     "archiveCount": 11,
     "archives": [
       "BSTRIP.LHA",
+      "DATATYPE.LHA",
+      "ORS-FC11.LHA",
+      "ORS-HB10.LHA",
+      "ORS-ID10.LHA",
+      "SAD^FI20.LHA",
+      "SAD^LIBS.LHA",
+      "STRACKER.LHA",
+      "TFP-TD62.LHA",
+      "THX-WH16.LHA",
+      "TRSI-CAD.LHA"
+    ],
+    "methods": [
+      "md5"
+    ]
+  },
+  "a53310cd7b74164ab1785e8c91085347": {
+    "filename": "O",
+    "md5": "a53310cd7b74164ab1785e8c91085347",
+    "archiveCount": 12,
+    "archives": [
+      "BSTRIP.LHA",
+      "CRX-BC02.LHA",
       "DATATYPE.LHA",
       "ORS-FC11.LHA",
       "ORS-HB10.LHA",
@@ -3670,28 +3864,6 @@
       "LZX_IDFX.LHA",
       "MST-FD10.LHA",
       "MST-FD11.LHA"
-    ],
-    "methods": [
-      "md5"
-    ]
-  },
-  "36e4252d025a3fa665a3cd70b2711abf": {
-    "filename": "RexxPlus.lib",
-    "md5": "36e4252d025a3fa665a3cd70b2711abf",
-    "archiveCount": 12,
-    "archives": [
-      "IA-OPA10.LHA",
-      "IA-SPD10.LHA",
-      "IA-SYSPW.LHA",
-      "TRB_KI14.LHA",
-      "TRB_KI16.LHA",
-      "TRB_KWTF.LHA",
-      "TRB_WF11.LHA",
-      "TRS_UDC.LHA",
-      "VDCOLORD.LHA",
-      "VDPAGE.LHA",
-      "VDSTAT11.LHA",
-      "VES-FAC1.LHA"
     ],
     "methods": [
       "md5"

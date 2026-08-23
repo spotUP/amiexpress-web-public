@@ -1,17 +1,17 @@
 [4;33m                                                                             [0m
-[4;33;44mMultiTop v2.1                              Design Created (c)1994 Bobo/Mystic[0m
+[4;33;44m  MultiTop-II                              Design Created (c)1994 Bobo/Mystic[0m
 
 [35mNo# Username (Handle)    Leeched Bytes No# Username (Handle)    Leeched Bytes[0m
 [34m===-===================-==============-===-===================-==============[0m
-[33m 1.[0m spot                       512 000 [33m16.[0m                                   
-[33m 2.[0m SmokeTest2026                    0 [33m17.[0m                                   
-[33m 3.[0m erased_69e94db7                  0 [33m18.[0m                                   
-[33m 4.[0m knak                             0 [33m19.[0m                                   
-[33m 5.[0m krakken                          0 [33m20.[0m                                   
-[33m 6.[0m yonx                             0 [33m21.[0m                                   
-[33m 7.[0m                                    [33m22.[0m                                   
-[33m 8.[0m                                    [33m23.[0m                                   
-[33m 9.[0m                                    [33m24.[0m                                   
+[33m 1.[0m sysop                    2,613,182 [33m16.[0m                                   
+[33m 2.[0m testx                            0 [33m17.[0m                                   
+[33m 3.[0m testxx                           0 [33m18.[0m                                   
+[33m 4.[0m testuser_1787179209              0 [33m19.[0m                                   
+[33m 5.[0m testuser_1787179209              0 [33m20.[0m                                   
+[33m 6.[0m expertuser                       0 [33m21.[0m                                   
+[33m 7.[0m erased_0aa0e7e5                  0 [33m22.[0m                                   
+[33m 8.[0m testone                          0 [33m23.[0m                                   
+[33m 9.[0m erased_394021ba                  0 [33m24.[0m                                   
 [33m10.[0m                                    [33m25.[0m                                   
 [33m11.[0m                                    [33m26.[0m                                   
 [33m12.[0m                                    [33m27.[0m                                   
@@ -19,5 +19,5 @@
 [33m14.[0m                                    [33m29.[0m                                   
 [33m15.[0m                                    [33m30.[0m                                   
 [34m===-===================-==============-===-===================-==============[0m
-[32mUploaded Bytes[33m: [0m     1 024 000 [32mDownloaded Bytes[33m: [0m       512 000 [32mCalls[33m: [0m   218
-[32mUploaded Files[33m: [0m            10 [32mDownloaded Files[33m: [0m             5 [32mUsers[33m: [0m     6
+[32mUploaded Bytes[33m: [0m     5,120,000 [32mDownloaded Bytes[33m: [0m     2,613,182 [32mCalls[33m: [0m 3,030
+[32mUploaded Files[33m: [0m            50 [32mDownloaded Files[33m: [0m            28 [32mUsers[33m: [0m     9

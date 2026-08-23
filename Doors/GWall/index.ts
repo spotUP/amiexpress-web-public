@@ -332,15 +332,6 @@ function uncleanstr(sourcestring: string): string {
     .replace(/\\u001b/g, '');
 }
 
-// Circuit breaker: when the global wall server is unreachable, skip all
-// network calls for BREAKER_MS so ~CC_gwall doesn't stall every logon on
-// a dead remote (scenewall.bbs.io outage hung logons ~8s each, 2026-08-14).
-// TS doors run inside the backend process, so this state survives between
-// door invocations until the backend restarts.
-const CONNECT_TIMEOUT_MS = 2500;
-const BREAKER_MS = 5 * 60 * 1000;
-let serverDownUntil = 0;
-
 function httpRequest(
   requestPath: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -349,11 +340,6 @@ function httpRequest(
   extraHeaders: Record<string, string> = {}
 ): Promise<number> {
   return new Promise((resolve) => {
-    if (Date.now() < serverDownUntil) {
-      debugLog('httprequest - skipped (server marked down by circuit breaker)');
-      resolve(0);
-      return;
-    }
     const headers: Record<string, string> = {
       Host: serverHost,
       Connection: 'close',
@@ -369,9 +355,7 @@ function httpRequest(
       port: serverPort,
       method,
       path: requestPath,
-      // Cap by the fail-fast connect timeout — a dead remote must not hold
-      // the logon flow for the full configured timeout.
-      timeout: Math.min(timeout * 1000, CONNECT_TIMEOUT_MS),
+      timeout: timeout * 1000,
       headers
     };
 
@@ -395,21 +379,18 @@ function httpRequest(
           }
         }
 
-        serverDownUntil = 0; // server answered — close the breaker
         debugLog(`httprequest - done (${res.statusCode})`);
         resolve(res.statusCode || 0);
       });
     });
 
     req.on('error', (err) => {
-      serverDownUntil = Date.now() + BREAKER_MS;
-      debugLog(`httprequest - error: ${err.message} (breaker open for ${BREAKER_MS / 1000}s)`);
+      debugLog(`httprequest - error: ${err.message}`);
       resolve(0);
     });
 
     req.on('timeout', () => {
-      serverDownUntil = Date.now() + BREAKER_MS;
-      debugLog(`httprequest - timeout (breaker open for ${BREAKER_MS / 1000}s)`);
+      debugLog('httprequest - timeout');
       req.destroy();
       resolve(0);
     });

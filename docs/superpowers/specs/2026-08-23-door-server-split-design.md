@@ -2,7 +2,7 @@
 date: 2026-08-23
 topic: Split the door repository out of amiexpress-web into a standalone door server
 tags: [door-repo, doorserver, architecture, catalog, doorman, doorrepo-c, deployment]
-status: draft
+status: final
 ---
 
 # Door server split - design
