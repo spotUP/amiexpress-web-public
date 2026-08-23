@@ -1338,6 +1338,14 @@ git commit -m "feat: door-repo read API served by the standalone server"
 - Consumes: `createApp` (Task 6).
 - Produces: a committed fixture set and a test that fails if any ported endpoint's status, headers or bytes differ from what the BBS-hosted API produced. This is the gate for Task 8 - data does not move until this is green.
 
+**Fixtures store digests, not megabytes.** Measured live: `/manifest` is
+2.75 MB, `/manifest?type=XIM` 2.66 MB, `/list.txt` 620 KB - storing every body
+as base64 would commit roughly 9 MB. JSON bodies are pinned by a sha256 over
+the parsed body with `generatedAt` removed; bodies at or above 32 KB by
+sha256 + byte length (plus their first 512 bytes, so a failure is legible);
+everything smaller keeps its full bytes inline. A digest comparison is exactly
+as strict as a byte comparison.
+
 **One field is exempt from byte comparison.** `/manifest` and `/health` are
 JSON; the manifest's `generatedAt` is a wall-clock timestamp, so its bytes
 differ on every call. The harness compares JSON bodies structurally with
@@ -1370,6 +1378,7 @@ byte-for-byte, which is where the Latin-1 and CRLF risk actually lives.
  * a UTF-8 round-trip through a text file would corrupt exactly the bytes
  * this harness exists to protect.
  */
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -1381,6 +1390,22 @@ const HEADERS_OF_INTEREST = [
   'x-archive-md5', 'x-archive-sha256', 'x-doc-filename',
 ];
 
+// Bodies are stored whole only while they are small. Measured against the
+// live API: /manifest is 2.75 MB, /manifest?type=XIM 2.66 MB, /list.txt
+// 620 KB - storing those as base64 would commit ~9 MB of fixtures. So:
+//
+//   - JSON bodies      -> `jsonDigest`, a sha256 over the parsed body with
+//                         `generatedAt` removed (it is a wall clock and
+//                         differs on every call), plus the door count.
+//   - bodies >= 32 KB  -> `sha256` + `byteLength`. Still an exact
+//                         byte-equality proof, just not human readable.
+//   - everything else  -> `bodyBase64`, so the Latin-1 and CRLF bytes of
+//                         diz/doc/files stay inspectable by eye.
+//
+// Large bodies also keep `headBase64`, the first 512 bytes, so a failure
+// says something more useful than "digest differs".
+const INLINE_BODY_LIMIT = 32 * 1024;
+
 interface Capture {
   name: string;
   method: 'GET' | 'HEAD';
@@ -1388,7 +1413,22 @@ interface Capture {
   requestHeaders: Record<string, string>;
   status: number;
   headers: Record<string, string>;
-  bodyBase64: string;
+  bodyBase64?: string;
+  headBase64?: string;
+  sha256?: string;
+  byteLength?: number;
+  jsonDigest?: string;
+  doorCount?: number;
+}
+
+/** sha256 of a JSON body with the wall-clock field lifted out. */
+export function jsonBodyDigest(body: Buffer): { digest: string; doorCount: number } {
+  const parsed = JSON.parse(body.toString('utf-8')) as Record<string, unknown> & { doors?: unknown[] };
+  delete parsed.generatedAt;
+  return {
+    digest: crypto.createHash('sha256').update(JSON.stringify(parsed)).digest('hex'),
+    doorCount: Array.isArray(parsed.doors) ? parsed.doors.length : 0,
+  };
 }
 
 async function capture(
@@ -1404,7 +1444,20 @@ async function capture(
     const value = res.headers.get(key);
     if (value !== null) headers[key] = value;
   }
-  return { name, method, requestPath, requestHeaders, status: res.status, headers, bodyBase64: body.toString('base64') };
+  const base: Capture = { name, method, requestPath, requestHeaders, status: res.status, headers };
+  if ((headers['content-type'] ?? '').includes('application/json') && body.length > 0) {
+    const { digest, doorCount } = jsonBodyDigest(body);
+    return { ...base, jsonDigest: digest, doorCount, byteLength: body.length };
+  }
+  if (body.length >= INLINE_BODY_LIMIT) {
+    return {
+      ...base,
+      sha256: crypto.createHash('sha256').update(body).digest('hex'),
+      byteLength: body.length,
+      headBase64: body.subarray(0, 512).toString('base64'),
+    };
+  }
+  return { ...base, bodyBase64: body.toString('base64'), byteLength: body.length };
 }
 
 async function main(): Promise<void> {
@@ -1467,7 +1520,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const manifest = captures.find((c) => c.name === 'manifest');
-  const doors = manifest ? JSON.parse(Buffer.from(manifest.bodyBase64, 'base64').toString('utf-8')).doors.length : 0;
+  const doors = manifest?.doorCount ?? 0;
   if (doors < 100) {
     console.error(`[ERROR] manifest carries only ${doors} doors - that is not the real catalog, refusing to write fixtures`);
     process.exit(1);
@@ -1514,8 +1567,10 @@ fix that and re-run rather than committing the fixtures it refused to write.
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import request from 'supertest';
 import { createApp } from '../src/app';
+import { jsonBodyDigest } from '../scripts/capture-parity-fixtures';
 import { loadConfig } from '../src/config';
 
 const CAPTURES = path.join(__dirname, 'fixtures', 'parity', 'captures.json');
@@ -1527,7 +1582,12 @@ interface Capture {
   requestHeaders: Record<string, string>;
   status: number;
   headers: Record<string, string>;
-  bodyBase64: string;
+  bodyBase64?: string;
+  headBase64?: string;
+  sha256?: string;
+  byteLength?: number;
+  jsonDigest?: string;
+  doorCount?: number;
 }
 
 const describeOrSkip = fs.existsSync(CAPTURES) && process.env.PARITY_DB ? describe : describe.skip;
@@ -1573,17 +1633,37 @@ describeOrSkip('parity with the BBS-hosted API', () => {
       // the whole contract.
       if (c.method === 'HEAD') return;
 
-      const isJson = (c.headers['content-type'] ?? '').includes('application/json');
-      if (isJson) {
-        const expected = JSON.parse(Buffer.from(c.bodyBase64, 'base64').toString('utf-8'));
-        const actual = JSON.parse((res.body as Buffer).toString('utf-8'));
-        expect(actual.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-        delete expected.generatedAt;
-        delete actual.generatedAt;
-        expect(actual).toEqual(expected);
-      } else {
-        expect((res.body as Buffer).toString('base64')).toBe(c.bodyBase64);
+      const body = res.body as Buffer;
+      expect(body.length).toBe(c.byteLength);
+
+      // A JSON body carries `generatedAt: new Date().toISOString()`
+      // (door-repo-manifest.ts:309), so its bytes are never twice the same -
+      // verified live, two calls a second apart differ only there. Compare a
+      // digest of the body with that field lifted out, and assert separately
+      // that the field is still a real ISO instant. Its length is fixed at 24
+      // characters, so the Content-Length check above still bites.
+      if (c.jsonDigest !== undefined) {
+        const parsed = JSON.parse(body.toString('utf-8'));
+        expect(parsed.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        const { digest, doorCount } = jsonBodyDigest(body);
+        expect(doorCount).toBe(c.doorCount);
+        expect(digest).toBe(c.jsonDigest);
+        return;
       }
+
+      // Large non-JSON bodies (list.txt is 620 KB) are pinned by digest -
+      // exactly as strict as comparing bytes, without committing them. The
+      // first 512 bytes are compared too, so a failure shows something
+      // readable rather than only "digest differs".
+      if (c.sha256 !== undefined) {
+        expect(body.subarray(0, 512).toString('base64')).toBe(c.headBase64);
+        expect(crypto.createHash('sha256').update(body).digest('hex')).toBe(c.sha256);
+        return;
+      }
+
+      // Everything small is compared byte-for-byte, which is where the
+      // Latin-1 and CRLF risk actually lives.
+      expect(body.toString('base64')).toBe(c.bodyBase64);
     });
   }
 });
