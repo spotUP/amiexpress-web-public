@@ -553,7 +553,7 @@ rm -f /tmp/backfill-test.db
 ```
 Expected: the two counts match (or differ only by rows with an empty `installed_as`, which the script reports as skipped). NEVER run against the real file.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add dev/scripts/backfill-door-installs.ts web/backend/tests/doors/backfill-door-installs.test.ts
@@ -1084,7 +1084,7 @@ cd ~/Code/amiexpress-web/Doors/door-manager && npm run build
 ```
 Expected: 3 tests pass, and `dist/app.js` is rebuilt - a source-only commit is invisible to the running BBS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add Doors/door-manager/app.ts Doors/door-manager/repoDataSource.ts Doors/door-manager/dist web/backend/tests/doors/doorman-records-install.test.ts
@@ -1289,14 +1289,35 @@ git commit -m "docs(handoff): the BBS now proxies the door-repo API to the door 
 
 **STOP - this task needs explicit human approval before Step 3 runs against anything live.** It deletes 3300 rows and 58400 file rows from the BBS's database. The door server holds the authoritative copy, and a database backup must exist first.
 
-- [ ] **Step 1: Confirm nothing still reads the tables**
+- [ ] **Step 1: Remove the DDL, or the drop will not stick**
+
+**The BBS recreates these tables on every boot.** Verified:
+`web/backend/src/database.ts:1732` has `CREATE TABLE IF NOT EXISTS door_catalog`
+and `:1763` the same for `door_catalog_files`, plus a column-migration block at
+`:786-800` that `ALTER`s `door_catalog`. Dropping the tables without removing
+that DDL means the next restart silently recreates them EMPTY - and the grep
+gate below could never pass.
+
+So this task removes, in `web/backend/src/database.ts`:
+- the `CREATE TABLE IF NOT EXISTS door_catalog (...)` statement at ~:1732
+- the `CREATE TABLE IF NOT EXISTS door_catalog_files (...)` statement at ~:1763
+- the door_catalog column-migration block at ~:786-800 (the `PRAGMA table_info`
+  probe and the two `ADD COLUMN` calls)
+and leaves the `door_installs` DDL added in Task 1 exactly where it is.
+
+`dev/scripts/door-corpus/build-door-catalog.ts` also creates these tables. It is
+the corpus BUILDER, is never run by the BBS, and moves to the door server repo
+in phase 3 - leave it alone and note it in the report.
+
+- [ ] **Step 2: Confirm nothing still reads the tables**
 
 ```bash
 grep -rn "door_catalog" web/backend/src Doors --include='*.ts' | grep -v '/dist/' | grep -v 'door-installs'
 ```
-Expected: hits only inside the three modules being deleted. Any other hit blocks this task.
+Expected after Step 1: hits only inside the three modules being deleted. Any
+other hit blocks this task.
 
-- [ ] **Step 2: Delete the modules and their suites, run the whole backend suite**
+- [ ] **Step 3: Delete the modules and their suites, run the whole backend suite**
 
 ```bash
 git rm web/backend/src/doors/door-catalog.service.ts web/backend/src/doors/door-repo-manifest.ts web/backend/src/doors/door-repo-checksums.ts
@@ -1305,7 +1326,7 @@ cd web/backend && npx tsc --noEmit && npx jest --config dev-scripts/jest.config.
 ```
 Expected: type-check clean and the suite green. A compile error here means something still depends on the catalog - fix that before going further, do not delete more.
 
-- [ ] **Step 3: Write the drop script (do not run it yet)**
+- [ ] **Step 4: Write the drop script (do not run it yet)**
 
 ```typescript
 /**
@@ -1355,7 +1376,7 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 4: Test it against a copy**
+- [ ] **Step 5: Test it against a copy**
 
 ```typescript
 // web/backend/tests/doors/drop-bbs-catalog-tables.test.ts
@@ -1385,7 +1406,7 @@ it('drops both catalog tables and reports what it removed', () => {
 });
 ```
 
-- [ ] **Step 5: STOP. Get explicit approval, back up, then run it on live**
+- [ ] **Step 6: STOP. Get explicit approval, back up, then run it on live**
 
 ```bash
 # only after a human says go
@@ -1393,7 +1414,7 @@ ssh root@bbs.uprough.net 'docker exec amiexpress-bbs sh -lc "sqlite3 /app/data/d
 ```
 Then run the backfill (Task 2) if it has not run on live yet, THEN the drop, then confirm the BBS still serves and DOORMAN still shows installed doors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add dev/scripts/drop-bbs-catalog-tables.ts web/backend/tests/doors/drop-bbs-catalog-tables.test.ts
