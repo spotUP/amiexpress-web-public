@@ -28,7 +28,7 @@ import {
   enableGameMode as enableGameModeForSession,
   disableGameMode as disableGameModeForSession,
 } from '../services/game-mode.service';
-import { searchCatalog as _searchCatalog } from './door-catalog.service';
+import { getInstallByCommand } from './door-installs.repository';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
 export interface BBSUser {
@@ -1340,12 +1340,12 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
         resolvedPath,
       };
     }).map((door: any) => {
-      // Overlay catalog metadata (name, description, category, version) when available
+      // Overlay the metadata captured when this door was installed. It used
+      // to come from door_catalog; the shared catalog now lives in the door
+      // server, and door_installs holds this node's snapshot of it (keyed by
+      // command, so no installed_as matching is needed any more).
       try {
-        const results = _searchCatalog(door.command, true);
-        const match = results.find((e: any) =>
-          (e.installed_as || '').toUpperCase() === (door.command || '').toUpperCase()
-        );
+        const match = getInstallByCommand(door.command);
         if (match) {
           return {
             ...door,
