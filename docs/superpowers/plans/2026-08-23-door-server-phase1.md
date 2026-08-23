@@ -1450,8 +1450,31 @@ async function main(): Promise<void> {
   // Latin-1 archive name, percent-encoded the way an Amiga client encodes it
   // (%DF, not UTF-8's %C3%9F). Passed raw, NOT through encodeURIComponent.
   captures.push(await capture('files-latin1-raw', '/files/%24CP-BU%DF1.LZX'));
+  // A capture run against a MISCONFIGURED server is the dangerous failure
+  // here: if the BBS is not in owner mode the router is not mounted, every
+  // request 404s, and the fixture set becomes 24 rows of "NOT FOUND" that
+  // the new server would match trivially - parity would pass while proving
+  // nothing. Verified against the live API: every per-archive endpoint for
+  // the named archives answers 200 today. So refuse to write a fixture set
+  // that does not look like a working catalog.
+  const shouldBe200 = captures.filter(
+    (c) => c.method === 'GET' && !c.name.startsWith('archive-missing')
+  );
+  const bad = shouldBe200.filter((c) => c.status !== 200);
+  if (bad.length > 0) {
+    console.error(`[ERROR] ${bad.length} capture(s) did not return 200 - is the source server in owner mode?`);
+    for (const c of bad) console.error(`[ERROR]   ${c.status} ${c.requestPath}`);
+    process.exit(1);
+  }
+  const manifest = captures.find((c) => c.name === 'manifest');
+  const doors = manifest ? JSON.parse(Buffer.from(manifest.bodyBase64, 'base64').toString('utf-8')).doors.length : 0;
+  if (doors < 100) {
+    console.error(`[ERROR] manifest carries only ${doors} doors - that is not the real catalog, refusing to write fixtures`);
+    process.exit(1);
+  }
+
   fs.writeFileSync(path.join(OUT, 'captures.json'), JSON.stringify(captures, null, 1), 'utf-8');
-  console.log(`[OK] captured ${captures.length} responses from ${BASE}`);
+  console.log(`[OK] captured ${captures.length} responses from ${BASE} (${doors} doors in the manifest)`);
 }
 
 void main();
@@ -1466,7 +1489,13 @@ cd ~/Code/amiexpress-doorserver
 npx tsx scripts/capture-parity-fixtures.ts http://localhost:3001/api/door-repo \
   ACC-V103.LHA '5D!DP002.LHA' -D-CALC.LHA '$CP-BUß1.LZX'
 ```
-Expected: `[OK] captured N responses`, `tests/fixtures/parity/captures.json` written.
+Expected: `[OK] captured N responses from ... (3301 doors in the manifest)`, and
+`tests/fixtures/parity/captures.json` written. Every per-archive endpoint for
+the four named archives returns 200 today - `files`, `diz`, `doc` and
+`archive` alike, all four archives (verified against the live API). If the
+script exits with `[ERROR] ... is the source server in owner mode?`, the BBS
+was started without `DOOR_REPO_ROLE=owner` and the router is not mounted;
+fix that and re-run rather than committing the fixtures it refused to write.
 
 - [ ] **Step 3: Write the failing parity test**
 
