@@ -1051,11 +1051,28 @@ In `app.ts`, replace the `upsertCatalogEntry` / `markInstalled` pair in the cons
             version: e.version ?? null,
             release_group: e.release_group ?? null,
             source_url: process.env.DOOR_REPO_URL ?? null,
-            source_revision: manifestRevision ?? null,
+            // No manifest revision is in scope at this call site - verified,
+            // `manifestRevision` does not exist in app.ts. Recording null is
+            // honest; threading the revision down from fetchManifest is a
+            // separate change and not worth it for a provenance field.
+            source_revision: null,
           });
         },
 ```
-and at :1296 replace `svc?.markUninstalled(e.id)` with `deps.removeInstall(e.installed_as ?? e.archive_name)`. In `repoDataSource.ts`, the `installed` flag resolver switches from a catalog lookup to `isArchiveInstalled(entry.archive_name)`.
+
+**Preserve the collision guard.** The code you are replacing does not blindly
+write: it first checks whether the command is already held by a DIFFERENT
+archive and refuses, warning `"... is already installed from a different
+archive (X) -- not clobbering it"`. That check currently runs against the
+local catalog row. It must survive against `door_installs`: call
+`getInstallByCommand(finalCmd)` and, when a row exists whose `archive_name`
+differs from the one being installed, emit the same refusal rather than
+overwriting. Losing this would let one door silently take over another's
+command name - and the backfill has already shown this BBS has commands
+claimed by up to nine different archives.
+and at :1296 replace `svc?.markUninstalled(e.id)` with `deps.removeInstall(e.installed_as ?? e.archive_name)`. In `repoDataSource.ts:160` the resolver is currently
+`installed: local?.installed ? 1 : 0`; it switches to
+`isArchiveInstalled(entry.archive_name) ? 1 : 0`.
 
 Owner mode's curation screens (`deleteCatalogEntry`, `stripArchiveOnServer`, `updateJunkCount`, `removeArchiveFiles`) are NOT touched here - they move to the admin API in phase 3. If they no longer compile because the catalog service is gone, guard them behind the existing `svc?.` optional-call pattern so they degrade to "unavailable" rather than crashing, and note it for phase 3.
 
