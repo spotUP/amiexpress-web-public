@@ -38,9 +38,29 @@ import * as path from 'path';
 // node_modules of its own, so plain `require('better-sqlite3')` does not
 // resolve here. Require it by explicit path instead, matching the existing
 // pattern in dev/scripts/verify-config-tables.ts.
-const Database = require(
-  path.join(__dirname, '..', '..', 'web', 'backend', 'node_modules', 'better-sqlite3')
+const betterSqlitePath = path.join(
+  __dirname, '..', '..', 'web', 'backend', 'node_modules', 'better-sqlite3'
 );
+const Database = require(betterSqlitePath) as typeof import('better-sqlite3');
+
+// ensureSchema is the same function door-installs.repository.ts (Task 1)
+// exports and every other repository function uses - reused here rather
+// than re-reading the DDL file a second time. It lives in web/backend/src
+// so better-sqlite3 resolves from there the normal way when it runs; it is
+// required by explicit path for the same reason Database is above. Its
+// sibling functions (recordInstall, removeInstall, etc.) are NOT reused:
+// they resolve their own database path from DATABASE_DIR/DATABASE_FILE,
+// while this script is parameterised by an explicit dbFile argument - a
+// call to recordInstall here would silently write to whatever the
+// environment happens to point at instead of the file the operator named
+// on the command line. That mismatch is exactly the kind of foot-gun a
+// migration script must not have, so this file keeps its own INSERT
+// (below) rather than calling recordInstall.
+const doorInstallsRepoPath = path.join(
+  __dirname, '..', '..', 'web', 'backend', 'src', 'doors', 'door-installs.repository'
+);
+const { ensureSchema } = require(doorInstallsRepoPath) as
+  typeof import('../../web/backend/src/doors/door-installs.repository');
 
 export interface ContestedCommand {
   command: string;
@@ -136,9 +156,7 @@ function pickWinner(
 export function backfillDoorInstalls(dbFile: string, opts?: BackfillOptions): BackfillCounts {
   const db = new Database(dbFile);
   try {
-    db.exec(fs.readFileSync(
-      path.join(__dirname, '..', '..', 'web', 'backend', 'src', 'doors', 'door-installs.schema.sql'),
-      'utf-8'));
+    ensureSchema(db);
 
     const rows = db.prepare(
       `SELECT id, archive_name, door_type, name, md5, description, category, version,
@@ -163,6 +181,16 @@ export function backfillDoorInstalls(dbFile: string, opts?: BackfillOptions): Ba
       }
     }
 
+    // This INSERT duplicates recordInstall's column list rather than calling
+    // it (see the comment above on why recordInstall can't be reused here),
+    // but it is NOT the same statement with a different name: recordInstall
+    // uses ON CONFLICT DO UPDATE (a real install overwrites whatever was
+    // there), while this backfill uses ON CONFLICT DO NOTHING (a one-time
+    // backfill must never clobber a row a real install already wrote,
+    // including one written by DOORREPO after this script ran). Two
+    // deliberately different conflict rules, not one behaviour written
+    // twice - if door_installs gains a column, both this list and
+    // recordInstall's in door-installs.repository.ts need it.
     const insert = db.prepare(
       `INSERT INTO door_installs
          (id, catalog_id, archive_name, command, install_dir, door_type, name, md5,
@@ -235,7 +263,8 @@ if (require.main === module) {
       `[WARN] never cleared when a command was re-used, so the winner is a best guess:`
     );
     for (const c of counts.contested) {
-      const shown = c.losers.slice(0, 4).join(', ') + (c.losers.length > 4 ? ', ...' : '');
+      const hidden = c.losers.length - 4;
+      const shown = c.losers.slice(0, 4).join(', ') + (hidden > 0 ? `, ... (+${hidden} more)` : '');
       console.log(`[WARN]   ${c.command.padEnd(8)} -> ${c.winner} (${c.resolvedBy})  losing: ${shown}`);
     }
     console.log('[WARN] Re-install any of these through DOORREPO to record the real one.');
