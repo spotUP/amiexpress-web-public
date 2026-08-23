@@ -63,7 +63,10 @@ describe('backfillDoorInstalls', () => {
     const n = (db.prepare('SELECT COUNT(*) AS n FROM door_installs').get() as { n: number }).n;
     db.close();
     expect(n).toBe(2);
-    expect(second.migrated + second.skipped).toBe(2);
+    // Second run: every command is already claimed, so every row (both of
+    // them, no duplicates in this fixture) loses its contest to the row
+    // recorded by the first run.
+    expect(second.migrated + second.skippedDuplicate + second.skippedNoCommand).toBe(2);
   });
 
   it('skips a row whose installed_as is empty, because a command name is required', () => {
@@ -72,7 +75,7 @@ describe('backfillDoorInstalls', () => {
                 VALUES ('c4','BAD.LHA','A/BAD.LHA','Bad',1,NULL)`).run();
     db.close();
     const counts = backfillDoorInstalls(dbFile);
-    expect(counts.skipped).toBeGreaterThanOrEqual(1);
+    expect(counts.skippedNoCommand).toBeGreaterThanOrEqual(1);
     const check = new Database(dbFile, { readonly: true });
     const n = (check.prepare('SELECT COUNT(*) AS n FROM door_installs').get() as { n: number }).n;
     check.close();
@@ -100,16 +103,70 @@ describe('backfillDoorInstalls', () => {
 
     const counts = backfillDoorInstalls(dbFile);
     // 3 installed=1 rows total now (c1, c3, c5); c1 and c5 share command
-    // ACCV103, so only one of them can land - migrated + skipped must still
-    // account for every installed=1 row, and the row count must not exceed
-    // the number of distinct commands.
-    expect(counts.migrated + counts.skipped).toBe(3);
+    // ACCV103, so only one of them can land - migrated + skipped* must
+    // still account for every installed=1 row, and the row count must not
+    // exceed the number of distinct commands.
+    expect(counts.migrated + counts.skippedDuplicate + counts.skippedNoCommand).toBe(3);
     expect(counts.migrated).toBe(2);
-    expect(counts.skipped).toBe(1);
+    expect(counts.skippedDuplicate).toBe(1);
+    expect(counts.skippedNoCommand).toBe(0);
 
     const check = new Database(dbFile, { readonly: true });
     const n = (check.prepare('SELECT COUNT(*) AS n FROM door_installs').get() as { n: number }).n;
     check.close();
     expect(n).toBe(2);
+  });
+
+  it('prefers the version the on-disk .info actually points at, not the newest catalog row', () => {
+    // Two rows claim command ED; the .info says the v1.10 directory is installed.
+    const db = new Database(dbFile);
+    db.prepare(
+      `INSERT INTO door_catalog (id, archive_name, archive_path, door_type, name, md5,
+         description, category, version, release_group, installed, installed_as, install_dir)
+       VALUES ('e1','5D-ED110.LHA','A/5D-ED110.LHA','XIM','Editor','aa','Ed 110',NULL,'1.10',NULL,1,'ED','Doors/ED110'),
+              ('e2','5D-ED121.LHA','A/5D-ED121.LHA','XIM','Editor','bb','Ed 121',NULL,'1.21',NULL,1,'ED','Doors/ED121')`
+    ).run();
+    db.close();
+    const cmds = fs.mkdtempSync(path.join(os.tmpdir(), 'cmds-'));
+    fs.writeFileSync(path.join(cmds, 'ED.info'),
+      'TYPE=XIM\nLOCATION=Doors:ED110/ed\nSTACK=8192\nACCESS=0\n');
+
+    backfillDoorInstalls(dbFile, { commandsDir: cmds });
+
+    const check = new Database(dbFile, { readonly: true });
+    const row = check.prepare('SELECT archive_name, version FROM door_installs WHERE command = ?').get('ED') as Record<string, unknown>;
+    check.close();
+    fs.rmSync(cmds, { recursive: true, force: true });
+    expect(row).toMatchObject({ archive_name: '5D-ED110.LHA', version: '1.10' });
+  });
+
+  it('falls back to the most recently indexed row when no .info names a winner', () => {
+    const db = new Database(dbFile);
+    db.prepare(
+      `INSERT INTO door_catalog (id, archive_name, archive_path, door_type, name, md5,
+         description, category, version, release_group, installed, installed_as, install_dir)
+       VALUES ('f1','OLD.LHA','A/OLD.LHA','XIM','Thing','aa',NULL,NULL,'1.0',NULL,1,'THING','Doors/OLD'),
+              ('f2','NEW.LHA','A/NEW.LHA','XIM','Thing','bb',NULL,NULL,'2.0',NULL,1,'THING','Doors/NEW')`
+    ).run();
+    db.close();
+    backfillDoorInstalls(dbFile);   // no commandsDir at all
+    const check = new Database(dbFile, { readonly: true });
+    const row = check.prepare('SELECT archive_name FROM door_installs WHERE command = ?').get('THING') as Record<string, unknown>;
+    check.close();
+    expect(row.archive_name).toBe('NEW.LHA');
+  });
+
+  it('counts a lost contest separately from a row that had no command name', () => {
+    const db = new Database(dbFile);
+    db.prepare(
+      `INSERT INTO door_catalog (id, archive_name, archive_path, name, installed, installed_as)
+       VALUES ('g1','DUP-A.LHA','A/DUP-A.LHA','Dup',1,'DUP'),
+              ('g2','DUP-B.LHA','A/DUP-B.LHA','Dup',1,'DUP'),
+              ('g3','NOCMD.LHA','A/NOCMD.LHA','NoCmd',1,NULL)`
+    ).run();
+    db.close();
+    const counts = backfillDoorInstalls(dbFile);
+    expect(counts.skippedDuplicate).toBeGreaterThanOrEqual(1);
+    expect(counts.skippedNoCommand).toBeGreaterThanOrEqual(1);
   });
 });
