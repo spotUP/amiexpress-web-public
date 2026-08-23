@@ -866,7 +866,18 @@ Then apply exactly these edits and no others:
 3. Every exported function takes `cfg: ServerConfig` as its FIRST parameter and passes it to `openDb` / `resolveArchivePath` / `getCatalogRevision`.
 4. `getCatalogRevision` and `getDoorCount` are deleted here - they now live in `src/catalog.ts` (Task 3); import them.
 5. Move `ManifestDoor` / `DoorRepoManifest` into `contract/manifest-types.ts` and import them back, re-exporting both so existing call sites keep compiling.
-6. The SQL, the `JUNK_JOIN`, `hasFilesTable`, `LAZY_CHECKSUM_FALLBACK_LIMIT`, `oneLine`, `esc`, `toLatin1Safe`, the `DOORREPO|1|<revision>|<count>` header and every field order in `renderListTxt` stay byte-identical.
+6. The SQL, the `JUNK_JOIN`, `hasFilesTable`, `LAZY_CHECKSUM_FALLBACK_LIMIT`, `oneLine`, `esc`, `toLatin1Safe`, the `DOORREPO|1|<revision>|<count>` header and every field order in `renderListTxt` stay byte-identical - with ONE exception, below.
+7. **The `?q=` filter loses its `installed_as` term.** The source reads:
+
+   ```
+   '(archive_name LIKE ? OR name LIKE ? OR author LIKE ? OR release_group LIKE ? OR description LIKE ? OR installed_as LIKE ?)'
+   ```
+
+   `installed_as` is one of the three per-node columns this server's schema
+   drops, so a verbatim port throws at prepare time and every `/manifest?q=`
+   and `/list.txt?q=` request 500s. Drop that term and its `params.push`
+   entry - five `LIKE ?` placeholders and five pushed params, not six. Keep
+   the `ORDER BY archive_name COLLATE NOCASE ASC` exactly as it is.
 
 - [ ] **Step 2: Write `contract/manifest-types.ts`**
 
@@ -999,6 +1010,14 @@ describe('buildManifest', () => {
     expect(buildManifest(cfg, { type: 'AIM' }).doors).toHaveLength(0);
     expect(buildManifest(cfg, { type: 'XIM' }).doors).toHaveLength(1);
   });
+
+  // The source's q filter also searched installed_as, a per-node column this
+  // server does not have. Without dropping that term the query throws at
+  // prepare time, so this test is what proves the port dropped it.
+  it('searches by free text without touching per-node columns', () => {
+    expect(buildManifest(cfg, { q: 'Account' }).doors).toHaveLength(1);
+    expect(buildManifest(cfg, { q: 'nothing-matches-this' }).doors).toHaveLength(0);
+  });
 });
 
 describe('renderListTxt', () => {
@@ -1073,7 +1092,7 @@ Expected: FAIL - module not found / edits from Step 1 not yet applied
 - [ ] **Step 7: Apply the Step 1 edits until both suites pass**
 
 Run: `npx jest --config jest.config.ts tests/manifest.test.ts tests/contract-staleness.test.ts`
-Expected: PASS, 11 tests
+Expected: PASS, 12 tests
 
 - [ ] **Step 8: Type-check**
 
@@ -1370,6 +1389,13 @@ async function main(): Promise<void> {
   captures.push(await capture('manifest', '/manifest'));
   captures.push(await capture('list', '/list.txt'));
   captures.push(await capture('health', '/health'));
+  // The filtered forms have their own SQL path - and the q filter is the one
+  // place the port deliberately differs from the source (it drops the
+  // installed_as term, whose column this server does not have). Capture both
+  // so the difference is visible rather than assumed.
+  captures.push(await capture('manifest-type-xim', '/manifest?type=XIM'));
+  captures.push(await capture('list-type-xim', '/list.txt?type=XIM'));
+  captures.push(await capture('manifest-q', '/manifest?q=door'));
   for (const a of archives) {
     const enc = encodeURIComponent(a);
     captures.push(await capture(`files-${a}`, `/files/${enc}`));
