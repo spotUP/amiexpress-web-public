@@ -47,9 +47,10 @@ def render_row(row):
     if not version:
         version = R.version_from_filename(archive)
     who = R.tidy_case(R.clean_author(who), handles=True)
+    door = R.display_name(name, binary, archive)
     system = path.split('/')[0] if '/' in path else 'Unsorted'
     size = f"{size}B" if size < 1024 else f"{round(size/1024)}K"
-    return f"{archive}\t{system}\t{size}\t{version or '-'}\t{requires or '-'}\t{who or '-'}\t{desc}"
+    return f"{archive}\t{system}\t{size}\t{door}\t{version or '-'}\t{requires or '-'}\t{who or '-'}\t{desc}"
 
 
 def main():
@@ -59,7 +60,7 @@ def main():
         "SELECT archive_name, archive_path, binary_name, name, version, author,"
         " file_id_diz, COALESCE(archive_size,0) FROM door_catalog ORDER BY archive_name").fetchall()
     R.load_group_tags([r[0] for r in rows])
-    print("Filename\tSystem\tSize\tVersion\tRequires\tAuthor\tDescription")
+    print("Filename\tSystem\tSize\tDoor\tVersion\tRequires\tAuthor\tDescription")
     for r in rows:
         if filters and not any(f in r[0].upper() for f in filters):
             continue

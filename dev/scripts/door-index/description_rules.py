@@ -244,6 +244,85 @@ def looks_like_program(prog):
     return len(p) >= 3 and len(re.findall(r'[A-Za-zÀ-ÿ]', p)) >= 3 and alnum_share(p) > 0.5
 
 
+def looks_like_name(text):
+    """Is this a NAME rather than a piece of box art?
+
+    The bar is lower than for a description: "Bull", "DMS" and "Avail" are
+    real door names and would fail the description scorer's six-character
+    minimum. What a name may not be is decoration - 1031 of the 3301 catalog
+    `name` fields are the box border the DIZ opened with.
+    """
+    t = (text or '').strip()
+    if not t or len(t) > 40:
+        return False
+    if ART.match(t):
+        return False
+    if not WORD.search(t):
+        return False
+    if high_bit_share(t) > 0.3:
+        return False
+    return alnum_share(t) > 0.5
+
+
+NAME_WORDS = 4
+# A value shaped like a filename rather than a name: it ends in a program
+# extension, or - the scene-signature case - it BEGINS with one
+# ("exe.-l0S-eND0S-bBS-.exe" is the catalog name AND binary_name of 41
+# archives).
+FILENAME_SHAPED = re.compile(
+    r'\.(exe|info|rexx|xim|aim|fim|sim|tim|iim|lha|lzx|dms)\s*$|^(?:exe|com|bat|dll)\.', re.I)
+
+
+def display_name(name, binary, archive):
+    """A short label for a door: its catalog name when that reads as a name,
+    then its program name, then the archive's own name. Never box art.
+
+    The catalog's `name` is whatever the corpus builder found at the top of
+    the DIZ, so for 1031 of 3301 rows it is the box border itself, and for
+    others it is a whole banner line ("Aquawho -] ____ [-Aquarius/Otl"). A
+    name is ONE CELL of that row and at most four words - past that it is a
+    sentence, and the door's program name reads better.
+    """
+    raw = (name or '').strip()
+    # A FILENAME is not a display name, and the test has to run on the RAW
+    # value: cleaning strips the extension off the end, and then the shape is
+    # invisible. The corpus carries scene signatures in this shape -
+    # "exe.-l0S-End0S-bBS-.exe" is the catalog `name` of 41 archives.
+    if FILENAME_SHAPED.search(raw):
+        # ...and when the program name is the same junk, the archive's own
+        # name is the only honest label left.
+        prog = prettify_program(to_plain(binary or ''))
+        if looks_like_program(prog) and not FILENAME_SHAPED.search((binary or '').strip()):
+            return tidy_case(capitalise_name(prog))
+        return tidy_case(to_plain(prettify_in_text(archive.rsplit('.', 1)[0])))
+
+    candidate = to_plain(clean(name or ''))
+    # A banner names the GROUP and then the door, so the door is what follows
+    # it - the same split the description rules make. When nothing usable
+    # follows (the rest is a date, or border), the archive has the last word.
+    after, _ = split_banner_credit(candidate)
+    if after != candidate:
+        candidate = after if looks_like_name(after) else ''
+    elif BANNER.search(candidate):
+        # A banner word with nothing usable after it ("Ir\/ANA presents ---
+        # 02/15/98"): the group and a date, and no door name anywhere in it.
+        candidate = ''
+    for cell in CELL_SPLIT.split(candidate):
+        cleaned = to_plain(clean(cell))
+        if looks_like_name(cleaned):
+            candidate = cleaned
+            break
+    words = candidate.split()
+    prog = prettify_program(to_plain(binary or ''))
+    if looks_like_name(candidate) and len(words) <= NAME_WORDS:
+        return tidy_case(capitalise_name(candidate))
+    if looks_like_program(prog):
+        return tidy_case(capitalise_name(prog))
+    if looks_like_name(candidate):
+        return tidy_case(capitalise_name(' '.join(words[:NAME_WORDS])))
+    return tidy_case(to_plain(prettify_in_text(archive.rsplit('.', 1)[0])))
+
+
 def describe(diz, binary, name, archive):
     lines = [l for l in (diz or '').replace('\r','').split('\n')]
     scored = []
