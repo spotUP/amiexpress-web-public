@@ -639,6 +639,63 @@ int flow_read_door_info(const char *info_path, dr_info_fields *out);
 long flow_compute_prior_access(long current_access, long new_access,
                                 int prior_access_found, long prior_access);
 
+/* Line cap shared by every reader/rewriter of a .info file
+ * (flow_read_door_info() and flow_rewrite_access_lines() below, plus
+ * do_edit_access()'s own raw read in doorrepo.c) - this door's own .info
+ * files are 4-9 lines; capped anyway on the same "trust nothing you read
+ * back, even your own output" instinct as flow_declared_count_exceeds_cap()
+ * elsewhere in this file, so a hand-edited or corrupted .info can't turn a
+ * read into an unbounded loop. One constant, not a value copied into two
+ * files, so the reader and the rewriter can never silently disagree on it. */
+#define FLOW_INFO_MAX_LINES 32
+
+/* Whole-file counterpart to flow_build_info_content(): where that function
+ * REBUILDS a .info from a fixed 4-5 tooltype template (TYPE/LOCATION/
+ * STACK/ACCESS/DRACCESS), this one EDITS an existing .info's raw text IN
+ * PLACE, touching only the ACCESS and DRACCESS lines and copying every
+ * other line - BBSCMD, NAME, DESCRIPTION, MULTINODE, PRIORITY, CATEGORY,
+ * a custom STACK, anything else a real production .info carries that this
+ * door does not itself understand - byte-for-byte. Task 4's M-key editor
+ * must never go back to the rebuild-from-template approach: that approach
+ * silently deletes every tooltype this door doesn't know about and resets
+ * STACK to a hardcoded default, exactly the corruption this function
+ * exists to prevent (see this plan's Global Constraint: "an editor here is
+ * not a license to rewrite the whole file's shape, only to change one
+ * value in place").
+ *
+ * `content` is the whole .info as read (NUL-terminated; CRLF or LF line
+ * endings both tolerated per line, matching flow_parse_tooltype_line()'s
+ * own tolerance). Each line is identified via flow_parse_tooltype_line()
+ * and handled as follows:
+ *   - a line whose key is ACCESS: replaced with "ACCESS=<new_access>\n"
+ *     (this door's own canonical LF-terminated format, same as
+ *     flow_build_info_content() writes) at that line's original position.
+ *     A second ACCESS line (a hand-edited or corrupted duplicate) is
+ *     dropped rather than also rewritten, so the result never carries two.
+ *     If no ACCESS line exists at all, one is appended at the end.
+ *   - a line whose key is DRACCESS: always removed from its original
+ *     position (never copied through as-is, since it may need a new value
+ *     or removal). If `prior_access >= 0`, a "DRACCESS=<prior_access>\n"
+ *     line is emitted exactly once - at the point the (rewritten or
+ *     appended) ACCESS line is emitted if no old DRACCESS line came before
+ *     it, or at the old DRACCESS line's own position otherwise. If
+ *     `prior_access < 0`, no DRACCESS line appears in the output at all.
+ *   - every other line - preserved exactly as it appeared, including its
+ *     original line ending (or lack of one, for a final line with none).
+ * A line longer than this function's internal parse buffer is passed
+ * through unidentified (never guessed at) rather than risking a truncated
+ * key being misread as ACCESS/DRACCESS - see flow_parse_tooltype_line()'s
+ * own refuse-don't-truncate contract, which this mirrors.
+ *
+ * Bounded to FLOW_INFO_MAX_LINES lines - `content` with more lines than
+ * that is refused (-1), the same defense flow_read_door_info() already
+ * applies to its own read.
+ *
+ * Returns the length written to `out`, or -1 if the input has too many
+ * lines or the result would not fit `outsize`. */
+int flow_rewrite_access_lines(const char *content, char *out, unsigned long outsize,
+                              long new_access, long prior_access);
+
 /* ---- /files listing helpers ----
  *
  * The archive-contents listing (GET /files/<archive>, section 6 of the API

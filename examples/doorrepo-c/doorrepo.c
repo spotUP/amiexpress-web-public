@@ -3485,6 +3485,57 @@ static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
  * exact three cases that make "type a new value" serve as both.
  * ------------------------------------------------------------------- */
 
+/* Reads the .info at `info_path` into `out` as one flat, NUL-terminated
+ * string, preserving every byte of every line exactly as written - unlike
+ * flow_read_door_info() (which extracts only the handful of tooltypes this
+ * door itself understands), this keeps everything, so do_edit_access() can
+ * hand it to flow_rewrite_access_lines() and get back a version with only
+ * ACCESS/DRACCESS touched, every other tooltype byte-for-byte unchanged.
+ * Bounded to FLOW_INFO_MAX_LINES lines - the same cap flow_read_door_info()
+ * applies to its own read, shared via flow.h so the two can never silently
+ * disagree - a hand-edited or corrupted .info should not turn this into an
+ * unbounded loop. Returns 1 on success, 0 if the file could not be opened,
+ * had too many lines, or was too large for `outsize` - do_edit_access()
+ * refuses to edit either way, the same "can't safely account for this
+ * .info" defense as its other preconditions. */
+static int read_info_raw(const char *info_path, char *out, unsigned long outsize)
+{
+    FILE *f;
+    char line[512];
+    int line_count;
+    unsigned long pos;
+
+    out[0] = '\0';
+    f = fopen(info_path, "r");
+    if (f == (FILE *) 0) {
+        return 0;
+    }
+
+    pos = 0;
+    line_count = 0;
+    while (fgets(line, (int) sizeof(line), f) != (char *) 0) {
+        unsigned long len;
+
+        line_count++;
+        if (line_count > FLOW_INFO_MAX_LINES) {
+            fclose(f);
+            out[0] = '\0';
+            return 0;
+        }
+        len = (unsigned long) strlen(line);
+        if (pos + len + 1 > outsize) {
+            fclose(f);
+            out[0] = '\0';
+            return 0;
+        }
+        memcpy(out + pos, line, (size_t) len);
+        pos += len;
+        out[pos] = '\0';
+    }
+    fclose(f);
+    return 1;
+}
+
 /* Modeled on strip_installed_door()'s shape (an archive name in, not a
  * full dr_entry, plus the ansi buf/frame/geometry the other mutating
  * screens take). Resolves cmdname through the install index first, exactly
@@ -3502,9 +3553,8 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     long current_access;
     long new_access;
     long prior_access;
-    const char *binary_rel;
-    unsigned long cmdlen;
-    char info_content[320];
+    char info_raw[2048];
+    char info_content[2048];
     char msg[420];
     char logmsg[300];
 
@@ -3548,66 +3598,19 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
         return;
     }
 
-    /* TYPE/LOCATION come back from the reader, never hardcoded or
-     * reconstructed - flow_build_info_content() emits all four tooltypes
-     * every call, so a .info this editor cannot fully account for is one
-     * it must refuse to rewrite rather than guess at. */
-    if (!fields.type_found || !fields.location_found) {
-        ansi_begin(b, frame, framecap);
-        ansi_cursor(b, 1);
-        ansi_reset(b);
-        ansi_clear(b);
-        ansi_flush(b);
-        ae_put("This command's .info is missing TYPE or LOCATION - DoorRepo will not rewrite", 1);
-        ae_put("a config it cannot fully account for. Nothing was changed.", 1);
-        ae_put("", 1);
-        ae_put("Press any key to return to the list.", 1);
-        (void) ae_key();
-        return;
-    }
-
-    /* LOCATION must be EXACTLY "Doors:<cmdname>/<binary_rel>" -
-     * install_door()'s own format (see flow_build_info_content()'s
-     * comment; grepped for the only place in this codebase that writes a
-     * "Doors:" LOCATION, since doorrepo.c itself has no such literal).
-     * cmdname here already IS <cmd> (index_lookup() gave it to us), so
-     * every token up to binary_rel is fully known - checked, not assumed.
-     * A hand-edited .info, one installed by a different tool, or one
-     * installed under a different command name would otherwise silently
-     * yield a wrong or partial binary_rel here, which
-     * flow_build_info_content() would then happily reassemble into a
-     * corrupted LOCATION and WRITE - refused instead, same defense as the
-     * missing-TYPE/LOCATION case just above. */
-    cmdlen = strlen(cmdname);
-    binary_rel = fields.location;
-    if (strncmp(binary_rel, "Doors:", 6) != 0) {
-        binary_rel = (const char *) 0;
-    } else {
-        binary_rel += 6;
-        if (strncmp(binary_rel, cmdname, cmdlen) != 0 || binary_rel[cmdlen] != '/') {
-            binary_rel = (const char *) 0;
-        } else {
-            binary_rel += cmdlen + 1;
-        }
-    }
-    if (binary_rel == (const char *) 0) {
-        ansi_begin(b, frame, framecap);
-        ansi_cursor(b, 1);
-        ansi_reset(b);
-        ansi_clear(b);
-        ansi_flush(b);
-        sprintf(msg, "This command's LOCATION (%s) does not match the Doors:%s/<program>",
-                fields.location, cmdname);
-        ae_put(msg, 1);
-        ae_put("format DoorRepo expects - the .info may be hand-edited or installed by", 1);
-        ae_put("another tool. Nothing was changed.", 1);
-        ae_put("", 1);
-        ae_put("Press any key to return to the list.", 1);
-        (void) ae_key();
-        return;
-    }
-
-    /* parse_nonneg_long() (flow_read_door_info()'s own number parser) only
+    /* NOTE: TYPE/LOCATION are read above (fields.type/fields.location) but
+     * deliberately not used anywhere below - the write path is now a real
+     * in-place line edit (flow_rewrite_access_lines()) that never
+     * reconstructs LOCATION or rebuilds the file from a template, so it
+     * has nothing to guess at and no missing-TYPE/LOCATION precondition
+     * to refuse on. See flow_rewrite_access_lines()'s doc comment in
+     * flow.h for why this design replaced the old rebuild-from-template
+     * one (whole-branch final review: rebuilding silently deleted every
+     * tooltype this door doesn't itself read, such as BBSCMD/NAME/
+     * DESCRIPTION/MULTINODE/PRIORITY/CATEGORY, and reset a custom STACK
+     * to a hardcoded default).
+     *
+     * parse_nonneg_long() (flow_read_door_info()'s own number parser) only
      * rejects a NEGATIVE value - it has no upper bound, so a hand-edited or
      * corrupted ACCESS/DRACCESS line (e.g. 8+ digits) can hand back a
      * `long` far outside this door's 0-255 convention. That value is about
@@ -3660,6 +3663,23 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
     }
     current_access = fields.access_found ? fields.access : 0;
 
+    /* The whole point of "disable, remembering what it used to be" is
+     * defeated if the sysop is never told what it remembers - show the
+     * actual number, not just that one is tracked. */
+    if (fields.prior_access_found) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        sprintf(msg, "Normal level for this door was %ld - type it back in to restore.",
+                fields.prior_access);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to continue.", 1);
+        (void) ae_key();
+    }
+
     access_buf[0] = '\0';
     ui_append_ulong(access_buf, (unsigned long) current_access);
 
@@ -3693,9 +3713,30 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
                                              fields.prior_access_found,
                                              fields.prior_access);
 
-    if (flow_build_info_content(info_content, sizeof(info_content),
-                                fields.type, cmdname, binary_rel,
-                                new_access, prior_access) < 0) {
+    /* Real in-place line edit, not a rebuild-from-template: read every
+     * byte of the .info as it stands, then let flow_rewrite_access_lines()
+     * change only the ACCESS/DRACCESS lines, copying everything else -
+     * BBSCMD, NAME, DESCRIPTION, MULTINODE, PRIORITY, CATEGORY, a custom
+     * STACK, anything else this door itself never reads - through
+     * untouched. See read_info_raw()'s and flow_rewrite_access_lines()'s
+     * own doc comments for why this replaced the old
+     * flow_build_info_content() rebuild. */
+    if (!read_info_raw(info_path, info_raw, sizeof(info_raw))) {
+        ansi_begin(b, frame, framecap);
+        ansi_cursor(b, 1);
+        ansi_reset(b);
+        ansi_clear(b);
+        ansi_flush(b);
+        sprintf(msg, "Access edit failed: could not re-read %s.", info_path);
+        ae_put(msg, 1);
+        ae_put("", 1);
+        ae_put("Press any key to return to the list.", 1);
+        (void) ae_key();
+        return;
+    }
+
+    if (flow_rewrite_access_lines(info_raw, info_content, sizeof(info_content),
+                                  new_access, prior_access) < 0) {
         ansi_begin(b, frame, framecap);
         ansi_cursor(b, 1);
         ansi_reset(b);
@@ -3725,7 +3766,9 @@ static void do_edit_access(const dr_config *cfg, const dr_entry *entry,
             current_access, new_access);
     ae_put(msg, 1);
     if (prior_access >= 0) {
-        ae_put("The previous level is remembered - press M and type it back in to restore.", 1);
+        sprintf(msg, "Level %ld is remembered - press M and type it back in to restore.",
+                prior_access);
+        ae_put(msg, 1);
     }
     sprintf(logmsg, "ACCESS OK archive=%s cmd=%s from=%ld to=%ld",
             entry->archive, cmdname, current_access, new_access);

@@ -820,7 +820,9 @@ static int parse_nonneg_long(const char *value, long *out)
     return 0;
 }
 
-#define FLOW_INFO_MAX_LINES 32
+/* FLOW_INFO_MAX_LINES is now declared in flow.h - shared with
+ * flow_rewrite_access_lines() below and with doorrepo.c's own raw .info
+ * read, so all three agree on the same cap. */
 
 int flow_read_door_info(const char *info_path, dr_info_fields *out)
 {
@@ -913,6 +915,162 @@ long flow_compute_prior_access(long current_access, long new_access,
         return -1;
     }
     return prior_access;
+}
+
+/* Longest single line flow_rewrite_access_lines() below will attempt to
+ * identify by key - generous headroom over any real .info line seen in
+ * this repo's own .info files under Commands/BBSCmd/ (the longest, a DESCRIPTION line,
+ * is under 90 bytes). A line longer than this is passed through
+ * unidentified rather than parsed via a truncated copy - see that
+ * function's doc comment. */
+#define FLOW_REWRITE_LINE_MAX 512
+
+/* Bounds-checked append: writes NUL-terminated `text` to `out` at `*pos`,
+ * refusing (returning non-zero) rather than truncating if it would not
+ * fit `outsize` - shared by every append flow_rewrite_access_lines() below
+ * makes. */
+static int rewrite_append(char *out, unsigned long outsize, unsigned long *pos,
+                          const char *text)
+{
+    unsigned long len = (unsigned long) strlen(text);
+
+    if (*pos + len + 1 > outsize) {
+        return 1;
+    }
+    memcpy(out + *pos, text, (size_t) len);
+    *pos += len;
+    out[*pos] = '\0';
+    return 0;
+}
+
+int flow_rewrite_access_lines(const char *content, char *out, unsigned long outsize,
+                              long new_access, long prior_access)
+{
+    const char *p;
+    unsigned long pos;
+    int line_count;
+    int access_emitted;
+    int draccess_emitted;
+    char access_line[48];
+    char draccess_line[48];
+
+    if (content == (const char *) 0 || out == (char *) 0 || outsize == 0) {
+        return -1;
+    }
+    out[0] = '\0';
+
+    /* This door's own canonical format (flow_build_info_content()'s own
+     * shape) - a %ld can never overflow a 48-byte buffer. */
+    sprintf(access_line, "ACCESS=%ld\n", new_access);
+    if (prior_access >= 0) {
+        sprintf(draccess_line, "DRACCESS=%ld\n", prior_access);
+    } else {
+        draccess_line[0] = '\0';
+    }
+
+    pos = 0;
+    line_count = 0;
+    access_emitted = 0;
+    draccess_emitted = 0;
+    p = content;
+
+    while (*p != '\0') {
+        const char *q = p;
+        unsigned long span_len;
+        int is_access = 0;
+        int is_draccess = 0;
+
+        while (*q != '\0' && *q != '\n') {
+            q++;
+        }
+        if (*q == '\n') {
+            q++;
+        }
+        span_len = (unsigned long) (q - p);
+
+        line_count++;
+        if (line_count > FLOW_INFO_MAX_LINES) {
+            return -1;
+        }
+
+        {
+            char linebuf[FLOW_REWRITE_LINE_MAX];
+
+            if (span_len + 1 <= sizeof(linebuf)) {
+                char key[32];
+                char value[256];
+
+                memcpy(linebuf, p, (size_t) span_len);
+                linebuf[span_len] = '\0';
+                if (flow_parse_tooltype_line(linebuf, key, sizeof(key),
+                                             value, sizeof(value)) == 0) {
+                    if (strcmp(key, "ACCESS") == 0) {
+                        is_access = 1;
+                    } else if (strcmp(key, "DRACCESS") == 0) {
+                        is_draccess = 1;
+                    }
+                }
+
+                if (is_access) {
+                    if (!access_emitted) {
+                        if (rewrite_append(out, outsize, &pos, access_line) != 0) {
+                            return -1;
+                        }
+                        access_emitted = 1;
+                        if (!draccess_emitted && draccess_line[0] != '\0') {
+                            if (rewrite_append(out, outsize, &pos, draccess_line) != 0) {
+                                return -1;
+                            }
+                            draccess_emitted = 1;
+                        }
+                    }
+                    /* a duplicate ACCESS line (hand-edited/corrupted) is
+                     * dropped, not re-emitted - the result must never
+                     * carry two */
+                } else if (is_draccess) {
+                    if (!draccess_emitted && draccess_line[0] != '\0') {
+                        if (rewrite_append(out, outsize, &pos, draccess_line) != 0) {
+                            return -1;
+                        }
+                        draccess_emitted = 1;
+                    }
+                    /* whether just emitted or dropped, the OLD DRACCESS
+                     * line's own text is never copied through */
+                } else {
+                    if (rewrite_append(out, outsize, &pos, linebuf) != 0) {
+                        return -1;
+                    }
+                }
+            } else {
+                /* Too long to safely identify - copied through verbatim,
+                 * byte-for-byte span including its terminator, rather than
+                 * risking a truncated key being misread. */
+                if (pos + span_len + 1 > outsize) {
+                    return -1;
+                }
+                memcpy(out + pos, p, (size_t) span_len);
+                pos += span_len;
+                out[pos] = '\0';
+            }
+        }
+
+        p = q;
+    }
+
+    if (!access_emitted) {
+        if (rewrite_append(out, outsize, &pos, access_line) != 0) {
+            return -1;
+        }
+        access_emitted = 1;
+    }
+    if (!draccess_emitted && draccess_line[0] != '\0') {
+        if (rewrite_append(out, outsize, &pos, draccess_line) != 0) {
+            return -1;
+        }
+        draccess_emitted = 1;
+    }
+
+    return (int) pos;
 }
 
 /* Copies field `index` (0-based, '|'-delimited) of `line` into `out`.

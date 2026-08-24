@@ -379,13 +379,22 @@ same thing:
 | `I` | install it as a BBS command: extract, write the command config, offer to strip ads |
 | `U` | uninstall it again (only shown for an installed door) |
 | `S` | strip the ad files from an installed door (only shown when it has any) |
-| `M` | edit the access level of an installed door - typing a new level also doubles as disable/restore, remembering the level it replaced (only shown for an installed door) |
+| `M` | edit the access level of an installed door - typing a new level also doubles as disable/restore, remembering the level it replaced (only shown for an installed door). Edits the `.info`'s `ACCESS`/`DRACCESS` lines in place; every other tooltype (`BBSCMD`, `NAME`, `DESCRIPTION`, `MULTINODE`, `PRIORITY`, `CATEGORY`, a custom `STACK`, anything else the file carries) is preserved byte-for-byte |
 | `A` | show what is inside the archive, with ad files flagged |
 | `V` | show the door's own documentation - offered only for a door that has any |
 | `F` | filter by text - live, over the rows already loaded, no refetch |
 | `C` | cycle the door type (the types actually present, so it never offers an empty one) |
 | `L` | open a dedicated screen listing only the doors this door has installed, with its own `U=Uninstall`/`S=Strip` |
 | `Q` | leave the door |
+
+The footer is width-budgeted, not truncated: on a narrow terminal, or a row
+whose optional keys all apply at once (an installed door with both ads and
+documentation, for example), the lowest-priority keys - `F`, `C`, then `L` -
+may not display, in that order, before anything higher-priority (`S`, `M`,
+`A`, `V`) or the mandatory `Q=Quit` is ever dropped. This is deliberate, the
+same trade-off every optional key in this footer already accepts, not a bug -
+the key still works if pressed, it just isn't advertised on that particular
+screen.
 
 `F` matches the archive name, door name, description, author and release
 group - the same fields the server's own `?q=` search matches, so typing a

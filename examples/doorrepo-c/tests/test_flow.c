@@ -1435,6 +1435,209 @@ TEST(read_door_info_tolerates_a_malformed_line)
     unlink("/tmp/test_flow_info_malformed.info");
 }
 
+/* ---- flow_rewrite_access_lines() -----------------------------------------
+ *
+ * The whole-branch final review's Critical finding: do_edit_access() used
+ * to rebuild a .info from flow_build_info_content()'s fixed 4-5 tooltype
+ * template, silently deleting BBSCMD/NAME/DESCRIPTION/MULTINODE/PRIORITY/
+ * CATEGORY/a custom STACK - every tooltype this door does not itself read
+ * back. This is the pure in-place line editor that replaces that rebuild:
+ * copy every line byte-for-byte except ACCESS (value replaced) and
+ * DRACCESS (added/replaced/removed). Pure string-in/string-out, no file
+ * I/O, so every case is a literal here - no /tmp fixtures needed. */
+
+TEST(rewrite_access_lines_preserves_unknown_tooltypes_through_an_access_edit)
+{
+    /* Modeled directly on this repo's own Commands/BBSCmd/DOORREPO.info -
+     * the exact scenario the finding named as broken: a real production
+     * .info with tooltypes this door has never read (BBSCMD, NAME,
+     * DESCRIPTION, MULTINODE, PRIORITY) and a non-default STACK, disabled
+     * via the M key (255 -> 0, tracking 255 to restore later). */
+    const char *content =
+        "BBSCMD=DOORREPO\n"
+        "NAME=DoorRepo v1.0\n"
+        "TYPE=XIM\n"
+        "LOCATION=Doors:DoorRepo/doorrepo.amiga\n"
+        "DESCRIPTION=Browse, download and install doors from the DoorRepo catalog (sysop only)\n"
+        "ACCESS=255\n"
+        "MULTINODE=YES\n"
+        "PRIORITY=SAME\n"
+        "STACK=8192\n";
+    char out[512];
+    int len;
+
+    len = flow_rewrite_access_lines(content, out, sizeof(out), 0, 255);
+
+    ASSERT_TRUE(len > 0, "rewrite succeeds");
+    ASSERT_TRUE(strstr(out, "BBSCMD=DOORREPO\n") != (char *) 0, "BBSCMD preserved");
+    ASSERT_TRUE(strstr(out, "NAME=DoorRepo v1.0\n") != (char *) 0, "NAME preserved");
+    ASSERT_TRUE(strstr(out, "TYPE=XIM\n") != (char *) 0, "TYPE preserved");
+    ASSERT_TRUE(strstr(out, "LOCATION=Doors:DoorRepo/doorrepo.amiga\n") != (char *) 0,
+                "LOCATION preserved byte-for-byte, not reconstructed");
+    ASSERT_TRUE(strstr(out, "DESCRIPTION=Browse, download and install doors from the DoorRepo catalog (sysop only)\n") != (char *) 0,
+                "DESCRIPTION preserved");
+    ASSERT_TRUE(strstr(out, "MULTINODE=YES\n") != (char *) 0,
+                "MULTINODE preserved - this is the exact tooltype the finding named as silently reverted");
+    ASSERT_TRUE(strstr(out, "PRIORITY=SAME\n") != (char *) 0, "PRIORITY preserved");
+    ASSERT_TRUE(strstr(out, "STACK=8192\n") != (char *) 0,
+                "custom STACK preserved, NOT reset to the hardcoded 65536 default");
+    ASSERT_TRUE(strstr(out, "STACK=65536") == (char *) 0,
+                "the old rebuild-from-template default never appears");
+    ASSERT_TRUE(strstr(out, "ACCESS=0\n") != (char *) 0, "ACCESS updated to the new value");
+    /* "\nACCESS=255\n" rather than bare "ACCESS=255\n" - the latter is
+     * also a substring of the (correctly present) "DRACCESS=255\n" line,
+     * which would make this assertion a false failure, not a real one. */
+    ASSERT_TRUE(strstr(out, "\nACCESS=255\n") == (char *) 0, "old ACCESS value gone");
+    ASSERT_TRUE(strstr(out, "DRACCESS=255\n") != (char *) 0, "DRACCESS added, remembering the pre-disable level");
+}
+
+TEST(rewrite_access_lines_adds_draccess_when_none_existed)
+{
+    const char *content = "TYPE=XIM\nACCESS=0\nSTACK=65536\n";
+    char out[256];
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 50, 0);
+
+    ASSERT_TRUE(strstr(out, "ACCESS=50\n") != (char *) 0, "ACCESS updated");
+    ASSERT_TRUE(strstr(out, "DRACCESS=0\n") != (char *) 0, "DRACCESS inserted");
+    ASSERT_TRUE(strstr(out, "TYPE=XIM\n") != (char *) 0, "TYPE preserved");
+    ASSERT_TRUE(strstr(out, "STACK=65536\n") != (char *) 0, "STACK preserved");
+}
+
+TEST(rewrite_access_lines_removes_draccess_on_restore)
+{
+    const char *content = "TYPE=XIM\nACCESS=50\nDRACCESS=0\nSTACK=65536\n";
+    char out[256];
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 0, -1);
+
+    ASSERT_TRUE(strstr(out, "ACCESS=0\n") != (char *) 0, "ACCESS restored");
+    ASSERT_TRUE(strstr(out, "DRACCESS") == (char *) 0, "DRACCESS line gone entirely, not just its value");
+    ASSERT_TRUE(strstr(out, "TYPE=XIM\n") != (char *) 0, "TYPE preserved");
+    ASSERT_TRUE(strstr(out, "STACK=65536\n") != (char *) 0, "STACK preserved");
+}
+
+TEST(rewrite_access_lines_updates_existing_draccess_without_duplicating_it)
+{
+    /* A further edit to a THIRD level while already disabled -
+     * flow_compute_prior_access() keeps the ORIGINAL tracked value (0),
+     * not the most recently disabled one (50) - this test only checks the
+     * line-rewrite honors whatever prior_access it's given exactly once. */
+    const char *content = "ACCESS=50\nDRACCESS=0\nTYPE=XIM\n";
+    char out[256];
+    char *first;
+    char *second;
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 200, 0);
+
+    ASSERT_TRUE(strstr(out, "ACCESS=200\n") != (char *) 0, "ACCESS updated to the third level");
+    first = strstr(out, "DRACCESS=0\n");
+    ASSERT_TRUE(first != (char *) 0, "DRACCESS kept at its original value");
+    /* Guarded: a NULL `first` (a regression that drops DRACCESS entirely)
+     * must fail the assertion above, not crash this test by dereferencing
+     * NULL + 1 below - a segfault would abort the whole binary and hide
+     * every later test's result, not just this one's. */
+    second = (first != (char *) 0) ? strstr(first + 1, "DRACCESS=0\n") : (char *) 0;
+    ASSERT_TRUE(second == (char *) 0, "DRACCESS appears exactly once, not duplicated");
+}
+
+TEST(rewrite_access_lines_appends_access_when_missing)
+{
+    /* do_edit_access()'s "no ACCESS line - defaulting to 0" case: the
+     * .info genuinely has none, and the edit must still add one. */
+    const char *content = "TYPE=XIM\nSTACK=65536\n";
+    char out[256];
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 10, -1);
+
+    ASSERT_STR_EQ(out, "TYPE=XIM\nSTACK=65536\nACCESS=10\n",
+                  "ACCESS appended at the end, everything else untouched");
+}
+
+TEST(rewrite_access_lines_drops_a_duplicate_access_line)
+{
+    /* A hand-edited or corrupted .info with two ACCESS lines - the result
+     * must never carry two, or the BBS's tooltype parser (last-wins,
+     * matching amiga-command-parser.util.ts) would silently take whichever
+     * happens to sort last, contradicting whatever do_edit_access() told
+     * the sysop it changed the level to. */
+    const char *content = "ACCESS=1\nTYPE=XIM\nACCESS=2\n";
+    char out[256];
+    char *first;
+    char *second;
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 99, -1);
+
+    first = strstr(out, "ACCESS=99\n");
+    ASSERT_TRUE(first != (char *) 0, "the new value is present");
+    /* Guarded the same way as the DRACCESS-duplicate test above - a NULL
+     * `first` must fail the assertion, not crash the test binary. */
+    second = (first != (char *) 0) ? strstr(first + 1, "ACCESS=99\n") : (char *) 0;
+    ASSERT_TRUE(second == (char *) 0, "ACCESS appears exactly once, the duplicate is dropped");
+    ASSERT_TRUE(strstr(out, "TYPE=XIM\n") != (char *) 0, "the line between the duplicates is preserved");
+}
+
+TEST(rewrite_access_lines_preserves_crlf_of_untouched_lines)
+{
+    /* A .info copied through a CRLF-preserving transfer (or edited on a
+     * non-Amiga machine): untouched lines keep whatever line ending they
+     * arrived with; the ACCESS line this function itself emits always
+     * uses this door's own canonical LF-only format. */
+    const char *content = "TYPE=XIM\r\nACCESS=5\r\n";
+    char out[256];
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 10, -1);
+
+    ASSERT_TRUE(strstr(out, "TYPE=XIM\r\n") != (char *) 0,
+                "the untouched line's original CRLF is preserved byte-for-byte");
+    ASSERT_TRUE(strstr(out, "ACCESS=10\n") != (char *) 0,
+                "the rewritten ACCESS line uses this door's own LF-only format");
+    ASSERT_TRUE(strstr(out, "ACCESS=10\r\n") == (char *) 0,
+                "the rewritten line does not inherit the old line's CR");
+}
+
+TEST(rewrite_access_lines_handles_a_final_line_with_no_trailing_newline)
+{
+    /* The file's last line (here, ACCESS itself) has no trailing \n at
+     * all - a common way a hand-edited file ends. */
+    const char *content = "TYPE=XIM\nACCESS=5";
+    char out[256];
+
+    (void) flow_rewrite_access_lines(content, out, sizeof(out), 9, -1);
+
+    ASSERT_TRUE(strstr(out, "TYPE=XIM\n") != (char *) 0, "preceding line preserved");
+    ASSERT_TRUE(strstr(out, "ACCESS=9\n") != (char *) 0,
+                "ACCESS rewritten with a trailing newline even though the original had none");
+}
+
+TEST(rewrite_access_lines_too_many_lines_is_refused)
+{
+    /* FLOW_INFO_MAX_LINES is 32 - one more line than that must be refused,
+     * the same defense flow_read_door_info() already applies to its own
+     * read, so a hand-edited or corrupted .info can't turn this into an
+     * unbounded loop. */
+    char content[64 * 40];
+    char out[4096];
+    int i;
+
+    content[0] = '\0';
+    for (i = 0; i < 33; i++) {
+        strcat(content, "X=1\n");
+    }
+
+    ASSERT_TRUE(flow_rewrite_access_lines(content, out, sizeof(out), 1, -1) < 0,
+                "33 lines (one past FLOW_INFO_MAX_LINES) is refused");
+}
+
+TEST(rewrite_access_lines_output_buffer_too_small_is_refused)
+{
+    const char *content = "ACCESS=1\n";
+    char out[4];
+
+    ASSERT_TRUE(flow_rewrite_access_lines(content, out, sizeof(out), 99, -1) < 0,
+                "an output buffer too small for even one line is refused, not truncated");
+}
+
 /* ---- flow_is_installed_row / the installed-only view's walk -------------
  *
  * ui_view_rebuild_installed() (doorrepo.c) walks cat->rows[] once, keeping
@@ -1903,31 +2106,35 @@ TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols)
 {
     /* The exact real-world case from the finding: ui_draw_footer()'s
      * prefix for an installed row with ads and documentation, plus all
-     * six optional parts in the browser's real priority order, at the
-     * default ScreenCols=80. Unfixed, this is 94 characters and
-     * ui_draw_bar()'s truncation to 80 reads "...F=Find  C=System  L=Ins"
-     * - L=Installed cut mid-word and Q=Quit gone entirely. */
-    const char *optional[6];
+     * SEVEN optional parts (M=Access added by Task 4) in the browser's
+     * real priority order, at the default ScreenCols=80. Unfixed (pre-
+     * flow_build_footer_bar()), the equivalent strcat chain is 104
+     * characters and would truncate mid-word past col 80, cutting
+     * Q=Quit entirely - flow_build_footer_bar() exists so that never
+     * happens, regardless of how many optional parts there are. */
+    const char *optional[7];
     char out[160];
     int len;
     char raw[160];
 
     optional[0] = "S=Strip ads";
-    optional[1] = "A=Archive";
-    optional[2] = "V=Doc";
-    optional[3] = "F=Find";
-    optional[4] = "C=System";
-    optional[5] = "L=Installed";
+    optional[1] = "M=Access";
+    optional[2] = "A=Archive";
+    optional[3] = "V=Doc";
+    optional[4] = "F=Find";
+    optional[5] = "C=System";
+    optional[6] = "L=Installed";
 
     strcpy(raw, "ENTER/R=Get  U=Uninstall");
     strcat(raw, "  S=Strip ads");
+    strcat(raw, "  M=Access");
     strcat(raw, "  A=Archive");
     strcat(raw, "  V=Doc");
     strcat(raw, "  F=Find  C=System  L=Installed  Q=Quit");
-    ASSERT_EQ((int) strlen(raw), 94, "sanity: the unfixed strcat chain really is 94 bytes");
+    ASSERT_EQ((int) strlen(raw), 104, "sanity: the unfixed strcat chain really is 104 bytes with all 7 parts");
 
     len = flow_build_footer_bar(out, sizeof(out), 80, "ENTER/R=Get  U=Uninstall",
-                                optional, 6, "Q=Quit");
+                                optional, 7, "Q=Quit");
 
     ASSERT_TRUE(len <= 80, "fixed bar fits the real 80-column screen");
     ASSERT_TRUE(strlen(out) >= 6
@@ -1935,6 +2142,55 @@ TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols)
                 "bar always ends with the full, unmangled Q=Quit");
     ASSERT_TRUE(strstr(out, "L=Ins ") == (char *) 0 || strstr(out, "L=Installed") != (char *) 0,
                 "L=Installed never appears cut mid-word");
+}
+
+TEST(footer_bar_seven_parts_at_80_cols_drops_find_that_six_parts_fit)
+{
+    /* Documents a real, INTENTIONAL trade-off from adding M=Access
+     * (Task 4's whole-branch review, Important #5): with 6 optional parts
+     * (pre-M), F=Find fit at the default 80 columns on an installed row
+     * with both ads and documentation. With M added as the 7th, ahead of
+     * F/C/L in priority (a deliberate, kept decision - M and S/A/V all act
+     * on the one selected door, F/C/L are screen-level), the budget is
+     * tight enough that F=Find (and C=System, L=Installed, which were
+     * already being dropped even before M) is now the one part that
+     * crosses from "fits" to "dropped". Verified empirically against the
+     * real function, not computed by hand - this test is that proof, kept
+     * as a permanent regression check so a future change to any part's
+     * wording notices if the trade-off shifts again. */
+    const char *optional6[6];
+    const char *optional7[7];
+    char out6[160];
+    char out7[160];
+
+    optional6[0] = "S=Strip ads";
+    optional6[1] = "A=Archive";
+    optional6[2] = "V=Doc";
+    optional6[3] = "F=Find";
+    optional6[4] = "C=System";
+    optional6[5] = "L=Installed";
+
+    optional7[0] = "S=Strip ads";
+    optional7[1] = "M=Access";
+    optional7[2] = "A=Archive";
+    optional7[3] = "V=Doc";
+    optional7[4] = "F=Find";
+    optional7[5] = "C=System";
+    optional7[6] = "L=Installed";
+
+    (void) flow_build_footer_bar(out6, sizeof(out6), 80, "ENTER/R=Get  U=Uninstall",
+                                 optional6, 6, "Q=Quit");
+    (void) flow_build_footer_bar(out7, sizeof(out7), 80, "ENTER/R=Get  U=Uninstall",
+                                 optional7, 7, "Q=Quit");
+
+    ASSERT_TRUE(strstr(out6, "F=Find") != (char *) 0,
+                "sanity: without M, F=Find used to fit at 80 cols on this row");
+    ASSERT_TRUE(strstr(out7, "M=Access") != (char *) 0,
+                "M=Access itself always fits - it outranks F/C/L");
+    ASSERT_TRUE(strstr(out7, "F=Find") == (char *) 0,
+                "with M added, F=Find is now the part that gets dropped at 80 cols");
+    ASSERT_TRUE(strlen(out7) >= 6 && strcmp(out7 + strlen(out7) - 6, "Q=Quit") == 0,
+                "Q=Quit is still never the one that gets cut");
 }
 
 TEST(footer_bar_installed_screen_real_parts_fit_at_80_cols)
@@ -2019,25 +2275,28 @@ TEST(footer_bar_browse_screen_fits_the_documented_cols_40_floor)
     /* Symmetry check requested alongside the installed-screen fix above:
      * ui_draw_footer() (the main browse screen) never folded A=Archive
      * into its mandatory prefix in the first place - only S=Strip ads,
-     * A=Archive, V=Doc, F=Find, C=System and L=Installed are optional
-     * there, so its mandatory-only total (worst case, the "installed"
-     * prefix: "ENTER/R=Get  U=Uninstall" + "  Q=Quit" = 32 bytes) already
-     * fit the 40-col floor before this fix and needed no change. Locked
-     * in here so a future edit to ui_draw_footer()'s prefix gets the same
-     * regression coverage the installed screen just needed. */
-    const char *optional[6];
+     * M=Access, A=Archive, V=Doc, F=Find, C=System and L=Installed are
+     * optional there (M added by Task 4, right after S - both act on the
+     * one selected, already-installed door), so its mandatory-only total
+     * (worst case, the "installed" prefix: "ENTER/R=Get  U=Uninstall" +
+     * "  Q=Quit" = 32 bytes) already fit the 40-col floor before this fix
+     * and needed no change. Locked in here so a future edit to
+     * ui_draw_footer()'s prefix gets the same regression coverage the
+     * installed screen just needed. */
+    const char *optional[7];
     char out[160];
     int len;
 
     optional[0] = "S=Strip ads";
-    optional[1] = "A=Archive";
-    optional[2] = "V=Doc";
-    optional[3] = "F=Find";
-    optional[4] = "C=System";
-    optional[5] = "L=Installed";
+    optional[1] = "M=Access";
+    optional[2] = "A=Archive";
+    optional[3] = "V=Doc";
+    optional[4] = "F=Find";
+    optional[5] = "C=System";
+    optional[6] = "L=Installed";
 
     len = flow_build_footer_bar(out, sizeof(out), 40, "ENTER/R=Get  U=Uninstall",
-                                optional, 6, "Q=Quit");
+                                optional, 7, "Q=Quit");
 
     ASSERT_TRUE(len <= 40, "fits the documented cols=40 floor");
     ASSERT_TRUE(strlen(out) >= 6 && strcmp(out + strlen(out) - 6, "Q=Quit") == 0,
@@ -2104,6 +2363,17 @@ int main(void)
     RUN_TEST(read_door_info_missing_stack_leaves_other_fields_intact);
     RUN_TEST(read_door_info_rejects_negative_access);
     RUN_TEST(read_door_info_tolerates_a_malformed_line);
+
+    RUN_TEST(rewrite_access_lines_preserves_unknown_tooltypes_through_an_access_edit);
+    RUN_TEST(rewrite_access_lines_adds_draccess_when_none_existed);
+    RUN_TEST(rewrite_access_lines_removes_draccess_on_restore);
+    RUN_TEST(rewrite_access_lines_updates_existing_draccess_without_duplicating_it);
+    RUN_TEST(rewrite_access_lines_appends_access_when_missing);
+    RUN_TEST(rewrite_access_lines_drops_a_duplicate_access_line);
+    RUN_TEST(rewrite_access_lines_preserves_crlf_of_untouched_lines);
+    RUN_TEST(rewrite_access_lines_handles_a_final_line_with_no_trailing_newline);
+    RUN_TEST(rewrite_access_lines_too_many_lines_is_refused);
+    RUN_TEST(rewrite_access_lines_output_buffer_too_small_is_refused);
 
     RUN_TEST(installed_view_empty_index_keeps_nothing);
     RUN_TEST(installed_view_one_match_is_kept);
@@ -2303,6 +2573,7 @@ int main(void)
     RUN_TEST(footer_bar_drops_several_parts_to_fit);
     RUN_TEST(footer_bar_never_drops_the_suffix_even_when_prefix_and_suffix_alone_overflow);
     RUN_TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols);
+    RUN_TEST(footer_bar_seven_parts_at_80_cols_drops_find_that_six_parts_fit);
     RUN_TEST(footer_bar_installed_screen_real_parts_fit_at_80_cols);
     RUN_TEST(footer_bar_installed_screen_fits_the_documented_cols_40_floor);
     RUN_TEST(footer_bar_browse_screen_fits_the_documented_cols_40_floor);
