@@ -86,13 +86,23 @@ describe('Security headers (helmet)', () => {
       expect(csp).toMatch(/(^|;)\s*default-src 'self'(;|$)/);
     });
 
-    it('script-src is self only (no unsafe-inline / unsafe-eval / CDNs)', () => {
+    it('script-src is self + wasm-unsafe-eval only (no unsafe-inline / unsafe-eval / CDNs)', () => {
       // Bundled scripts only — no inline <script>, no eval, no CDN refs
       // verified by the asset audit. If a future change adds an inline
       // script, this test fires and forces a deliberate decision.
-      expect(csp).toMatch(/(^|;)\s*script-src 'self'(;|$)/);
+      //
+      // Deliberate decision 2026-08-24: 'wasm-unsafe-eval' added for the
+      // SDK TrackerEngine's libopenmpt AudioWorklet (mod/xm music in
+      // client doors) - it permits ONLY WebAssembly compilation, not JS
+      // eval, and the same-origin restriction still applies. The full
+      // 'unsafe-eval' stays banned.
+      expect(csp).toMatch(/(^|;)\s*script-src 'self' 'wasm-unsafe-eval'(;|$)/);
       expect(csp).not.toMatch(/'unsafe-inline'.*script/);
-      expect(csp).not.toMatch(/script.*'unsafe-eval'/);
+      expect(csp).not.toMatch(/script-src[^;]*'unsafe-eval'/);
+    });
+
+    it('worker-src allows self and blob: (Tone.js clock worker in client doors)', () => {
+      expect(csp).toMatch(/(^|;)\s*worker-src 'self' blob:(;|$)/);
     });
 
     it('style-src allows unsafe-inline (index.html <style> + React style props)', () => {

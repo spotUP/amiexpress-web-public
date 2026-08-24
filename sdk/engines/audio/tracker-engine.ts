@@ -215,6 +215,12 @@ export class TrackerEngine {
   /** Is engine initialized? */
   private _initialized: boolean = false;
 
+  /** Module handed to play() before the AudioWorklet finished loading.
+   *  chiptune3 silently drops commands sent before its processNode exists
+   *  (postCmd guards on it), so the engine queues the most recent buffer
+   *  and plays it the moment 'initialized' fires. */
+  private pendingBuffer: ArrayBuffer | null = null;
+
   /** Is browser environment? */
   private readonly isBrowser: boolean;
 
@@ -284,6 +290,11 @@ export class TrackerEngine {
       this.player.onInitialized(() => {
         this._initialized = true;
         this.emit('initialized');
+        if (this.pendingBuffer) {
+          const buffer = this.pendingBuffer;
+          this.pendingBuffer = null;
+          this.player.play(buffer);
+        }
       });
 
       this.player.onMetadata((meta: any) => {
@@ -526,13 +537,23 @@ export class TrackerEngine {
    * ```
    */
   play(buffer: ArrayBuffer): void {
-    if (!this.isBrowser || !this.player) {
+    if (!this.isBrowser) {
       console.warn('TrackerEngine: Cannot play - not in browser environment');
       return;
     }
 
     this.setState(PlaybackState.Loading);
     this._metadata = null;
+
+    if (!this.player || !this._initialized) {
+      // AudioWorklet still loading (or the dynamic import of chiptune3 is
+      // still in flight). chiptune3 would silently drop this play; queue
+      // the buffer instead - the latest request wins - and it starts the
+      // moment initialization completes.
+      this.pendingBuffer = buffer;
+      return;
+    }
+
     this.player.play(buffer);
   }
 
@@ -540,6 +561,7 @@ export class TrackerEngine {
    * Stop playback and reset position.
    */
   stop(): void {
+    this.pendingBuffer = null;
     if (!this.player) return;
 
     this.player.stop();

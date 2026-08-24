@@ -41,14 +41,20 @@ export const app = express();
  * Directive choices (per asset audit 2026-05-05):
  *  - default-src 'self' — backend serves frontend in prod, all assets
  *    same-origin via /assets/* and /fonts/*.
- *  - script-src 'self' — bundled React/xterm/socket.io, no CDNs, no
- *    inline <script>, no eval / dangerouslySetInnerHTML.
+ *  - script-src 'self' 'wasm-unsafe-eval' — bundled React/xterm/
+ *    socket.io, no CDNs, no inline <script>, no eval. wasm-unsafe-eval
+ *    is for the TrackerEngine's libopenmpt AudioWorklet (mod/xm music
+ *    in client doors), which compiles a same-origin wasm module;
+ *    without it, enforcing this policy silences every tracker door.
  *  - style-src 'self' 'unsafe-inline' — index.html has an inline
  *    <style> block; React components use the style={{...}} prop
  *    (DOM style attribute, requires unsafe-inline in CSP2).
  *  - img-src 'self' data: — favicon is a data: URI SVG.
  *  - connect-src 'self' — socket.io connects to same-origin in prod;
  *    'self' covers WebSocket on same origin per CSP3.
+ *  - worker-src 'self' blob: — Tone.js (SDK AudioEngine, bundled into
+ *    client doors) spins up a blob: worker for its clock; AudioWorklet
+ *    module loads ride script-src, not worker-src.
  *  - frame-ancestors 'none' — modern X-Frame-Options DENY equivalent.
  *  - object-src 'none', base-uri 'self' — defang plugin / base-tag
  *    injection attacks even though we don't use plugins.
@@ -65,12 +71,12 @@ app.use(helmet({
     useDefaults: false,
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'"],
       imgSrc: ["'self'", 'data:'],
       connectSrc: ["'self'"],
-      workerSrc: ["'none'"],
+      workerSrc: ["'self'", 'blob:'],
       frameAncestors: ["'none'"],
       formAction: ["'self'"],
       baseUri: ["'self'"],
