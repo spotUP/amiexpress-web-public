@@ -672,4 +672,53 @@ int flow_build_index_path(char *out, unsigned long outsize, const char *download
 int flow_is_installed_row(const char *row_archive,
                           const char *known_archives[], int known_count);
 
+/* ---- Footer bar builder --------------------------------------------------
+ *
+ * ui_draw_footer() and ui_draw_footer_installed() (doorrepo.c) each built
+ * their key-legend bar with a fixed strcat chain and handed the result to
+ * ui_draw_bar(), which centers-then-truncates at `g->cols` (ansi_center()).
+ * Adding a part to either chain (L=Installed; two more sibling plans queue
+ * an .info-editor key and an owner-mode key next) can silently push the
+ * total past `cols`, and truncation cuts from the FRONT of whatever
+ * ansi_center() is handed past `width` bytes - i.e. it keeps the first
+ * `cols` bytes of the string and drops the tail, which is exactly where
+ * the mandatory "Q=Quit"/"Q=Back" lives. A sysop with no ESC binding then
+ * has no documented way out of the screen. See docs/DOOR-REPO-API.md's
+ * sibling review write-up for the live 94-char reproduction.
+ *
+ * This function is the fix: a width-budgeted builder that drops OPTIONAL
+ * parts, lowest priority first, before ever touching the mandatory prefix
+ * or suffix. */
+
+/* Builds a footer bar from optional parts in priority order (parts[0]
+ * highest priority), stopping BEFORE adding a part that would push the bar
+ * past `cols`. `mandatory_prefix` (e.g. "ENTER/R=Get  U=Uninstall") and
+ * `mandatory_suffix` (e.g. "Q=Quit") are ALWAYS present in full, separated
+ * from the optional parts and each other by "  " - the budget calculation
+ * accounts for both separators, including the one reserved in front of the
+ * suffix while deciding whether each optional part still fits. If even the
+ * mandatory prefix+suffix don't fit in `cols` (a pathological/tiny screen),
+ * the result is prefix+suffix untruncated (never silently drop the one
+ * documented way out) rather than something shorter that cuts Q - the
+ * suffix is appended unconditionally once the optional-part loop is done,
+ * never gated on the `cols` budget itself (only `outcap`, the actual
+ * buffer, can make this return -1).
+ *
+ * Either `mandatory_prefix` or `mandatory_suffix` may be NULL or "" to
+ * omit that side entirely (no stray leading/trailing separator is left
+ * behind) - used for the installed-doors screen's empty-list footer,
+ * which has no prefix at all, just "Q=Back".
+ *
+ * `optional_parts` may be NULL when `optional_count` is 0. A NULL or empty
+ * entry within it is skipped, matching the conditional-strcat cases in the
+ * two callers (e.g. "V=Doc" only when the selected row has documentation).
+ *
+ * Returns the bar length written to `out`, or -1 if it would not fit
+ * `outcap` at all (a NULL `out`, zero `outcap`, or a genuinely undersized
+ * buffer - never triggered by the `cols` budget on its own). */
+int flow_build_footer_bar(char *out, unsigned long outcap, int cols,
+                           const char *mandatory_prefix,
+                           const char *const *optional_parts, int optional_count,
+                           const char *mandatory_suffix);
+
 #endif /* DOORREPO_FLOW_H */

@@ -1546,8 +1546,10 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
                           int installed, int has_junk)
 {
     char bar[160];
+    const char *optional[6];
+    int n = 0;
+    int len;
 
-    strcpy(bar, installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install");
     /* S appears on the same condition DOORMAN applies: the door is
      * installed AND its archive actually contains ads. Offering it
      * otherwise advertises an action that can only answer "nothing to
@@ -1555,16 +1557,30 @@ static void ui_draw_footer(ansi_buf *b, const ui_geometry *g, const dr_entry *e,
      * counts as "might have some", the same way an unknown has_doc still
      * offers V. */
     if (installed && has_junk) {
-        strcat(bar, "  S=Strip ads");
+        optional[n++] = "S=Strip ads";
     }
-    strcat(bar, "  A=Archive");
+    optional[n++] = "A=Archive";
     if (e == (const dr_entry *) 0 || e->has_doc != 0) {
-        strcat(bar, "  V=Doc");
+        optional[n++] = "V=Doc";
     }
     /* L opens the dedicated "installed doors" screen (Task 4) - listed
      * unconditionally, the same as F/C, since it never depends on which row
-     * is selected. */
-    strcat(bar, "  F=Find  C=System  L=Installed  Q=Quit");
+     * is selected. In priority order, lowest last: a narrow screen drops
+     * L=Installed before it drops F=Find or C=System, and drops all three
+     * before it would ever touch Q=Quit (flow_build_footer_bar() -
+     * width-budgeted, see flow.h - guarantees Q=Quit is never the one that
+     * gets cut, unlike the old strcat-then-truncate-at-cols shape this
+     * replaced, which silently dropped it on any row with ads AND doc). */
+    optional[n++] = "F=Find";
+    optional[n++] = "C=System";
+    optional[n++] = "L=Installed";
+
+    len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                installed ? "ENTER/R=Get  U=Uninstall" : "ENTER/R=Get  I=Install",
+                                optional, n, "Q=Quit");
+    if (len < 0) {
+        bar[0] = '\0'; /* unreachable with this door's fixed short strings and bar[160] */
+    }
     ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
 }
 
@@ -3869,27 +3885,50 @@ static void ui_draw_installed_header(ansi_buf *b, const ui_geometry *g,
     }
 }
 
-/* Step 5's footer legend: `ENTER/R=Get  A=Archive  V=Doc  U=Uninstall
+/* Step 5's footer legend: `ENTER/R=Get  A=Archive  U=Uninstall  V=Doc
  * S=Strip  Q=Back`, F=Find/C=System/I=Install dropped along with the keys
  * they name. Every row here is already installed, so unlike
  * ui_draw_footer()'s browse-screen version there is no install/uninstall
- * ternary - U=Uninstall is unconditional. V and S keep the same gates
- * ui_draw_footer() applies (has_doc, has_junk) for the same reason: hiding
- * a key that would still work is the worse of the two errors. */
+ * ternary - U=Uninstall is unconditional, exactly like ENTER/R=Get and
+ * A=Archive, so it is folded into the mandatory prefix rather than being
+ * one of the (genuinely optional) parts flow_build_footer_bar() may drop
+ * for width; this moves it one slot earlier than the old strcat chain had
+ * it (which put it after V=Doc) - the simplest shape, per the fix plan,
+ * since a mandatory key has no business living in the droppable list. V
+ * and S keep the same gates ui_draw_footer() applies (has_doc, has_junk)
+ * for the same reason: hiding a key that would still work is the worse of
+ * the two errors.
+ *
+ * `e == NULL` means the list is empty (installed_loop_ansi()'s view.count
+ * == 0) - none of A/U/V/S do anything with nothing installed, so rather
+ * than advertise four dead keys the whole prefix and every optional part
+ * are skipped; only the one documented way out remains. */
 static void ui_draw_footer_installed(ansi_buf *b, const ui_geometry *g,
                                      const dr_entry *e, int has_junk)
 {
     char bar[160];
+    int len;
 
-    strcpy(bar, "ENTER/R=Get  A=Archive");
-    if (e == (const dr_entry *) 0 || e->has_doc != 0) {
-        strcat(bar, "  V=Doc");
+    if (e == (const dr_entry *) 0) {
+        len = flow_build_footer_bar(bar, sizeof(bar), g->cols, "",
+                                    (const char *const *) 0, 0, "Q=Back");
+    } else {
+        const char *optional[2];
+        int n = 0;
+
+        if (e->has_doc != 0) {
+            optional[n++] = "V=Doc";
+        }
+        if (has_junk) {
+            optional[n++] = "S=Strip";
+        }
+        len = flow_build_footer_bar(bar, sizeof(bar), g->cols,
+                                    "ENTER/R=Get  A=Archive  U=Uninstall",
+                                    optional, n, "Q=Back");
     }
-    strcat(bar, "  U=Uninstall");
-    if (has_junk) {
-        strcat(bar, "  S=Strip");
+    if (len < 0) {
+        bar[0] = '\0'; /* unreachable with this door's fixed short strings and bar[160] */
     }
-    strcat(bar, "  Q=Back");
     ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
 }
 
@@ -3910,6 +3949,30 @@ static void ui_draw_installed_chrome(ansi_buf *b, const ui_geometry *g,
     ansi_box(b, g->pane_top, g->info_left, g->pane_height, g->info_width, ANSI_BLUE,
              (const char *) 0);
     ui_draw_footer_installed(b, g, sel_entry, has_junk);
+    ansi_reset(b);
+}
+
+/* The empty-state message for this screen. ui_draw_list() draws nothing but
+ * blank rows when view.count == 0 (every idx is past v->count - see its own
+ * "blank rows past the end" branch) - a first-time user of the L key who
+ * has nothing installed yet saw an empty box and a footer of keys that all
+ * silently no-op, with no text anywhere explaining why. The non-ANSI
+ * fallback (installed_loop_plain()) already says "No doors are currently
+ * installed." for the same state; this is that screen's ANSI equivalent,
+ * so the two read as genuinely equivalent rather than the primary screen
+ * being the lesser one. Skipped while the detail pane has the whole screen
+ * (g->list_width <= 0, same guard ui_draw_list() itself uses) - there is no
+ * list pane to write into then. */
+static void ui_draw_installed_empty_message(ansi_buf *b, const ui_geometry *g)
+{
+    int row;
+
+    if (g->list_width <= 0) {
+        return;
+    }
+    row = g->pane_top + 1 + (g->visible_rows / 2);
+    ansi_color(b, ANSI_YELLOW, ANSI_BLACK, 0);
+    ansi_center(b, row, g->list_left + 1, g->list_width - 2, "No doors are installed.");
     ansi_reset(b);
 }
 
@@ -3992,6 +4055,9 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             ui_draw_installed_chrome(&buf, &g, &view, orphan_count, sel_entry,
                                      sel_entry != (const dr_entry *) 0 && sel_entry->junk != 0);
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);
+            if (view.count == 0) {
+                ui_draw_installed_empty_message(&buf, &g);
+            }
             info_rows_used = 0;
         } else if (top_index != prev_top) {
             ui_draw_list(&buf, cfg, &g, cat, &view, top_index, selected, -1, -1);

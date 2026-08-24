@@ -114,7 +114,7 @@ is exactly where door authors get burned.
 
 | Layer | Status | How it was checked |
 |---|---|---|
-| Every module's logic (parsing, pagination, retry state machine, security checks) | **Unit-tested and native-run verified** | `make test`: 6 suites, 406 assertions, 0 failures, `-std=c89 -Wall -Wextra -pedantic` clean. `make live` run against the real, live `bbs.uprough.net` API: browsed, paged forward/back, filtered by type, searched, opened an entry, downloaded a real archive, MD5 verified. Full transcript in this task's report. |
+| Every module's logic (parsing, pagination, retry state machine, security checks) | **Unit-tested and native-run verified** | `make test`: 10 suites, 693 assertions, 0 failures, `-std=c89 -Wall -Wextra -pedantic` clean. `make live` run against the real, live `bbs.uprough.net` API: browsed, paged forward/back, filtered by type, searched, opened an entry, downloaded a real archive, MD5 verified. Full transcript in this task's report. |
 | POSIX/native build | **Built and run-verified** | `make native` links and runs on this machine; this is the build every test suite and the live run above actually exercises. |
 | Every module except netio.c's real socket branch, cross-compiled for m68k | **Compile- and link-verified** | `make amiga-stub` produces a real `AmigaOS loadseg()ble executable/binary` (confirmed with `file`), zero warnings, with no AmiTCP SDK involved at all. |
 | netio.c's real `bsdsocket.library` branch, cross-compiled for m68k | **Compile- AND link-verified for m68k** | `make amiga` produces a complete, real `AmigaOS loadseg()ble executable/binary` (confirmed with `file`) linked against the vendored NDK3.2R4, zero warnings. This is stronger than "compiles": the object code genuinely links into a loadable AmigaOS program, and every symbol `netio.c`'s Amiga branch calls (`OpenLibrary`, `socket`, `connect`, `WaitSelect`, `send`, `recv`, `CloseSocket`, ...) resolved. It is **not** merely "compile-only" -- do not read it that way. |
@@ -368,7 +368,7 @@ same thing:
 | -D-DOR11.LHA           7k|| by Loop/Abuse / ABS            2 ads             |
 | ...                      ||   ______    ________.  /\    ______.__________   |   FILE_ID.DIZ,
 +--------------------------++--------------------------------------------------+   line for line
-|         ENTER/R=Get  A=Archive  V=Doc  F=Find  C=System  Q=Quit               |
+|ENTER/R=Get  I=Install  A=Archive  V=Doc  F=Find  C=System  L=Installed  Q=Quit|
 +------------------------------------------------------------------------------+
 ```
 

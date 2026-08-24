@@ -1083,3 +1083,105 @@ const char *flow_effective_door_type(const char *catalog_type,
     }
     return type;
 }
+
+/* ---- Footer bar builder --------------------------------------------------
+ * See flow.h for the full contract. */
+
+int flow_build_footer_bar(char *out, unsigned long outcap, int cols,
+                           const char *mandatory_prefix,
+                           const char *const *optional_parts, int optional_count,
+                           const char *mandatory_suffix)
+{
+    unsigned long pos;
+    unsigned long prefix_len;
+    unsigned long suffix_len;
+    int i;
+
+    if (out == (char *) 0 || outcap == 0) {
+        return -1;
+    }
+    if (mandatory_prefix == (const char *) 0) {
+        mandatory_prefix = "";
+    }
+    if (mandatory_suffix == (const char *) 0) {
+        mandatory_suffix = "";
+    }
+    if (optional_parts == (const char *const *) 0) {
+        optional_count = 0;
+    }
+    if (cols < 0) {
+        cols = 0;
+    }
+
+    prefix_len = (unsigned long) strlen(mandatory_prefix);
+    suffix_len = (unsigned long) strlen(mandatory_suffix);
+    pos = 0;
+
+    if (prefix_len > 0) {
+        if (prefix_len + 1 > outcap) {
+            return -1;
+        }
+        memcpy(out, mandatory_prefix, prefix_len);
+        pos = prefix_len;
+    }
+
+    /* Optional parts, highest priority first. Each is tried against the
+     * `cols` budget with room for its own leading separator AND the
+     * separator+suffix that must still follow it - so a part is only ever
+     * added when the suffix is still guaranteed to fit afterwards. The
+     * first part that would not fit stops the loop outright: lower-
+     * priority parts are not tried in its place, since the array's order
+     * IS the priority (a later, shorter part appearing where an earlier,
+     * longer one was dropped would invert that ordering). */
+    for (i = 0; i < optional_count; i++) {
+        const char *part = optional_parts[i];
+        unsigned long part_len;
+        unsigned long sep_len;
+        unsigned long tail_len;
+        unsigned long candidate_cols;
+
+        if (part == (const char *) 0 || part[0] == '\0') {
+            continue;
+        }
+        part_len = (unsigned long) strlen(part);
+        sep_len = (pos > 0) ? 2UL : 0UL;
+        tail_len = (suffix_len > 0) ? 2UL + suffix_len : 0UL;
+        candidate_cols = pos + sep_len + part_len + tail_len;
+
+        if (candidate_cols > (unsigned long) cols) {
+            break;
+        }
+        if (pos + sep_len + part_len + 1 > outcap) {
+            break; /* outcap is generous in every real caller; defensive only */
+        }
+
+        if (sep_len > 0) {
+            memcpy(out + pos, "  ", 2);
+            pos += 2;
+        }
+        memcpy(out + pos, part, part_len);
+        pos += part_len;
+    }
+
+    /* The suffix is appended unconditionally from here - never gated on
+     * `cols`. This is the "never silently drop Q" guarantee: the only way
+     * this function returns without the full suffix is running out of
+     * `outcap` (a genuinely undersized buffer), never running out of
+     * `cols` (a narrow screen). */
+    if (suffix_len > 0) {
+        unsigned long sep_len = (pos > 0) ? 2UL : 0UL;
+
+        if (pos + sep_len + suffix_len + 1 > outcap) {
+            return -1;
+        }
+        if (sep_len > 0) {
+            memcpy(out + pos, "  ", 2);
+            pos += 2;
+        }
+        memcpy(out + pos, mandatory_suffix, suffix_len);
+        pos += suffix_len;
+    }
+
+    out[pos] = '\0';
+    return (int) pos;
+}

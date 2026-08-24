@@ -1584,6 +1584,183 @@ TEST(effective_type_leaves_a_real_executable_alone)
                   "only a real .rexx suffix counts");
 }
 
+
+/* ---- Footer bar builder (2026-08-24) --------------------------------
+ *
+ * flow_build_footer_bar() exists because ui_draw_footer()'s strcat chain
+ * plus L=Installed overflows 80 columns on real rows and ui_draw_bar()'s
+ * truncation drops the tail - which is where "Q=Quit" lives. See flow.h
+ * for the full contract. */
+
+TEST(footer_bar_fits_everything_when_there_is_room)
+{
+    const char *optional[3];
+    char out[160];
+    int len;
+
+    optional[0] = "A=Archive";
+    optional[1] = "F=Find";
+    optional[2] = "C=System";
+
+    len = flow_build_footer_bar(out, sizeof(out), 80, "ENTER/R=Get  I=Install",
+                                optional, 3, "Q=Quit");
+
+    ASSERT_STR_EQ(out, "ENTER/R=Get  I=Install  A=Archive  F=Find  C=System  Q=Quit",
+                  "everything present, nothing dropped, when it all fits");
+    ASSERT_EQ(len, (int) strlen(out), "returned length matches what was written");
+}
+
+TEST(footer_bar_drops_one_low_priority_part_to_fit)
+{
+    /* Sized so every part but the last (lowest priority) fits alongside
+     * the mandatory prefix+suffix. */
+    const char *optional[3];
+    char out[160];
+    int len;
+
+    optional[0] = "A=Archive";
+    optional[1] = "F=Find";
+    optional[2] = "C=System";
+
+    len = flow_build_footer_bar(out, sizeof(out), 52, "ENTER/R=Get  I=Install",
+                                optional, 3, "Q=Quit");
+
+    ASSERT_STR_EQ(out, "ENTER/R=Get  I=Install  A=Archive  F=Find  Q=Quit",
+                  "lowest-priority part (C=System) dropped, the rest kept");
+    ASSERT_TRUE(len <= 52, "result fits the column budget");
+    ASSERT_TRUE(strstr(out, "Q=Quit") != (char *) 0, "suffix still present");
+}
+
+TEST(footer_bar_drops_several_parts_to_fit)
+{
+    const char *optional[3];
+    char out[160];
+    int len;
+
+    optional[0] = "A=Archive";
+    optional[1] = "F=Find";
+    optional[2] = "C=System";
+
+    /* Only room for the mandatory prefix+suffix - none of the three
+     * optional parts fit. */
+    len = flow_build_footer_bar(out, sizeof(out), 30, "ENTER/R=Get  I=Install",
+                                optional, 3, "Q=Quit");
+
+    ASSERT_STR_EQ(out, "ENTER/R=Get  I=Install  Q=Quit",
+                  "every optional part dropped; mandatory prefix+suffix survive intact");
+    ASSERT_TRUE(len == (int) strlen("ENTER/R=Get  I=Install  Q=Quit"), "length matches");
+}
+
+TEST(footer_bar_never_drops_the_suffix_even_when_prefix_and_suffix_alone_overflow)
+{
+    /* The "never silently drop the one documented way out" guarantee: a
+     * pathological/tiny `cols` still gets the FULL prefix and FULL suffix
+     * back, never a shorter string that cuts Q. */
+    const char *optional[1];
+    char out[160];
+    int len;
+
+    optional[0] = "A=Archive";
+
+    len = flow_build_footer_bar(out, sizeof(out), 10, "ENTER/R=Get  U=Uninstall",
+                                optional, 1, "Q=Quit");
+
+    ASSERT_STR_EQ(out, "ENTER/R=Get  U=Uninstall  Q=Quit",
+                  "prefix and suffix both survive untruncated past the cols budget");
+    ASSERT_TRUE(len > 10, "the pathological case is allowed to exceed cols - dropping Q is not");
+    ASSERT_TRUE(strstr(out, "Q=Quit") != (char *) 0, "the one documented way out is still there");
+}
+
+TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols)
+{
+    /* The exact real-world case from the finding: ui_draw_footer()'s
+     * prefix for an installed row with ads and documentation, plus all
+     * six optional parts in the browser's real priority order, at the
+     * default ScreenCols=80. Unfixed, this is 94 characters and
+     * ui_draw_bar()'s truncation to 80 reads "...F=Find  C=System  L=Ins"
+     * - L=Installed cut mid-word and Q=Quit gone entirely. */
+    const char *optional[6];
+    char out[160];
+    int len;
+    char raw[160];
+
+    optional[0] = "S=Strip ads";
+    optional[1] = "A=Archive";
+    optional[2] = "V=Doc";
+    optional[3] = "F=Find";
+    optional[4] = "C=System";
+    optional[5] = "L=Installed";
+
+    strcpy(raw, "ENTER/R=Get  U=Uninstall");
+    strcat(raw, "  S=Strip ads");
+    strcat(raw, "  A=Archive");
+    strcat(raw, "  V=Doc");
+    strcat(raw, "  F=Find  C=System  L=Installed  Q=Quit");
+    ASSERT_EQ((int) strlen(raw), 94, "sanity: the unfixed strcat chain really is 94 bytes");
+
+    len = flow_build_footer_bar(out, sizeof(out), 80, "ENTER/R=Get  U=Uninstall",
+                                optional, 6, "Q=Quit");
+
+    ASSERT_TRUE(len <= 80, "fixed bar fits the real 80-column screen");
+    ASSERT_TRUE(strlen(out) >= 6
+                && strcmp(out + strlen(out) - 6, "Q=Quit") == 0,
+                "bar always ends with the full, unmangled Q=Quit");
+    ASSERT_TRUE(strstr(out, "L=Ins ") == (char *) 0 || strstr(out, "L=Installed") != (char *) 0,
+                "L=Installed never appears cut mid-word");
+}
+
+TEST(footer_bar_installed_screen_real_parts_fit_at_80_cols)
+{
+    /* Mirrors ui_draw_footer_installed()'s real part set (U=Uninstall
+     * folded into the mandatory prefix, per the fix). Doesn't overflow
+     * today, but two more sibling plans are about to add to this footer
+     * too - lock the "everything fits, nothing silently dropped" case in
+     * now, while it's still true by construction rather than by luck. */
+    const char *optional[2];
+    char out[160];
+    int len;
+
+    optional[0] = "V=Doc";
+    optional[1] = "S=Strip";
+
+    len = flow_build_footer_bar(out, sizeof(out), 80,
+                                "ENTER/R=Get  A=Archive  U=Uninstall",
+                                optional, 2, "Q=Back");
+
+    ASSERT_STR_EQ(out, "ENTER/R=Get  A=Archive  U=Uninstall  V=Doc  S=Strip  Q=Back",
+                  "every real part present, all fits comfortably under 80 cols");
+    ASSERT_TRUE(len <= 80, "fits the real 80-column screen");
+}
+
+TEST(footer_bar_empty_list_case_is_just_the_suffix)
+{
+    /* installed_loop_ansi()'s empty-state footer: no prefix at all (none
+     * of the row-dependent keys do anything with nothing installed), just
+     * the one documented way out. */
+    char out[160];
+    int len;
+
+    len = flow_build_footer_bar(out, sizeof(out), 80, "",
+                                (const char *const *) 0, 0, "Q=Back");
+
+    ASSERT_STR_EQ(out, "Q=Back", "no stray leading separator when the prefix is empty");
+    ASSERT_EQ(len, 6, "length is just strlen(\"Q=Back\")");
+}
+
+TEST(footer_bar_too_small_buffer_returns_error)
+{
+    char out[8];
+    const char *optional[1];
+    int len;
+
+    optional[0] = "A=Archive";
+
+    len = flow_build_footer_bar(out, sizeof(out), 80, "ENTER/R=Get  U=Uninstall",
+                                optional, 1, "Q=Quit");
+
+    ASSERT_EQ(len, -1, "outcap too small for even the mandatory parts returns -1");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
@@ -1767,6 +1944,15 @@ int main(void)
     RUN_TEST(plain_alnum_rejects_query_injection_attempt);
     RUN_TEST(plain_alnum_rejects_empty_and_null);
     RUN_TEST(plain_alnum_rejects_whitespace_and_punctuation);
+
+    RUN_TEST(footer_bar_fits_everything_when_there_is_room);
+    RUN_TEST(footer_bar_drops_one_low_priority_part_to_fit);
+    RUN_TEST(footer_bar_drops_several_parts_to_fit);
+    RUN_TEST(footer_bar_never_drops_the_suffix_even_when_prefix_and_suffix_alone_overflow);
+    RUN_TEST(footer_bar_reproduces_the_real_94_char_overflow_case_at_80_cols);
+    RUN_TEST(footer_bar_installed_screen_real_parts_fit_at_80_cols);
+    RUN_TEST(footer_bar_empty_list_case_is_just_the_suffix);
+    RUN_TEST(footer_bar_too_small_buffer_returns_error);
 
     printf("\n====== Results ======\n");
     printf("Passed: %d/%d\n", tests_passed, tests_run);
